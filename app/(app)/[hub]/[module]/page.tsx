@@ -181,7 +181,6 @@ export default async function ModulePage({
   // Source › Network — relationship capital search, LinkedIn import, warm intros, syndicate circles.
   if (params.hub === "source" && params.module === "network") {
     const ctx = await getSessionContext();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createServerClient() as any;
 
     // Count contacts for the org.

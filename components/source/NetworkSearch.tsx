@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Image from "next/image";
 import type { NetworkSearchResult } from "@/lib/network-search";
 
 const STRENGTH_COLORS: Record<string, string> = {
@@ -136,7 +137,7 @@ function ContactCard({
         {/* Avatar */}
         <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent font-semibold text-sm">
           {contact.avatarUrl ? (
-            <img src={contact.avatarUrl} alt={contact.fullName} className="h-10 w-10 rounded-full object-cover" />
+            <Image src={contact.avatarUrl} alt={contact.fullName} width={40} height={40} className="rounded-full object-cover" />
           ) : (
             contact.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("")
           )}

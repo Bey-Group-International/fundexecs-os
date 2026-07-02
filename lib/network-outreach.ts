@@ -95,7 +95,6 @@ export async function saveIntroRequest(params: {
   const auth = await requireOrgContext();
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServerClient() as any;
 
   const { data } = await supabase

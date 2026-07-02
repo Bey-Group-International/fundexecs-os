@@ -70,7 +70,6 @@ function parseRow(line: string): string[] {
 
 // Insert parsed rows into network_contacts and return the job ID.
 // New tables are not yet in database.types.ts so we cast to bypass strict typing.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = (supabase: ReturnType<typeof createServerClient>) => supabase as any;
 
 export async function importLinkedInContacts(

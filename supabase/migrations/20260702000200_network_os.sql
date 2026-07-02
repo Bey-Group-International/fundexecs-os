@@ -65,7 +65,7 @@ create policy "org members can manage their network contacts"
   for all
   using (
     organization_id in (
-      select organization_id from organization_members where user_id = auth.uid()
+      select organization_id from organization_members where principal_id = auth.uid()
     )
   );
 
@@ -95,7 +95,7 @@ create policy "org members can view their import jobs"
   for all
   using (
     organization_id in (
-      select organization_id from organization_members where user_id = auth.uid()
+      select organization_id from organization_members where principal_id = auth.uid()
     )
   );
 
@@ -136,7 +136,7 @@ create policy "org members can manage intro requests"
   for all
   using (
     organization_id in (
-      select organization_id from organization_members where user_id = auth.uid()
+      select organization_id from organization_members where principal_id = auth.uid()
     )
   );
 
@@ -163,7 +163,7 @@ create policy "org members can view circles they belong to"
   for select
   using (
     organization_id in (
-      select organization_id from organization_members where user_id = auth.uid()
+      select organization_id from organization_members where principal_id = auth.uid()
     )
     or id in (
       select circle_id from circle_memberships where user_id = auth.uid()
@@ -175,7 +175,7 @@ create policy "org members can manage their circles"
   for insert
   with check (
     organization_id in (
-      select organization_id from organization_members where user_id = auth.uid()
+      select organization_id from organization_members where principal_id = auth.uid()
     )
   );
 
@@ -201,7 +201,7 @@ create policy "circle members can view memberships"
     circle_id in (
       select id from syndicate_circles
       where organization_id in (
-        select organization_id from organization_members where user_id = auth.uid()
+        select organization_id from organization_members where principal_id = auth.uid()
       )
     )
     or user_id = auth.uid()
@@ -228,7 +228,7 @@ create policy "org members can manage contact lists"
   for all
   using (
     organization_id in (
-      select organization_id from organization_members where user_id = auth.uid()
+      select organization_id from organization_members where principal_id = auth.uid()
     )
   );
 
@@ -249,7 +249,7 @@ create policy "org members can manage list members"
     list_id in (
       select id from contact_lists
       where organization_id in (
-        select organization_id from organization_members where user_id = auth.uid()
+        select organization_id from organization_members where principal_id = auth.uid()
       )
     )
   );

@@ -159,7 +159,6 @@ export async function searchNetwork(query: string, limit = 20): Promise<NetworkS
   const { ctx } = auth;
 
   // Cast to any — network_contacts is not yet in database.types.ts.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServerClient() as any;
 
   const intent = await parseQueryIntent(query);

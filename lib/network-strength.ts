@@ -43,7 +43,6 @@ Notes: "${notes.slice(0, 800)}"`,
 }
 
 export async function refreshNetworkStrength(orgId: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServerClient() as any;
 
   const { data: rawContacts } = await supabase
@@ -129,7 +128,6 @@ export async function bumpStrength(
   contactId: string,
   interactionType: "meeting" | "deal_share" | "task" | "email",
 ): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServerClient() as any;
   const { data: contact } = await supabase
     .from("network_contacts")
