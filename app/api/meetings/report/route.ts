@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createTeamTask } from "@/lib/team-tasks";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     // Verify caller is the meeting host
     const { data: meeting } = await supabase
       .from("live_meetings")
-      .select("id, host_id")
+      .select("id, host_id, organization_id, title")
       .eq("id", body.meetingId)
       .single();
 
@@ -117,6 +118,26 @@ Generate a comprehensive post-meeting report.`,
       .from("live_meetings")
       .update({ status: "ended", ended_at: new Date().toISOString() })
       .eq("id", body.meetingId);
+
+    // Fire-and-forget: create a task for each action item
+    const actionItems = Array.isArray(analysis.action_items) ? analysis.action_items as string[] : [];
+    if (actionItems.length > 0 && meeting.organization_id) {
+      void Promise.allSettled(
+        actionItems.map((item) =>
+          createTeamTask(supabase, {
+            organizationId: meeting.organization_id!,
+            assignedTo: user.id,
+            assignedBy: user.id,
+            title: item.slice(0, 120),
+            description: `Auto-created from meeting: ${meeting.title ?? body.title ?? "Untitled"}`,
+            hub: "execute",
+            module: "live_meetings",
+            priority: "normal",
+            contextSnapshot: (analysis.summary as string) ?? "",
+          }),
+        ),
+      );
+    }
 
     return NextResponse.json({ reportId: report.id, analysis });
   } catch (err) {
