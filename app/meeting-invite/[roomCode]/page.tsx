@@ -54,7 +54,7 @@ export default function MeetingInvitePage() {
     setJoining(true);
     // Store guest name in sessionStorage so MeetingRoom can pick it up
     sessionStorage.setItem(`guest_name_${roomCode}`, name);
-    router.push(`/meetings/${roomCode}?guest=1&name=${encodeURIComponent(name)}`);
+    router.push(`/meeting-room/${roomCode}?guest=1&name=${encodeURIComponent(name)}`);
   }
 
   if (loading) {
