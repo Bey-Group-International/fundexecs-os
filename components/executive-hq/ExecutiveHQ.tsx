@@ -150,51 +150,73 @@ function MiniMap({ activeId, nightMode, occupancy = {} }: { activeId: string | n
 
 // ─── ExecAvatar ───────────────────────────────────────────────────────────────
 
+function getInitials(name: string): string {
+  return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
 function ExecAvatar({
   exec,
   size,
   onClick,
   activeBubble,
-  reducedEffects,
-  nightMode,
 }: {
   exec: ExecData;
   size: number;
   onClick: () => void;
   activeBubble: BubbleState;
-  reducedEffects: boolean;
-  nightMode: boolean;
 }) {
   const speaking = activeBubble?.execId === exec.id;
+  const initials = getInitials(exec.name);
+  const fontSize = Math.round(size * 0.32);
   return (
     <button
       type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={`${exec.name} — ${exec.hint}`}
       aria-label={`${exec.name}. ${exec.hint}`}
       style={{
+        position: "relative",
         width: size,
         height: size,
-        border: `1px solid ${exec.themeColor}55`,
         borderRadius: "50%",
-        background:
-          `radial-gradient(circle at 50% 35%, ${exec.themeColor}30, transparent 66%), ` +
-          `rgba(8,6,4,${nightMode ? 0.82 : 0.66})`,
-        backgroundImage: `url(${exec.sprite}), radial-gradient(circle at 50% 35%, ${exec.themeColor}30, transparent 66%)`,
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "center",
-        backgroundSize: exec.sprite.endsWith(".svg") ? "72%" : "86%",
-        boxShadow: `0 0 ${speaking ? 22 : 12}px ${exec.themeColor}${speaking ? "88" : "33"}`,
+        border: `1.5px solid ${exec.themeColor}${speaking ? "cc" : "66"}`,
+        background: `radial-gradient(circle at 40% 35%, ${exec.themeColor}22 0%, rgba(8,6,4,0.85) 70%)`,
+        boxShadow: speaking
+          ? `0 0 0 2px ${exec.themeColor}55, 0 0 18px ${exec.themeColor}44`
+          : `0 0 0 0px transparent`,
         cursor: "pointer",
         pointerEvents: "auto",
-        transform: speaking ? "translateY(-3px) scale(1.04)" : "translateY(0)",
+        transform: speaking ? "scale(1.08)" : "scale(1)",
         transition: "transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease",
-        animation: reducedEffects ? "none" : `exec-float ${exec.walkDuration} ease-in-out ${exec.bobDelay} infinite`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
       }}
-    />
+    >
+      <span style={{
+        fontFamily: "Georgia, 'Times New Roman', serif",
+        fontSize,
+        fontWeight: 600,
+        color: exec.themeColor,
+        letterSpacing: "0.04em",
+        userSelect: "none",
+        lineHeight: 1,
+      }}>
+        {initials}
+      </span>
+      {/* Active status dot */}
+      <span style={{
+        position: "absolute",
+        bottom: 1,
+        right: 1,
+        width: Math.max(6, size * 0.17),
+        height: Math.max(6, size * 0.17),
+        borderRadius: "50%",
+        background: "#22c55e",
+        border: "1.5px solid rgba(8,6,4,0.9)",
+      }} />
+    </button>
   );
 }
 
@@ -300,8 +322,8 @@ function RoomCell({
       {/* Active executives */}
       <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
         {room.executives.map(exec=>(
-          <ExecAvatar key={exec.id} exec={exec} size={42} onClick={()=>onExecClick(exec)}
-            activeBubble={activeBubble} reducedEffects={reducedEffects} nightMode={nightMode}/>
+          <ExecAvatar key={exec.id} exec={exec} size={44} onClick={()=>onExecClick(exec)}
+            activeBubble={activeBubble}/>
         ))}
       </div>
 
@@ -337,29 +359,23 @@ function RoomCell({
           }}>
             {isZooming ? "Entering…" : room.label}
           </div>
-          {!isZooming && !hovered && (
+          {/* Activity status badge */}
+          {!isZooming && (
             <div style={{
-              fontFamily:"'Courier New',monospace", fontSize:7.5,
-              color:"rgba(255,248,220,0.45)",
-              letterSpacing:"0.06em", whiteSpace:"nowrap",
+              display:"flex", alignItems:"center", gap:3, flexShrink:0,
             }}>
-              Open →
+              <span style={{
+                width:5, height:5, borderRadius:"50%", flexShrink:0,
+                background: activity >= 3 ? "#22c55e" : activity >= 2 ? "#fbbf24" : activity >= 1 ? "#60a5fa" : "#475569",
+                boxShadow: activity >= 2 ? `0 0 5px ${activity >= 3 ? "#22c55e" : "#fbbf24"}88` : "none",
+              }}/>
+              <span style={{
+                fontFamily:"'Courier New',monospace", fontSize:7,
+                color:"rgba(255,248,220,0.5)", letterSpacing:"0.04em", whiteSpace:"nowrap",
+              }}>
+                {room.executives.length} active
+              </span>
             </div>
-          )}
-          {hovered && (
-            <button
-              onClick={handleToggleNight}
-              title={roomNight ? "Switch to day" : "Switch to night"}
-              style={{
-                background:"rgba(201,168,76,0.12)", backdropFilter:"blur(4px)",
-                border:`1px solid ${GOLD}55`, borderRadius:2,
-                color:GOLD, fontFamily:"Georgia,serif",
-                fontSize:8, padding:"1px 5px", cursor:"pointer",
-                letterSpacing:"0.08em", lineHeight:1.3, flexShrink:0,
-              }}
-            >
-              {roomNight ? "☀" : "☾"}
-            </button>
           )}
         </div>
       </div>
