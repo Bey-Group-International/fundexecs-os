@@ -165,9 +165,6 @@ create policy "org members can view circles they belong to"
     organization_id in (
       select organization_id from organization_members where principal_id = auth.uid()
     )
-    or id in (
-      select circle_id from circle_memberships where user_id = auth.uid()
-    )
   );
 
 create policy "org members can manage their circles"
@@ -205,6 +202,16 @@ create policy "circle members can view memberships"
       )
     )
     or user_id = auth.uid()
+  );
+
+-- Allow viewing syndicate_circles via circle membership (deferred until circle_memberships exists).
+create policy "circle members can view their circles"
+  on syndicate_circles
+  for select
+  using (
+    id in (
+      select circle_id from circle_memberships where user_id = auth.uid()
+    )
   );
 
 -- ── 6. Saved contact lists ────────────────────────────────────────────────────
