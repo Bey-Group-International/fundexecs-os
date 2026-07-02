@@ -6,6 +6,7 @@
 import type { AdapterModule } from "../types";
 import { gmailModule } from "./gmail";
 import { docusignModule } from "./docusign";
+import { calendlyModule } from "./calendly";
 import { slackModule } from "./slack";
 import { INBOX_MODULES } from "./inbox";
 import { FINANCE_MODULES } from "./finance";
@@ -16,6 +17,7 @@ import { FINANCE_MODULES } from "./finance";
 export const ADAPTERS: AdapterModule[] = [
   gmailModule,
   docusignModule,
+  calendlyModule,
   ...INBOX_MODULES,
   ...FINANCE_MODULES,
   slackModule,

@@ -1,12 +1,23 @@
 // Tool dispatch layer: classify a step's intent and route to the appropriate
-// integration (Gmail, Calendly, Supabase query). Falls back to text-generation
-// when the intent doesn't map to a known tool or credentials aren't available.
+// integration adapter (Gmail, Calendly, Docusign). Falls back to null
+// (text-generation) when no integration is available for the step.
+//
+// Integration availability is resolved per-org via the gateway layer —
+// gateway rows in integration_connections win over the deploy-wide env
+// fallback. This means a step routes to a live tool only when THIS org has
+// connected that integration, not just because env vars are present.
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
 import type { AgentKey } from "@/lib/supabase/database.types";
+import { dispatchAction } from "@/lib/integrations";
+import { orgConnectedChannels } from "@/lib/integrations/gateway";
+import type { DispatchContext } from "@/lib/integrations/types";
 
 export type StepIntent =
   | "send_email"
   | "book_meeting"
+  | "sign_document"
   | "query_data"
   | "draft_document"
   | "text_generation";
@@ -32,7 +43,10 @@ export function classifyStepIntent(stepTitle: string, stepDescription: string): 
   if (has("schedule meeting", "book meeting", "calendar invite", "set up call", "arrange call", "schedule call", "book call", "set meeting")) {
     return "book_meeting";
   }
-  if (has("query", "pull data", "fetch data", "retrieve", "look up", "look up")) {
+  if (has("sign document", "execute subdoc", "subscription doc", "term sheet", "docusign", "send for signature", "request signature")) {
+    return "sign_document";
+  }
+  if (has("query", "pull data", "fetch data", "retrieve", "look up")) {
     return "query_data";
   }
   if (has("draft", "write", "prepare", "create memo", "ic memo", "lp update", "report", "summary")) {
@@ -54,13 +68,13 @@ export function formatDispatchOutput(result: DispatchResult): string {
 
 /**
  * Attempt to dispatch a step to a real tool integration.
- * Returns null when no integration is available — caller should fall back to
- * text generation via executeStep.
+ * Returns null when no integration handles this intent — caller falls back
+ * to text generation via executeStep.
  *
- * Tool integrations are credential-gated: Gmail requires GMAIL_CLIENT_ID +
- * GMAIL_CLIENT_SECRET + per-org refresh tokens stored in integrations table;
- * Calendly requires CALENDLY_API_KEY. When credentials are absent, returns
- * null so the caller falls back to Claude text output.
+ * Availability is per-org: checks integration_connections in the DB and
+ * falls back to the deploy-wide env configuration when no row exists.
+ * Tier 3 (sign_document) only dispatches after operator approval — the gate
+ * layer enforces this; we just route the request once it arrives here.
  */
 export async function dispatchStepTool(args: {
   intent: StepIntent;
@@ -70,83 +84,62 @@ export async function dispatchStepTool(args: {
   agent: AgentKey;
   orgContext: string;
   orgId: string;
+  actorId?: string;
+  supabase: SupabaseClient<Database>;
 }): Promise<DispatchResult | null> {
-  // Tool dispatch is credential-gated. When no credentials are configured,
-  // return null so the caller falls back to Claude text generation.
-  // This ensures the system degrades gracefully rather than failing hard.
+  // Data queries are handled by Claude with org context injection — no
+  // external API needed.
+  if (args.intent === "query_data") return null;
 
-  switch (args.intent) {
-    case "send_email":
-      return await dispatchEmail(args);
-    case "book_meeting":
-      return await dispatchCalendar(args);
-    case "query_data":
-      // Data queries are handled by Claude with org context injection —
-      // no external API needed. Fall back to text generation.
-      return null;
-    default:
-      return null;
-  }
-}
+  // Resolve which channels this org has connected.
+  const connected = await orgConnectedChannels(args.supabase, args.orgId);
 
-async function dispatchEmail(args: {
-  stepTitle: string;
-  stepDescription: string;
-  workflowTitle: string;
-  orgContext: string;
-}): Promise<DispatchResult | null> {
-  // Gmail integration is gated on GMAIL_ENABLED env var.
-  // When not set, fall back to Claude text generation.
-  if (process.env.GMAIL_ENABLED !== "true") return null;
-
-  // Compose a structured draft from the step context.
-  // The actual MCP call (mcp__Gmail__create_draft) must be triggered from a
-  // server action where MCP tools are available — not from this lib module.
-  // TODO: wire to Gmail MCP via server action when deployed.
-  const subject = `${args.workflowTitle} — ${args.stepTitle}`;
-  const body = [
-    args.stepDescription.trim(),
-    "",
-    args.orgContext ? `---\n${args.orgContext}` : "",
-  ]
-    .filter((l, i, arr) => !(i === arr.length - 1 && l === ""))
-    .join("\n")
-    .trim();
-
-  return {
-    intent: "send_email",
-    output: `Email draft prepared: ${subject}`,
-    tool_used: "gmail_draft",
-    tool_result: {
-      subject,
-      body,
-      // Recipient not yet resolved — operator sets before sending from inbox.
-      to: null,
-    },
+  const intentToChannel: Record<StepIntent, string | null> = {
+    send_email: "gmail",
+    book_meeting: "calendly",
+    sign_document: "docusign",
+    query_data: null,
+    draft_document: null,
+    text_generation: null,
   };
-}
 
-async function dispatchCalendar(args: {
-  stepTitle: string;
-  stepDescription: string;
-  workflowTitle: string;
-  orgContext: string;
-}): Promise<DispatchResult | null> {
-  // Calendly integration requires CALENDLY_ENABLED=true.
-  if (process.env.CALENDLY_ENABLED !== "true") return null;
+  const channel = intentToChannel[args.intent];
+  if (!channel) return null;
 
-  // Compose a meeting description from the step context.
-  const title = args.stepTitle;
-  const description =
-    `Workflow: ${args.workflowTitle}\n` +
-    `Step: ${args.stepDescription || args.stepTitle}` +
-    (args.orgContext ? `\n\nContext:\n${args.orgContext}` : "");
+  const intentToAction = {
+    send_email: "send_outreach" as const,
+    book_meeting: "propose_meeting" as const,
+    sign_document: "sign_document" as const,
+  } satisfies Partial<Record<StepIntent, DispatchContext["action"]>>;
 
-  // TODO: wire to Calendly MCP via server action
+  const action = intentToAction[args.intent as keyof typeof intentToAction];
+  if (!action) return null;
+
+  const ctx: DispatchContext = {
+    orgId: args.orgId,
+    actorId: args.actorId ?? "system",
+    action,
+    channel,
+    connected: connected.has(channel),
+    subject: `${args.workflowTitle} — ${args.stepTitle}`,
+    body: args.stepDescription.trim() + (args.orgContext ? `\n\n---\n${args.orgContext}` : ""),
+    metadata: { stepTitle: args.stepTitle, workflowTitle: args.workflowTitle },
+  };
+
+  const result = await dispatchAction(ctx);
+
   return {
-    intent: "book_meeting",
-    output: "Meeting scheduling link prepared",
-    tool_used: "calendly_link",
-    tool_result: { title, description, duration_minutes: 30 },
+    intent: args.intent,
+    output: result.detail,
+    tool_used: result.live ? channel : null,
+    tool_result: {
+      ok: result.ok,
+      channel: result.channel,
+      live: result.live,
+      detail: result.detail,
+      ...(result.reference ? { reference: result.reference } : {}),
+      ...(result.error ? { error: result.error } : {}),
+      ...(result.gated ? { gated: result.gated } : {}),
+    },
   };
 }
