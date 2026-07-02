@@ -47,13 +47,13 @@ export default function MeetingReportPage() {
       return;
     }
 
-    const { data: report } = await supabase
+    const { data: report } = await (supabase as any)
       .from("live_meeting_reports")
       .select("status, summary, key_points, action_items, analysis, full_transcript")
       .eq("meeting_id", meeting.id)
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .single() as { data: Report | null };
 
     setData({ meeting, report: report ?? null });
 

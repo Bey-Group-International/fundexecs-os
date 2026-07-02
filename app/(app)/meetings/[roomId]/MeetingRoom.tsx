@@ -17,8 +17,6 @@ type SignalMsg =
   | { type: "join"; from: string; displayName: string }
   | { type: "leave"; from: string }
   | { type: "end"; from: string }
-  | { type: "admit"; from: string; to: string }
-  | { type: "deny"; from: string; to: string }
   | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit }
