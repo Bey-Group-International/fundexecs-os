@@ -188,12 +188,13 @@ export async function listSentEnvelopes(): Promise<
     .order("sent_at", { ascending: false })
     .limit(50);
 
-  return (data ?? []).map((row) => ({
-    id: row.envelope_id as string,
-    subject: (row.subject as string) ?? "(no subject)",
-    status: row.status as string,
-    created: row.sent_at as string,
-    signer_name: row.signer_name as string | null,
-    signer_email: row.signer_email as string | null,
+  type EnvRow = { envelope_id: string; subject: string | null; status: string; sent_at: string; signer_name: string | null; signer_email: string | null };
+  return ((data ?? []) as EnvRow[]).map((row) => ({
+    id: row.envelope_id,
+    subject: row.subject ?? "(no subject)",
+    status: row.status,
+    created: row.sent_at,
+    signer_name: row.signer_name,
+    signer_email: row.signer_email,
   }));
 }
