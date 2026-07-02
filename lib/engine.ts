@@ -29,6 +29,7 @@ import { parseStoredEdgeContext, edgeContextToPromptLine, type EdgeContextResult
 import { selectAgentWithContext } from "@/lib/brain-routing";
 import { resolveAutonomyForIntent } from "@/lib/autonomy";
 import { getActiveMandate } from "@/lib/mandates";
+import { observeOutput } from "@/lib/observe";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -46,6 +47,7 @@ interface Ctx {
  */
 export type ProgressEvent =
   | { type: "step_start"; step_id: string; title: string; step_order: number }
+  | { type: "step_retry"; step_id: string; title: string; retry: number; agent: string }
   | { type: "step_done"; step_id: string; title: string }
   | { type: "workflow_done"; workflow_id: string };
 
@@ -780,7 +782,9 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     });
 
     const stepIntent = classifyStepIntent(step.title, step.description ?? "");
+    const stepAutonomy = resolveAutonomyForIntent(stepIntent, activeMandate);
     let output: string;
+    let effectiveAgent = step.assigned_agent;
     try {
       // Debit credits before execution. Throws if insufficient, which the catch
       // block below handles as a step failure — the workflow continues to remaining
@@ -814,7 +818,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
             .eq("id", step.id);
         }
       } else {
-        output = await executeStep({
+        const rawOutput = await executeStep({
           workflowTitle: workflow.title,
           agent: step.assigned_agent,
           stepTitle: step.title,
@@ -823,6 +827,30 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           orgContext,
           documentMode: stepIntent === "draft_document",
         });
+        // Observe: auto-retry with rerouting if output quality falls below
+        // threshold. Only fires in "auto" mode — semi/manual pass through.
+        const observed = await observeOutput(rawOutput, {
+          autonomy: stepAutonomy,
+          hub: step.hub,
+          workflowTitle: workflow.title,
+          agent: step.assigned_agent,
+          stepTitle: step.title,
+          stepDescription: step.description ?? "",
+          priorOutputs,
+          orgContext,
+          documentMode: stepIntent === "draft_document",
+        });
+        output = observed.output;
+        effectiveAgent = observed.agent;
+        for (let r = 0; r < observed.retryCount; r++) {
+          emitProgress(onProgress, {
+            type: "step_retry",
+            step_id: step.id,
+            title: step.title,
+            retry: r + 1,
+            agent: observed.agent,
+          });
+        }
       }
     } catch (stepErr) {
       // A step failure must never abort the remaining steps. Mark this step
@@ -858,14 +886,11 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     try {
       brain = await activateBrain(
         { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.actorId, sessionId: workflow.session_id ?? null },
-        brainForAgent(step.assigned_agent),
+        brainForAgent(effectiveAgent),
         {
           objective: step.description?.trim() || step.title,
           context: priorOutputs.length ? priorOutputs.join("\n\n") : undefined,
-          autonomy: resolveAutonomyForIntent(
-            classifyStepIntent(step.title, step.description ?? ""),
-            activeMandate,
-          ),
+          autonomy: stepAutonomy,
         },
       );
     } catch {
@@ -886,7 +911,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     // citations. Persisted now; the human approval gate verifies on top of it.
     const groundingScore = computeGroundingScore(output, sources);
 
-    const artifactType = classifyArtifact(step.assigned_agent, step.title);
+    const artifactType = classifyArtifact(effectiveAgent, step.title);
     const [, { data: artifact }] = await Promise.all([
       ctx.supabase
         .from("tasks")
@@ -900,7 +925,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           step_id: step.id,
           title: step.title,
           artifact_type: artifactType,
-          agent: step.assigned_agent,
+          agent: effectiveAgent,
           hub: step.hub,
           content: output,
           created_by: ctx.actorId,
@@ -921,14 +946,14 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
       recordEvent(ctx, {
         taskId: workflow.id,
         type: "task.completed",
-        agent: step.assigned_agent,
+        agent: effectiveAgent,
         hub: step.hub,
         payload: { step_id: step.id, message: `${step.title} — done` },
       }),
       recordEvent(ctx, {
         taskId: workflow.id,
         type: "artifact.created",
-        agent: step.assigned_agent,
+        agent: effectiveAgent,
         hub: step.hub,
         payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title, sources: sources.length },
       }),
