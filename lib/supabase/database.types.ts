@@ -675,6 +675,16 @@ export type Document = {
   created_at: string;
 };
 
+export type DocumentVersion = {
+  id: string;
+  document_id: string;
+  organization_id: string;
+  content: string | null;
+  name: string;
+  saved_by: string | null;
+  created_at: string;
+};
+
 export type DataRoomShare = {
   id: string;
   organization_id: string;
@@ -1710,6 +1720,7 @@ export type Database = {
       deals: TableShape<Deal>;
       assets: TableShape<Asset>;
       documents: TableShape<Document>;
+      document_versions: TableShape<DocumentVersion>;
       underwritings: TableShape<Underwriting>;
       diligence_items: TableShape<DiligenceItem>;
       ic_decisions: TableShape<IcDecision>;
