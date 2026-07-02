@@ -7,6 +7,40 @@ export type RoomDef = {
   href: string;
 };
 
+/**
+ * An interactive zone inside a room. The player walks into it and an iframe
+ * overlay appears. Coordinates are relative to the room's top-left corner in
+ * world pixels. In future this can be sourced from Tiled object layers.
+ */
+export type ZoneDef = {
+  id: string;
+  roomKey: string;
+  /** World-space rect. x/y are room-relative offsets from room top-left. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  url: string;
+  title: string;
+};
+
+export const IFRAME_ZONES: ZoneDef[] = [
+  {
+    id: "trading-market-data",
+    roomKey: "trading",
+    x: 48, y: 48, w: 288, h: 192,
+    url: "https://widget.finnhub.io/widgets/stocks/chart?symbol=SPY&watermarkColor=%231db954&backgroundColor=%230f172a&textColor=white",
+    title: "Market Data",
+  },
+  {
+    id: "research-news",
+    roomKey: "research",
+    x: 48, y: 48, w: 288, h: 192,
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US",
+    title: "Research Feed",
+  },
+];
+
 export type RoomAction = {
   id: string;
   label: string;
