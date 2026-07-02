@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
+import type { RoomAction } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
 import { MediaPermissionBanner } from "./MediaPermissionBanner";
@@ -67,6 +68,7 @@ export function VirtualOfficeGame({
   const [videoTiles, setVideoTiles] = useState<VideoTile[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [mediaState, setMediaState] = useState<"idle" | "prompt" | "active" | "dismissed">("idle");
+  const [roomActions, setRoomActions] = useState<RoomAction[]>([]);
 
   const requestMedia = useCallback(async () => {
     try {
@@ -133,6 +135,11 @@ export function VirtualOfficeGame({
           onNpcClickRef.current?.(payload);
         });
 
+        // Room enter bridge — updates room-specific action panel
+        game.events.on("office:room-enter", (_key: string, actions: RoomAction[]) => {
+          setRoomActions(actions);
+        });
+
         // Video tile bridge
         game.events.on("rtc:video", (peerId: string, el: HTMLVideoElement | null) => {
           setVideoTiles((prev) => {
@@ -170,6 +177,7 @@ export function VirtualOfficeGame({
       setBubbleMembers([]);
       setVideoTiles([]);
       setMediaState("idle");
+      setRoomActions([]);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -204,6 +212,14 @@ export function VirtualOfficeGame({
     }
   }, [teleportTarget]);
 
+  const handleRoomAction = useCallback((action: RoomAction) => {
+    if (action.href) {
+      window.location.href = action.href;
+    } else if (action.event) {
+      window.dispatchEvent(new CustomEvent(action.event, { detail: {} }));
+    }
+  }, []);
+
   return (
     <div className="flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800">
       {/* Media permission banner */}
@@ -232,6 +248,22 @@ export function VirtualOfficeGame({
 
         {/* Proximity bubble overlay */}
         <BubbleOverlay members={bubbleMembers} />
+
+        {/* Room-specific action panel — bottom-left, fades in on room enter */}
+        {roomActions.length > 0 && (
+          <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
+            {roomActions.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => handleRoomAction(action)}
+                className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium rounded-lg bg-slate-900/90 border border-slate-700/60 text-slate-300 hover:text-amber-400 hover:border-amber-400/40 hover:bg-slate-800/90 transition-colors backdrop-blur-sm"
+              >
+                <span className="text-amber-400/70 font-mono">{action.icon}</span>
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Phaser canvas mount point */}
         <div
