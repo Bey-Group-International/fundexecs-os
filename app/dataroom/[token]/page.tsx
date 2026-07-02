@@ -11,33 +11,20 @@ import type {
   Document,
   DataRoomShare,
 } from "@/lib/supabase/database.types";
+import { DataRoomViewer } from "@/components/dataroom/DataRoomViewer";
+import type {
+  ViewerOrg,
+  ViewerTrackRecord,
+  ViewerThesis,
+  ViewerTeamMember,
+  ViewerEntity,
+  ViewerSection,
+  ViewerDoc,
+} from "@/components/dataroom/DataRoomViewer";
 
-// Public, read-only data room. Lives OUTSIDE the authed (app) group so it's
-// reachable without a login. The token is the sole gate: the share row is
-// resolved with the service-role client (RLS-bypassing) and only honored when
-// it is not revoked and not past its expiry.
+// Public, read-only data room — outside the authed (app) group so it's
+// reachable without a login. The token is the sole gate.
 export const dynamic = "force-dynamic";
-
-function compactUsd(n: number | null): string | null {
-  if (n == null || n <= 0) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
-}
-
-function safeHref(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    if (u.protocol === "http:" || u.protocol === "https:") return u.href;
-  } catch {
-    /* not absolute */
-  }
-  return null;
-}
 
 function Unavailable() {
   return (
@@ -65,6 +52,7 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return <Unavailable />;
 
   const orgId = share.organization_id;
+
   const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, docsRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
     supabase
@@ -78,7 +66,13 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
     supabase.from("track_records").select("*").eq("organization_id", orgId).order("vintage_year", { ascending: false }),
     supabase.from("entities").select("*").eq("organization_id", orgId),
     supabase.from("organization_members").select("*").eq("organization_id", orgId),
-    supabase.from("documents").select("*").eq("organization_id", orgId).order("sort_order", { ascending: true }),
+    supabase
+      .from("documents")
+      .select("*")
+      .eq("organization_id", orgId)
+      .eq("status", "ready")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
   ]);
 
   const org = orgRes.data as Organization | null;
@@ -91,145 +85,100 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
 
   let principals: Principal[] = [];
   if (members.length) {
-    const { data } = await supabase.from("principals").select("*").in("id", members.map((m) => m.principal_id));
+    const { data } = await supabase
+      .from("principals")
+      .select("*")
+      .in("id", members.map((m) => m.principal_id));
     principals = (data ?? []) as Principal[];
   }
   const byId = new Map(principals.map((p) => [p.id, p]));
   const blended = blendTrackRecord(records);
-  const accent = org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color) ? org.brand_color : "#D4AF6A";
 
-  // Log the visit (fire-and-forget; never block the render).
+  // Log the visit (fire-and-forget).
   await supabase
     .from("data_room_views")
     .insert({ organization_id: orgId, share_id: share.id, kind: "room" })
     .then(() => undefined, () => undefined);
 
-  const docsBySection = new Map<string, Document[]>();
+  // Group ready documents by section.
+  const docsBySection = new Map<string, ViewerDoc[]>();
   for (const d of documents) {
     const k = d.doc_type ?? "other";
-    (docsBySection.get(k) ?? docsBySection.set(k, []).get(k)!).push(d);
+    const doc: ViewerDoc = {
+      id: d.id,
+      name: d.name,
+      content: d.content ?? null,
+      storage_key: d.storage_key ?? null,
+      doc_type: d.doc_type ?? null,
+    };
+    const bucket = docsBySection.get(k);
+    if (bucket) bucket.push(doc);
+    else docsBySection.set(k, [doc]);
   }
 
+  // Build ordered section list (only sections that have ready docs).
+  const docSections: ViewerSection[] = DATA_ROOM_SECTIONS
+    .map((s) => ({ key: s.key, label: s.label, docs: docsBySection.get(s.key) ?? [] }))
+    .filter((s) => s.docs.length > 0);
+
+  // Serialize for client component.
+  const viewerOrg: ViewerOrg = {
+    name: org.name,
+    tagline: org.tagline ?? null,
+    legal_name: org.legal_name ?? null,
+    entity_type: org.entity_type ?? null,
+    jurisdiction: org.jurisdiction ?? null,
+    website: org.website ?? null,
+    brand_color: org.brand_color ?? null,
+    logo_url: org.logo_url ?? null,
+  };
+
+  const viewerBlended: ViewerTrackRecord = {
+    dealCount: blended.dealCount,
+    realizedCount: blended.realizedCount,
+    weightedGrossIrr: blended.weightedGrossIrr ?? null,
+    pooledMoic: blended.pooledMoic ?? null,
+    dpi: blended.dpi ?? null,
+    totalInvested: blended.totalInvested ?? null,
+    vintageRange: blended.vintageRange ?? null,
+  };
+
+  const viewerThesis: ViewerThesis | null = thesis
+    ? {
+        title: thesis.title,
+        summary: thesis.summary ?? null,
+        asset_classes: thesis.asset_classes ?? null,
+        geographies: thesis.geographies ?? null,
+        target_irr: thesis.target_irr ?? null,
+        target_moic: thesis.target_moic ?? null,
+        check_size_min: thesis.check_size_min ?? null,
+        check_size_max: thesis.check_size_max ?? null,
+      }
+    : null;
+
+  const viewerTeam: ViewerTeamMember[] = members.map((m) => {
+    const p = byId.get(m.principal_id);
+    return {
+      name: p?.full_name || p?.email || "Member",
+      title: p?.title ?? null,
+      email: p?.email ?? null,
+    };
+  });
+
+  const viewerEntities: ViewerEntity[] = entities.map((e) => ({
+    name: e.name,
+    entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
+  }));
+
   return (
-    <main className="min-h-screen bg-surface-0 text-fg-primary">
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <header className="mb-8 flex items-start gap-4 border-b pb-6" style={{ borderColor: `${accent}55` }}>
-          <span
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg font-display text-xl font-semibold text-surface-0"
-            style={{ backgroundColor: accent }}
-          >
-            {org.name.charAt(0).toUpperCase()}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">Data Room</span>
-              <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                Read-only
-              </span>
-            </div>
-            <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">{org.name}</h1>
-            {org.tagline ? <p className="mt-1 text-sm text-fg-secondary">{org.tagline}</p> : null}
-          </div>
-        </header>
-
-        {blended.dealCount > 0 ? (
-          <section className="mb-8">
-            <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">Track Record</h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[
-                { v: blended.weightedGrossIrr != null ? `${blended.weightedGrossIrr.toFixed(0)}%` : "—", l: "Gross IRR" },
-                { v: blended.pooledMoic != null ? `${blended.pooledMoic.toFixed(1)}x` : "—", l: "MOIC" },
-                { v: blended.dpi != null ? `${blended.dpi.toFixed(2)}x` : "—", l: "DPI" },
-                { v: compactUsd(blended.totalInvested) ?? "—", l: "Invested" },
-              ].map((m) => (
-                <div key={m.l} className="rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-center">
-                  <p className="font-display text-xl font-semibold">{m.v}</p>
-                  <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">{m.l}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {thesis ? (
-          <section className="mb-8">
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-fg-muted">Thesis &amp; Strategy</h2>
-            <p className="text-sm font-medium">{thesis.title}</p>
-            {thesis.summary ? <p className="mt-1 text-sm leading-snug text-fg-secondary">{thesis.summary}</p> : null}
-          </section>
-        ) : null}
-
-        {members.length > 0 ? (
-          <section className="mb-8">
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-fg-muted">Team</h2>
-            <div className="flex flex-wrap gap-2">
-              {members.map((m) => {
-                const p = byId.get(m.principal_id);
-                const name = p?.full_name || p?.email || "Member";
-                return (
-                  <span key={m.id} className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary">
-                    <span className="text-fg-primary">{name}</span>
-                    {p?.title ? <span className="text-fg-muted"> · {p.title}</span> : null}
-                  </span>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        {entities.length > 0 ? (
-          <section className="mb-8">
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-wider text-fg-muted">Structure</h2>
-            <p className="text-sm text-fg-secondary">{entities.map((e) => e.name).join("  ·  ")}</p>
-          </section>
-        ) : null}
-
-        {documents.length > 0 ? (
-          <section className="mb-8">
-            <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">Documents</h2>
-            <div className="flex flex-col gap-4">
-              {DATA_ROOM_SECTIONS.map((s) => {
-                const docs = docsBySection.get(s.key);
-                if (!docs?.length) return null;
-                return (
-                  <div key={s.key}>
-                    <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">{s.label}</p>
-                    <div className="flex flex-col gap-1.5">
-                      {docs.map((d) => {
-                        const href = safeHref(d.storage_key);
-                        return (
-                          <div key={d.id} className="rounded-lg border border-line bg-surface-1 px-3 py-2">
-                            <div className="flex items-center gap-3">
-                              <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">{d.name}</span>
-                              {href ? (
-                                <a
-                                  href={`/dataroom/${params.token}/d/${d.id}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline"
-                                >
-                                  Open →
-                                </a>
-                              ) : null}
-                            </div>
-                            {d.content ? (
-                              <p className="mt-1 whitespace-pre-wrap text-xs leading-snug text-fg-secondary">{d.content}</p>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <footer className="mt-12 border-t border-line pt-6 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-fg-muted">Powered by FundExecs OS</span>
-        </footer>
-      </div>
-    </main>
+    <DataRoomViewer
+      token={params.token}
+      org={viewerOrg}
+      blended={viewerBlended}
+      thesis={viewerThesis}
+      team={viewerTeam}
+      entities={viewerEntities}
+      docSections={docSections}
+    />
   );
 }

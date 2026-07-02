@@ -1,8 +1,10 @@
 {
-  "name": "@fundexecs/virtual-office-shared",
-  "version": "0.1.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -10,14 +12,12 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "main": "dist/index.js",
+  "name": "@fundexecs/virtual-office-shared",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
   },
-  "dependencies": {
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.3"
-  }
+  "types": "dist/index.d.ts",
+  "version": "0.1.0"
 }

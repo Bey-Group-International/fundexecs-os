@@ -4,7 +4,8 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { scoreDocument } from "@/lib/document-quality";
-import { deleteDocument, updateDocument } from "./materials-actions";
+import { deleteDocument, updateDocument, updateDocumentStatus } from "./materials-actions";
+import type { DocumentStatus } from "@/lib/supabase/database.types";
 import { autoComposeContent, earnChat, institutionalize } from "./builder-actions";
 import { BuilderWizard } from "./BuilderWizard";
 import type { DraftTurn } from "@/lib/claude";
@@ -19,6 +20,7 @@ export interface BuilderDoc {
   doc_type: string | null;
   content: string | null;
   storage_key: string | null;
+  status?: DocumentStatus;
 }
 
 export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
@@ -27,8 +29,29 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
   const [section, setSection] = useState(doc.doc_type ?? "other");
   const [content, setContent] = useState(doc.content ?? "");
   const [dirtySaved, setDirtySaved] = useState<"idle" | "saving" | "saved">("idle");
+  const [docStatus, setDocStatus] = useState<DocumentStatus>(doc.status ?? "ready");
+  const [statusPending, startStatusTransition] = useTransition();
   const [pending, startTransition] = useTransition();
   const isLink = !!doc.storage_key;
+
+  const STATUS_CYCLE: DocumentStatus[] = ["draft", "review", "ready"];
+  const STATUS_LABELS: Record<DocumentStatus, string> = { draft: "Draft", review: "Review", ready: "Ready ✓" };
+  const STATUS_CLASSES: Record<DocumentStatus, string> = {
+    draft: "border-line text-fg-muted",
+    review: "border-amber-500/40 text-amber-400",
+    ready: "border-emerald-500/40 text-emerald-400 bg-emerald-500/5",
+  };
+
+  function cycleStatus() {
+    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(docStatus) + 1) % STATUS_CYCLE.length];
+    setDocStatus(next);
+    startStatusTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", doc.id);
+      fd.set("status", next);
+      await updateDocumentStatus(fd);
+    });
+  }
 
   // Earn chat
   const [messages, setMessages] = useState<DraftTurn[]>([]);
@@ -259,6 +282,16 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">Draft</span>
           <div className="flex items-center gap-2">
+            {/* Publish status cycler */}
+            <button
+              type="button"
+              onClick={cycleStatus}
+              disabled={statusPending}
+              title="Click to advance publish status: Draft → Review → Ready"
+              className={`rounded-full border px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[docStatus]}`}
+            >
+              {STATUS_LABELS[docStatus]}
+            </button>
             {dirtySaved === "saved" ? (
               <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-400">Saved ✓</span>
             ) : null}

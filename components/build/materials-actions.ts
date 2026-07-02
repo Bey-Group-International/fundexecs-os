@@ -143,6 +143,22 @@ export async function moveDocument(formData: FormData): Promise<void> {
   revalidatePath(ROOM);
 }
 
+// Set a document's publish status (draft | review | ready).
+export async function updateDocumentStatus(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const id = String(formData.get("id") ?? "");
+  const s = String(formData.get("status") ?? "");
+  if (!id || !["draft", "review", "ready"].includes(s)) return;
+  const supabase = createServerClient();
+  await supabase
+    .from("documents")
+    .update({ status: s as import("@/lib/supabase/database.types").DocumentStatus })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  revalidatePath(ROOM);
+}
+
 // --- Shareable data-room links --------------------------------------------
 export async function createShare(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();

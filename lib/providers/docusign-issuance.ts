@@ -27,7 +27,22 @@ function configured(): boolean {
 }
 
 // Docusign base URL from env, defaulting to sandbox.
-const BASE_URL = process.env.DOCUSIGN_BASE_URL ?? "https://demo.docusign.net/restapi";
+// Only allow known Docusign hostnames to prevent SSRF via env var injection.
+const ALLOWED_DOCUSIGN_HOSTS = ["demo.docusign.net", "na4.docusign.net", "eu.docusign.net", "docusign.net"];
+function safeBaseUrl(): string {
+  const raw = process.env.DOCUSIGN_BASE_URL;
+  if (!raw) return "https://demo.docusign.net/restapi";
+  try {
+    const parsed = new URL(raw);
+    if (!ALLOWED_DOCUSIGN_HOSTS.some(h => parsed.hostname === h || parsed.hostname.endsWith("." + h))) {
+      return "https://demo.docusign.net/restapi";
+    }
+    return raw;
+  } catch {
+    return "https://demo.docusign.net/restapi";
+  }
+}
+const BASE_URL = safeBaseUrl();
 const ACCOUNT_ID = process.env.DOCUSIGN_ACCOUNT_ID ?? "";
 
 async function createEnvelope(params: IssuanceParams): Promise<string> {
@@ -73,7 +88,16 @@ async function createEnvelope(params: IssuanceParams): Promise<string> {
   return data.envelopeId as string;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertEnvelopeId(envelopeId: string): void {
+  if (!UUID_RE.test(envelopeId)) {
+    throw new Error(`Invalid envelope ID: must be a UUID`);
+  }
+}
+
 async function sendEnvelope(envelopeId: string): Promise<void> {
+  assertEnvelopeId(envelopeId);
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
     {
@@ -92,6 +116,7 @@ async function sendEnvelope(envelopeId: string): Promise<void> {
 }
 
 async function getEnvelopeStatus(envelopeId: string): Promise<string> {
+  assertEnvelopeId(envelopeId);
   const res = await fetch(
     `${BASE_URL}/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
     {

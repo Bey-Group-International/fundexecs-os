@@ -34,6 +34,7 @@ import { ExecuteCapTableModule } from "@/components/execute/CapTableModule";
 import { ExecuteOwnershipModule } from "@/components/execute/OwnershipModule";
 import { ExecuteValuationsModule } from "@/components/execute/ValuationsModule";
 import { ExecuteWaterfallModule } from "@/components/execute/WaterfallModule";
+import { SigningModule } from "@/components/execute/SigningModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -202,15 +203,11 @@ export async function ModuleView({
     if (mod.key === "waterfall") return <ExecuteWaterfallModule orgId={ctx.orgId} />;
     if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
+    if (mod.key === "signing") return <SigningModule />;
 
     // Modules with defined roadmap scope — structured Coming Soon states so
     // the operator knows what's shipping and can use Earn in the interim.
     const EXECUTE_COMING_SOON: Record<string, { blurb: string; earnPrompt: string }> = {
-      signing: {
-        blurb:
-          "Counterparty e-signature flows, signature-status tracking, and automatic filing into the Data Room — all wired to your deal records.",
-        earnPrompt: "Help me track signing status for my active closing",
-      },
       issuance: {
         blurb:
           "Equity and unit issuance ledger: issue securities, record cap-table entries, generate certificates, and push events to LP notices.",
