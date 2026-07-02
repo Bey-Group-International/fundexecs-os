@@ -24,7 +24,22 @@ export type ZoneDef = {
   title: string;
 };
 
+/**
+ * Sentinel value in a ZoneDef url field.
+ * OfficeTabs replaces it at runtime with the user's actual Calendly scheduling URL
+ * (from user_metadata.calendly_scheduling_url, falling back to CALENDLY_DEFAULT_URL).
+ */
+export const ZONE_URL_CALENDLY = "{{calendly}}";
+export const CALENDLY_DEFAULT_URL = "https://calendly.com/fundexecs";
+
 export const IFRAME_ZONES: ZoneDef[] = [
+  {
+    id: "boardroom-calendly",
+    roomKey: "boardroom",
+    x: 48, y: 48, w: 288, h: 192,
+    url: ZONE_URL_CALENDLY,
+    title: "Schedule a Meeting",
+  },
   {
     id: "trading-market-data",
     roomKey: "trading",
@@ -33,11 +48,11 @@ export const IFRAME_ZONES: ZoneDef[] = [
     title: "Market Data",
   },
   {
-    id: "research-news",
-    roomKey: "research",
+    id: "reception-lp-portal",
+    roomKey: "reception",
     x: 48, y: 48, w: 288, h: 192,
-    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US",
-    title: "Research Feed",
+    url: "{{lp-portal}}",
+    title: "LP Portal",
   },
 ];
 

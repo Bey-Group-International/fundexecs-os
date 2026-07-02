@@ -28,6 +28,7 @@ export function OfficeTabs() {
   const [occupancy, setOccupancy] = useState<Record<string, number>>({});
 
   // Guest join state — shown when no session and virtual tab is requested
+  const [zoneUrlOverrides, setZoneUrlOverrides] = useState<Record<string, string>>({});
   const [guestPrompt, setGuestPrompt] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestLoading, setGuestLoading] = useState(false);
@@ -45,6 +46,11 @@ export function OfficeTabs() {
       const meta = data.session?.user?.user_metadata;
       if (meta?.character_id) setCharacterId(meta.character_id as string);
       if (meta?.display_name) setDisplayName(meta.display_name as string);
+      // Populate dynamic zone URLs from integration metadata
+      const overrides: Record<string, string> = {};
+      if (meta?.calendly_scheduling_url) overrides["calendly"] = meta.calendly_scheduling_url as string;
+      if (meta?.lp_portal_url) overrides["lp-portal"] = meta.lp_portal_url as string;
+      if (Object.keys(overrides).length > 0) setZoneUrlOverrides(overrides);
       setSessionChecked(true);
     });
   }, []);
@@ -81,6 +87,8 @@ export function OfficeTabs() {
       if (t) setToken(t);
       setDisplayName(name);
       setGuestPrompt(false);
+      // Guests get default zone URLs (no custom integrations)
+      setZoneUrlOverrides({});
       // Teleport to the room from ?room= if present
       const room = searchParams.get("room");
       if (room) {
@@ -178,6 +186,7 @@ export function OfficeTabs() {
             teleportTarget={teleportTarget}
             onOccupancyChange={setOccupancy}
             onNpcClick={handleNpcClick}
+            zoneUrlOverrides={zoneUrlOverrides}
           />
         )}
       </div>

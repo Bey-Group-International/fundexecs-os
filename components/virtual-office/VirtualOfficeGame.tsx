@@ -4,12 +4,26 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
 import type { RoomAction, ZoneDef } from "./types";
+import { IFRAME_ZONES, ZONE_URL_CALENDLY, CALENDLY_DEFAULT_URL } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
 import { MediaPermissionBanner } from "./MediaPermissionBanner";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
+
+/** Replace sentinel URLs in IFRAME_ZONES with runtime values from overrides. */
+function _resolveZones(overrides: Record<string, string>) {
+  return IFRAME_ZONES.map((z) => {
+    if (z.url.startsWith("{{") && z.url.endsWith("}}")) {
+      const key = z.url.slice(2, -2);
+      const resolved = overrides[key] ?? (key === "calendly" ? CALENDLY_DEFAULT_URL : null);
+      if (!resolved) return null; // skip zones with no URL yet
+      return { ...z, url: resolved };
+    }
+    return z;
+  }).filter((z): z is NonNullable<typeof z> => z !== null);
+}
 
 type VideoTile = {
   peerId: string;
@@ -38,6 +52,12 @@ type VirtualOfficeGameProps = {
   onOccupancyChange?: (counts: Record<string, number>) => void;
   /** Called when the user clicks an NPC sprite. */
   onNpcClick?: (payload: NpcClickPayload) => void;
+  /**
+   * Per-zone URL overrides keyed by zone id or sentinel string.
+   * Sentinel values in IFRAME_ZONES (e.g. "{{calendly}}") are replaced with
+   * the matching value here before being passed into the Phaser scene.
+   */
+  zoneUrlOverrides?: Record<string, string>;
 };
 
 export function VirtualOfficeGame({
@@ -48,6 +68,7 @@ export function VirtualOfficeGame({
   teleportTarget,
   onOccupancyChange,
   onNpcClick,
+  zoneUrlOverrides = {},
 }: VirtualOfficeGameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -60,6 +81,15 @@ export function VirtualOfficeGame({
 
   const onNpcClickRef = useRef(onNpcClick);
   useEffect(() => { onNpcClickRef.current = onNpcClick; }, [onNpcClick]);
+
+  // Keep zone overrides current; re-emit zone config if game is already running
+  const zoneUrlOverridesRef = useRef(zoneUrlOverrides);
+  useEffect(() => {
+    zoneUrlOverridesRef.current = zoneUrlOverrides;
+    if (gameRef.current) {
+      gameRef.current.events.emit("office:zone-config", _resolveZones(zoneUrlOverrides));
+    }
+  }, [zoneUrlOverrides]);
 
   // Buffer teleport targets that arrive before Phaser has loaded
   const pendingTeleportRef = useRef<string | null>(null);
@@ -163,6 +193,9 @@ export function VirtualOfficeGame({
         }
 
         gameRef.current = game;
+
+        // Send resolved zone config to the scene
+        game.events.emit("office:zone-config", _resolveZones(zoneUrlOverridesRef.current));
 
         // Flush any teleport that arrived before the game was ready
         if (pendingTeleportRef.current) {

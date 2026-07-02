@@ -12,7 +12,6 @@ import {
   DOOR_GAP,
   ANIM_ROWS,
   ROOM_ACTIONS,
-  IFRAME_ZONES,
   type ZoneDef,
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
@@ -122,7 +121,8 @@ export class OfficeScene extends Phaser.Scene {
   private lastPlayerRow = -1;
   private _interpFrame = 0;
 
-  // Iframe zones
+  // Iframe zones — populated via office:zone-config event from React layer
+  private iframeZoneDefs: ZoneDef[] = [];
   private iframeZoneRects: Array<{ rect: Phaser.Geom.Rectangle; def: ZoneDef }> = [];
   private currentZoneId: string | null = null;
   /** seq number of the last server-acknowledged move for local reconciliation */
@@ -204,11 +204,16 @@ export class OfficeScene extends Phaser.Scene {
     this._createPlayer();
     this._createAnimations();
     this._createRoomZones();
-    this._createIframeZones();
     this._createRoomLabel();
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
+
+    // Receive resolved zone definitions from the React wrapper
+    this.game.events.on("office:zone-config", (zones: ZoneDef[]) => {
+      this.iframeZoneDefs = zones;
+      this._createIframeZones();
+    });
 
     // M3/M4: receive local media stream from React wrapper
     this.game.events.on("rtc:localStream", (stream: MediaStream) => {
@@ -247,6 +252,7 @@ export class OfficeScene extends Phaser.Scene {
 
   shutdown() {
     this.game.events.off("office:teleport");
+    this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
     if (this.sfuMode) {
       this.sfu?.leave();
@@ -451,7 +457,9 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private _createIframeZones() {
-    for (const def of IFRAME_ZONES) {
+    // Clear any previously rendered zone graphics (safe to call multiple times)
+    this.iframeZoneRects = [];
+    for (const def of this.iframeZoneDefs) {
       const room = ROOMS.find((r) => r.key === def.roomKey);
       if (!room) continue;
       const worldX = room.col * ROOM_W + def.x;
