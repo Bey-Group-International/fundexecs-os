@@ -47,5 +47,6 @@ export async function saveOrgProfile(
 
   revalidatePath("/build/profile");
   revalidatePath("/settings");
+  revalidatePath("/build/brand");
   return { ok: true };
 }

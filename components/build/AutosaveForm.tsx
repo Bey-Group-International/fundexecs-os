@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-type SaveStatus = "idle" | "saving" | "saved";
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 // Wraps a set of form fields and autosaves them via a server action. On any
 // input/change, it debounces (~800ms) and then submits the form, showing a
@@ -34,9 +34,13 @@ export function AutosaveForm({
   async function handleSubmit(formData: FormData) {
     setStatus("saving");
     startTransition(async () => {
-      await action(formData);
-      setStatus("saved");
-      router.refresh();
+      try {
+        await action(formData);
+        setStatus("saved");
+        router.refresh();
+      } catch {
+        setStatus("error");
+      }
     });
   }
 
@@ -56,6 +60,8 @@ export function AutosaveForm({
           <span className="text-fg-muted">Saving…</span>
         ) : status === "saved" ? (
           <span className="text-status-success">Saved ✓</span>
+        ) : status === "error" ? (
+          <span className="text-status-danger">Save failed — retry</span>
         ) : (
           <span className="text-fg-muted">Saved</span>
         )}

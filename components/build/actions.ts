@@ -38,6 +38,8 @@ export async function updateBrand(formData: FormData): Promise<void> {
     })
     .eq("id", ctx.orgId);
   revalidatePath(`${BUILD}/brand`);
+  revalidatePath(`${BUILD}/profile`);
+  revalidatePath("/settings");
 }
 
 // --- Thesis ----------------------------------------------------------------
