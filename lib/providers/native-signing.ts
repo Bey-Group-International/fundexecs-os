@@ -13,12 +13,25 @@ import type {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Validate that the configured app URL is a safe internal origin before using
+// it as a fetch base. Only localhost and *.fundexecs.com are permitted to
+// prevent SSRF if env vars are tampered with.
 function getBaseUrl(): string {
-  return (
+  const raw =
     process.env.NEXTAUTH_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000"
-  );
+    "http://localhost:3000";
+  try {
+    const { hostname } = new URL(raw);
+    const safe =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.endsWith(".fundexecs.com") ||
+      hostname.endsWith(".vercel.app");
+    return safe ? raw : "http://localhost:3000";
+  } catch {
+    return "http://localhost:3000";
+  }
 }
 
 function isMockMode(): boolean {
