@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ExecutiveHQBoot } from "./ExecutiveHQBoot";
+import { useAgentActivity, agentKeyToExecId, type AgentActivityMap, type AgentActivityInfo } from "@/lib/hooks/useAgentActivity";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -159,64 +160,102 @@ function ExecAvatar({
   size,
   onClick,
   activeBubble,
+  activity,
 }: {
   exec: ExecData;
   size: number;
   onClick: () => void;
   activeBubble: BubbleState;
+  activity?: AgentActivityInfo;
 }) {
   const speaking = activeBubble?.execId === exec.id;
   const initials = getInitials(exec.name);
   const fontSize = Math.round(size * 0.32);
+  const status = activity?.status ?? "idle";
+  const isWorking = status === "working";
+
+  const dotColor =
+    status === "working"  ? "#fbbf24" :
+    status === "awaiting" ? "#60a5fa" :
+    status === "completed"? "#22c55e" :
+    "#475569";
+
+  const dotGlow =
+    status === "working"  ? "0 0 6px #fbbf24aa" :
+    status === "awaiting" ? "0 0 5px #60a5fa88" :
+    "none";
+
   return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      title={`${exec.name} — ${exec.hint}`}
-      aria-label={`${exec.name}. ${exec.hint}`}
-      style={{
-        position: "relative",
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        border: `1.5px solid ${exec.themeColor}${speaking ? "cc" : "66"}`,
-        background: `radial-gradient(circle at 40% 35%, ${exec.themeColor}22 0%, rgba(8,6,4,0.85) 70%)`,
-        boxShadow: speaking
-          ? `0 0 0 2px ${exec.themeColor}55, 0 0 18px ${exec.themeColor}44`
-          : `0 0 0 0px transparent`,
-        cursor: "pointer",
-        pointerEvents: "auto",
-        transform: speaking ? "scale(1.08)" : "scale(1)",
-        transition: "transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}
-    >
-      <span style={{
-        fontFamily: "Georgia, 'Times New Roman', serif",
-        fontSize,
-        fontWeight: 600,
-        color: exec.themeColor,
-        letterSpacing: "0.04em",
-        userSelect: "none",
-        lineHeight: 1,
-      }}>
-        {initials}
-      </span>
-      {/* Active status dot */}
-      <span style={{
-        position: "absolute",
-        bottom: 1,
-        right: 1,
-        width: Math.max(6, size * 0.17),
-        height: Math.max(6, size * 0.17),
-        borderRadius: "50%",
-        background: "#22c55e",
-        border: "1.5px solid rgba(8,6,4,0.9)",
-      }} />
-    </button>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        title={`${exec.name} — ${activity?.taskTitle ?? exec.hint}`}
+        aria-label={`${exec.name}. ${activity?.taskTitle ?? exec.hint}`}
+        style={{
+          position: "relative",
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          border: `1.5px solid ${exec.themeColor}${speaking || isWorking ? "cc" : "66"}`,
+          background: `radial-gradient(circle at 40% 35%, ${exec.themeColor}22 0%, rgba(8,6,4,0.85) 70%)`,
+          boxShadow: speaking || isWorking
+            ? `0 0 0 2px ${exec.themeColor}55, 0 0 18px ${exec.themeColor}44`
+            : `0 0 0 0px transparent`,
+          cursor: "pointer",
+          pointerEvents: "auto",
+          transform: speaking || isWorking ? "scale(1.08)" : "scale(1)",
+          transition: "transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          animation: isWorking ? "exec-badge-pulse 1.8s ease-in-out infinite" : undefined,
+        }}
+      >
+        <span style={{
+          fontFamily: "Georgia, 'Times New Roman', serif",
+          fontSize,
+          fontWeight: 600,
+          color: exec.themeColor,
+          letterSpacing: "0.04em",
+          userSelect: "none",
+          lineHeight: 1,
+        }}>
+          {initials}
+        </span>
+        {/* Status dot */}
+        <span style={{
+          position: "absolute",
+          bottom: 1,
+          right: 1,
+          width: Math.max(6, size * 0.17),
+          height: Math.max(6, size * 0.17),
+          borderRadius: "50%",
+          background: dotColor,
+          border: "1.5px solid rgba(8,6,4,0.9)",
+          boxShadow: dotGlow,
+          animation: isWorking ? "exec-dot-pulse 1.2s ease-in-out infinite" : undefined,
+        }} />
+      </button>
+
+      {/* Typing indicator when working */}
+      {isWorking && (
+        <div style={{
+          display: "flex", gap: 2, alignItems: "center",
+          height: 6,
+        }}>
+          {[0, 1, 2].map(i => (
+            <span key={i} style={{
+              width: 3, height: 3, borderRadius: "50%",
+              background: exec.themeColor,
+              opacity: 0.8,
+              animation: `exec-typing 1.1s ease-in-out ${i * 0.18}s infinite`,
+            }} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -225,7 +264,7 @@ function ExecAvatar({
 function RoomCell({
   room, roomIndex, onExecClick, onRoomClick, zoomingRoom,
   activeBubble, reducedEffects, nightMode, isFocused, activity,
-  onHoverChange, debugGrid,
+  onHoverChange, debugGrid, agentActivity, onAutoActiveBubble,
 }: {
   room: RoomData; roomIndex: number;
   onExecClick: (exec: ExecData) => void;
@@ -235,6 +274,8 @@ function RoomCell({
   isFocused: boolean; activity: 0 | 1 | 2 | 3;
   onHoverChange: (id: string | null) => void;
   debugGrid: boolean;
+  agentActivity: AgentActivityMap;
+  onAutoActiveBubble: (execId: string, text: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [roomNight, setRoomNight] = useState(nightMode);
@@ -321,10 +362,24 @@ function RoomCell({
 
       {/* Active executives */}
       <div style={{ position:"absolute", bottom:28, left:0, right:0, zIndex:5, display:"flex", justifyContent:"space-around", alignItems:"flex-end", pointerEvents:"none" }}>
-        {room.executives.map(exec=>(
-          <ExecAvatar key={exec.id} exec={exec} size={44} onClick={()=>onExecClick(exec)}
-            activeBubble={activeBubble}/>
-        ))}
+        {room.executives.map(exec=>{
+          // Find activity by exec id (agentActivity keyed by AgentKey; map via exec id)
+          const execActivity = Object.entries(agentActivity).find(([agentKey]) =>
+            agentKeyToExecId(agentKey) === exec.id
+          )?.[1];
+          return (
+            <ExecAvatar key={exec.id} exec={exec} size={44}
+              onClick={()=>{
+                if (execActivity?.status === "working" && execActivity.taskTitle) {
+                  onAutoActiveBubble(exec.id, execActivity.taskTitle);
+                }
+                onExecClick(exec);
+              }}
+              activeBubble={activeBubble}
+              activity={execActivity}
+            />
+          );
+        })}
       </div>
 
       {/* Bottom glass panel */}
@@ -599,6 +654,7 @@ export function ExecutiveHQ({
   roomOccupancy?: Record<string, number>;
 } = {}) {
   const router = useRouter();
+  const agentActivity = useAgentActivity();
   const [booting, setBooting]             = useState(() => {
     if (typeof window === "undefined") return true;
     return sessionStorage.getItem(HQ_BOOT_SEEN_KEY) !== "1";
@@ -673,6 +729,25 @@ export function ExecutiveHQ({
       detail: { execName: exec.name, prompt: `You are advising ${exec.name}. What can I help you with today?` },
     }));
   }, []);
+
+  const handleAutoActiveBubble = useCallback((execId: string, text: string) => {
+    setActiveBubble({ execId, text });
+    setTimeout(() => setActiveBubble(null), 4000);
+  }, []);
+
+  // Compute room-level activity from live agent data
+  const computeRoomActivity = useCallback((room: RoomData): 0 | 1 | 2 | 3 => {
+    let maxStatus = 0;
+    for (const exec of room.executives) {
+      const execActivity = Object.entries(agentActivity).find(([agentKey]) =>
+        agentKeyToExecId(agentKey) === exec.id
+      )?.[1];
+      if (execActivity?.status === "working") return 3;
+      if (execActivity?.status === "awaiting" && maxStatus < 2) maxStatus = 2;
+    }
+    if (maxStatus > 0) return maxStatus as 0 | 1 | 2 | 3;
+    return (ROOM_ACTIVITY[room.id] ?? 0) as 0 | 1 | 2 | 3;
+  }, [agentActivity]);
 
   // Listen for earn-delegate: run the institutional animation sequence
   useEffect(() => {
@@ -766,6 +841,9 @@ export function ExecutiveHQ({
         @keyframes board-out      { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(1.04)} }
         @keyframes dispatch-glow  { 0%{opacity:0;transform:scale(0.8)} 30%{opacity:1} 70%{opacity:0.6} 100%{opacity:0;transform:scale(1.6)} }
         @keyframes gold-pulse-ring{ 0%{r:18;opacity:0.8;stroke-width:2} 100%{r:56;opacity:0;stroke-width:0.5} }
+        @keyframes exec-typing    { 0%,80%,100%{transform:translateY(0);opacity:0.4} 40%{transform:translateY(-3px);opacity:1} }
+        @keyframes exec-badge-pulse { 0%,100%{box-shadow:0 0 0 2px rgba(251,191,36,0.3),0 0 18px rgba(251,191,36,0.2)} 50%{box-shadow:0 0 0 3px rgba(251,191,36,0.6),0 0 28px rgba(251,191,36,0.45)} }
+        @keyframes exec-dot-pulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
@@ -886,9 +964,11 @@ export function ExecutiveHQ({
             reducedEffects={reducedEffects}
             nightMode={nightMode}
             isFocused={focusedRoomIndex === idx}
-            activity={(ROOM_ACTIVITY[room.id] ?? 0) as 0 | 1 | 2 | 3}
+            activity={computeRoomActivity(room)}
             onHoverChange={handleHoverChange}
             debugGrid={debugGrid}
+            agentActivity={agentActivity}
+            onAutoActiveBubble={handleAutoActiveBubble}
           />
         ))}
       </div>
