@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
-import type { RoomAction, ZoneDef } from "./types";
+import type { InteractiveObject, RoomAction, ZoneDef } from "./types";
 import { IFRAME_ZONES, ZONE_URL_CALENDLY, CALENDLY_DEFAULT_URL } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
@@ -23,6 +23,14 @@ const ROOM_NAV = [
   { key: "legal",     label: "Legal Corner",    icon: "§" },
   { key: "marketing", label: "Marketing",       icon: "◬" },
   { key: "reception", label: "Reception",       icon: "⬢" },
+];
+
+// Emote bar — mirrors keys 1-4 in the scene
+const EMOTE_BAR = [
+  { emoji: "👋", label: "Wave",      hotkey: "1" },
+  { emoji: "👍", label: "Thumbs up", hotkey: "2" },
+  { emoji: "❤️", label: "Heart",     hotkey: "3" },
+  { emoji: "🎉", label: "Celebrate", hotkey: "4" },
 ];
 
 /** Replace sentinel URLs in IFRAME_ZONES with runtime values from overrides. */
@@ -191,6 +199,15 @@ export function VirtualOfficeGame({
         game.events.on("office:zone-enter", (def: ZoneDef) => setActiveZone(def));
         game.events.on("office:zone-leave", () => setActiveZone(null));
 
+        // Interactive-object bridge — press X on a hotspot triggers its action
+        game.events.on("office:interact", (obj: InteractiveObject) => {
+          if (obj.href) {
+            window.location.href = obj.href;
+          } else if (obj.event) {
+            window.dispatchEvent(new CustomEvent(obj.event, { detail: {} }));
+          }
+        });
+
         // Video tile bridge
         game.events.on("rtc:video", (peerId: string, el: HTMLVideoElement | null) => {
           setVideoTiles((prev) => {
@@ -346,6 +363,19 @@ export function VirtualOfficeGame({
             {r.label}
           </button>
         ))}
+        {/* Emote bar — mirrors keyboard shortcuts 1-4 */}
+        <div className="ml-auto flex items-center gap-0.5 shrink-0 pl-2 border-l border-[#c9a84c18]">
+          {EMOTE_BAR.map((e) => (
+            <button
+              key={e.emoji}
+              title={`${e.label} (${e.hotkey})`}
+              onClick={() => gameRef.current?.events.emit("office:emote", e.emoji)}
+              className="px-1.5 py-0.5 rounded text-[13px] hover:bg-[#c9a84c1f] transition-colors"
+            >
+              {e.emoji}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Game canvas area */}

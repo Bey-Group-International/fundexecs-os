@@ -12,6 +12,8 @@ import {
   DOOR_GAP,
   ANIM_ROWS,
   ROOM_ACTIONS,
+  INTERACTIVE_OBJECTS,
+  type InteractiveObject,
   type ZoneDef,
 } from "../types";
 import { VirtualOfficeSocket, type ConnectionStatus } from "../net/VirtualOfficeSocket";
@@ -135,6 +137,16 @@ export class OfficeScene extends Phaser.Scene {
   // Minimap HUD
   private minimapPlayerDot!: Phaser.GameObjects.Arc;
 
+  // Interactive objects (press-X hotspots)
+  private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number }> = [];
+  private interactPrompt!: Phaser.GameObjects.Text;
+  private nearestInteractive: InteractiveObject | null = null;
+  private keyX!: Phaser.Input.Keyboard.Key;
+
+  // Emotes
+  private emoteKeys: Phaser.Input.Keyboard.Key[] = [];
+  private npcEmoteTimer = 0;
+
   constructor() {
     super({ key: "OfficeScene" });
   }
@@ -206,6 +218,8 @@ export class OfficeScene extends Phaser.Scene {
     this._spawnExecNpcs();
     this._setupPointerTeleport();
     this._createMinimap();
+    this._createInteractives();
+    this._setupEmotes();
 
     // Ensure the canvas captures keyboard events immediately on scene start
     this.game.canvas.setAttribute("tabindex", "0");
@@ -237,8 +251,10 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── update ──────────────────────────────────────────────────────────────────
 
-  update() {
+  update(_time: number, delta: number) {
     this._handleMovement();
+    this._updateInteractives();
+    this._updateEmotes(delta);
     this._updateRoomLabel();
     this._updateIframeZones();
     this._updateRemoteAvatars();
@@ -253,6 +269,8 @@ export class OfficeScene extends Phaser.Scene {
 
   shutdown() {
     this.game.events.off("office:teleport");
+    this.game.events.off("office:teleport-room");
+    this.game.events.off("office:emote");
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
     if (this.sfuMode) {
@@ -634,6 +652,125 @@ export class OfficeScene extends Phaser.Scene {
       state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
     }
+  }
+
+  // ── Interactive objects — WorkAdventure-style "press X" hotspots ────────────
+
+  private static readonly INTERACT_RADIUS = 52;
+
+  private _createInteractives() {
+    for (const obj of INTERACTIVE_OBJECTS) {
+      const room = ROOMS.find((r) => r.key === obj.roomKey);
+      if (!room) continue;
+      const wx = room.col * ROOM_W + obj.x;
+      const wy = room.row * ROOM_H + obj.y;
+      this.interactives.push({ obj, wx, wy });
+
+      // Subtle pulsing gold diamond marks the hotspot
+      const marker = this.add.text(wx, wy - 20, obj.icon, {
+        fontFamily: "monospace",
+        fontSize: "10px",
+        color: "#c9a84c",
+      }).setOrigin(0.5, 0.5).setDepth(7).setAlpha(0.7);
+      this.tweens.add({
+        targets: marker, y: wy - 24, alpha: 0.35,
+        duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+      });
+    }
+
+    // Scroll-locked prompt shown when standing near a hotspot
+    this.interactPrompt = this.add.text(0, 0, "", {
+      fontFamily: "'Georgia','Times New Roman',serif",
+      fontSize: "10px",
+      color: "#c9a84c",
+      backgroundColor: "#0a0806e6",
+      padding: { x: 10, y: 5 },
+    }).setScrollFactor(0).setDepth(25).setVisible(false);
+
+    this.keyX = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+  }
+
+  private _updateInteractives() {
+    let nearest: InteractiveObject | null = null;
+    let bestDist = OfficeScene.INTERACT_RADIUS;
+    for (const { obj, wx, wy } of this.interactives) {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, wx, wy);
+      if (d < bestDist) { bestDist = d; nearest = obj; }
+    }
+    if (nearest !== this.nearestInteractive) {
+      this.nearestInteractive = nearest;
+      if (nearest) {
+        this.interactPrompt.setText(`${nearest.icon}  Press X — ${nearest.label}`);
+        const cam = this.cameras.main;
+        this.interactPrompt.setPosition(
+          cam.width / 2 - this.interactPrompt.width / 2,
+          cam.height - 44,
+        );
+        this.interactPrompt.setVisible(true);
+      } else {
+        this.interactPrompt.setVisible(false);
+      }
+    }
+    if (this.nearestInteractive && Phaser.Input.Keyboard.JustDown(this.keyX)) {
+      this.game.events.emit("office:interact", this.nearestInteractive);
+      this._showEmote(this.player.x, this.player.y, "✦");
+    }
+  }
+
+  // ── Emotes — Gather-style reactions on keys 1-4 ─────────────────────────────
+
+  private static readonly EMOTES = ["👋", "👍", "❤️", "🎉"];
+
+  private _setupEmotes() {
+    const codes = [
+      Phaser.Input.Keyboard.KeyCodes.ONE,
+      Phaser.Input.Keyboard.KeyCodes.TWO,
+      Phaser.Input.Keyboard.KeyCodes.THREE,
+      Phaser.Input.Keyboard.KeyCodes.FOUR,
+    ];
+    this.emoteKeys = codes.map((c) => this.input.keyboard!.addKey(c));
+
+    // React layer can also trigger emotes (emote button bar)
+    this.game.events.on("office:emote", (emoji: string) => {
+      this._showEmote(this.player.x, this.player.y, emoji);
+    });
+  }
+
+  private _updateEmotes(delta: number) {
+    for (let i = 0; i < this.emoteKeys.length; i++) {
+      if (Phaser.Input.Keyboard.JustDown(this.emoteKeys[i])) {
+        this._showEmote(this.player.x, this.player.y, OfficeScene.EMOTES[i]);
+      }
+    }
+    // Ambient NPC emotes — a random exec reacts every 9-16s for liveliness
+    this.npcEmoteTimer -= delta;
+    if (this.npcEmoteTimer <= 0) {
+      this.npcEmoteTimer = 9000 + Math.random() * 7000;
+      const npcs = [...this.npcAvatars.values()];
+      if (npcs.length > 0) {
+        const npc = npcs[Math.floor(Math.random() * npcs.length)];
+        const ambient = ["💬", "📊", "✦", "📈", "☕"];
+        this._showEmote(npc.sprite.x, npc.sprite.y, ambient[Math.floor(Math.random() * ambient.length)]);
+      }
+    }
+  }
+
+  private _showEmote(x: number, y: number, emoji: string) {
+    // Speech-bubble emote that floats up and fades
+    const bubble = this.add.text(x, y - 34, emoji, {
+      fontSize: "14px",
+      backgroundColor: "#0a0806cc",
+      padding: { x: 5, y: 3 },
+    }).setOrigin(0.5, 1).setDepth(15).setScale(0.4);
+    this.tweens.add({
+      targets: bubble, scale: 1, y: y - 44, duration: 180, ease: "Back.easeOut",
+      onComplete: () => {
+        this.tweens.add({
+          targets: bubble, y: y - 58, alpha: 0, duration: 900, delay: 700,
+          onComplete: () => bubble.destroy(),
+        });
+      },
+    });
   }
 
   private _createMinimap() {

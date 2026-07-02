@@ -56,6 +56,33 @@ export const IFRAME_ZONES: ZoneDef[] = [
   },
 ];
 
+/** Interactive object — a furniture hotspot with a "press X" prompt. */
+export type InteractiveObject = {
+  id: string;
+  roomKey: string;
+  /** Position within the room, px from room origin (tile center). */
+  x: number;
+  y: number;
+  label: string;
+  icon: string;
+  href?: string;
+  event?: string;
+};
+
+// Positions match furniture placed in office-world.tmj (tile*32 + 16).
+export const INTERACTIVE_OBJECTS: InteractiveObject[] = [
+  { id: "ceo-desk",        roomKey: "ceo",       x: 5*32+16, y: 2*32+16, label: "CEO Dashboard",   icon: "◆", href: "/dashboard" },
+  { id: "board-table",     roomKey: "boardroom", x: 6*32+16, y: 4*32+16, label: "Start Meeting",   icon: "▶", event: "office:start-meeting" },
+  { id: "board-whiteboard",roomKey: "boardroom", x: 1*32+16, y: 1*32+16, label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  { id: "trading-screens", roomKey: "trading",   x: 5*32+16, y: 1*32+16, label: "View Deals",      icon: "◈", href: "/dashboard/deals" },
+  { id: "research-shelf",  roomKey: "research",  x: 2*32+16, y: 1*32+16, label: "Research Brief",  icon: "✦", event: "earn:open-with-context" },
+  { id: "office-cooler",   roomKey: "office",    x: 10*32+16, y: 7*32+16, label: "Ask Earn",       icon: "✦", event: "earn:open-with-context" },
+  { id: "ops-screens",     roomKey: "ops",       x: 6*32+16, y: 2*32+16, label: "Automation Hub",  icon: "⚙", href: "/dashboard/automation" },
+  { id: "legal-desk",      roomKey: "legal",     x: 6*32+16, y: 3*32+16, label: "Capital",         icon: "◈", href: "/dashboard/capital" },
+  { id: "marketing-board", roomKey: "marketing", x: 1*32+16, y: 1*32+16, label: "Marketing Hub",   icon: "◉", href: "/dashboard/marketing" },
+  { id: "reception-desk",  roomKey: "reception", x: 4*32+32, y: 2*32+16, label: "Investor Relations", icon: "⬢", href: "/dashboard/investor-relations" },
+];
+
 export type RoomAction = {
   id: string;
   label: string;
