@@ -28,6 +28,8 @@ export default function CapitalRunForm({
   const [fundId, setFundId] = useState(funds[0]?.id ?? "");
   const [kind, setKind] = useState<RunKind>("capital_call");
   const [amount, setAmount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (funds.length === 0) return null;
@@ -54,7 +56,14 @@ export default function CapitalRunForm({
     <form
       ref={formRef}
       action={async (fd: FormData) => {
-        await recordCapitalRun(fd);
+        setPending(true);
+        setError(null);
+        const result = await recordCapitalRun(fd);
+        setPending(false);
+        if (!result.ok) {
+          setError(result.error ?? "Could not book the run.");
+          return;
+        }
         formRef.current?.reset();
         setOpen(false);
         setAmount(0);
@@ -150,13 +159,19 @@ export default function CapitalRunForm({
         </p>
       )}
 
+      {error ? (
+        <p className="rounded-lg border border-status-danger/40 bg-status-danger/5 px-4 py-2.5 text-xs text-status-danger">
+          {error}
+        </p>
+      ) : null}
+
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          disabled={!(amount > 0 && plan.totalAllocated > 0)}
+          disabled={pending || !(amount > 0 && plan.totalAllocated > 0)}
           className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Confirm &amp; book {kind === "capital_call" ? "call" : "distribution"}
+          {pending ? "Booking…" : `Confirm & book ${kind === "capital_call" ? "call" : "distribution"}`}
         </button>
         <button
           type="button"

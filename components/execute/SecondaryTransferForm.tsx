@@ -37,6 +37,8 @@ export default function SecondaryTransferForm({
   const [buyerId, setBuyerId] = useState("");
   const [pct, setPct] = useState(100); // fraction of the position, percent
   const [pricePct, setPricePct] = useState(100); // price as % of transferred NAV
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (positions.length === 0 || buyers.length < 1) return null;
@@ -70,7 +72,14 @@ export default function SecondaryTransferForm({
     <form
       ref={formRef}
       action={async (fd: FormData) => {
-        await recordSecondaryTransfer(fd);
+        setPending(true);
+        setError(null);
+        const result = await recordSecondaryTransfer(fd);
+        setPending(false);
+        if (!result.ok) {
+          setError(result.error ?? "Could not book the transfer.");
+          return;
+        }
         formRef.current?.reset();
         setOpen(false);
         setPct(100);
@@ -164,13 +173,19 @@ export default function SecondaryTransferForm({
         </div>
       </div>
 
+      {error ? (
+        <p className="rounded-lg border border-status-danger/40 bg-status-danger/5 px-4 py-2.5 text-xs text-status-danger">
+          {error}
+        </p>
+      ) : null}
+
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          disabled={!(buyerValid && fraction > 0 && t.committed > 0)}
+          disabled={pending || !(buyerValid && fraction > 0 && t.committed > 0)}
           className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Confirm &amp; book transfer
+          {pending ? "Booking…" : "Confirm & book transfer"}
         </button>
         <button
           type="button"
