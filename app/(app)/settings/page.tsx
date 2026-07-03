@@ -5,8 +5,12 @@ import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
 import { loadOrgConnections } from "@/lib/integrations/gateway";
+import { CHANNEL_SECRET_KEYS } from "@/lib/integrations/credentials";
+import { vaultConfigured } from "@/lib/vault";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
+import { OrgSecretsPanel, type SecretKeyGroup } from "./OrgSecretsPanel";
+import { listOrgSecrets } from "./secrets-actions";
 import { DigestPreferences } from "./DigestPreferences";
 import { loadDigestPrefs } from "./digest-actions";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
@@ -24,6 +28,25 @@ export const dynamic = "force-dynamic";
 // so the account-menu deep links (/settings#integrations, /settings#help, …)
 // land exactly where they should. Visual language follows the Command Center:
 // fx-card surfaces, a gold ambient glow, hairline borders.
+
+// Display copy for the vault key catalog. The set of channels and keys itself
+// comes from CHANNEL_SECRET_KEYS (lib/integrations/credentials.ts) — the same
+// registry the dispatch layer resolves and the settings writer allow-lists —
+// so a key added there shows up here without a second edit.
+const CHANNEL_LABELS: Record<string, string> = {
+  gmail: "Email (Gmail / Resend)",
+  calendly: "Calendly",
+  docusign: "DocuSign",
+};
+
+const SECRET_KEY_HINTS: Record<string, string> = {
+  GMAIL_ACCESS_TOKEN: "Gmail OAuth access token — live sends go out from your inbox.",
+  RESEND_API_KEY: "Resend API key — live sends via Resend when Gmail isn't set.",
+  RESEND_FROM_EMAIL: "From address for Resend sends (defaults to the deploy-wide sender).",
+  CALENDLY_API_TOKEN: "Personal access token — scheduling links come from your Calendly account.",
+  DOCUSIGN_ACCESS_TOKEN: "OAuth access token for envelope dispatch under your DocuSign account.",
+  DOCUSIGN_INTEGRATION_KEY: "Integration (client) key paired with the access token.",
+};
 
 const SECTIONS: SettingsSection[] = [
   { id: "account", label: "Account" },
@@ -87,6 +110,20 @@ export default async function SettingsPage() {
 
   // Per-org integration connections brokered by the unified gateway.
   const connections = await loadOrgConnections(supabase, ctx.orgId);
+
+  // The org's stored provider credentials (masked metadata only) and the
+  // display catalog of keys the dispatch layer can resolve
+  // (lib/integrations/credentials.ts CHANNEL_SECRET_KEYS).
+  const orgSecrets = await listOrgSecrets();
+  const secretKeyGroups: SecretKeyGroup[] = Object.entries(CHANNEL_SECRET_KEYS).map(
+    ([channel, keys]) => ({
+      channelLabel: CHANNEL_LABELS[channel] ?? channel,
+      keys: keys.map((key) => ({
+        key,
+        hint: SECRET_KEY_HINTS[key] ?? "Provider credential resolved at dispatch time.",
+      })),
+    }),
+  );
 
   // Per-org, per-channel delivery prefs for the Act-now Radar digest.
   const { prefs: digestPrefs } = await loadDigestPrefs();
@@ -242,6 +279,23 @@ export default async function SettingsPage() {
             description="Dispatch channels carry approved external actions to the outside world. Today only Gmail actually sends live once connected — every other channel below prepares the action but does not yet deliver it, regardless of connection state (real provider plumbing is on the roadmap)."
           >
             <Connections connections={connections} />
+
+            {/* Per-org provider credentials — the vault the dispatch layer
+                resolves before every send, so an org acts under its own
+                identity instead of the deploy-wide env credential. */}
+            <div className="mt-4">
+              <h3 className="mb-1 text-sm font-medium text-fg-primary">Organization credentials</h3>
+              <p className="mb-3 text-xs leading-snug text-fg-muted">
+                Store your own provider credentials so outbound actions run under your
+                organization&apos;s identity. Values are encrypted at rest and never shown again;
+                removing one falls back to this deployment&apos;s shared credential, if any.
+              </p>
+              <OrgSecretsPanel
+                secrets={orgSecrets}
+                groups={secretKeyGroups}
+                vaultReady={vaultConfigured()}
+              />
+            </div>
           </Section>
 
           {/* Digest preferences */}

@@ -42,6 +42,13 @@ export interface DispatchContext {
   // unverified, weakly-grounded work product. Omit for actions with no backing
   // artifact — those dispatch exactly as before.
   backingArtifact?: { verification_status: string; grounding_score: number };
+  // Per-org credentials resolved from the secret vault (lib/org-secrets.ts),
+  // keyed by the provider env-var names the adapters read (e.g.
+  // GMAIL_ACCESS_TOKEN). dispatchAction populates this when absent; adapters
+  // prefer these over process.env so each org acts under its own identity
+  // instead of the deploy-wide credential. Leave unset — set only in tests or
+  // by a caller that already resolved them.
+  secrets?: Partial<Record<string, string>>;
   // Optional Supabase client — passed through from the engine when adapters need
   // to write to internal tables (e.g. inbox, meetings) without an HTTP hop.
   supabase?: SupabaseClient<Database>;

@@ -29,8 +29,16 @@ export const docusignAdapter: DispatchAdapter = {
     const action = ctx.action.replace(/_/g, " ");
     const target = ctx.target?.name ?? ctx.target?.email ?? "the counterparty";
 
+    // The org's own vault credentials (resolved by dispatchAction) count
+    // toward "configured" alongside the deploy env, matching the gmail
+    // adapter — an org that stored its Docusign token shouldn't be told
+    // "not connected".
+    const hasOrgCreds = Boolean(
+      ctx.secrets?.DOCUSIGN_ACCESS_TOKEN || ctx.secrets?.DOCUSIGN_INTEGRATION_KEY,
+    );
+
     // Per-org connection wins when the caller resolved it; else the env default.
-    if (!(ctx.connected ?? configured())) {
+    if (!(ctx.connected ?? (configured() || hasOrgCreds))) {
       return {
         ok: true,
         channel: "docusign",

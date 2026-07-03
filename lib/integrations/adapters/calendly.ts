@@ -24,16 +24,29 @@ function configured(): boolean {
   return Boolean(process.env.CALENDLY_API_TOKEN ?? process.env.CALENDLY_ACCESS_TOKEN);
 }
 
+// The org's own vault credential wins; the deploy-wide env var is the
+// fallback — so a multi-tenant deploy schedules under each org's Calendly
+// account, not one shared identity.
+function resolveToken(ctx: DispatchContext): string | undefined {
+  return (
+    ctx.secrets?.CALENDLY_API_TOKEN ??
+    process.env.CALENDLY_API_TOKEN ??
+    process.env.CALENDLY_ACCESS_TOKEN
+  );
+}
+
 export const calendlyAdapter: DispatchAdapter = {
   channel: "calendly",
   isConfigured: configured,
   async dispatch(ctx: DispatchContext): Promise<DispatchResult> {
     const target = ctx.target?.name ?? ctx.target?.email ?? "the counterparty";
     const topic = ctx.subject ?? ctx.metadata?.["stepTitle"] as string ?? "meeting";
+    const token = resolveToken(ctx);
 
     // Honour the gateway contract: ctx.connected reflects the org's integration_connections
-    // row; CALENDLY_API_TOKEN gates the live API path. Both must be true to proceed.
-    if (!ctx.connected || !configured()) {
+    // row; a resolved token (org secret or env) gates the live API path. Both
+    // must be true to proceed.
+    if (!ctx.connected || !token) {
       return {
         ok: true,
         channel: "calendly",
@@ -44,7 +57,7 @@ export const calendlyAdapter: DispatchAdapter = {
 
     try {
       const authHeaders = {
-        Authorization: `Bearer ${process.env.CALENDLY_API_TOKEN ?? process.env.CALENDLY_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       };
 

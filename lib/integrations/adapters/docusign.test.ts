@@ -47,4 +47,16 @@ describe("docusign adapter", () => {
     expect(notConnected.ok).toBe(true);
     expect(notConnected.detail).toContain("not connected");
   });
+
+  it("counts org vault credentials toward configured", async () => {
+    // An org that stored its own Docusign token in the vault takes the
+    // connected path (and is told honestly that sending isn't wired up),
+    // rather than being told Docusign is "not connected".
+    const withOrgCreds = await docusignAdapter.dispatch({
+      ...ctx("sign_document"),
+      secrets: { DOCUSIGN_ACCESS_TOKEN: "org-token" },
+    });
+    expect(withOrgCreds.ok).toBe(false);
+    expect(withOrgCreds.detail).toContain("was not sent");
+  });
 });

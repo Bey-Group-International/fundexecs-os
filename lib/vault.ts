@@ -3,19 +3,28 @@
 // while the UI only ever shows a masked last-4. AES-256-GCM gives us
 // confidentiality plus an authentication tag that detects tampering on decrypt.
 //
-// The key comes from FUNDEXECS_VAULT_KEY (server-only). We derive a fixed 32-byte
-// key from it via SHA-256, so any sufficiently random string works as the env
-// value — no specific length/encoding is imposed on operators. Node's `crypto`
-// is built in, so this adds no dependency.
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+// The key comes from FUNDEXECS_VAULT_KEY (server-only). We derive a fixed
+// 32-byte key from it via scrypt (memory-hard KDF, built into Node), so the
+// vault resists offline brute-force even if an operator sets a passphrase
+// rather than a random token — no specific length/encoding is imposed. The
+// salt is static because there is exactly one vault key per deployment; the
+// derived key is cached per process so the KDF cost is paid once, not per
+// encrypt/decrypt.
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12; // GCM standard nonce length.
+const KDF_SALT = "fundexecs-vault-v1";
+
+let cachedKey: { raw: string; key: Buffer } | null = null;
 
 function deriveKey(): Buffer | null {
   const raw = process.env.FUNDEXECS_VAULT_KEY;
   if (!raw) return null;
-  return createHash("sha256").update(raw).digest();
+  if (cachedKey?.raw !== raw) {
+    cachedKey = { raw, key: scryptSync(raw, KDF_SALT, 32) };
+  }
+  return cachedKey.key;
 }
 
 /** True when FUNDEXECS_VAULT_KEY is set — gates the vault UI and writes. */

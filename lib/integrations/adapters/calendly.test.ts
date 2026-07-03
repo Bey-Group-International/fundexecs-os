@@ -55,3 +55,43 @@ describe("calendly adapter env-var contract", () => {
     expect(result.detail).toContain("not connected");
   });
 });
+
+describe("calendly adapter per-org credential preference", () => {
+  const fetchMock = jest.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        String(url).includes("/users/me")
+          ? { resource: { uri: "https://api.calendly.com/users/u-1", scheduling_url: "https://calendly.com/org" } }
+          : { collection: [{ scheduling_url: "https://calendly.com/org/intro", name: "Intro" }] },
+    }));
+  });
+
+  it("uses the org's vault token over the deploy env var", async () => {
+    process.env.CALENDLY_API_TOKEN = "env-token";
+    const result = await calendlyAdapter.dispatch(
+      ctx({ connected: true, secrets: { CALENDLY_API_TOKEN: "org-token" } }),
+    );
+    expect(result.live).toBe(true);
+    const authHeaders = fetchMock.mock.calls.map((c) => c[1]?.headers?.Authorization);
+    expect(authHeaders).toEqual(["Bearer org-token", "Bearer org-token"]);
+  });
+
+  it("falls back to the env token when the org has no vault credential", async () => {
+    process.env.CALENDLY_API_TOKEN = "env-token";
+    const result = await calendlyAdapter.dispatch(ctx({ connected: true, secrets: {} }));
+    expect(result.live).toBe(true);
+    expect(fetchMock.mock.calls[0][1]?.headers?.Authorization).toBe("Bearer env-token");
+  });
+
+  it("stays in mock mode when connected but no token resolves anywhere", async () => {
+    const result = await calendlyAdapter.dispatch(ctx({ connected: true, secrets: {} }));
+    expect(result.ok).toBe(true);
+    expect(result.live).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
