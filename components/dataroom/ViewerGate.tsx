@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { verifySharePassword } from "@/components/build/materials-actions";
-import { recordNdaSignature } from "@/components/dataroom/viewer-actions";
+import { passEmailGate, recordNdaSignature } from "@/components/dataroom/viewer-actions";
 
 export interface GateConfig {
   requireEmail: boolean;
@@ -20,11 +20,6 @@ interface Props {
   onPass: (email: string | null) => void;
 }
 
-// localStorage key helpers — namespaced by token so different shares are isolated.
-function lsKey(token: string, gate: string) {
-  return `drgate_${gate}_${token}`;
-}
-
 type Stage = "email" | "nda" | "password" | "done";
 
 function nextStage(config: GateConfig, after: Stage | null): Stage {
@@ -39,20 +34,22 @@ function nextStage(config: GateConfig, after: Stage | null): Stage {
   return order[idx + 1] ?? "done";
 }
 
-function firstIncomplete(config: GateConfig, token: string): Stage {
-  if (config.requireEmail && !localStorage.getItem(lsKey(token, "email"))) return "email";
-  if (config.requireNda && !localStorage.getItem(lsKey(token, "nda"))) return "nda";
-  if (config.passwordProtected && !localStorage.getItem(lsKey(token, "pwd"))) return "password";
-  return "done";
-}
-
 // ---------------------------------------------------------------------------
 // Sub-forms
 // ---------------------------------------------------------------------------
 
-function EmailGate({ onNext, accent }: { onNext: (email: string) => void; accent: string }) {
+function EmailGate({
+  token,
+  onNext,
+  accent,
+}: {
+  token: string;
+  onNext: (email: string) => void;
+  accent: string;
+}) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
 
   function submit() {
     const trimmed = value.trim();
@@ -60,7 +57,15 @@ function EmailGate({ onNext, accent }: { onNext: (email: string) => void; accent
       setError("Please enter a valid email address.");
       return;
     }
-    onNext(trimmed);
+    setError("");
+    startTransition(async () => {
+      const result = await passEmailGate(token, trimmed);
+      if (result.ok) {
+        onNext(trimmed);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    });
   }
 
   return (
@@ -83,10 +88,11 @@ function EmailGate({ onNext, accent }: { onNext: (email: string) => void; accent
         <button
           type="button"
           onClick={submit}
-          className="w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+          disabled={pending}
+          className="w-full rounded-lg py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-60"
           style={{ backgroundColor: accent }}
         >
-          Continue
+          {pending ? "Checking…" : "Continue"}
         </button>
       </div>
     </div>
@@ -291,29 +297,23 @@ function PasswordGate({
 export function ViewerGate({ token, shareId, config, onPass }: Props) {
   const accent = "#D4AF6A";
 
-  // Determine the starting stage by reading localStorage (client-only).
-  const [stage, setStage] = useState<Stage | null>(null); // null = not yet hydrated
+  // The starting stage is a pure function of the gate config (email → nda →
+  // password), so it's identical on server and client — no hydration dance
+  // needed. Whether the visitor has ALREADY passed these gates on a prior
+  // visit is now a server-side fact (the signed pass cookie, checked by the
+  // page before it decides whether to render this component at all), not
+  // something this component re-derives from localStorage.
+  const [stage, setStage] = useState<Stage>(() => nextStage(config, null));
   const [email, setEmail] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Rehydrate existing gate state from localStorage.
-    const storedEmail = localStorage.getItem(lsKey(token, "email"));
-    if (storedEmail) setEmail(storedEmail);
-    setStage(firstIncomplete(config, token));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  // Advance to the next gate stage, persisting the current one to localStorage.
+  // Advance to the next gate stage. Each sub-gate's own `onNext` only fires
+  // after ITS server action has already granted that gate — this function
+  // just tracks which stage to show next and, once every stage is done,
+  // signals the parent so it can refresh from the server (which will now see
+  // every gate granted and return real content).
   function advance(current: Stage, capturedEmail?: string) {
     if (current === "email" && capturedEmail) {
-      localStorage.setItem(lsKey(token, "email"), capturedEmail);
       setEmail(capturedEmail);
-    }
-    if (current === "nda") {
-      localStorage.setItem(lsKey(token, "nda"), "1");
-    }
-    if (current === "password") {
-      localStorage.setItem(lsKey(token, "pwd"), "1");
     }
     const next = nextStage(config, current);
     setStage(next);
@@ -323,15 +323,9 @@ export function ViewerGate({ token, shareId, config, onPass }: Props) {
     }
   }
 
-  // Not yet hydrated (SSR / first paint) — render nothing to avoid flash.
-  if (stage === null) return null;
-
-  // All gates passed (or none required) — signal parent.
-  if (stage === "done") {
-    // Synchronously pass on the first call after hydration.
-    // The parent will re-render and we won't be shown again.
-    return null;
-  }
+  // All gates passed — signal parent already fired via onPass above; nothing
+  // left to render (the parent is now refreshing from the server).
+  if (stage === "done") return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-0/90 px-6 backdrop-blur-sm">
@@ -352,7 +346,7 @@ export function ViewerGate({ token, shareId, config, onPass }: Props) {
 
         {/* Gate content */}
         {stage === "email" ? (
-          <EmailGate accent={accent} onNext={(e) => advance("email", e)} />
+          <EmailGate token={token} accent={accent} onNext={(e) => advance("email", e)} />
         ) : stage === "nda" ? (
           <NdaGate
             ndaText={config.ndaText}

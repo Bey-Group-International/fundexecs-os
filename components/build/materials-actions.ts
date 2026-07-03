@@ -284,20 +284,27 @@ export async function createShare(formData: FormData): Promise<void> {
   }
 }
 
-/** Verify a data-room password from the public viewer (no auth required). */
+/** Verify a data-room password from the public viewer (no auth required). On
+ * success, grants the "pwd" gate for this share via a signed server-side pass
+ * — the page itself now withholds content until this (and any other
+ * configured gate) is granted, rather than trusting a client-side flag. */
 export async function verifySharePassword(token: string, password: string): Promise<boolean> {
   const { createServiceClient, hasSupabaseServiceEnv } = await import("@/lib/supabase/server");
   if (!hasSupabaseServiceEnv()) return false;
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("data_room_shares")
-    .select("password_hash, revoked_at, expires_at")
+    .select("id, password_hash, revoked_at, expires_at")
     .eq("token", token)
     .maybeSingle();
   if (!data?.password_hash) return false;
   if (data.revoked_at) return false;
   if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) return false;
-  return comparePassword(password, data.password_hash);
+  const ok = await comparePassword(password, data.password_hash);
+  if (!ok) return false;
+  const { grantGate } = await import("@/lib/data-room-gate");
+  await grantGate(data.id as string, { pwd: true });
+  return true;
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ViewerGate } from "./ViewerGate";
 import type { GateConfig } from "./ViewerGate";
@@ -75,6 +76,12 @@ interface Props {
   entities: ViewerEntity[];
   docSections: ViewerSection[];
   gateConfig: GateConfig;
+  /** True only when the server has already verified every configured gate
+   * for this visitor and therefore included real content in the props above.
+   * When false, every content prop is an empty/minimal placeholder — the
+   * server never sent the real data at all, so there is nothing to leak from
+   * this component regardless of client-side state. */
+  contentReady: boolean;
 }
 
 function compactUsd(n: number | null): string | null {
@@ -118,28 +125,18 @@ export function DataRoomViewer({
   entities,
   docSections,
   gateConfig,
+  contentReady,
 }: Props) {
   const accent =
     org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color)
       ? org.brand_color
       : "#D4AF6A";
 
-  // Gate state — false until ViewerGate calls onPass.
-  const [gatePassed, setGatePassed] = useState(false);
+  const router = useRouter();
   const [viewerEmail, setViewerEmail] = useState<string | null>(null);
 
   // Stable session ID for this page load.
   const sessionId = useMemo(() => crypto.randomUUID(), []);
-
-  // If no gates are required, pass immediately.
-  const noGates =
-    !gateConfig.requireEmail && !gateConfig.requireNda && !gateConfig.passwordProtected;
-
-  useEffect(() => {
-    if (noGates && !gatePassed) {
-      setGatePassed(true);
-    }
-  }, [noGates, gatePassed]);
 
   // Build nav
   const nav: NavItem[] = useMemo(() => {
@@ -206,27 +203,31 @@ export function DataRoomViewer({
 
   // Fire dwell on page unload.
   useEffect(() => {
-    if (!gatePassed) return;
+    if (!contentReady) return;
     const handleUnload = () => fireDwell(dwellSection.current, dwellStart.current);
     window.addEventListener("pagehide", handleUnload);
     return () => window.removeEventListener("pagehide", handleUnload);
-  }, [gatePassed, fireDwell]);
+  }, [contentReady, fireDwell]);
 
-  // Reset dwell timer when gate is passed.
+  // Reset dwell timer once real content is showing.
   useEffect(() => {
-    if (gatePassed) {
+    if (contentReady) {
       dwellStart.current = Date.now();
     }
-  }, [gatePassed]);
+  }, [contentReady]);
 
   // ---------------------------------------------------------------------------
-  // Gate overlay — shown until all gates pass.
+  // Gate overlay — shown until the server has verified every configured gate
+  // and re-rendered with real content. Note there is no client-side content to
+  // protect here at all: when `contentReady` is false, every prop above is an
+  // empty placeholder the server sent on purpose, not real data being hidden
+  // by CSS.
   // ---------------------------------------------------------------------------
 
-  if (!gatePassed) {
+  if (!contentReady) {
     return (
       <>
-        {/* Blurred background preview */}
+        {/* Blurred background preview — org name/initial only, never confidential */}
         <div className="flex min-h-screen flex-col bg-surface-0 text-fg-primary select-none pointer-events-none blur-sm opacity-40" aria-hidden>
           <header className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-3">
             <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -247,7 +248,10 @@ export function DataRoomViewer({
           config={gateConfig}
           onPass={(email) => {
             setViewerEmail(email);
-            setGatePassed(true);
+            // Every configured gate is now granted server-side. Re-fetch the
+            // Server Component so it reads the fresh pass cookie and returns
+            // real content this time — content was never in this render.
+            router.refresh();
           }}
         />
       </>
