@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import type { ApiKeyMode } from "@/lib/supabase/database.types";
-import { maskedSecret, API_SCOPES, API_SCOPE_LABELS, type ApiScope } from "@/lib/api-keys";
+import { maskedSecret, API_SCOPES, API_SCOPE_LABELS, DEFAULT_API_SCOPES, type ApiScope } from "@/lib/api-keys";
 import { createApiKey, revokeApiKey, rotateApiKey } from "./api-keys-actions";
 
 // A key as surfaced to the UI — never the secret hash. The secret itself only
@@ -115,8 +115,9 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
             {pending ? "Generating…" : "Generate key"}
           </button>
         </div>
-        {/* Scope picker — the key's blast radius. Defaults to everything
-            checked; unchecking narrows what a leaked key could ever reach. */}
+        {/* Scope picker — the key's blast radius. Read scopes start checked
+            (the pre-scopes default); write scopes are deliberately opt-in so a
+            key never gains proposal rights the issuer didn't tick. */}
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
           {API_SCOPES.map((scope) => (
             <label
@@ -127,7 +128,7 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
                 type="checkbox"
                 name="scopes"
                 value={scope}
-                defaultChecked
+                defaultChecked={DEFAULT_API_SCOPES.includes(scope)}
                 className="h-3.5 w-3.5 accent-gold-400"
               />
               {API_SCOPE_LABELS[scope as ApiScope]}

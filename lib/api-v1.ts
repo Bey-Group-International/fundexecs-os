@@ -75,3 +75,9 @@ export function collection<T>(rows: T[], nextCursor: string | null = null): Next
 export function failure(error: string, status: number): NextResponse {
   return NextResponse.json({ error }, { status });
 }
+
+/** A write parked for human approval: 202 Accepted with the pending handle —
+ * the request was understood and queued, but nothing has been committed. */
+export function accepted<T>(data: T): NextResponse {
+  return NextResponse.json({ data }, { status: 202 });
+}
