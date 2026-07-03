@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { recordIcDecision } from "@/app/(app)/deal/[id]/actions";
+import { useToast } from "@/components/shared/CoachingToast";
 import type { IcDecisionKind } from "@/lib/supabase/database.types";
 
 const fieldClass =
@@ -22,6 +23,7 @@ const DECISION_META: Record<IcDecisionKind, { label: string; tone: string }> = {
 export function IcDecisionForm({ dealId }: { dealId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const toast = useToast();
   const router = useRouter();
 
   return (
@@ -31,9 +33,12 @@ export function IcDecisionForm({ dealId }: { dealId: string }) {
         start(async () => {
           const result = await recordIcDecision(formData);
           if (!result.ok) {
-            setError(result.error ?? "Could not record the decision.");
+            const message = result.error ?? "Could not record the decision.";
+            setError(message);
+            toast.error("Decision not recorded", message);
             return;
           }
+          toast.success("IC decision recorded");
           router.refresh();
         });
       }}
