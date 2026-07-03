@@ -1,0 +1,19 @@
+# Keep the Docker build context lean — the server image COPYs only
+# package manifests, shared/, and server/.
+.git
+node_modules
+**/node_modules
+.next
+**/dist
+public
+app
+components
+hooks
+lib
+types
+supabase
+docs
+*.md
+.env*
+.github
+.cleanthat
