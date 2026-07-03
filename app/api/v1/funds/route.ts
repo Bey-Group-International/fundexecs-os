@@ -10,13 +10,26 @@ export const dynamic = "force-dynamic";
 export const GET = withApiKey(async ({ orgId, supabase }) => {
   const { data, error } = await supabase
     .from("funds")
-    .select("*")
+    .select(
+      "id, name, fund_type, vintage_year, target_size, committed_capital, called_capital, distributed_capital, currency"
+    )
     .eq("organization_id", orgId)
     .order("vintage_year", { ascending: false, nullsFirst: false });
 
   if (error) return failure(error.message, 500);
 
-  const funds = ((data as Fund[] | null) ?? []).map((f) => ({
+  const funds = ((data as Pick<
+    Fund,
+    | "id"
+    | "name"
+    | "fund_type"
+    | "vintage_year"
+    | "target_size"
+    | "committed_capital"
+    | "called_capital"
+    | "distributed_capital"
+    | "currency"
+  >[] | null) ?? []).map((f) => ({
     id: f.id,
     name: f.name,
     type: f.fund_type,

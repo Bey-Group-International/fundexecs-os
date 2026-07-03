@@ -455,8 +455,14 @@ export function AllocatorDirectory({ entries, funds }: Props) {
     });
   }, [entries, search, typeFilter, stageFilter, sortBy]);
 
-  const types = Array.from(new Set(entries.map((e) => e.allocatorType)));
-  const stages = Array.from(new Set(entries.map((e) => e.pipelineStage ?? "prospect")));
+  const types = useMemo(
+    () => Array.from(new Set(entries.map((e) => e.allocatorType))),
+    [entries],
+  );
+  const stages = useMemo(
+    () => Array.from(new Set(entries.map((e) => e.pipelineStage ?? "prospect"))),
+    [entries],
+  );
 
   return (
     <div className="flex flex-col gap-4">

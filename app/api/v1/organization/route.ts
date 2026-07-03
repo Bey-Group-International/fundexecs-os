@@ -13,14 +13,27 @@ export const dynamic = "force-dynamic";
 export const GET = withApiKey(async ({ orgId, supabase }) => {
   const { data, error } = await supabase
     .from("organizations")
-    .select("*")
+    .select(
+      "id, name, slug, description, website, jurisdiction, primary_strategy, aum_range, created_at"
+    )
     .eq("id", orgId)
     .maybeSingle();
 
   if (error) return failure(error.message, 500);
   if (!data) return failure("Organization not found", 404);
 
-  const org = data as Organization;
+  const org = data as Pick<
+    Organization,
+    | "id"
+    | "name"
+    | "slug"
+    | "description"
+    | "website"
+    | "jurisdiction"
+    | "primary_strategy"
+    | "aum_range"
+    | "created_at"
+  >;
   return resource({
     id: org.id,
     name: org.name,
