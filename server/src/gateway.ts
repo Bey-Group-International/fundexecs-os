@@ -2,6 +2,7 @@ import uWS from "uWebSockets.js";
 import { ClientMessageSchema, ALLOWED_EMOTES } from "@fundexecs/virtual-office-shared";
 import type { RoomManager } from "./RoomManager";
 import type { AuthService } from "./AuthService";
+import type { OrgAuthorizer } from "./OrgAuthorizer";
 import type { SocketData } from "./Room";
 
 function getQueryParam(query: string, key: string): string | undefined {
@@ -17,7 +18,8 @@ function handleAsync(fn: () => Promise<void>): void {
 
 export function createGateway(
   roomManager: RoomManager,
-  authService: AuthService
+  authService: AuthService,
+  orgAuthorizer: OrgAuthorizer
 ): uWS.TemplatedApp {
   const app = uWS.App();
 
@@ -29,37 +31,60 @@ export function createGateway(
     maxPayloadLength: 64 * 1024,
 
     upgrade: async (res, req, context) => {
+      // uWS request objects are only valid synchronously — read everything
+      // (query + upgrade headers) before the first await, and track aborts so
+      // we never write to a connection the client already dropped.
       const query = req.getQuery();
       const roomId = getQueryParam(query, "roomId");
       const token = getQueryParam(query, "token");
       const characterId = getQueryParam(query, "characterId") ?? "player_default";
+      const wsKey = req.getHeader("sec-websocket-key");
+      const wsProtocol = req.getHeader("sec-websocket-protocol");
+      const wsExtensions = req.getHeader("sec-websocket-extensions");
+
+      let aborted = false;
+      res.onAborted(() => { aborted = true; });
 
       if (!roomId || !token) {
         res.writeStatus("400").end("Missing roomId or token");
         return;
       }
 
+      // WHO: verified Supabase JWT (signature + exp).
       let userId: string;
       let displayName: string;
-
       try {
         const authResult = await authService.validateToken(token);
         userId = authResult.userId;
         displayName = authResult.displayName;
       } catch {
+        if (aborted) return;
         res.writeStatus("401").end("Unauthorized");
         return;
       }
-
-      let aborted = false;
-      res.onAborted(() => { aborted = true; });
       if (aborted) return;
 
+      // WHERE: the room is an org-scoped namespace the server derives from
+      // the caller's memberships — a client-chosen roomId is never trusted
+      // directly, so no seat exists outside the caller's own org.
+      let resolvedRoomId: string | null;
+      try {
+        resolvedRoomId = await orgAuthorizer.resolveRoom(userId, roomId);
+      } catch {
+        // Membership lookup failed — cannot authorize is not authorized.
+        resolvedRoomId = null;
+      }
+      if (aborted) return;
+      if (!resolvedRoomId) {
+        res.writeStatus("403").end("Forbidden");
+        return;
+      }
+
       res.upgrade<SocketData>(
-        { playerId: userId, roomId, displayName, characterId },
-        req.getHeader("sec-websocket-key"),
-        req.getHeader("sec-websocket-protocol"),
-        req.getHeader("sec-websocket-extensions"),
+        { playerId: userId, roomId: resolvedRoomId, displayName, characterId },
+        wsKey,
+        wsProtocol,
+        wsExtensions,
         context
       );
     },
