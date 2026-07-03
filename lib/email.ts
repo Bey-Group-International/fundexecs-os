@@ -15,6 +15,9 @@ export interface SendEmailArgs {
   subject: string;
   htmlBody: string;
   fromName?: string;
+  // Explicit per-send override — wins over credentials.fromEmail. From-address
+  // resolution: args.fromEmail → credentials.fromEmail → RESEND_FROM_EMAIL env
+  // → the deploy default.
   fromEmail?: string;
   // Per-org credentials; each field falls back to its env var when unset.
   credentials?: SendEmailCredentials;

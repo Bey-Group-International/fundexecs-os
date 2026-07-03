@@ -9,7 +9,7 @@
 // ground for arbitrary key/value pairs.
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
-import { getSessionContext } from "@/lib/auth";
+import { getSessionContext, type SessionContext } from "@/lib/auth";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
 import { ALL_SECRET_KEYS } from "@/lib/integrations/credentials";
 
@@ -28,10 +28,19 @@ function isAllowedKey(key: string): boolean {
   return ALL_SECRET_KEYS.includes(key);
 }
 
+// Credentials control the org's outbound identity (who emails/envelopes go
+// out as), so writes are held to the same admin bar as membership changes
+// (components/build/team-actions.ts).
+function canManageSecrets(ctx: SessionContext | null): ctx is SessionContext & { orgId: string } {
+  return Boolean(ctx?.orgId) && (ctx?.role === "owner" || ctx?.role === "admin");
+}
+
 /** Store (or rotate) one provider credential for the org. */
 export async function setOrgSecret(formData: FormData): Promise<OrgSecretResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
+  if (!canManageSecrets(ctx)) {
+    return { ok: false, error: "Only organization owners and admins can manage credentials." };
+  }
   if (!vaultConfigured()) {
     return { ok: false, error: "The secret vault is not configured on this deployment (FUNDEXECS_VAULT_KEY)." };
   }
@@ -65,7 +74,12 @@ export async function setOrgSecret(formData: FormData): Promise<OrgSecretResult>
 /** Remove one provider credential — dispatch falls back to the deploy env var. */
 export async function deleteOrgSecret(formData: FormData): Promise<OrgSecretResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
+  if (!canManageSecrets(ctx)) {
+    return { ok: false, error: "Only organization owners and admins can manage credentials." };
+  }
+  if (!vaultConfigured()) {
+    return { ok: false, error: "The secret vault is not configured on this deployment (FUNDEXECS_VAULT_KEY)." };
+  }
   const provider = String(formData.get("provider") ?? "").trim();
   if (!isAllowedKey(provider)) return { ok: false, error: "Unknown credential key." };
 

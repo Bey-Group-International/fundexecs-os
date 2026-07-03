@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
 import { loadOrgConnections } from "@/lib/integrations/gateway";
+import { CHANNEL_SECRET_KEYS } from "@/lib/integrations/credentials";
 import { vaultConfigured } from "@/lib/vault";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
@@ -27,6 +28,25 @@ export const dynamic = "force-dynamic";
 // so the account-menu deep links (/settings#integrations, /settings#help, …)
 // land exactly where they should. Visual language follows the Command Center:
 // fx-card surfaces, a gold ambient glow, hairline borders.
+
+// Display copy for the vault key catalog. The set of channels and keys itself
+// comes from CHANNEL_SECRET_KEYS (lib/integrations/credentials.ts) — the same
+// registry the dispatch layer resolves and the settings writer allow-lists —
+// so a key added there shows up here without a second edit.
+const CHANNEL_LABELS: Record<string, string> = {
+  gmail: "Email (Gmail / Resend)",
+  calendly: "Calendly",
+  docusign: "DocuSign",
+};
+
+const SECRET_KEY_HINTS: Record<string, string> = {
+  GMAIL_ACCESS_TOKEN: "Gmail OAuth access token — live sends go out from your inbox.",
+  RESEND_API_KEY: "Resend API key — live sends via Resend when Gmail isn't set.",
+  RESEND_FROM_EMAIL: "From address for Resend sends (defaults to the deploy-wide sender).",
+  CALENDLY_API_TOKEN: "Personal access token — scheduling links come from your Calendly account.",
+  DOCUSIGN_ACCESS_TOKEN: "OAuth access token for envelope dispatch under your DocuSign account.",
+  DOCUSIGN_INTEGRATION_KEY: "Integration (client) key paired with the access token.",
+};
 
 const SECTIONS: SettingsSection[] = [
   { id: "account", label: "Account" },
@@ -95,29 +115,15 @@ export default async function SettingsPage() {
   // display catalog of keys the dispatch layer can resolve
   // (lib/integrations/credentials.ts CHANNEL_SECRET_KEYS).
   const orgSecrets = await listOrgSecrets();
-  const secretKeyGroups: SecretKeyGroup[] = [
-    {
-      channelLabel: "Email (Gmail / Resend)",
-      keys: [
-        { key: "GMAIL_ACCESS_TOKEN", hint: "Gmail OAuth access token — live sends go out from your inbox." },
-        { key: "RESEND_API_KEY", hint: "Resend API key — live sends via Resend when Gmail isn't set." },
-        { key: "RESEND_FROM_EMAIL", hint: "From address for Resend sends (defaults to the deploy-wide sender)." },
-      ],
-    },
-    {
-      channelLabel: "Calendly",
-      keys: [
-        { key: "CALENDLY_API_TOKEN", hint: "Personal access token — scheduling links come from your Calendly account." },
-      ],
-    },
-    {
-      channelLabel: "DocuSign",
-      keys: [
-        { key: "DOCUSIGN_ACCESS_TOKEN", hint: "OAuth access token for envelope dispatch under your DocuSign account." },
-        { key: "DOCUSIGN_INTEGRATION_KEY", hint: "Integration (client) key paired with the access token." },
-      ],
-    },
-  ];
+  const secretKeyGroups: SecretKeyGroup[] = Object.entries(CHANNEL_SECRET_KEYS).map(
+    ([channel, keys]) => ({
+      channelLabel: CHANNEL_LABELS[channel] ?? channel,
+      keys: keys.map((key) => ({
+        key,
+        hint: SECRET_KEY_HINTS[key] ?? "Provider credential resolved at dispatch time.",
+      })),
+    }),
+  );
 
   // Per-org, per-channel delivery prefs for the Act-now Radar digest.
   const { prefs: digestPrefs } = await loadDigestPrefs();
