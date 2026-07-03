@@ -5,17 +5,19 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import {
   computeInvoiceTotals,
-  allocatePayment,
   agingSummary,
   type InvoiceLineInput,
-  type PayableInvoice,
   type AgingRow,
 } from "@/lib/finance/arap";
+import { invoiceJournalLines, paymentJournalLines } from "@/lib/finance/posting";
+import { postJournalEntry } from "../actions";
 import type {
   FinInvoiceKind,
   FinPartyKind,
   FinPaymentDirection,
   FinInvoice,
+  FinInvoiceLine,
+  FinPayment,
   Json,
 } from "@/lib/supabase/database.types";
 
@@ -168,26 +170,9 @@ export async function recordPayment(input: {
   }
   const supabase = createServerClient();
 
-  let allocations = input.allocations;
-  if (!allocations) {
-    // Auto-allocate oldest-due first against the matching open invoices: an
-    // inbound payment settles receivables, an outbound one settles payables.
-    const kind: FinInvoiceKind = input.direction === "inbound" ? "receivable" : "payable";
-    const { data: openRows } = await supabase
-      .from("fin_invoices")
-      .select("id, total, amount_paid, due_date")
-      .eq("organization_id", auth.ctx.orgId)
-      .eq("entity_id", input.entityId)
-      .eq("party_id", input.partyId)
-      .eq("kind", kind)
-      .in("status", ["open", "partial"]);
-    const open: PayableInvoice[] = ((openRows ?? []) as Pick<
-      FinInvoice,
-      "id" | "total" | "amount_paid" | "due_date"
-    >[]).map((r) => ({ id: r.id, outstanding: r.total - r.amount_paid, dueDate: r.due_date }));
-    allocations = allocatePayment(input.amount, open, "oldest-first").allocations;
-  }
-
+  // When no explicit allocations are supplied, the RPC auto-allocates oldest-due
+  // first INSIDE the transaction (open invoices locked FOR UPDATE), so there is
+  // no read-then-write window for a concurrent payment to overpay an invoice.
   const { data: paymentId, error } = await supabase.rpc("fin_apply_payment", {
     p_payment: {
       organizationId: auth.ctx.orgId,
@@ -200,12 +185,12 @@ export async function recordPayment(input: {
       memo: input.memo ?? null,
       bankAccountId: input.bankAccountId ?? "",
     } as unknown as Json,
-    p_allocations: allocations as unknown as Json,
+    p_allocations: (input.allocations ?? []) as unknown as Json,
     p_actor: auth.ctx.userId,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/finance");
-  return { ok: true, data: { paymentId, allocated: allocations } };
+  return { ok: true, data: { paymentId } };
 }
 
 // --- Aging report ------------------------------------------------------------
@@ -236,4 +221,182 @@ export async function agingReport(input: {
     .map((r) => ({ partyId: r.party_id, dueDate: r.due_date, outstanding: r.total - r.amount_paid }))
     .filter((r) => r.outstanding > 0);
   return { ok: true, data: agingSummary(aging, input.asOf) };
+}
+
+// --- GL posting --------------------------------------------------------------
+
+// Resolve a party's AR (receivable) or AP (payable) control account.
+async function resolveControlAccount(
+  supabase: ReturnType<typeof createServerClient>,
+  orgId: string,
+  partyId: string,
+  receivable: boolean,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("fin_parties")
+    .select("ar_control_account_id, ap_control_account_id")
+    .eq("organization_id", orgId)
+    .eq("id", partyId)
+    .maybeSingle();
+  const p = data as { ar_control_account_id: string | null; ap_control_account_id: string | null } | null;
+  return (receivable ? p?.ar_control_account_id : p?.ap_control_account_id) ?? null;
+}
+
+/**
+ * Post an issued invoice's accrual entry to the ledger — receivable: Dr AR
+ * control, Cr revenue + tax; payable: Dr expense + tax, Cr AP control — and
+ * record the entry id back on the invoice. The posting itself is the Phase-1
+ * Tier-1 `post_journal_entry`. Idempotent: a posted invoice is rejected.
+ */
+export async function postInvoice(input: {
+  invoiceId: string;
+  ledgerId: string;
+  periodId: string;
+  controlAccountId?: string;
+  taxAccountId?: string;
+  defaultLineAccountId?: string;
+}): Promise<ArapResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+
+  const { data: inv } = await supabase
+    .from("fin_invoices")
+    .select("entity_id, party_id, kind, currency, issue_date, status, posted_entry_id, invoice_no")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", input.invoiceId)
+    .maybeSingle();
+  if (!inv) return { ok: false, error: "Invoice not found." };
+  const invoice = inv as Pick<
+    FinInvoice,
+    "party_id" | "kind" | "currency" | "issue_date" | "status" | "posted_entry_id" | "invoice_no"
+  >;
+  if (invoice.posted_entry_id) return { ok: false, error: "Invoice is already posted." };
+  if (invoice.status !== "open" && invoice.status !== "partial") {
+    return { ok: false, error: "Only an open invoice can be posted." };
+  }
+
+  const controlAccountId =
+    input.controlAccountId ??
+    (await resolveControlAccount(supabase, auth.ctx.orgId, invoice.party_id, invoice.kind === "receivable")) ??
+    undefined;
+  if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
+
+  const { data: lineRows } = await supabase
+    .from("fin_invoice_lines")
+    .select("income_account_id, line_subtotal, line_tax")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("invoice_id", input.invoiceId);
+  const lines = (lineRows ?? []) as Pick<
+    FinInvoiceLine,
+    "income_account_id" | "line_subtotal" | "line_tax"
+  >[];
+  if (!lines.length) return { ok: false, error: "Invoice has no lines." };
+
+  let journalLines;
+  try {
+    journalLines = invoiceJournalLines(
+      invoice.kind,
+      invoice.currency,
+      lines.map((l) => ({
+        incomeAccountId: l.income_account_id,
+        lineSubtotal: l.line_subtotal,
+        lineTax: l.line_tax,
+      })),
+      {
+        controlAccountId,
+        taxAccountId: input.taxAccountId ?? null,
+        defaultLineAccountId: input.defaultLineAccountId ?? null,
+      },
+    );
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+
+  const posted = await postJournalEntry({
+    ledgerId: input.ledgerId,
+    periodId: input.periodId,
+    entryDate: invoice.issue_date,
+    memo: `${invoice.kind === "receivable" ? "Invoice" : "Bill"} ${invoice.invoice_no}`,
+    lines: journalLines,
+  });
+  if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the invoice entry." };
+  const entryId = (posted.data as { entryId: string }).entryId;
+  await supabase.from("fin_invoices").update({ posted_entry_id: entryId }).eq("id", input.invoiceId);
+  revalidatePath("/finance");
+  return { ok: true, data: { invoiceId: input.invoiceId, entryId } };
+}
+
+/**
+ * Post a payment's cash entry to the ledger — inbound: Dr cash, Cr AR control;
+ * outbound: Dr AP control, Cr cash — and record the entry id on the payment.
+ * Cash account defaults to the linked bank account's GL account.
+ */
+export async function postPayment(input: {
+  paymentId: string;
+  ledgerId: string;
+  periodId: string;
+  controlAccountId?: string;
+  cashAccountId?: string;
+}): Promise<ArapResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = createServerClient();
+
+  const { data: pay } = await supabase
+    .from("fin_payments")
+    .select("party_id, direction, currency, amount, payment_date, bank_account_id, posted_entry_id")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", input.paymentId)
+    .maybeSingle();
+  if (!pay) return { ok: false, error: "Payment not found." };
+  const payment = pay as Pick<
+    FinPayment,
+    "party_id" | "direction" | "currency" | "amount" | "payment_date" | "bank_account_id" | "posted_entry_id"
+  >;
+  if (payment.posted_entry_id) return { ok: false, error: "Payment is already posted." };
+
+  const controlAccountId =
+    input.controlAccountId ??
+    (await resolveControlAccount(supabase, auth.ctx.orgId, payment.party_id, payment.direction === "inbound")) ??
+    undefined;
+  if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
+
+  let cashAccountId = input.cashAccountId;
+  if (!cashAccountId && payment.bank_account_id) {
+    const { data: bank } = await supabase
+      .from("fin_bank_accounts")
+      .select("gl_account_id")
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("id", payment.bank_account_id)
+      .maybeSingle();
+    cashAccountId = (bank as { gl_account_id: string } | null)?.gl_account_id;
+  }
+  if (!cashAccountId) return { ok: false, error: "No cash account resolved (link a bank account or pass one)." };
+
+  let journalLines;
+  try {
+    journalLines = paymentJournalLines(
+      payment.direction,
+      payment.currency,
+      payment.amount,
+      controlAccountId,
+      cashAccountId,
+    );
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+
+  const posted = await postJournalEntry({
+    ledgerId: input.ledgerId,
+    periodId: input.periodId,
+    entryDate: payment.payment_date,
+    memo: `Payment ${input.paymentId}`,
+    lines: journalLines,
+  });
+  if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the payment entry." };
+  const entryId = (posted.data as { entryId: string }).entryId;
+  await supabase.from("fin_payments").update({ posted_entry_id: entryId }).eq("id", input.paymentId);
+  revalidatePath("/finance");
+  return { ok: true, data: { paymentId: input.paymentId, entryId } };
 }
