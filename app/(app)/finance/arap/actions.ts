@@ -168,6 +168,11 @@ export async function recordPayment(input: {
   if (!input.entityId || !input.partyId || !(input.amount > 0) || !/^[A-Z]{3}$/.test(currency)) {
     return { ok: false, error: "Entity, party, a positive amount, and a 3-letter currency are required." };
   }
+  // Pre-flight: surface a clean message for bad explicit allocations rather than
+  // letting the DB CHECK (amount > 0) throw a raw Postgres constraint error.
+  if (input.allocations?.some((a) => a.amount <= 0)) {
+    return { ok: false, error: "All allocation amounts must be positive." };
+  }
   const supabase = createServerClient();
 
   // When no explicit allocations are supplied, the RPC auto-allocates oldest-due
