@@ -64,6 +64,38 @@ function emitProgress(onProgress: OnProgress | undefined, ev: ProgressEvent) {
   }
 }
 
+export type WorkflowFinalStatus = "completed" | "completed_with_errors" | "failed";
+
+/**
+ * A workflow's final status honestly reflects what its steps actually did —
+ * previously executeWorkflow force-set every workflow to "completed"
+ * regardless of how many of its steps failed. "failed" when every step
+ * failed (the caller should skip persistOutcome — there's no real work to
+ * turn into a deal/asset); "completed_with_errors" when some but not all
+ * steps failed; "completed" only when none did.
+ */
+export function workflowFinalStatus(totalSteps: number, failedSteps: number): WorkflowFinalStatus {
+  if (totalSteps > 0 && failedSteps === totalSteps) return "failed";
+  if (failedSteps > 0) return "completed_with_errors";
+  return "completed";
+}
+
+/**
+ * A failed dispatch (rate-limited send, dead integration, etc.) used to fall
+ * straight through to the success path — the failure detail got saved as the
+ * step's "deliverable" and the step still showed completed. Returns the
+ * error message to throw when the tool result reports failure, or null when
+ * dispatch either wasn't attempted or actually succeeded.
+ */
+export function dispatchFailureMessage(
+  stepTitle: string,
+  toolResult: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!toolResult || toolResult.ok !== false) return null;
+  const detail = toolResult.error;
+  return typeof detail === "string" ? detail : `${stepTitle} could not be dispatched.`;
+}
+
 function hubToGraph(hub: Hub): GraphKind | null {
   if (hub === "source") return "relationship";
   if (hub === "run") return "deal";
@@ -750,6 +782,14 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   const list = (steps ?? []) as Task[];
   const priorOutputs: string[] = [];
   const artifactIds: string[] = [];
+  // Every step failure used to be invisible above the step level: the loop
+  // always `continue`s past a failed step, and the workflow row was force-set
+  // to "completed" afterward regardless — a Claude outage, a dead
+  // integration, or an insufficient-credits error all read as full success,
+  // and persistOutcome would still seed a deal/asset from whatever (possibly
+  // empty) content survived. This counter lets the workflow's own status
+  // honestly reflect what happened.
+  let failedSteps = 0;
 
   const [orgContext, orgProfile, activeMandate] = await Promise.all([
     loadOrgContext(ctx, workflow),
@@ -811,6 +851,13 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           })
         : null;
       if (dispatched) {
+        // A failed dispatch (rate-limited send, dead integration, etc.) used
+        // to fall straight through to the success path below — the failure
+        // detail got saved as the step's "deliverable" and the step still
+        // showed completed. Route it through the same failure handling as
+        // any other step error instead.
+        const failure = dispatchFailureMessage(step.title, dispatched.tool_result);
+        if (failure) throw new Error(failure);
         output = formatDispatchOutput(dispatched);
         // Persist the raw tool result to the step task row so it surfaces in the UI.
         if (dispatched.tool_result) {
@@ -868,6 +915,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     } catch (stepErr) {
       // A step failure must never abort the remaining steps. Mark this step
       // failed, record the error, and continue so later steps still execute.
+      failedSteps++;
       const errMsg = stepErr instanceof Error ? stepErr.message : String(stepErr);
       await Promise.all([
         ctx.supabase
@@ -978,13 +1026,41 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     emitProgress(onProgress, { type: "step_done", step_id: step.id, title: step.title });
   }
 
+  const finalStatus = workflowFinalStatus(list.length, failedSteps);
+
+  // If every step failed, there's no real work to turn into a deal/asset —
+  // persistOutcome used to run anyway, seeding a record from empty (or
+  // fallback/error) content while the workflow read as a plain "completed".
+  if (finalStatus === "failed") {
+    await ctx.supabase
+      .from("tasks")
+      .update({
+        status: "failed",
+        progress: 1,
+        completed_at: new Date().toISOString(),
+        result: { steps: list.map((s) => s.title), error: "Every step in this workflow failed." } as Json,
+      })
+      .eq("id", workflow.id);
+
+    await recordEvent(ctx, {
+      taskId: workflow.id,
+      type: "task.completed",
+      agent: "associate",
+      hub: workflow.hub,
+      payload: { message: `Failed: ${workflow.title}` },
+    });
+
+    emitProgress(onProgress, { type: "workflow_done", workflow_id: workflow.id });
+    return;
+  }
+
   // Turn the finished work into a structured record (Deal / Asset).
   const outcome = await persistOutcome(ctx, workflow, artifactIds, priorOutputs.join("\n\n"));
 
   await ctx.supabase
     .from("tasks")
     .update({
-      status: "completed",
+      status: finalStatus,
       progress: 1,
       completed_at: new Date().toISOString(),
       result: { steps: list.map((s) => s.title), ...outcome } as Json,
@@ -996,7 +1072,10 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     type: "task.completed",
     agent: "associate",
     hub: workflow.hub,
-    payload: { message: `Completed: ${workflow.title}`, ...outcome },
+    payload: {
+      message: `${finalStatus === "completed_with_errors" ? "Completed with errors" : "Completed"}: ${workflow.title}`,
+      ...outcome,
+    },
   });
   if (workflow.graph_touched) {
     await recordEvent(ctx, {

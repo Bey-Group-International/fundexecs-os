@@ -63,6 +63,7 @@ export type TaskStatus =
   | "awaiting_approval"
   | "blocked"
   | "completed"
+  | "completed_with_errors"
   | "failed"
   | "cancelled";
 export type ApprovalDecision = "pending" | "approved" | "rejected" | "regenerate" | "accepted";
