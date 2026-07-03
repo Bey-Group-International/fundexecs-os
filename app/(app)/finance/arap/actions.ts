@@ -269,7 +269,7 @@ export async function postInvoice(input: {
 
   const { data: inv } = await supabase
     .from("fin_invoices")
-    .select("entity_id, party_id, kind, currency, issue_date, status, posted_entry_id, invoice_no")
+    .select("party_id, kind, currency, issue_date, status, posted_entry_id, invoice_no")
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", input.invoiceId)
     .maybeSingle();
