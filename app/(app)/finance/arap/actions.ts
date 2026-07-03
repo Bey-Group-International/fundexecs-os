@@ -341,12 +341,20 @@ export async function postInvoice(input: {
   if (!linked?.length) {
     // A concurrent request already posted this invoice. Our entry is now an
     // unlinked duplicate — reverse it so the ledger nets to zero (no orphan).
-    await reverseJournalEntry({
+    const reversal = await reverseJournalEntry({
       entryId,
       entryDate: invoice.issue_date,
       memo: "Auto-reversal: concurrent duplicate post",
     });
-    return { ok: false, error: "Invoice was already posted by a concurrent request; the duplicate entry was reversed." };
+    if (!reversal.ok) {
+      console.error(`[postInvoice] auto-reversal failed for entry ${entryId}: ${reversal.error}`);
+    }
+    return {
+      ok: false,
+      error: `Invoice was already posted by a concurrent request; the duplicate entry was ${
+        reversal.ok ? "reversed" : "NOT reversed — manual cleanup needed"
+      }.`,
+    };
   }
   revalidatePath("/finance");
   return { ok: true, data: { invoiceId: input.invoiceId, entryId } };
@@ -432,12 +440,20 @@ export async function postPayment(input: {
     .is("posted_entry_id", null)
     .select("id");
   if (!linked?.length) {
-    await reverseJournalEntry({
+    const reversal = await reverseJournalEntry({
       entryId,
       entryDate: payment.payment_date,
       memo: "Auto-reversal: concurrent duplicate post",
     });
-    return { ok: false, error: "Payment was already posted by a concurrent request; the duplicate entry was reversed." };
+    if (!reversal.ok) {
+      console.error(`[postPayment] auto-reversal failed for entry ${entryId}: ${reversal.error}`);
+    }
+    return {
+      ok: false,
+      error: `Payment was already posted by a concurrent request; the duplicate entry was ${
+        reversal.ok ? "reversed" : "NOT reversed — manual cleanup needed"
+      }.`,
+    };
   }
   revalidatePath("/finance");
   return { ok: true, data: { paymentId: input.paymentId, entryId } };
