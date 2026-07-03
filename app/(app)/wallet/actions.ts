@@ -85,7 +85,6 @@ export async function openBillingPortalAction(): Promise<{ error?: string }> {
     console.error("[wallet] openBillingPortalAction failed:", err);
     return { error: "Something went wrong. Please try again." };
   }
-  return {};
 }
 
 // Redeem a coupon code for a free credit grant. One-time per org.

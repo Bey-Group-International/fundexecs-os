@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
+import {
+  createServerClient,
+  createServiceClient,
+  hasSupabaseServerEnv,
+} from "@/lib/supabase/server";
 import { grantTrialCreditsIfEligible } from "@/lib/trial";
-import { getSessionContext } from "@/lib/auth";
 
 // OAuth callback (Google) and email OTP verification callback.
 // Supabase redirects here with either:
@@ -26,7 +29,7 @@ export async function GET(request: Request) {
     // OAuth flow (Google)
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      await maybeGrantTrial();
+      await maybeGrantTrial(supabase);
       return NextResponse.redirect(`${origin}${next}`);
     }
     return NextResponse.redirect(
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
     // Email OTP / magic-link verification
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
     if (!error) {
-      await maybeGrantTrial();
+      await maybeGrantTrial(supabase);
       return NextResponse.redirect(`${origin}${next}`);
     }
     return NextResponse.redirect(
@@ -71,11 +74,30 @@ function sanitizeNextPath(rawNext: string | null, origin: string): string {
 
 // Best-effort trial credit grant after any successful auth exchange.
 // Silently swallows errors so a credit-system hiccup never blocks login.
-async function maybeGrantTrial(): Promise<void> {
+//
+// Takes the SAME client that performed the exchange: its in-memory session is
+// valid immediately, whereas a fresh client (e.g. via getSessionContext) only
+// sees the incoming request cookies — the just-issued session cookies are on
+// the outgoing response and not visible to it yet.
+async function maybeGrantTrial(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<void> {
   try {
-    const ctx = await getSessionContext();
-    if (!ctx?.orgId) return;
-    await grantTrialCreditsIfEligible(ctx.orgId);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    // Membership lookup via the service client — the new session's RLS grants
+    // may not be attached to this request either.
+    const { data: membership } = await createServiceClient()
+      .from("organization_members")
+      .select("organization_id")
+      .eq("principal_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!membership?.organization_id) return;
+    await grantTrialCreditsIfEligible(membership.organization_id);
   } catch (err) {
     console.error("[auth-callback] maybeGrantTrial failed:", err);
   }
