@@ -80,7 +80,11 @@ export function CommandPalette({
       ? commands
       : commands.filter(
           (c) =>
-            c.label.toLowerCase().includes(s) || (c.group?.toLowerCase().includes(s) ?? false),
+            c.label.toLowerCase().includes(s) ||
+            (c.group?.toLowerCase().includes(s) ?? false) ||
+            // Hints are searchable too — "HUD" finds "Main HUD", "e-sign"
+            // finds Envelopes — matching the retired dashboard palette.
+            (c.hint?.toLowerCase().includes(s) ?? false),
         );
     // The free-text row joins the keyboard index as the first entry, so Enter
     // on an unmatched query goes to the action instead of dead-ending.
