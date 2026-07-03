@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
+import { humanize, humanizeEnumValue } from "@/lib/humanize";
 
 interface Column {
   key: string;
@@ -15,7 +16,9 @@ function cell(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "object") return "—";
-  return String(value);
+  // Enum-shaped strings (`ic_review`, `fund_of_funds`) render as labels;
+  // real content (names, emails, URLs, numbers) passes through untouched.
+  return typeof value === "string" ? humanizeEnumValue(value) : String(value);
 }
 
 // Provenance + verification + archive are surfaced and managed here; never shown
@@ -34,14 +37,6 @@ const HIDDEN_FIELDS = new Set([
 
 function isEmpty(value: unknown): boolean {
   return value === null || value === undefined || value === "";
-}
-
-function humanize(key: string): string {
-  return key
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 function relativeTime(iso: unknown): string | null {
@@ -152,7 +147,19 @@ export default function ModuleTable({
                 <Fragment key={id || JSON.stringify(row)}>
                   <tr
                     onClick={() => setExpanded(isOpen ? null : id)}
-                    className={`cursor-pointer border-b border-line/60 transition hover:bg-surface-2 ${
+                    // The expandable row is the gate to every record action
+                    // (verify, archive, detail), so it must be operable from
+                    // the keyboard, not just the mouse.
+                    tabIndex={0}
+                    role="button"
+                    aria-expanded={isOpen}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setExpanded(isOpen ? null : id);
+                      }
+                    }}
+                    className={`cursor-pointer border-b border-line/60 transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400 ${
                       archived ? "bg-surface-1/40 opacity-60" : "bg-surface-1"
                     }`}
                   >

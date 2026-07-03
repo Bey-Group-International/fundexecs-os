@@ -3,36 +3,36 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { HUBS } from "@/lib/hubs";
 
+// Navigation and settings destinations — every href is a real route. Hub
+// module commands are NOT listed here: they are generated from lib/hubs.ts
+// below, so the palette can never drift from the routes that actually exist
+// (the previous hardcoded catalog shipped six destinations that 404'd).
 const BASE_COMMANDS = [
-  // Navigation
   { label: "Command Center", href: "/dashboard", hint: "Main HUD", group: "nav" },
   { label: "Interactive Office", href: "/dashboard/office", hint: "Visual workspace", group: "nav" },
   { label: "Earn Workspace", href: "/workspace", hint: "Create a workflow", group: "nav" },
   { label: "Automated Sessions", href: "/automations", hint: "Workflow automation", group: "nav" },
   { label: "Inbox", href: "/inbox", hint: "Unified messages", group: "nav" },
   { label: "Search", href: "/search", hint: "Full-text search", group: "nav" },
-  // Build Hub
-  { label: "Build: Profile", href: "/build/profile", hint: "Org profile", group: "build" },
-  { label: "Build: Track Record", href: "/build/track-record", hint: "Historical performance", group: "build" },
-  { label: "Build: Materials", href: "/build/materials", hint: "Investor materials", group: "build" },
-  // Source Hub
-  { label: "Source: Deal Pipeline", href: "/source/pipeline", hint: "Live deal funnel", group: "source" },
-  { label: "Source: Capital Map", href: "/capital-map", hint: "Relationship intelligence", group: "source" },
-  { label: "Source: Allocator Directory", href: "/source/allocators", hint: "LP directory", group: "source" },
-  { label: "Source: Outreach Studio", href: "/source/outreach", hint: "Prospecting workflow", group: "source" },
-  // Run Hub
-  { label: "Run: Deal War Room", href: "/run/deal", hint: "Deal evaluation", group: "run" },
-  { label: "Run: Underwriting", href: "/run/underwriting", hint: "LBO model engine", group: "run" },
-  { label: "Run: Diligence", href: "/run/diligence", hint: "Diligence workbench", group: "run" },
-  // Execute Hub
-  { label: "Execute: Cap Table", href: "/execute/cap-table", hint: "Equity tracking", group: "execute" },
-  { label: "Execute: Portfolio", href: "/execute/portfolio", hint: "Portfolio health", group: "execute" },
-  { label: "Execute: Closing", href: "/execute/closing", hint: "Closing checklist", group: "execute" },
-  // Settings
+  { label: "Capital Map", href: "/capital-map", hint: "Relationship intelligence", group: "nav" },
+  { label: "Portfolio", href: "/portfolio", hint: "Portfolio health", group: "nav" },
+  { label: "Deals", href: "/deals", hint: "Deal war rooms", group: "nav" },
   { label: "Settings", href: "/settings", hint: "Account & org", group: "settings" },
-  { label: "Integrations", href: "/settings/integrations", hint: "Connect tools", group: "settings" },
+  { label: "Integrations", href: "/settings#integrations", hint: "Connect tools", group: "settings" },
 ];
+
+// Every hub module, straight from the routing source of truth: /{hub}/{module}
+// is exactly what app/(app)/[hub]/[module] serves.
+const HUB_COMMANDS = HUBS.flatMap((hub) =>
+  hub.modules.map((m) => ({
+    label: `${hub.label}: ${m.label}`,
+    href: `/${hub.key}/${m.key}`,
+    hint: hub.label,
+    group: hub.key as string,
+  })),
+);
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -40,6 +40,7 @@ export function CommandPalette() {
   const commands = useMemo(
     () => [
       ...BASE_COMMANDS,
+      ...HUB_COMMANDS,
       ...dashboardWorkspaces.map((workspace) => ({
         label: workspace.title,
         href: workspace.href,
