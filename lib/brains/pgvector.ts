@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { embedder, toVectorLiteral } from "@/lib/brains/embed";
+import { getEmbedder, toVectorLiteral } from "@/lib/brains/embed";
 import type { RetrievedChunk } from "@/lib/brains/vector";
 
 // Retrieve top-k grounding passages from a Brain's own KB via pgvector cosine
@@ -23,11 +23,15 @@ export async function retrieveBrainKb(
   k = 2,
 ): Promise<RetrievedChunk[]> {
   try {
-    const queryEmbedding = toVectorLiteral(embedder.embed(query || brainKey));
+    const embedder = getEmbedder();
+    const queryEmbedding = toVectorLiteral(await embedder.embed(query || brainKey, "query"));
     const { data, error } = await supabase.rpc("match_brain_kb_chunks", {
       query_embedding: queryEmbedding,
       target_brain_key: brainKey,
       match_count: k,
+      // Only rank rows in the query's vector space — hash and voyage vectors
+      // are not comparable.
+      query_model: embedder.model,
     });
     if (error || !data) return [];
     return (data as MatchRow[]).map((row) => ({
