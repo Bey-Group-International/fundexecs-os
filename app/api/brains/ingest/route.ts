@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { chunkText } from "@/lib/brains/vector";
-import { embedder, toVectorLiteral } from "@/lib/brains/embed";
+import { getEmbedder, toVectorLiteral } from "@/lib/brains/embed";
 import { BRAINS } from "@/lib/brains/catalog";
 import type { BrainKey } from "@/lib/brains/types";
 
@@ -80,6 +80,21 @@ export async function POST(request: Request) {
       continue;
     }
 
+    // Embed BEFORE the destructive delete below — an embedding failure (real
+    // API down, bad key) must leave the brain's existing corpus intact. One
+    // batched call per file (the real embedder batches over the wire; the hash
+    // embedder just maps). Rows carry the vector space they were embedded in
+    // so retrieval never mixes spaces.
+    const embedder = getEmbedder();
+    let embeddings: number[][];
+    try {
+      embeddings = await embedder.embedBatch(chunks, "document");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "embedding failed";
+      results.push({ brainKey, source, chunks: 0, status: `failed: ${message}` });
+      continue;
+    }
+
     // Idempotent: clear this brain's existing rows before re-inserting.
     const { error: delError } = await supabase
       .from("brain_kb_chunks")
@@ -95,7 +110,8 @@ export async function POST(request: Request) {
       source,
       chunk_index: i,
       content: text,
-      embedding: toVectorLiteral(embedder.embed(text)),
+      embedding: toVectorLiteral(embeddings[i]),
+      embedding_model: embedder.model,
     }));
 
     const { error: insError } = await supabase.from("brain_kb_chunks").insert(rows);

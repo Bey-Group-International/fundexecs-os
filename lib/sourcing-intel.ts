@@ -15,7 +15,15 @@
 // the operator can index their live pipeline. Every search is org-scoped (RLS).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { embedder, toVectorLiteral } from "@/lib/brains/embed";
+import { HashingEmbedder, toVectorLiteral } from "@/lib/brains/embed";
+
+// Sourcing intel deliberately stays on the DETERMINISTIC hash embedder even
+// when a real embedder is configured: matching below reproduces an entity's
+// stored vector by re-embedding its text, which requires bit-identical
+// determinism a remote API cannot guarantee — and entity discovery must work
+// keyless in CI/preview. The Brain KB (lib/brains/pgvector) is where the real
+// semantic embedder plugs in.
+const embedder = new HashingEmbedder();
 
 type Client = SupabaseClient<Database>;
 
@@ -160,7 +168,7 @@ export async function ingestEntities(
         source_url: e.sourceUrl ?? null,
         created_by: userId,
         embedding: toVectorLiteral(
-          embedder.embed(
+          embedder.embedSync(
             composeEmbedText({
               name: e.name,
               categories: e.categories,
@@ -255,7 +263,7 @@ export async function semanticSearch(
   const kind = opts.kind ?? null;
   try {
     const { data, error } = await supabase.rpc("match_sourcing_entities", {
-      query_embedding: toVectorLiteral(embedder.embed(clean)),
+      query_embedding: toVectorLiteral(embedder.embedSync(clean)),
       target_org: orgId,
       match_count: k,
       filter_kind: kind,
@@ -286,7 +294,7 @@ export async function findSimilar(
   const kind = entity.kind ?? null;
   try {
     const { data, error } = await supabase.rpc("match_sourcing_entities", {
-      query_embedding: toVectorLiteral(embedder.embed(text)),
+      query_embedding: toVectorLiteral(embedder.embedSync(text)),
       target_org: orgId,
       match_count: k,
       filter_kind: kind,

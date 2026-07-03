@@ -1445,6 +1445,9 @@ export type BrainKbChunk = {
   chunk_index: number;
   content: string;
   embedding: string | null;
+  // Which vector space the embedding was produced in (migration
+  // 20260703240000): 'hash-v1' or a real model id like 'voyage-3.5-lite@256'.
+  embedding_model: string;
   created_at: string;
 };
 
@@ -2465,6 +2468,7 @@ export type Database = {
           query_embedding: string;
           target_brain_key: string;
           match_count?: number;
+          query_model?: string;
         };
         Returns: {
           id: string;
