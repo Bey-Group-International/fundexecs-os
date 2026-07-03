@@ -14,7 +14,7 @@
 // Claude-backed helper; it degrades to a deterministic summary when no API key is
 // configured, so the inbox behaves identically in CI and preview builds.
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicClient } from "@/lib/anthropic-client";
+import { anthropicClient, isAnthropicTimeout } from "@/lib/anthropic-client";
 import type { ActionKind } from "@/lib/gates";
 import type { InboxCategory } from "@/lib/supabase/database.types";
 
@@ -242,7 +242,11 @@ export async function summarizeThread(input: ThreadDigestInput): Promise<ThreadS
       summary: (typeof raw.summary === "string" && raw.summary.trim()) || fb.summary,
       intent: (typeof raw.intent === "string" && raw.intent.trim()) || fb.intent,
     };
-  } catch {
+  } catch (err) {
+    // A timeout is now a typed, observable event — the fallback is the same.
+    if (isAnthropicTimeout(err)) {
+      console.warn("[inbox/intelligence] summarize timed out — deterministic fallback");
+    }
     return fallbackSummary(input);
   }
 }
@@ -333,7 +337,10 @@ export async function draftReply(input: ThreadDigestInput): Promise<ThreadDraftR
     const raw = JSON.parse(text) as { draft?: unknown };
     const draft = typeof raw.draft === "string" ? raw.draft.trim() : "";
     return draft ? { draft, live: true } : { draft: fallbackDraft(input), live: false };
-  } catch {
+  } catch (err) {
+    if (isAnthropicTimeout(err)) {
+      console.warn("[inbox/intelligence] draft timed out — deterministic fallback");
+    }
     return { draft: fallbackDraft(input), live: false };
   }
 }
