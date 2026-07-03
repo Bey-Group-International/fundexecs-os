@@ -1,5 +1,14 @@
 // Unified email sender: Gmail API → Resend → in-app only.
-// Priority: Gmail (when GMAIL_ACCESS_TOKEN is set) → Resend (when RESEND_API_KEY is set) → silent fallback.
+// Priority: Gmail (when a Gmail token resolves) → Resend (when a Resend key
+// resolves) → silent fallback. Each provider credential prefers the caller's
+// per-org value (resolved from the secret vault by the dispatch layer) over
+// the deploy-wide env var, so orgs send from their own identity.
+
+export interface SendEmailCredentials {
+  gmailAccessToken?: string;
+  resendApiKey?: string;
+  fromEmail?: string;
+}
 
 export interface SendEmailArgs {
   to: { name: string; email: string };
@@ -7,6 +16,8 @@ export interface SendEmailArgs {
   htmlBody: string;
   fromName?: string;
   fromEmail?: string;
+  // Per-org credentials; each field falls back to its env var when unset.
+  credentials?: SendEmailCredentials;
 }
 
 export interface SendEmailResult {
@@ -15,8 +26,17 @@ export interface SendEmailResult {
   detail: string;
 }
 
+function fromAddress(args: SendEmailArgs): string {
+  return (
+    args.fromEmail ??
+    args.credentials?.fromEmail ??
+    process.env.RESEND_FROM_EMAIL ??
+    "noreply@fundexecs.com"
+  );
+}
+
 function buildRfc2822(args: SendEmailArgs): string {
-  const from = `${args.fromName ?? "FundExecs"} <${args.fromEmail ?? (process.env.RESEND_FROM_EMAIL ?? "noreply@fundexecs.com")}>`;
+  const from = `${args.fromName ?? "FundExecs"} <${fromAddress(args)}>`;
   const lines = [
     `From: ${from}`,
     `To: ${args.to.name} <${args.to.email}>`,
@@ -35,7 +55,7 @@ function base64url(str: string): string {
 }
 
 async function sendViaGmail(args: SendEmailArgs): Promise<SendEmailResult> {
-  const token = process.env.GMAIL_ACCESS_TOKEN;
+  const token = args.credentials?.gmailAccessToken ?? process.env.GMAIL_ACCESS_TOKEN;
   if (!token) return { ok: false, channel: "gmail", detail: "no token" };
 
   const raw = base64url(buildRfc2822(args));
@@ -56,10 +76,10 @@ async function sendViaGmail(args: SendEmailArgs): Promise<SendEmailResult> {
 }
 
 async function sendViaResend(args: SendEmailArgs): Promise<SendEmailResult> {
-  const key = process.env.RESEND_API_KEY;
+  const key = args.credentials?.resendApiKey ?? process.env.RESEND_API_KEY;
   if (!key) return { ok: false, channel: "resend", detail: "no key" };
 
-  const from = `${args.fromName ?? "FundExecs"} <${args.fromEmail ?? (process.env.RESEND_FROM_EMAIL ?? "noreply@fundexecs.com")}>`;
+  const from = `${args.fromName ?? "FundExecs"} <${fromAddress(args)}>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -82,13 +102,13 @@ async function sendViaResend(args: SendEmailArgs): Promise<SendEmailResult> {
 }
 
 export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
-  if (process.env.GMAIL_ACCESS_TOKEN) {
+  if (args.credentials?.gmailAccessToken ?? process.env.GMAIL_ACCESS_TOKEN) {
     const result = await sendViaGmail(args);
     if (result.ok) return result;
     console.warn("[email] Gmail send failed, falling back to Resend:", result.detail);
   }
 
-  if (process.env.RESEND_API_KEY) {
+  if (args.credentials?.resendApiKey ?? process.env.RESEND_API_KEY) {
     const result = await sendViaResend(args);
     if (result.ok) return result;
     console.warn("[email] Resend send failed:", result.detail);

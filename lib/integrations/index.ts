@@ -5,6 +5,7 @@
 // any adapter error is captured (never thrown) so a dispatch can't break the
 // caller's flow.
 import { getAdapter } from "./registry";
+import { resolveChannelCredentials } from "./credentials";
 import { tierForAction } from "@/lib/gates";
 import { isVerifiable } from "@/lib/grounding";
 import type { DispatchContext, DispatchResult } from "./types";
@@ -19,6 +20,21 @@ export { getAdapter } from "./registry";
 
 export async function dispatchAction(ctx: DispatchContext): Promise<DispatchResult> {
   const adapter = getAdapter(ctx.action, ctx.channel);
+
+  // Resolve this org's own provider credentials from the vault so the adapter
+  // acts under the org's identity, not the deploy-wide env credential. One
+  // choke point covers every call site; a no-op (empty bag) when the vault is
+  // unconfigured or the channel needs no credentials, and a resolution error
+  // degrades to the env fallback rather than blocking the dispatch. Assigned
+  // in place (not spread) so no other ctx property is touched here.
+  if (!ctx.secrets) {
+    try {
+      ctx.secrets = await resolveChannelCredentials(ctx.orgId, adapter.channel);
+    } catch (err) {
+      console.error("[integrations] credential resolution failed:", err);
+      ctx.secrets = {};
+    }
+  }
 
   // Trust layer pre-flight: nothing unverified leaves the building. When an
   // action carries a backing composer artifact and that artifact is not

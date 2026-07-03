@@ -28,8 +28,14 @@ export const gmailAdapter: DispatchAdapter = {
   async dispatch(ctx: DispatchContext): Promise<DispatchResult> {
     const to = ctx.target?.email;
     const recipient = to ?? ctx.target?.name ?? "the contact";
+    // The org's own vault credentials (resolved by dispatchAction) count
+    // toward "configured" alongside the deploy env — so an org with its own
+    // Gmail/Resend credential sends live even on a deploy with no env creds.
+    const hasOrgCreds = Boolean(
+      ctx.secrets?.GMAIL_ACCESS_TOKEN || ctx.secrets?.RESEND_API_KEY,
+    );
 
-    if (!(ctx.connected ?? configured())) {
+    if (!(ctx.connected ?? (configured() || hasOrgCreds))) {
       return {
         ok: true,
         channel: "gmail",
@@ -54,6 +60,11 @@ export const gmailAdapter: DispatchAdapter = {
       htmlBody: escaped
         ? `<p>${escaped.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`
         : "",
+      credentials: {
+        gmailAccessToken: ctx.secrets?.GMAIL_ACCESS_TOKEN,
+        resendApiKey: ctx.secrets?.RESEND_API_KEY,
+        fromEmail: ctx.secrets?.RESEND_FROM_EMAIL,
+      },
     });
 
     if (result.ok) {
