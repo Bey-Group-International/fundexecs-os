@@ -6,13 +6,14 @@
 import type { Deal } from "@/lib/supabase/database.types";
 import { DILIGENCE_CATEGORIES } from "@/lib/diligence-templates";
 import { applyDiligenceTemplate } from "@/components/run/diligence-actions";
+import { ActionForm } from "@/components/shared/ActionForm";
 
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
 
 export function DiligenceTemplatePicker({ deals }: { deals: Deal[] }) {
   return (
-    <form
+    <ActionForm
       action={applyDiligenceTemplate}
       className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface-1 p-3"
     >
@@ -38,6 +39,6 @@ export function DiligenceTemplatePicker({ deals }: { deals: Deal[] }) {
       <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
         Apply template
       </button>
-    </form>
+    </ActionForm>
   );
 }

@@ -14,6 +14,7 @@ import {
 } from "@/components/run/diligence-actions";
 import { updateDiligenceItem } from "@/app/(app)/deal/[id]/actions";
 import { RecordBulkLifecycleActions, RecordLifecycleActions } from "@/components/RecordLifecycleActions";
+import { ActionForm } from "@/components/shared/ActionForm";
 
 const SEV_DOT: Record<RiskSeverity, string> = {
   low: "bg-fg-muted",
@@ -72,7 +73,7 @@ export function DiligenceDealGroup({
         </div>
         <div className="ml-auto">
           {selectedIds.length > 0 && (
-            <form action={bulkUpdateDiligence} className="flex items-center gap-1.5">
+            <ActionForm action={bulkUpdateDiligence} className="flex items-center gap-1.5">
               {selectedIds.map((id) => (
                 <input key={id} type="hidden" name="ids" value={id} />
               ))}
@@ -98,7 +99,7 @@ export function DiligenceDealGroup({
                 ids={selectedIds}
                 onComplete={() => setSelected(new Set())}
               />
-            </form>
+            </ActionForm>
           )}
         </div>
       </div>
@@ -132,7 +133,7 @@ export function DiligenceDealGroup({
                     {i.due_date}
                   </span>
                 )}
-                <form action={updateDiligenceItem} className="flex items-center gap-1">
+                <ActionForm action={updateDiligenceItem} className="flex items-center gap-1">
                   <input type="hidden" name="id" value={i.id} />
                   <input type="hidden" name="deal_id" value={i.deal_id} />
                   <select
@@ -150,11 +151,11 @@ export function DiligenceDealGroup({
                   <button className="rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/50 hover:text-gold-300">
                     Save
                   </button>
-                </form>
+                </ActionForm>
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
-                <form action={updateDiligenceFinding} className="flex min-w-0 flex-1 items-center gap-1">
+                <ActionForm action={updateDiligenceFinding} className="flex min-w-0 flex-1 items-center gap-1">
                   <input type="hidden" name="id" value={i.id} />
                   <input type="hidden" name="deal_id" value={i.deal_id} />
                   <input
@@ -166,8 +167,8 @@ export function DiligenceDealGroup({
                   <button className="rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/50 hover:text-gold-300">
                     Note
                   </button>
-                </form>
-                <form action={setDiligenceOwnerDue} className="flex items-center gap-1">
+                </ActionForm>
+                <ActionForm action={setDiligenceOwnerDue} className="flex items-center gap-1">
                   <input type="hidden" name="id" value={i.id} />
                   <input type="hidden" name="deal_id" value={i.deal_id} />
                   <input
@@ -186,7 +187,7 @@ export function DiligenceDealGroup({
                   <button className="rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/50 hover:text-gold-300">
                     Assign
                   </button>
-                </form>
+                </ActionForm>
                 <RecordLifecycleActions
                   hub="run"
                   module="diligence"

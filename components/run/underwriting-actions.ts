@@ -46,36 +46,43 @@ function revalidate() {
   revalidatePath("/run/underwriting");
 }
 
+export interface UnderwritingActionResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
  * Assign a probability weight (0..1) to a case, stored in `model.probability`.
  * Merges into the existing model JSON so saved assumptions survive.
  */
-export async function setUnderwritingProbability(formData: FormData): Promise<void> {
+export async function setUnderwritingProbability(formData: FormData): Promise<UnderwritingActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing case." };
 
   let probability = num(formData, "probability");
-  if (probability == null) return;
+  if (probability == null) return { ok: false, error: "Enter a probability." };
   if (probability > 1) probability = 1;
   if (probability < 0) probability = 0;
 
   const supabase = createServerClient();
   const row = await loadCase(supabase, ctx.orgId, id);
-  if (!row) return;
+  if (!row) return { ok: false, error: "Case not found." };
 
   const model = asModelObject(row.model);
   model.probability = probability;
 
-  await supabase
+  const { error } = await supabase
     .from("underwritings")
     .update({ model: model as Json })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, row.deal_id);
   revalidate();
+  return { ok: true };
 }
 
 /**
@@ -85,11 +92,11 @@ export async function setUnderwritingProbability(formData: FormData): Promise<vo
  * onto `projected_irr` / `projected_moic` so the case and conviction reflect
  * the inputs. IRR is stored as a fraction (consistent with `toPercent`).
  */
-export async function saveUnderwritingInputs(formData: FormData): Promise<void> {
+export async function saveUnderwritingInputs(formData: FormData): Promise<UnderwritingActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing case." };
 
   const equity = num(formData, "equity");
   const exitValue = num(formData, "exitValue");
@@ -99,7 +106,7 @@ export async function saveUnderwritingInputs(formData: FormData): Promise<void> 
 
   const supabase = createServerClient();
   const row = await loadCase(supabase, ctx.orgId, id);
-  if (!row) return;
+  if (!row) return { ok: false, error: "Case not found." };
 
   const model = asModelObject(row.model);
   model.assumptions = {
@@ -121,36 +128,40 @@ export async function saveUnderwritingInputs(formData: FormData): Promise<void> 
     update.projected_moic = moic;
   }
 
-  await supabase
+  const { error } = await supabase
     .from("underwritings")
     .update(update)
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, row.deal_id);
   revalidate();
+  return { ok: true };
 }
 
 /**
  * Set a case's `equity_required` (sources & uses). Kept minimal — equity is a
  * first-class column, not part of `model`.
  */
-export async function setUnderwritingEquity(formData: FormData): Promise<void> {
+export async function setUnderwritingEquity(formData: FormData): Promise<UnderwritingActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing case." };
 
   const supabase = createServerClient();
   const row = await loadCase(supabase, ctx.orgId, id);
-  if (!row) return;
+  if (!row) return { ok: false, error: "Case not found." };
 
-  await supabase
+  const { error } = await supabase
     .from("underwritings")
     .update({ equity_required: num(formData, "equity_required") })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, row.deal_id);
   revalidate();
+  return { ok: true };
 }

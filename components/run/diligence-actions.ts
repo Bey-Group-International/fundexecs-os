@@ -28,34 +28,40 @@ function revalidateDiligence(dealId?: string) {
   revalidatePath("/run/diligence");
 }
 
+export interface DiligenceActionResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
  * Materialise a category's (or "all") standard checklist as open diligence_items
  * for a deal — idempotent: titles already present on the deal are skipped.
  */
-export async function applyDiligenceTemplate(formData: FormData): Promise<void> {
+export async function applyDiligenceTemplate(formData: FormData): Promise<DiligenceActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
   const categoryRaw = String(formData.get("category") ?? "all");
-  if (!dealId) return;
+  if (!dealId) return { ok: false, error: "Choose a deal." };
   const category: DiligenceCategory | "all" =
     categoryRaw === "all" || isDiligenceCategory(categoryRaw) ? categoryRaw : "all";
 
   const supabase = createServerClient();
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from("diligence_items")
     .select("title")
     .eq("organization_id", ctx.orgId)
     .eq("deal_id", dealId);
+  if (readError) return { ok: false, error: readError.message };
 
   const existingTitles = ((existing ?? []) as { title: string }[]).map((r) => r.title);
   const fresh = newTemplateItems(templateItemsFor(category), existingTitles);
   if (fresh.length === 0) {
     revalidateDiligence(dealId);
-    return;
+    return { ok: true };
   }
 
-  await supabase.from("diligence_items").insert(
+  const { error } = await supabase.from("diligence_items").insert(
     fresh.map((r) => ({
       organization_id: ctx.orgId,
       deal_id: dealId,
@@ -64,39 +70,43 @@ export async function applyDiligenceTemplate(formData: FormData): Promise<void> 
       status: "open" as DiligenceStatus,
     })),
   );
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateDiligence(dealId);
+  return { ok: true };
 }
 
 /** Write/edit the free-text `finding` note on a single item. */
-export async function updateDiligenceFinding(formData: FormData): Promise<void> {
+export async function updateDiligenceFinding(formData: FormData): Promise<DiligenceActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
   const dealId = String(formData.get("deal_id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing diligence item." };
 
   const patch: Partial<Pick<DiligenceItem, "finding">> = { finding: text(formData, "finding") };
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("diligence_items")
     .update(patch)
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   if (dealId) await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateDiligence(dealId);
+  return { ok: true };
 }
 
 /** Set owner and/or due date on a single item. */
-export async function setDiligenceOwnerDue(formData: FormData): Promise<void> {
+export async function setDiligenceOwnerDue(formData: FormData): Promise<DiligenceActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
   const dealId = String(formData.get("deal_id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing diligence item." };
 
   const patch: Partial<Pick<DiligenceItem, "owner" | "due_date">> = {
     owner: text(formData, "owner"),
@@ -104,35 +114,40 @@ export async function setDiligenceOwnerDue(formData: FormData): Promise<void> {
   };
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("diligence_items")
     .update(patch)
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   // Owner/due don't move conviction, but re-snapshot is harmless (no-op when
   // the score is unchanged) and keeps the surface consistent.
   if (dealId) await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateDiligence(dealId);
+  return { ok: true };
 }
 
 /**
  * Apply one target status to many selected items at once (clear or flag in
  * bulk). `ids` arrives as repeated form fields; `status` is the target.
  */
-export async function bulkUpdateDiligence(formData: FormData): Promise<void> {
+export async function bulkUpdateDiligence(formData: FormData): Promise<DiligenceActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const ids = formData.getAll("ids").map((v) => String(v)).filter(Boolean);
   const statusRaw = String(formData.get("status") ?? "");
-  if (ids.length === 0 || !STATUSES.has(statusRaw as DiligenceStatus)) return;
+  if (ids.length === 0 || !STATUSES.has(statusRaw as DiligenceStatus)) {
+    return { ok: false, error: "Select at least one item and a target status." };
+  }
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("diligence_items")
     .update({ status: statusRaw as DiligenceStatus })
     .in("id", ids)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   // Re-snapshot conviction for every distinct deal the bulk edit touched.
   const { data: touched } = await supabase
@@ -146,4 +161,5 @@ export async function bulkUpdateDiligence(formData: FormData): Promise<void> {
     revalidatePath(`/deal/${dealId}`);
   }
   revalidatePath("/run/diligence");
+  return { ok: true };
 }
