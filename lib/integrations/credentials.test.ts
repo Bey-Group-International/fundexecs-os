@@ -67,6 +67,22 @@ describe("resolveChannelCredentials", () => {
     consoleError.mockRestore();
   });
 
+  it("times out a hung vault read and degrades that key to the env fallback", async () => {
+    jest.useFakeTimers();
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    getOrgSecret.mockImplementation((_orgId: string, key: string) => {
+      if (key === "GMAIL_ACCESS_TOKEN") return new Promise(() => {}); // hangs forever
+      return Promise.resolve(key === "RESEND_API_KEY" ? "re_org_key" : null);
+    });
+    const pending = resolveChannelCredentials("org-1", "gmail");
+    await jest.advanceTimersByTimeAsync(3_001);
+    const result = await pending;
+    expect(result).toEqual({ RESEND_API_KEY: "re_org_key" });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+    jest.useRealTimers();
+  });
+
   it("exposes every channel key in the settings allow-list", () => {
     for (const keys of Object.values(CHANNEL_SECRET_KEYS)) {
       for (const key of keys) expect(ALL_SECRET_KEYS).toContain(key);

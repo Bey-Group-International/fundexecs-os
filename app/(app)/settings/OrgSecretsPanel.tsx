@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { setOrgSecret, deleteOrgSecret, type OrgSecretMeta } from "./secrets-actions";
 
 export interface SecretKeyGroup {
@@ -22,7 +22,10 @@ export function OrgSecretsPanel({
   groups: SecretKeyGroup[];
   vaultReady: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
+  // Manual busy flag rather than useTransition: in React 18 isPending can
+  // drop back to false after the action's first await, re-enabling the
+  // buttons mid-flight and allowing a duplicate submit.
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const byKey = new Map(secrets.map((s) => [s.provider, s]));
@@ -37,13 +40,21 @@ export function OrgSecretsPanel({
     );
   }
 
-  const run = (action: (fd: FormData) => Promise<{ ok: boolean; error?: string }>, fd: FormData) =>
-    startTransition(async () => {
-      setError(null);
+  const run = async (
+    action: (fd: FormData) => Promise<{ ok: boolean; error?: string }>,
+    fd: FormData,
+  ) => {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
       const result = await action(fd);
       if (!result.ok) setError(result.error ?? "Something went wrong.");
       else setEditingKey(null);
-    });
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -95,6 +106,13 @@ export function OrgSecretsPanel({
                         <button
                           type="submit"
                           disabled={pending}
+                          onClick={(e) => {
+                            // Removing a credential silently reverts the channel to the
+                            // deploy-wide env credential (or mock mode) — confirm first.
+                            if (!window.confirm(`Remove the stored ${key} credential? Dispatch falls back to the deployment default.`)) {
+                              e.preventDefault();
+                            }
+                          }}
                           className="rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-50"
                         >
                           Remove

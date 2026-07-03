@@ -26,6 +26,27 @@ export const CHANNEL_SECRET_KEYS: Record<string, readonly string[]> = {
 /** Every key any channel can resolve — the allow-list for the settings writer. */
 export const ALL_SECRET_KEYS: readonly string[] = Object.values(CHANNEL_SECRET_KEYS).flat();
 
+// The Supabase client has no default request timeout, so a hung vault read
+// would hold the whole dispatch open. Cap each key lookup; a timed-out key
+// degrades to the env fallback like any other per-key failure.
+const VAULT_READ_TIMEOUT_MS = 3_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} vault read timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * Resolve the org's stored credentials for one channel. Fast no-op (empty bag)
  * when the channel has no credentialed keys or the vault isn't configured. A
@@ -44,7 +65,7 @@ export async function resolveChannelCredentials(
   await Promise.all(
     keys.map(async (key) => {
       try {
-        const value = await getOrgSecret(orgId, key);
+        const value = await withTimeout(getOrgSecret(orgId, key), VAULT_READ_TIMEOUT_MS, key);
         if (value) secrets[key] = value;
       } catch (err) {
         console.error(`[integrations/credentials] failed to resolve ${key} for org ${orgId}:`, err);
