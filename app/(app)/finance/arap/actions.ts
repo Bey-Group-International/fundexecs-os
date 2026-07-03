@@ -10,7 +10,7 @@ import {
   type AgingRow,
 } from "@/lib/finance/arap";
 import { invoiceJournalLines, paymentJournalLines } from "@/lib/finance/posting";
-import { postJournalEntry } from "../actions";
+import { postJournalEntry, reverseJournalEntry } from "../actions";
 import type {
   FinInvoiceKind,
   FinPartyKind,
@@ -225,21 +225,28 @@ export async function agingReport(input: {
 
 // --- GL posting --------------------------------------------------------------
 
-// Resolve a party's AR (receivable) or AP (payable) control account.
+// Resolve a party's AR (receivable) or AP (payable) control account + its name.
 async function resolveControlAccount(
   supabase: ReturnType<typeof createServerClient>,
   orgId: string,
   partyId: string,
   receivable: boolean,
-): Promise<string | null> {
+): Promise<{ accountId: string | null; partyName: string | null }> {
   const { data } = await supabase
     .from("fin_parties")
-    .select("ar_control_account_id, ap_control_account_id")
+    .select("name, ar_control_account_id, ap_control_account_id")
     .eq("organization_id", orgId)
     .eq("id", partyId)
     .maybeSingle();
-  const p = data as { ar_control_account_id: string | null; ap_control_account_id: string | null } | null;
-  return (receivable ? p?.ar_control_account_id : p?.ap_control_account_id) ?? null;
+  const p = data as {
+    name: string;
+    ar_control_account_id: string | null;
+    ap_control_account_id: string | null;
+  } | null;
+  return {
+    accountId: (receivable ? p?.ar_control_account_id : p?.ap_control_account_id) ?? null,
+    partyName: p?.name ?? null,
+  };
 }
 
 /**
@@ -278,7 +285,8 @@ export async function postInvoice(input: {
 
   const controlAccountId =
     input.controlAccountId ??
-    (await resolveControlAccount(supabase, auth.ctx.orgId, invoice.party_id, invoice.kind === "receivable")) ??
+    (await resolveControlAccount(supabase, auth.ctx.orgId, invoice.party_id, invoice.kind === "receivable"))
+      .accountId ??
     undefined;
   if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
 
@@ -331,7 +339,14 @@ export async function postInvoice(input: {
     .is("posted_entry_id", null)
     .select("id");
   if (!linked?.length) {
-    return { ok: false, error: "Invoice was posted by a concurrent request; reverse the duplicate entry." };
+    // A concurrent request already posted this invoice. Our entry is now an
+    // unlinked duplicate — reverse it so the ledger nets to zero (no orphan).
+    await reverseJournalEntry({
+      entryId,
+      entryDate: invoice.issue_date,
+      memo: "Auto-reversal: concurrent duplicate post",
+    });
+    return { ok: false, error: "Invoice was already posted by a concurrent request; the duplicate entry was reversed." };
   }
   revalidatePath("/finance");
   return { ok: true, data: { invoiceId: input.invoiceId, entryId } };
@@ -366,10 +381,13 @@ export async function postPayment(input: {
   >;
   if (payment.posted_entry_id) return { ok: false, error: "Payment is already posted." };
 
-  const controlAccountId =
-    input.controlAccountId ??
-    (await resolveControlAccount(supabase, auth.ctx.orgId, payment.party_id, payment.direction === "inbound")) ??
-    undefined;
+  const resolved = await resolveControlAccount(
+    supabase,
+    auth.ctx.orgId,
+    payment.party_id,
+    payment.direction === "inbound",
+  );
+  const controlAccountId = input.controlAccountId ?? resolved.accountId ?? undefined;
   if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
 
   let cashAccountId = input.cashAccountId;
@@ -401,7 +419,7 @@ export async function postPayment(input: {
     ledgerId: input.ledgerId,
     periodId: input.periodId,
     entryDate: payment.payment_date,
-    memo: `Payment ${payment.payment_date} ${payment.currency} ${payment.amount}`,
+    memo: `Payment · ${resolved.partyName ?? "party"} · ${payment.payment_date} ${payment.currency} ${payment.amount}`,
     lines: journalLines,
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the payment entry." };
@@ -414,7 +432,12 @@ export async function postPayment(input: {
     .is("posted_entry_id", null)
     .select("id");
   if (!linked?.length) {
-    return { ok: false, error: "Payment was posted by a concurrent request; reverse the duplicate entry." };
+    await reverseJournalEntry({
+      entryId,
+      entryDate: payment.payment_date,
+      memo: "Auto-reversal: concurrent duplicate post",
+    });
+    return { ok: false, error: "Payment was already posted by a concurrent request; the duplicate entry was reversed." };
   }
   revalidatePath("/finance");
   return { ok: true, data: { paymentId: input.paymentId, entryId } };
