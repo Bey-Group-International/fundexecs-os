@@ -1,6 +1,7 @@
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { blendTrackRecord } from "@/lib/track-record";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
 import type {
   Organization,
   InvestmentThesis,
@@ -39,6 +40,16 @@ function Unavailable() {
   );
 }
 
+const EMPTY_BLENDED: ViewerTrackRecord = {
+  dealCount: 0,
+  realizedCount: 0,
+  weightedGrossIrr: null,
+  pooledMoic: null,
+  dpi: null,
+  totalInvested: null,
+  vintageRange: null,
+};
+
 export default async function PublicDataRoom({ params }: { params: { token: string } }) {
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
@@ -53,6 +64,65 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return <Unavailable />;
 
   const orgId = share.organization_id;
+
+  // Log the visit regardless of gate status — this tracks link opens, not
+  // gate completion. Fire-and-forget.
+  await supabase
+    .from("data_room_views")
+    .insert({ organization_id: orgId, share_id: share.id, kind: "room" })
+    .then(() => undefined, () => undefined);
+
+  const gateConfig: GateConfig = {
+    requireEmail: share.require_email ?? false,
+    requireNda: share.require_nda ?? false,
+    ndaText: share.nda_text ?? null,
+    passwordProtected: Boolean(share.password_hash),
+  };
+
+  // The gate is enforced HERE, before any confidential data is fetched — not
+  // by hiding already-fetched content behind client-side CSS. Only a visitor
+  // whose server-verified pass satisfies every currently-required gate gets
+  // the real queries below; everyone else gets a minimal branding-only render
+  // (name/logo/accent — not confidential) plus the gate UI.
+  const pass = await readGatePass(share.id);
+  const passed = gateSatisfied(
+    { require_email: gateConfig.requireEmail, require_nda: gateConfig.requireNda, password_hash: share.password_hash },
+    pass,
+  );
+
+  if (!passed) {
+    const { data: brandRow } = await supabase
+      .from("organizations")
+      .select("name, tagline, brand_color, logo_url")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (!brandRow) return <Unavailable />;
+    const brand = brandRow as Pick<Organization, "name" | "tagline" | "brand_color" | "logo_url">;
+
+    return (
+      <DataRoomViewer
+        token={params.token}
+        shareId={share.id}
+        org={{
+          name: brand.name,
+          tagline: brand.tagline ?? null,
+          legal_name: null,
+          entity_type: null,
+          jurisdiction: null,
+          website: null,
+          brand_color: brand.brand_color ?? null,
+          logo_url: brand.logo_url ?? null,
+        }}
+        blended={EMPTY_BLENDED}
+        thesis={null}
+        team={[]}
+        entities={[]}
+        docSections={[]}
+        gateConfig={gateConfig}
+        contentReady={false}
+      />
+    );
+  }
 
   const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, docsRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
@@ -94,12 +164,6 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
   }
   const byId = new Map(principals.map((p) => [p.id, p]));
   const blended = blendTrackRecord(records);
-
-  // Log the visit (fire-and-forget).
-  await supabase
-    .from("data_room_views")
-    .insert({ organization_id: orgId, share_id: share.id, kind: "room" })
-    .then(() => undefined, () => undefined);
 
   // Group ready documents by section.
   const docsBySection = new Map<string, ViewerDoc[]>();
@@ -174,13 +238,6 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
     entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
   }));
 
-  const gateConfig: GateConfig = {
-    requireEmail: share.require_email ?? false,
-    requireNda: share.require_nda ?? false,
-    ndaText: share.nda_text ?? null,
-    passwordProtected: Boolean(share.password_hash),
-  };
-
   return (
     <DataRoomViewer
       token={params.token}
@@ -192,6 +249,7 @@ export default async function PublicDataRoom({ params }: { params: { token: stri
       entities={viewerEntities}
       docSections={docSections}
       gateConfig={gateConfig}
+      contentReady
     />
   );
 }

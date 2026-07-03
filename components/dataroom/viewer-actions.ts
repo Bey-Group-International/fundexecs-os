@@ -7,6 +7,9 @@ import { createServiceClient } from "@/lib/supabase/server";
  * Records an NDA signature in nda_signatures.
  * Uses the service client so the insert bypasses RLS
  * (the table has no authenticated-role insert policy by design).
+ *
+ * On success, grants the "nda" gate for this share via a signed server-side
+ * pass — the page withholds content until every configured gate is granted.
  */
 export async function recordNdaSignature(formData: FormData): Promise<{ ok: boolean }> {
   const shareId = String(formData.get("share_id") ?? "").trim();
@@ -43,23 +46,58 @@ export async function recordNdaSignature(formData: FormData): Promise<{ ok: bool
   const supabase = createServiceClient();
 
   // Resolve the organization_id from the share row so we can store it
-  // on the signature for efficient RLS-policy lookups.
+  // on the signature for efficient RLS-policy lookups, and reject a
+  // revoked/expired share rather than recording a signature against it.
   const { data: share, error: shareErr } = await supabase
     .from("data_room_shares")
-    .select("organization_id")
+    .select("organization_id, revoked_at, expires_at")
     .eq("id", shareId)
     .single();
 
   if (shareErr || !share) return { ok: false };
+  const shareRow = share as { organization_id: string; revoked_at: string | null; expires_at: string | null };
+  if (shareRow.revoked_at) return { ok: false };
+  if (shareRow.expires_at && new Date(shareRow.expires_at).getTime() < Date.now()) return { ok: false };
 
   const { error: insertErr } = await supabase.from("nda_signatures" as never).insert({
     share_id: shareId,
-    organization_id: (share as { organization_id: string }).organization_id,
+    organization_id: shareRow.organization_id,
     signer_name: signerName,
     signer_email: signerEmail,
     signed_at: signedAt,
     ip_hint: ipHint,
   } as never);
 
-  return { ok: !insertErr };
+  if (insertErr) return { ok: false };
+
+  const { grantGate } = await import("@/lib/data-room-gate");
+  await grantGate(shareId, { nda: true });
+
+  return { ok: true };
+}
+
+/**
+ * Records that a visitor provided their email for a data room that requires
+ * one (data capture, not authentication — there's no secret to check), then
+ * grants the "email" gate for this share via a signed server-side pass.
+ */
+export async function passEmailGate(token: string, email: string): Promise<{ ok: boolean }> {
+  const trimmed = email.trim();
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return { ok: false };
+
+  const supabase = createServiceClient();
+  const { data: share } = await supabase
+    .from("data_room_shares")
+    .select("id, revoked_at, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+  if (!share) return { ok: false };
+  const shareRow = share as { id: string; revoked_at: string | null; expires_at: string | null };
+  if (shareRow.revoked_at) return { ok: false };
+  if (shareRow.expires_at && new Date(shareRow.expires_at).getTime() < Date.now()) return { ok: false };
+
+  const { grantGate } = await import("@/lib/data-room-gate");
+  await grantGate(shareRow.id, { email: trimmed });
+
+  return { ok: true };
 }
