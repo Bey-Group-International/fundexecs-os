@@ -1231,7 +1231,12 @@ export async function decideApproval(
     .single();
   if (!approval) throw new Error("Approval not found");
 
-  await ctx.supabase
+  // Idempotency guard: record the decision with a compare-and-set on the
+  // still-undecided row. A double-clicked or retried "approved" POST used to
+  // re-run the entire workflow — re-billing credits, re-spending on Claude, and
+  // duplicating every artifact. Only the POST that actually flips a null
+  // decision proceeds; any later one no-ops.
+  const { data: decided } = await ctx.supabase
     .from("approvals")
     .update({
       decision: args.decision,
@@ -1239,7 +1244,14 @@ export async function decideApproval(
       decided_at: new Date().toISOString(),
       note: args.note ?? null,
     })
-    .eq("id", args.approvalId);
+    .eq("id", args.approvalId)
+    .is("decision", null)
+    .select("id");
+  if (!decided || decided.length === 0) {
+    // Already decided by a prior request — return the settled decision without
+    // executing the workflow a second time.
+    return { workflowId: approval.task_id, decision: args.decision, alreadyDecided: true };
+  }
 
   const { data: workflow } = await ctx.supabase
     .from("tasks")
