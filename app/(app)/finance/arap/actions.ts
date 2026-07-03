@@ -322,7 +322,17 @@ export async function postInvoice(input: {
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the invoice entry." };
   const entryId = (posted.data as { entryId: string }).entryId;
-  await supabase.from("fin_invoices").update({ posted_entry_id: entryId }).eq("id", input.invoiceId);
+  // Optimistic lock: only attach the entry if the invoice is still unposted, so
+  // a concurrent post is detected rather than silently double-linking.
+  const { data: linked } = await supabase
+    .from("fin_invoices")
+    .update({ posted_entry_id: entryId })
+    .eq("id", input.invoiceId)
+    .is("posted_entry_id", null)
+    .select("id");
+  if (!linked?.length) {
+    return { ok: false, error: "Invoice was posted by a concurrent request; reverse the duplicate entry." };
+  }
   revalidatePath("/finance");
   return { ok: true, data: { invoiceId: input.invoiceId, entryId } };
 }
@@ -391,12 +401,21 @@ export async function postPayment(input: {
     ledgerId: input.ledgerId,
     periodId: input.periodId,
     entryDate: payment.payment_date,
-    memo: `Payment ${input.paymentId}`,
+    memo: `Payment ${payment.payment_date} ${payment.currency} ${payment.amount}`,
     lines: journalLines,
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the payment entry." };
   const entryId = (posted.data as { entryId: string }).entryId;
-  await supabase.from("fin_payments").update({ posted_entry_id: entryId }).eq("id", input.paymentId);
+  // Optimistic lock: attach only if still unposted (detect a concurrent post).
+  const { data: linked } = await supabase
+    .from("fin_payments")
+    .update({ posted_entry_id: entryId })
+    .eq("id", input.paymentId)
+    .is("posted_entry_id", null)
+    .select("id");
+  if (!linked?.length) {
+    return { ok: false, error: "Payment was posted by a concurrent request; reverse the duplicate entry." };
+  }
   revalidatePath("/finance");
   return { ok: true, data: { paymentId: input.paymentId, entryId } };
 }

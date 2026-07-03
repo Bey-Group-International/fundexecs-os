@@ -37,6 +37,23 @@ describe("invoiceJournalLines", () => {
     expect(sum(lines)).toBe(0);
   });
 
+  it("keeps distinct income accounts as separate revenue lines (split invoice)", () => {
+    const lines = invoiceJournalLines(
+      "receivable",
+      "USD",
+      [
+        { incomeAccountId: "rev-a", lineSubtotal: 100, lineTax: 0 },
+        { incomeAccountId: "rev-b", lineSubtotal: 40, lineTax: 0 },
+      ],
+      { controlAccountId: "ar" },
+    );
+    expect(lines.find((l) => l.accountId === "rev-a")!.amount).toBe(-100);
+    expect(lines.find((l) => l.accountId === "rev-b")!.amount).toBe(-40);
+    expect(lines.find((l) => l.accountId === "ar")!.amount).toBe(140);
+    expect(sum(lines)).toBe(0);
+    expect(isBalanced(lines)).toBe(true);
+  });
+
   it("combines multiple lines that share an income account", () => {
     const lines = invoiceJournalLines(
       "receivable",
@@ -96,5 +113,18 @@ describe("paymentJournalLines", () => {
 
   it("throws on a non-positive amount", () => {
     expect(() => paymentJournalLines("inbound", "USD", 0, "ar", "cash")).toThrow(/positive/);
+  });
+});
+
+describe("isBalanced", () => {
+  it("is true for a zero-sum set and false otherwise", () => {
+    expect(isBalanced([
+      { accountId: "a", amount: 100, currency: "USD" },
+      { accountId: "b", amount: -100, currency: "USD" },
+    ])).toBe(true);
+    expect(isBalanced([
+      { accountId: "a", amount: 100, currency: "USD" },
+      { accountId: "b", amount: -99.99, currency: "USD" },
+    ])).toBe(false);
   });
 });
