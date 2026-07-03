@@ -7,6 +7,7 @@ import type { AdapterModule } from "../types";
 import { gmailModule } from "./gmail";
 import { docusignModule } from "./docusign";
 import { nativeMeetingModule } from "./native-meeting";
+import { nativeSigningModule } from "./native-signing";
 import { calendlyModule } from "./calendly";
 import { slackModule } from "./slack";
 import { INBOX_MODULES } from "./inbox";
@@ -33,6 +34,11 @@ import { FINANCE_MODULES } from "./finance";
 //   CHANNEL_ROUTING regardless of this ActionKind precedence.
 // - slackModule (real, native inbox delivery) is last so it wins the "slack"
 //   channel string over the inbox's mock Slack placeholder.
+// - nativeSigningModule is registered after docusignModule so the in-repo
+//   e-sign system — always available, actually creates envelopes — wins the
+//   signing-family ActionKinds (sign_document / execute_subdoc /
+//   submit_term_sheet) by default. An explicit channel="docusign" hint still
+//   reaches the DocuSign adapter via CHANNEL_ROUTING.
 export const ADAPTERS: AdapterModule[] = [
   gmailModule,
   docusignModule,
@@ -40,5 +46,6 @@ export const ADAPTERS: AdapterModule[] = [
   ...FINANCE_MODULES,
   calendlyModule,
   nativeMeetingModule,
+  nativeSigningModule,
   slackModule,
 ];

@@ -25,14 +25,18 @@ describe("integration registry", () => {
     }
   });
 
-  it("routes the signing family to the Docusign adapter", () => {
+  it("routes the signing family to the native e-sign adapter by default", () => {
     for (const action of [
       "sign_document",
       "execute_subdoc",
       "submit_term_sheet",
     ] as ActionKind[]) {
-      expect(getAdapter(action).channel).toBe("docusign");
+      expect(getAdapter(action).channel).toBe("native_signing");
     }
+  });
+
+  it("still reaches the Docusign adapter via an explicit channel hint", () => {
+    expect(getAdapter("sign_document" as ActionKind, "docusign").channel).toBe("docusign");
   });
 
   it("falls back to the mock adapter for unclaimed actions", () => {
