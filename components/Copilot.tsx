@@ -93,6 +93,7 @@ const STATUS_LABEL: Record<string, string> = {
   awaiting_approval: "Awaiting",
   blocked: "Blocked",
   completed: "Done",
+  completed_with_errors: "Done with errors",
   failed: "Failed",
   cancelled: "Declined",
 };
