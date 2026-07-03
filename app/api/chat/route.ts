@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { earnChatStream, earnChatFallback } from "@/lib/claude";
 import { EARN_MODELS, type EarnModelKey } from "@/lib/earn-conversation";
 import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-context";
+import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -25,6 +26,19 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Pre-flight credit gate: this route calls Claude directly, outside the
+  // task engine's per-step spendCredits gate, so without this a single
+  // authenticated seat could drive unbounded Anthropic spend by scripting
+  // requests against it. A no-op when Claude isn't configured (the fallback
+  // path below costs nothing real).
+  const gate = await gateConversationalSpend(orgId, CONVERSATIONAL_COST.chat, "chat");
+  if (!gate.ok) {
+    return new Response(JSON.stringify({ error: gate.error }), {
+      status: gate.status,
       headers: { "Content-Type": "application/json" },
     });
   }

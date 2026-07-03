@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { generateClarifyingQuestions } from "@/lib/claude";
+import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import type { Task } from "@/lib/supabase/database.types";
 
 // Generating questions calls Claude; give it a little room.
@@ -28,6 +29,12 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (!data) return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
   const workflow = data as Task;
+
+  // Pre-flight credit gate. Clarifying questions are a pre-plan nicety, not
+  // the plan itself — insufficient credits skips them (the operator proceeds
+  // straight to the plan) rather than blocking the whole flow.
+  const gate = await gateConversationalSpend(auth.ctx.orgId, CONVERSATIONAL_COST.clarify, "clarify");
+  if (!gate.ok) return NextResponse.json({ questions: [] });
 
   const questions = await generateClarifyingQuestions(workflow.description ?? workflow.title);
   return NextResponse.json({ questions });
