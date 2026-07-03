@@ -1,7 +1,7 @@
 // lib/integrations/adapters/calendly.ts
 // Meeting scheduling dispatch via the Calendly API.
 //
-// Mock-or-real: with no CALENDLY_API_KEY in the environment the adapter
+// Mock-or-real: with no CALENDLY_API_TOKEN in the environment the adapter
 // operates in mock mode (it describes what a scheduling link would look like
 // but does not call Calendly), so the gate → dispatch flow behaves identically
 // whether or not the operator has connected Calendly.
@@ -16,8 +16,12 @@ import type {
   DispatchResult,
 } from "../types";
 
+// CALENDLY_API_TOKEN matches .env.example and the inbox mock module's env
+// check — this adapter previously read CALENDLY_API_KEY, a name nothing else
+// in the repo used, so following the documented setup steps could never
+// activate the real API path.
 function configured(): boolean {
-  return Boolean(process.env.CALENDLY_API_KEY);
+  return Boolean(process.env.CALENDLY_API_TOKEN ?? process.env.CALENDLY_ACCESS_TOKEN);
 }
 
 export const calendlyAdapter: DispatchAdapter = {
@@ -28,7 +32,7 @@ export const calendlyAdapter: DispatchAdapter = {
     const topic = ctx.subject ?? ctx.metadata?.["stepTitle"] as string ?? "meeting";
 
     // Honour the gateway contract: ctx.connected reflects the org's integration_connections
-    // row; process.env.CALENDLY_API_KEY gates the live API path. Both must be true to proceed.
+    // row; CALENDLY_API_TOKEN gates the live API path. Both must be true to proceed.
     if (!ctx.connected || !configured()) {
       return {
         ok: true,
@@ -40,7 +44,7 @@ export const calendlyAdapter: DispatchAdapter = {
 
     try {
       const authHeaders = {
-        Authorization: `Bearer ${process.env.CALENDLY_API_KEY}`,
+        Authorization: `Bearer ${process.env.CALENDLY_API_TOKEN ?? process.env.CALENDLY_ACCESS_TOKEN}`,
         "Content-Type": "application/json",
       };
 

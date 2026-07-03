@@ -44,16 +44,29 @@ export function Outbox({ rows }: { rows: DispatchLog[] }) {
               key={row.id}
               className="fx-card flex items-center gap-2.5 px-3 py-2.5"
             >
-              {/* Live = a real external call; prepared = queued but not sent. */}
+              {/* Live = a real external call went out. Prepared = a mock/preview
+                  result for a channel that isn't connected — connecting it in
+                  Settings is the right next step. Not delivered = the channel
+                  IS connected but has no real provider call wired up yet
+                  (row.ok is false in exactly this case) — telling the operator
+                  to "connect" it would be wrong since they already have. */}
               <span
                 className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
                   row.live
                     ? "border-gold-500/50 text-gold-400"
-                    : "border-line text-fg-muted"
+                    : row.ok
+                      ? "border-line text-fg-muted"
+                      : "border-status-danger/40 text-status-danger"
                 }`}
-                title={row.live ? "Sent live" : "Prepared, not sent — connect the channel in Settings"}
+                title={
+                  row.live
+                    ? "Sent live"
+                    : row.ok
+                      ? "Prepared, not sent — connect the channel in Settings"
+                      : "Connected, but sending for this channel isn't wired up yet — nothing was delivered"
+                }
               >
-                {row.live ? "Live" : "Prepared"}
+                {row.live ? "Live" : row.ok ? "Prepared" : "Not delivered"}
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm text-fg-primary">

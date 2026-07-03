@@ -29,10 +29,14 @@ interface InboxChannelSpec {
   handles: ActionKind[];
   // Prose describing the prepared (mock) outcome, e.g. "Drafted a Slack reply".
   prepared: (target: string) => string;
-  // Prose describing the queued (configured-but-not-yet-wired) outcome.
-  queued: (target: string) => string;
-  // A plausible external reference (booking/meeting URL) to attach in mock mode,
-  // so downstream surfaces (the inbox thread, the Outbox) have something to show.
+  // Prose describing the not-yet-delivered outcome for a channel the org has
+  // connected but that has no real provider call wired up yet.
+  notDelivered: (target: string) => string;
+  // A plausible external reference (booking/meeting URL) to attach in mock
+  // (not-connected) mode only, so downstream surfaces (the inbox thread, the
+  // Outbox) have something illustrative to show. Never attached to a
+  // not-delivered result — a fabricated link there would be presented as a
+  // completed action's outcome, which is exactly what this fixes.
   mockReference?: (ctx: DispatchContext) => string | undefined;
 }
 
@@ -55,15 +59,17 @@ function makeModule(spec: InboxChannelSpec): AdapterModule {
         };
       }
       // SEAM: the real provider call goes here once OAuth credential plumbing
-      // lands. Until then we return a configured-but-queued result rather than
-      // calling an external API from a server action — the contract stays honest
-      // and the loop stays observable.
+      // lands. Until then, report this honestly as NOT delivered — there is no
+      // queue or worker that will ever send it, so claiming "queued" (as this
+      // used to) told the operator a message went out when nothing left the
+      // building. ok:false here is what flips the associated task/thread away
+      // from reading "completed".
       return {
-        ok: true,
+        ok: false,
         channel: spec.channel,
         live: false,
-        detail: spec.queued(target),
-        reference: spec.mockReference?.(ctx),
+        detail: spec.notDelivered(target),
+        error: `${spec.channel} sending is not yet wired up — nothing was delivered to ${target}.`,
       };
     },
   };
@@ -71,7 +77,8 @@ function makeModule(spec: InboxChannelSpec): AdapterModule {
   return { handles: spec.handles, adapter };
 }
 
-// A deterministic, obviously-fake link for mock mode — never a real endpoint.
+// A deterministic, obviously-fake link for mock (not-connected) preview mode
+// only — never a real endpoint, and never attached to a not-delivered result.
 function mockLink(provider: string): string {
   return `https://mock.fundexecs.local/${provider}/${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -81,16 +88,7 @@ export const slackModule = makeModule({
   envVars: ["SLACK_BOT_TOKEN"],
   handles: [], // messaging replies route here only via the channel hint
   prepared: (t) => `Drafted a Slack reply to ${t} (Slack not connected — saved to review).`,
-  queued: (t) => `Queued a Slack reply to ${t} for send via connected Slack.`,
-});
-
-export const calendlyModule = makeModule({
-  channel: "calendly",
-  envVars: ["CALENDLY_API_TOKEN", "CALENDLY_ACCESS_TOKEN"],
-  handles: ["propose_meeting", "confirm_booking"],
-  prepared: (t) => `Prepared a booking link for ${t} (Calendly not connected).`,
-  queued: (t) => `Queued a Calendly booking link for ${t}.`,
-  mockReference: () => mockLink("calendly"),
+  notDelivered: (t) => `Slack reply to ${t} was not sent — Slack sending isn't wired up yet.`,
 });
 
 export const googleCalendarModule = makeModule({
@@ -98,7 +96,7 @@ export const googleCalendarModule = makeModule({
   envVars: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_CALENDAR_ACCESS_TOKEN"],
   handles: [], // booking on a Google Calendar thread routes here via the channel hint
   prepared: (t) => `Prepared a Google Calendar invite for ${t} (Google not connected).`,
-  queued: (t) => `Queued a Google Calendar invite for ${t}.`,
+  notDelivered: (t) => `Google Calendar invite for ${t} was not sent — Google Calendar sending isn't wired up yet.`,
   mockReference: () => mockLink("gcal"),
 });
 
@@ -107,7 +105,7 @@ export const zoomModule = makeModule({
   envVars: ["ZOOM_CLIENT_ID", "ZOOM_ACCOUNT_ID"],
   handles: ["create_video_meeting"],
   prepared: (t) => `Prepared a Zoom meeting for ${t} (Zoom not connected).`,
-  queued: (t) => `Queued a Zoom meeting for ${t}.`,
+  notDelivered: (t) => `Zoom meeting for ${t} was not created — Zoom sending isn't wired up yet.`,
   mockReference: () => mockLink("zoom"),
 });
 
@@ -116,13 +114,12 @@ export const googleMeetModule = makeModule({
   envVars: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_MEET_ACCESS_TOKEN"],
   handles: [], // video on a Google Meet thread routes here via the channel hint
   prepared: (t) => `Prepared a Google Meet for ${t} (Google not connected).`,
-  queued: (t) => `Queued a Google Meet for ${t}.`,
+  notDelivered: (t) => `Google Meet for ${t} was not created — Google Meet sending isn't wired up yet.`,
   mockReference: () => mockLink("meet"),
 });
 
 export const INBOX_MODULES: AdapterModule[] = [
   slackModule,
-  calendlyModule,
   googleCalendarModule,
   zoomModule,
   googleMeetModule,

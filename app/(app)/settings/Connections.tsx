@@ -10,6 +10,14 @@ import { ConnectionControls } from "./ConnectionControls";
 
 type ChannelState = "connected_gateway" | "connected_env" | "prepared";
 
+// The only channel whose "connected" state actually results in a live external
+// call today (lib/integrations/adapters/gmail.ts routes through lib/email.ts).
+// Every other adapter's connected branch honestly reports a not-delivered
+// result rather than calling out — connecting them here changes what the
+// Settings badge says, not what dispatch actually does, so the badge for
+// those channels says so rather than implying parity with Gmail.
+const LIVE_CAPABLE = new Set(["gmail"]);
+
 export function Connections({ connections }: { connections: IntegrationConnection[] }) {
   // One row per (org, channel) by the table's unique constraint.
   const rowByChannel = new Map(connections.map((c) => [c.channel, c]));
@@ -57,6 +65,12 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                     <span className="font-mono text-[10px] text-fg-muted">{row.account_label}</span>
                   ) : null}
                 </div>
+
+                {connected && !LIVE_CAPABLE.has(descriptor.channel) ? (
+                  <p className="mt-1.5 text-[11px] leading-snug text-fg-muted">
+                    Sending isn&apos;t live for this channel yet — actions will be prepared, not delivered.
+                  </p>
+                ) : null}
 
                 {descriptor.capabilities.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">

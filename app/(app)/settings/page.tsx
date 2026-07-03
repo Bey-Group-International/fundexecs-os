@@ -239,7 +239,7 @@ export default async function SettingsPage() {
             id="integrations"
             eyebrow="Reach"
             title="Integrations"
-            description="Dispatch channels carry approved external actions to the outside world. Connected channels send live; unconnected channels prepare and queue the action until you connect the provider."
+            description="Dispatch channels carry approved external actions to the outside world. Today only Gmail actually sends live once connected — every other channel below prepares the action but does not yet deliver it, regardless of connection state (real provider plumbing is on the roadmap)."
           >
             <Connections connections={connections} />
           </Section>

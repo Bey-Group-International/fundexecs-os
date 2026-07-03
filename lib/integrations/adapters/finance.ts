@@ -28,8 +28,9 @@ interface FinanceChannelSpec {
   handles: ActionKind[];
   // Prose describing the prepared (mock) outcome.
   prepared: (target: string) => string;
-  // Prose describing the queued (configured-but-not-yet-wired) outcome.
-  queued: (target: string) => string;
+  // Prose describing the not-yet-delivered outcome for a channel the org has
+  // connected but that has no real provider call wired up yet.
+  notDelivered: (target: string) => string;
 }
 
 function makeModule(spec: FinanceChannelSpec): AdapterModule {
@@ -50,14 +51,17 @@ function makeModule(spec: FinanceChannelSpec): AdapterModule {
         };
       }
       // SEAM: the real provider call goes here once OAuth credential plumbing
-      // lands. Until then we return a configured-but-queued result rather than
-      // calling an external API from a server action — the contract stays honest
-      // and the loop stays observable.
+      // lands. Until then, report this honestly as NOT delivered — there is no
+      // queue or worker that will ever push it through, so claiming "queued"
+      // (as this used to) told the operator an action went out when nothing
+      // reached the provider. ok:false is what flips the associated task away
+      // from reading "completed".
       return {
-        ok: true,
+        ok: false,
         channel: spec.channel,
         live: false,
-        detail: spec.queued(target),
+        detail: spec.notDelivered(target),
+        error: `${spec.channel} sending is not yet wired up — nothing was delivered to ${target}.`,
       };
     },
   };
@@ -70,7 +74,7 @@ export const xeroModule = makeModule({
   envVars: ["XERO_ACCESS_TOKEN", "XERO_CLIENT_ID"],
   handles: [], // read-only ingest — reached only via the channel hint
   prepared: (t) => `Prepared a Xero sync for ${t} (Xero not connected — review in the provider).`,
-  queued: (t) => `Queued a Xero action for ${t} via connected Xero.`,
+  notDelivered: (t) => `Xero action for ${t} was not sent — Xero sending isn't wired up yet.`,
 });
 
 export const jaxModule = makeModule({
@@ -78,7 +82,7 @@ export const jaxModule = makeModule({
   envVars: ["JAX_ACCESS_TOKEN", "JAX_API_KEY"],
   handles: [], // read-only ingest — reached only via the channel hint
   prepared: (t) => `Prepared a Jax sync for ${t} (Jax not connected — review in the provider).`,
-  queued: (t) => `Queued a Jax action for ${t} via connected Jax.`,
+  notDelivered: (t) => `Jax action for ${t} was not sent — Jax sending isn't wired up yet.`,
 });
 
 export const FINANCE_MODULES: AdapterModule[] = [xeroModule, jaxModule];

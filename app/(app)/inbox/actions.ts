@@ -219,9 +219,14 @@ async function performThreadAction(
 
   // Reflect the outcome back onto the thread: it's been actioned (read), its
   // activity bumps, and any meeting link the booking/video dispatch produced is
-  // captured so the thread carries it forward.
+  // captured so the thread carries it forward. Only when result.live is true —
+  // a mock/not-yet-connected dispatch's reference is an illustrative
+  // placeholder (or, for a connected-but-unwired channel, absent entirely
+  // since it's no longer attached to a not-delivered result); persisting it as
+  // the thread's durable meeting_url/meeting_at would record a booking that
+  // never actually happened.
   const patch: Partial<InboxThread> = { unread: false, last_message_at: now };
-  if (result.reference && (action === "create_video_meeting" || action === "confirm_booking")) {
+  if (result.live && result.reference && (action === "create_video_meeting" || action === "confirm_booking")) {
     patch.meeting_url = result.reference;
     if (action === "confirm_booking" && !t.meeting_at) patch.meeting_at = now;
   }

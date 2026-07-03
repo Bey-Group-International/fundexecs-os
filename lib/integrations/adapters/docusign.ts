@@ -42,14 +42,18 @@ export const docusignAdapter: DispatchAdapter = {
     // SEAM: real envelope creation through the connected Docusign integration
     // goes here. This runs only AFTER operator approval — Tier 3 actions are
     // never auto-dispatched by the gate. Until the OAuth credential plumbing is
-    // in place we return a configured-but-queued result rather than calling an
-    // external API from this server action — the contract stays honest and the
-    // loop stays observable.
+    // in place, report this honestly as NOT delivered — no envelope was ever
+    // created, so claiming "queued" (as this used to) told the operator a
+    // signature request went out when it didn't. ok:false is what flips the
+    // associated task away from reading "completed". FundExecs' own native
+    // e-sign system (lib/signing.ts, /sign/[token]) does not have this gap —
+    // prefer routing signing actions there over this Docusign placeholder.
     return {
-      ok: true,
+      ok: false,
       channel: "docusign",
       live: false,
-      detail: `Queued a ${action} envelope for ${target} for signature via connected Docusign.`,
+      detail: `${action} envelope for ${target} was not sent for signature — Docusign sending isn't wired up yet.`,
+      error: `docusign sending is not yet wired up — no envelope was created for ${target}.`,
     };
   },
 };

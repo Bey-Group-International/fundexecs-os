@@ -12,18 +12,33 @@ import { slackModule } from "./slack";
 import { INBOX_MODULES } from "./inbox";
 import { FINANCE_MODULES } from "./finance";
 
-// Registration order determines channel ownership when multiple modules claim
-// the same ActionKind:
-// - nativeMeetingModule is before calendlyModule so it wins propose_meeting /
-//   confirm_booking — meeting rooms are generated natively.
-// - slackModule is last so it supersedes the inbox Slack placeholder for
-//   channel-pinned dispatch (the Radar digest pins to "slack").
+// registry.ts resolves both ActionKind routing and channel routing on a
+// last-module-wins basis, so registration order IS the precedence rule. Real
+// or native adapters must be registered AFTER any mock/placeholder that claims
+// the same ActionKind or channel string, or the mock silently shadows them —
+// this previously routed every meeting action to the inbox's permanently-mock
+// calendly placeholder (since deleted; ./inbox no longer defines one) even
+// with the real Calendly adapter configured. registry.test.ts asserts these
+// outcomes.
+//
+// - INBOX_MODULES / FINANCE_MODULES go first: they are placeholders for
+//   channels with no real adapter (yet), reachable by their channel string
+//   until something below supersedes them.
+// - calendlyModule (real) is registered after them so an explicit
+//   channel="calendly" hint always reaches it.
+// - nativeMeetingModule is registered after calendlyModule so native meeting
+//   rooms — zero external dependency, always live — win the generic
+//   propose_meeting / confirm_booking ActionKind route by default. An explicit
+//   channel="calendly" hint still reaches the real Calendly adapter via
+//   CHANNEL_ROUTING regardless of this ActionKind precedence.
+// - slackModule (real, native inbox delivery) is last so it wins the "slack"
+//   channel string over the inbox's mock Slack placeholder.
 export const ADAPTERS: AdapterModule[] = [
   gmailModule,
   docusignModule,
-  nativeMeetingModule,
-  calendlyModule,
   ...INBOX_MODULES,
   ...FINANCE_MODULES,
+  calendlyModule,
+  nativeMeetingModule,
   slackModule,
 ];
