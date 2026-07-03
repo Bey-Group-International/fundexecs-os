@@ -11,7 +11,10 @@ import Anthropic from "@anthropic-ai/sdk";
 export const INTERACTIVE_TIMEOUT_MS = 45_000;
 
 // Long-run paths (meeting-transcript analysis, cron sweeps): more headroom,
-// still bounded — worst case with one retry stays inside a 300s envelope.
+// still bounded. Retry budget: maxRetries:1 → worst case 240s of Anthropic
+// time PER CALL, so a long-run code path must not make more than one
+// sequential long-run call or its total wall time approaches the 300s
+// envelope.
 export const LONG_RUN_TIMEOUT_MS = 120_000;
 
 /**
@@ -25,4 +28,14 @@ export function anthropicClient(
   timeout: number = INTERACTIVE_TIMEOUT_MS,
 ): Anthropic {
   return new Anthropic({ apiKey, timeout, maxRetries: 1 });
+}
+
+/**
+ * True when an error is the SDK's request-timeout error — the typed check
+ * call sites use inside their catch-all fallbacks to tell "model was slow"
+ * apart from "bad key / upstream 500" for logging and metrics, without
+ * changing the fallback behavior itself.
+ */
+export function isAnthropicTimeout(err: unknown): boolean {
+  return err instanceof Anthropic.APIConnectionTimeoutError;
 }
