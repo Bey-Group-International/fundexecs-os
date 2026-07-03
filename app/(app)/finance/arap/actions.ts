@@ -10,7 +10,7 @@ import {
   type AgingRow,
 } from "@/lib/finance/arap";
 import { invoiceJournalLines, paymentJournalLines } from "@/lib/finance/posting";
-import { postJournalEntry } from "../actions";
+import { postJournalEntry, reverseJournalEntry } from "../actions";
 import type {
   FinInvoiceKind,
   FinPartyKind,
@@ -168,6 +168,17 @@ export async function recordPayment(input: {
   if (!input.entityId || !input.partyId || !(input.amount > 0) || !/^[A-Z]{3}$/.test(currency)) {
     return { ok: false, error: "Entity, party, a positive amount, and a 3-letter currency are required." };
   }
+  // Pre-flight: surface a clean message for bad explicit allocations rather than
+  // letting the DB CHECK (amount > 0) throw a raw Postgres constraint error.
+  if (input.allocations?.some((a) => a.amount <= 0)) {
+    return { ok: false, error: "All allocation amounts must be positive." };
+  }
+  if (
+    input.allocations &&
+    input.allocations.reduce((s, a) => s + a.amount, 0) > input.amount + 1e-9
+  ) {
+    return { ok: false, error: "Allocations exceed the payment amount." };
+  }
   const supabase = createServerClient();
 
   // When no explicit allocations are supplied, the RPC auto-allocates oldest-due
@@ -225,21 +236,28 @@ export async function agingReport(input: {
 
 // --- GL posting --------------------------------------------------------------
 
-// Resolve a party's AR (receivable) or AP (payable) control account.
+// Resolve a party's AR (receivable) or AP (payable) control account + its name.
 async function resolveControlAccount(
   supabase: ReturnType<typeof createServerClient>,
   orgId: string,
   partyId: string,
   receivable: boolean,
-): Promise<string | null> {
+): Promise<{ accountId: string | null; partyName: string | null }> {
   const { data } = await supabase
     .from("fin_parties")
-    .select("ar_control_account_id, ap_control_account_id")
+    .select("name, ar_control_account_id, ap_control_account_id")
     .eq("organization_id", orgId)
     .eq("id", partyId)
     .maybeSingle();
-  const p = data as { ar_control_account_id: string | null; ap_control_account_id: string | null } | null;
-  return (receivable ? p?.ar_control_account_id : p?.ap_control_account_id) ?? null;
+  const p = data as {
+    name: string;
+    ar_control_account_id: string | null;
+    ap_control_account_id: string | null;
+  } | null;
+  return {
+    accountId: (receivable ? p?.ar_control_account_id : p?.ap_control_account_id) ?? null,
+    partyName: p?.name ?? null,
+  };
 }
 
 /**
@@ -262,7 +280,7 @@ export async function postInvoice(input: {
 
   const { data: inv } = await supabase
     .from("fin_invoices")
-    .select("entity_id, party_id, kind, currency, issue_date, status, posted_entry_id, invoice_no")
+    .select("party_id, kind, currency, issue_date, status, posted_entry_id, invoice_no")
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", input.invoiceId)
     .maybeSingle();
@@ -276,10 +294,13 @@ export async function postInvoice(input: {
     return { ok: false, error: "Only an open invoice can be posted." };
   }
 
-  const controlAccountId =
-    input.controlAccountId ??
-    (await resolveControlAccount(supabase, auth.ctx.orgId, invoice.party_id, invoice.kind === "receivable")) ??
-    undefined;
+  const resolved = await resolveControlAccount(
+    supabase,
+    auth.ctx.orgId,
+    invoice.party_id,
+    invoice.kind === "receivable",
+  );
+  const controlAccountId = input.controlAccountId ?? resolved.accountId ?? undefined;
   if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
 
   const { data: lineRows } = await supabase
@@ -317,11 +338,12 @@ export async function postInvoice(input: {
     ledgerId: input.ledgerId,
     periodId: input.periodId,
     entryDate: invoice.issue_date,
-    memo: `${invoice.kind === "receivable" ? "Invoice" : "Bill"} ${invoice.invoice_no}`,
+    memo: `${invoice.kind === "receivable" ? "Invoice" : "Bill"} ${invoice.invoice_no} · ${resolved.partyName ?? "party"}`,
     lines: journalLines,
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the invoice entry." };
-  const entryId = (posted.data as { entryId: string }).entryId;
+  const entryId = (posted.data as { entryId?: string })?.entryId;
+  if (!entryId) return { ok: false, error: "Journal entry returned no id." };
   // Optimistic lock: only attach the entry if the invoice is still unposted, so
   // a concurrent post is detected rather than silently double-linking.
   const { data: linked } = await supabase
@@ -331,7 +353,22 @@ export async function postInvoice(input: {
     .is("posted_entry_id", null)
     .select("id");
   if (!linked?.length) {
-    return { ok: false, error: "Invoice was posted by a concurrent request; reverse the duplicate entry." };
+    // A concurrent request already posted this invoice. Our entry is now an
+    // unlinked duplicate — reverse it so the ledger nets to zero (no orphan).
+    const reversal = await reverseJournalEntry({
+      entryId,
+      entryDate: invoice.issue_date,
+      memo: "Auto-reversal: concurrent duplicate post",
+    });
+    if (!reversal.ok) {
+      console.error(`[postInvoice] auto-reversal failed for entry ${entryId}: ${reversal.error}`);
+    }
+    return {
+      ok: false,
+      error: `Invoice was already posted by a concurrent request; the duplicate entry was ${
+        reversal.ok ? "reversed" : "NOT reversed — manual cleanup needed"
+      }.`,
+    };
   }
   revalidatePath("/finance");
   return { ok: true, data: { invoiceId: input.invoiceId, entryId } };
@@ -366,10 +403,13 @@ export async function postPayment(input: {
   >;
   if (payment.posted_entry_id) return { ok: false, error: "Payment is already posted." };
 
-  const controlAccountId =
-    input.controlAccountId ??
-    (await resolveControlAccount(supabase, auth.ctx.orgId, payment.party_id, payment.direction === "inbound")) ??
-    undefined;
+  const resolved = await resolveControlAccount(
+    supabase,
+    auth.ctx.orgId,
+    payment.party_id,
+    payment.direction === "inbound",
+  );
+  const controlAccountId = input.controlAccountId ?? resolved.accountId ?? undefined;
   if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
 
   let cashAccountId = input.cashAccountId;
@@ -401,11 +441,12 @@ export async function postPayment(input: {
     ledgerId: input.ledgerId,
     periodId: input.periodId,
     entryDate: payment.payment_date,
-    memo: `Payment ${payment.payment_date} ${payment.currency} ${payment.amount}`,
+    memo: `Payment · ${resolved.partyName ?? "party"} · ${payment.payment_date} ${payment.currency} ${payment.amount}`,
     lines: journalLines,
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the payment entry." };
-  const entryId = (posted.data as { entryId: string }).entryId;
+  const entryId = (posted.data as { entryId?: string })?.entryId;
+  if (!entryId) return { ok: false, error: "Journal entry returned no id." };
   // Optimistic lock: attach only if still unposted (detect a concurrent post).
   const { data: linked } = await supabase
     .from("fin_payments")
@@ -414,7 +455,20 @@ export async function postPayment(input: {
     .is("posted_entry_id", null)
     .select("id");
   if (!linked?.length) {
-    return { ok: false, error: "Payment was posted by a concurrent request; reverse the duplicate entry." };
+    const reversal = await reverseJournalEntry({
+      entryId,
+      entryDate: payment.payment_date,
+      memo: "Auto-reversal: concurrent duplicate post",
+    });
+    if (!reversal.ok) {
+      console.error(`[postPayment] auto-reversal failed for entry ${entryId}: ${reversal.error}`);
+    }
+    return {
+      ok: false,
+      error: `Payment was already posted by a concurrent request; the duplicate entry was ${
+        reversal.ok ? "reversed" : "NOT reversed — manual cleanup needed"
+      }.`,
+    };
   }
   revalidatePath("/finance");
   return { ok: true, data: { paymentId: input.paymentId, entryId } };

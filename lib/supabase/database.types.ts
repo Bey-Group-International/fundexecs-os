@@ -2361,7 +2361,7 @@ export type Database = {
       // Sweep stale 'draft' invoices older than the cutoff (migration
       // 20260703140000). Returns the count removed.
       fin_cleanup_draft_invoices: {
-        Args: { p_older_than?: string };
+        Args: { p_org: string; p_older_than?: string };
         Returns: number;
       };
       // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
