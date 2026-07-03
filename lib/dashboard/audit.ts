@@ -7,6 +7,7 @@ export async function writeDashboardAudit({
   action,
   entityType,
   entityId,
+  beforeState,
   afterState,
 }: {
   organizationId: string;
@@ -14,6 +15,7 @@ export async function writeDashboardAudit({
   action: string;
   entityType: string;
   entityId?: string | null;
+  beforeState?: Json;
   afterState?: Json;
 }) {
   if (!hasSupabaseServiceEnv()) return;
@@ -24,6 +26,7 @@ export async function writeDashboardAudit({
     action,
     entity_type: entityType,
     entity_id: entityId ?? null,
+    before_state: beforeState ?? null,
     after_state: afterState ?? null,
   });
 }
