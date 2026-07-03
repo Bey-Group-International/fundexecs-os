@@ -17,6 +17,7 @@ import {
   exchangeCodeForTokens,
   getGoogleAccessToken,
   googleOAuthConfigured,
+  invalidateGoogleTokenCache,
   refreshAccessToken,
   verifyOAuthState,
 } from "./google-oauth";
@@ -93,6 +94,18 @@ describe("token exchange and refresh", () => {
     await expect(exchangeCodeForTokens("c", "https://app.test/cb")).rejects.toThrow(/400/);
     await expect(refreshAccessToken("rt")).rejects.toThrow(/400/);
   });
+
+  it("bounds both token fetches with an abort signal", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: "at", expires_in: 3600 }),
+    });
+    await exchangeCodeForTokens("c", "https://app.test/cb");
+    await refreshAccessToken("rt");
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1] as { signal?: unknown }).signal).toBeInstanceOf(AbortSignal);
+    }
+  });
 });
 
 describe("getGoogleAccessToken", () => {
@@ -107,6 +120,34 @@ describe("getGoogleAccessToken", () => {
     // Second call served from cache — one vault read, one refresh.
     expect(getOrgSecret).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the vault read when the caller passes the refresh token", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: "at-2", expires_in: 3600 }),
+    });
+    expect(await getGoogleAccessToken("org-1", "rt-passed")).toBe("at-2");
+    expect(getOrgSecret).not.toHaveBeenCalled();
+    // An explicitly-null token (org has no vault entry) also skips the read.
+    expect(await getGoogleAccessToken("org-2", null)).toBeNull();
+    expect(getOrgSecret).not.toHaveBeenCalled();
+  });
+
+  it("invalidates one org's cache on reconnect without touching others", async () => {
+    getOrgSecret.mockResolvedValue("rt-1");
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: "old", expires_in: 3600 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: "other", expires_in: 3600 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: "new", expires_in: 3600 }) });
+    expect(await getGoogleAccessToken("org-1")).toBe("old");
+    expect(await getGoogleAccessToken("org-2")).toBe("other");
+
+    invalidateGoogleTokenCache("org-1");
+    expect(await getGoogleAccessToken("org-1")).toBe("new");
+    // org-2 still served from cache — no third refresh for it.
+    expect(await getGoogleAccessToken("org-2")).toBe("other");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("returns null (never throws) when unconnected, unconfigured, or failing", async () => {

@@ -9,6 +9,7 @@ import {
   GOOGLE_REFRESH_TOKEN_KEY,
   exchangeCodeForTokens,
   googleOAuthConfigured,
+  invalidateGoogleTokenCache,
   verifyOAuthState,
 } from "@/lib/google-oauth";
 
@@ -101,6 +102,10 @@ export async function GET(req: NextRequest) {
   );
   if (connError) return settingsRedirect("store_failed");
 
+  // A reconnect may be a different Google account; drop any access token
+  // cached from the old grant so the next send mints from the new one.
+  invalidateGoogleTokenCache(ctx.orgId);
+
   // 3. Append-only history, same shape as the gateway connect/disconnect path.
   await writeDashboardAudit({
     organizationId: ctx.orgId,
@@ -110,7 +115,7 @@ export async function GET(req: NextRequest) {
     afterState: {
       channel: "gmail",
       status: "connected",
-      gateway: "google-oauth",
+      gateway: GATEWAY_PROVIDER,
       account_label: accountLabel,
     },
   });

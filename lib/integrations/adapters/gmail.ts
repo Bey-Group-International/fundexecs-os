@@ -63,7 +63,9 @@ export const gmailAdapter: DispatchAdapter = {
     // through to the Resend leg of the chain.
     let gmailAccessToken = ctx.secrets?.GMAIL_ACCESS_TOKEN;
     if (!gmailAccessToken && ctx.secrets?.GOOGLE_REFRESH_TOKEN) {
-      gmailAccessToken = (await getGoogleAccessToken(ctx.orgId)) ?? undefined;
+      gmailAccessToken =
+        (await getGoogleAccessToken(ctx.orgId, ctx.secrets.GOOGLE_REFRESH_TOKEN)) ??
+        undefined;
     }
 
     const escaped = escapeHtml(ctx.body ?? "");

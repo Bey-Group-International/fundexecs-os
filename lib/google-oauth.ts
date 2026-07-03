@@ -26,6 +26,9 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPES = "openid email https://www.googleapis.com/auth/gmail.send";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
+// Google's token endpoint answers in well under a second; a hung connection
+// should fail the dispatch (which falls through to Resend) rather than stall it.
+const TOKEN_FETCH_TIMEOUT_MS = 10_000;
 
 /** The vault key the refresh token is stored under (org_secrets.provider). */
 export const GOOGLE_REFRESH_TOKEN_KEY = "GOOGLE_REFRESH_TOKEN";
@@ -137,6 +140,7 @@ export async function exchangeCodeForTokens(
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
+    signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`google token exchange failed: ${res.status}`);
   const body = (await res.json()) as {
@@ -164,6 +168,7 @@ export async function refreshAccessToken(
       client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
       grant_type: "refresh_token",
     }),
+    signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`google token refresh failed: ${res.status}`);
   const body = (await res.json()) as { access_token?: string; expires_in?: number };
@@ -182,19 +187,25 @@ const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 /**
  * A live Gmail access token for the org, minted from its vaulted refresh
  * token. Null when the org hasn't connected Google or OAuth isn't configured —
- * callers fall through to their existing credential chain.
+ * callers fall through to their existing credential chain. Pass refreshToken
+ * when the caller already holds it (dispatch resolves the vault once for all
+ * of an org's secrets) to skip the redundant vault read.
  */
-export async function getGoogleAccessToken(orgId: string): Promise<string | null> {
+export async function getGoogleAccessToken(
+  orgId: string,
+  refreshToken?: string | null,
+): Promise<string | null> {
   if (!googleOAuthConfigured()) return null;
 
   const cached = tokenCache.get(orgId);
   if (cached && cached.expiresAt > Date.now()) return cached.token;
 
-  let refreshToken: string | null;
-  try {
-    refreshToken = await getOrgSecret(orgId, GOOGLE_REFRESH_TOKEN_KEY);
-  } catch {
-    return null;
+  if (refreshToken === undefined) {
+    try {
+      refreshToken = await getOrgSecret(orgId, GOOGLE_REFRESH_TOKEN_KEY);
+    } catch {
+      return null;
+    }
   }
   if (!refreshToken) return null;
 
@@ -209,6 +220,15 @@ export async function getGoogleAccessToken(orgId: string): Promise<string | null
     console.error(`[google-oauth] token refresh failed for org ${orgId}:`, err);
     return null;
   }
+}
+
+/**
+ * Drop one org's cached access token. Called on reconnect: a new grant may be
+ * for a different Google account, and a cached token from the old one would
+ * otherwise keep sending as it for up to ~55 minutes.
+ */
+export function invalidateGoogleTokenCache(orgId: string): void {
+  tokenCache.delete(orgId);
 }
 
 /** Test hook — clears the in-process access-token cache. */
