@@ -23,6 +23,25 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json() as { title?: string; orgId?: string; dealId?: string; roomCode?: string };
+
+    // Defense-in-depth alongside the live_meetings_insert RLS policy
+    // (20260703190000): don't trust an org id from the request body without
+    // checking the caller actually belongs to it — otherwise any
+    // authenticated user could attribute a meeting to an org they aren't a
+    // member of, and it would appear in that org's meeting list for every
+    // real member.
+    if (body.orgId) {
+      const { data: membership } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("principal_id", user.id)
+        .eq("organization_id", body.orgId)
+        .maybeSingle();
+      if (!membership) {
+        return NextResponse.json({ error: "Not a member of that organization" }, { status: 403 });
+      }
+    }
+
     const roomCode = body.roomCode ?? generateRoomCode();
 
     const { data, error } = await (supabase
