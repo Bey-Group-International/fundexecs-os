@@ -550,6 +550,10 @@ export type Wallet = Timestamps & {
   plan: string | null;
   plan_interval: string | null;
   plan_started_at: string | null;
+  // migration 20260703170000 — cached Stripe customer for portal sessions
+  stripe_customer_id: string | null;
+  // migration 20260703170001 — idempotency stamp for the email-verify trial grant
+  trial_granted_at: string | null;
 };
 
 // Tokenization layers (migration 0048). Earned standing, credit stakes, and

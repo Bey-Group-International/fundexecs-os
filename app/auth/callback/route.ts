@@ -14,9 +14,7 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
-  // Only allow internal, same-origin paths — never "//evil.com" or absolute URLs.
-  const rawNext = searchParams.get("next") ?? "/workspace";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/workspace";
+  const next = sanitizeNextPath(searchParams.get("next"), origin);
 
   if (!hasSupabaseServerEnv()) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent("Auth not configured.")}`);
@@ -51,6 +49,24 @@ export async function GET(request: Request) {
   return NextResponse.redirect(
     `${origin}/login?error=${encodeURIComponent("Invalid callback parameters.")}`,
   );
+}
+
+// Only allow internal, same-origin paths as post-auth redirect targets. Prefix
+// checks alone are bypassable ("/\evil.com" — browsers normalize backslash to
+// slash, making it protocol-relative), so resolve against our origin and
+// require the result to stay there.
+function sanitizeNextPath(rawNext: string | null, origin: string): string {
+  const fallback = "/workspace";
+  if (!rawNext || !rawNext.startsWith("/") || rawNext.startsWith("//") || rawNext.includes("\\")) {
+    return fallback;
+  }
+  try {
+    const resolved = new URL(rawNext, origin);
+    if (resolved.origin !== origin) return fallback;
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch {
+    return fallback;
+  }
 }
 
 // Best-effort trial credit grant after any successful auth exchange.
