@@ -1,0 +1,22 @@
+-- Backfilled from the production migration history (applied directly to prod
+-- via MCP/dashboard before the DB Migrate workflow existed). Present in the
+-- repo so `supabase db push` sees local >= remote; already applied in prod.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'commitment_stage') THEN
+    CREATE TYPE commitment_stage AS ENUM (
+      'soft_circle',
+      'verbal',
+      'signed',
+      'funded',
+      'closed',
+      'withdrawn'
+    );
+  END IF;
+END $$;
+
+ALTER TABLE commitments
+  ADD COLUMN IF NOT EXISTS lifecycle_stage commitment_stage NOT NULL DEFAULT 'soft_circle',
+  ADD COLUMN IF NOT EXISTS notes           text;
+
+COMMENT ON COLUMN commitments.lifecycle_stage IS 'Soft-circle → verbal → signed → funded → closed; withdrawn at any pre-funded stage.';
+COMMENT ON COLUMN commitments.notes          IS 'Free-text notes on this commitment (LP call summary, conditions, etc).';;
