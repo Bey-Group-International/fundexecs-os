@@ -51,6 +51,11 @@ export type ActionKind =
   // reconciling a staged transaction are routine internal work product.
   | "import_bank_file"
   | "reconcile_transaction"
+  // Finance AR/AP (internal bookkeeping): recording an invoice/bill and applying
+  // a payment are routine internal work product (sending an invoice OUT to a
+  // counterparty would be a separate Tier-2 action).
+  | "issue_invoice"
+  | "record_payment"
   // Tier 3 — compliance- or capital-binding; creates an obligation.
   | "sign_document"
   | "submit_term_sheet"
@@ -76,6 +81,8 @@ const TIER_1: ActionKind[] = [
   "reverse_journal_entry",
   "import_bank_file",
   "reconcile_transaction",
+  "issue_invoice",
+  "record_payment",
 ];
 
 const TIER_2: ActionKind[] = [
