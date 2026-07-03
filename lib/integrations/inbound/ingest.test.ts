@@ -17,6 +17,7 @@ interface Recorded {
 function makeSupabase(opts: {
   existingThreadId?: string | null;
   claimConflict?: boolean;
+  existingClaim?: { id: string; ok: boolean } | null;
   failMessageInsert?: boolean;
 } = {}): { supabase: SupabaseClient<Database>; recorded: Recorded } {
   const recorded: Recorded = { inserts: [], updates: [] };
@@ -52,10 +53,15 @@ function makeSupabase(opts: {
       };
     },
     select() {
-      const maybeSingle = async () => ({
-        data: opts.existingThreadId ? { id: opts.existingThreadId } : null,
-        error: null,
-      });
+      const maybeSingle = async () => {
+        if (table === "ingest_log") {
+          return { data: opts.existingClaim ?? { id: "log-1", ok: true }, error: null };
+        }
+        return {
+          data: opts.existingThreadId ? { id: opts.existingThreadId } : null,
+          error: null,
+        };
+      };
       const chain = { eq: () => chain, maybeSingle };
       return chain;
     },
@@ -92,6 +98,25 @@ describe("ingestInboundEvent", () => {
     expect(result).toEqual({ ok: true, duplicate: true });
     expect(recorded.inserts.filter((i) => i.table !== "ingest_log")).toHaveLength(0);
     expect(recorded.updates).toHaveLength(0);
+  });
+
+  it("retries a previously failed claim instead of acknowledging it as a duplicate", async () => {
+    const { supabase, recorded } = makeSupabase({
+      claimConflict: true,
+      existingClaim: { id: "log-failed", ok: false },
+      existingThreadId: "thr-1",
+    });
+    const result = await ingestInboundEvent(supabase, "org-1", "calendly", BOOKING_EVENT);
+    expect(result).toEqual({ ok: true, duplicate: false, threadId: "thr-1", created: false });
+
+    expect(recorded.inserts.some((i) => i.table === "inbox_messages")).toBe(true);
+    const finalized = recorded.updates.find((u) => u.table === "ingest_log")!;
+    expect(finalized.id).toBe("log-failed");
+    expect(finalized.patch).toMatchObject({
+      ok: true,
+      detail: "appended to thread",
+      thread_id: "thr-1",
+    });
   });
 
   it("creates a thread with triage priority on first delivery and finalizes the ledger", async () => {

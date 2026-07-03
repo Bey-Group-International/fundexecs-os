@@ -43,11 +43,26 @@ export async function ingestInboundEvent(
     .select("id")
     .single();
 
+  let logId: string;
   if (claim.error) {
-    if (claim.error.code === UNIQUE_VIOLATION) return { ok: true, duplicate: true };
-    return { ok: false, error: claim.error.message };
+    if (claim.error.code === UNIQUE_VIOLATION) {
+      const existingClaim = await supabase
+        .from("ingest_log")
+        .select("id, ok")
+        .eq("organization_id", orgId)
+        .eq("channel", webhookChannel)
+        .eq("external_id", event.eventId)
+        .maybeSingle();
+      if (existingClaim.error) return { ok: false, error: existingClaim.error.message };
+      if (!existingClaim.data) return { ok: false, error: "duplicate claim could not be resolved" };
+      if (existingClaim.data.ok) return { ok: true, duplicate: true };
+      logId = existingClaim.data.id;
+    } else {
+      return { ok: false, error: claim.error.message };
+    }
+  } else {
+    logId = claim.data.id;
   }
-  const logId = claim.data.id;
 
   const finalize = async (fields: { ok: boolean; detail: string; thread_id?: string }) => {
     await supabase.from("ingest_log").update(fields).eq("id", logId);
