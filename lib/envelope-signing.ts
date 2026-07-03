@@ -8,13 +8,18 @@ export interface EnvelopeFieldRequirement {
   required: boolean
 }
 
+// A required checkbox only counts when the response is an affirmative checked
+// value — generic non-empty-string truthiness would let "false" satisfy it.
+const CHECKED_VALUES = new Set(['true', 'checked', 'on', '1'])
+
 /**
  * Every required field must be satisfied before a signature is accepted —
  * previously the completion handler never read envelope_fields at all, so an
  * envelope whose fields were marked required could be completed with all of
  * them blank. signature/initials field types are satisfied by the submitted
- * signature/initials images; the rest need a non-empty response for that
- * field id. Returns the labels of whatever is missing (empty = all satisfied).
+ * signature/initials images; a checkbox needs an affirmative checked value;
+ * the rest need a non-empty response for that field id. Returns the labels
+ * of whatever is missing (empty = all satisfied).
  */
 export function missingRequiredFields(
   fields: EnvelopeFieldRequirement[],
@@ -32,7 +37,9 @@ export function missingRequiredFields(
         ? Boolean(args.signatureData)
         : field.field_type === 'initials'
           ? Boolean(args.initialsData)
-          : Boolean(args.fieldResponses[field.id]?.trim())
+          : field.field_type === 'checkbox'
+            ? CHECKED_VALUES.has(args.fieldResponses[field.id]?.trim().toLowerCase() ?? '')
+            : Boolean(args.fieldResponses[field.id]?.trim())
     if (!satisfied) missing.push(field.label || field.field_type)
   }
   return missing

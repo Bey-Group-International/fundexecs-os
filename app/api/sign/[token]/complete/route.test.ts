@@ -116,6 +116,17 @@ describe('POST /api/sign/[token]/complete', () => {
     expect(res.status).toBe(409);
   });
 
+  it('fails closed on an unrecognized envelope status (allow-list, not deny-list)', async () => {
+    makeSupabase({
+      recipient: { id: 'rec-1', status: 'pending', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'expired' },
+    });
+    const res = await POST(request(GOOD_BODY), params);
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.error).toContain('not available for signing');
+  });
+
   it('still rejects a voided envelope with 410', async () => {
     makeSupabase({
       recipient: { id: 'rec-1', status: 'pending', envelope_id: 'env-1' },
@@ -170,6 +181,24 @@ describe('POST /api/sign/[token]/complete', () => {
     expect(inserts.map((i) => i.row.event_type)).toEqual(['signed', 'completed']);
   });
 
+  it('accepts the next signer while the envelope is already partially_signed', async () => {
+    const { updates } = makeSupabase({
+      recipient: { id: 'rec-2', status: 'viewed', envelope_id: 'env-1' },
+      envelope: { id: 'env-1', status: 'partially_signed' },
+      fields: [],
+      allRecipients: [
+        { id: 'rec-1', status: 'signed' },
+        { id: 'rec-2', status: 'signed' },
+      ],
+    });
+    const res = await POST(request(GOOD_BODY), params);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, envelopeCompleted: true });
+    const envelopeUpdate = updates.find((u) => u.table === 'envelopes');
+    expect(envelopeUpdate?.patch).toMatchObject({ status: 'completed' });
+  });
+
   it('moves a multi-signer envelope to partially_signed after the first signature', async () => {
     const { updates } = makeSupabase({
       recipient: { id: 'rec-1', status: 'viewed', envelope_id: 'env-1' },
@@ -220,5 +249,25 @@ describe('missingRequiredFields', () => {
     expect(
       missingRequiredFields([{ id: 'f-1', field_type: 'text', label: 'Notes', required: false }], sig),
     ).toEqual([]);
+  });
+
+  it('does not let a required checkbox pass on a non-affirmative response like "false"', () => {
+    expect(
+      missingRequiredFields(
+        [{ id: 'f-1', field_type: 'checkbox', label: 'I agree', required: true }],
+        { ...sig, fieldResponses: { 'f-1': 'false' } },
+      ),
+    ).toEqual(['I agree']);
+  });
+
+  it('accepts a required checkbox for affirmative checked values', () => {
+    for (const value of ['true', 'checked', 'on', '1', ' TRUE ']) {
+      expect(
+        missingRequiredFields(
+          [{ id: 'f-1', field_type: 'checkbox', label: 'I agree', required: true }],
+          { ...sig, fieldResponses: { 'f-1': value } },
+        ),
+      ).toEqual([]);
+    }
   });
 });

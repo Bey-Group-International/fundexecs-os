@@ -85,24 +85,33 @@ export async function POST(
     }
 
     // Status gates. Signatures are only acceptable while the envelope is
-    // actually out for signing — previously only 'voided' was rejected, so a
-    // draft that was never dispatched (recipient tokens are minted at create
-    // time) or an already-completed envelope would take a signature.
-    if (envelope.status === 'voided') {
+    // actually out for signing — an explicit allow-list (sent /
+    // partially_signed) so any state this code doesn't know about fails
+    // closed instead of slipping through. Previously only 'voided' was
+    // rejected, so a draft that was never dispatched (recipient tokens are
+    // minted at create time) or an already-completed envelope would take a
+    // signature.
+    if (envelope.status !== 'sent' && envelope.status !== 'partially_signed') {
+      if (envelope.status === 'voided') {
+        return NextResponse.json(
+          { ok: false, error: 'This document has been voided.' },
+          { status: 410 }
+        )
+      }
+      if (envelope.status === 'draft') {
+        return NextResponse.json(
+          { ok: false, error: 'This document has not been sent for signing yet.' },
+          { status: 409 }
+        )
+      }
+      if (envelope.status === 'completed') {
+        return NextResponse.json(
+          { ok: false, error: 'This document has already been completed.' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json(
-        { ok: false, error: 'This document has been voided.' },
-        { status: 410 }
-      )
-    }
-    if (envelope.status === 'draft') {
-      return NextResponse.json(
-        { ok: false, error: 'This document has not been sent for signing yet.' },
-        { status: 409 }
-      )
-    }
-    if (envelope.status === 'completed') {
-      return NextResponse.json(
-        { ok: false, error: 'This document has already been completed.' },
+        { ok: false, error: 'This document is not available for signing.' },
         { status: 409 }
       )
     }
