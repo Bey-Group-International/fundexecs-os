@@ -2368,6 +2368,33 @@ export type Database = {
         Args: { p_org: string; p_older_than?: string };
         Returns: number;
       };
+      // Atomically insert one capital_event per LP allocation and roll each
+      // commitment + the fund aggregate in one transaction (migration
+      // 20260703180000). Returns { totalApplied }.
+      capital_run_apply: {
+        Args: {
+          p_org: string;
+          p_fund_id: string;
+          p_kind: string;
+          p_allocations: Json;
+          p_reference: string | null;
+          p_effective_date: string;
+        };
+        Returns: Json;
+      };
+      // Atomically split a seller's commitment and roll the transferred
+      // amounts onto the buyer's (creating it if new) in one transaction
+      // (migration 20260703180000). Returns { fundId, committed, called,
+      // distributed }.
+      capital_secondary_transfer: {
+        Args: {
+          p_org: string;
+          p_seller_commitment_id: string;
+          p_buyer_investor_id: string;
+          p_fraction: number;
+        };
+        Returns: Json;
+      };
       // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
       // sent as the pgvector text literal "[0.1,0.2,...]".
       match_brain_kb_chunks: {

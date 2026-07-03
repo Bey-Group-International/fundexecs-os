@@ -3,10 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { getSessionContext } from "@/lib/auth";
+import { getSessionContext, requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { planRun, type CommitmentLike, type RunKind } from "@/lib/capital-ops";
-import type { AssetType } from "@/lib/supabase/database.types";
+import type { AssetType, Json } from "@/lib/supabase/database.types";
+
+export interface CapitalOpResult {
+  ok: boolean;
+  error?: string;
+}
 
 // Best-effort map a deal's free-text asset class onto the asset_type enum so a
 // promoted holding lands with a sensible type; falls back to "other".
@@ -193,166 +198,113 @@ export async function recordValuationMark(formData: FormData): Promise<void> {
 
 // --- Agent-run capital operations (Tier 3 — always operator sign-off) -------
 // Books a capital call or distribution RUN to the ledger: allocate across the
-// fund's commitments pro-rata (planRun), write one capital_event per LP, and
-// roll the amounts onto the commitments and the fund. Capital movement is Tier
-// 3 in the gate layer — never delegable — so this only runs on an explicit
-// operator confirm (the UI previews the allocation first).
-export async function recordCapitalRun(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+// fund's commitments pro-rata (planRun — pure, unit-tested TypeScript), then
+// apply the whole write set (one capital_event per LP, each commitment's
+// called/distributed amount, and the fund aggregate) in a single transaction
+// via the capital_run_apply RPC (20260703180000_capital_ops_atomic.sql). A
+// per-JS-write loop with no transaction used to mean a mid-run failure left
+// some LPs booked and others not, with the fund aggregate rolled by the full
+// planned total regardless — the RPC makes the whole run atomic, and its
+// guarded increment re-validates the unfunded cap under lock (not the stale
+// pre-transaction read the allocation was planned from) instead of silently
+// over-calling an LP past their commitment. Capital movement is Tier 3 in the
+// gate layer — never delegable — so this only runs on an explicit operator
+// confirm (the UI previews the allocation first).
+export async function recordCapitalRun(formData: FormData): Promise<CapitalOpResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
   const fundId = String(formData.get("fund_id") ?? "");
   const kind = String(formData.get("kind") ?? "") as RunKind;
   const amount = Number(String(formData.get("amount") ?? "").trim());
-  if (!fundId || (kind !== "capital_call" && kind !== "distribution")) return;
-  if (!Number.isFinite(amount) || amount <= 0) return;
+  if (!fundId || (kind !== "capital_call" && kind !== "distribution")) {
+    return { ok: false, error: "Choose a fund and a run type." };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, error: "Enter a positive amount." };
+  }
 
   const supabase = createServerClient();
   const { data: fund } = await supabase
     .from("funds")
-    .select("id, called_capital, distributed_capital")
+    .select("id")
     .eq("id", fundId)
-    .eq("organization_id", ctx.orgId)
+    .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
-  if (!fund) return;
+  if (!fund) return { ok: false, error: "Fund not found." };
 
   const { data: commitRows } = await supabase
     .from("commitments")
     .select("id, investor_id, committed_amount, called_amount, distributed_amount")
-    .eq("organization_id", ctx.orgId)
+    .eq("organization_id", auth.ctx.orgId)
     .eq("fund_id", fundId);
   const commitments = (commitRows ?? []) as CommitmentLike[];
-  if (commitments.length === 0) return;
+  if (commitments.length === 0) return { ok: false, error: "This fund has no commitments to allocate across." };
 
   const plan = planRun(kind, commitments, amount);
-  if (plan.totalAllocated <= 0) return;
+  if (plan.totalAllocated <= 0) {
+    return { ok: false, error: "Nothing could be allocated — check unfunded commitments." };
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const reference = String(formData.get("reference") ?? "").trim() || null;
-  const byId = new Map(commitments.map((c) => [c.id, c]));
+  const allocations = plan.allocations
+    .filter((a) => a.allocation > 0)
+    .map((a) => ({ commitmentId: a.commitmentId, investorId: a.investorId, allocation: a.allocation }));
 
-  for (const a of plan.allocations) {
-    if (a.allocation <= 0) continue;
-    await supabase.from("capital_events").insert({
-      organization_id: ctx.orgId,
-      fund_id: fundId,
-      investor_id: a.investorId,
-      event_type: kind,
-      amount: a.allocation,
-      currency: "USD",
-      effective_date: today,
-      reference,
-    });
-    const c = byId.get(a.commitmentId)!;
-    if (kind === "capital_call") {
-      await supabase
-        .from("commitments")
-        .update({ called_amount: (c.called_amount ?? 0) + a.allocation })
-        .eq("id", a.commitmentId)
-        .eq("organization_id", ctx.orgId);
-    } else {
-      await supabase
-        .from("commitments")
-        .update({ distributed_amount: (c.distributed_amount ?? 0) + a.allocation })
-        .eq("id", a.commitmentId)
-        .eq("organization_id", ctx.orgId);
-    }
-  }
-
-  // Roll the fund aggregate so the command center (which prefers fund totals)
-  // stays consistent with the per-LP ledger.
-  if (kind === "capital_call") {
-    await supabase
-      .from("funds")
-      .update({ called_capital: (fund.called_capital ?? 0) + plan.totalAllocated })
-      .eq("id", fundId)
-      .eq("organization_id", ctx.orgId);
-  } else {
-    await supabase
-      .from("funds")
-      .update({ distributed_capital: (fund.distributed_capital ?? 0) + plan.totalAllocated })
-      .eq("id", fundId)
-      .eq("organization_id", ctx.orgId);
-  }
+  const { error } = await supabase.rpc("capital_run_apply", {
+    p_org: auth.ctx.orgId,
+    p_fund_id: fundId,
+    p_kind: kind,
+    p_allocations: allocations as unknown as Json,
+    p_reference: reference,
+    p_effective_date: today,
+  });
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/execute/capital_events");
   revalidatePath("/execute/cap_table");
   revalidatePath("/execute/ownership");
+  return { ok: true };
 }
 
 // --- Secondary transfer (Tier 3 — always operator sign-off) ----------------
 // Books an LP secondary: move a fraction of a seller's commitment to a buyer in
-// the same fund. Splits the seller's capital account (committed / called /
-// distributed) and rolls the transferred amounts onto the buyer's commitment
-// (creating it if the buyer is new to the fund). A change of ownership is Tier 3
-// — never delegable — so this only runs on an explicit operator confirm (the UI
-// previews the transfer and premium/discount to NAV first). The negotiated price
-// is informational here: it changes hands between LPs, not on the fund's books.
-export async function recordSecondaryTransfer(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+// the same fund. The whole transfer — reducing the seller's capital account
+// (committed / called / distributed) and rolling the transferred amounts onto
+// the buyer's commitment (creating it if the buyer is new to the fund) — runs
+// in a single transaction via the capital_secondary_transfer RPC
+// (20260703180000_capital_ops_atomic.sql), which locks the seller's row for
+// the duration of the transfer and upserts the buyer's side atomically. The
+// two separate JS read-then-write calls this used to be could lose an update
+// under a concurrent transfer of the same position. A change of ownership is
+// Tier 3 — never delegable — so this only runs on an explicit operator
+// confirm (the UI previews the transfer and premium/discount to NAV first).
+// The negotiated price is informational here: it changes hands between LPs,
+// not on the fund's books.
+export async function recordSecondaryTransfer(formData: FormData): Promise<CapitalOpResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
   const sellerCommitmentId = String(formData.get("seller_commitment_id") ?? "");
   const buyerInvestorId = String(formData.get("buyer_investor_id") ?? "");
   const fraction = Number(String(formData.get("fraction") ?? "").trim());
-  if (!sellerCommitmentId || !buyerInvestorId) return;
-  if (!Number.isFinite(fraction) || fraction <= 0) return;
+  if (!sellerCommitmentId || !buyerInvestorId) {
+    return { ok: false, error: "Choose a seller position and a buyer." };
+  }
+  if (!Number.isFinite(fraction) || fraction <= 0) {
+    return { ok: false, error: "Enter a positive fraction to transfer." };
+  }
   const f = fraction >= 1 ? 1 : fraction;
 
   const supabase = createServerClient();
-  const { data: seller } = await supabase
-    .from("commitments")
-    .select("id, fund_id, investor_id, committed_amount, called_amount, distributed_amount")
-    .eq("id", sellerCommitmentId)
-    .eq("organization_id", ctx.orgId)
-    .maybeSingle();
-  if (!seller || seller.investor_id === buyerInvestorId) return;
-
-  const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
-  const xCommitted = round2((seller.committed_amount ?? 0) * f);
-  const xCalled = round2((seller.called_amount ?? 0) * f);
-  const xDistributed = round2((seller.distributed_amount ?? 0) * f);
-  if (xCommitted <= 0) return;
-
-  // Reduce the seller's position.
-  await supabase
-    .from("commitments")
-    .update({
-      committed_amount: round2((seller.committed_amount ?? 0) - xCommitted),
-      called_amount: round2((seller.called_amount ?? 0) - xCalled),
-      distributed_amount: round2((seller.distributed_amount ?? 0) - xDistributed),
-    })
-    .eq("id", seller.id)
-    .eq("organization_id", ctx.orgId);
-
-  // Roll onto the buyer's commitment in the same fund — create it if new.
-  const { data: buyer } = await supabase
-    .from("commitments")
-    .select("id, committed_amount, called_amount, distributed_amount")
-    .eq("organization_id", ctx.orgId)
-    .eq("fund_id", seller.fund_id)
-    .eq("investor_id", buyerInvestorId)
-    .maybeSingle();
-
-  if (buyer) {
-    await supabase
-      .from("commitments")
-      .update({
-        committed_amount: round2((buyer.committed_amount ?? 0) + xCommitted),
-        called_amount: round2((buyer.called_amount ?? 0) + xCalled),
-        distributed_amount: round2((buyer.distributed_amount ?? 0) + xDistributed),
-      })
-      .eq("id", buyer.id)
-      .eq("organization_id", ctx.orgId);
-  } else {
-    await supabase.from("commitments").insert({
-      organization_id: ctx.orgId,
-      fund_id: seller.fund_id,
-      investor_id: buyerInvestorId,
-      committed_amount: xCommitted,
-      called_amount: xCalled,
-      distributed_amount: xDistributed,
-    });
-  }
+  const { error } = await supabase.rpc("capital_secondary_transfer", {
+    p_org: auth.ctx.orgId,
+    p_seller_commitment_id: sellerCommitmentId,
+    p_buyer_investor_id: buyerInvestorId,
+    p_fraction: f,
+  });
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/execute/cap_table");
   revalidatePath("/execute/ownership");
+  return { ok: true };
 }
