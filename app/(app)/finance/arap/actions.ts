@@ -173,6 +173,12 @@ export async function recordPayment(input: {
   if (input.allocations?.some((a) => a.amount <= 0)) {
     return { ok: false, error: "All allocation amounts must be positive." };
   }
+  if (
+    input.allocations &&
+    input.allocations.reduce((s, a) => s + a.amount, 0) > input.amount + 1e-9
+  ) {
+    return { ok: false, error: "Allocations exceed the payment amount." };
+  }
   const supabase = createServerClient();
 
   // When no explicit allocations are supplied, the RPC auto-allocates oldest-due
