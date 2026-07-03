@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   deleteInvestorAction,
@@ -13,6 +13,7 @@ import {
   clearProvidersAction,
   deleteProviderAction,
 } from "@/app/(app)/[hub]/[module]/actions";
+import { TypedConfirmDialog } from "@/components/shared/TypedConfirmDialog";
 
 function DangerBtn({
   onClick,
@@ -100,18 +101,34 @@ export function DeleteDealBtn({ id, onDeleted }: { id: string; onDeleted?: (id: 
   return <DangerBtn onClick={handle} disabled={pending}>Remove</DangerBtn>;
 }
 
+// Same blast radius as the Command Center's clear-all (both act on the whole
+// org's deals table) — same typed-confirm treatment instead of a single
+// dismissible confirm().
 export function ClearDealsBtn() {
   const [pending, start] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const router = useRouter();
-  function handle() {
-    if (!confirm("Clear the entire deal pipeline? This cannot be undone.")) return;
-    start(async () => {
-      const result = await clearDealsAction();
-      if (result?.error) { alertError(result.error); return; }
-      router.refresh();
-    });
-  }
-  return <DangerBtn onClick={handle} disabled={pending}>Clear all</DangerBtn>;
+  return (
+    <>
+      <DangerBtn onClick={() => setConfirmOpen(true)} disabled={pending}>Clear all</DangerBtn>
+      <TypedConfirmDialog
+        open={confirmOpen}
+        title="Clear the deal pipeline"
+        body="This archives every deal in the pipeline for this org, hiding them from the active list."
+        phrase="CLEAR DEALS"
+        confirmLabel="Clear all deals"
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          start(async () => {
+            const result = await clearDealsAction();
+            if (result?.error) { alertError(result.error); return; }
+            router.refresh();
+          });
+        }}
+      />
+    </>
+  );
 }
 
 // ── Partners ─────────────────────────────────────────────────────────────────

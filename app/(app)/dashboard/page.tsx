@@ -132,7 +132,7 @@ export default async function DashboardPage() {
       .is("parent_task_id", null)
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase.from("deals").select("*").order("created_at", { ascending: false }).limit(8),
+    supabase.from("deals").select("*").is("archived_at", null).order("created_at", { ascending: false }).limit(8),
     supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
     supabase.from("artifacts").select("*").order("created_at", { ascending: false }).limit(6),
     supabase.from("sessions").select("*").order("created_at", { ascending: false }).limit(30),

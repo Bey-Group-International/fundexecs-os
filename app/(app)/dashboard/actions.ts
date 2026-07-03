@@ -160,14 +160,22 @@ export async function deleteDeal(id: string): Promise<{ ok: boolean; error?: str
   return { ok: true };
 }
 
+// Soft-archives every deal for the org rather than deleting — a hard DELETE
+// here used to cascade to every document, underwriting, and diligence item
+// tied to those deals (supabase/migrations/0005_deals.sql), with no undo
+// short of a database restore, behind a single dismissible confirm(). This
+// mirrors the archived_at pattern the rest of the app already uses for the
+// same table (app/(app)/[hub]/[module]/actions.ts's clearDealsAction), so a
+// mis-click is recoverable instead of permanent.
 export async function clearDeals(): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const supabase = createServerClient();
   const { error } = await supabase
     .from("deals")
-    .delete()
-    .eq("organization_id", auth.ctx.orgId);
+    .update({ archived_at: new Date().toISOString() })
+    .eq("organization_id", auth.ctx.orgId)
+    .is("archived_at", null);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/dashboard");
   return { ok: true };

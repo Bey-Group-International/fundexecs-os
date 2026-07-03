@@ -775,7 +775,10 @@ export async function clearDealsAction(): Promise<{ ok?: boolean; error?: string
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServiceClient();
+    // The org-scoped client (not the service-role client this used to reach
+    // for) so RLS's deals_write policy — which blocks the 'viewer' role —
+    // actually applies here, same as deleteDealAction just above.
+    const supabase = createServerClient();
     const { error } = await supabase
       .from("deals")
       .update({ archived_at: new Date().toISOString() })
