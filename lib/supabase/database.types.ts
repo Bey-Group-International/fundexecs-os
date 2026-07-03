@@ -2395,6 +2395,46 @@ export type Database = {
         };
         Returns: Json;
       };
+      // Atomically insert an asset for a closed deal (if one doesn't already
+      // exist) and advance the deal to 'owned' in one transaction (migration
+      // 20260703200000). Returns { assetId }.
+      promote_deal_to_asset: {
+        Args: {
+          p_org: string;
+          p_deal_id: string;
+          p_asset_type: string;
+        };
+        Returns: Json;
+      };
+      // Atomically insert an IC decision and (for go/no_go) advance the deal
+      // stage in one transaction (migration 20260703200000). Returns
+      // { decisionId }.
+      record_ic_decision: {
+        Args: {
+          p_org: string;
+          p_deal_id: string;
+          p_decision: string;
+          p_rationale: string | null;
+          p_conviction: number | null;
+          p_decided_by: string | null;
+        };
+        Returns: Json;
+      };
+      // Atomically insert a valuation mark and roll it onto the asset's
+      // current_value in one transaction (migration 20260703200000). Returns
+      // { markId }.
+      record_valuation_mark: {
+        Args: {
+          p_org: string;
+          p_asset_id: string;
+          p_value: number;
+          p_as_of: string;
+          p_method: string | null;
+          p_note: string | null;
+          p_created_by: string | null;
+        };
+        Returns: Json;
+      };
       // Cosine-search a Brain's KB corpus (migration 0024). embedding args are
       // sent as the pgvector text literal "[0.1,0.2,...]".
       match_brain_kb_chunks: {

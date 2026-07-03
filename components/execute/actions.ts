@@ -28,52 +28,36 @@ function assetTypeFor(assetClass: string | null): AssetType {
 // Creates an asset seeded from the deal (name, type, cost = target amount, first
 // mark = cost) and advances the deal to "owned" — the moment a deal becomes
 // something to operate. Idempotent on re-click: if an asset already exists for
-// the deal, it just ensures the stage is "owned".
-export async function promoteDealToAsset(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+// the deal, it just ensures the stage is "owned". Both writes happen in one
+// transaction via the promote_deal_to_asset RPC
+// (20260703200000_deal_lifecycle_atomic.sql) — a failure between the insert
+// and the stage update used to leave a deal marked "owned" with no matching
+// holding, with nothing checking the Supabase client's error at either step.
+export async function promoteDealToAsset(formData: FormData): Promise<CapitalOpResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
-  if (!dealId) return;
+  if (!dealId) return { ok: false, error: "Missing deal." };
 
   const supabase = createServerClient();
   const { data: deal } = await supabase
     .from("deals")
-    .select("id, name, asset_class, target_amount, fund_id, stage")
+    .select("id, asset_class")
     .eq("id", dealId)
-    .eq("organization_id", ctx.orgId)
+    .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
-  if (!deal) return;
+  if (!deal) return { ok: false, error: "Deal not found." };
 
-  const { data: existing } = await supabase
-    .from("assets")
-    .select("id")
-    .eq("organization_id", ctx.orgId)
-    .eq("deal_id", deal.id)
-    .maybeSingle();
-
-  if (!existing) {
-    const cost = typeof deal.target_amount === "number" ? deal.target_amount : null;
-    await supabase.from("assets").insert({
-      organization_id: ctx.orgId,
-      deal_id: deal.id,
-      fund_id: deal.fund_id,
-      name: deal.name,
-      asset_type: assetTypeFor(deal.asset_class),
-      acquisition_date: new Date().toISOString().slice(0, 10),
-      acquisition_cost: cost,
-      current_value: cost, // first mark = cost basis
-      status: "active",
-    });
-  }
-
-  await supabase
-    .from("deals")
-    .update({ stage: "owned" })
-    .eq("id", deal.id)
-    .eq("organization_id", ctx.orgId);
+  const { error } = await supabase.rpc("promote_deal_to_asset", {
+    p_org: auth.ctx.orgId,
+    p_deal_id: dealId,
+    p_asset_type: assetTypeFor(deal.asset_class),
+  });
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/execute/closing");
   revalidatePath("/execute/asset_management");
+  return { ok: true };
 }
 
 // --- Execute › agent actions ----------------------------------------------
@@ -164,36 +148,37 @@ export async function revokeInvestorPortalShare(formData: FormData): Promise<voi
 // --- Valuations: record a fair-value mark (audit trail) --------------------
 // Appends a mark to the valuation_marks history and rolls it onto the asset as
 // the current value, so the latest mark and the full history stay in sync.
-export async function recordValuationMark(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+// Both writes happen in one transaction via the record_valuation_mark RPC
+// (20260703200000_deal_lifecycle_atomic.sql) — a failure between the insert
+// and the roll-up used to leave the audit trail and the asset's headline mark
+// out of sync, with nothing checking the Supabase client's error at either step.
+export async function recordValuationMark(formData: FormData): Promise<CapitalOpResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
   const assetId = String(formData.get("asset_id") ?? "");
   const raw = String(formData.get("value") ?? "").trim();
   const value = Number(raw);
-  if (!assetId || raw === "" || !Number.isFinite(value)) return;
+  if (!assetId) return { ok: false, error: "Choose a holding." };
+  if (raw === "" || !Number.isFinite(value)) return { ok: false, error: "Enter a valid fair value." };
 
   const asOf = String(formData.get("as_of") ?? "").trim() || new Date().toISOString().slice(0, 10);
   const method = String(formData.get("method") ?? "").trim() || null;
   const note = String(formData.get("note") ?? "").trim() || null;
 
   const supabase = createServerClient();
-  await supabase.from("valuation_marks").insert({
-    organization_id: ctx.orgId,
-    asset_id: assetId,
-    value,
-    as_of: asOf,
-    method,
-    note,
-    created_by: ctx.userId,
+  const { error } = await supabase.rpc("record_valuation_mark", {
+    p_org: auth.ctx.orgId,
+    p_asset_id: assetId,
+    p_value: value,
+    p_as_of: asOf,
+    p_method: method,
+    p_note: note,
+    p_created_by: auth.ctx.userId,
   });
-  // Latest mark becomes the asset's current value.
-  await supabase
-    .from("assets")
-    .update({ current_value: value })
-    .eq("id", assetId)
-    .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/execute/valuations");
+  return { ok: true };
 }
 
 // --- Agent-run capital operations (Tier 3 — always operator sign-off) -------
