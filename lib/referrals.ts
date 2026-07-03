@@ -106,7 +106,9 @@ export type LedgerReason =
   | "streak_bonus"
   | "milestone_bonus"
   | "hub_achievement"
-  | "quest_complete";
+  | "quest_complete"
+  | "free_tier"
+  | "manual";
 
 /** Whether a ledger reason represents referral earnings (for totals). */
 export function isReferralEarning(reason: string): boolean {

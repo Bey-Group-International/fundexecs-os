@@ -372,8 +372,9 @@ export interface PurchaseGiftResult {
   gift?: CreditGift;
 }
 
-// Buy a credit pack as a gift for someone else. Payment is mocked (no provider
-// wired); the gift is created in 'pending' and moves real credits when redeemed.
+// Buy a credit pack as a gift for someone else. Called from fulfillCheckout()
+// after Stripe payment is confirmed — the gift row is created in 'pending' here
+// and moves real credits to the recipient when they redeem their token.
 export async function purchaseGift(args: {
   senderOrgId: string;
   createdBy: string | null;

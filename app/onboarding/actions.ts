@@ -7,6 +7,7 @@ import { getSessionContext } from "@/lib/auth";
 import { sanitizeMandateActions } from "@/lib/mandate-options";
 import { matchNewOrgAndNotify } from "@/lib/ecosystem-match.server";
 import { claimReferralCode } from "@/lib/gift-earn";
+import { grantTrialCreditsIfEligible } from "@/lib/trial";
 
 // Updates the authenticated principal's personal profile fields collected in the
 // first onboarding step. Returns a result object so the wizard can stay on the
@@ -104,6 +105,16 @@ export async function createOrganization(
     is_active: true,
     created_by: ctx.userId,
   });
+
+  // Welcome trial credits. The auth-callback grant only reaches principals who
+  // already had an org when they verified; a brand-new signup gets theirs here,
+  // the moment the org exists. Idempotent + race-safe, and never blocks
+  // onboarding.
+  try {
+    await grantTrialCreditsIfEligible(orgId);
+  } catch {
+    // ignore — onboarding succeeds regardless of the trial grant
+  }
 
   // The profile is live — let Earn match it across the ecosystem and fan out
   // professional alerts to matching orgs (and a reciprocal digest back). This

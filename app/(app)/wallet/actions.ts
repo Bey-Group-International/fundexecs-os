@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
-import { stripeConfigured, createCheckout } from "@/lib/stripe";
+import { stripeConfigured, createCheckout, createPortalSession } from "@/lib/stripe";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
@@ -64,6 +65,25 @@ export async function purchasePackAction(formData: FormData): Promise<ActionResu
   } catch (err) {
     console.error("[wallet] purchasePackAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };
+  }
+}
+
+// Open Stripe Customer Portal for plan management (cancel, swap, update card).
+// Redirects the browser to the portal URL; returns an error string on failure.
+export async function openBillingPortalAction(): Promise<{ error?: string }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
+
+    const { url, error } = await createPortalSession(ctx.orgId);
+    if (error || !url) return { error: error ?? "Could not open billing portal." };
+
+    redirect(url); // throws NEXT_REDIRECT — never returns normally
+  } catch (err: unknown) {
+    // next/navigation redirect throws NEXT_REDIRECT — re-throw so Next.js handles it.
+    if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+    console.error("[wallet] openBillingPortalAction failed:", err);
+    return { error: "Something went wrong. Please try again." };
   }
 }
 

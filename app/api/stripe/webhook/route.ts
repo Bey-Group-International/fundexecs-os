@@ -3,7 +3,14 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getStripe, fulfillCheckout } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
-import { PLAN_BY_KEY, loyaltyBonus, tenureMonths, type PlanKey } from "@/lib/billing";
+import {
+  PLAN_BY_KEY,
+  planGrantCredits,
+  loyaltyBonus,
+  tenureMonths,
+  type PlanKey,
+  type PlanInterval,
+} from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -49,19 +56,29 @@ export async function POST(req: NextRequest) {
           const meta = subscription.metadata as Record<string, string>;
           const orgId = meta.org_id ?? invoice.metadata?.org_id;
           const planKey = meta.plan_key ?? invoice.metadata?.plan_key;
+          const metaInterval = meta.interval ?? invoice.metadata?.interval;
           const plan = planKey ? PLAN_BY_KEY[planKey as PlanKey] : null;
           if (orgId && plan) {
             const service = createServiceClient();
-            await grantCredits(service, orgId, plan.creditsPerMonth, "plan_grant", {
-              note: `${plan.name} plan — renewal`,
+            const { data: walletRow } = await service
+              .from("wallets")
+              .select("plan_started_at, plan_interval")
+              .eq("organization_id", orgId)
+              .maybeSingle();
+            // Subscriptions created before metadata wiring (or whose interval
+            // changed via the Stripe Dashboard/Portal) carry no usable interval
+            // metadata — fall back to the wallet's recorded plan_interval so an
+            // annual renewal isn't granted a single month of credits.
+            const interval: PlanInterval =
+              (metaInterval ?? walletRow?.plan_interval) === "annual" ? "annual" : "monthly";
+            // planGrantCredits returns creditsPerMonth for monthly, creditsPerMonth*12
+            // for annual. Annual subscriptions bill once/year via Stripe, so this
+            // event fires once/year — we must grant the full annual allotment.
+            await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {
+              note: `${plan.name} plan — renewal (${interval})`,
             });
             // Also grant the loyalty bonus accrued since plan_started_at so the
             // dashboard's loyalty display and the actual credit grant stay in sync.
-            const { data: walletRow } = await service
-              .from("wallets")
-              .select("plan_started_at")
-              .eq("organization_id", orgId)
-              .maybeSingle();
             const tenure = tenureMonths(walletRow?.plan_started_at);
             const bonus = loyaltyBonus(tenure);
             if (bonus > 0) {
