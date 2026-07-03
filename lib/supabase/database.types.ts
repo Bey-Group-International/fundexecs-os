@@ -1030,6 +1030,23 @@ export type DispatchLog = {
   created_at: string;
 };
 
+// An inbound ingest ledger row (migration 20260703220000) — one record per
+// webhook event received through app/api/webhooks/[channel]. The arriving
+// counterpart to DispatchLog; its unique (org, channel, external_id) index is
+// the idempotency claim for provider retries. Rows are claimed then finalized
+// once (thread_id/ok/detail), never deleted.
+export type IngestLog = {
+  id: string;
+  organization_id: string;
+  channel: string;
+  event_type: string;
+  external_id: string;
+  ok: boolean;
+  detail: string | null;
+  thread_id: string | null;
+  created_at: string;
+};
+
 export type AuditLog = {
   id: string;
   organization_id: string | null;
@@ -1110,6 +1127,10 @@ export type InboxThread = Timestamps & {
   assigned_to: string | null;
   // When a snoozed thread should auto-return to open (migration 20260702000017).
   snoozed_until: string | null;
+  // Provider-side correlation key for inbound ingestion (migration
+  // 20260703220000): a Calendly scheduled-event URI, an email thread key. Null
+  // for internally-created threads.
+  external_id: string | null;
 };
 
 // One message within an inbox thread (migration 0038).
@@ -2211,6 +2232,7 @@ export type Database = {
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
+      ingest_log: TableShape<IngestLog>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;
