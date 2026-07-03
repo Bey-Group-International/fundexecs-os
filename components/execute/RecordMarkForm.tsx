@@ -13,6 +13,8 @@ interface AssetOption {
 // rolls the value onto the asset as its current mark.
 export default function RecordMarkForm({ assets }: { assets: AssetOption[] }) {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (assets.length === 0) return null;
@@ -34,7 +36,14 @@ export default function RecordMarkForm({ assets }: { assets: AssetOption[] }) {
     <form
       ref={formRef}
       action={async (fd: FormData) => {
-        await recordValuationMark(fd);
+        setPending(true);
+        setError(null);
+        const result = await recordValuationMark(fd);
+        setPending(false);
+        if (!result.ok) {
+          setError(result.error ?? "Could not save the mark.");
+          return;
+        }
         formRef.current?.reset();
         setOpen(false);
       }}
@@ -96,12 +105,18 @@ export default function RecordMarkForm({ assets }: { assets: AssetOption[] }) {
           />
         </label>
       </div>
+      {error ? (
+        <p className="rounded-lg border border-status-danger/40 bg-status-danger/5 px-4 py-2.5 text-xs text-status-danger">
+          {error}
+        </p>
+      ) : null}
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+          disabled={pending}
+          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Save mark
+          {pending ? "Saving…" : "Save mark"}
         </button>
         <button
           type="button"

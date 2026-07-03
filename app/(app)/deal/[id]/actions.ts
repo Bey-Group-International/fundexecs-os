@@ -128,40 +128,40 @@ export async function addUnderwriting(formData: FormData): Promise<void> {
 // --- IC decision -----------------------------------------------------------
 // Stage transitions a recorded decision implies. A 'go' moves the deal to
 // closing; a 'no_go' passes on it. Conditional / hold leave the deal where it is.
-const DECISION_STAGE: Partial<Record<IcDecisionKind, string>> = {
-  go: "closing",
-  no_go: "passed",
-};
+export interface IcDecisionResult {
+  ok: boolean;
+  error?: string;
+}
 
-export async function recordIcDecision(formData: FormData): Promise<void> {
+// The decision insert and the (go/no_go) stage advance happen in one
+// transaction via the record_ic_decision RPC
+// (20260703200000_deal_lifecycle_atomic.sql) — a failure between the two used
+// to leave an IC vote on the record with the deal stage unchanged, or the
+// reverse, with nothing checking the Supabase client's error at either step.
+export async function recordIcDecision(formData: FormData): Promise<IcDecisionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
   const decision = String(formData.get("decision") ?? "") as IcDecisionKind;
-  if (!dealId || !["go", "conditional", "hold", "no_go"].includes(decision)) return;
+  if (!dealId || !["go", "conditional", "hold", "no_go"].includes(decision)) {
+    return { ok: false, error: "Choose a deal and a decision." };
+  }
 
   const supabase = createServerClient();
   // Record the conviction at the moment of the call so the log stands alone.
   const conviction = await computeDealConviction(supabase, ctx.orgId, dealId);
 
-  await supabase.from("ic_decisions").insert({
-    organization_id: ctx.orgId,
-    deal_id: dealId,
-    decision,
-    rationale: text(formData, "rationale"),
-    conviction: conviction?.score ?? null,
-    decided_by: ctx.userId,
+  const { error } = await supabase.rpc("record_ic_decision", {
+    p_org: ctx.orgId,
+    p_deal_id: dealId,
+    p_decision: decision,
+    p_rationale: text(formData, "rationale"),
+    p_conviction: conviction?.score ?? null,
+    p_decided_by: ctx.userId,
   });
-
-  const nextStage = DECISION_STAGE[decision];
-  if (nextStage) {
-    await supabase
-      .from("deals")
-      .update({ stage: nextStage as never })
-      .eq("id", dealId)
-      .eq("organization_id", ctx.orgId);
-  }
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateRun(dealId);
+  return { ok: true };
 }

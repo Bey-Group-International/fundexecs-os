@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getExecuteClosing, type DealClose } from "@/lib/execute-closing";
 import { compactUsd } from "@/lib/format";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
-import { promoteDealToAsset } from "@/components/execute/actions";
+import { PromoteDealButton } from "@/components/execute/PromoteDealButton";
 import { EmptyState, StatTile } from "@/components/execute/ui";
 
 // Thin readiness meter, tone shifting as the close firms up.
@@ -74,18 +74,7 @@ function CloseCard({ c }: { c: DealClose }) {
           <span className="truncate font-mono text-[11px] text-fg-muted">Next · {c.nextStep?.action}</span>
         )}
         {isClosing ? (
-          <form action={promoteDealToAsset} className="shrink-0">
-            <input type="hidden" name="deal_id" value={c.deal.id} />
-            <button
-              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition ${
-                c.ready
-                  ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20"
-                  : "border-gold-500/40 bg-gold-500/10 text-gold-300 hover:bg-gold-500/20"
-              }`}
-            >
-              → {c.ready ? "Complete close" : "Promote to portfolio"}
-            </button>
-          </form>
+          <PromoteDealButton dealId={c.deal.id} ready={c.ready} />
         ) : (
           <Link
             href="/run/strategy"

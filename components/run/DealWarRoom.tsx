@@ -9,11 +9,11 @@ import {
   addDiligenceItem,
   updateDiligenceItem,
   addUnderwriting,
-  recordIcDecision,
 } from "@/app/(app)/deal/[id]/actions";
 import { DealCompsPanel } from "@/components/run/DealCompsPanel";
 import { ScenarioComparisonTable } from "@/components/run/ScenarioComparisonTable";
 import { SecondaryLiquidityPanel } from "@/components/run/SecondaryLiquidityPanel";
+import { IcDecisionForm } from "@/components/run/IcDecisionForm";
 
 // --- Small primitives ------------------------------------------------------
 function Ring({ value, size = 72 }: { value: number; size?: number }) {
@@ -426,27 +426,7 @@ function Decision({ data }: { data: WarRoom }) {
       >
         IC decision
       </SectionTitle>
-      <form action={recordIcDecision} className="flex flex-col gap-2 print:hidden">
-        <input type="hidden" name="deal_id" value={deal.id} />
-        <textarea
-          name="rationale"
-          rows={2}
-          placeholder="Rationale for the record…"
-          className={`${fieldClass} resize-none`}
-        />
-        <div className="flex flex-wrap gap-2">
-          {(["go", "conditional", "hold", "no_go"] as IcDecisionKind[]).map((k) => (
-            <button
-              key={k}
-              name="decision"
-              value={k}
-              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition hover:brightness-110 ${DECISION_META[k].tone}`}
-            >
-              {DECISION_META[k].label}
-            </button>
-          ))}
-        </div>
-      </form>
+      <IcDecisionForm dealId={deal.id} />
       <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:hidden">
         Go → advances to closing · No-Go → passes the deal
       </p>
