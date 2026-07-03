@@ -15,10 +15,12 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Fetch envelope (RLS enforced; no explicit org check here)
+  // Fetch envelope (RLS enforced; no explicit org check here). Column list
+  // matches the migration (20260701250000_envelopes.sql) — this select used
+  // to name a sent_at column that doesn't exist, erroring on every request.
   const { data: envelope, error: envErr } = await supabase
     .from("envelopes")
-    .select("id, title, status, created_at, sent_at, completed_at, organization_id")
+    .select("id, title, status, created_at, completed_at, organization_id")
     .eq("id", envelopeId)
     .maybeSingle();
 
@@ -30,10 +32,11 @@ export async function GET(
     return NextResponse.json({ error: "Envelope not found" }, { status: 404 });
   }
 
-  // Fetch recipients status summary
+  // Fetch recipients status summary (viewed state lives in `status`; there is
+  // no viewed_at column in the schema).
   const { data: recipients, error: recipErr } = await supabase
     .from("envelope_recipients")
-    .select("id, name, email, status, signed_at, viewed_at")
+    .select("id, name, email, status, signed_at")
     .eq("envelope_id", envelopeId);
 
   if (recipErr) {
@@ -57,7 +60,6 @@ export async function GET(
       title: envelope.title,
       status: envelope.status,
       created_at: envelope.created_at,
-      sent_at: envelope.sent_at,
       completed_at: envelope.completed_at,
     },
     recipients: rows.map((r) => ({
@@ -65,7 +67,6 @@ export async function GET(
       name: r.name,
       email: r.email,
       status: r.status,
-      viewed_at: r.viewed_at,
       signed_at: r.signed_at,
     })),
     summary,

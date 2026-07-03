@@ -67,14 +67,25 @@ export async function GET(
       )
     }
 
+    // Recipient tokens are minted when the envelope is still a draft — a
+    // never-sent document isn't signable, so don't serve it to a signer.
+    if (envelope.status === 'draft') {
+      return NextResponse.json(
+        { error: 'This document has not been sent for signing yet.' },
+        { status: 409 }
+      )
+    }
+
     if (recipient.status === 'signed') {
       return NextResponse.json({ alreadySigned: true }, { status: 200 })
     }
 
-    // Fetch fields for this recipient
+    // Fetch fields for this recipient. Column names match the migration
+    // (20260701250000_envelopes.sql) — this select used to name columns that
+    // don't exist (x/y/width/height/value), so it errored on every request.
     const { data: fields, error: fieldsError } = await supabase
       .from('envelope_fields')
-      .select('id, field_type, label, required, page, x, y, width, height, value')
+      .select('id, field_type, label, required, page, x_pct, y_pct, width_pct, height_pct, response')
       .eq('recipient_id', recipient.id)
 
     if (fieldsError) {

@@ -11,6 +11,7 @@ export interface SigningData {
   documentTitle: string;
   documentContent: string;
   envelopeId: string;
+  envelopeStatus: string;
   signingToken: string;
   status: string;
   signedAt: string | null;
@@ -47,6 +48,7 @@ async function fetchSigningData(token: string): Promise<SigningData | null> {
     documentTitle: env.title,
     documentContent: env.document_content,
     envelopeId: env.id,
+    envelopeStatus: env.status,
     signingToken: token,
     status: recipient.status as string,
     signedAt: (recipient.signed_at as string | null) ?? null,
@@ -72,6 +74,26 @@ export default async function SignPage({
           <p className="text-slate-400">
             This signing link is invalid or has expired. Please contact the
             sender for a new link.
+          </p>
+        </div>
+      </SignPageShell>
+    );
+  }
+
+  // Recipient tokens are minted while the envelope is still a draft — the
+  // completion API rejects never-sent drafts, so don't render a signable UI
+  // for one either.
+  if (signingData.envelopeStatus === "draft") {
+    return (
+      <SignPageShell>
+        <div className="text-center py-16">
+          <div className="text-5xl mb-4">⏳</div>
+          <h1 className="text-2xl font-semibold text-white mb-2">
+            Not Ready for Signing
+          </h1>
+          <p className="text-slate-400">
+            This document has not been sent for signing yet. Please contact the
+            sender.
           </p>
         </div>
       </SignPageShell>

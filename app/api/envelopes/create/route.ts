@@ -139,11 +139,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Insert 'created' event
+    // Insert 'created' event. envelope_events has no created_by column
+    // (20260701250000_envelopes.sql) — the actor rides in metadata, and the
+    // old insert that named created_by errored (swallowed) on every create.
     const { error: createdEventError } = await supabase.from('envelope_events').insert({
       envelope_id: envelopeId,
       event_type: 'created',
-      created_by: user.id,
+      metadata: { actor: user.id },
     })
 
     if (createdEventError) {
@@ -164,7 +166,7 @@ export async function POST(request: Request) {
       const { error: sentEventError } = await supabase.from('envelope_events').insert({
         envelope_id: envelopeId,
         event_type: 'sent',
-        created_by: user.id,
+        metadata: { actor: user.id },
       })
 
       if (sentEventError) {

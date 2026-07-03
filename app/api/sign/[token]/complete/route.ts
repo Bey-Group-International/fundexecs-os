@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { missingRequiredFields, type EnvelopeFieldRequirement } from '@/lib/envelope-signing'
 
 export const runtime = 'nodejs'
 
@@ -45,6 +46,14 @@ export async function POST(
     if (!signatureData || typeof signatureData !== 'string') {
       return NextResponse.json({ ok: false, error: 'signatureData is required' }, { status: 400 })
     }
+    // The signing UI won't submit without initials either — the server has to
+    // match, or a crafted POST records a legally weaker signature than any
+    // real signer could produce.
+    if (!initialsData || typeof initialsData !== 'string') {
+      return NextResponse.json({ ok: false, error: 'initialsData is required' }, { status: 400 })
+    }
+    const responses: Record<string, string> =
+      fieldResponses && typeof fieldResponses === 'object' ? fieldResponses : {}
 
     // Look up recipient by signing_token
     const { data: recipient, error: recipientError } = await supabase
@@ -75,19 +84,85 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'Envelope not found' }, { status: 404 })
     }
 
+    // Status gates. Signatures are only acceptable while the envelope is
+    // actually out for signing — previously only 'voided' was rejected, so a
+    // draft that was never dispatched (recipient tokens are minted at create
+    // time) or an already-completed envelope would take a signature.
     if (envelope.status === 'voided') {
       return NextResponse.json(
         { ok: false, error: 'This document has been voided.' },
         { status: 410 }
       )
     }
+    if (envelope.status === 'draft') {
+      return NextResponse.json(
+        { ok: false, error: 'This document has not been sent for signing yet.' },
+        { status: 409 }
+      )
+    }
+    if (envelope.status === 'completed') {
+      return NextResponse.json(
+        { ok: false, error: 'This document has already been completed.' },
+        { status: 409 }
+      )
+    }
 
     if (recipient.status === 'signed') {
       return NextResponse.json({ ok: false, error: 'Already signed.' }, { status: 409 })
     }
+    // A declined recipient made a recorded decision — flipping it to signed
+    // via a replayed link would contradict the audit trail.
+    if (recipient.status === 'declined') {
+      return NextResponse.json(
+        { ok: false, error: 'This signature request was declined and can no longer be signed.' },
+        { status: 409 }
+      )
+    }
+
+    // Required-field enforcement: the signing UI validates these client-side,
+    // but the server is what makes the signed record defensible.
+    const { data: fieldRows, error: fieldsError } = await supabase
+      .from('envelope_fields')
+      .select('id, field_type, label, required')
+      .eq('recipient_id', recipient.id)
+
+    if (fieldsError) {
+      console.error('POST /api/sign/[token]/complete fieldsError:', fieldsError)
+      return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+    }
+
+    const missing = missingRequiredFields((fieldRows ?? []) as EnvelopeFieldRequirement[], {
+      signatureData,
+      initialsData,
+      fieldResponses: responses,
+    })
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: `Required fields are incomplete: ${missing.join(', ')}` },
+        { status: 400 }
+      )
+    }
 
     const ipAddress = getIpAddress(request)
     const now = new Date().toISOString()
+
+    // Persist field responses BEFORE flipping the recipient to signed, so a
+    // signed recipient can never exist with its responses still unwritten.
+    const fieldIds = Object.keys(responses)
+    for (const fieldId of fieldIds) {
+      const { error: fieldUpdateError } = await supabase
+        .from('envelope_fields')
+        .update({ response: responses[fieldId] })
+        .eq('id', fieldId)
+        .eq('recipient_id', recipient.id)
+      if (fieldUpdateError) {
+        console.error(`POST /api/sign/[token]/complete field ${fieldId} error:`, fieldUpdateError)
+        return NextResponse.json(
+          { ok: false, error: 'Failed to record field responses' },
+          { status: 500 }
+        )
+      }
+    }
 
     // Update recipient to signed
     const { error: updateRecipientError } = await supabase
@@ -96,7 +171,7 @@ export async function POST(
         status: 'signed',
         signed_at: now,
         signature_data: signatureData,
-        initials_data: initialsData ?? null,
+        initials_data: initialsData,
         ip_address: ipAddress,
       })
       .eq('id', recipient.id)
@@ -106,33 +181,12 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'Failed to record signature' }, { status: 500 })
     }
 
-    // Update field responses if provided
-    if (fieldResponses && typeof fieldResponses === 'object') {
-      const fieldIds = Object.keys(fieldResponses)
-      if (fieldIds.length > 0) {
-        const updates = fieldIds.map((fieldId) =>
-          supabase
-            .from('envelope_fields')
-            .update({ value: fieldResponses[fieldId] })
-            .eq('id', fieldId)
-            .eq('recipient_id', recipient.id)
-        )
-        const results = await Promise.allSettled(updates)
-        results.forEach((result, i) => {
-          if (result.status === 'rejected') {
-            console.error(`Failed to update field ${fieldIds[i]}:`, result.reason)
-          } else if (result.value.error) {
-            console.error(`Failed to update field ${fieldIds[i]}:`, result.value.error)
-          }
-        })
-      }
-    }
-
     // Log 'signed' event
     const { error: signedEventError } = await supabase.from('envelope_events').insert({
       envelope_id: envelope.id,
       event_type: 'signed',
       recipient_id: recipient.id,
+      ip_address: ipAddress,
     })
 
     if (signedEventError) {
@@ -178,6 +232,17 @@ export async function POST(
             completedEventError
           )
         }
+      }
+    } else if (envelope.status === 'sent') {
+      // First signature in a multi-signer envelope: reflect the documented
+      // lifecycle (draft → sent → partially_signed → completed) instead of
+      // leaving the envelope on 'sent' until the very last signer.
+      const { error: partialError } = await supabase
+        .from('envelopes')
+        .update({ status: 'partially_signed' })
+        .eq('id', envelope.id)
+      if (partialError) {
+        console.error('POST /api/sign/[token]/complete partialError:', partialError)
       }
     }
 
