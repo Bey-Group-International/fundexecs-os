@@ -14,6 +14,7 @@ import { DealCompsPanel } from "@/components/run/DealCompsPanel";
 import { ScenarioComparisonTable } from "@/components/run/ScenarioComparisonTable";
 import { SecondaryLiquidityPanel } from "@/components/run/SecondaryLiquidityPanel";
 import { IcDecisionForm } from "@/components/run/IcDecisionForm";
+import { ActionForm } from "@/components/shared/ActionForm";
 
 // --- Small primitives ------------------------------------------------------
 function Ring({ value, size = 72 }: { value: number; size?: number }) {
@@ -194,7 +195,7 @@ function Underwriting({ data }: { data: WarRoom }) {
           })}
         </div>
       )}
-      <form action={addUnderwriting} className="flex flex-wrap items-end gap-2 print:hidden">
+      <ActionForm action={addUnderwriting} className="flex flex-wrap items-end gap-2 print:hidden">
         <input type="hidden" name="deal_id" value={deal.id} />
         <select name="scenario" className={fieldClass} defaultValue="base" aria-label="Scenario">
           <option value="base">Base</option>
@@ -207,7 +208,7 @@ function Underwriting({ data }: { data: WarRoom }) {
         <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
           Add case
         </button>
-      </form>
+      </ActionForm>
     </div>
   );
 }
@@ -226,7 +227,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
           {item.title}
         </span>
         <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{item.category}</span>
-        <form action={updateDiligenceItem} className="flex items-center print:hidden">
+        <ActionForm action={updateDiligenceItem} className="flex items-center print:hidden">
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="deal_id" value={item.deal_id} />
           <select
@@ -244,7 +245,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
           <button className="ml-1 rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:border-gold-500/50 hover:text-gold-300">
             Save
           </button>
-        </form>
+        </ActionForm>
         <RecordLifecycleActions
           hub="deal"
           module={item.deal_id}
@@ -256,7 +257,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
       </div>
       {/* Mitigation: only meaningful for severe, unresolved findings */}
       {!resolved && item.risk_severity && (item.risk_severity === "high" || item.risk_severity === "critical") ? (
-        <form action={updateDiligenceItem} className="flex flex-wrap items-center gap-2 pl-5 print:hidden">
+        <ActionForm action={updateDiligenceItem} className="flex flex-wrap items-center gap-2 pl-5 print:hidden">
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="deal_id" value={item.deal_id} />
           <input
@@ -276,7 +277,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
           <button className="rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-gold-300">
             Mitigate
           </button>
-        </form>
+        </ActionForm>
       ) : null}
     </div>
   );
@@ -304,7 +305,7 @@ function Diligence({ data }: { data: WarRoom }) {
       ) : (
         <p className="mb-3 text-sm text-fg-muted">No diligence items yet.</p>
       )}
-      <form action={addDiligenceItem} className="flex flex-wrap items-end gap-2 print:hidden">
+      <ActionForm action={addDiligenceItem} className="flex flex-wrap items-end gap-2 print:hidden">
         <input type="hidden" name="deal_id" value={deal.id} />
         <input name="title" placeholder="New diligence item…" className={`${fieldClass} min-w-0 flex-1`} required />
         <input name="category" placeholder="Category" className={`${fieldClass} w-28`} />
@@ -327,7 +328,7 @@ function Diligence({ data }: { data: WarRoom }) {
         <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
           Add
         </button>
-      </form>
+      </ActionForm>
     </div>
   );
 }

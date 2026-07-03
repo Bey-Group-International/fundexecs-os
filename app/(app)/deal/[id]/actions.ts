@@ -53,15 +53,26 @@ export async function shareDealAction(dealId: string): Promise<ShareDealResult> 
 }
 
 // --- Diligence -------------------------------------------------------------
-export async function addDiligenceItem(formData: FormData): Promise<void> {
+export interface ActionResult {
+  ok: boolean;
+  error?: string;
+}
+
+// Each of these used to be `Promise<void>` with its Supabase write unchecked —
+// a failed insert/update looked identical to success in the UI, since the
+// calling `<form action={...}>` had no way to surface a return value anyway.
+// They now return {ok, error}, and their call sites use the shared
+// ActionForm wrapper (components/shared/ActionForm.tsx) to show a failure
+// inline instead of silently doing nothing.
+export async function addDiligenceItem(formData: FormData): Promise<ActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
   const title = text(formData, "title");
-  if (!dealId || !title) return;
+  if (!dealId || !title) return { ok: false, error: "Choose a deal and enter a title." };
 
   const supabase = createServerClient();
-  await supabase.from("diligence_items").insert({
+  const { error } = await supabase.from("diligence_items").insert({
     organization_id: ctx.orgId,
     deal_id: dealId,
     title,
@@ -70,17 +81,19 @@ export async function addDiligenceItem(formData: FormData): Promise<void> {
     risk_severity: sev(formData, "risk_severity"),
     likelihood: sev(formData, "likelihood"),
   });
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateRun(dealId);
+  return { ok: true };
 }
 
-export async function updateDiligenceItem(formData: FormData): Promise<void> {
+export async function updateDiligenceItem(formData: FormData): Promise<ActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const id = String(formData.get("id") ?? "");
   const dealId = String(formData.get("deal_id") ?? "");
-  if (!id) return;
+  if (!id) return { ok: false, error: "Missing diligence item." };
 
   const patch: Partial<
     Pick<DiligenceItem, "status" | "mitigation" | "residual_severity" | "likelihood">
@@ -90,28 +103,30 @@ export async function updateDiligenceItem(formData: FormData): Promise<void> {
   if (formData.has("mitigation")) patch.mitigation = text(formData, "mitigation");
   if (formData.has("residual_severity")) patch.residual_severity = sev(formData, "residual_severity");
   if (formData.has("likelihood")) patch.likelihood = sev(formData, "likelihood");
-  if (Object.keys(patch).length === 0) return;
+  if (Object.keys(patch).length === 0) return { ok: true };
 
   const supabase = createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("diligence_items")
     .update(patch)
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { ok: false, error: error.message };
 
   if (dealId) await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateRun(dealId);
+  return { ok: true };
 }
 
 // --- Underwriting ----------------------------------------------------------
-export async function addUnderwriting(formData: FormData): Promise<void> {
+export async function addUnderwriting(formData: FormData): Promise<ActionResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   const dealId = String(formData.get("deal_id") ?? "");
-  if (!dealId) return;
+  if (!dealId) return { ok: false, error: "Choose a deal." };
 
   const supabase = createServerClient();
-  await supabase.from("underwritings").insert({
+  const { error } = await supabase.from("underwritings").insert({
     organization_id: ctx.orgId,
     deal_id: dealId,
     name: text(formData, "name") ?? "Case",
@@ -120,18 +135,17 @@ export async function addUnderwriting(formData: FormData): Promise<void> {
     projected_moic: num(formData, "projected_moic"),
     equity_required: num(formData, "equity_required"),
   });
+  if (error) return { ok: false, error: error.message };
 
   await recordConvictionSnapshot(supabase, ctx.orgId, dealId);
   revalidateRun(dealId);
+  return { ok: true };
 }
 
 // --- IC decision -----------------------------------------------------------
 // Stage transitions a recorded decision implies. A 'go' moves the deal to
 // closing; a 'no_go' passes on it. Conditional / hold leave the deal where it is.
-export interface IcDecisionResult {
-  ok: boolean;
-  error?: string;
-}
+export type IcDecisionResult = ActionResult;
 
 // The decision insert and the (go/no_go) stage advance happen in one
 // transaction via the record_ic_decision RPC

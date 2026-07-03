@@ -20,11 +20,12 @@ jest.mock("@/lib/run-war-room", () => ({
 jest.mock("@/lib/deal-share.server", () => ({ shareDeal: jest.fn() }));
 
 const rpc = jest.fn();
+const from = jest.fn();
 jest.mock("@/lib/supabase/server", () => ({
-  createServerClient: () => ({ rpc: (...a: unknown[]) => rpc(...a) }),
+  createServerClient: () => ({ rpc: (...a: unknown[]) => rpc(...a), from: (...a: unknown[]) => from(...a) }),
 }));
 
-import { recordIcDecision } from "./actions";
+import { recordIcDecision, addDiligenceItem, updateDiligenceItem, addUnderwriting } from "./actions";
 
 function formData(fields: Record<string, string>): FormData {
   const fd = new FormData();
@@ -32,11 +33,27 @@ function formData(fields: Record<string, string>): FormData {
   return fd;
 }
 
+// A chainable insert/update stub: .insert()/.update()/.eq() all return the
+// same builder, and awaiting the chain resolves to {error} via the thenable
+// protocol — mirrors the Supabase query-builder shape.
+function makeFromStub(error: { message: string } | null = null) {
+  return () => {
+    const builder: Record<string, unknown> = {
+      insert: () => builder,
+      update: () => builder,
+      eq: () => builder,
+      then: (onFulfilled: (v: unknown) => unknown) => Promise.resolve({ error }).then(onFulfilled),
+    };
+    return builder;
+  };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   getSessionContext.mockResolvedValue({ orgId: "org-1", userId: "user-1" });
   computeDealConviction.mockResolvedValue({ score: 72 });
   recordConvictionSnapshot.mockResolvedValue(undefined);
+  from.mockImplementation(makeFromStub());
 });
 
 describe("recordIcDecision", () => {
@@ -80,5 +97,77 @@ describe("recordIcDecision", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("not found");
     expect(recordConvictionSnapshot).not.toHaveBeenCalled();
+  });
+});
+
+// Coverage for the diligence/underwriting error-handling fix: these three
+// used to be `Promise<void>` with their Supabase write unchecked — a failed
+// insert/update looked identical to success. They now return {ok, error}.
+describe("addDiligenceItem", () => {
+  it("rejects when there's no active org, without touching the DB", async () => {
+    getSessionContext.mockResolvedValue(null);
+    const result = await addDiligenceItem(formData({ deal_id: "d1", title: "Check leases" }));
+    expect(result.ok).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing deal or title before any DB call", async () => {
+    const result = await addDiligenceItem(formData({ deal_id: "", title: "Check leases" }));
+    expect(result.ok).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an insert error as {ok:false} instead of silently succeeding", async () => {
+    from.mockImplementation(makeFromStub({ message: "insert failed" }));
+    const result = await addDiligenceItem(formData({ deal_id: "d1", title: "Check leases" }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("insert failed");
+    expect(recordConvictionSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("records a conviction snapshot and returns ok on success", async () => {
+    const result = await addDiligenceItem(formData({ deal_id: "d1", title: "Check leases" }));
+    expect(result).toEqual({ ok: true });
+    expect(recordConvictionSnapshot).toHaveBeenCalledWith(expect.anything(), "org-1", "d1");
+  });
+});
+
+describe("updateDiligenceItem", () => {
+  it("rejects a missing id before any DB call", async () => {
+    const result = await updateDiligenceItem(formData({ deal_id: "d1", status: "cleared" }));
+    expect(result.ok).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an update error as {ok:false} instead of silently succeeding", async () => {
+    from.mockImplementation(makeFromStub({ message: "update failed" }));
+    const result = await updateDiligenceItem(formData({ id: "item-1", deal_id: "d1", status: "cleared" }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("update failed");
+  });
+
+  it("returns ok on success", async () => {
+    const result = await updateDiligenceItem(formData({ id: "item-1", deal_id: "d1", status: "cleared" }));
+    expect(result).toEqual({ ok: true });
+  });
+});
+
+describe("addUnderwriting", () => {
+  it("rejects a missing deal before any DB call", async () => {
+    const result = await addUnderwriting(formData({ name: "Base case" }));
+    expect(result.ok).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an insert error as {ok:false} instead of silently succeeding", async () => {
+    from.mockImplementation(makeFromStub({ message: "insert failed" }));
+    const result = await addUnderwriting(formData({ deal_id: "d1", name: "Base case" }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("insert failed");
+  });
+
+  it("returns ok on success", async () => {
+    const result = await addUnderwriting(formData({ deal_id: "d1", name: "Base case" }));
+    expect(result).toEqual({ ok: true });
   });
 });

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { addDiligenceItem } from "@/app/(app)/deal/[id]/actions";
+import { ActionForm } from "@/components/shared/ActionForm";
 import type { Deal, DiligenceItem, RiskSeverity } from "@/lib/supabase/database.types";
 import {
   coverageByCategory,
@@ -97,7 +98,7 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
           <DiligenceTemplatePicker deals={deals} />
 
           {/* Manual add */}
-          <form
+          <ActionForm
             action={addDiligenceItem}
             className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface-1 p-3"
           >
@@ -124,7 +125,7 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
             <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
               Add
             </button>
-          </form>
+          </ActionForm>
 
           {items.length === 0 ? (
             <p className="text-sm text-fg-muted">No diligence items yet — add the first one above or apply a template.</p>

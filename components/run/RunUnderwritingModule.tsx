@@ -8,6 +8,7 @@ import {
   setUnderwritingEquity,
 } from "@/components/run/underwriting-actions";
 import { RecordLifecycleActions } from "@/components/RecordLifecycleActions";
+import { ActionForm } from "@/components/shared/ActionForm";
 import {
   compareScenarios,
   weightedReturn,
@@ -146,7 +147,7 @@ function CaseControls({ uw }: { uw: Underwriting }) {
             id={uw.id}
             deleteClassName=""
           />
-          <form action={setUnderwritingProbability} className="flex items-center gap-1.5">
+          <ActionForm action={setUnderwritingProbability} className="flex items-center gap-1.5">
             <input type="hidden" name="id" value={uw.id} />
             <span className={labelClass}>Prob.</span>
             <input
@@ -160,8 +161,8 @@ function CaseControls({ uw }: { uw: Underwriting }) {
             <button className="rounded-md border border-line px-2 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/60 hover:text-gold-300">
               Set
             </button>
-          </form>
-          <form action={setUnderwritingEquity} className="flex items-center gap-1.5">
+          </ActionForm>
+          <ActionForm action={setUnderwritingEquity} className="flex items-center gap-1.5">
             <input type="hidden" name="id" value={uw.id} />
             <span className={labelClass}>Equity</span>
             <input
@@ -175,7 +176,7 @@ function CaseControls({ uw }: { uw: Underwriting }) {
             <button className="rounded-md border border-line px-2 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/60 hover:text-gold-300">
               Set
             </button>
-          </form>
+          </ActionForm>
         </div>
       </div>
       <UnderwritingCalculator
@@ -281,7 +282,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
         <NoDeals what="underwrite" />
       ) : (
         <>
-          <form
+          <ActionForm
             action={addUnderwriting}
             className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface-1 p-3"
           >
@@ -304,7 +305,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
             <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
               Add case
             </button>
-          </form>
+          </ActionForm>
 
           {/* Pipeline-wide equity roll-up */}
           {equity.dealsWithEquity > 0 && (

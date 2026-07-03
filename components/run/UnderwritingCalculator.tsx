@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { computeReturnsFromInputs } from "@/lib/underwriting-calc";
 import { saveUnderwritingInputs } from "@/components/run/underwriting-actions";
+import { ActionForm } from "@/components/shared/ActionForm";
 
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
@@ -54,7 +55,7 @@ export function UnderwritingCalculator({
   const moicLabel = preview.moic != null ? `${preview.moic.toFixed(2)}x` : "—";
 
   return (
-    <form action={saveUnderwritingInputs} className="mt-3 rounded-lg border border-line bg-surface-0 p-3">
+    <ActionForm action={saveUnderwritingInputs} className="mt-3 rounded-lg border border-line bg-surface-0 p-3">
       <input type="hidden" name="id" value={caseId} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <label className="flex flex-col gap-1">
@@ -127,6 +128,6 @@ export function UnderwritingCalculator({
           Save &amp; compute
         </button>
       </div>
-    </form>
+    </ActionForm>
   );
 }
