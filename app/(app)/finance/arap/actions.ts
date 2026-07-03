@@ -363,11 +363,14 @@ export async function postInvoice(input: {
     if (!reversal.ok) {
       console.error(`[postInvoice] auto-reversal failed for entry ${entryId}: ${reversal.error}`);
     }
+    const reversalState = reversal.ok
+      ? reversal.gated
+        ? "queued for reversal approval"
+        : "reversed"
+      : "NOT reversed - manual cleanup needed";
     return {
       ok: false,
-      error: `Invoice was already posted by a concurrent request; the duplicate entry was ${
-        reversal.ok ? "reversed" : "NOT reversed — manual cleanup needed"
-      }.`,
+      error: `Invoice was already posted by a concurrent request; the duplicate entry was ${reversalState}.`,
     };
   }
   revalidatePath("/finance");
@@ -463,11 +466,14 @@ export async function postPayment(input: {
     if (!reversal.ok) {
       console.error(`[postPayment] auto-reversal failed for entry ${entryId}: ${reversal.error}`);
     }
+    const reversalState = reversal.ok
+      ? reversal.gated
+        ? "queued for reversal approval"
+        : "reversed"
+      : "NOT reversed - manual cleanup needed";
     return {
       ok: false,
-      error: `Payment was already posted by a concurrent request; the duplicate entry was ${
-        reversal.ok ? "reversed" : "NOT reversed — manual cleanup needed"
-      }.`,
+      error: `Payment was already posted by a concurrent request; the duplicate entry was ${reversalState}.`,
     };
   }
   revalidatePath("/finance");

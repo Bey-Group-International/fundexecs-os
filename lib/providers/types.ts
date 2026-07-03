@@ -70,6 +70,9 @@ export interface CapitalTransferParams {
   capitalEventId: string;
   amountUsd: number;
   railType: CapitalRailType;
+  // TODO: wire to source_transaction / source param when multi-ledger is needed.
+  // Currently unused — internal rail draws from the platform balance;
+  // ACH/wire rails source from STRIPE_FINANCIAL_ACCOUNT_ID.
   fromAccountRef: string;
   toAccountRef: string;
   memo?: string;
