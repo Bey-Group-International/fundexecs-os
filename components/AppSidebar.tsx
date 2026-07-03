@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { useMobileNav } from "@/components/nav/mobile-nav";
 
 // Client-side side rail, Claude Code style. Minimal top level (Logo · New
 // Session · Workflows · More), the operational hubs whose modules expand on
@@ -324,23 +325,7 @@ const SessionRow = memo(function SessionRow({
   );
 });
 
-export function AppSidebar({
-  name,
-  planName,
-  hubs,
-  sessions,
-  groups,
-  signOutAction,
-  createGroupAction,
-  moveSessionAction,
-  deleteSessionAction,
-  renameSessionAction,
-  shareSessionAction,
-  archiveSessionAction,
-  pinSessionAction,
-  unreadSessionAction,
-  inboxUnread = 0,
-}: {
+interface AppSidebarProps {
   name: string;
   planName: string;
   hubs: HubItem[];
@@ -356,7 +341,29 @@ export function AppSidebar({
   archiveSessionAction: (formData: FormData) => void;
   pinSessionAction: (formData: FormData) => void;
   unreadSessionAction: (formData: FormData) => void;
-}) {
+}
+
+// The hub/session/account nav content, shared verbatim by the always-mounted
+// desktop rail and the mobile slide-over so the two surfaces can never drift —
+// each mounted instance owns its own local UI state (which hub is expanded,
+// which session menu is open, etc.) independently.
+function SidebarPanel({
+  name,
+  planName,
+  hubs,
+  sessions,
+  groups,
+  signOutAction,
+  createGroupAction,
+  moveSessionAction,
+  deleteSessionAction,
+  renameSessionAction,
+  shareSessionAction,
+  archiveSessionAction,
+  pinSessionAction,
+  unreadSessionAction,
+  inboxUnread = 0,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [openHub, setOpenHub] = useState<string | null>(null);
@@ -400,7 +407,7 @@ export function AppSidebar({
   const activeLinkClass = "fx-nav-active rounded-md px-2 py-1.5 text-fg-primary transition duration-150";
 
   return (
-    <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line/60 bg-surface-1/95 backdrop-blur-xl md:flex">
+    <>
       {/* Logo — centralized coin mark + wordmark, with subtle glow beneath */}
       <div className="relative flex h-12 items-center gap-2 border-b border-line/60 px-4">
         <span
@@ -739,6 +746,57 @@ export function AppSidebar({
           </button>
         </form>
       </div>
-    </aside>
+    </>
+  );
+}
+
+// Below `md` the desktop rail is `hidden` with nothing standing in for it — a
+// hamburger in the header (GlobalTopBar / SessionCommandBar) toggles this
+// slide-over via the shared MobileNavProvider so the exact same hub/session
+// nav is reachable on a phone.
+export function AppSidebar(props: AppSidebarProps) {
+  const { open, setOpen } = useMobileNav();
+  const pathname = usePathname();
+
+  // Close on navigation — covers link clicks, back/forward, and programmatic
+  // redirects alike without wiring an onClick through every nav Link.
+  useEffect(() => {
+    setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, setOpen]);
+
+  return (
+    <>
+      <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line/60 bg-surface-1/95 backdrop-blur-xl md:flex">
+        <SidebarPanel {...props} />
+      </aside>
+
+      {open ? (
+        <div role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-50 md:hidden">
+          <div
+            aria-hidden
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+          />
+          <aside className="fixed inset-y-0 left-0 flex w-[260px] max-w-[80vw] flex-col border-r border-line/60 bg-surface-1 shadow-2xl">
+            <SidebarPanel {...props} />
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }

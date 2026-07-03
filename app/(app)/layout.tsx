@@ -20,6 +20,7 @@ import { getWalletBalance } from "@/lib/wallet";
 import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
+import { MobileNavProvider } from "@/components/nav/mobile-nav";
 import { GlobalTopBar } from "@/components/GlobalTopBar";
 import { MatchToast } from "@/components/inbox/MatchToast";
 import { DownloadBanner } from "@/components/DownloadBanner";
@@ -168,6 +169,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex h-dvh overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
+      <MobileNavProvider>
       <div className="contents print:hidden">
       <AppSidebar
         name={name}
@@ -211,6 +213,7 @@ export default async function AppLayout({
         <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />
         <EarnCopilotDock name={name} />
       </div>
+      </MobileNavProvider>
     </div>
   );
 }

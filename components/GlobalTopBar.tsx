@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActiveSession } from "@/components/session/active-session";
 import { SessionCommandBar } from "@/components/session/SessionCommandBar";
 import { TopNavAlerts } from "@/components/TopNavAlerts";
+import { MobileNavToggle } from "@/components/nav/MobileNavToggle";
 import { formatCredits } from "@/lib/billing";
 
 // The global top bar. Inside a session it renders the full command surface
@@ -39,6 +40,7 @@ export function GlobalTopBar({
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent"
       />
+      <MobileNavToggle />
       <span className="font-display text-sm font-semibold tracking-tight text-fg-secondary">FundExecs OS</span>
       <div className="ml-auto flex items-center gap-1">
         <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
