@@ -1,7 +1,7 @@
 // lib/identity.ts
 // Trust layer: internal identity verification for principals.
 //
-// The compounding loop (lib/engine.ts verifyWorkflowArtifacts) couples earned
+// The compounding loop (lib/engine.ts verifyArtifact) couples earned
 // reputation to a verified identity: an operator approval only MINTS standing
 // when the verifying principal is itself identity-verified. This module is the
 // read side of that gate (isPrincipalIdentityVerified) plus the write side — an

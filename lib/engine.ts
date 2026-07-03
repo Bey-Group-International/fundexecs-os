@@ -1129,105 +1129,126 @@ export async function runAutomation(
  * ordered steps) is promoted to a memo artifact so it's a durable deliverable,
  * and the workflow is marked complete.
  */
+export interface VerifyArtifactResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
- * The human half of the trust gate: once an operator approves a workflow, its
- * artifacts are signed off — verification_status flips to 'verified', stamped
- * with who and when. Emits an `artifact.verified` event per artifact so the
- * canvas can flip the badge live. Best-effort and idempotent; verifying an
- * already-verified artifact is a harmless no-op.
+ * The human half of the trust gate — and the ONLY thing that should ever set
+ * verification_status to 'verified'. This used to fire automatically as a
+ * side effect of approving the workflow's PLAN (before any step had run and
+ * before the artifact even existed), which meant "verified" and "sealed"
+ * never actually meant an operator looked at the deliverable's content — see
+ * docs/institutional-elevation-report-2026-07-03.md P1 #17. Now it operates
+ * on exactly one artifact, called only from an explicit operator action
+ * (components/copilot/actions.ts's verifyArtifact) taken after the operator
+ * has the actual content in front of them (components/ArtifactViewer.tsx).
+ *
+ * Idempotent: verifying an already-verified artifact is a harmless no-op.
  */
-async function verifyWorkflowArtifacts(ctx: Ctx, wf: Task, note: string) {
-  const { data: rows } = await ctx.supabase
+export async function verifyArtifact(ctx: Ctx, artifactId: string, note: string): Promise<VerifyArtifactResult> {
+  const { data: row, error: fetchError } = await ctx.supabase
+    .from("artifacts")
+    .select("id, workflow_id, hub, artifact_type, content, sources, verification_status, grounding_score")
+    .eq("id", artifactId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (fetchError) return { ok: false, error: fetchError.message };
+  if (!row) return { ok: false, error: "Artifact not found." };
+  if (row.verification_status === "verified") return { ok: true };
+
+  const verifiedAt = new Date().toISOString();
+  const { data: updated, error } = await ctx.supabase
     .from("artifacts")
     .update({
       verification_status: "verified",
       verified_by: ctx.actorId,
-      verified_at: new Date().toISOString(),
+      verified_at: verifiedAt,
       verification_note: note,
     })
-    .eq("workflow_id", wf.id)
+    .eq("id", artifactId)
+    .eq("organization_id", ctx.orgId)
+    // Compare-and-set: a concurrent verify of the same artifact claims zero
+    // rows here and no-ops, rather than double-sealing/double-granting.
     .eq("verification_status", "unverified")
-    .select("id, artifact_type, content, sources, verification_status, verified_by, verified_at, grounding_score");
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) return { ok: true };
 
-  const verified = rows ?? [];
+  await recordEvent(ctx, {
+    taskId: row.workflow_id,
+    type: "artifact.verified",
+    agent: "associate",
+    hub: row.hub,
+    payload: { artifact_id: row.id, artifact_type: row.artifact_type },
+  });
 
-  for (const row of verified) {
-    await recordEvent(ctx, {
-      taskId: wf.id,
-      type: "artifact.verified",
-      agent: "associate",
-      hub: wf.hub,
-      payload: { artifact_id: row.id, artifact_type: row.artifact_type },
+  // Trust layer (phase 3.1): seal the verified artifact into the attestations
+  // rail for tamper-evidence. Best-effort and fully defensive — a sealing
+  // failure must never break the verification itself from standing.
+  try {
+    const attestation = buildArtifactAttestation({
+      artifactId: row.id,
+      organizationId: ctx.orgId,
+      attestedBy: ctx.actorId,
+      hashInput: {
+        content: row.content ?? "",
+        sources: row.sources ?? null,
+        verification_status: "verified",
+        verified_by: ctx.actorId,
+        verified_at: verifiedAt,
+      },
     });
-
-    // Trust layer (phase 3.1): seal the verified artifact into the attestations
-    // rail for tamper-evidence. Best-effort and fully defensive — a sealing
-    // failure must never break the approval flow.
-    try {
-      const attestation = buildArtifactAttestation({
-        artifactId: row.id,
-        organizationId: ctx.orgId,
-        attestedBy: ctx.actorId,
-        hashInput: {
-          content: row.content ?? "",
-          sources: row.sources ?? null,
-          verification_status: row.verification_status,
-          verified_by: row.verified_by,
-          verified_at: row.verified_at,
+    const { data: sealed } = await ctx.supabase
+      .from("attestations")
+      .insert(attestation)
+      .select("id")
+      .single();
+    if (sealed) {
+      await recordEvent(ctx, {
+        taskId: row.workflow_id,
+        type: "artifact.sealed",
+        agent: "associate",
+        hub: row.hub,
+        payload: {
+          artifact_id: row.id,
+          attestation_id: sealed.id,
+          evidence_hash: attestation.evidence_hash,
         },
       });
-      const { data: sealed } = await ctx.supabase
-        .from("attestations")
-        .insert(attestation)
-        .select("id")
-        .single();
-      if (sealed) {
-        await recordEvent(ctx, {
-          taskId: wf.id,
-          type: "artifact.sealed",
-          agent: "associate",
-          hub: wf.hub,
-          payload: {
-            artifact_id: row.id,
-            attestation_id: sealed.id,
-            evidence_hash: attestation.evidence_hash,
-          },
-        });
-      }
-    } catch {
-      // Swallow: tamper-evident sealing is additive trust, never a gate.
     }
+  } catch {
+    // Swallow: tamper-evident sealing is additive trust, never a gate.
   }
 
   // Trust layer (compounding loop): producing verified, well-grounded output
   // builds the org's standing. Fully defensive — a reputation failure must NEVER
-  // break approval (verification has already happened and been sealed above).
+  // break verification (it has already happened and been sealed above).
   //
   // Identity is a SOFT gate on MINTING standing only: standing is granted iff the
   // verifying principal is itself identity-verified. If not, we simply skip the
-  // grant — verification still stands; only the reputation is withheld (this
-  // avoids locking everyone out before anyone is marked verified).
+  // grant — verification still stands; only the reputation is withheld.
   try {
-    if (verified.length > 0 && (await isPrincipalIdentityVerified(ctx.supabase, ctx.actorId))) {
+    if (await isPrincipalIdentityVerified(ctx.supabase, ctx.actorId)) {
       const service = createServiceClient();
-      // Per-artifact, grounding-weighted grant: a better-grounded artifact earns
-      // more, floored at 1 so any verified artifact earns something. Bounded by
-      // REPUTATION_POINTS.artifact_verified (grounding_score is in [0,1]), so the
-      // total per approval can never exceed points * (number of verified rows) —
-      // standing is never minted unbounded.
-      for (const row of verified) {
-        const score = typeof row.grounding_score === "number" ? row.grounding_score : 0;
-        const delta = Math.max(1, Math.round(REPUTATION_POINTS.artifact_verified * score));
-        await grantReputation(service, ctx.orgId, delta, "artifact_verified", {
-          sourceType: "artifact",
-          sourceId: row.id,
-          note,
-        });
-      }
+      // Grounding-weighted grant: a better-grounded artifact earns more,
+      // floored at 1. Bounded by REPUTATION_POINTS.artifact_verified
+      // (grounding_score is in [0,1]) — standing is never minted unbounded.
+      const score = typeof row.grounding_score === "number" ? row.grounding_score : 0;
+      const delta = Math.max(1, Math.round(REPUTATION_POINTS.artifact_verified * score));
+      await grantReputation(service, ctx.orgId, delta, "artifact_verified", {
+        sourceType: "artifact",
+        sourceId: row.id,
+        note,
+      });
     }
   } catch {
-    // Swallow: earned standing is additive trust, never a gate on approval.
+    // Swallow: earned standing is additive trust, never a gate.
   }
+
+  return { ok: true };
 }
 
 async function acceptRecommendation(ctx: Ctx, wf: Task) {
@@ -1377,13 +1398,15 @@ export async function decideApproval(
       }
     }
     await executeWorkflow(ctx, wf, onProgress);
-    // Operator approval is the authoritative sign-off — verify the deliverables.
-    await verifyWorkflowArtifacts(ctx, wf, `Approved by operator${args.note ? `: ${args.note}` : ""}`);
+    // Approving the PLAN is not the same as reviewing a deliverable's actual
+    // content — the plan's steps/agents are the only thing the operator has
+    // seen at this point, since no artifact exists yet. Deliverables land as
+    // "unverified" here; verifyArtifact (called explicitly, per-artifact,
+    // from the artifact viewer) is the only path to "verified".
   } else if (args.decision === "accepted") {
     // Accept: the plan stands as the recommendation — no agents run. Capture it
     // as a first-class artifact and mark the workflow done.
     await acceptRecommendation(ctx, wf);
-    await verifyWorkflowArtifacts(ctx, wf, "Accepted as recommendation by operator");
   } else if (args.decision === "rejected") {
     await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
     await ctx.supabase
