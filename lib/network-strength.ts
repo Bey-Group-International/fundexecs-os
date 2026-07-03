@@ -4,6 +4,7 @@
 // New tables not in database.types.ts — cast supabase client to bypass strict typing.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { createServerClient } from "@/lib/supabase/server";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
@@ -21,7 +22,7 @@ async function inferStrengthFromNotes(notes: string): Promise<number> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || !notes.trim()) return 0;
 
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient(apiKey);
   const message = await client.messages.create({
     model: MODEL,
     max_tokens: 64,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,7 @@ export const runtime = "nodejs";
 const MODEL = process.env.NOTES_MODEL ?? "claude-haiku-4-5-20251001";
 
 const client = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  ? anthropicClient(process.env.ANTHROPIC_API_KEY, LONG_RUN_TIMEOUT_MS)
   : null;
 
 export interface LiveNotesResult {

@@ -11,6 +11,7 @@
 // deterministic keyword fallback keeps the loop demoable in CI/preview. The
 // engine is DB-free and unit-testable — callers pass only the prompt.
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -21,7 +22,7 @@ const EXECUTE_AGENTS: AgentKey[] = ["investor_relations", "portfolio_ops", "fund
 
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey) : null;
 }
 
 export interface ExecuteSearchStep {

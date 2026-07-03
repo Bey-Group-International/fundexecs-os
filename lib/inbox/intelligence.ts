@@ -14,6 +14,7 @@
 // Claude-backed helper; it degrades to a deterministic summary when no API key is
 // configured, so the inbox behaves identically in CI and preview builds.
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import type { ActionKind } from "@/lib/gates";
 import type { InboxCategory } from "@/lib/supabase/database.types";
 
@@ -210,7 +211,7 @@ export async function summarizeThread(input: ThreadDigestInput): Promise<ThreadS
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return fallbackSummary(input);
   try {
-    const anthropic = new Anthropic({ apiKey });
+    const anthropic = anthropicClient(apiKey);
     const transcript = input.messages
       .slice(-8)
       .map((m) => `${m.direction === "inbound" ? input.counterparty ?? "Them" : "You"}: ${m.body}`)
@@ -302,7 +303,7 @@ export async function draftReply(input: ThreadDigestInput): Promise<ThreadDraftR
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { draft: fallbackDraft(input), live: false };
   try {
-    const anthropic = new Anthropic({ apiKey });
+    const anthropic = anthropicClient(apiKey);
     const transcript = input.messages
       .slice(-8)
       .map((m) => `${m.direction === "inbound" ? input.counterparty ?? "Them" : "You"}: ${m.body}`)

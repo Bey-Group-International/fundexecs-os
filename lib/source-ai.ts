@@ -14,6 +14,7 @@
 // the loop stays demoable in CI/preview. The engine itself is DB-free — callers
 // pass the mandate + rows — which keeps it unit-testable.
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import type { ActionKind } from "@/lib/gates";
 import { tierForAction } from "@/lib/gates";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
@@ -36,7 +37,7 @@ export function sourcingEnrichmentEnabled(): boolean {
 
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey) : null;
 }
 
 // The mandate context the engine sources against (a subset of build-readiness'

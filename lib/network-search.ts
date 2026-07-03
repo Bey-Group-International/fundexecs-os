@@ -3,6 +3,7 @@
 // New tables not in database.types.ts — cast supabase client to bypass strict typing.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 
@@ -53,7 +54,7 @@ async function parseQueryIntent(query: string): Promise<{
     return { roles: [], companies: [], locations: [], industries: [], keywords: [query] };
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient(apiKey);
   const message = await client.messages.create({
     model: MODEL,
     max_tokens: 256,
@@ -97,7 +98,7 @@ async function scoreRelevance(
     return map;
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient(apiKey);
   const contactList = contacts
     .map((c) => `${c.id}|${c.full_name}|${c.title ?? ""}|${c.company ?? ""}|${c.location ?? ""}`)
     .join("\n");

@@ -9,6 +9,7 @@
 // Plug a different provider in here later (or route per-Brain) without touching
 // any Brain logic.
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 
@@ -27,7 +28,7 @@ export function brainsLive(): boolean {
 
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey) : null;
 }
 
 export interface CompleteArgs {
