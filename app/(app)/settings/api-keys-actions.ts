@@ -9,6 +9,8 @@ import {
   secretPrefix,
   secretLast4,
   API_KEY_MODES,
+  API_SCOPES,
+  isApiScope,
 } from "@/lib/api-keys";
 import type { ApiKeyMode } from "@/lib/supabase/database.types";
 
@@ -35,6 +37,13 @@ export async function createApiKey(
   if (!name) return { error: "Name is required" };
   const mode = parseMode(formData.get("mode"));
 
+  // Scope selection (checkbox group). No selection = the full read set, so a
+  // form that doesn't render the picker issues keys exactly as before;
+  // anything outside the catalog is rejected rather than silently dropped.
+  const requested = formData.getAll("scopes").map(String);
+  if (requested.some((s) => !isApiScope(s))) return { error: "Unknown scope requested" };
+  const scopes = requested.length > 0 ? requested : [...API_SCOPES];
+
   const { publishableKey, secretKey } = generateKeyPair(mode);
 
   const supabase = createServerClient();
@@ -42,6 +51,7 @@ export async function createApiKey(
     organization_id: ctx.orgId,
     name,
     mode,
+    scopes,
     publishable_key: publishableKey,
     secret_hash: hashSecret(secretKey),
     secret_prefix: secretPrefix(secretKey),

@@ -89,6 +89,7 @@ export default async function SettingsPage() {
     id: k.id,
     name: k.name,
     mode: k.mode,
+    scopes: k.scopes ?? [],
     publishable_key: k.publishable_key,
     secret_prefix: k.secret_prefix,
     secret_last4: k.secret_last4,

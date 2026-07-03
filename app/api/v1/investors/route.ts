@@ -61,4 +61,4 @@ export const GET = withApiKey(async ({ orgId, supabase }, request) => {
   }));
 
   return collection(investors, nextCursor);
-});
+}, "read:investors");
