@@ -283,11 +283,13 @@ export async function postInvoice(input: {
     return { ok: false, error: "Only an open invoice can be posted." };
   }
 
-  const controlAccountId =
-    input.controlAccountId ??
-    (await resolveControlAccount(supabase, auth.ctx.orgId, invoice.party_id, invoice.kind === "receivable"))
-      .accountId ??
-    undefined;
+  const resolved = await resolveControlAccount(
+    supabase,
+    auth.ctx.orgId,
+    invoice.party_id,
+    invoice.kind === "receivable",
+  );
+  const controlAccountId = input.controlAccountId ?? resolved.accountId ?? undefined;
   if (!controlAccountId) return { ok: false, error: "No control account configured for this party." };
 
   const { data: lineRows } = await supabase
@@ -325,11 +327,12 @@ export async function postInvoice(input: {
     ledgerId: input.ledgerId,
     periodId: input.periodId,
     entryDate: invoice.issue_date,
-    memo: `${invoice.kind === "receivable" ? "Invoice" : "Bill"} ${invoice.invoice_no}`,
+    memo: `${invoice.kind === "receivable" ? "Invoice" : "Bill"} ${invoice.invoice_no} · ${resolved.partyName ?? "party"}`,
     lines: journalLines,
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the invoice entry." };
-  const entryId = (posted.data as { entryId: string }).entryId;
+  const entryId = (posted.data as { entryId?: string })?.entryId;
+  if (!entryId) return { ok: false, error: "Journal entry returned no id." };
   // Optimistic lock: only attach the entry if the invoice is still unposted, so
   // a concurrent post is detected rather than silently double-linking.
   const { data: linked } = await supabase
@@ -431,7 +434,8 @@ export async function postPayment(input: {
     lines: journalLines,
   });
   if (!posted.ok) return { ok: false, error: posted.error ?? "Could not post the payment entry." };
-  const entryId = (posted.data as { entryId: string }).entryId;
+  const entryId = (posted.data as { entryId?: string })?.entryId;
+  if (!entryId) return { ok: false, error: "Journal entry returned no id." };
   // Optimistic lock: attach only if still unposted (detect a concurrent post).
   const { data: linked } = await supabase
     .from("fin_payments")
