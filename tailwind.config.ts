@@ -158,6 +158,11 @@ const config: Config = {
           "0%":   { transform: "translateY(12px)", opacity: "0" },
           "100%": { transform: "translateY(0)",    opacity: "1" },
         },
+        // CoachingToast exit — quick fade so a dismissed toast doesn't blink out.
+        fxCoachFadeOut: {
+          "0%":   { opacity: "1" },
+          "100%": { opacity: "0", transform: "translateY(4px)" },
+        },
         // Credit award pop: floats up and fades after task completion.
         fxCreditPop: {
           "0%":   { opacity: "0", transform: "translateY(0) scale(0.7)" },
@@ -184,7 +189,8 @@ const config: Config = {
         "milestone-burst": "fxMilestoneBurst 0.55s cubic-bezier(0.22, 1, 0.36, 1) both",
         "badge-reveal": "fxBadgeReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
         "mult-shimmer": "fxMultShimmer 2.2s linear infinite",
-        "coach-slide-up": "fxCoachSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "coach-slide-up": "fxCoachSlideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "coach-fade-out": "fxCoachFadeOut 0.15s ease-in both",
         "credit-pop": "fxCreditPop 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards",
       },
     },

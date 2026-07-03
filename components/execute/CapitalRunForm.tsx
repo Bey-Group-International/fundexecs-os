@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { planRun, type RunKind, type CommitmentLike } from "@/lib/capital-ops";
 import { usd } from "@/lib/format";
 import { recordCapitalRun } from "@/components/execute/actions";
+import { useToast } from "@/components/shared/CoachingToast";
 
 export interface CommitmentRow extends CommitmentLike {
   investorName: string;
@@ -30,6 +31,7 @@ export default function CapitalRunForm({
   const [amount, setAmount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
 
   if (funds.length === 0) return null;
@@ -61,9 +63,12 @@ export default function CapitalRunForm({
         const result = await recordCapitalRun(fd);
         setPending(false);
         if (!result.ok) {
-          setError(result.error ?? "Could not book the run.");
+          const message = result.error ?? "Could not book the run.";
+          setError(message);
+          toast.error("Run not booked", message);
           return;
         }
+        toast.success("Capital run booked");
         formRef.current?.reset();
         setOpen(false);
         setAmount(0);

@@ -10,6 +10,7 @@ import {
   deleteRecord,
 } from "@/app/(app)/[hub]/[module]/record-actions";
 import type { RecordActionResult } from "@/lib/managed-tables";
+import { useToast } from "@/components/shared/CoachingToast";
 
 type VerifyState = "verified" | "unverified" | string | null | undefined;
 
@@ -45,13 +46,22 @@ export function RecordLifecycleActions({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
-  const run = (fn: () => Promise<RecordActionResult>) => {
+  // `label` names the outcome in the toast ("Record verified"); the inline
+  // error stays for context right next to the control that failed.
+  const run = (fn: () => Promise<RecordActionResult>, label: string) => {
     setError(null);
     start(async () => {
       const res = await fn();
-      if (!res.ok) setError(res.error ?? "Action failed.");
-      else router.refresh();
+      if (!res.ok) {
+        const message = res.error ?? "Action failed.";
+        setError(message);
+        toast.error(`${label} failed`, message);
+      } else {
+        toast.success(label);
+        router.refresh();
+      }
     });
   };
 
@@ -62,7 +72,7 @@ export function RecordLifecycleActions({
         <button
           type="button"
           disabled={pending}
-          onClick={() => run(() => restoreRecord(hub, module, table, id))}
+          onClick={() => run(() => restoreRecord(hub, module, table, id), "Record restored")}
           className={neutralButton}
         >
           Restore
@@ -74,7 +84,7 @@ export function RecordLifecycleActions({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(() => unverifyRecord(hub, module, table, id))}
+                onClick={() => run(() => unverifyRecord(hub, module, table, id), "Verification removed")}
                 className={neutralButton}
               >
                 Unverify
@@ -92,7 +102,7 @@ export function RecordLifecycleActions({
                   type="button"
                   disabled={pending}
                   onClick={() => {
-                    run(() => verifyRecord(hub, module, table, id, noteText));
+                    run(() => verifyRecord(hub, module, table, id, noteText), "Record verified");
                     setNoteOpen(false);
                     setNoteText("");
                   }}
@@ -128,7 +138,7 @@ export function RecordLifecycleActions({
           <button
             type="button"
             disabled={pending}
-            onClick={() => run(() => archiveRecord(hub, module, table, id))}
+            onClick={() => run(() => archiveRecord(hub, module, table, id), "Record archived")}
             className={neutralButton}
           >
             Archive
@@ -141,7 +151,7 @@ export function RecordLifecycleActions({
             type="button"
             disabled={pending}
             onClick={() => {
-              run(() => deleteRecord(hub, module, table, id));
+              run(() => deleteRecord(hub, module, table, id), "Record deleted");
               setConfirmDelete(false);
             }}
             className="rounded-md bg-status-danger/90 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-status-danger disabled:opacity-50"
@@ -187,16 +197,24 @@ export function RecordBulkLifecycleActions({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
-  const runMany = (action: (id: string) => Promise<RecordActionResult>) => {
+  const runMany = (action: (id: string) => Promise<RecordActionResult>, label: string) => {
     setError(null);
     start(async () => {
       const results = await Promise.all(ids.map((id) => action(id)));
-      const failed = results.find((res) => !res.ok);
-      if (failed) {
-        setError(failed.error ?? "Action failed.");
+      const failedCount = results.filter((res) => !res.ok).length;
+      if (failedCount > 0) {
+        const failed = results.find((res) => !res.ok);
+        const message = failed?.error ?? "Action failed.";
+        setError(message);
+        toast.error(
+          `${label} failed for ${failedCount} of ${ids.length}`,
+          message,
+        );
         return;
       }
+      toast.success(`${label} — ${ids.length} record${ids.length === 1 ? "" : "s"}`);
       onComplete?.();
       router.refresh();
     });
@@ -210,7 +228,7 @@ export function RecordBulkLifecycleActions({
       <button
         type="button"
         disabled={pending}
-        onClick={() => runMany((id) => archiveRecord(hub, module, table, id))}
+        onClick={() => runMany((id) => archiveRecord(hub, module, table, id), "Archived")}
         className="rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:bg-surface-3 disabled:opacity-50"
       >
         Archive
@@ -221,7 +239,7 @@ export function RecordBulkLifecycleActions({
             type="button"
             disabled={pending}
             onClick={() => {
-              runMany((id) => deleteRecord(hub, module, table, id));
+              runMany((id) => deleteRecord(hub, module, table, id), "Deleted");
               setConfirmDelete(false);
             }}
             className="rounded-md bg-status-danger/90 px-2 py-1 text-[11px] font-medium text-surface-0 transition hover:bg-status-danger disabled:opacity-50"

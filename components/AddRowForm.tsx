@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
 import type { FieldConfig } from "@/lib/module-forms";
 import { humanizeEnumValue } from "@/lib/humanize";
+import { useToast } from "@/components/shared/CoachingToast";
 
 // Inline, collapsible "+ Add" form for a table-backed module. Posts to the
 // createModuleRow server action, which validates against the same field config.
@@ -24,6 +25,7 @@ export default function AddRowForm({
   // resolves used to insert a duplicate row.
   const [pending, setPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const toast = useToast();
 
   if (!open) {
     return (
@@ -48,9 +50,12 @@ export default function AddRowForm({
         try {
           const result = await createModuleRow(hub, module, formData, sessionId);
           if (!result.ok) {
-            setSaveError(result.error ?? "Failed to save. Please try again.");
+            const message = result.error ?? "Failed to save. Please try again.";
+            setSaveError(message);
+            toast.error("Record not added", message);
             return;
           }
+          toast.success("Record added");
           formRef.current?.reset();
           setOpen(false);
         } finally {

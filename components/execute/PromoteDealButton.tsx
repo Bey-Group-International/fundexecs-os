@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { promoteDealToAsset } from "@/components/execute/actions";
+import { useToast } from "@/components/shared/CoachingToast";
 
 // Execute › Closing: promotes a closed deal into a portfolio holding. A
 // client wrapper around the promoteDealToAsset server action so a failed
@@ -11,6 +12,7 @@ import { promoteDealToAsset } from "@/components/execute/actions";
 export function PromoteDealButton({ dealId, ready }: { dealId: string; ready: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const toast = useToast();
   const router = useRouter();
 
   const onClick = () => {
@@ -20,9 +22,12 @@ export function PromoteDealButton({ dealId, ready }: { dealId: string; ready: bo
     start(async () => {
       const result = await promoteDealToAsset(formData);
       if (!result.ok) {
-        setError(result.error ?? "Could not promote this deal.");
+        const message = result.error ?? "Could not promote this deal.";
+        setError(message);
+        toast.error("Promotion failed", message);
         return;
       }
+      toast.success("Deal promoted to portfolio");
       router.refresh();
     });
   };
