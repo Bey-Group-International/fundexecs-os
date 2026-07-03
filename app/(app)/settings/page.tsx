@@ -43,7 +43,11 @@ const SECRET_KEY_HINTS: Record<string, string> = {
   GMAIL_ACCESS_TOKEN: "Gmail OAuth access token — live sends go out from your inbox.",
   RESEND_API_KEY: "Resend API key — live sends via Resend when Gmail isn't set.",
   RESEND_FROM_EMAIL: "From address for Resend sends (defaults to the deploy-wide sender).",
+  RESEND_WEBHOOK_SECRET:
+    "Signing secret for Resend inbound email — arriving mail lands in your Unified Inbox.",
   CALENDLY_API_TOKEN: "Personal access token — scheduling links come from your Calendly account.",
+  CALENDLY_WEBHOOK_SECRET:
+    "Webhook signing key — bookings and cancellations land in your Unified Inbox.",
   DOCUSIGN_ACCESS_TOKEN: "OAuth access token for envelope dispatch under your DocuSign account.",
   DOCUSIGN_INTEGRATION_KEY: "Integration (client) key paired with the access token.",
 };
