@@ -32,13 +32,19 @@ describe("docusign adapter", () => {
   });
 
   it("prefers the per-org connected flag over the env check", async () => {
-    // ctx.connected wins even with no env credentials: a connected org queues
-    // through the provider rather than staying in the prepared/draft state.
+    // ctx.connected wins even with no env credentials — but since no real
+    // Docusign call is actually wired up yet, a "connected" org must be told
+    // honestly that nothing was delivered, not that it was "queued" (the
+    // previous behavior, which reported false success and marked the task
+    // "completed" for an envelope that was never created).
     const connected = await docusignAdapter.dispatch({ ...ctx("sign_document"), connected: true });
-    expect(connected.detail).toContain("connected Docusign");
+    expect(connected.ok).toBe(false);
+    expect(connected.detail).toContain("was not sent");
+    expect(connected.error).toBeTruthy();
 
     // Explicitly not connected keeps it in the prepared (mock) state.
     const notConnected = await docusignAdapter.dispatch({ ...ctx("sign_document"), connected: false });
+    expect(notConnected.ok).toBe(true);
     expect(notConnected.detail).toContain("not connected");
   });
 });

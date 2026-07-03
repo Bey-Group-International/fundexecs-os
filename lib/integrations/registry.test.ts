@@ -40,6 +40,30 @@ describe("integration registry", () => {
       expect(getAdapter(action).channel).toBe("mock");
     }
   });
+
+  it("routes propose_meeting / confirm_booking to the native meeting adapter by default", () => {
+    // Three modules claim these ActionKinds: the inbox's permanently-mock
+    // calendly placeholder, the real Calendly adapter, and native meeting
+    // rooms. Native must win the generic ActionKind route — it has zero
+    // external dependency and is always live — or every meeting action
+    // silently degrades to a fabricated mock.fundexecs.local link even when
+    // Calendly is fully configured.
+    expect(getAdapter("propose_meeting").channel).toBe("native_meeting");
+    expect(getAdapter("confirm_booking").channel).toBe("native_meeting");
+  });
+
+  it("routes an explicit channel=\"calendly\" hint to the real Calendly adapter, not the inbox mock", () => {
+    // The inbox's mock calendly module and the real adapter share the literal
+    // channel string "calendly". A call site that explicitly pins to that
+    // channel (e.g. replying on a Calendly-sourced inbox thread) must reach
+    // the real adapter — which itself degrades gracefully when unconfigured —
+    // not the mock that can never call the API no matter what is configured.
+    expect(getAdapter("update_pipeline", "calendly").channel).toBe("calendly");
+  });
+
+  it("routes an explicit channel=\"slack\" hint to the real (native-delivery) Slack adapter", () => {
+    expect(getAdapter("update_pipeline", "slack").channel).toBe("slack");
+  });
 });
 
 describe("mock adapter", () => {

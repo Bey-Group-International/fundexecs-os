@@ -26,6 +26,13 @@ import {
 
 // Snooze presets, resolved to an absolute wake time when chosen (client-side so
 // it's the operator's local clock). "Tomorrow" is 9am the next day.
+// The only inbox channel whose dispatch adapter actually sends a live external
+// reply once connected (lib/integrations/adapters/gmail.ts). Every other
+// channel's connected branch reports an honest not-delivered result rather
+// than calling out — so the composer hint below must not claim they behave
+// the same as Gmail once "connected".
+const LIVE_CAPABLE_CHANNELS = new Set<InboxChannel>(["gmail"]);
+
 const SNOOZE_PRESETS: { key: string; label: string; until: () => Date }[] = [
   { key: "3h", label: "3 hours", until: () => new Date(Date.now() + 3 * 3_600_000) },
   {
@@ -558,9 +565,13 @@ function ThreadCard({
               className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
             />
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-              {card.connected ? (
+              {card.connected && LIVE_CAPABLE_CHANNELS.has(card.channel) ? (
                 <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
                   Routes through connected {card.channelLabel} · approvals if required
+                </span>
+              ) : card.connected ? (
+                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  {card.channelLabel} sending isn&apos;t live yet — this will be recorded on the thread but not delivered.
                 </span>
               ) : (
                 <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
