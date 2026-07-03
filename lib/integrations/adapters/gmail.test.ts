@@ -9,6 +9,11 @@ jest.mock("@/lib/email", () => ({
   escapeHtml: (s: string) => s,
 }));
 
+const getGoogleAccessToken = jest.fn();
+jest.mock("@/lib/google-oauth", () => ({
+  getGoogleAccessToken: (...a: unknown[]) => getGoogleAccessToken(...a),
+}));
+
 import { gmailAdapter } from "./gmail";
 import type { ActionKind } from "@/lib/gates";
 import type { DispatchContext } from "../types";
@@ -71,6 +76,54 @@ describe("gmail adapter per-org credential gate", () => {
           resendApiKey: "re_org",
           fromEmail: "gp@fund.test",
         },
+      }),
+    );
+  });
+
+  it("mints a live token from the vaulted refresh token and hands it to the sender", async () => {
+    getGoogleAccessToken.mockResolvedValue("minted-at");
+    await gmailAdapter.dispatch(
+      ctx({ connected: true, secrets: { GOOGLE_REFRESH_TOKEN: "rt-org" } }),
+    );
+    // The already-resolved refresh token is passed in — no second vault read.
+    expect(getGoogleAccessToken).toHaveBeenCalledWith("org-1", "rt-org");
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: expect.objectContaining({ gmailAccessToken: "minted-at" }),
+      }),
+    );
+  });
+
+  it("a static GMAIL_ACCESS_TOKEN wins over minting from the refresh token", async () => {
+    await gmailAdapter.dispatch(
+      ctx({
+        connected: true,
+        secrets: { GMAIL_ACCESS_TOKEN: "static-at", GOOGLE_REFRESH_TOKEN: "rt-org" },
+      }),
+    );
+    expect(getGoogleAccessToken).not.toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: expect.objectContaining({ gmailAccessToken: "static-at" }),
+      }),
+    );
+  });
+
+  it("still attempts the send with no gmail token when minting fails (Resend leg)", async () => {
+    getGoogleAccessToken.mockResolvedValue(null);
+    const result = await gmailAdapter.dispatch(
+      ctx({
+        connected: true,
+        secrets: { GOOGLE_REFRESH_TOKEN: "rt-org", RESEND_API_KEY: "re_org" },
+      }),
+    );
+    expect(result.live).toBe(true);
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: expect.objectContaining({
+          gmailAccessToken: undefined,
+          resendApiKey: "re_org",
+        }),
       }),
     );
   });
