@@ -5,6 +5,7 @@ import Link from "next/link";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { formatCredits } from "@/lib/billing";
+import { MobileNavToggle } from "@/components/nav/MobileNavToggle";
 import {
   renameSession,
   setSessionColor,
@@ -56,6 +57,7 @@ export function SessionCommandBar({
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent"
       />
+      <MobileNavToggle />
       {/* Session name */}
       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
       {renaming ? (
