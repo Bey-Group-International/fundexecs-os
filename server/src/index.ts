@@ -8,6 +8,7 @@ const PORT = parseInt(process.env["PORT"] ?? "4000", 10);
 const REDIS_URL = process.env["REDIS_URL"] ?? "redis://localhost:6379";
 const SUPABASE_URL = process.env["SUPABASE_URL"] ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+const SUPABASE_JWT_SECRET = process.env["SUPABASE_JWT_SECRET"] ?? "";
 
 async function main() {
   const worker = await mediasoup.createWorker({
@@ -22,7 +23,13 @@ async function main() {
 
   const pubsub = new PubSub(REDIS_URL);
   const roomManager = new RoomManager(pubsub, worker);
-  const authService = new AuthService(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  if (!SUPABASE_JWT_SECRET) {
+    console.error(
+      "SUPABASE_JWT_SECRET is not set — the gateway will reject every connection. " +
+        "Set it (Supabase → Project Settings → API → JWT Secret) before serving traffic.",
+    );
+  }
+  const authService = new AuthService(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET);
 
   const app = createGateway(roomManager, authService);
 

@@ -35,6 +35,12 @@ const nextConfig = {
       { source: "/graphs", destination: "/graph", permanent: true },
       // Legacy match-inbox URL — canonical destination is /inbox.
       { source: "/match-inbox", destination: "/inbox", permanent: true },
+      // The Signing module used to link envelope actions under
+      // /execute/signing/* — routes that never existed (the wizard/detail live
+      // at /envelopes/*). Heal any stale bookmarks. The bare /execute/signing
+      // module page is unaffected (no trailing segment).
+      { source: "/execute/signing/new", destination: "/envelopes/new", permanent: true },
+      { source: "/execute/signing/:id", destination: "/envelopes/:id", permanent: true },
     ];
   },
 };

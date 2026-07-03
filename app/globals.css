@@ -401,6 +401,22 @@ body {
   .fx-neural-card:hover {
     transform: none;
   }
+
+  /* Global catch-all: the scoped list above only tamed the neural surfaces,
+     leaving 30+ infinite ambient animations (pulsing dots, KPI shimmer, flame
+     oscillations, glows, spinners) running for users who explicitly requested
+     reduced motion. Neutralize all animation/transition/scroll motion by
+     default. Where a state must stay perceivable under reduce (streaming
+     caret, working spinner), express it as a static affordance via
+     `motion-reduce:` utilities rather than exempting it here. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Print: the investor one-pager exports as a clean light document. App chrome

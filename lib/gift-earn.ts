@@ -446,18 +446,29 @@ export async function redeemGift(
   if (gift.sender_organization_id === redeemingOrgId)
     return { ok: false, error: "You can't redeem your own gift." };
 
-  await grantCredits(service, redeemingOrgId, gift.credits, "gift_received", {
-    sourceOrgId: gift.sender_organization_id,
-    note: "Gift redeemed",
-  });
-  await service
+  // Claim the gift atomically BEFORE granting credits: the conditional flip on
+  // `status = 'pending'` is the concurrency guard. Two simultaneous redemptions
+  // of the same token both pass the read check above, but only one wins this
+  // compare-and-set — the loser gets zero rows back and no credits. Granting
+  // first (the previous order) let both winners double-credit real billing
+  // currency.
+  const { data: claimed } = await service
     .from("credit_gifts")
     .update({
       status: "redeemed",
       redeemed_by_organization_id: redeemingOrgId,
       redeemed_at: new Date().toISOString(),
     })
-    .eq("id", gift.id);
+    .eq("id", gift.id)
+    .eq("status", "pending")
+    .select("id");
+  if (!claimed || claimed.length === 0)
+    return { ok: false, error: "This gift has already been redeemed." };
+
+  await grantCredits(service, redeemingOrgId, gift.credits, "gift_received", {
+    sourceOrgId: gift.sender_organization_id,
+    note: "Gift redeemed",
+  });
 
   return { ok: true, credits: gift.credits };
 }

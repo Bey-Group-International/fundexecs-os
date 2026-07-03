@@ -69,7 +69,7 @@ function EmptyState() {
         Create your first envelope to send documents for signature to LPs, co-investors, or service providers.
       </p>
       <Link
-        href="/execute/signing/new"
+        href="/envelopes/new"
         className="mt-6 rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400"
       >
         New Envelope
@@ -105,7 +105,7 @@ export async function SigningModule() {
           </p>
         </div>
         <Link
-          href="/execute/signing/new"
+          href="/envelopes/new"
           className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400"
         >
           <svg aria-hidden className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -129,7 +129,7 @@ export async function SigningModule() {
             {envelopes.map((env) => (
               <li key={env.id}>
                 <Link
-                  href={`/execute/signing/${env.id}`}
+                  href={`/envelopes/${env.id}`}
                   className="group flex flex-col gap-3 px-5 py-4 transition hover:bg-surface-2 sm:grid sm:grid-cols-[1fr_160px_140px_80px] sm:items-center sm:gap-4"
                 >
                   <span className="truncate text-sm font-medium text-fg-primary transition group-hover:text-gold-300">
