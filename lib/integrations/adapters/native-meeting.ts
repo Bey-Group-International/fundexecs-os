@@ -15,6 +15,7 @@ import type {
   DispatchContext,
   DispatchResult,
 } from "../types";
+import { getAppUrl } from "./app-url";
 
 function generateRoomCode(): string {
   const chars = "abcdefghijkmnpqrstuvwxyz23456789";
@@ -26,24 +27,6 @@ function generateRoomCode(): string {
     code += chars[bytes[i] % chars.length];
   }
   return code;
-}
-
-function getAppUrl(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXTAUTH_URL ||
-    "http://localhost:3000";
-  try {
-    const { hostname } = new URL(raw);
-    const safe =
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname.endsWith(".fundexecs.com") ||
-      hostname.endsWith(".vercel.app");
-    return safe ? raw.replace(/\/$/, "") : "http://localhost:3000";
-  } catch {
-    return "http://localhost:3000";
-  }
 }
 
 export const nativeMeetingAdapter: DispatchAdapter = {
