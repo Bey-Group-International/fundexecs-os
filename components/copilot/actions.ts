@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { handlePrompt, decideApproval } from "@/lib/engine";
+import { handlePrompt, decideApproval, verifyArtifact as verifyArtifactEngine } from "@/lib/engine";
 import { getActiveMandate } from "@/lib/mandates";
 import type { Mandate } from "@/lib/gates";
 import {
@@ -346,6 +346,33 @@ export async function dismissRun(formData: FormData): Promise<void> {
   } catch {
     // Best-effort: ignore and let the dock re-fetch.
   }
+}
+
+// --- Deliverable sign-off ----------------------------------------------------
+
+export interface VerifyArtifactResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Explicit, per-artifact sign-off — the operator has read this specific
+ * deliverable's content (components/ArtifactViewer.tsx renders the button
+ * only where the content is actually displayed) and attests it's accurate.
+ * This is the ONLY path to verification_status: "verified"; approving a
+ * workflow's plan no longer does this automatically (see
+ * docs/institutional-elevation-report-2026-07-03.md P1 #17).
+ */
+export async function verifyArtifact(artifactId: string, note?: string): Promise<VerifyArtifactResult> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
+  if (!artifactId) return { ok: false, error: "Missing artifact." };
+  const supabase = createServerClient();
+  return verifyArtifactEngine(
+    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
+    artifactId,
+    note?.trim() || "Verified by operator",
+  );
 }
 
 // --- Live briefing ---------------------------------------------------------

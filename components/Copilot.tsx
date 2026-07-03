@@ -1636,7 +1636,7 @@ function WorkflowSteps({
   liveSteps?: Record<string, "in_progress" | "completed">;
 }) {
   const { steps, artifacts } = bundle;
-  const artifactByStep = new Map<string, Artifact>();
+  const artifactByStep = new Map<string, SealedArtifact>();
   for (const a of artifacts) if (a.step_id) artifactByStep.set(a.step_id, a);
   return (
     <ol className="relative flex flex-col gap-2.5">
@@ -1682,7 +1682,16 @@ function WorkflowSteps({
               {output ? (
                 artifact ? (
                   // Durable artifact: render with full ArtifactInline (type-aware display).
-                  <ArtifactInline content={output} artifactType={artifact.artifact_type} title={step.title} />
+                  <ArtifactInline
+                    id={artifact.id}
+                    content={output}
+                    artifactType={artifact.artifact_type}
+                    title={step.title}
+                    sources={artifact.sources}
+                    verificationStatus={artifact.verification_status}
+                    groundingScore={artifact.grounding_score}
+                    sealStatus={artifact.seal_status}
+                  />
                 ) : (
                   // Inline step result: plain-text deliverable with truncation + expand.
                   <StepDeliverable text={output} />
@@ -1790,6 +1799,7 @@ function WorkflowCard({
           <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deliverable</p>
           <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
             <ArtifactInline
+              id={primaryArtifact.id}
               content={primaryArtifact.content}
               artifactType={primaryArtifact.artifact_type}
               title={primaryArtifact.title}

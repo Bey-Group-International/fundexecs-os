@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { ArtifactType, Json } from "@/lib/supabase/database.types";
 import { ArtifactModal } from "@/components/ArtifactModal";
 import { parseSources, verificationView, type VerificationLevel } from "@/lib/artifact-provenance";
 import type { SealStatus } from "@/lib/attestation-seal";
+import { verifyArtifact } from "@/components/copilot/actions";
 
 // Verification badge palette — verified (signed off) / grounded (cites sources,
 // unsigned) / unverified (no sources).
@@ -42,21 +44,33 @@ function SealChip({ status }: { status?: SealStatus }) {
 
 // Provenance bar — a verification badge plus the openable grounding citations
 // that make a composer output verifiable. Renders the badge always; the sources
-// list expands on demand.
+// list expands on demand. When `artifactId` is given and the artifact isn't
+// verified yet, also renders the explicit sign-off control — this is the only
+// place in the app that can move verification_status to "verified", since
+// doing so requires an operator to actually be looking at this content.
 export function ProvenanceBar({
+  artifactId,
   sources,
   verificationStatus,
   groundingScore,
   sealStatus,
 }: {
+  artifactId?: string;
   sources?: Json | null;
   verificationStatus?: string | null;
   groundingScore?: number | null;
   sealStatus?: SealStatus;
 }) {
   const [open, setOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
+  const [pending, start] = useTransition();
+  const router = useRouter();
   const cited = parseSources(sources);
   const view = verificationView({ verification_status: verificationStatus, sources, grounding_score: groundingScore });
+  const canVerify = Boolean(artifactId) && verificationStatus === "unverified" && !verified;
 
   return (
     <div className="mt-2 border-t border-line/55 pt-2">
@@ -81,7 +95,53 @@ export function ProvenanceBar({
         ) : (
           <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{view.detail}</span>
         )}
+        {canVerify ? (
+          noteOpen ? (
+            <span className="flex flex-1 items-center gap-1.5">
+              <input
+                autoFocus
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Note (optional)"
+                className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-2 py-1 text-[11px] text-fg-primary outline-none focus:border-status-success/60"
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setError(null);
+                  start(async () => {
+                    const result = await verifyArtifact(artifactId!, note);
+                    if (!result.ok) {
+                      setError(result.error ?? "Could not verify this deliverable.");
+                      return;
+                    }
+                    setVerified(true);
+                    setNoteOpen(false);
+                    router.refresh();
+                  });
+                }}
+                className="rounded-md bg-status-success/90 px-2 py-1 font-mono text-[9px] font-medium uppercase tracking-wider text-surface-0 transition hover:bg-status-success disabled:opacity-50"
+              >
+                Confirm
+              </button>
+              <button type="button" onClick={() => setNoteOpen(false)} className="text-[10px] text-fg-muted hover:text-fg-secondary">
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setNoteOpen(true)}
+              className="ml-auto rounded-full border border-status-success/40 bg-status-success/10 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wider text-status-success transition hover:bg-status-success/20"
+            >
+              ✓ Verify
+            </button>
+          )
+        ) : null}
       </div>
+
+      {error ? <p className="mt-1.5 text-[11px] text-status-danger">{error}</p> : null}
 
       {open && cited.length ? (
         <ol className="mt-2 space-y-1.5">
@@ -401,6 +461,7 @@ interface ArtifactCardProps {
 }
 
 export function ArtifactCard({
+  id,
   title,
   content,
   artifact_type,
@@ -447,6 +508,7 @@ export function ArtifactCard({
           </div>
           {sources !== undefined || verificationStatus !== undefined ? (
             <ProvenanceBar
+              artifactId={id}
               sources={sources}
               verificationStatus={verificationStatus}
               groundingScore={groundingScore}
@@ -467,6 +529,7 @@ export function ArtifactCard({
 
 // Inline viewer for Copilot step output (no card chrome, just the formatted text)
 export function ArtifactInline({
+  id,
   content,
   artifactType,
   title,
@@ -475,6 +538,7 @@ export function ArtifactInline({
   groundingScore,
   sealStatus,
 }: {
+  id?: string;
   content: string;
   artifactType?: ArtifactType;
   title?: string;
@@ -517,6 +581,7 @@ export function ArtifactInline({
       )}
       {sources !== undefined || verificationStatus !== undefined ? (
         <ProvenanceBar
+          artifactId={id}
           sources={sources}
           verificationStatus={verificationStatus}
           groundingScore={groundingScore}

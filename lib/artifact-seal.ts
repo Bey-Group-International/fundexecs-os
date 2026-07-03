@@ -1,5 +1,5 @@
 // lib/artifact-seal.ts
-// The READ side of tamper-evidence. verifyWorkflowArtifacts (lib/engine.ts)
+// The READ side of tamper-evidence. verifyArtifact (lib/engine.ts)
 // writes a SHA-256 seal into the `attestations` rail when an operator verifies
 // an artifact; this module recomputes that hash on read and reports whether each
 // sealed artifact is still intact. Best-effort and fully defensive: a query
@@ -12,7 +12,7 @@ import { verifyArtifactSeal, type ArtifactHashInput, type SealStatus } from "@/l
 type ServerClient = ReturnType<typeof createServerClient>;
 
 // The salient verification fields the seal was computed over (see
-// attestation-seal.ts). Must mirror exactly what verifyWorkflowArtifacts hashed.
+// attestation-seal.ts). Must mirror exactly what verifyArtifact hashed.
 function hashInputFromArtifact(a: Artifact): ArtifactHashInput {
   return {
     content: a.content ?? "",
