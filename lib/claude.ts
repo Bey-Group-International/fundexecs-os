@@ -5,6 +5,7 @@
 // When ANTHROPIC_API_KEY is absent, both fall back to deterministic results
 // so the app — and CI/preview builds — keep working.
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
 import { guidanceText } from "@/lib/document-quality";
@@ -69,7 +70,7 @@ export function copilotLive(): boolean {
 
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +169,7 @@ export function earnChatStream(args: {
 
 export async function summarizeSessionMessages(messages: Array<{role: string; content: string}>): Promise<string> {
   if (messages.length === 0) return "";
-  const apiClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const apiClient = anthropicClient(process.env.ANTHROPIC_API_KEY);
   const truncated = messages.slice(-20); // last 20 messages max
   const transcript = truncated.map(m => `${m.role}: ${m.content}`).join("\n");
   const resp = await apiClient.messages.create({

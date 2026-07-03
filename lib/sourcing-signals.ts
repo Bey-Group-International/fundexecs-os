@@ -13,6 +13,7 @@
 // thin, best-effort wrappers. A real third-party feed plugs in behind the
 // generateSignals seam (see the comment there).
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { EntityKind } from "@/lib/sourcing-intel";
@@ -210,7 +211,7 @@ export function summarizeSignals(
 // ===========================================================================
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey, LONG_RUN_TIMEOUT_MS) : null;
 }
 
 function textOf(message: Anthropic.Message): string {
