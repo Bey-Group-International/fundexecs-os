@@ -20,6 +20,10 @@ import { vaultConfigured } from "@/lib/vault";
 export const CHANNEL_SECRET_KEYS: Record<string, readonly string[]> = {
   gmail: [
     "GMAIL_ACCESS_TOKEN",
+    // Long-lived Google OAuth refresh token (written by /api/oauth/google/
+    // callback) — the adapter mints fresh access tokens from it, replacing
+    // the static ~1-hour GMAIL_ACCESS_TOKEN.
+    "GOOGLE_REFRESH_TOKEN",
     "RESEND_API_KEY",
     "RESEND_FROM_EMAIL",
     // Inbound: verifies Resend email.received webhooks (app/api/webhooks/resend).

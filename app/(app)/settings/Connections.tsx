@@ -6,6 +6,7 @@
 // actions; the gateway holds any OAuth tokens, so nothing secret is shown here.
 import type { IntegrationConnection } from "@/lib/supabase/database.types";
 import { integrationCatalog, envConfiguredChannels } from "@/lib/integrations/catalog";
+import { googleOAuthConfigured } from "@/lib/google-oauth";
 import { ConnectionControls } from "./ConnectionControls";
 
 type ChannelState = "connected_gateway" | "connected_env" | "prepared";
@@ -96,6 +97,14 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                 channel={descriptor.channel}
                 connected={connected}
                 gatewayConnected={state === "connected_gateway"}
+                // Gmail gets the REAL hosted-auth flow when the deploy has a
+                // Google OAuth client: Connect goes to Google's consent screen
+                // and stores a per-org refresh token, not a placeholder row.
+                oauthHref={
+                  descriptor.channel === "gmail" && googleOAuthConfigured()
+                    ? "/api/oauth/google/start"
+                    : undefined
+                }
               />
             </div>
           </div>

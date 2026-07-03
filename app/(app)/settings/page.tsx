@@ -41,6 +41,8 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 const SECRET_KEY_HINTS: Record<string, string> = {
   GMAIL_ACCESS_TOKEN: "Gmail OAuth access token — live sends go out from your inbox.",
+  GOOGLE_REFRESH_TOKEN:
+    "Written by Connect Google (Settings › Integrations) — mints fresh Gmail tokens automatically.",
   RESEND_API_KEY: "Resend API key — live sends via Resend when Gmail isn't set.",
   RESEND_FROM_EMAIL: "From address for Resend sends (defaults to the deploy-wide sender).",
   RESEND_WEBHOOK_SECRET:

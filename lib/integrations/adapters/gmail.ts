@@ -13,6 +13,7 @@ import type {
   DispatchResult,
 } from "../types";
 import { sendEmail, escapeHtml } from "@/lib/email";
+import { getGoogleAccessToken } from "@/lib/google-oauth";
 
 function configured(): boolean {
   return Boolean(
@@ -32,7 +33,9 @@ export const gmailAdapter: DispatchAdapter = {
     // toward "configured" alongside the deploy env — so an org with its own
     // Gmail/Resend credential sends live even on a deploy with no env creds.
     const hasOrgCreds = Boolean(
-      ctx.secrets?.GMAIL_ACCESS_TOKEN || ctx.secrets?.RESEND_API_KEY,
+      ctx.secrets?.GMAIL_ACCESS_TOKEN ||
+        ctx.secrets?.GOOGLE_REFRESH_TOKEN ||
+        ctx.secrets?.RESEND_API_KEY,
     );
 
     if (!(ctx.connected ?? (configured() || hasOrgCreds))) {
@@ -53,6 +56,16 @@ export const gmailAdapter: DispatchAdapter = {
       };
     }
 
+    // Per-org Gmail identity: when the org connected Google via OAuth, mint a
+    // fresh access token from its vaulted refresh token — this outlives the
+    // static ~1-hour GMAIL_ACCESS_TOKEN. A stored static token still wins
+    // (explicit configuration beats derived), and any failure here just falls
+    // through to the Resend leg of the chain.
+    let gmailAccessToken = ctx.secrets?.GMAIL_ACCESS_TOKEN;
+    if (!gmailAccessToken && ctx.secrets?.GOOGLE_REFRESH_TOKEN) {
+      gmailAccessToken = (await getGoogleAccessToken(ctx.orgId)) ?? undefined;
+    }
+
     const escaped = escapeHtml(ctx.body ?? "");
     const result = await sendEmail({
       to: { name: ctx.target?.name ?? recipient, email: to },
@@ -61,7 +74,7 @@ export const gmailAdapter: DispatchAdapter = {
         ? `<p>${escaped.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`
         : "",
       credentials: {
-        gmailAccessToken: ctx.secrets?.GMAIL_ACCESS_TOKEN,
+        gmailAccessToken,
         resendApiKey: ctx.secrets?.RESEND_API_KEY,
         fromEmail: ctx.secrets?.RESEND_FROM_EMAIL,
       },
