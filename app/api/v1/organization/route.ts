@@ -45,4 +45,4 @@ export const GET = withApiKey(async ({ orgId, supabase }) => {
     aum_range: org.aum_range,
     created_at: org.created_at,
   });
-});
+}, "read:organization");

@@ -37,7 +37,7 @@ function request(url: string): Request {
 
 beforeEach(() => {
   calls.length = 0;
-  requireApiKey.mockResolvedValue({ ok: true, key: { orgId: "org-1", mode: "live", keyId: "key-1" } });
+  requireApiKey.mockResolvedValue({ ok: true, key: { orgId: "org-1", mode: "live", keyId: "key-1", scopes: ["read:organization", "read:deals", "read:investors", "read:funds"] } });
 });
 
 const row = (over: Partial<{ id: string; vintage_year: number | null }> = {}) => ({

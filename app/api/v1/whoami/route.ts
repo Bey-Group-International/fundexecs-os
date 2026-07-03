@@ -7,6 +7,8 @@ import { resource, withApiKey } from "@/lib/api-v1";
 //     -H "Authorization: Bearer fxsk_live_…"
 export const dynamic = "force-dynamic";
 
-export const GET = withApiKey(async ({ orgId, mode, keyId }) =>
-  resource({ organization_id: orgId, mode, key_id: keyId }),
+// Deliberately unscoped: any valid key may introspect itself — the returned
+// scope list is how a consumer discovers what its key can reach.
+export const GET = withApiKey(async ({ orgId, mode, keyId, scopes }) =>
+  resource({ organization_id: orgId, mode, key_id: keyId, scopes }),
 );

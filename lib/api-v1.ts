@@ -16,6 +16,8 @@ export interface ApiContext {
   orgId: string;
   mode: ApiKeyMode;
   keyId: string;
+  /** The key's granted scopes — already checked against the route's requirement. */
+  scopes: string[];
   /** Service-role client — the caller has no Supabase session. Always scope by orgId. */
   supabase: ServiceClient;
 }
@@ -25,20 +27,32 @@ export interface ApiContext {
  * is verified; it receives the resolved org context, a service client, and the
  * original request (so a route can read query params like ?cursor=/?limit=).
  * Auth failures (401/503) are returned before the handler is reached.
+ *
+ * `requiredScope` is the route's blast-radius gate: a key without it gets a 403
+ * naming the missing scope. Omit only for identity endpoints (whoami) — every
+ * data route must name its scope.
  */
 export function withApiKey(
   handler: (ctx: ApiContext, request: Request) => Promise<NextResponse> | NextResponse,
+  requiredScope?: string,
 ) {
   return async (request: Request): Promise<NextResponse> => {
     const auth = await requireApiKey(request);
     if (!auth.ok) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    if (requiredScope && !auth.key.scopes.includes(requiredScope)) {
+      return NextResponse.json(
+        { error: `This key is missing the required scope: ${requiredScope}` },
+        { status: 403 },
+      );
+    }
     return handler(
       {
         orgId: auth.key.orgId,
         mode: auth.key.mode,
         keyId: auth.key.keyId,
+        scopes: auth.key.scopes,
         supabase: createServiceClient(),
       },
       request,

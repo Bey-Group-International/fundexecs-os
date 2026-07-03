@@ -68,10 +68,36 @@ export function looksLikeSecretKey(value: string): boolean {
   return /^fxsk_(test|live)_[0-9a-f]{48}$/.test(value.trim());
 }
 
+// ── Scopes ────────────────────────────────────────────────────────────────────
+// The blast-radius contract for issued keys: each v1 route requires one scope,
+// enforced in withApiKey (lib/api-v1.ts). Keys default to the full read set at
+// issue time; narrowing is the issuer's choice.
+
+export const API_SCOPES = [
+  "read:organization",
+  "read:deals",
+  "read:investors",
+  "read:funds",
+] as const;
+
+export type ApiScope = (typeof API_SCOPES)[number];
+
+export const API_SCOPE_LABELS: Record<ApiScope, string> = {
+  "read:organization": "Read organization profile",
+  "read:deals": "Read deals",
+  "read:investors": "Read investors",
+  "read:funds": "Read funds",
+};
+
+export function isApiScope(value: string): value is ApiScope {
+  return (API_SCOPES as readonly string[]).includes(value);
+}
+
 export interface VerifiedKey {
   keyId: string;
   orgId: string;
   mode: ApiKeyMode;
+  scopes: string[];
 }
 
 /** Pull the presented secret from a request: `Authorization: Bearer …` or `x-api-key`. */

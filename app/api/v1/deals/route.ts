@@ -62,4 +62,4 @@ export const GET = withApiKey(async ({ orgId, supabase }, request) => {
   }));
 
   return collection(deals, nextCursor);
-});
+}, "read:deals");

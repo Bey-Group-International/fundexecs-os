@@ -1509,6 +1509,9 @@ export type ApiKey = Timestamps & {
   organization_id: string;
   name: string;
   mode: ApiKeyMode;
+  // Granted scopes (migration 20260703250000) — enforced per v1 route in
+  // withApiKey. Existing keys default to the full read set.
+  scopes: string[];
   publishable_key: string;
   secret_hash: string;
   secret_prefix: string;
