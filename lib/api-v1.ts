@@ -22,23 +22,27 @@ export interface ApiContext {
 
 /**
  * Wrap a v1 GET handler with secret-key auth. The handler only runs once the key
- * is verified; it receives the resolved org context and a service client. Auth
- * failures (401/503) are returned before the handler is reached.
+ * is verified; it receives the resolved org context, a service client, and the
+ * original request (so a route can read query params like ?cursor=/?limit=).
+ * Auth failures (401/503) are returned before the handler is reached.
  */
 export function withApiKey(
-  handler: (ctx: ApiContext) => Promise<NextResponse> | NextResponse,
+  handler: (ctx: ApiContext, request: Request) => Promise<NextResponse> | NextResponse,
 ) {
   return async (request: Request): Promise<NextResponse> => {
     const auth = await requireApiKey(request);
     if (!auth.ok) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    return handler({
-      orgId: auth.key.orgId,
-      mode: auth.key.mode,
-      keyId: auth.key.keyId,
-      supabase: createServiceClient(),
-    });
+    return handler(
+      {
+        orgId: auth.key.orgId,
+        mode: auth.key.mode,
+        keyId: auth.key.keyId,
+        supabase: createServiceClient(),
+      },
+      request,
+    );
   };
 }
 
@@ -47,9 +51,10 @@ export function resource<T>(data: T): NextResponse {
   return NextResponse.json({ data });
 }
 
-/** A collection: { data, count }. */
-export function collection<T>(rows: T[]): NextResponse {
-  return NextResponse.json({ data: rows, count: rows.length });
+/** A collection: { data, count, nextCursor }. Pass nextCursor for a paginated
+ * list (null once there's no further page); omit it for an unpaginated one. */
+export function collection<T>(rows: T[], nextCursor: string | null = null): NextResponse {
+  return NextResponse.json({ data: rows, count: rows.length, nextCursor });
 }
 
 /** A failure with an explicit status. */
