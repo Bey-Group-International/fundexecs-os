@@ -2,6 +2,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { planPrompts, materializePrompts } from "@/lib/engine";
 import { isExecutive } from "@/lib/intelligence";
+import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 
 // Plan generation calls Claude; give it room beyond the default.
 export const maxDuration = 60;
@@ -41,6 +42,15 @@ export async function POST(request: Request) {
     async start(controller) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       try {
+        // Pre-flight credit gate: plan generation calls Claude directly,
+        // outside the task engine's per-step spendCredits gate (which only
+        // applies once a workflow's steps start executing) — without this,
+        // scripting requests against this route had zero cost metering.
+        const gate = await gateConversationalSpend(auth.ctx.orgId, CONVERSATIONAL_COST.promptPlan, "prompt_plan");
+        if (!gate.ok) {
+          send({ type: "error", reason: "insufficient_credits", message: gate.error });
+          return;
+        }
         send({ type: "planning" });
         const plans = await planPrompts(ctx, body, sessionId, desk);
         // Reveal the primary plan in the canvas; `split` tells the client more
