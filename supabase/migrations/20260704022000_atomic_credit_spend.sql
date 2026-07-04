@@ -45,10 +45,16 @@ begin
      set credits = new_balance
    where organization_id = p_org;
 
-  insert into public.credit_ledger
-    (organization_id, amount, reason, note)
-  values
-    (p_org, -p_amount, 'spend', p_note);
+  -- Record the ACTUAL wallet delta, not the requested amount: on a
+  -- grace-buffered overspend the wallet is clamped at zero, and the ledger
+  -- must stay in lockstep with it (wallet == sum(ledger) invariant). A
+  -- fully-grace-covered spend moves the wallet by zero and writes no row.
+  if new_balance <> current_balance then
+    insert into public.credit_ledger
+      (organization_id, amount, reason, note)
+    values
+      (p_org, new_balance - current_balance, 'spend', p_note);
+  end if;
 
   return jsonb_build_object(
     'ok', true,

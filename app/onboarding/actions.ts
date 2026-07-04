@@ -67,8 +67,9 @@ export async function createOrganization(
   const aumRange = optionalAllowed(formData, "aum_range", ["sub_25m", "25m_100m", "100m_500m", "500m_1b", "over_1b"] as const);
   const primaryStrategy = optionalAllowed(formData, "strategy", ["real_estate", "private_equity", "credit", "multi"] as const);
   const firstHub = optionalAllowed(formData, "first_hub", ["build", "source", "run", "execute"] as const);
-  const rawFundCount = Number(formData.get("fund_count"));
-  const fundCount = Number.isFinite(rawFundCount) && rawFundCount >= 0
+  const rawFundCountStr = String(formData.get("fund_count") ?? "").trim();
+  const rawFundCount = Number(rawFundCountStr);
+  const fundCount = rawFundCountStr !== "" && Number.isFinite(rawFundCount) && rawFundCount >= 0
     ? Math.trunc(rawFundCount)
     : null;
 

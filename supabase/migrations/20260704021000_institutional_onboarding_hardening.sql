@@ -17,7 +17,14 @@ begin
       add constraint organizations_primary_strategy_check
       check (
         primary_strategy is null
-        or primary_strategy in ('real_estate', 'private_equity', 'credit', 'multi')
+        or primary_strategy in (
+          -- onboarding wizard values
+          'real_estate', 'private_equity', 'credit', 'multi',
+          -- profile editor values (app/(app)/build/profile) — the constraint
+          -- must accept everything any live writer emits
+          'venture_capital', 'credit_debt', 'infrastructure', 'multi_strategy',
+          'fund_of_funds', 'hedge_fund', 'other'
+        )
       );
   end if;
 end $$;
