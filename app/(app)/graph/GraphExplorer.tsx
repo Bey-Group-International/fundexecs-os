@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { GraphData } from "@/lib/graph";
 import type { GraphKind } from "@/lib/supabase/database.types";
 
@@ -17,6 +18,40 @@ const TABS: { key: GraphKind; label: string; hint: string }[] = [
   { key: "deal", label: "Deal", hint: "Active deals, targets, SPVs, funds" },
   { key: "capital", label: "Capital", hint: "LPs, lenders, family offices, banks" },
 ];
+
+const EMPTY_STATE: Record<GraphKind, {
+  title: string;
+  description: string;
+  primaryLabel: string;
+  primaryHref: string;
+  secondaryLabel: string;
+  secondaryHref: string;
+}> = {
+  relationship: {
+    title: "Start with your relationship graph.",
+    description: "Import network contacts or connect inbox channels so FundExecs can map who knows whom before outreach starts.",
+    primaryLabel: "Open Network",
+    primaryHref: "/source/network",
+    secondaryLabel: "Connect channels",
+    secondaryHref: "/settings#integrations",
+  },
+  deal: {
+    title: "Seed the deal graph.",
+    description: "Add active opportunities to the deal pipeline so targets, funds, SPVs, documents, and IC work appear as a traceable graph.",
+    primaryLabel: "Open Deal Pipeline",
+    primaryHref: "/source/deal_pipeline",
+    secondaryLabel: "Ask Earn",
+    secondaryHref: "/workspace",
+  },
+  capital: {
+    title: "Build the capital graph.",
+    description: "Add LPs and commitments so allocators, lenders, capital events, and ownership paths become visible.",
+    primaryLabel: "Open Capital Map",
+    primaryHref: "/capital-map",
+    secondaryLabel: "Open LP Pipeline",
+    secondaryHref: "/source/lp_pipeline",
+  },
+};
 
 const TYPE_COLOR: Record<string, string> = {
   fund: "#d4a843",
@@ -228,11 +263,40 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
       </div>
 
       {data.nodes.length === 0 ? (
-        <div className="fx-card mt-6 p-10 text-center">
-          <p className="text-sm text-fg-muted">
-            No {tab.label.toLowerCase()} graph data yet. As deals, funds, investors and
-            relationships accrue, they appear here.
-          </p>
+        <div className="fx-card relative mt-6 overflow-hidden p-8">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgb(var(--fx-accent-rgb)/0.16),transparent_34%)]" />
+          <div className="relative grid gap-5 md:grid-cols-[1fr_220px] md:items-center">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
+                {tab.label} graph activation
+              </p>
+              <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+                {EMPTY_STATE[active].title}
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-fg-secondary">
+                {EMPTY_STATE[active].description}
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link href={EMPTY_STATE[active].primaryHref} className="fx-btn-primary">
+                  {EMPTY_STATE[active].primaryLabel}
+                </Link>
+                <Link href={EMPTY_STATE[active].secondaryHref} className="fx-btn-secondary">
+                  {EMPTY_STATE[active].secondaryLabel}
+                </Link>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-line/70 bg-surface-0/60 p-4">
+              {TABS.map((t) => (
+                <div key={t.key} className="flex items-center gap-3 border-b border-line/50 py-2 last:border-b-0">
+                  <span className={`h-2.5 w-2.5 rounded-full ${active === t.key ? "bg-gold-400" : "bg-fg-muted/40"}`} />
+                  <div>
+                    <p className="text-sm font-medium text-fg-primary">{t.label}</p>
+                    <p className="text-xs text-fg-muted">{t.hint}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="fx-card relative mt-4 overflow-hidden">

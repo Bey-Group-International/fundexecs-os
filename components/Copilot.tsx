@@ -214,6 +214,17 @@ export default function Copilot({
     return () => timers.forEach(clearTimeout);
   }, []);
 
+  useEffect(() => {
+    function onWorkspacePrompt(event: Event) {
+      const promptText = (event as CustomEvent<{ prompt?: string }>).detail?.prompt?.trim();
+      if (!promptText) return;
+      setPrompt(promptText);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    window.addEventListener("earn:set-composer-prompt", onWorkspacePrompt);
+    return () => window.removeEventListener("earn:set-composer-prompt", onWorkspacePrompt);
+  }, []);
+
   // Load persisted chat turns for this session on mount so answers survive a
   // reload even when initialChat is stale (e.g. edge-cached page).
   useEffect(() => {

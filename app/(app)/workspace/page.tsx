@@ -6,6 +6,7 @@ import { copilotLive } from "@/lib/claude";
 import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
+import { PromptChips } from "@/components/workspace/PromptChips";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
@@ -86,18 +87,9 @@ export default async function SessionsPage() {
             Ask Earn to source LPs, draft an IC memo, run diligence, or build an LBO model.
             Each conversation becomes a session you can return to.
           </p>
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {EARN_EXAMPLES.map((example) => (
-              <span
-                key={example}
-                className="rounded-full border border-line/60 bg-surface-2/60 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-fg-muted"
-              >
-                {example}
-              </span>
-            ))}
-          </div>
+          <PromptChips examples={EARN_EXAMPLES} />
           <p className="mt-3 text-[11px] text-fg-muted">
-            Type any of these in the composer below ↓
+            Pick one to open Earn with context, or type directly in the composer below ↓
           </p>
         </div>
       ) : (

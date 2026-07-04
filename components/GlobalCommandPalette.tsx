@@ -16,7 +16,7 @@ import { navCommands } from "@/lib/nav-commands";
 
 const OPEN_EVENT = "fx:open-command-palette";
 
-/** Programmatic opener for buttons/menus ("Commands ⇧⌘K" in the dashboard shell). */
+/** Programmatic opener for buttons/menus ("Commands ⌘K / ⇧⌘K" in the dashboard shell). */
 export function openCommandPalette(): void {
   window.dispatchEvent(new Event(OPEN_EVENT));
 }
@@ -32,8 +32,9 @@ export function CommandPaletteTrigger({ className }: { className?: string }) {
         "rounded-lg border border-line px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
       }
       aria-label="Open command palette"
+      title="Open command palette. Use Shift+Command+K inside Earn composer surfaces."
     >
-      Commands <kbd className="ml-1 text-fg-muted">⌘K</kbd>
+      Commands <kbd className="ml-1 text-fg-muted">⌘K · ⇧⌘K</kbd>
     </button>
   );
 }

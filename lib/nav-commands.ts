@@ -20,6 +20,7 @@ const BASE_COMMANDS: NavCommand[] = [
   { label: "Automated Sessions", href: "/automations", hint: "Workflow automation", group: "nav" },
   { label: "Inbox", href: "/inbox", hint: "Unified messages", group: "nav" },
   { label: "Search", href: "/search", hint: "Full-text search", group: "nav" },
+  { label: "Graphs", href: "/graph", hint: "Three graphs", group: "nav" },
   { label: "Capital Map", href: "/capital-map", hint: "Relationship intelligence", group: "nav" },
   { label: "Portfolio", href: "/portfolio", hint: "Portfolio health", group: "nav" },
   { label: "Deals", href: "/deals", hint: "Deal war rooms", group: "nav" },
