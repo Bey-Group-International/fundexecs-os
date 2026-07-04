@@ -1536,6 +1536,27 @@ export type OrgSecret = Timestamps & {
   created_by: string | null;
 };
 
+// An outbound webhook subscription (migration 20260704010000). The signing
+// secret is AES-256-GCM encrypted like org_secrets; `cursor_at` is the
+// delivery high-water mark and `consecutive_failures` drives auto-disable.
+export type WebhookEndpoint = Timestamps & {
+  id: string;
+  organization_id: string;
+  url: string;
+  description: string | null;
+  events: string[];
+  ciphertext: string;
+  iv: string;
+  auth_tag: string;
+  secret_last4: string;
+  cursor_at: string;
+  consecutive_failures: number;
+  disabled_at: string | null;
+  last_delivery_at: string | null;
+  last_delivery_status: string | null;
+  created_by: string | null;
+};
+
 // Stripe hosted-Checkout session tracking (migration 0043). One row per Checkout
 // Session, flipped to 'fulfilled' exactly once so credits/plan/gift effects are
 // never double-applied. `metadata` mirrors the session metadata used to fulfill.
@@ -2276,6 +2297,7 @@ export type Database = {
       stripe_checkouts: TableShape<StripeCheckout>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;
+      webhook_endpoints: TableShape<WebhookEndpoint>;
       deal_shares: TableShape<DealShare>;
       deal_share_recipients: TableShape<DealShareRecipient>;
       deal_share_views: TableShape<DealShareView>;

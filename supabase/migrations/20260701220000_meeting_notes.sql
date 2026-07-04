@@ -26,13 +26,18 @@ CREATE TABLE IF NOT EXISTS meeting_notes (
 
 ALTER TABLE meeting_notes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "org_members_all" ON meeting_notes
-  USING (
-    organization_id IN (
-      SELECT organization_id FROM organization_members
-      WHERE principal_id = auth.uid()
-    )
-  );
+-- Guarded like the 20260701155438 backfill twin of this migration: on a fresh
+-- database (e.g. a Supabase preview branch) the backfill has already created
+-- this policy, and a bare CREATE POLICY here aborts the whole replay.
+do $$ begin
+  CREATE POLICY "org_members_all" ON meeting_notes
+    USING (
+      organization_id IN (
+        SELECT organization_id FROM organization_members
+        WHERE principal_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null; end $$;
 
 COMMENT ON TABLE  meeting_notes                IS 'Meeting transcripts and AI analysis produced by Meeting Copilot.';
 COMMENT ON COLUMN meeting_notes.analysis       IS 'JSON payload: sentiment, objections[], commitment_probability, follow_up_draft, crm_updates.';
