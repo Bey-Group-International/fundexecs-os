@@ -42,14 +42,14 @@
 
 **Theme: from working loop to complete lifecycle.**
 
-| Item | Detail |
-|---|---|
-| Three-graph query layer | `/graph/relationship`, `/graph/deal`, `/graph/capital` endpoints + visualizations over the existing schema |
-| Remaining hub modules | Source (LP Pipeline, Deal Pipeline), Run (Underwriting, Diligence, Stress Test), Execute (Capital Events, Asset Management, Reporting), Build (Thesis, Entity) |
-| Real-world trigger expansion | Email, webhook, and internal-event triggers for Automations (enum already reserved); retry/adapt-on-failure autonomy |
-| Brain recall v2 | Vectorize each org's completed high-quality artifacts into org-scoped recall — the firm's own work becomes agent memory |
-| Deployment hardening | Fixed production Supabase environment, observability (already specified: OpenTelemetry/Sentry), SLO baselines |
-| Design-partner conversion | 3–5 external design partners live on the platform with weekly feedback loops |
+|             Item             |                                                                             Detail                                                                             |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Three-graph query layer      | `/graph/relationship`, `/graph/deal`, `/graph/capital` endpoints + visualizations over the existing schema                                                     |
+| Remaining hub modules        | Source (LP Pipeline, Deal Pipeline), Run (Underwriting, Diligence, Stress Test), Execute (Capital Events, Asset Management, Reporting), Build (Thesis, Entity) |
+| Real-world trigger expansion | Email, webhook, and internal-event triggers for Automations (enum already reserved); retry/adapt-on-failure autonomy                                           |
+| Brain recall v2              | Vectorize each org's completed high-quality artifacts into org-scoped recall — the firm's own work becomes agent memory                                        |
+| Deployment hardening         | Fixed production Supabase environment, observability (already specified: OpenTelemetry/Sentry), SLO baselines                                                  |
+| Design-partner conversion    | 3–5 external design partners live on the platform with weekly feedback loops                                                                                   |
 
 **Exit criteria:** an emerging manager can run a raise and a deal pipeline entirely inside FundExecs OS, with at least one recurring automation trusted to run unattended.
 
@@ -81,3 +81,4 @@
 - **Model costs and latency** — mitigated by cost-tiered routing (cheap default model, per-task overrides) and metered credits that pass usage through to pricing.
 - **Build-order discipline** — UI never precedes a stable data model; this has held through 66 migrations and is why the roadmap compounds instead of resetting.
 - **Compliance gating on the tokenization layer** — governance/security token layers ship only with counsel review (see document 13); the access/credits layer carries no such dependency and is already live.
+

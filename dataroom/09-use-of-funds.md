@@ -6,24 +6,24 @@
 
 ## 1. The raise
 
-| | |
-|---|---|
-| **Instrument** | Seed round (priced equity or SAFE, per counsel) |
-| **Target** | **$2.5M** |
-| **Runway** | 21–24 months |
-| **Close target** | Q4 2026 |
+|                  |                                                 |
+|------------------|-------------------------------------------------|
+| **Instrument**   | Seed round (priced equity or SAFE, per counsel) |
+| **Target**       | **$2.5M**                                       |
+| **Runway**       | 21–24 months                                    |
+| **Close target** | Q4 2026                                         |
 
 > Note: this raise is equity/SAFE in **FundExecs Technologies, the software company**. It is entirely separate from the BGI Founding Capital Circle and from any interest in BGI Fund I. See document 14 for the entity relationship.
 
 ## 2. Allocation
 
-| Category | $ | % | What it buys |
-|---|---|---|---|
-| **Product & engineering** | $1,375K | 55% | 3–4 founding engineers (full-stack + AI/agent orchestration) for ~21 months; ships the graph query layer, remaining Source/Run/Execute hub modules, automation trigger expansion, org-memory recall, marketplace v1, and production hardening |
-| **GTM & design-partner success** | $500K | 20% | Design-partner success lead; salon program (4–6 capital-formation rooms/yr); case-study production; self-serve funnel polish; referral program operations |
-| **Founder & operations** | $375K | 15% | Founder salary, ops/admin support, finance function |
-| **Infrastructure, AI compute, legal & compliance** | $250K | 10% | Anthropic/API compute for pilots, Supabase/Vercel/AWS, SOC 2 Type I, entity & IP legal hygiene, securities counsel review of the trust layer |
-| **Total** | **$2,500K** | 100% | |
+|                      Category                      |      $      |  %   |                                                                                                                 What it buys                                                                                                                  |
+|----------------------------------------------------|-------------|------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Product & engineering**                          | $1,375K     | 55%  | 3–4 founding engineers (full-stack + AI/agent orchestration) for ~21 months; ships the graph query layer, remaining Source/Run/Execute hub modules, automation trigger expansion, org-memory recall, marketplace v1, and production hardening |
+| **GTM & design-partner success**                   | $500K       | 20%  | Design-partner success lead; salon program (4–6 capital-formation rooms/yr); case-study production; self-serve funnel polish; referral program operations                                                                                     |
+| **Founder & operations**                           | $375K       | 15%  | Founder salary, ops/admin support, finance function                                                                                                                                                                                           |
+| **Infrastructure, AI compute, legal & compliance** | $250K       | 10%  | Anthropic/API compute for pilots, Supabase/Vercel/AWS, SOC 2 Type I, entity & IP legal hygiene, securities counsel review of the trust layer                                                                                                  |
+| **Total**                                          | **$2,500K** | 100% |                                                                                                                                                                                                                                               |
 
 Monthly burn ramps from ~$70K (post-close) to ~$120K (fully staffed), averaging ~$105K — consistent with 21–24 months of runway including a reserve.
 
@@ -55,3 +55,4 @@ Monthly burn ramps from ~$70K (post-close) to ~$120K (fully staffed), averaging 
 
 - **If the round closes at $1.5M:** drop one engineering hire and the marketplace v1 scope; hold the 12-month milestones; runway ~18 months to the same beta + 25-org proof point.
 - **If the round is oversubscribed to $3.5M:** pull forward the AI engineer and the enterprise tier (SSO/SAML, governance pack), targeting $1.5M+ ARR run-rate at month 24.
+

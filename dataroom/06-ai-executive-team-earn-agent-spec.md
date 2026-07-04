@@ -18,43 +18,43 @@ Three properties make this trustworthy enough for fiduciaries:
 
 ### Orchestration
 
-| Agent | Role | Capabilities |
-|---|---|---|
+|  Agent   |                                           Role                                           |                    Capabilities                     |
+|----------|------------------------------------------------------------------------------------------|-----------------------------------------------------|
 | **Earn** | Coordinates workflows and task execution across all hubs — the operator's chief of staff | orchestration · routing · handoff · task management |
 
 ### Run hub
 
-| Agent | Role | Capabilities |
-|---|---|---|
-| **Analyst** | Ingests deal data, financials, market comps; produces pro formas and valuations | pro_forma · valuation · sensitivity · comps |
-| **Diligence** | Parses documents, flags risks, produces diligence memos | doc_parsing · risk_flags · diligence_memo |
+|     Agent     |                                      Role                                       |                Capabilities                 |
+|---------------|---------------------------------------------------------------------------------|---------------------------------------------|
+| **Analyst**   | Ingests deal data, financials, market comps; produces pro formas and valuations | pro_forma · valuation · sensitivity · comps |
+| **Diligence** | Parses documents, flags risks, produces diligence memos                         | doc_parsing · risk_flags · diligence_memo   |
 
 ### Execute hub
 
-| Agent | Role | Capabilities |
-|---|---|---|
-| **Investor Relations** | LP communications, capital calls, reporting | lp_comms · capital_calls · reporting |
-| **Portfolio Ops** | Asset KPIs, budgets, capex, variance alerts | kpis · budgets · capex · variance |
-| **Fund Admin** | Waterfall calculations, fund accounting, audit prep | waterfall · fund_accounting · audit_prep |
+|         Agent          |                        Role                         |               Capabilities               |
+|------------------------|-----------------------------------------------------|------------------------------------------|
+| **Investor Relations** | LP communications, capital calls, reporting         | lp_comms · capital_calls · reporting     |
+| **Portfolio Ops**      | Asset KPIs, budgets, capex, variance alerts         | kpis · budgets · capex · variance        |
+| **Fund Admin**         | Waterfall calculations, fund accounting, audit prep | waterfall · fund_accounting · audit_prep |
 
 ### Source hub
 
-| Agent | Role | Capabilities |
-|---|---|---|
-| **Executive Advisor** | Researches investors, family offices, and partners before first contact | investor_research · targeting · relationship_intel · first_contact |
-| **Capital Raiser** | LP fundraising and capital formation campaigns; founding-circle and anchor-LP pipelines | lp_fundraising · capital_formation · founding_circle · investor_pipeline |
-| **Capital Connector** | Deal financing and capital-stack structuring; lender and equity-partner selection | deal_financing · capital_stack · lender_relations · sponsor_finance |
-| **Deal Sourcer** | Identifies acquisition targets; structures creative financing; positions the buyer | deal_flow · acquisition_strategy · seller_outreach · creative_financing |
-| **Rainmaker** | Converts high-value prospects into commitments; qualification and closing | prospect_conversion · capital_closing · qualification · outreach_sequencing |
+|         Agent         |                                          Role                                           |                                Capabilities                                 |
+|-----------------------|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| **Executive Advisor** | Researches investors, family offices, and partners before first contact                 | investor_research · targeting · relationship_intel · first_contact          |
+| **Capital Raiser**    | LP fundraising and capital formation campaigns; founding-circle and anchor-LP pipelines | lp_fundraising · capital_formation · founding_circle · investor_pipeline    |
+| **Capital Connector** | Deal financing and capital-stack structuring; lender and equity-partner selection       | deal_financing · capital_stack · lender_relations · sponsor_finance         |
+| **Deal Sourcer**      | Identifies acquisition targets; structures creative financing; positions the buyer      | deal_flow · acquisition_strategy · seller_outreach · creative_financing     |
+| **Rainmaker**         | Converts high-value prospects into commitments; qualification and closing               | prospect_conversion · capital_closing · qualification · outreach_sequencing |
 
 ### Build hub
 
-| Agent | Role | Capabilities |
-|---|---|---|
-| **Lead Generator** | Digital funnels capturing investors, owners, operators, connectors | funnel_design · lead_capture · crm_integration · campaign_ops |
-| **PR Director** | Investor materials, pitch decks, CIMs, executive summaries, brand narrative | investor_materials · pitch_decks · cim · brand_narrative · pr |
-| **SEO Disruptor** | Search authority and organic lead generation | seo_strategy · content_authority · organic_leads · category_creation |
-| **Curator** | Private investor rooms and capital-formation salons; post-event conversion | event_curation · private_rooms · rsvp_management · post_event_conversion |
+|       Agent        |                                    Role                                     |                               Capabilities                               |
+|--------------------|-----------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| **Lead Generator** | Digital funnels capturing investors, owners, operators, connectors          | funnel_design · lead_capture · crm_integration · campaign_ops            |
+| **PR Director**    | Investor materials, pitch decks, CIMs, executive summaries, brand narrative | investor_materials · pitch_decks · cim · brand_narrative · pr            |
+| **SEO Disruptor**  | Search authority and organic lead generation                                | seo_strategy · content_authority · organic_leads · category_creation     |
+| **Curator**        | Private investor rooms and capital-formation salons; post-event conversion  | event_curation · private_rooms · rsvp_management · post_event_conversion |
 
 Each agent has a color and motion identity for the live workspace (e.g., Analyst — cyan, precise; Diligence — red, investigative), a seeded catalog row, and a domain knowledge base ("Brain").
 
@@ -94,12 +94,12 @@ An automation = **a natural-language instruction + a trigger + an `auto_approve`
 
 ### 3.5 Learning & memory architecture
 
-| Layer | Mechanism | Status |
-|---|---|---|
-| Domain knowledge | Per-agent Brain knowledge bases (reference corpus) | Live |
-| Operator preference | `operator_feedback` ledger + learned digest injection | Live |
-| Sourcing personalization | Accepted/rejected candidate signals with fit scores | Live |
-| Org memory | Vectorized recall of the org's own completed artifacts | Next (roadmap H2 2026) |
+|          Layer           |                       Mechanism                        |         Status         |
+|--------------------------|--------------------------------------------------------|------------------------|
+| Domain knowledge         | Per-agent Brain knowledge bases (reference corpus)     | Live                   |
+| Operator preference      | `operator_feedback` ledger + learned digest injection  | Live                   |
+| Sourcing personalization | Accepted/rejected candidate signals with fit scores    | Live                   |
+| Org memory               | Vectorized recall of the org's own completed artifacts | Next (roadmap H2 2026) |
 
 ## 4. Cost and model governance
 

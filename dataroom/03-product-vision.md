@@ -24,14 +24,14 @@ Our vision: within five years, a lower-middle-market GP or family office should 
 
 FundExecs OS collapses the 30-tool stack into one platform:
 
-| What it replaces | What it becomes |
-|---|---|
-| DealCloud / Dynamo | Native deal pipeline + deal graph |
-| Carta / Juniper Square | Fund admin + waterfall engine |
-| Affinity / HubSpot | Relationship intelligence graph + Capital Map |
-| Hebbia / AlphaSense | AI-native document analysis inside diligence workflows |
-| Notion + Slack + Zapier | Unified workflow + agent layer + inbox |
-| Visible / Passthrough | LP reporting + capital events + investor portal |
+|    What it replaces     |                    What it becomes                     |
+|-------------------------|--------------------------------------------------------|
+| DealCloud / Dynamo      | Native deal pipeline + deal graph                      |
+| Carta / Juniper Square  | Fund admin + waterfall engine                          |
+| Affinity / HubSpot      | Relationship intelligence graph + Capital Map          |
+| Hebbia / AlphaSense     | AI-native document analysis inside diligence workflows |
+| Notion + Slack + Zapier | Unified workflow + agent layer + inbox                 |
+| Visible / Passthrough   | LP reporting + capital events + investor portal        |
 
 ### The three primitives
 

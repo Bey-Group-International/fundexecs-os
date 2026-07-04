@@ -31,16 +31,16 @@ The access/reputation/attestation layer is deliberately **off-chain, non-transfe
 
 ## 2. Security architecture (current state)
 
-| Control | State |
-|---|---|
-| Tenancy | Row-level security on **every table**; org-membership checks via database helper functions |
-| AuthN/Z | Supabase Auth (email/password + Google OAuth), JWT, middleware session refresh; role-based seats by plan |
-| Auditability | Append-only ledgers (credits, operator feedback, dispatch log), audit log migration, artifact provenance/grounding |
-| Secrets | Never in-repo; deployment-env only (API keys, cron secret, service-role key) |
-| Encryption | At rest (managed Postgres/S3) and in transit (TLS) |
-| Automation guardrails | Secret-guarded cron endpoint; per-sweep spend caps; opt-in auto-approve only |
-| SDLC | CI gates (typecheck/lint/test), versioned migrations, PR review; CodeRabbit review on PRs |
-| Roadmap | SOC 2 Type I within 12 months of seed close; observability stack (OpenTelemetry/Sentry/Grafana) per spec; pen-test before public beta |
+|        Control        |                                                                 State                                                                 |
+|-----------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| Tenancy               | Row-level security on **every table**; org-membership checks via database helper functions                                            |
+| AuthN/Z               | Supabase Auth (email/password + Google OAuth), JWT, middleware session refresh; role-based seats by plan                              |
+| Auditability          | Append-only ledgers (credits, operator feedback, dispatch log), audit log migration, artifact provenance/grounding                    |
+| Secrets               | Never in-repo; deployment-env only (API keys, cron secret, service-role key)                                                          |
+| Encryption            | At rest (managed Postgres/S3) and in transit (TLS)                                                                                    |
+| Automation guardrails | Secret-guarded cron endpoint; per-sweep spend caps; opt-in auto-approve only                                                          |
+| SDLC                  | CI gates (typecheck/lint/test), versioned migrations, PR review; CodeRabbit review on PRs                                             |
+| Roadmap               | SOC 2 Type I within 12 months of seed close; observability stack (OpenTelemetry/Sentry/Grafana) per spec; pen-test before public beta |
 
 ## 3. AI governance
 
@@ -57,17 +57,17 @@ Residual risk: LLM error inside an *approved* deliverable (e.g., a flawed pro fo
 
 ## 4. Principal business risks
 
-| # | Risk | Severity | Mitigation |
-|---|---|---|---|
-| 1 | **Model dependency** (pricing, availability, terms of frontier-model supply) | High | Provider-adapter design (multi-model routing planned); deterministic fallbacks; credits pass cost changes through to price |
-| 2 | **Incumbent response** (Intapp/Carta ship agentic layers) | High | Architecture head start (task engine, gates, graphs); beachhead segment incumbents don't serve; speed |
-| 3 | **Key-person concentration** (solo founder) | High | Seed round funds founding team; AGENT.md/living-documentation practice makes the build unusually transferable; advisory bench |
-| 4 | **Beachhead fragility** (emerging managers churn/fail) | Medium | Usage pricing, family-office segment, expansion into established GPs |
-| 5 | **Related-party optics** (BGI/Fund I as first customer) | Medium | Arm's-length terms, disclosure, and separation governance — document 14 |
-| 6 | **Repricing risk** (early cohort anchored on $5–100/mo) | Medium | Grandfathering + usage growth; institutional tiers for new cohorts with documented value evidence |
-| 7 | **Security incident** in a trust-sensitive market | Medium (high impact) | Controls in §2; SOC 2 path; incident-response plan pre-beta; insurance (E&O/cyber) at seed close |
-| 8 | **Regulatory drift** (AI rules, broker-dealer boundary, token regimes) | Medium | Counsel-gated feature releases (§1); conservative defaults; the product's audit-trail DNA is itself the compliance asset |
-| 9 | **Pre-revenue execution risk** (alpha product, projections unproven) | High | Disclosed throughout this data room; milestone-based use of funds (document 09) |
+| # |                                     Risk                                     |       Severity       |                                                          Mitigation                                                           |
+|---|------------------------------------------------------------------------------|----------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| 1 | **Model dependency** (pricing, availability, terms of frontier-model supply) | High                 | Provider-adapter design (multi-model routing planned); deterministic fallbacks; credits pass cost changes through to price    |
+| 2 | **Incumbent response** (Intapp/Carta ship agentic layers)                    | High                 | Architecture head start (task engine, gates, graphs); beachhead segment incumbents don't serve; speed                         |
+| 3 | **Key-person concentration** (solo founder)                                  | High                 | Seed round funds founding team; AGENT.md/living-documentation practice makes the build unusually transferable; advisory bench |
+| 4 | **Beachhead fragility** (emerging managers churn/fail)                       | Medium               | Usage pricing, family-office segment, expansion into established GPs                                                          |
+| 5 | **Related-party optics** (BGI/Fund I as first customer)                      | Medium               | Arm's-length terms, disclosure, and separation governance — document 14                                                       |
+| 6 | **Repricing risk** (early cohort anchored on $5–100/mo)                      | Medium               | Grandfathering + usage growth; institutional tiers for new cohorts with documented value evidence                             |
+| 7 | **Security incident** in a trust-sensitive market                            | Medium (high impact) | Controls in §2; SOC 2 path; incident-response plan pre-beta; insurance (E&O/cyber) at seed close                              |
+| 8 | **Regulatory drift** (AI rules, broker-dealer boundary, token regimes)       | Medium               | Counsel-gated feature releases (§1); conservative defaults; the product's audit-trail DNA is itself the compliance asset      |
+| 9 | **Pre-revenue execution risk** (alpha product, projections unproven)         | High                 | Disclosed throughout this data room; milestone-based use of funds (document 09)                                               |
 
 ## 5. Insurance & corporate hygiene (at/near seed close)
 

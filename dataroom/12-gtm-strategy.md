@@ -10,30 +10,33 @@ Enter at the moment of maximum pain and budget: **capital formation for emerging
 
 ## 2. ICP and entry trigger
 
-| | Primary ICP | Secondary |
-|---|---|---|
-| Who | Emerging managers (Funds I–III), independent sponsors | Family offices doing directs; LMM GPs modernizing |
-| Size | 1–15 people, $10M–$500M target AUM | up to $1B AUM |
-| Trigger | Starting or running a raise; spinning out; first institutional LP demands | Tool-stack consolidation; analyst attrition |
-| Budget owner | Founder/Managing Partner (no procurement) | COO/CFO |
+|              |                                Primary ICP                                |                     Secondary                     |
+|--------------|---------------------------------------------------------------------------|---------------------------------------------------|
+| Who          | Emerging managers (Funds I–III), independent sponsors                     | Family offices doing directs; LMM GPs modernizing |
+| Size         | 1–15 people, $10M–$500M target AUM                                        | up to $1B AUM                                     |
+| Trigger      | Starting or running a raise; spinning out; first institutional LP demands | Tool-stack consolidation; analyst attrition       |
+| Budget owner | Founder/Managing Partner (no procurement)                                 | COO/CFO                                           |
 
 **Entry trigger is the raise.** A manager mid-raise needs investor research, outreach sequencing, pipeline discipline, materials, and follow-up — exactly the Source/Build agent set — and feels the pain daily.
 
 ## 3. Channels (sequenced)
 
 ### Phase 1 (now → month 9): founder-led + design partners
+
 - **BGI Fund I in-house** — the live proving ground and demo (arm's-length terms per document 14).
 - **3–5 external design partners** from the founder's advisory network: discounted Scale-tier, weekly feedback, case-study rights.
 - **Salon channel:** capital-formation rooms (The $100M Room format) put 25–100 exact-ICP principals in a room; the platform itself runs the event follow-up (Curator/Rainmaker agents) — the sales motion demos the product.
 - Target: 40 paying orgs, 2 public case studies.
 
 ### Phase 2 (months 9–18): product-led + referral flywheel
+
 - Self-serve signup → demo seed → guided tour → credit packs ($5–90) → plan conversion. The demo-readiness layer already shipped makes the product self-demonstrating.
 - **In-product referral program** (live: referral credits + gifts) aimed at the tightest-networked industry on earth.
 - Content/SEO motion executed by our own Build-hub agents (PR Director / SEO Disruptor playbooks) — dogfooding as marketing.
 - Webinar-free positioning: private rooms, operator round-tables, LP-intro dinners.
 
 ### Phase 3 (months 18+): partner channel + enterprise motion
+
 - **Fund formation attorneys, fund administrators, placement agents** as referrers/resellers — they meet every new manager first and gain a client-success tool.
 - Enterprise tier (SSO/SAML, governance pack) for established LMM GPs, sold on trust architecture + audit trail.
 - Marketplace network effects: deal shares and matchmaking give orgs a reason to invite counterparties onto the platform — each deal is a distribution event.
@@ -64,18 +67,19 @@ Planning ratios (illustrative): salon of 50 → ~15 signups → ~8 activated →
 
 ## 7. Metrics that govern the plan
 
-| Metric | Target (month 18) |
-|---|---|
-| Activated orgs (first approved workflow) | 60% of signups |
-| Paying orgs | 100+ |
-| ARR run-rate | ~$1M |
-| NRR | ≥110% |
-| Weekly workflows per active org | ≥5 |
-| % orgs with ≥1 trusted automation | ≥40% (the leading indicator of lock-in) |
-| Referral-sourced signups | ≥30% |
+|                  Metric                  |            Target (month 18)            |
+|------------------------------------------|-----------------------------------------|
+| Activated orgs (first approved workflow) | 60% of signups                          |
+| Paying orgs                              | 100+                                    |
+| ARR run-rate                             | ~$1M                                    |
+| NRR                                      | ≥110%                                   |
+| Weekly workflows per active org          | ≥5                                      |
+| % orgs with ≥1 trusted automation        | ≥40% (the leading indicator of lock-in) |
+| Referral-sourced signups                 | ≥30%                                    |
 
 ## 8. Risks and counters
 
 - **Salon motion doesn't scale** → it doesn't need to; it seeds the referral flywheel, and PLG + partners carry volume.
 - **Free/underpriced cohort resists repricing** → grandfathering + credits mean revenue still grows with usage; repricing applies to new cohorts.
 - **Activation stalls (operators don't trust agents)** → double down on the gate layer UX, provenance display, and templates seeded from real BGI Fund I workflows; the guided tour exists precisely for this.
+

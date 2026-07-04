@@ -8,12 +8,12 @@
 
 ## 1. The three entities at a glance
 
-| | **Bey Group International (BGI)** | **BGI Fund I** | **FundExecs Technologies** |
-|---|---|---|---|
-| What it is | Multi-strategy alternative-investment platform and holding company founded by Sheik Astin Simmons-Bey | A **$100M target, control-oriented lower-middle-market private equity fund** sponsored by BGI | A **software company** building FundExecs OS |
-| Business | Platform building, capital formation, advisory, sponsorship of investment vehicles | Acquire underperforming but EBITDA-positive businesses and experiential real assets; institutionalize, integrate, scale, exit | Vertical AI SaaS for private-market operators |
-| Capital instrument discussed in its materials | **Founding Capital Circle** — formation-capital round for the BGI platform ($1.5M target / $2M hard cap; revenue-participation instrument) | LP interests in Fund I (institutional raise; first-close target $25M) | **Seed equity/SAFE in FundExecs Technologies** (this data room, document 09) |
-| Relationship to the others | Common founder; BGI ecosystem is FundExecs' design partner and first customer community | Sponsored by BGI; **customer** of FundExecs OS | Independent company; **vendor** to BGI/Fund I |
+|                                               |                                                     **Bey Group International (BGI)**                                                      |                                                        **BGI Fund I**                                                         |                          **FundExecs Technologies**                          |
+|-----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|
+| What it is                                    | Multi-strategy alternative-investment platform and holding company founded by Sheik Astin Simmons-Bey                                      | A **$100M target, control-oriented lower-middle-market private equity fund** sponsored by BGI                                 | A **software company** building FundExecs OS                                 |
+| Business                                      | Platform building, capital formation, advisory, sponsorship of investment vehicles                                                         | Acquire underperforming but EBITDA-positive businesses and experiential real assets; institutionalize, integrate, scale, exit | Vertical AI SaaS for private-market operators                                |
+| Capital instrument discussed in its materials | **Founding Capital Circle** — formation-capital round for the BGI platform ($1.5M target / $2M hard cap; revenue-participation instrument) | LP interests in Fund I (institutional raise; first-close target $25M)                                                         | **Seed equity/SAFE in FundExecs Technologies** (this data room, document 09) |
+| Relationship to the others                    | Common founder; BGI ecosystem is FundExecs' design partner and first customer community                                                    | Sponsored by BGI; **customer** of FundExecs OS                                                                                | Independent company; **vendor** to BGI/Fund I                                |
 
 **The one-sentence version:** BGI is the founder's investment platform; BGI Fund I is the fund that platform sponsors; FundExecs Technologies is a separate software company whose product, FundExecs OS, BGI and Fund I use as their operating system — and each has its own investors, its own instrument, and its own risk.
 
@@ -76,13 +76,13 @@ Each strengthens the other's story — without either owning the other's risk
 
 ## 8. Risks of the relationship (stated plainly)
 
-| Risk | Mitigation |
-|---|---|
-| Founder bandwidth split across three entities | §6.3 commitment + seed-funded team; diligence directly |
-| Optics of self-dealing (vendor terms, IP) | Written arm's-length agreements, disclosure, board approval of related-party transactions |
-| Confusion between the raises | Capital separation language (§3) in every instrument's materials; different instruments, different banks, different counsel |
-| Fund I underperformance reflecting on FundExecs | FundExecs' customer base diversifies beyond BGI in year one (document 12); Fund I is a customer, not collateral |
-| Brain/playbook IP provenance | License/assignment executed at or before seed close (§4) |
+|                      Risk                       |                                                         Mitigation                                                          |
+|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| Founder bandwidth split across three entities   | §6.3 commitment + seed-funded team; diligence directly                                                                      |
+| Optics of self-dealing (vendor terms, IP)       | Written arm's-length agreements, disclosure, board approval of related-party transactions                                   |
+| Confusion between the raises                    | Capital separation language (§3) in every instrument's materials; different instruments, different banks, different counsel |
+| Fund I underperformance reflecting on FundExecs | FundExecs' customer base diversifies beyond BGI in year one (document 12); Fund I is a customer, not collateral             |
+| Brain/playbook IP provenance                    | License/assignment executed at or before seed close (§4)                                                                    |
 
 ## 9. Bottom line
 

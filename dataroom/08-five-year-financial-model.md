@@ -12,63 +12,63 @@ Revenue builds bottom-up from **paying organizations × blended ARPA**, where AR
 
 ### Pricing assumptions (blended ARPA by year)
 
-| | FY1 | FY2 | FY3 | FY4 | FY5 |
-|---|---|---|---|---|---|
-| Starter-tier equivalent ($/org/mo) | 50 | 100 | 150 | 175 | 200 |
-| Pro-tier equivalent ($/org/mo) | 300 | 500 | 750 | 900 | 1,000 |
-| Scale-tier equivalent ($/org/mo) | 1,000 | 1,750 | 2,500 | 3,000 | 3,500 |
-| Mix (Starter/Pro/Scale) | 60/30/10 | 50/35/15 | 40/40/20 | 35/40/25 | 30/40/30 |
-| Credits/usage uplift on subscription | +15% | +20% | +25% | +30% | +30% |
-| **Blended ARPA ($/org/yr)** | **~2,100** | **~4,700** | **~8,600** | **~11,300** | **~13,900** |
+|                                      |    FY1     |    FY2     |    FY3     |     FY4     |     FY5     |
+|--------------------------------------|------------|------------|------------|-------------|-------------|
+| Starter-tier equivalent ($/org/mo)   | 50         | 100        | 150        | 175         | 200         |
+| Pro-tier equivalent ($/org/mo)       | 300        | 500        | 750        | 900         | 1,000       |
+| Scale-tier equivalent ($/org/mo)     | 1,000      | 1,750      | 2,500      | 3,000       | 3,500       |
+| Mix (Starter/Pro/Scale)              | 60/30/10   | 50/35/15   | 40/40/20   | 35/40/25    | 30/40/30    |
+| Credits/usage uplift on subscription | +15%       | +20%       | +25%       | +30%        | +30%        |
+| **Blended ARPA ($/org/yr)**          | **~2,100** | **~4,700** | **~8,600** | **~11,300** | **~13,900** |
 
 Rationale: Pro-tier at $500–$1,000/mo remains <2% of the cost of one analyst hire; Scale-tier at $2.5–3.5K/mo remains a fraction of a single DealCloud or Juniper Square contract while covering far more surface.
 
 ### Customer assumptions
 
-| | FY1 | FY2 | FY3 | FY4 | FY5 |
-|---|---|---|---|---|---|
-| New paying orgs added | 45 | 135 | 330 | 640 | 1,080 |
-| Gross logo churn (annual) | 15% | 15% | 12% | 10% | 10% |
-| **Paying orgs (EOY)** | **40** | **160** | **450** | **1,000** | **1,900** |
-| Net revenue retention | 100% | 110% | 115% | 118% | 120% |
+|                           |  FY1   |   FY2   |   FY3   |    FY4    |    FY5    |
+|---------------------------|--------|---------|---------|-----------|-----------|
+| New paying orgs added     | 45     | 135     | 330     | 640       | 1,080     |
+| Gross logo churn (annual) | 15%    | 15%     | 12%     | 10%       | 10%       |
+| **Paying orgs (EOY)**     | **40** | **160** | **450** | **1,000** | **1,900** |
+| Net revenue retention     | 100%   | 110%    | 115%    | 118%      | 120%      |
 
 Acquisition mix: FY1 is founder-led + design partners; FY2–FY3 add salon/referral/PLG; FY4–FY5 add partner channel. FY5's 1,900 orgs ≈ 4–5% of the ~40–45K addressable firms (document 10) — ambitious but not implausible for a category leader.
 
 ## 2. Revenue build
 
-| $M | FY1 | FY2 | FY3 | FY4 | FY5 |
-|---|---|---|---|---|---|
-| Subscription + usage ARR (EOY) | 0.28 | 1.30 | 4.45 | 12.0 | 25.0 |
-| Marketplace + data/API ARR | — | 0.05 | 0.55 | 1.5 | 3.0 |
-| **Total ARR (EOY)** | **0.28** | **1.35** | **5.0** | **13.5** | **28.0** |
-| **Recognized revenue** | **0.15** | **0.8** | **3.0** | **9.0** | **20.5** |
+|               $M               |   FY1    |   FY2    |   FY3   |   FY4    |   FY5    |
+|--------------------------------|----------|----------|---------|----------|----------|
+| Subscription + usage ARR (EOY) | 0.28     | 1.30     | 4.45    | 12.0     | 25.0     |
+| Marketplace + data/API ARR     | —        | 0.05     | 0.55    | 1.5      | 3.0      |
+| **Total ARR (EOY)**            | **0.28** | **1.35** | **5.0** | **13.5** | **28.0** |
+| **Recognized revenue**         | **0.15** | **0.8**  | **3.0** | **9.0**  | **20.5** |
 
 Marketplace/data revenue = take-rate on matched transactions + API grants, ramping only after the marketplace ships (FY2+); held deliberately conservative.
 
 ## 3. P&L summary
 
-| $M | FY1 | FY2 | FY3 | FY4 | FY5 |
-|---|---|---|---|---|---|
-| Revenue | 0.15 | 0.8 | 3.0 | 9.0 | 20.5 |
-| COGS (AI compute, infra, support) | 0.08 | 0.25 | 0.7 | 1.9 | 3.9 |
-| **Gross profit** | 0.07 | 0.55 | 2.3 | 7.1 | 16.6 |
-| **Gross margin** | ~45% | ~69% | ~77% | ~79% | ~81% |
-| R&D / Engineering | 0.9 | 1.5 | 2.6 | 4.5 | 7.0 |
-| Sales & Marketing | 0.2 | 0.5 | 1.3 | 2.7 | 4.9 |
-| G&A (incl. legal/compliance) | 0.3 | 0.5 | 0.9 | 1.6 | 2.5 |
-| **Total OpEx** | **1.4** | **2.5** | **4.8** | **8.8** | **14.4** |
-| **EBITDA** | **(1.33)** | **(1.95)** | **(2.5)** | **(1.7)** | **+2.2** |
+|                $M                 |    FY1     |    FY2     |    FY3    |    FY4    |   FY5    |
+|-----------------------------------|------------|------------|-----------|-----------|----------|
+| Revenue                           | 0.15       | 0.8        | 3.0       | 9.0       | 20.5     |
+| COGS (AI compute, infra, support) | 0.08       | 0.25       | 0.7       | 1.9       | 3.9      |
+| **Gross profit**                  | 0.07       | 0.55       | 2.3       | 7.1       | 16.6     |
+| **Gross margin**                  | ~45%       | ~69%       | ~77%      | ~79%      | ~81%     |
+| R&D / Engineering                 | 0.9        | 1.5        | 2.6       | 4.5       | 7.0      |
+| Sales & Marketing                 | 0.2        | 0.5        | 1.3       | 2.7       | 4.9      |
+| G&A (incl. legal/compliance)      | 0.3        | 0.5        | 0.9       | 1.6       | 2.5      |
+| **Total OpEx**                    | **1.4**    | **2.5**    | **4.8**   | **8.8**   | **14.4** |
+| **EBITDA**                        | **(1.33)** | **(1.95)** | **(2.5)** | **(1.7)** | **+2.2** |
 
 Gross margin starts low (heavy AI usage per early account, unpriced pilots) and normalizes to ~80% as model costs fall, routing improves, and repricing lands. EBITDA breakeven late FY5 on this plan; a Series A (~FY2/FY3, at or above $1.5M ARR) funds the FY3–FY4 loss years.
 
 ## 4. Headcount plan
 
-| FTEs (EOY) | FY1 | FY2 | FY3 | FY4 | FY5 |
-|---|---|---|---|---|---|
-| Engineering & product | 4 | 7 | 12 | 20 | 30 |
-| GTM & success | 1 | 3 | 7 | 13 | 21 |
-| G&A / ops | 1 | 2 | 3 | 5 | 8 |
-| **Total** | **6** | **12** | **22** | **38** | **59** |
+|      FTEs (EOY)       |  FY1  |  FY2   |  FY3   |  FY4   |  FY5   |
+|-----------------------|-------|--------|--------|--------|--------|
+| Engineering & product | 4     | 7      | 12     | 20     | 30     |
+| GTM & success         | 1     | 3      | 7      | 13     | 21     |
+| G&A / ops             | 1     | 2      | 3      | 5      | 8      |
+| **Total**             | **6** | **12** | **22** | **38** | **59** |
 
 The product's own thesis applies internally: agents carry a large share of support, content, and ops work, keeping revenue per employee high (target >$300K by FY5).
 
@@ -80,12 +80,12 @@ The product's own thesis applies internally: agents carry a large share of suppo
 
 ## 6. Key sensitivities
 
-| Variable | Downside effect | Mitigant |
-|---|---|---|
-| Repricing lags proof of value | FY3+ ARR −40–50% | Credits still capture usage growth; delay hires to match |
-| Churn 20%+ in beachhead | FY5 orgs ~1,300 | Compounding graphs/Brains raise switching costs with tenure |
-| AI compute cost doesn't fall | GM plateaus ~70% | Cost-tiered routing (already live), per-run caps, pass-through via credits |
-| Slower logo adds (½ pace) | FY5 ARR ~$14M | Still a strong Series B profile; burn scales down with GTM spend |
+|           Variable            | Downside effect  |                                  Mitigant                                  |
+|-------------------------------|------------------|----------------------------------------------------------------------------|
+| Repricing lags proof of value | FY3+ ARR −40–50% | Credits still capture usage growth; delay hires to match                   |
+| Churn 20%+ in beachhead       | FY5 orgs ~1,300  | Compounding graphs/Brains raise switching costs with tenure                |
+| AI compute cost doesn't fall  | GM plateaus ~70% | Cost-tiered routing (already live), per-run caps, pass-through via credits |
+| Slower logo adds (½ pace)     | FY5 ARR ~$14M    | Still a strong Series B profile; burn scales down with GTM spend           |
 
 ## 7. What would make the model conservative
 
@@ -93,3 +93,4 @@ The product's own thesis applies internally: agents carry a large share of suppo
 - Marketplace take-rate held to a token ramp.
 - No LP/allocator-side monetization despite the portal existing in-product.
 - ARPA ceilings well below incumbent enterprise contracts (DealCloud-class deployments commonly run $50K–$250K+/yr).
+

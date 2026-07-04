@@ -10,22 +10,22 @@
 
 ## Contents
 
-| # | Document | File | Purpose |
-|---|----------|------|---------|
-| 01 | Executive Summary | `01-executive-summary.md` | Two-page overview of the company, product, market, and ask |
-| 02 | FundExecs Technologies Pitch Deck | `02-pitch-deck.md` | Slide-by-slide investor narrative |
-| 03 | FundExecs OS Product Vision | `03-product-vision.md` | What we are building and why it wins |
-| 04 | Product Roadmap | `04-product-roadmap.md` | What is shipped, in flight, and planned through GA |
-| 05 | Platform Architecture Map | `05-platform-architecture-map.md` | Hubs, agents, graphs, task engine, data model, security |
-| 06 | AI Executive Team / Earn Agent Spec | `06-ai-executive-team-earn-agent-spec.md` | The fifteen-agent executive team and the Earn orchestrator specification |
-| 07 | Business Model Canvas | `07-business-model-canvas.md` | The business on one page (nine-block canvas) |
-| 08 | 5-Year Financial Model | `08-five-year-financial-model.md` | Assumptions, revenue build, P&L summary, headcount |
-| 09 | Use of Funds | `09-use-of-funds.md` | Raise size, allocation, runway, and milestones |
-| 10 | Market Opportunity Memo | `10-market-opportunity-memo.md` | TAM / SAM / SOM and structural tailwinds |
-| 11 | Competitive Landscape | `11-competitive-landscape.md` | Incumbents, adjacents, and our positioning |
-| 12 | GTM Strategy | `12-gtm-strategy.md` | Wedge, channels, sales motion, and pricing strategy |
-| 13 | Risk & Compliance Memo | `13-risk-compliance-memo.md` | Regulatory posture, data security, AI governance, key risks |
-| 14 | BGI / Fund I / FundExecs Technologies Relationship Memo | `14-bgi-fund-i-relationship-memo.md` | Entity structure, IP ownership, related-party governance |
+| #  |                        Document                         |                   File                    |                                 Purpose                                  |
+|----|---------------------------------------------------------|-------------------------------------------|--------------------------------------------------------------------------|
+| 01 | Executive Summary                                       | `01-executive-summary.md`                 | Two-page overview of the company, product, market, and ask               |
+| 02 | FundExecs Technologies Pitch Deck                       | `02-pitch-deck.md`                        | Slide-by-slide investor narrative                                        |
+| 03 | FundExecs OS Product Vision                             | `03-product-vision.md`                    | What we are building and why it wins                                     |
+| 04 | Product Roadmap                                         | `04-product-roadmap.md`                   | What is shipped, in flight, and planned through GA                       |
+| 05 | Platform Architecture Map                               | `05-platform-architecture-map.md`         | Hubs, agents, graphs, task engine, data model, security                  |
+| 06 | AI Executive Team / Earn Agent Spec                     | `06-ai-executive-team-earn-agent-spec.md` | The fifteen-agent executive team and the Earn orchestrator specification |
+| 07 | Business Model Canvas                                   | `07-business-model-canvas.md`             | The business on one page (nine-block canvas)                             |
+| 08 | 5-Year Financial Model                                  | `08-five-year-financial-model.md`         | Assumptions, revenue build, P&L summary, headcount                       |
+| 09 | Use of Funds                                            | `09-use-of-funds.md`                      | Raise size, allocation, runway, and milestones                           |
+| 10 | Market Opportunity Memo                                 | `10-market-opportunity-memo.md`           | TAM / SAM / SOM and structural tailwinds                                 |
+| 11 | Competitive Landscape                                   | `11-competitive-landscape.md`             | Incumbents, adjacents, and our positioning                               |
+| 12 | GTM Strategy                                            | `12-gtm-strategy.md`                      | Wedge, channels, sales motion, and pricing strategy                      |
+| 13 | Risk & Compliance Memo                                  | `13-risk-compliance-memo.md`              | Regulatory posture, data security, AI governance, key risks              |
+| 14 | BGI / Fund I / FundExecs Technologies Relationship Memo | `14-bgi-fund-i-relationship-memo.md`      | Entity structure, IP ownership, related-party governance                 |
 
 ---
 

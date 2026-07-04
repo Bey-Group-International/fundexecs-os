@@ -42,14 +42,14 @@
 
 ## 5. Revenue streams
 
-| Stream | Mechanics | Status |
-|---|---|---|
-| **Subscription plans** | Starter / Pro / Scale per-org tiers with seat limits (1 / 10 / unlimited) — live in-product at early-access pricing ($5 / $30 / $100 per month; annual = 10× monthly) | Live |
-| **Metered credits** | Agent execution burns credits; credit packs ($5–$90) top up beyond plan allotments — usage revenue scales with work delegated | Live |
-| **Institutional repricing** | As deliverable value is proven, tiers reprice toward the value of work replaced (target: $300–$2,500/org/mo blended; see document 08) | Planned Y1–Y2 |
-| **Marketplace take-rate** | Listings + matching between orgs (deal shares, services, co-invest) | Schema live; logic planned |
-| **Data / API grants** | Scoped programmatic access for partners and LPs | Plumbing live |
-| **Trust layer** | Reputation-based entitlements, attestations, verified track record — premium governance features | Specified |
+|           Stream            |                                                                               Mechanics                                                                               |           Status           |
+|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| **Subscription plans**      | Starter / Pro / Scale per-org tiers with seat limits (1 / 10 / unlimited) — live in-product at early-access pricing ($5 / $30 / $100 per month; annual = 10× monthly) | Live                       |
+| **Metered credits**         | Agent execution burns credits; credit packs ($5–$90) top up beyond plan allotments — usage revenue scales with work delegated                                         | Live                       |
+| **Institutional repricing** | As deliverable value is proven, tiers reprice toward the value of work replaced (target: $300–$2,500/org/mo blended; see document 08)                                 | Planned Y1–Y2              |
+| **Marketplace take-rate**   | Listings + matching between orgs (deal shares, services, co-invest)                                                                                                   | Schema live; logic planned |
+| **Data / API grants**       | Scoped programmatic access for partners and LPs                                                                                                                       | Plumbing live              |
+| **Trust layer**             | Reputation-based entitlements, attestations, verified track record — premium governance features                                                                      | Specified                  |
 
 ## 6. Key resources
 

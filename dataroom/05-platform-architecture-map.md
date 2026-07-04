@@ -42,12 +42,12 @@
 
 ## 2. The four hubs
 
-| Hub | Purpose | Key modules |
-|---|---|---|
-| **Build** | Identity and foundation | Profile · Thesis · Brand · Entity · Track Record · Team |
-| **Source** | Pipelines and relationships | LP Pipeline · Deal Pipeline · Debt & Hybrid · Partners · Providers |
-| **Run** | Evaluate active deals | Strategy · Diligence · Underwriting · Stress Test · Comms · Risk |
-| **Execute** | Operate post-closing | Closing · Capital Events · Asset Management · Reporting · Exit |
+|     Hub     |           Purpose           |                            Key modules                             |
+|-------------|-----------------------------|--------------------------------------------------------------------|
+| **Build**   | Identity and foundation     | Profile · Thesis · Brand · Entity · Track Record · Team            |
+| **Source**  | Pipelines and relationships | LP Pipeline · Deal Pipeline · Debt & Hybrid · Partners · Providers |
+| **Run**     | Evaluate active deals       | Strategy · Diligence · Underwriting · Stress Test · Comms · Risk   |
+| **Execute** | Operate post-closing        | Closing · Capital Events · Asset Management · Reporting · Exit     |
 
 ## 3. The fifteen agents (grouped by hub)
 
@@ -96,11 +96,11 @@ User prompt (or trigger fires)
 
 ## 5. The three graphs
 
-| Graph | Contents | Feeds |
-|---|---|---|
-| **Relationship** | Who knows whom; who invested in / financed what | Capital Map temperature, warm-intro pathfinding |
-| **Deal** | Deals, targets, portfolio companies, SPVs, funds | Pipeline, underwriting context, deal intelligence workspace |
-| **Capital** | LPs, investors, lenders, family offices, banks | LP pipeline, capital stack, allocator portfolios |
+|      Graph       |                     Contents                     |                            Feeds                            |
+|------------------|--------------------------------------------------|-------------------------------------------------------------|
+| **Relationship** | Who knows whom; who invested in / financed what  | Capital Map temperature, warm-intro pathfinding             |
+| **Deal**         | Deals, targets, portfolio companies, SPVs, funds | Pipeline, underwriting context, deal intelligence workspace |
+| **Capital**      | LPs, investors, lenders, family offices, banks   | LP pipeline, capital stack, allocator portfolios            |
 
 All three are **native, first-party structures** in the schema (no external graph dependency). The dedicated `/graph/*` query layer and visualizations are the current build focus.
 
@@ -115,15 +115,15 @@ All three are **native, first-party structures** in the schema (no external grap
 
 Native REST, no external SDKs for core intelligence:
 
-| Endpoint | Role |
-|---|---|
-| `POST /api/prompt` | Accepts an objective; plans it into a workflow |
-| `GET /api/task` | Workflow and step status |
-| `POST /api/approve` | Approval gate; triggers execution |
-| `GET /api/report` | Deliverables and analytics for a workflow |
-| `GET /api/agents` | Agent catalog and workloads |
-| `GET /api/cron` | Secret-guarded automation sweep (hourly) |
-| `GET /api/graph/*` | Relationship / Deal / Capital graph queries (in flight) |
+|      Endpoint       |                          Role                           |
+|---------------------|---------------------------------------------------------|
+| `POST /api/prompt`  | Accepts an objective; plans it into a workflow          |
+| `GET /api/task`     | Workflow and step status                                |
+| `POST /api/approve` | Approval gate; triggers execution                       |
+| `GET /api/report`   | Deliverables and analytics for a workflow               |
+| `GET /api/agents`   | Agent catalog and workloads                             |
+| `GET /api/cron`     | Secret-guarded automation sweep (hourly)                |
+| `GET /api/graph/*`  | Relationship / Deal / Capital graph queries (in flight) |
 
 Plus: API keys and scoped data-API grants for programmatic org access.
 
@@ -135,14 +135,14 @@ Plus: API keys and scoped data-API grants for programmatic org access.
 
 ## 9. Infrastructure, security, observability
 
-| Layer | Technology |
-|---|---|
-| Hosting | Vercel (+ Railway/Docker option), Cloudflare, AWS/S3 for documents |
-| Auth | Supabase Auth — email/password + Google OAuth; JWT; middleware session refresh |
-| Security | RLS everywhere · org tenancy · encryption at rest · audit logging · secrets never in-repo |
-| Automation | Vercel Cron → `/api/cron` (CRON_SECRET-guarded, per-sweep spend cap) |
-| Observability (spec) | Prometheus · Grafana · OpenTelemetry · Sentry |
-| CI | GitHub Actions; typecheck/lint/test gates |
+|        Layer         |                                        Technology                                         |
+|----------------------|-------------------------------------------------------------------------------------------|
+| Hosting              | Vercel (+ Railway/Docker option), Cloudflare, AWS/S3 for documents                        |
+| Auth                 | Supabase Auth — email/password + Google OAuth; JWT; middleware session refresh            |
+| Security             | RLS everywhere · org tenancy · encryption at rest · audit logging · secrets never in-repo |
+| Automation           | Vercel Cron → `/api/cron` (CRON_SECRET-guarded, per-sweep spend cap)                      |
+| Observability (spec) | Prometheus · Grafana · OpenTelemetry · Sentry                                             |
+| CI                   | GitHub Actions; typecheck/lint/test gates                                                 |
 
 ## 10. Architectural principles
 
@@ -150,3 +150,4 @@ Plus: API keys and scoped data-API grants for programmatic org access.
 2. **One spine, many entry points** — Copilot, automations, and future triggers share the plan→gate→execute path, so every new trigger inherits trust and audit for free.
 3. **Everything durable** — steps leave artifacts, workflows leave records, actions leave ledger entries. Chat is never the system of record.
 4. **Autonomy is opt-in** — the default is a gate; trust is granted per-automation and revocable.
+

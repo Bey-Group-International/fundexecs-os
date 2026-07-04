@@ -22,11 +22,11 @@ Two budgets converge on FundExecs OS:
 
 ## 3. TAM / SAM / SOM
 
-| Level | Definition | Count | Value logic | Size |
-|---|---|---|---|---|
-| **TAM** | All GPs, family offices, independent sponsors, and allocators globally that run private-market workflows | ~18K GPs + ~10K family offices + ~15K sponsors/syndicators/advisors ≈ **43K+ firms** | at a mature blended $25–75K/yr per firm (software + usage, still ≪ labor replaced) | **$1.5–3B+ ARR** software-addressable today; multiples of that as agent work displaces labor spend |
-| **SAM** | English-speaking, LMM-and-below GPs, emerging managers, independent sponsors, family offices doing directs — the segment priced out of enterprise incumbents | ~20–25K firms | blended $10–30K/yr | **$300–600M ARR** |
-| **SOM (5-yr)** | Category-leading share of the beachhead via founder network, salons, PLG, and partners | ~1,900 orgs (≈4–5% of SAM firms) | blended ~$14K ARPA (document 08) | **~$28M ARR** |
+|     Level      |                                                                          Definition                                                                          |                                        Count                                         |                                    Value logic                                     |                                                Size                                                |
+|----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| **TAM**        | All GPs, family offices, independent sponsors, and allocators globally that run private-market workflows                                                     | ~18K GPs + ~10K family offices + ~15K sponsors/syndicators/advisors ≈ **43K+ firms** | at a mature blended $25–75K/yr per firm (software + usage, still ≪ labor replaced) | **$1.5–3B+ ARR** software-addressable today; multiples of that as agent work displaces labor spend |
+| **SAM**        | English-speaking, LMM-and-below GPs, emerging managers, independent sponsors, family offices doing directs — the segment priced out of enterprise incumbents | ~20–25K firms                                                                        | blended $10–30K/yr                                                                 | **$300–600M ARR**                                                                                  |
+| **SOM (5-yr)** | Category-leading share of the beachhead via founder network, salons, PLG, and partners                                                                       | ~1,900 orgs (≈4–5% of SAM firms)                                                     | blended ~$14K ARPA (document 08)                                                   | **~$28M ARR**                                                                                      |
 
 ## 4. Why this segment is the right wedge
 
@@ -44,11 +44,11 @@ Two budgets converge on FundExecs OS:
 
 ## 6. Risks to the thesis
 
-| Risk | Read |
-|---|---|
-| Incumbents add agents | They bolt AI onto record-keeping architectures without approval-gated task engines or native graphs; a true rebuild is a multi-year, cannibalizing project. Watch DealCloud/Intapp and Carta most closely. |
-| Foundation-model platforms go vertical | Possible but historically platforms enable verticals rather than operate them; our moat is domain depth + trust architecture + compounding org data, not model access. |
-| Beachhead budget fragility | Emerging managers fail often; mitigated by usage pricing (revenue scales with activity), multi-segment coverage (family offices are durable), and low CAC. |
+|                  Risk                  |                                                                                                    Read                                                                                                    |
+|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Incumbents add agents                  | They bolt AI onto record-keeping architectures without approval-gated task engines or native graphs; a true rebuild is a multi-year, cannibalizing project. Watch DealCloud/Intapp and Carta most closely. |
+| Foundation-model platforms go vertical | Possible but historically platforms enable verticals rather than operate them; our moat is domain depth + trust architecture + compounding org data, not model access.                                     |
+| Beachhead budget fragility             | Emerging managers fail often; mitigated by usage pricing (revenue scales with activity), multi-segment coverage (family offices are durable), and low CAC.                                                 |
 
 ## 7. Bottom line
 
