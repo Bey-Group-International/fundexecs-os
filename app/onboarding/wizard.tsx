@@ -103,6 +103,7 @@ export default function OnboardingWizard({
   const [step, setStep] = useState(1);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState(error ?? "");
+  const [formWarning, setFormWarning] = useState("");
   const [userData, setUserData] = useState<UserFormData>({
     full_name: initialFullName ?? "",
     title: "",
@@ -165,6 +166,7 @@ export default function OnboardingWizard({
   const handleSubmit = async (presetOverride?: MandatePreset) => {
     setPending(true);
     setFormError("");
+    setFormWarning("");
 
     // Persist user profile first (non-blocking failure is surfaced but doesn't
     // block org creation — the org is the gate to the workspace).
@@ -175,9 +177,7 @@ export default function OnboardingWizard({
     ufd.append("avatar_url", userData.avatar_url);
     const userResult = await updateUserProfile(ufd);
     if (userResult?.error) {
-      setFormError(userResult.error);
-      setPending(false);
-      return;
+      setFormWarning(`Profile details will need review in Settings: ${userResult.error}`);
     }
 
     const fd = new FormData();
@@ -199,7 +199,7 @@ export default function OnboardingWizard({
         setPending(false);
         return;
       }
-      router.replace("/workspace");
+      router.replace(result.redirectTo ?? "/workspace");
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Something went wrong");
       setPending(false);
@@ -239,6 +239,12 @@ export default function OnboardingWizard({
       {formError && (
         <p className="mb-4 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
           {formError}
+        </p>
+      )}
+
+      {formWarning && (
+        <p className="mb-4 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-sm text-status-warning">
+          {formWarning}
         </p>
       )}
 
@@ -564,8 +570,9 @@ export default function OnboardingWizard({
         {step > 1 ? (
           <button
             onClick={() => setStep((s) => s - 1)}
+            disabled={pending}
             type="button"
-            className="rounded-md border border-line px-4 py-2 text-sm text-fg-secondary transition hover:bg-surface-2"
+            className="rounded-md border border-line px-4 py-2 text-sm text-fg-secondary transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Back
           </button>
@@ -576,9 +583,9 @@ export default function OnboardingWizard({
         {step < TOTAL_STEPS ? (
           <button
             onClick={() => setStep((s) => s + 1)}
-            disabled={!canNext()}
+            disabled={!canNext() || pending}
             type="button"
-            className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-30"
+            className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
           >
             Continue
           </button>
@@ -588,7 +595,7 @@ export default function OnboardingWizard({
               onClick={() => handleSubmit("draft")}
               disabled={pending}
               type="button"
-              className="text-sm text-fg-muted underline-offset-4 transition hover:text-fg-secondary hover:underline disabled:opacity-30"
+              className="text-sm text-fg-muted underline-offset-4 transition hover:text-fg-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
             >
               Skip for now
             </button>
@@ -596,7 +603,7 @@ export default function OnboardingWizard({
               onClick={() => handleSubmit()}
               disabled={!canNext() || pending}
               type="button"
-              className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 disabled:opacity-30"
+              className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
             >
               {pending ? "Creating…" : "Launch workspace"}
             </button>

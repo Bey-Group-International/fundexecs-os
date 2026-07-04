@@ -15,12 +15,19 @@ const config: Config = {
       colors: {
         // Theme-aware surface ramp (0 = page background)
         surface: {
+          DEFAULT: "rgb(var(--fx-surface-1) / <alpha-value>)",
           0: "rgb(var(--fx-surface-0) / <alpha-value>)",
           1: "rgb(var(--fx-surface-1) / <alpha-value>)",
           2: "rgb(var(--fx-surface-2) / <alpha-value>)",
           3: "rgb(var(--fx-surface-3) / <alpha-value>)",
+          secondary: "rgb(var(--fx-surface-2) / <alpha-value>)",
+          tertiary: "rgb(var(--fx-surface-3) / <alpha-value>)",
         },
         line: "rgb(var(--fx-line) / <alpha-value>)",
+        border: {
+          DEFAULT: "rgb(var(--fx-line) / <alpha-value>)",
+          secondary: "rgb(var(--fx-line) / <alpha-value>)",
+        },
         // Warm investment-bank gold — financial numbers, CTAs, accent highlights.
         gold: {
           300: "rgb(var(--fx-gold-300) / <alpha-value>)",
@@ -33,7 +40,20 @@ const config: Config = {
           400: "rgb(var(--fx-accent-400) / <alpha-value>)",
           500: "rgb(var(--fx-accent-500) / <alpha-value>)",
         },
+        accent: {
+          DEFAULT: "rgb(var(--fx-accent-400) / <alpha-value>)",
+          300: "rgb(var(--fx-accent-300) / <alpha-value>)",
+          400: "rgb(var(--fx-accent-400) / <alpha-value>)",
+          500: "rgb(var(--fx-accent-500) / <alpha-value>)",
+        },
+        brand: {
+          DEFAULT: "rgb(var(--fx-accent-400) / <alpha-value>)",
+        },
+        bg: {
+          DEFAULT: "rgb(var(--fx-surface-0) / <alpha-value>)",
+        },
         fg: {
+          DEFAULT: "rgb(var(--fx-fg-primary) / <alpha-value>)",
           primary: "rgb(var(--fx-fg-primary) / <alpha-value>)",
           secondary: "rgb(var(--fx-fg-secondary) / <alpha-value>)",
           muted: "rgb(var(--fx-fg-muted) / <alpha-value>)",

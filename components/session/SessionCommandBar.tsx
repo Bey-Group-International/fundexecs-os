@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { HUB_BY_KEY } from "@/lib/hubs";
+import { HUB_BY_KEY, HUB_ORDER } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { formatCredits } from "@/lib/billing";
 import { MobileNavToggle } from "@/components/nav/MobileNavToggle";
@@ -14,7 +14,6 @@ import {
   createSessionShare,
 } from "@/app/(app)/sessions/actions";
 
-const HUB_ORDER: Hub[] = ["build", "run", "source", "execute"];
 const COLORS = ["#f7c948", "#34d399", "#60a5fa", "#f472b6", "#a78bfa", "#f87171", "#94a3b8"];
 
 export interface BarTask {

@@ -1,6 +1,6 @@
-// Credit movement helpers. Every grant or debit goes through grantCredits so
-// the wallet balance and the append-only credit_ledger stay in lockstep — the
-// ledger is what the Gift Earn dashboard and the wallet history read back.
+// Credit movement helpers. Grants go through grantCredits and AI spend goes
+// through spend_org_credits so wallet balance and the append-only credit_ledger
+// stay in lockstep under concurrent workflow execution.
 import { createServiceClient, createServerClient } from "@/lib/supabase/server";
 import type { LedgerReason } from "@/lib/referrals";
 import type { CreditLedgerEntry } from "@/lib/supabase/database.types";
@@ -79,21 +79,21 @@ export async function spendCredits(
   if (process.env.CREDITS_SPEND_ENABLED !== "true") {
     return { ok: true };
   }
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from("wallets")
-    .select("credits")
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  const balance = data?.credits ?? 0;
-  if (balance + CREDIT_GRACE_BUFFER < amount) {
-    return { ok: false, insufficient: true, balance };
-  }
   const service = createServiceClient();
-  const newBalance = await grantCredits(service, orgId, -amount, "spend", {
-    note: agentKey ? `agent:${agentKey}` : undefined,
+  const { data, error } = await service.rpc("spend_org_credits", {
+    p_org: orgId,
+    p_amount: amount,
+    p_grace: CREDIT_GRACE_BUFFER,
+    p_note: agentKey ? `agent:${agentKey}` : null,
   });
-  return { ok: true, balance: newBalance };
+  if (error) throw new Error(error.message);
+
+  const result = data as { ok?: boolean; balance?: number; insufficient?: boolean } | null;
+  return {
+    ok: result?.ok === true,
+    balance: typeof result?.balance === "number" ? result.balance : undefined,
+    insufficient: result?.insufficient === true,
+  };
 }
 
 // The most recent ledger entries for an org, newest first.

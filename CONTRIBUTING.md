@@ -10,7 +10,7 @@ Per `AGENT.md`, we build in this sequence and never invert it:
 
 ```
 1. Data model   — schema, migrations, RLS policies
-2. API layer    — endpoints, GraphQL resolvers, auth
+2. API layer    — route handlers, auth, response contracts
 3. Agent logic  — task engine, handoff protocol, approval loop
 4. WebSocket    — event emitters, client listeners
 5. Frontend     — components, workspace, avatar animations
