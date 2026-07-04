@@ -2,6 +2,7 @@
 // Pulls fund name, strategy, AUM from organizations table to ground AI drafts.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 
@@ -73,7 +74,7 @@ export async function generateIntroBlurb(profile: OutreachProfile): Promise<stri
     return `${profile.senderName}${profile.senderTitle ? `, ${profile.senderTitle}` : ""}${profile.fundName ? ` at ${profile.fundName}` : ""}.`;
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient(apiKey);
 
   const context = [
     profile.fundName && `Fund: ${profile.fundName}`,

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import type { ApiKeyMode } from "@/lib/supabase/database.types";
-import { maskedSecret } from "@/lib/api-keys";
+import { maskedSecret, API_SCOPES, API_SCOPE_LABELS, DEFAULT_API_SCOPES, type ApiScope } from "@/lib/api-keys";
 import { createApiKey, revokeApiKey, rotateApiKey } from "./api-keys-actions";
 
 // A key as surfaced to the UI — never the secret hash. The secret itself only
@@ -11,6 +11,7 @@ export interface ApiKeyView {
   id: string;
   name: string;
   mode: ApiKeyMode;
+  scopes: string[];
   publishable_key: string;
   secret_prefix: string;
   secret_last4: string;
@@ -114,10 +115,31 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
             {pending ? "Generating…" : "Generate key"}
           </button>
         </div>
+        {/* Scope picker — the key's blast radius. Read scopes start checked
+            (the pre-scopes default); write scopes are deliberately opt-in so a
+            key never gains proposal rights the issuer didn't tick. */}
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+          {API_SCOPES.map((scope) => (
+            <label
+              key={scope}
+              className="flex items-center gap-1.5 text-xs text-fg-secondary"
+            >
+              <input
+                type="checkbox"
+                name="scopes"
+                value={scope}
+                defaultChecked={DEFAULT_API_SCOPES.includes(scope)}
+                className="h-3.5 w-3.5 accent-gold-400"
+              />
+              {API_SCOPE_LABELS[scope as ApiScope]}
+            </label>
+          ))}
+        </div>
         {error ? <p className="mt-2 text-xs text-status-danger">{error}</p> : null}
         <p className="mt-2 text-[11px] leading-snug text-fg-muted">
           Test keys are for development; live keys act on real data. The secret key is shown once at
-          creation — store it somewhere safe.
+          creation — store it somewhere safe. Scopes limit what the key can read; leave all checked
+          for a full-access read key.
         </p>
       </form>
 
@@ -170,6 +192,19 @@ function KeyRow({ k }: { k: ApiKeyView }) {
               </span>
             ) : null}
           </div>
+
+          {k.scopes.length ? (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {k.scopes.map((scope) => (
+                <span
+                  key={scope}
+                  className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] text-fg-secondary"
+                >
+                  {scope}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-2 flex flex-col gap-1">
             <CopyField label="Publishable" value={k.publishable_key} compact />

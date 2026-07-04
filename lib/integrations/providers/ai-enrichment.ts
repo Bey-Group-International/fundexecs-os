@@ -3,11 +3,12 @@
 // Uses haiku for speed; all output is JSON-structured (no free-text hallucinations).
 
 import Anthropic from '@anthropic-ai/sdk';
+import { anthropicClient } from '@/lib/anthropic-client';
 import type { VerifiedCompany, VerifiedInvestor, FitAnalysis, InvestorFitAnalysis } from '../../source-hub-types';
 
 function getClient(): Anthropic | null {
   if (!process.env.ANTHROPIC_API_KEY) return null;
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return anthropicClient(process.env.ANTHROPIC_API_KEY);
 }
 
 const MODEL = 'claude-haiku-4-5-20251001';

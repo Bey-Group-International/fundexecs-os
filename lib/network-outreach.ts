@@ -3,6 +3,7 @@
 // Dispatches via the existing Gmail/Slack adapter when approved.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 
@@ -46,7 +47,7 @@ export async function draftOutreachMessage(
     };
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient(apiKey);
 
   const toneGuide =
     params.tone === "formal" ? "Tone: formal and precise. No contractions."

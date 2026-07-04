@@ -12,6 +12,7 @@
 // fan-out are never-block: a hiccup there must never fail the share itself.
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { computePriority } from "@/lib/inbox/intelligence";
@@ -43,7 +44,7 @@ async function generateDealMemo(deal: Deal): Promise<string> {
   if (!apiKey) return fallback;
   try {
     const t = dealTeaser(deal);
-    const anthropic = new Anthropic({ apiKey });
+    const anthropic = anthropicClient(apiKey);
     const model = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
     const message = await anthropic.messages.create(
       {

@@ -2,6 +2,7 @@ import * as mediasoup from "mediasoup";
 import { createGateway } from "./gateway";
 import { RoomManager } from "./RoomManager";
 import { AuthService } from "./AuthService";
+import { OrgAuthorizer } from "./OrgAuthorizer";
 import { PubSub } from "./PubSub";
 
 const PORT = parseInt(process.env["PORT"] ?? "4000", 10);
@@ -30,8 +31,15 @@ async function main() {
     );
   }
   const authService = new AuthService(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET);
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set — room authorization " +
+        "cannot check org membership, so the gateway will reject every connection (403).",
+    );
+  }
+  const orgAuthorizer = new OrgAuthorizer(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  const app = createGateway(roomManager, authService);
+  const app = createGateway(roomManager, authService, orgAuthorizer);
 
   // HTTP health check
   app.get("/health", (res) => {

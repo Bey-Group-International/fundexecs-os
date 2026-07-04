@@ -26,6 +26,7 @@ import { MatchToast } from "@/components/inbox/MatchToast";
 import { DownloadBanner } from "@/components/DownloadBanner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
+import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 
 const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
 
@@ -212,6 +213,8 @@ export default async function AppLayout({
       <div className="print:hidden">
         <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />
         <EarnCopilotDock name={name} />
+        {/* THE app-wide ⌘K palette — one instance, one catalog, every route. */}
+        <GlobalCommandPalette />
       </div>
       </MobileNavProvider>
     </div>

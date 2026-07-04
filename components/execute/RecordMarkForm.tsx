@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { recordValuationMark } from "@/components/execute/actions";
+import { useToast } from "@/components/shared/CoachingToast";
 
 interface AssetOption {
   id: string;
@@ -15,6 +16,7 @@ export default function RecordMarkForm({ assets }: { assets: AssetOption[] }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
 
   if (assets.length === 0) return null;
@@ -41,9 +43,12 @@ export default function RecordMarkForm({ assets }: { assets: AssetOption[] }) {
         const result = await recordValuationMark(fd);
         setPending(false);
         if (!result.ok) {
-          setError(result.error ?? "Could not save the mark.");
+          const message = result.error ?? "Could not save the mark.";
+          setError(message);
+          toast.error("Mark not saved", message);
           return;
         }
+        toast.success("Valuation mark recorded");
         formRef.current?.reset();
         setOpen(false);
       }}

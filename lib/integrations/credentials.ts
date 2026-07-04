@@ -18,8 +18,22 @@ import { vaultConfigured } from "@/lib/vault";
  * (organization_id, provider) uniqueness.
  */
 export const CHANNEL_SECRET_KEYS: Record<string, readonly string[]> = {
-  gmail: ["GMAIL_ACCESS_TOKEN", "RESEND_API_KEY", "RESEND_FROM_EMAIL"],
-  calendly: ["CALENDLY_API_TOKEN"],
+  gmail: [
+    "GMAIL_ACCESS_TOKEN",
+    // Long-lived Google OAuth refresh token (written by /api/oauth/google/
+    // callback) — the adapter mints fresh access tokens from it, replacing
+    // the static ~1-hour GMAIL_ACCESS_TOKEN.
+    "GOOGLE_REFRESH_TOKEN",
+    "RESEND_API_KEY",
+    "RESEND_FROM_EMAIL",
+    // Inbound: verifies Resend email.received webhooks (app/api/webhooks/resend).
+    "RESEND_WEBHOOK_SECRET",
+  ],
+  calendly: [
+    "CALENDLY_API_TOKEN",
+    // Inbound: verifies Calendly invitee webhooks (app/api/webhooks/calendly).
+    "CALENDLY_WEBHOOK_SECRET",
+  ],
   docusign: ["DOCUSIGN_ACCESS_TOKEN", "DOCUSIGN_INTEGRATION_KEY"],
 };
 

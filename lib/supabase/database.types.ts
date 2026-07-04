@@ -1030,6 +1030,23 @@ export type DispatchLog = {
   created_at: string;
 };
 
+// An inbound ingest ledger row (migration 20260703220000) — one record per
+// webhook event received through app/api/webhooks/[channel]. The arriving
+// counterpart to DispatchLog; its unique (org, channel, external_id) index is
+// the idempotency claim for provider retries. Rows are claimed then finalized
+// once (thread_id/ok/detail), never deleted.
+export type IngestLog = {
+  id: string;
+  organization_id: string;
+  channel: string;
+  event_type: string;
+  external_id: string;
+  ok: boolean;
+  detail: string | null;
+  thread_id: string | null;
+  created_at: string;
+};
+
 export type AuditLog = {
   id: string;
   organization_id: string | null;
@@ -1110,6 +1127,10 @@ export type InboxThread = Timestamps & {
   assigned_to: string | null;
   // When a snoozed thread should auto-return to open (migration 20260702000017).
   snoozed_until: string | null;
+  // Provider-side correlation key for inbound ingestion (migration
+  // 20260703220000): a Calendly scheduled-event URI, an email thread key. Null
+  // for internally-created threads.
+  external_id: string | null;
 };
 
 // One message within an inbox thread (migration 0038).
@@ -1424,6 +1445,9 @@ export type BrainKbChunk = {
   chunk_index: number;
   content: string;
   embedding: string | null;
+  // Which vector space the embedding was produced in (migration
+  // 20260703240000): 'hash-v1' or a real model id like 'voyage-3.5-lite@256'.
+  embedding_model: string;
   created_at: string;
 };
 
@@ -1485,6 +1509,9 @@ export type ApiKey = Timestamps & {
   organization_id: string;
   name: string;
   mode: ApiKeyMode;
+  // Granted scopes (migration 20260703250000) — enforced per v1 route in
+  // withApiKey. Existing keys default to the full read set.
+  scopes: string[];
   publishable_key: string;
   secret_hash: string;
   secret_prefix: string;
@@ -1506,6 +1533,27 @@ export type OrgSecret = Timestamps & {
   iv: string;
   auth_tag: string;
   last4: string;
+  created_by: string | null;
+};
+
+// An outbound webhook subscription (migration 20260704010000). The signing
+// secret is AES-256-GCM encrypted like org_secrets; `cursor_at` is the
+// delivery high-water mark and `consecutive_failures` drives auto-disable.
+export type WebhookEndpoint = Timestamps & {
+  id: string;
+  organization_id: string;
+  url: string;
+  description: string | null;
+  events: string[];
+  ciphertext: string;
+  iv: string;
+  auth_tag: string;
+  secret_last4: string;
+  cursor_at: string;
+  consecutive_failures: number;
+  disabled_at: string | null;
+  last_delivery_at: string | null;
+  last_delivery_status: string | null;
   created_by: string | null;
 };
 
@@ -2211,6 +2259,7 @@ export type Database = {
       automations: TableShape<Automation>;
       mandates: TableShape<MandateRow>;
       dispatch_log: TableShape<DispatchLog>;
+      ingest_log: TableShape<IngestLog>;
       audit_log: TableShape<AuditLog>;
       source_feedback: TableShape<SourceFeedback>;
       sourcing_entities: TableShape<SourcingEntity>;
@@ -2248,6 +2297,7 @@ export type Database = {
       stripe_checkouts: TableShape<StripeCheckout>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;
+      webhook_endpoints: TableShape<WebhookEndpoint>;
       deal_shares: TableShape<DealShare>;
       deal_share_recipients: TableShape<DealShareRecipient>;
       deal_share_views: TableShape<DealShareView>;
@@ -2443,6 +2493,7 @@ export type Database = {
           query_embedding: string;
           target_brain_key: string;
           match_count?: number;
+          query_model?: string;
         };
         Returns: {
           id: string;

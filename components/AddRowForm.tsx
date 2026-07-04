@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { createModuleRow } from "@/app/(app)/[hub]/[module]/actions";
 import type { FieldConfig } from "@/lib/module-forms";
+import { humanizeEnumValue } from "@/lib/humanize";
+import { useToast } from "@/components/shared/CoachingToast";
 
 // Inline, collapsible "+ Add" form for a table-backed module. Posts to the
 // createModuleRow server action, which validates against the same field config.
@@ -19,7 +21,11 @@ export default function AddRowForm({
 }) {
   const [open, setOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Guards the double-submit window: a second click before the server action
+  // resolves used to insert a duplicate row.
+  const [pending, setPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const toast = useToast();
 
   if (!open) {
     return (
@@ -38,14 +44,23 @@ export default function AddRowForm({
     <form
       ref={formRef}
       action={async (formData: FormData) => {
+        if (pending) return;
+        setPending(true);
         setSaveError(null);
-        const result = await createModuleRow(hub, module, formData, sessionId);
-        if (!result.ok) {
-          setSaveError(result.error ?? "Failed to save. Please try again.");
-          return;
+        try {
+          const result = await createModuleRow(hub, module, formData, sessionId);
+          if (!result.ok) {
+            const message = result.error ?? "Failed to save. Please try again.";
+            setSaveError(message);
+            toast.error("Record not added", message);
+            return;
+          }
+          toast.success("Record added");
+          formRef.current?.reset();
+          setOpen(false);
+        } finally {
+          setPending(false);
         }
-        formRef.current?.reset();
-        setOpen(false);
       }}
       className="mb-4 flex flex-col gap-4 rounded-xl border border-line bg-surface-1 p-5"
     >
@@ -64,7 +79,7 @@ export default function AddRowForm({
               >
                 {f.options?.map((opt) => (
                   <option key={opt} value={opt}>
-                    {opt}
+                    {humanizeEnumValue(opt)}
                   </option>
                 ))}
               </select>
@@ -78,7 +93,17 @@ export default function AddRowForm({
             ) : (
               <input
                 name={f.name}
-                type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                type={
+                  f.type === "number"
+                    ? "number"
+                    : f.type === "date"
+                      ? "date"
+                      : // Email columns get the email input type: native format
+                        // validation plus the right mobile keyboard.
+                        f.name.includes("email")
+                        ? "email"
+                        : "text"
+                }
                 step={f.type === "number" ? "any" : undefined}
                 required={f.required}
                 defaultValue={typeof f.defaultValue === "string" ? f.defaultValue : undefined}
@@ -94,9 +119,10 @@ export default function AddRowForm({
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+          disabled={pending}
+          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Save
+          {pending ? "Saving…" : "Save"}
         </button>
         <button
           type="button"

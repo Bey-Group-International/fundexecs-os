@@ -9,6 +9,7 @@
 // request; when no ANTHROPIC_API_KEY is present a deterministic keyword fallback
 // keeps the loop demoable in CI/preview.
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -23,7 +24,7 @@ export function runSearchLive(): boolean {
 
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey) : null;
 }
 
 export interface RunSearchStep {

@@ -309,7 +309,10 @@ export default function Copilot({
   // in-progress answer (when no menu/palette is capturing it).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+      // Plain ⌘K only — ⇧⌘K belongs to the app-wide navigation palette
+      // (components/GlobalCommandPalette), which yields plain ⌘K to this
+      // composer via the [data-owns-cmdk] marker on our root.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setPaletteOpen((o) => !o);
         return;
@@ -1087,7 +1090,10 @@ export default function Copilot({
   ];
 
   return (
-    <div className="fx-neural-ambient mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl flex-col">
+    <div
+      data-owns-cmdk
+      className="fx-neural-ambient mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl flex-col"
+    >
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
         <div
           aria-hidden

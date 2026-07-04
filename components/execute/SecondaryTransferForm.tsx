@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { modelTransfer, priceFromNav } from "@/lib/secondaries";
 import { usd } from "@/lib/format";
 import { recordSecondaryTransfer } from "@/components/execute/actions";
+import { useToast } from "@/components/shared/CoachingToast";
 
 export interface SellerPosition {
   commitmentId: string;
@@ -39,6 +40,7 @@ export default function SecondaryTransferForm({
   const [pricePct, setPricePct] = useState(100); // price as % of transferred NAV
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
 
   if (positions.length === 0 || buyers.length < 1) return null;
@@ -77,9 +79,12 @@ export default function SecondaryTransferForm({
         const result = await recordSecondaryTransfer(fd);
         setPending(false);
         if (!result.ok) {
-          setError(result.error ?? "Could not book the transfer.");
+          const message = result.error ?? "Could not book the transfer.";
+          setError(message);
+          toast.error("Transfer not booked", message);
           return;
         }
+        toast.success("Secondary transfer booked");
         formRef.current?.reset();
         setOpen(false);
         setPct(100);

@@ -30,6 +30,7 @@ import { selectAgentWithContext } from "@/lib/brain-routing";
 import { resolveAutonomyForIntent } from "@/lib/autonomy";
 import { getActiveMandate } from "@/lib/mandates";
 import { observeOutput } from "@/lib/observe";
+import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
 
 type Client = ReturnType<typeof createServerClient>;
 
@@ -1334,8 +1335,10 @@ export async function decideApproval(
   // Idempotency guard: record the decision with a compare-and-set on the
   // still-undecided row. A double-clicked or retried "approved" POST used to
   // re-run the entire workflow — re-billing credits, re-spending on Claude, and
-  // duplicating every artifact. Only the POST that actually flips a null
-  // decision proceeds; any later one no-ops.
+  // duplicating every artifact. Only the POST that actually flips a 'pending'
+  // decision proceeds; any later one no-ops. (The column is `not null default
+  // 'pending'` — matching on IS NULL here would claim zero rows and no-op
+  // every real decision.)
   const { data: decided } = await ctx.supabase
     .from("approvals")
     .update({
@@ -1345,7 +1348,7 @@ export async function decideApproval(
       note: args.note ?? null,
     })
     .eq("id", args.approvalId)
-    .is("decision", null)
+    .eq("decision", "pending")
     .select("id");
   if (!decided || decided.length === 0) {
     // Already decided by a prior request — return the settled decision without
@@ -1368,6 +1371,42 @@ export async function decideApproval(
     hub: wf.hub,
     payload: { approval_id: args.approvalId, decision: args.decision },
   });
+
+  // API-originated writes (POST /api/v1/*) park the proposed row on the task —
+  // no plan, no steps, nothing for the workflow engine to run. Approving
+  // commits exactly the parked insert under the deciding operator's RLS
+  // session; any other decision discards it. Handled before the workflow
+  // branches so an API write can never fall through into plan execution.
+  const apiWrite = extractApiWriteRequest(wf.result);
+  if (apiWrite) {
+    if (args.decision === "approved") {
+      const exec = await executeApiWrite(ctx.supabase, ctx.orgId, apiWrite);
+      await ctx.supabase
+        .from("tasks")
+        .update(
+          exec.ok
+            ? {
+                status: "completed" as const,
+                progress: 1,
+                completed_at: new Date().toISOString(),
+                result: { apiWriteRequest: apiWrite, apiWriteResult: { id: exec.id } } as unknown as Json,
+              }
+            : {
+                status: "failed" as const,
+                result: { apiWriteRequest: apiWrite, apiWriteResult: { error: exec.error } } as unknown as Json,
+              },
+        )
+        .eq("id", wf.id);
+      if (!exec.ok) {
+        return { workflowId: wf.id, decision: args.decision, error: exec.error };
+      }
+    } else {
+      // rejected / regenerate / accepted — there is no plan to regenerate or
+      // recommendation to accept; anything but an approval discards the write.
+      await ctx.supabase.from("tasks").update({ status: "cancelled" }).eq("id", wf.id);
+    }
+    return { workflowId: wf.id, decision: args.decision };
+  }
 
   if (args.decision === "approved") {
     // Persist the approved instruction as a saved Workflow so the operator can

@@ -27,7 +27,7 @@ export async function verifyApiKey(
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("api_keys")
-    .select("id, organization_id, mode")
+    .select("id, organization_id, mode, scopes")
     .eq("secret_hash", hashSecret(secret))
     .is("revoked_at", null)
     .maybeSingle();
@@ -44,6 +44,7 @@ export async function verifyApiKey(
     keyId: data.id,
     orgId: data.organization_id,
     mode: data.mode,
+    scopes: Array.isArray(data.scopes) ? data.scopes : [],
   };
 }
 

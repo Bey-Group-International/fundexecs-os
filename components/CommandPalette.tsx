@@ -10,16 +10,22 @@ export interface Command {
   run: () => void;
 }
 
-// ⌘K command palette — fuzzy-filtered, keyboard-navigable list of composer
-// actions (models, modes, slash commands, jump-to-workflow, …).
+// ⌘K command palette — fuzzy-filtered, keyboard-navigable list of commands
+// (navigation, composer actions, models, modes, slash commands, …).
+//
+// `queryAction`, when provided, adds a free-text escape hatch: once the query
+// is long enough to read as a question/task rather than a filter, a pinned
+// first row offers to hand the raw query to the action (e.g. "Ask Earn").
 export function CommandPalette({
   open,
   onClose,
   commands,
+  queryAction,
 }: {
   open: boolean;
   onClose: () => void;
   commands: Command[];
+  queryAction?: { label: string; run: (query: string) => void };
 }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -70,11 +76,33 @@ export function CommandPalette({
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return commands;
-    return commands.filter(
-      (c) => c.label.toLowerCase().includes(s) || (c.group?.toLowerCase().includes(s) ?? false),
-    );
-  }, [q, commands]);
+    const matches = !s
+      ? commands
+      : commands.filter(
+          (c) =>
+            c.label.toLowerCase().includes(s) ||
+            (c.group?.toLowerCase().includes(s) ?? false) ||
+            // Hints are searchable too — "HUD" finds "Main HUD", "e-sign"
+            // finds Envelopes — matching the retired dashboard palette.
+            (c.hint?.toLowerCase().includes(s) ?? false),
+        );
+    // The free-text row joins the keyboard index as the first entry, so Enter
+    // on an unmatched query goes to the action instead of dead-ending.
+    if (queryAction && q.trim().length > 3) {
+      const query = q.trim();
+      return [
+        {
+          id: "__query-action",
+          label: query,
+          group: queryAction.label,
+          hint: "↵",
+          run: () => queryAction.run(query),
+        },
+        ...matches,
+      ];
+    }
+    return matches;
+  }, [q, commands, queryAction]);
 
   useEffect(() => setActive(0), [q]);
 

@@ -11,7 +11,7 @@
 // recency-ordered SELECT. The fallback is transparent to the caller.
 
 import { createServerClient } from "@/lib/supabase/server";
-import { embedder, toVectorLiteral } from "@/lib/brains/embed";
+import { getEmbedder, toVectorLiteral } from "@/lib/brains/embed";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -214,7 +214,7 @@ export async function retrieveRelevantMemories(
   // Attempt vector similarity search via RPC first.
   if (prompt.trim()) {
     try {
-      const queryEmbedding = toVectorLiteral(embedder.embed(prompt));
+      const queryEmbedding = toVectorLiteral(await getEmbedder().embed(prompt, "query"));
       const { data: vecData, error: vecError } = await (supabase as ReturnType<typeof createServerClient>).rpc(
         "match_agent_memories" as never,
         {

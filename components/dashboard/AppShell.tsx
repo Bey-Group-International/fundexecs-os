@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import type { DashboardData } from "@/lib/dashboard/types";
-import { CommandPalette } from "./CommandPalette";
+import { CommandPaletteTrigger } from "@/components/GlobalCommandPalette";
 import { DashboardHUD } from "./DashboardHUD";
 import { PWAInstallPrompt } from "./PWAInstallPrompt";
 import { RecentsStrip } from "./RecentsStrip";
@@ -63,7 +63,8 @@ export function AppShell({
             Office
           </Link>
         </nav>
-        <CommandPalette />
+        {/* Opens the app-wide palette mounted in the (app) layout. */}
+        <CommandPaletteTrigger />
       </div>
       <RecentsStrip />
       <DashboardHUD data={data} />

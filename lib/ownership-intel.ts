@@ -15,6 +15,7 @@
 //      is present every path falls back to deterministic output, so the loop stays
 //      demoable in CI/preview with no key and no spend (REQUIRED — CI has no key).
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "@/lib/anthropic-client";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Acquisition, BuyerProfile, Database } from "@/lib/supabase/database.types";
 
@@ -28,7 +29,7 @@ export function ownershipLive(): boolean {
 
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? new Anthropic({ apiKey }) : null;
+  return apiKey ? anthropicClient(apiKey) : null;
 }
 
 // ---------------------------------------------------------------------------

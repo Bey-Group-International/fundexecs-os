@@ -83,4 +83,4 @@ export const GET = withApiKey(async ({ orgId, supabase }, request) => {
   }));
 
   return collection(funds, nextCursor);
-});
+}, "read:funds");
