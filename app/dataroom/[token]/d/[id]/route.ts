@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
 import type { DataRoomShare, Document } from "@/lib/supabase/database.types";
+import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,17 @@ function safeHref(url: string | null): string | null {
 export async function GET(req: Request, props: { params: Promise<{ token: string; id: string }> }) {
   const params = await props.params;
   const roomUrl = new URL(`/dataroom/${params.token}`, req.url);
+  const rateLimit = checkRateLimit({
+    key: `ip:${clientIp(req)}:dataroom-doc:${params.token}`,
+    limit: 60,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: rateLimitHeaders(rateLimit, 60) },
+    );
+  }
   if (!hasSupabaseServiceEnv()) return NextResponse.redirect(roomUrl);
 
   const supabase = createServiceClient();

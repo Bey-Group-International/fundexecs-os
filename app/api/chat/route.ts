@@ -4,6 +4,7 @@ import { earnChatStream, earnChatFallback } from "@/lib/claude";
 import { EARN_MODELS, type EarnModelKey } from "@/lib/earn-conversation";
 import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-context";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -21,6 +22,20 @@ export async function POST(request: Request) {
     });
   }
   const { orgId, userId } = auth.ctx;
+  const rateLimit = checkRateLimit({
+    key: `org:${orgId}:chat`,
+    limit: 60,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        ...rateLimitHeaders(rateLimit, 60),
+      },
+    });
+  }
 
   const { body, model: requestedModel, prior, session_id, prior_session_id } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {

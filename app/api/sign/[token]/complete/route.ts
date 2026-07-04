@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { missingRequiredFields, type EnvelopeFieldRequirement } from '@/lib/envelope-signing'
+import { checkRateLimit, rateLimitHeaders } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -31,6 +32,17 @@ export async function POST(
 ) {
   try {
     const { token } = await params
+    const limiter = checkRateLimit({
+      key: `ip:${getIpAddress(request) ?? 'unknown'}:sign-complete:${token}`,
+      limit: 20,
+      windowMs: 60_000,
+    })
+    if (!limiter.ok) {
+      return NextResponse.json(
+        { ok: false, error: 'Rate limit exceeded' },
+        { status: 429, headers: rateLimitHeaders(limiter, 20) },
+      )
+    }
     const supabase = getServiceClient()
 
     // Parse body
