@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { handlePrompt } from "@/lib/engine";
 import { isExecutive } from "@/lib/intelligence";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 // Plan generation calls Claude; give it room beyond the default.
 export const maxDuration = 60;
@@ -12,6 +13,17 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const rateLimit = checkRateLimit({
+    key: `org:${auth.ctx.orgId}:prompt`,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: rateLimitHeaders(rateLimit, 30) },
+    );
+  }
 
   const { body, session_id, delegate } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
@@ -28,5 +40,5 @@ export async function POST(request: Request) {
     sessionId,
     desk,
   );
-  return NextResponse.json(result, { status: 201 });
+  return NextResponse.json(result, { status: 201, headers: rateLimitHeaders(rateLimit, 30) });
 }
