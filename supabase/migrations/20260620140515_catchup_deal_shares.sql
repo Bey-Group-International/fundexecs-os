@@ -20,10 +20,16 @@ do $$ begin
   create index if not exists deal_shares_deal_idx on public.deal_shares (deal_id);
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
-drop trigger if exists deal_shares_set_updated_at on public.deal_shares;
-create trigger deal_shares_set_updated_at
+do $$ begin
+  drop trigger if exists deal_shares_set_updated_at on public.deal_shares;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  create trigger deal_shares_set_updated_at
   before update on public.deal_shares
   for each row execute function public.set_updated_at();
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 create table if not exists public.deal_share_recipients (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -61,22 +67,43 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-alter table public.deal_shares enable row level security;
-alter table public.deal_share_recipients enable row level security;
-alter table public.deal_share_views enable row level security;
+do $$ begin
+  alter table public.deal_shares enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.deal_share_recipients enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.deal_share_views enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists deal_shares_select on public.deal_shares;
-create policy deal_shares_select on public.deal_shares
+do $$ begin
+  create policy deal_shares_select on public.deal_shares
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists deal_shares_write on public.deal_shares;
-create policy deal_shares_write on public.deal_shares
+do $$ begin
+  create policy deal_shares_write on public.deal_shares
   for all using (public.is_org_writer(organization_id))
   with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists deal_share_recipients_select on public.deal_share_recipients;
-create policy deal_share_recipients_select on public.deal_share_recipients
+do $$ begin
+  create policy deal_share_recipients_select on public.deal_share_recipients
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists deal_share_views_select on public.deal_share_views;
-create policy deal_share_views_select on public.deal_share_views
-  for select using (organization_id in (select public.current_principal_org_ids()));;
+do $$ begin
+  create policy deal_share_views_select on public.deal_share_views
+  for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

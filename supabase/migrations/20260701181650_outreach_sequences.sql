@@ -26,7 +26,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE outreach_sequences ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE outreach_sequences ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS outreach_sequences_org_id_idx ON outreach_sequences(org_id);
@@ -38,12 +41,15 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_outreach_sequences" ON outreach_sequences;
-CREATE POLICY "org_members_outreach_sequences" ON outreach_sequences
+do $$ begin
+  CREATE POLICY "org_members_outreach_sequences" ON outreach_sequences
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 CREATE TABLE IF NOT EXISTS sequence_enrollments (
   id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,7 +77,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE sequence_enrollments ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE sequence_enrollments ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS sequence_enrollments_sequence_id_idx  ON sequence_enrollments(sequence_id);
@@ -91,11 +100,14 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_sequence_enrollments" ON sequence_enrollments;
-CREATE POLICY "org_members_sequence_enrollments" ON sequence_enrollments
+do $$ begin
+  CREATE POLICY "org_members_sequence_enrollments" ON sequence_enrollments
   FOR ALL USING (
     sequence_id IN (
       SELECT s.id FROM outreach_sequences s
       JOIN organization_members om ON om.organization_id = s.org_id
       WHERE om.principal_id = auth.uid()
     )
-  );;
+  );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

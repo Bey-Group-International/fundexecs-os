@@ -24,7 +24,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE workflow_templates ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE workflow_templates ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS workflow_templates_org_id_idx    ON workflow_templates(org_id);
@@ -36,10 +39,13 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_workflow_templates" ON workflow_templates;
-CREATE POLICY "org_members_workflow_templates" ON workflow_templates
+do $$ begin
+  CREATE POLICY "org_members_workflow_templates" ON workflow_templates
   FOR ALL USING (
     is_global = true
     OR org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
-  );;
+  );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

@@ -33,7 +33,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE synthesis_queue ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE synthesis_queue ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS synthesis_queue_org_id_idx          ON synthesis_queue(org_id);
@@ -53,9 +56,12 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_synthesis_queue" ON synthesis_queue;
-CREATE POLICY "org_members_synthesis_queue" ON synthesis_queue
+do $$ begin
+  CREATE POLICY "org_members_synthesis_queue" ON synthesis_queue
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
-  );;
+  );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

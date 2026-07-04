@@ -34,7 +34,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE annotations ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE annotations ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS annotations_org_id_idx            ON annotations(org_id);
@@ -62,9 +65,12 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_annotations" ON annotations;
-CREATE POLICY "org_members_annotations" ON annotations
+do $$ begin
+  CREATE POLICY "org_members_annotations" ON annotations
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
-  );;
+  );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

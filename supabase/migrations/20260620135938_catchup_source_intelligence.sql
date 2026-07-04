@@ -30,12 +30,21 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-alter table public.source_feedback enable row level security;
+do $$ begin
+  alter table public.source_feedback enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists source_feedback_select on public.source_feedback;
-create policy source_feedback_select on public.source_feedback
+do $$ begin
+  create policy source_feedback_select on public.source_feedback
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists source_feedback_write on public.source_feedback;
-create policy source_feedback_write on public.source_feedback
+do $$ begin
+  create policy source_feedback_write on public.source_feedback
   for all using (public.is_org_writer(organization_id))
-  with check (public.is_org_writer(organization_id));;
+  with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

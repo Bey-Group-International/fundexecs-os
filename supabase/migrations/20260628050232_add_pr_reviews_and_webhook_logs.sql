@@ -22,14 +22,20 @@ CREATE TABLE IF NOT EXISTS public.pr_reviews (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE public.pr_reviews ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE public.pr_reviews ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "org members can read pr_reviews"
+do $$ begin
+  CREATE POLICY "org members can read pr_reviews"
   ON public.pr_reviews FOR SELECT
   USING (organization_id IN (
     SELECT organization_id FROM public.organization_members
     WHERE principal_id = auth.uid()
   ));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 -- Webhook Logs: log every inbound webhook with routing outcome
 CREATE TABLE IF NOT EXISTS public.webhook_logs (
@@ -46,14 +52,20 @@ CREATE TABLE IF NOT EXISTS public.webhook_logs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE public.webhook_logs ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE public.webhook_logs ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "org members can read webhook_logs"
+do $$ begin
+  CREATE POLICY "org members can read webhook_logs"
   ON public.webhook_logs FOR SELECT
   USING (organization_id IN (
     SELECT organization_id FROM public.organization_members
     WHERE principal_id = auth.uid()
   ));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 -- Indexes for performance
 do $$ begin

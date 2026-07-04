@@ -77,26 +77,50 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-drop trigger if exists inbox_threads_set_updated_at on public.inbox_threads;
-create trigger inbox_threads_set_updated_at
+do $$ begin
+  drop trigger if exists inbox_threads_set_updated_at on public.inbox_threads;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  create trigger inbox_threads_set_updated_at
   before update on public.inbox_threads
   for each row execute function public.set_updated_at();
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-alter table public.inbox_threads enable row level security;
-alter table public.inbox_messages enable row level security;
+do $$ begin
+  alter table public.inbox_threads enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.inbox_messages enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists inbox_threads_select on public.inbox_threads;
-create policy inbox_threads_select on public.inbox_threads
+do $$ begin
+  create policy inbox_threads_select on public.inbox_threads
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists inbox_threads_write on public.inbox_threads;
-create policy inbox_threads_write on public.inbox_threads
+do $$ begin
+  create policy inbox_threads_write on public.inbox_threads
   for all using (public.is_org_writer(organization_id))
   with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists inbox_messages_select on public.inbox_messages;
-create policy inbox_messages_select on public.inbox_messages
+do $$ begin
+  create policy inbox_messages_select on public.inbox_messages
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists inbox_messages_write on public.inbox_messages;
-create policy inbox_messages_write on public.inbox_messages
+do $$ begin
+  create policy inbox_messages_write on public.inbox_messages
   for all using (public.is_org_writer(organization_id))
-  with check (public.is_org_writer(organization_id));;
+  with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

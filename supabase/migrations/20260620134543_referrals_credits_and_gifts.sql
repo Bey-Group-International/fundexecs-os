@@ -83,30 +83,57 @@ begin
 end;
 $$;
 
-alter table public.referral_codes enable row level security;
-alter table public.referrals      enable row level security;
-alter table public.credit_ledger  enable row level security;
-alter table public.credit_gifts   enable row level security;
+do $$ begin
+  alter table public.referral_codes enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.referrals      enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.credit_ledger  enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.credit_gifts   enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists referral_codes_select on public.referral_codes;
-create policy referral_codes_select on public.referral_codes
+do $$ begin
+  create policy referral_codes_select on public.referral_codes
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists referral_codes_write on public.referral_codes;
-create policy referral_codes_write on public.referral_codes
+do $$ begin
+  create policy referral_codes_write on public.referral_codes
   for all using (public.is_org_writer(organization_id))
   with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists referrals_select on public.referrals;
-create policy referrals_select on public.referrals
+do $$ begin
+  create policy referrals_select on public.referrals
   for select using (
     referrer_organization_id in (select public.current_principal_org_ids())
     or referred_organization_id in (select public.current_principal_org_ids())
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists credit_ledger_select on public.credit_ledger;
-create policy credit_ledger_select on public.credit_ledger
+do $$ begin
+  create policy credit_ledger_select on public.credit_ledger
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists credit_gifts_select on public.credit_gifts;
-create policy credit_gifts_select on public.credit_gifts
-  for select using (sender_organization_id in (select public.current_principal_org_ids()));;
+do $$ begin
+  create policy credit_gifts_select on public.credit_gifts
+  for select using (sender_organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

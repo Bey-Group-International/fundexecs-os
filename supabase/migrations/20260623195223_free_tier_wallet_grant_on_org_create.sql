@@ -33,17 +33,23 @@ end;
 $$;
 
 -- Backfill: create wallets for orgs that slipped through before this migration.
-INSERT INTO public.wallets (organization_id, credits, plan)
+do $$ begin
+  INSERT INTO public.wallets (organization_id, credits, plan)
 SELECT o.id, 500, 'free'
 FROM public.organizations o
 LEFT JOIN public.wallets w ON w.organization_id = o.id
 WHERE w.organization_id IS NULL
 ON CONFLICT (organization_id) DO NOTHING;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 -- Backfill: write ledger entries for those same orgs.
-INSERT INTO public.credit_ledger (organization_id, amount, reason, note)
+do $$ begin
+  INSERT INTO public.credit_ledger (organization_id, amount, reason, note)
 SELECT o.id, 500, 'free_tier', 'Free-tier starter grant — 500 credits on signup (backfilled)'
 FROM public.organizations o
 LEFT JOIN public.credit_ledger cl
   ON cl.organization_id = o.id AND cl.reason = 'free_tier'
-WHERE cl.organization_id IS NULL;;
+WHERE cl.organization_id IS NULL;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

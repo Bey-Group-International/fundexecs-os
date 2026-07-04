@@ -43,7 +43,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE pipeline_stages ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE pipeline_stages ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS pipeline_stages_org_id_idx      ON pipeline_stages(org_id);
@@ -59,14 +62,20 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_pipeline_stages" ON pipeline_stages;
-CREATE POLICY "org_members_pipeline_stages" ON pipeline_stages
+do $$ begin
+  CREATE POLICY "org_members_pipeline_stages" ON pipeline_stages
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-ALTER TABLE deals ADD COLUMN IF NOT EXISTS pipeline_stage_id uuid REFERENCES pipeline_stages(id) ON DELETE SET NULL;
+do $$ begin
+  ALTER TABLE deals ADD COLUMN IF NOT EXISTS pipeline_stage_id uuid REFERENCES pipeline_stages(id) ON DELETE SET NULL;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 do $$ begin
   COMMENT ON COLUMN deals.pipeline_stage_id IS 'Current pipeline stage for this deal; NULL means unassigned.';
 -- tolerated on fresh DBs where the regular sequence built a different shape

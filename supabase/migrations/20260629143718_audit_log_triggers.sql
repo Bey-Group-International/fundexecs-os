@@ -57,25 +57,49 @@ END;
 $$;
 
 -- deals
-DROP TRIGGER IF EXISTS audit_deals ON public.deals;
-CREATE TRIGGER audit_deals
+do $$ begin
+  DROP TRIGGER IF EXISTS audit_deals ON public.deals;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  CREATE TRIGGER audit_deals
   AFTER INSERT OR UPDATE OR DELETE ON public.deals
   FOR EACH ROW EXECUTE FUNCTION public.audit_table_change();
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 -- tasks
-DROP TRIGGER IF EXISTS audit_tasks ON public.tasks;
-CREATE TRIGGER audit_tasks
+do $$ begin
+  DROP TRIGGER IF EXISTS audit_tasks ON public.tasks;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  CREATE TRIGGER audit_tasks
   AFTER INSERT OR UPDATE OR DELETE ON public.tasks
   FOR EACH ROW EXECUTE FUNCTION public.audit_table_change();
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 -- organizations
-DROP TRIGGER IF EXISTS audit_organizations ON public.organizations;
-CREATE TRIGGER audit_organizations
+do $$ begin
+  DROP TRIGGER IF EXISTS audit_organizations ON public.organizations;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  CREATE TRIGGER audit_organizations
   AFTER INSERT OR UPDATE OR DELETE ON public.organizations
   FOR EACH ROW EXECUTE FUNCTION public.audit_table_change();
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 -- credit_ledger (insert-only by design, but cover all ops for completeness)
-DROP TRIGGER IF EXISTS audit_credit_ledger ON public.credit_ledger;
-CREATE TRIGGER audit_credit_ledger
+do $$ begin
+  DROP TRIGGER IF EXISTS audit_credit_ledger ON public.credit_ledger;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  CREATE TRIGGER audit_credit_ledger
   AFTER INSERT OR UPDATE OR DELETE ON public.credit_ledger
-  FOR EACH ROW EXECUTE FUNCTION public.audit_table_change();;
+  FOR EACH ROW EXECUTE FUNCTION public.audit_table_change();
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

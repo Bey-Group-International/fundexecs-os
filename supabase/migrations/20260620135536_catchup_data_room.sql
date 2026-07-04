@@ -2,8 +2,14 @@
 -- via MCP/dashboard before the DB Migrate workflow existed). Present in the
 -- repo so `supabase db push` sees local >= remote; already applied in prod.
 -- catch-up: 0032_data_room.sql (idempotent)
-alter table public.documents add column if not exists content text;
-alter table public.documents add column if not exists sort_order integer not null default 0;
+do $$ begin
+  alter table public.documents add column if not exists content text;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.documents add column if not exists sort_order integer not null default 0;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 create table if not exists public.data_room_shares (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -33,17 +39,32 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-alter table public.data_room_shares enable row level security;
-alter table public.data_room_views  enable row level security;
+do $$ begin
+  alter table public.data_room_shares enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.data_room_views  enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists data_room_shares_select on public.data_room_shares;
-create policy data_room_shares_select on public.data_room_shares
+do $$ begin
+  create policy data_room_shares_select on public.data_room_shares
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists data_room_shares_write on public.data_room_shares;
-create policy data_room_shares_write on public.data_room_shares
+do $$ begin
+  create policy data_room_shares_write on public.data_room_shares
   for all using (public.is_org_writer(organization_id))
   with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists data_room_views_select on public.data_room_views;
-create policy data_room_views_select on public.data_room_views
-  for select using (organization_id in (select public.current_principal_org_ids()));;
+do $$ begin
+  create policy data_room_views_select on public.data_room_views
+  for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

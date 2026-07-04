@@ -51,7 +51,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE agent_memories ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE agent_memories ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS agent_memories_org_id_idx            ON agent_memories(org_id);
@@ -79,14 +82,20 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_agent_memories" ON agent_memories;
-CREATE POLICY "org_members_agent_memories" ON agent_memories
+do $$ begin
+  CREATE POLICY "org_members_agent_memories" ON agent_memories
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS memory_card jsonb NOT NULL DEFAULT '{}';
+do $$ begin
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS memory_card jsonb NOT NULL DEFAULT '{}';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 do $$ begin
   COMMENT ON COLUMN sessions.memory_card IS 'Per-session structured memory summary card (entities, decisions, open questions, constraints). Updated live as the session progresses.';
 -- tolerated on fresh DBs where the regular sequence built a different shape

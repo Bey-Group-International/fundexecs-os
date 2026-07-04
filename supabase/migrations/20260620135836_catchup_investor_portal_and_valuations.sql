@@ -32,20 +32,35 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-alter table public.investor_portal_shares enable row level security;
-alter table public.investor_portal_views  enable row level security;
+do $$ begin
+  alter table public.investor_portal_shares enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  alter table public.investor_portal_views  enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists investor_portal_shares_select on public.investor_portal_shares;
-create policy investor_portal_shares_select on public.investor_portal_shares
+do $$ begin
+  create policy investor_portal_shares_select on public.investor_portal_shares
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists investor_portal_shares_write on public.investor_portal_shares;
-create policy investor_portal_shares_write on public.investor_portal_shares
+do $$ begin
+  create policy investor_portal_shares_write on public.investor_portal_shares
   for all using (public.is_org_writer(organization_id))
   with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists investor_portal_views_select on public.investor_portal_views;
-create policy investor_portal_views_select on public.investor_portal_views
+do $$ begin
+  create policy investor_portal_views_select on public.investor_portal_views
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 create table if not exists public.valuation_marks (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -67,12 +82,21 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-alter table public.valuation_marks enable row level security;
+do $$ begin
+  alter table public.valuation_marks enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists valuation_marks_select on public.valuation_marks;
-create policy valuation_marks_select on public.valuation_marks
+do $$ begin
+  create policy valuation_marks_select on public.valuation_marks
   for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 drop policy if exists valuation_marks_write on public.valuation_marks;
-create policy valuation_marks_write on public.valuation_marks
+do $$ begin
+  create policy valuation_marks_write on public.valuation_marks
   for all using (public.is_org_writer(organization_id))
-  with check (public.is_org_writer(organization_id));;
+  with check (public.is_org_writer(organization_id));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

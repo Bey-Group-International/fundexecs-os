@@ -16,15 +16,21 @@ CREATE TABLE IF NOT EXISTS meeting_notes (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE meeting_notes ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE meeting_notes ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "org_members_all" ON meeting_notes
+do $$ begin
+  CREATE POLICY "org_members_all" ON meeting_notes
   USING (
     organization_id IN (
       SELECT organization_id FROM organization_members
       WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   COMMENT ON TABLE  meeting_notes                IS 'Meeting transcripts and AI analysis produced by Meeting Copilot.';

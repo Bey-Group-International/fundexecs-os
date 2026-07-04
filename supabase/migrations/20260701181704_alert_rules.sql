@@ -45,7 +45,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS alert_rules_org_id_idx ON alert_rules(org_id);
@@ -57,12 +60,15 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_alert_rules" ON alert_rules;
-CREATE POLICY "org_members_alert_rules" ON alert_rules
+do $$ begin
+  CREATE POLICY "org_members_alert_rules" ON alert_rules
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 CREATE TABLE IF NOT EXISTS alert_events (
   id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -89,7 +95,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS alert_events_rule_id_idx         ON alert_events(rule_id);
@@ -109,9 +118,12 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_alert_events" ON alert_events;
-CREATE POLICY "org_members_alert_events" ON alert_events
+do $$ begin
+  CREATE POLICY "org_members_alert_events" ON alert_events
   FOR ALL USING (
     org_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
-  );;
+  );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

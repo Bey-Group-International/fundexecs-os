@@ -22,8 +22,14 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-alter table public.stripe_checkouts enable row level security;
+do $$ begin
+  alter table public.stripe_checkouts enable row level security;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 drop policy if exists stripe_checkouts_select on public.stripe_checkouts;
-create policy stripe_checkouts_select on public.stripe_checkouts
-  for select using (organization_id in (select public.current_principal_org_ids()));;
+do $$ begin
+  create policy stripe_checkouts_select on public.stripe_checkouts
+  for select using (organization_id in (select public.current_principal_org_ids()));
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

@@ -14,9 +14,12 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE commitments
+do $$ begin
+  ALTER TABLE commitments
   ADD COLUMN IF NOT EXISTS lifecycle_stage commitment_stage NOT NULL DEFAULT 'soft_circle',
   ADD COLUMN IF NOT EXISTS notes           text;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   COMMENT ON COLUMN commitments.lifecycle_stage IS 'Soft-circle → verbal → signed → funded → closed; withdrawn at any pre-funded stage.';

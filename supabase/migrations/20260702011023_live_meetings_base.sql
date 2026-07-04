@@ -42,10 +42,22 @@ CREATE TABLE IF NOT EXISTS live_meeting_reports (
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE live_meetings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE live_meeting_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE live_meeting_transcripts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE live_meeting_reports ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE live_meetings ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  ALTER TABLE live_meeting_participants ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  ALTER TABLE live_meeting_transcripts ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
+do $$ begin
+  ALTER TABLE live_meeting_reports ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 DROP POLICY IF EXISTS "live_meetings_select" ON live_meetings;
 DROP POLICY IF EXISTS "live_meetings_insert" ON live_meetings;
@@ -54,25 +66,38 @@ DROP POLICY IF EXISTS "live_meeting_participants_self" ON live_meeting_participa
 DROP POLICY IF EXISTS "live_meeting_transcripts_meeting" ON live_meeting_transcripts;
 DROP POLICY IF EXISTS "live_meeting_reports_meeting" ON live_meeting_reports;
 
-CREATE POLICY "live_meetings_select" ON live_meetings FOR SELECT
+do $$ begin
+  CREATE POLICY "live_meetings_select" ON live_meetings FOR SELECT
   USING (
     organization_id IS NULL
     OR organization_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "live_meetings_insert" ON live_meetings FOR INSERT
+do $$ begin
+  CREATE POLICY "live_meetings_insert" ON live_meetings FOR INSERT
   WITH CHECK (host_id = auth.uid());
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "live_meetings_update" ON live_meetings FOR UPDATE
+do $$ begin
+  CREATE POLICY "live_meetings_update" ON live_meetings FOR UPDATE
   USING (host_id = auth.uid())
   WITH CHECK (host_id = auth.uid());
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "live_meeting_participants_self" ON live_meeting_participants
+do $$ begin
+  CREATE POLICY "live_meeting_participants_self" ON live_meeting_participants
   FOR ALL USING (user_id = auth.uid());
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "live_meeting_transcripts_meeting" ON live_meeting_transcripts
+do $$ begin
+  CREATE POLICY "live_meeting_transcripts_meeting" ON live_meeting_transcripts
   USING (
     meeting_id IN (
       SELECT id FROM live_meetings WHERE host_id = auth.uid()
@@ -80,8 +105,11 @@ CREATE POLICY "live_meeting_transcripts_meeting" ON live_meeting_transcripts
       SELECT meeting_id FROM live_meeting_participants WHERE user_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-CREATE POLICY "live_meeting_reports_meeting" ON live_meeting_reports
+do $$ begin
+  CREATE POLICY "live_meeting_reports_meeting" ON live_meeting_reports
   USING (
     meeting_id IN (
       SELECT id FROM live_meetings WHERE host_id = auth.uid()
@@ -89,8 +117,13 @@ CREATE POLICY "live_meeting_reports_meeting" ON live_meeting_reports
       SELECT meeting_id FROM live_meeting_participants WHERE user_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
-ALTER TABLE live_meetings ADD COLUMN IF NOT EXISTS deal_id uuid REFERENCES meeting_notes(id) ON DELETE SET NULL;
+do $$ begin
+  ALTER TABLE live_meetings ADD COLUMN IF NOT EXISTS deal_id uuid REFERENCES meeting_notes(id) ON DELETE SET NULL;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS live_meetings_host_id_idx ON live_meetings (host_id);

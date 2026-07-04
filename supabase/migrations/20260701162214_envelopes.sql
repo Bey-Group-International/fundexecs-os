@@ -25,7 +25,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS envelopes_organization_id_idx ON envelopes(organization_id);
@@ -37,12 +40,15 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelopes" ON envelopes;
-CREATE POLICY "org_members_envelopes" ON envelopes
+do $$ begin
+  CREATE POLICY "org_members_envelopes" ON envelopes
   FOR ALL USING (
     organization_id IN (
       SELECT organization_id FROM organization_members WHERE principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 CREATE TABLE IF NOT EXISTS envelope_recipients (
   id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -68,7 +74,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE envelope_recipients ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE envelope_recipients ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS envelope_recipients_envelope_id_idx ON envelope_recipients(envelope_id);
@@ -80,7 +89,8 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelope_recipients" ON envelope_recipients;
-CREATE POLICY "org_members_envelope_recipients" ON envelope_recipients
+do $$ begin
+  CREATE POLICY "org_members_envelope_recipients" ON envelope_recipients
   FOR ALL USING (
     envelope_id IN (
       SELECT e.id FROM envelopes e
@@ -88,6 +98,8 @@ CREATE POLICY "org_members_envelope_recipients" ON envelope_recipients
       WHERE om.principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 CREATE TABLE IF NOT EXISTS envelope_fields (
   id           uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,7 +122,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE envelope_fields ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE envelope_fields ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS envelope_fields_envelope_id_idx ON envelope_fields(envelope_id);
@@ -122,7 +137,8 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelope_fields" ON envelope_fields;
-CREATE POLICY "org_members_envelope_fields" ON envelope_fields
+do $$ begin
+  CREATE POLICY "org_members_envelope_fields" ON envelope_fields
   FOR ALL USING (
     envelope_id IN (
       SELECT e.id FROM envelopes e
@@ -130,6 +146,8 @@ CREATE POLICY "org_members_envelope_fields" ON envelope_fields
       WHERE om.principal_id = auth.uid()
     )
   );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 CREATE TABLE IF NOT EXISTS envelope_events (
   id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -147,7 +165,10 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 
-ALTER TABLE envelope_events ENABLE ROW LEVEL SECURITY;
+do $$ begin
+  ALTER TABLE envelope_events ENABLE ROW LEVEL SECURITY;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 
 do $$ begin
   CREATE INDEX IF NOT EXISTS envelope_events_envelope_id_idx ON envelope_events(envelope_id);
@@ -159,11 +180,14 @@ do $$ begin
 exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelope_events" ON envelope_events;
-CREATE POLICY "org_members_envelope_events" ON envelope_events
+do $$ begin
+  CREATE POLICY "org_members_envelope_events" ON envelope_events
   FOR ALL USING (
     envelope_id IN (
       SELECT e.id FROM envelopes e
       JOIN organization_members om ON om.organization_id = e.organization_id
       WHERE om.principal_id = auth.uid()
     )
-  );;
+  );
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;

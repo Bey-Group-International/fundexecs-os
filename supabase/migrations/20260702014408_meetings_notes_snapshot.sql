@@ -2,6 +2,9 @@
 -- via MCP/dashboard before the DB Migrate workflow existed). Present in the
 -- repo so `supabase db push` sees local >= remote; already applied in prod.
 
-ALTER TABLE live_meetings
+do $$ begin
+  ALTER TABLE live_meetings
   ADD COLUMN IF NOT EXISTS notes_snapshot jsonb;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;
 ;

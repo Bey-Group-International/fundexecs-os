@@ -1,4 +1,7 @@
 -- Backfilled from the production migration history (applied directly to prod
 -- via MCP/dashboard before the DB Migrate workflow existed). Present in the
 -- repo so `supabase db push` sees local >= remote; already applied in prod.
-ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS setup_hidden boolean NOT NULL DEFAULT false;;
+do $$ begin
+  ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS setup_hidden boolean NOT NULL DEFAULT false;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table or undefined_object or duplicate_object then null; end $$;;
