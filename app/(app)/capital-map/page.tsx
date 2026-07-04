@@ -93,22 +93,20 @@ export default async function CapitalMapPage() {
 
       <CapitalMap entries={entries} matchesByInvestor={matchesByInvestor} />
 
-      {allocatorEntries.length > 0 && (
-        <section className="mt-12">
-          <header className="mb-6">
-            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-              Allocator Directory
-            </span>
-            <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
-              LP &amp; Allocator Intelligence
-            </h2>
-            <p className="mt-1 text-sm text-fg-secondary">
-              Searchable directory of your allocators with AUM, ticket size, mandate fit, and compliance status when verified.
-            </p>
-          </header>
-          <AllocatorDirectory entries={allocatorEntries} funds={[]} />
-        </section>
-      )}
+      <section className="mt-12">
+        <header className="mb-6">
+          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            Allocator Directory
+          </span>
+          <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+            LP &amp; Allocator Intelligence
+          </h2>
+          <p className="mt-1 text-sm text-fg-secondary">
+            Searchable directory of your allocators with AUM, ticket size, mandate fit, and compliance status when verified.
+          </p>
+        </header>
+        <AllocatorDirectory entries={allocatorEntries} funds={[]} />
+      </section>
     </div>
   );
 }

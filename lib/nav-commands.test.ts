@@ -32,4 +32,9 @@ describe("navCommands", () => {
       expect(c.group.length).toBeGreaterThan(0);
     }
   });
+
+  it("routes legacy deal and report concepts to implemented pages", () => {
+    expect(commands.find((c) => c.label === "Deals")?.href).toBe("/deals/feed");
+    expect(commands.some((c) => c.href === "/lp-report")).toBe(false);
+  });
 });
