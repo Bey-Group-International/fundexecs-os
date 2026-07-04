@@ -3,5 +3,8 @@
 -- repo so `supabase db push` sees local >= remote; already applied in prod.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_dev boolean NOT NULL DEFAULT false;
 
-CREATE INDEX IF NOT EXISTS tasks_is_dev_idx ON tasks (organization_id, is_dev)
-  WHERE is_dev = false;;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS tasks_is_dev_idx ON tasks (organization_id, is_dev)
+  WHERE is_dev = false;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;;

@@ -26,6 +26,15 @@ CREATE POLICY "org_members_all" ON meeting_notes
     )
   );
 
-COMMENT ON TABLE  meeting_notes                IS 'Meeting transcripts and AI analysis produced by Meeting Copilot.';
-COMMENT ON COLUMN meeting_notes.analysis       IS 'JSON payload: sentiment, objections[], commitment_probability, follow_up_draft, crm_updates.';
-COMMENT ON COLUMN meeting_notes.calendar_event_id IS 'Google Calendar event ID when fed from Calendar MCP.';;
+do $$ begin
+  COMMENT ON TABLE  meeting_notes                IS 'Meeting transcripts and AI analysis produced by Meeting Copilot.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN meeting_notes.analysis       IS 'JSON payload: sentiment, objections[], commitment_probability, follow_up_draft, crm_updates.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN meeting_notes.calendar_event_id IS 'Google Calendar event ID when fed from Calendar MCP.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;;

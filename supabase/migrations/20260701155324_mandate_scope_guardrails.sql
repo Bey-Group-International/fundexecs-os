@@ -6,6 +6,15 @@ ALTER TABLE mandates
   ADD COLUMN IF NOT EXISTS guardrails         jsonb NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS blast_radius_rules jsonb NOT NULL DEFAULT '[]'::jsonb;
 
-COMMENT ON COLUMN mandates.scope              IS 'Human-readable scope of what this mandate covers — hubs, counterparty classes, deal sizes, etc.';
-COMMENT ON COLUMN mandates.guardrails         IS 'Ordered list of {rule: string} constraints Earn must respect during execution.';
-COMMENT ON COLUMN mandates.blast_radius_rules IS 'Hard limits on automated footprint: max outreach/day, forbidden domains, dollar thresholds, etc.';;
+do $$ begin
+  COMMENT ON COLUMN mandates.scope              IS 'Human-readable scope of what this mandate covers — hubs, counterparty classes, deal sizes, etc.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN mandates.guardrails         IS 'Ordered list of {rule: string} constraints Earn must respect during execution.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN mandates.blast_radius_rules IS 'Hard limits on automated footprint: max outreach/day, forbidden domains, dollar thresholds, etc.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;;

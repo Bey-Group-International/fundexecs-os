@@ -20,9 +20,15 @@ create table if not exists public.source_feedback (
   metadata        jsonb not null default '{}'::jsonb,
   created_at      timestamptz not null default now()
 );
-create index if not exists source_feedback_org_idx on public.source_feedback (organization_id);
-create index if not exists source_feedback_lookup_idx
+do $$ begin
+  create index if not exists source_feedback_org_idx on public.source_feedback (organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists source_feedback_lookup_idx
   on public.source_feedback (organization_id, principal_id, module, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 alter table public.source_feedback enable row level security;
 

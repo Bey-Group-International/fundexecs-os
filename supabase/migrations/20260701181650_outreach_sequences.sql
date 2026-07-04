@@ -13,14 +13,29 @@ CREATE TABLE IF NOT EXISTS outreach_sequences (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE outreach_sequences IS 'Multi-step outreach templates (email, slack, envelope) scoped to an org.';
-COMMENT ON COLUMN outreach_sequences.steps IS 'Ordered array of step objects: {step_index, channel, delay_days, subject, body_template, stop_if_replied}.';
-COMMENT ON COLUMN outreach_sequences.stop_on_reply IS 'When true, a reply from the target halts further steps.';
+do $$ begin
+  COMMENT ON TABLE outreach_sequences IS 'Multi-step outreach templates (email, slack, envelope) scoped to an org.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN outreach_sequences.steps IS 'Ordered array of step objects: {step_index, channel, delay_days, subject, body_template, stop_if_replied}.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN outreach_sequences.stop_on_reply IS 'When true, a reply from the target halts further steps.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE outreach_sequences ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS outreach_sequences_org_id_idx ON outreach_sequences(org_id);
-CREATE INDEX IF NOT EXISTS outreach_sequences_active_idx ON outreach_sequences(active);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS outreach_sequences_org_id_idx ON outreach_sequences(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS outreach_sequences_active_idx ON outreach_sequences(active);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_outreach_sequences" ON outreach_sequences;
 CREATE POLICY "org_members_outreach_sequences" ON outreach_sequences
@@ -43,16 +58,37 @@ CREATE TABLE IF NOT EXISTS sequence_enrollments (
   stopped_reason text
 );
 
-COMMENT ON TABLE sequence_enrollments IS 'Tracks a specific target (investor/deal/contact) progressing through an outreach sequence.';
-COMMENT ON COLUMN sequence_enrollments.next_step_at IS 'When the next step should be dispatched; checked by cron sweep.';
-COMMENT ON COLUMN sequence_enrollments.stopped_reason IS 'Why the sequence was stopped: reply_received | manual | completed.';
+do $$ begin
+  COMMENT ON TABLE sequence_enrollments IS 'Tracks a specific target (investor/deal/contact) progressing through an outreach sequence.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN sequence_enrollments.next_step_at IS 'When the next step should be dispatched;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$; checked by cron sweep.';
+do $$ begin
+  COMMENT ON COLUMN sequence_enrollments.stopped_reason IS 'Why the sequence was stopped: reply_received | manual | completed.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE sequence_enrollments ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS sequence_enrollments_sequence_id_idx  ON sequence_enrollments(sequence_id);
-CREATE INDEX IF NOT EXISTS sequence_enrollments_target_id_idx    ON sequence_enrollments(target_id);
-CREATE INDEX IF NOT EXISTS sequence_enrollments_next_step_at_idx ON sequence_enrollments(next_step_at);
-CREATE INDEX IF NOT EXISTS sequence_enrollments_stopped_at_idx   ON sequence_enrollments(stopped_at);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS sequence_enrollments_sequence_id_idx  ON sequence_enrollments(sequence_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS sequence_enrollments_target_id_idx    ON sequence_enrollments(target_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS sequence_enrollments_next_step_at_idx ON sequence_enrollments(next_step_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS sequence_enrollments_stopped_at_idx   ON sequence_enrollments(stopped_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_sequence_enrollments" ON sequence_enrollments;
 CREATE POLICY "org_members_sequence_enrollments" ON sequence_enrollments

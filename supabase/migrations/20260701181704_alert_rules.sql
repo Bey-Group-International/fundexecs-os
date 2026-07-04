@@ -16,18 +16,45 @@ CREATE TABLE IF NOT EXISTS alert_rules (
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE alert_rules IS 'Operator-configured threshold and change alert rules evaluated by cron sweep.';
-COMMENT ON COLUMN alert_rules.trigger_entity IS 'Entity type to monitor (e.g. deal, investor, commitment).';
-COMMENT ON COLUMN alert_rules.trigger_field IS 'Field on the entity to evaluate (e.g. conviction_score, status).';
-COMMENT ON COLUMN alert_rules.operator IS 'Comparison: lt | gt | eq | changed | contains.';
-COMMENT ON COLUMN alert_rules.threshold_value IS 'Value to compare against; null for "changed" operator.';
-COMMENT ON COLUMN alert_rules.channel IS '{slack: bool, email: bool, in_app: bool} delivery channels.';
-COMMENT ON COLUMN alert_rules.escalation IS '{hours: int, notify_role: string} escalation config if unacknowledged.';
+do $$ begin
+  COMMENT ON TABLE alert_rules IS 'Operator-configured threshold and change alert rules evaluated by cron sweep.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_rules.trigger_entity IS 'Entity type to monitor (e.g. deal, investor, commitment).';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_rules.trigger_field IS 'Field on the entity to evaluate (e.g. conviction_score, status).';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_rules.operator IS 'Comparison: lt | gt | eq | changed | contains.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_rules.threshold_value IS 'Value to compare against;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$; null for "changed" operator.';
+do $$ begin
+  COMMENT ON COLUMN alert_rules.channel IS '{slack: bool, email: bool, in_app: bool} delivery channels.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_rules.escalation IS '{hours: int, notify_role: string} escalation config if unacknowledged.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS alert_rules_org_id_idx ON alert_rules(org_id);
-CREATE INDEX IF NOT EXISTS alert_rules_active_idx ON alert_rules(active);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS alert_rules_org_id_idx ON alert_rules(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS alert_rules_active_idx ON alert_rules(active);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_alert_rules" ON alert_rules;
 CREATE POLICY "org_members_alert_rules" ON alert_rules
@@ -49,16 +76,37 @@ CREATE TABLE IF NOT EXISTS alert_events (
   created_at        timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE alert_events IS 'Immutable log of fired alert rule evaluations, with acknowledgement tracking.';
-COMMENT ON COLUMN alert_events.payload IS 'Snapshot of the triggering values at fire time.';
-COMMENT ON COLUMN alert_events.acknowledged_at IS 'When an operator dismissed this alert; null = unacknowledged.';
+do $$ begin
+  COMMENT ON TABLE alert_events IS 'Immutable log of fired alert rule evaluations, with acknowledgement tracking.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_events.payload IS 'Snapshot of the triggering values at fire time.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN alert_events.acknowledged_at IS 'When an operator dismissed this alert;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$; null = unacknowledged.';
 
 ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS alert_events_rule_id_idx         ON alert_events(rule_id);
-CREATE INDEX IF NOT EXISTS alert_events_org_id_idx          ON alert_events(org_id);
-CREATE INDEX IF NOT EXISTS alert_events_acknowledged_at_idx ON alert_events(acknowledged_at);
-CREATE INDEX IF NOT EXISTS alert_events_created_at_idx      ON alert_events(created_at);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS alert_events_rule_id_idx         ON alert_events(rule_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS alert_events_org_id_idx          ON alert_events(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS alert_events_acknowledged_at_idx ON alert_events(acknowledged_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS alert_events_created_at_idx      ON alert_events(created_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_alert_events" ON alert_events;
 CREATE POLICY "org_members_alert_events" ON alert_events

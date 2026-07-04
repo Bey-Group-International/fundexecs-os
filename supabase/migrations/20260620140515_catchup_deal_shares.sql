@@ -12,8 +12,14 @@ create table if not exists public.deal_shares (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
-create index if not exists deal_shares_org_idx on public.deal_shares (organization_id, created_at desc);
-create index if not exists deal_shares_deal_idx on public.deal_shares (deal_id);
+do $$ begin
+  create index if not exists deal_shares_org_idx on public.deal_shares (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists deal_shares_deal_idx on public.deal_shares (deal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 drop trigger if exists deal_shares_set_updated_at on public.deal_shares;
 create trigger deal_shares_set_updated_at
   before update on public.deal_shares
@@ -29,8 +35,14 @@ create table if not exists public.deal_share_recipients (
   source          text not null default 'matched' check (source in ('matched', 'forwarded')),
   created_at      timestamptz not null default now()
 );
-create index if not exists deal_share_recipients_org_idx on public.deal_share_recipients (organization_id, created_at desc);
-create index if not exists deal_share_recipients_share_idx on public.deal_share_recipients (share_id);
+do $$ begin
+  create index if not exists deal_share_recipients_org_idx on public.deal_share_recipients (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists deal_share_recipients_share_idx on public.deal_share_recipients (share_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.deal_share_views (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -40,8 +52,14 @@ create table if not exists public.deal_share_views (
   viewer_label    text,
   created_at      timestamptz not null default now()
 );
-create index if not exists deal_share_views_share_idx on public.deal_share_views (share_id, created_at desc);
-create index if not exists deal_share_views_org_idx on public.deal_share_views (organization_id, created_at desc);
+do $$ begin
+  create index if not exists deal_share_views_share_idx on public.deal_share_views (share_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists deal_share_views_org_idx on public.deal_share_views (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 alter table public.deal_shares enable row level security;
 alter table public.deal_share_recipients enable row level security;

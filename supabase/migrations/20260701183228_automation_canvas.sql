@@ -19,12 +19,21 @@ CREATE TABLE IF NOT EXISTS workflow_templates (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE workflow_templates IS 'Reusable visual automation canvas templates. Global templates are available to all orgs.';
+do $$ begin
+  COMMENT ON TABLE workflow_templates IS 'Reusable visual automation canvas templates. Global templates are available to all orgs.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE workflow_templates ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS workflow_templates_org_id_idx    ON workflow_templates(org_id);
-CREATE INDEX IF NOT EXISTS workflow_templates_is_global_idx ON workflow_templates(is_global);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS workflow_templates_org_id_idx    ON workflow_templates(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS workflow_templates_is_global_idx ON workflow_templates(is_global);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_workflow_templates" ON workflow_templates;
 CREATE POLICY "org_members_workflow_templates" ON workflow_templates

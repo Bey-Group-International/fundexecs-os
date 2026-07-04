@@ -1,104 +1,407 @@
 -- Backfilled from the production migration history (applied directly to prod
 -- via MCP/dashboard before the DB Migrate workflow existed). Present in the
 -- repo so `supabase db push` sees local >= remote; already applied in prod.
-CREATE INDEX IF NOT EXISTS idx_api_keys_created_by ON public.api_keys(created_by);
-CREATE INDEX IF NOT EXISTS idx_api_keys_organization_id ON public.api_keys(organization_id);
-CREATE INDEX IF NOT EXISTS idx_approvals_decided_by ON public.approvals(decided_by);
-CREATE INDEX IF NOT EXISTS idx_approvals_requested_by_agent ON public.approvals(requested_by_agent);
-CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON public.artifacts(agent);
-CREATE INDEX IF NOT EXISTS idx_artifacts_created_by ON public.artifacts(created_by);
-CREATE INDEX IF NOT EXISTS idx_artifacts_organization_id ON public.artifacts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_assets_fund_id ON public.assets(fund_id);
-CREATE INDEX IF NOT EXISTS idx_assets_verified_by ON public.assets(verified_by);
-CREATE INDEX IF NOT EXISTS idx_audit_log_organization_id ON public.audit_log(organization_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_principal_id ON public.audit_log(principal_id);
-CREATE INDEX IF NOT EXISTS idx_automations_created_by ON public.automations(created_by);
-CREATE INDEX IF NOT EXISTS idx_automations_organization_id ON public.automations(organization_id);
-CREATE INDEX IF NOT EXISTS idx_brain_documents_created_by ON public.brain_documents(created_by);
-CREATE INDEX IF NOT EXISTS idx_brain_documents_organization_id ON public.brain_documents(organization_id);
-CREATE INDEX IF NOT EXISTS idx_brain_runs_created_by ON public.brain_runs(created_by);
-CREATE INDEX IF NOT EXISTS idx_brain_runs_organization_id ON public.brain_runs(organization_id);
-CREATE INDEX IF NOT EXISTS idx_capital_events_investor_id ON public.capital_events(investor_id);
-CREATE INDEX IF NOT EXISTS idx_capital_events_verified_by ON public.capital_events(verified_by);
-CREATE INDEX IF NOT EXISTS idx_conviction_snapshots_deal_id ON public.conviction_snapshots(deal_id);
-CREATE INDEX IF NOT EXISTS idx_conviction_snapshots_organization_id ON public.conviction_snapshots(organization_id);
-CREATE INDEX IF NOT EXISTS idx_credit_gifts_created_by ON public.credit_gifts(created_by);
-CREATE INDEX IF NOT EXISTS idx_credit_gifts_redeemed_by_organization_id ON public.credit_gifts(redeemed_by_organization_id);
-CREATE INDEX IF NOT EXISTS idx_credit_gifts_sender_organization_id ON public.credit_gifts(sender_organization_id);
-CREATE INDEX IF NOT EXISTS idx_credit_ledger_organization_id ON public.credit_ledger(organization_id);
-CREATE INDEX IF NOT EXISTS idx_credit_ledger_source_organization_id ON public.credit_ledger(source_organization_id);
-CREATE INDEX IF NOT EXISTS idx_data_room_shares_created_by ON public.data_room_shares(created_by);
-CREATE INDEX IF NOT EXISTS idx_data_room_views_document_id ON public.data_room_views(document_id);
-CREATE INDEX IF NOT EXISTS idx_data_room_views_organization_id ON public.data_room_views(organization_id);
-CREATE INDEX IF NOT EXISTS idx_data_room_views_share_id ON public.data_room_views(share_id);
-CREATE INDEX IF NOT EXISTS idx_deal_share_recipients_investor_id ON public.deal_share_recipients(investor_id);
-CREATE INDEX IF NOT EXISTS idx_deal_share_recipients_organization_id ON public.deal_share_recipients(organization_id);
-CREATE INDEX IF NOT EXISTS idx_deal_share_views_organization_id ON public.deal_share_views(organization_id);
-CREATE INDEX IF NOT EXISTS idx_deal_share_views_share_id ON public.deal_share_views(share_id);
-CREATE INDEX IF NOT EXISTS idx_deal_share_views_viewer_org_id ON public.deal_share_views(viewer_org_id);
-CREATE INDEX IF NOT EXISTS idx_deal_shares_created_by ON public.deal_shares(created_by);
-CREATE INDEX IF NOT EXISTS idx_deal_shares_organization_id ON public.deal_shares(organization_id);
-CREATE INDEX IF NOT EXISTS idx_deals_fund_id ON public.deals(fund_id);
-CREATE INDEX IF NOT EXISTS idx_deals_lead_principal ON public.deals(lead_principal);
-CREATE INDEX IF NOT EXISTS idx_deals_verified_by ON public.deals(verified_by);
-CREATE INDEX IF NOT EXISTS idx_debt_facilities_created_by ON public.debt_facilities(created_by);
-CREATE INDEX IF NOT EXISTS idx_debt_facilities_verified_by ON public.debt_facilities(verified_by);
-CREATE INDEX IF NOT EXISTS idx_diligence_items_document_id ON public.diligence_items(document_id);
-CREATE INDEX IF NOT EXISTS idx_diligence_items_verified_by ON public.diligence_items(verified_by);
-CREATE INDEX IF NOT EXISTS idx_dispatch_log_created_by ON public.dispatch_log(created_by);
-CREATE INDEX IF NOT EXISTS idx_dispatch_log_task_id ON public.dispatch_log(task_id);
-CREATE INDEX IF NOT EXISTS idx_documents_asset_id ON public.documents(asset_id);
-CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON public.documents(uploaded_by);
-CREATE INDEX IF NOT EXISTS idx_entities_created_by ON public.entities(created_by);
-CREATE INDEX IF NOT EXISTS idx_entities_organization_id ON public.entities(organization_id);
-CREATE INDEX IF NOT EXISTS idx_equity_holdings_created_by ON public.equity_holdings(created_by);
-CREATE INDEX IF NOT EXISTS idx_equity_holdings_organization_id ON public.equity_holdings(organization_id);
-CREATE INDEX IF NOT EXISTS idx_equity_holdings_share_class_id ON public.equity_holdings(share_class_id);
-CREATE INDEX IF NOT EXISTS idx_ic_decisions_deal_id ON public.ic_decisions(deal_id);
-CREATE INDEX IF NOT EXISTS idx_ic_decisions_decided_by ON public.ic_decisions(decided_by);
-CREATE INDEX IF NOT EXISTS idx_inbox_messages_thread_id ON public.inbox_messages(thread_id);
-CREATE INDEX IF NOT EXISTS idx_inbox_threads_created_by ON public.inbox_threads(created_by);
-CREATE INDEX IF NOT EXISTS idx_investor_portal_shares_created_by ON public.investor_portal_shares(created_by);
-CREATE INDEX IF NOT EXISTS idx_investor_portal_views_organization_id ON public.investor_portal_views(organization_id);
-CREATE INDEX IF NOT EXISTS idx_investor_portal_views_share_id ON public.investor_portal_views(share_id);
-CREATE INDEX IF NOT EXISTS idx_investors_verified_by ON public.investors(verified_by);
-CREATE INDEX IF NOT EXISTS idx_mandates_created_by ON public.mandates(created_by);
-CREATE INDEX IF NOT EXISTS idx_mandates_organization_id ON public.mandates(organization_id);
-CREATE INDEX IF NOT EXISTS idx_marketplace_listings_deal_id ON public.marketplace_listings(deal_id);
-CREATE INDEX IF NOT EXISTS idx_marketplace_listings_fund_id ON public.marketplace_listings(fund_id);
-CREATE INDEX IF NOT EXISTS idx_org_secrets_created_by ON public.org_secrets(created_by);
-CREATE INDEX IF NOT EXISTS idx_org_secrets_organization_id ON public.org_secrets(organization_id);
-CREATE INDEX IF NOT EXISTS idx_organizations_created_by ON public.organizations(created_by);
-CREATE INDEX IF NOT EXISTS idx_partners_created_by ON public.partners(created_by);
-CREATE INDEX IF NOT EXISTS idx_partners_verified_by ON public.partners(verified_by);
-CREATE INDEX IF NOT EXISTS idx_pr_reviews_organization_id ON public.pr_reviews(organization_id);
-CREATE INDEX IF NOT EXISTS idx_prompts_principal_id ON public.prompts(principal_id);
-CREATE INDEX IF NOT EXISTS idx_referral_codes_created_by ON public.referral_codes(created_by);
-CREATE INDEX IF NOT EXISTS idx_service_providers_created_by ON public.service_providers(created_by);
-CREATE INDEX IF NOT EXISTS idx_service_providers_verified_by ON public.service_providers(verified_by);
-CREATE INDEX IF NOT EXISTS idx_session_groups_created_by ON public.session_groups(created_by);
-CREATE INDEX IF NOT EXISTS idx_session_groups_organization_id ON public.session_groups(organization_id);
-CREATE INDEX IF NOT EXISTS idx_session_shares_created_by ON public.session_shares(created_by);
-CREATE INDEX IF NOT EXISTS idx_session_shares_organization_id ON public.session_shares(organization_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_created_by ON public.sessions(created_by);
-CREATE INDEX IF NOT EXISTS idx_sessions_organization_id ON public.sessions(organization_id);
-CREATE INDEX IF NOT EXISTS idx_share_classes_organization_id ON public.share_classes(organization_id);
-CREATE INDEX IF NOT EXISTS idx_source_feedback_principal_id ON public.source_feedback(principal_id);
-CREATE INDEX IF NOT EXISTS idx_source_feedback_session_id ON public.source_feedback(session_id);
-CREATE INDEX IF NOT EXISTS idx_source_feedback_task_id ON public.source_feedback(task_id);
-CREATE INDEX IF NOT EXISTS idx_stakeholders_created_by ON public.stakeholders(created_by);
-CREATE INDEX IF NOT EXISTS idx_stakeholders_investor_id ON public.stakeholders(investor_id);
-CREATE INDEX IF NOT EXISTS idx_stakeholders_principal_id ON public.stakeholders(principal_id);
-CREATE INDEX IF NOT EXISTS idx_stripe_checkouts_created_by ON public.stripe_checkouts(created_by);
-CREATE INDEX IF NOT EXISTS idx_stripe_checkouts_organization_id ON public.stripe_checkouts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_task_events_organization_id ON public.task_events(organization_id);
-CREATE INDEX IF NOT EXISTS idx_task_handoffs_from_agent ON public.task_handoffs(from_agent);
-CREATE INDEX IF NOT EXISTS idx_task_handoffs_to_agent ON public.task_handoffs(to_agent);
-CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON public.tasks(created_by);
-CREATE INDEX IF NOT EXISTS idx_tasks_prompt_id ON public.tasks(prompt_id);
-CREATE INDEX IF NOT EXISTS idx_underwritings_created_by ON public.underwritings(created_by);
-CREATE INDEX IF NOT EXISTS idx_underwritings_verified_by ON public.underwritings(verified_by);
-CREATE INDEX IF NOT EXISTS idx_valuation_marks_asset_id ON public.valuation_marks(asset_id);
-CREATE INDEX IF NOT EXISTS idx_valuation_marks_created_by ON public.valuation_marks(created_by);
-CREATE INDEX IF NOT EXISTS idx_valuation_marks_organization_id ON public.valuation_marks(organization_id);
-CREATE INDEX IF NOT EXISTS idx_webhook_logs_organization_id ON public.webhook_logs(organization_id);;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_api_keys_created_by ON public.api_keys(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_api_keys_organization_id ON public.api_keys(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_approvals_decided_by ON public.approvals(decided_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_approvals_requested_by_agent ON public.approvals(requested_by_agent);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON public.artifacts(agent);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_artifacts_created_by ON public.artifacts(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_artifacts_organization_id ON public.artifacts(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_assets_fund_id ON public.assets(fund_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_assets_verified_by ON public.assets(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_audit_log_organization_id ON public.audit_log(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_audit_log_principal_id ON public.audit_log(principal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_automations_created_by ON public.automations(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_automations_organization_id ON public.automations(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_brain_documents_created_by ON public.brain_documents(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_brain_documents_organization_id ON public.brain_documents(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_brain_runs_created_by ON public.brain_runs(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_brain_runs_organization_id ON public.brain_runs(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_capital_events_investor_id ON public.capital_events(investor_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_capital_events_verified_by ON public.capital_events(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_conviction_snapshots_deal_id ON public.conviction_snapshots(deal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_conviction_snapshots_organization_id ON public.conviction_snapshots(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_credit_gifts_created_by ON public.credit_gifts(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_credit_gifts_redeemed_by_organization_id ON public.credit_gifts(redeemed_by_organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_credit_gifts_sender_organization_id ON public.credit_gifts(sender_organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_credit_ledger_organization_id ON public.credit_ledger(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_credit_ledger_source_organization_id ON public.credit_ledger(source_organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_data_room_shares_created_by ON public.data_room_shares(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_data_room_views_document_id ON public.data_room_views(document_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_data_room_views_organization_id ON public.data_room_views(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_data_room_views_share_id ON public.data_room_views(share_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_share_recipients_investor_id ON public.deal_share_recipients(investor_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_share_recipients_organization_id ON public.deal_share_recipients(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_share_views_organization_id ON public.deal_share_views(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_share_views_share_id ON public.deal_share_views(share_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_share_views_viewer_org_id ON public.deal_share_views(viewer_org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_shares_created_by ON public.deal_shares(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deal_shares_organization_id ON public.deal_shares(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deals_fund_id ON public.deals(fund_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deals_lead_principal ON public.deals(lead_principal);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_deals_verified_by ON public.deals(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_debt_facilities_created_by ON public.debt_facilities(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_debt_facilities_verified_by ON public.debt_facilities(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_diligence_items_document_id ON public.diligence_items(document_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_diligence_items_verified_by ON public.diligence_items(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_dispatch_log_created_by ON public.dispatch_log(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_dispatch_log_task_id ON public.dispatch_log(task_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_documents_asset_id ON public.documents(asset_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON public.documents(uploaded_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_entities_created_by ON public.entities(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_entities_organization_id ON public.entities(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_equity_holdings_created_by ON public.equity_holdings(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_equity_holdings_organization_id ON public.equity_holdings(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_equity_holdings_share_class_id ON public.equity_holdings(share_class_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_ic_decisions_deal_id ON public.ic_decisions(deal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_ic_decisions_decided_by ON public.ic_decisions(decided_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_inbox_messages_thread_id ON public.inbox_messages(thread_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_inbox_threads_created_by ON public.inbox_threads(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_investor_portal_shares_created_by ON public.investor_portal_shares(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_investor_portal_views_organization_id ON public.investor_portal_views(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_investor_portal_views_share_id ON public.investor_portal_views(share_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_investors_verified_by ON public.investors(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_mandates_created_by ON public.mandates(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_mandates_organization_id ON public.mandates(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_marketplace_listings_deal_id ON public.marketplace_listings(deal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_marketplace_listings_fund_id ON public.marketplace_listings(fund_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_org_secrets_created_by ON public.org_secrets(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_org_secrets_organization_id ON public.org_secrets(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_organizations_created_by ON public.organizations(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_partners_created_by ON public.partners(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_partners_verified_by ON public.partners(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_pr_reviews_organization_id ON public.pr_reviews(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_prompts_principal_id ON public.prompts(principal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_referral_codes_created_by ON public.referral_codes(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_service_providers_created_by ON public.service_providers(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_service_providers_verified_by ON public.service_providers(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_session_groups_created_by ON public.session_groups(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_session_groups_organization_id ON public.session_groups(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_session_shares_created_by ON public.session_shares(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_session_shares_organization_id ON public.session_shares(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_sessions_created_by ON public.sessions(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_sessions_organization_id ON public.sessions(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_share_classes_organization_id ON public.share_classes(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_source_feedback_principal_id ON public.source_feedback(principal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_source_feedback_session_id ON public.source_feedback(session_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_source_feedback_task_id ON public.source_feedback(task_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_stakeholders_created_by ON public.stakeholders(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_stakeholders_investor_id ON public.stakeholders(investor_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_stakeholders_principal_id ON public.stakeholders(principal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_stripe_checkouts_created_by ON public.stripe_checkouts(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_stripe_checkouts_organization_id ON public.stripe_checkouts(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_task_events_organization_id ON public.task_events(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_task_handoffs_from_agent ON public.task_handoffs(from_agent);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_task_handoffs_to_agent ON public.task_handoffs(to_agent);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON public.tasks(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_tasks_prompt_id ON public.tasks(prompt_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_underwritings_created_by ON public.underwritings(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_underwritings_verified_by ON public.underwritings(verified_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_valuation_marks_asset_id ON public.valuation_marks(asset_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_valuation_marks_created_by ON public.valuation_marks(created_by);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_valuation_marks_organization_id ON public.valuation_marks(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS idx_webhook_logs_organization_id ON public.webhook_logs(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;;

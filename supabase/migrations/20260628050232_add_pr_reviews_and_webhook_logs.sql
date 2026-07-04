@@ -56,7 +56,19 @@ CREATE POLICY "org members can read webhook_logs"
   ));
 
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS pr_reviews_repo_pr_idx ON public.pr_reviews(repo, pr_number);
-CREATE INDEX IF NOT EXISTS pr_reviews_created_at_idx ON public.pr_reviews(created_at DESC);
-CREATE INDEX IF NOT EXISTS webhook_logs_source_idx ON public.webhook_logs(source, event_type);
-CREATE INDEX IF NOT EXISTS webhook_logs_created_at_idx ON public.webhook_logs(created_at DESC);;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS pr_reviews_repo_pr_idx ON public.pr_reviews(repo, pr_number);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS pr_reviews_created_at_idx ON public.pr_reviews(created_at DESC);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS webhook_logs_source_idx ON public.webhook_logs(source, event_type);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS webhook_logs_created_at_idx ON public.webhook_logs(created_at DESC);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;;

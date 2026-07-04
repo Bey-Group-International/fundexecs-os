@@ -12,7 +12,10 @@ create table if not exists public.referral_codes (
   created_by      uuid references public.principals (id) on delete set null,
   created_at      timestamptz not null default now()
 );
-create index if not exists referral_codes_code_idx on public.referral_codes (code);
+do $$ begin
+  create index if not exists referral_codes_code_idx on public.referral_codes (code);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.referrals (
   id                       uuid primary key default extensions.gen_random_uuid(),
@@ -23,7 +26,10 @@ create table if not exists public.referrals (
   created_at               timestamptz not null default now(),
   constraint referrals_no_self check (referrer_organization_id <> referred_organization_id)
 );
-create index if not exists referrals_referrer_idx on public.referrals (referrer_organization_id);
+do $$ begin
+  create index if not exists referrals_referrer_idx on public.referrals (referrer_organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.credit_ledger (
   id                     uuid primary key default extensions.gen_random_uuid(),
@@ -35,7 +41,10 @@ create table if not exists public.credit_ledger (
   note                   text,
   created_at             timestamptz not null default now()
 );
-create index if not exists credit_ledger_org_idx on public.credit_ledger (organization_id, created_at desc);
+do $$ begin
+  create index if not exists credit_ledger_org_idx on public.credit_ledger (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.credit_gifts (
   id                          uuid primary key default extensions.gen_random_uuid(),
@@ -51,7 +60,10 @@ create table if not exists public.credit_gifts (
   created_at                  timestamptz not null default now(),
   redeemed_at                 timestamptz
 );
-create index if not exists credit_gifts_sender_idx on public.credit_gifts (sender_organization_id, created_at desc);
+do $$ begin
+  create index if not exists credit_gifts_sender_idx on public.credit_gifts (sender_organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create or replace function public.increment_org_credits(p_org uuid, p_delta integer)
 returns integer

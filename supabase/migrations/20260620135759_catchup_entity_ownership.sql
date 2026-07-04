@@ -13,7 +13,10 @@ create table if not exists public.stakeholders (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
-create index if not exists stakeholders_org_idx on public.stakeholders (organization_id);
+do $$ begin
+  create index if not exists stakeholders_org_idx on public.stakeholders (organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 drop trigger if exists stakeholders_set_updated_at on public.stakeholders;
 create trigger stakeholders_set_updated_at
   before update on public.stakeholders
@@ -31,7 +34,10 @@ create table if not exists public.share_classes (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
-create index if not exists share_classes_entity_idx on public.share_classes (entity_id);
+do $$ begin
+  create index if not exists share_classes_entity_idx on public.share_classes (entity_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 drop trigger if exists share_classes_set_updated_at on public.share_classes;
 create trigger share_classes_set_updated_at
   before update on public.share_classes
@@ -51,8 +57,14 @@ create table if not exists public.equity_holdings (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
-create index if not exists equity_holdings_entity_idx on public.equity_holdings (entity_id);
-create index if not exists equity_holdings_stakeholder_idx on public.equity_holdings (stakeholder_id);
+do $$ begin
+  create index if not exists equity_holdings_entity_idx on public.equity_holdings (entity_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists equity_holdings_stakeholder_idx on public.equity_holdings (stakeholder_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 drop trigger if exists equity_holdings_set_updated_at on public.equity_holdings;
 create trigger equity_holdings_set_updated_at
   before update on public.equity_holdings

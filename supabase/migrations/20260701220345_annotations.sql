@@ -17,19 +17,49 @@ CREATE TABLE IF NOT EXISTS annotations (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE annotations IS 'Collaborative inline annotations on any entity (document, envelope, deal, artifact, session).';
-COMMENT ON COLUMN annotations.entity_type IS 'Type of entity being annotated.';
-COMMENT ON COLUMN annotations.position_json IS '{page, x_pct, y_pct, selection_text} for positioned annotations on documents.';
-COMMENT ON COLUMN annotations.parent_id IS 'Non-null for threaded replies; references root annotation.';
+do $$ begin
+  COMMENT ON TABLE annotations IS 'Collaborative inline annotations on any entity (document, envelope, deal, artifact, session).';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN annotations.entity_type IS 'Type of entity being annotated.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN annotations.position_json IS '{page, x_pct, y_pct, selection_text} for positioned annotations on documents.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN annotations.parent_id IS 'Non-null for threaded replies;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$; references root annotation.';
 
 ALTER TABLE annotations ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS annotations_org_id_idx            ON annotations(org_id);
-CREATE INDEX IF NOT EXISTS annotations_entity_idx            ON annotations(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS annotations_author_id_idx         ON annotations(author_id);
-CREATE INDEX IF NOT EXISTS annotations_resolved_idx          ON annotations(resolved);
-CREATE INDEX IF NOT EXISTS annotations_parent_id_idx         ON annotations(parent_id);
-CREATE INDEX IF NOT EXISTS annotations_created_at_idx        ON annotations(created_at);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS annotations_org_id_idx            ON annotations(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS annotations_entity_idx            ON annotations(entity_type, entity_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS annotations_author_id_idx         ON annotations(author_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS annotations_resolved_idx          ON annotations(resolved);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS annotations_parent_id_idx         ON annotations(parent_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS annotations_created_at_idx        ON annotations(created_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_annotations" ON annotations;
 CREATE POLICY "org_members_annotations" ON annotations

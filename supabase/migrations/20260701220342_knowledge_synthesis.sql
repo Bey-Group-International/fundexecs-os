@@ -16,17 +16,41 @@ CREATE TABLE IF NOT EXISTS synthesis_queue (
   UNIQUE (org_id, topic_key)
 );
 
-COMMENT ON TABLE synthesis_queue IS 'Pending and approved knowledge synthesis jobs — groups artifacts by topic and triggers Claude synthesis on threshold.';
-COMMENT ON COLUMN synthesis_queue.topic_key IS 'Namespaced topic identifier, e.g. "deal:uuid", "investor:uuid", "sector:fintech".';
-COMMENT ON COLUMN synthesis_queue.source_artifact_ids IS 'JSON array of artifact IDs that feed this synthesis.';
-COMMENT ON COLUMN synthesis_queue.synthesis_status IS 'pending → processing → approved | discarded.';
+do $$ begin
+  COMMENT ON TABLE synthesis_queue IS 'Pending and approved knowledge synthesis jobs — groups artifacts by topic and triggers Claude synthesis on threshold.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN synthesis_queue.topic_key IS 'Namespaced topic identifier, e.g. "deal:uuid", "investor:uuid", "sector:fintech".';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN synthesis_queue.source_artifact_ids IS 'JSON array of artifact IDs that feed this synthesis.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN synthesis_queue.synthesis_status IS 'pending → processing → approved | discarded.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE synthesis_queue ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS synthesis_queue_org_id_idx          ON synthesis_queue(org_id);
-CREATE INDEX IF NOT EXISTS synthesis_queue_topic_key_idx       ON synthesis_queue(topic_key);
-CREATE INDEX IF NOT EXISTS synthesis_queue_synthesis_status_idx ON synthesis_queue(synthesis_status);
-CREATE INDEX IF NOT EXISTS synthesis_queue_created_at_idx      ON synthesis_queue(created_at);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS synthesis_queue_org_id_idx          ON synthesis_queue(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS synthesis_queue_topic_key_idx       ON synthesis_queue(topic_key);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS synthesis_queue_synthesis_status_idx ON synthesis_queue(synthesis_status);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS synthesis_queue_created_at_idx      ON synthesis_queue(created_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_synthesis_queue" ON synthesis_queue;
 CREATE POLICY "org_members_synthesis_queue" ON synthesis_queue

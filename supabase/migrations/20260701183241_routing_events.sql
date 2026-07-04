@@ -12,14 +12,29 @@ CREATE TABLE IF NOT EXISTS routing_events (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE routing_events IS 'Immutable log of agent routing decisions — which agent was assigned to each step and why.';
-COMMENT ON COLUMN routing_events.confidence IS 'Routing confidence 0-1. Events below 0.7 are flagged for operator review.';
+do $$ begin
+  COMMENT ON TABLE routing_events IS 'Immutable log of agent routing decisions — which agent was assigned to each step and why.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  COMMENT ON COLUMN routing_events.confidence IS 'Routing confidence 0-1. Events below 0.7 are flagged for operator review.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE routing_events ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS routing_events_task_id_idx    ON routing_events(task_id);
-CREATE INDEX IF NOT EXISTS routing_events_org_id_idx     ON routing_events(org_id);
-CREATE INDEX IF NOT EXISTS routing_events_created_at_idx ON routing_events(created_at);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS routing_events_task_id_idx    ON routing_events(task_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS routing_events_org_id_idx     ON routing_events(org_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS routing_events_created_at_idx ON routing_events(created_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_routing_events" ON routing_events;
 CREATE POLICY "org_members_routing_events" ON routing_events

@@ -16,8 +16,14 @@ create table if not exists public.api_keys (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
-create index if not exists api_keys_org_idx on public.api_keys (organization_id, created_at desc);
-create index if not exists api_keys_secret_hash_idx on public.api_keys (secret_hash);
+do $$ begin
+  create index if not exists api_keys_org_idx on public.api_keys (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists api_keys_secret_hash_idx on public.api_keys (secret_hash);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 drop trigger if exists api_keys_set_updated_at on public.api_keys;
 create trigger api_keys_set_updated_at
   before update on public.api_keys
@@ -37,7 +43,10 @@ create table if not exists public.org_secrets (
   updated_at      timestamptz not null default now(),
   unique (organization_id, provider)
 );
-create index if not exists org_secrets_org_idx on public.org_secrets (organization_id, provider);
+do $$ begin
+  create index if not exists org_secrets_org_idx on public.org_secrets (organization_id, provider);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 drop trigger if exists org_secrets_set_updated_at on public.org_secrets;
 create trigger org_secrets_set_updated_at
   before update on public.org_secrets

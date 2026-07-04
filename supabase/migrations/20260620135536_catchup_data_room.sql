@@ -15,7 +15,10 @@ create table if not exists public.data_room_shares (
   created_by      uuid references public.principals (id) on delete set null,
   created_at      timestamptz not null default now()
 );
-create index if not exists data_room_shares_org_idx on public.data_room_shares (organization_id);
+do $$ begin
+  create index if not exists data_room_shares_org_idx on public.data_room_shares (organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.data_room_views (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -25,7 +28,10 @@ create table if not exists public.data_room_views (
   kind            text not null default 'room' check (kind in ('room', 'document')),
   created_at      timestamptz not null default now()
 );
-create index if not exists data_room_views_org_idx on public.data_room_views (organization_id, created_at desc);
+do $$ begin
+  create index if not exists data_room_views_org_idx on public.data_room_views (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 alter table public.data_room_shares enable row level security;
 alter table public.data_room_views  enable row level security;

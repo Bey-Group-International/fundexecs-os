@@ -39,11 +39,23 @@ create table if not exists public.inbox_threads (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
-create index if not exists inbox_threads_org_idx on public.inbox_threads (organization_id);
-create index if not exists inbox_threads_org_priority_idx
+do $$ begin
+  create index if not exists inbox_threads_org_idx on public.inbox_threads (organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists inbox_threads_org_priority_idx
   on public.inbox_threads (organization_id, priority desc, last_message_at desc);
-create index if not exists inbox_threads_deal_idx on public.inbox_threads (deal_id);
-create index if not exists inbox_threads_investor_idx on public.inbox_threads (investor_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists inbox_threads_deal_idx on public.inbox_threads (deal_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists inbox_threads_investor_idx on public.inbox_threads (investor_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.inbox_messages (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -56,8 +68,14 @@ create table if not exists public.inbox_messages (
   metadata        jsonb not null default '{}'::jsonb,
   created_at      timestamptz not null default now()
 );
-create index if not exists inbox_messages_thread_idx on public.inbox_messages (thread_id, occurred_at asc);
-create index if not exists inbox_messages_org_idx on public.inbox_messages (organization_id);
+do $$ begin
+  create index if not exists inbox_messages_thread_idx on public.inbox_messages (thread_id, occurred_at asc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists inbox_messages_org_idx on public.inbox_messages (organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 drop trigger if exists inbox_threads_set_updated_at on public.inbox_threads;
 create trigger inbox_threads_set_updated_at

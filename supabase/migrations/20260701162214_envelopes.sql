@@ -20,12 +20,21 @@ CREATE TABLE IF NOT EXISTS envelopes (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE envelopes IS 'Native signing envelopes — document + metadata for signature workflows.';
+do $$ begin
+  COMMENT ON TABLE envelopes IS 'Native signing envelopes — document + metadata for signature workflows.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS envelopes_organization_id_idx ON envelopes(organization_id);
-CREATE INDEX IF NOT EXISTS envelopes_status_idx ON envelopes(status);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelopes_organization_id_idx ON envelopes(organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelopes_status_idx ON envelopes(status);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelopes" ON envelopes;
 CREATE POLICY "org_members_envelopes" ON envelopes
@@ -54,12 +63,21 @@ CREATE TABLE IF NOT EXISTS envelope_recipients (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE envelope_recipients IS 'Signers for an envelope; each issued a unique public signing token.';
+do $$ begin
+  COMMENT ON TABLE envelope_recipients IS 'Signers for an envelope;
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$; each issued a unique public signing token.';
 
 ALTER TABLE envelope_recipients ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS envelope_recipients_envelope_id_idx ON envelope_recipients(envelope_id);
-CREATE INDEX IF NOT EXISTS envelope_recipients_signing_token_idx ON envelope_recipients(signing_token);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelope_recipients_envelope_id_idx ON envelope_recipients(envelope_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelope_recipients_signing_token_idx ON envelope_recipients(signing_token);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelope_recipients" ON envelope_recipients;
 CREATE POLICY "org_members_envelope_recipients" ON envelope_recipients
@@ -87,12 +105,21 @@ CREATE TABLE IF NOT EXISTS envelope_fields (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE envelope_fields IS 'Positioned fields on document pages assigned to specific recipients.';
+do $$ begin
+  COMMENT ON TABLE envelope_fields IS 'Positioned fields on document pages assigned to specific recipients.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE envelope_fields ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS envelope_fields_envelope_id_idx ON envelope_fields(envelope_id);
-CREATE INDEX IF NOT EXISTS envelope_fields_recipient_id_idx ON envelope_fields(recipient_id);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelope_fields_envelope_id_idx ON envelope_fields(envelope_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelope_fields_recipient_id_idx ON envelope_fields(recipient_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelope_fields" ON envelope_fields;
 CREATE POLICY "org_members_envelope_fields" ON envelope_fields
@@ -115,12 +142,21 @@ CREATE TABLE IF NOT EXISTS envelope_events (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE envelope_events IS 'Immutable audit trail of all actions on an envelope.';
+do $$ begin
+  COMMENT ON TABLE envelope_events IS 'Immutable audit trail of all actions on an envelope.';
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE envelope_events ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS envelope_events_envelope_id_idx ON envelope_events(envelope_id);
-CREATE INDEX IF NOT EXISTS envelope_events_created_at_idx ON envelope_events(created_at);
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelope_events_envelope_id_idx ON envelope_events(envelope_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  CREATE INDEX IF NOT EXISTS envelope_events_created_at_idx ON envelope_events(created_at);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 DROP POLICY IF EXISTS "org_members_envelope_events" ON envelope_events;
 CREATE POLICY "org_members_envelope_events" ON envelope_events

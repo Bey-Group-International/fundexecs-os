@@ -17,7 +17,10 @@ create table if not exists public.stripe_checkouts (
   created_at      timestamptz not null default now(),
   fulfilled_at    timestamptz
 );
-create index if not exists stripe_checkouts_org_idx on public.stripe_checkouts (organization_id, created_at desc);
+do $$ begin
+  create index if not exists stripe_checkouts_org_idx on public.stripe_checkouts (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 alter table public.stripe_checkouts enable row level security;
 

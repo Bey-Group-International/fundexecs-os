@@ -12,8 +12,14 @@ create table if not exists public.investor_portal_shares (
   created_by      uuid references public.principals (id) on delete set null,
   created_at      timestamptz not null default now()
 );
-create index if not exists investor_portal_shares_org_idx on public.investor_portal_shares (organization_id);
-create index if not exists investor_portal_shares_investor_idx on public.investor_portal_shares (investor_id);
+do $$ begin
+  create index if not exists investor_portal_shares_org_idx on public.investor_portal_shares (organization_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists investor_portal_shares_investor_idx on public.investor_portal_shares (investor_id);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 create table if not exists public.investor_portal_views (
   id              uuid primary key default extensions.gen_random_uuid(),
@@ -21,7 +27,10 @@ create table if not exists public.investor_portal_views (
   share_id        uuid references public.investor_portal_shares (id) on delete set null,
   created_at      timestamptz not null default now()
 );
-create index if not exists investor_portal_views_org_idx on public.investor_portal_views (organization_id, created_at desc);
+do $$ begin
+  create index if not exists investor_portal_views_org_idx on public.investor_portal_views (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 alter table public.investor_portal_shares enable row level security;
 alter table public.investor_portal_views  enable row level security;
@@ -49,8 +58,14 @@ create table if not exists public.valuation_marks (
   created_by      uuid references public.principals (id) on delete set null,
   created_at      timestamptz not null default now()
 );
-create index if not exists valuation_marks_asset_idx on public.valuation_marks (asset_id, as_of desc);
-create index if not exists valuation_marks_org_idx on public.valuation_marks (organization_id, created_at desc);
+do $$ begin
+  create index if not exists valuation_marks_asset_idx on public.valuation_marks (asset_id, as_of desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
+do $$ begin
+  create index if not exists valuation_marks_org_idx on public.valuation_marks (organization_id, created_at desc);
+-- tolerated on fresh DBs where the regular sequence built a different shape
+exception when undefined_column or undefined_table then null; end $$;
 
 alter table public.valuation_marks enable row level security;
 
