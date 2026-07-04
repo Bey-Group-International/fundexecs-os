@@ -11,7 +11,13 @@
 #   SUPABASE_PROJECT_REF   — the production project ref: qhxcvvidhnwdgemjeaug
 #   SUPABASE_DB_PASSWORD   — the production database password
 #
-# `supabase db push` only applies migrations whose version is not already in the
+# `supabase db push --include-all` applies every local migration whose version is
+# not already in the remote history — including files whose timestamps sort before
+# the remote head, which happens routinely when parallel sessions merge migrations
+# out of timestamp order (without the flag the CLI refuses and the run goes red).
+# It never re-applies recorded versions, so it stays safe and idempotent.
+#
+# Original note: `supabase db push` only applies migrations whose version is not already in the
 # remote migration history, so it is safe and idempotent — the history was
 # repaired to match the repo's 0001–0024 filenames, so the first run is a no-op
 # and only genuinely new migrations (0025+) will be applied going forward.
@@ -53,7 +59,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Push migrations to production
-        run: supabase db push
+        run: supabase db push --include-all
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
