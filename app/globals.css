@@ -112,6 +112,18 @@ body {
   .fx-card-hover {
     @apply transition duration-200 hover:-translate-y-px hover:border-gold-500/45 hover:shadow-[0_10px_30px_-16px_rgb(var(--fx-accent-rgb)/0.55)];
   }
+  .fx-focus {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0;
+  }
+  .fx-btn {
+    @apply fx-focus transition duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .fx-btn-primary {
+    @apply fx-btn rounded-lg bg-gold-400 px-4 py-2 text-sm font-semibold text-surface-0 hover:bg-gold-300;
+  }
+  .fx-btn-secondary {
+    @apply fx-btn rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary hover:bg-surface-2 hover:text-fg-primary;
+  }
   /* Glass panel — for the hero/anchor surfaces that should feel set back behind
      a pane of frosted glass. */
   .fx-glass {

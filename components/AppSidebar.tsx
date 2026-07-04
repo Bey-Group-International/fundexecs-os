@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { useMobileNav } from "@/components/nav/mobile-nav";
+import { navHrefActive } from "@/lib/nav-active";
 
 // Client-side side rail, Claude Code style. Minimal top level (Logo · New
 // Session · Workflows · More), the operational hubs whose modules expand on
@@ -403,8 +404,8 @@ function SidebarPanel({
   ];
 
   const linkClass =
-    "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition duration-150 hover:bg-surface-2/80 hover:text-fg-primary";
-  const activeLinkClass = "fx-nav-active rounded-md px-2 py-1.5 text-fg-primary transition duration-150";
+    "flex items-center gap-2 rounded-md px-2 py-1.5 text-fg-secondary transition duration-150 hover:bg-surface-2/80 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400";
+  const activeLinkClass = "fx-nav-active rounded-md px-2 py-1.5 text-fg-primary transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400";
 
   return (
     <>
@@ -422,19 +423,19 @@ function SidebarPanel({
         <div className="flex flex-col gap-0.5">
           <Link
             href="/workspace"
-            className={pathname === "/workspace" ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+            className={navHrefActive(pathname, "/workspace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
             Sessions
           </Link>
           <Link
             href="/automations"
-            className={pathname === "/automations" ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+            className={navHrefActive(pathname, "/automations") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
             Automations
           </Link>
           <Link
             href="/inbox"
-            className={`${pathname === "/inbox" ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
+            className={`${navHrefActive(pathname, "/inbox") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
           >
             <span className="flex items-center gap-2">
               Inbox
@@ -468,7 +469,7 @@ function SidebarPanel({
                   key={item.label}
                   href={item.href}
                   className={`rounded-md px-2 py-1 pl-9 text-xs transition duration-150 ${
-                    pathname === item.href
+                    navHrefActive(pathname, item.href)
                       ? "text-gold-300 bg-gold-500/8"
                       : "text-fg-secondary hover:bg-surface-2/80 hover:text-fg-primary"
                   }`}
@@ -537,7 +538,7 @@ function SidebarPanel({
               {isOpen ? (
                 <div className="flex flex-col animate-fade-up">
                   {hub.modules.map((mod) => {
-                    const isModActive = pathname === mod.href;
+                    const isModActive = navHrefActive(pathname, mod.href);
                     return (
                       <Link
                         key={mod.href}
@@ -677,7 +678,7 @@ function SidebarPanel({
             type="button"
             onClick={() => setAccountOpen((v) => !v)}
             aria-expanded={accountOpen}
-            className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition duration-150 hover:bg-surface-2/80"
+                className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition duration-150 hover:bg-surface-2/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             {/* Avatar with gold ring */}
             <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold-300 to-gold-500 font-display text-xs font-bold text-surface-0 shadow-[0_0_10px_rgb(var(--fx-gold-rgb)/0.4)]">
@@ -786,13 +787,13 @@ export function AppSidebar(props: AppSidebarProps) {
       </aside>
 
       {open ? (
-        <div role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-50 md:hidden">
+            <div role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-50 md:hidden">
           <div
             aria-hidden
             onClick={() => setOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm motion-safe:animate-fade-up"
           />
-          <aside className="fixed inset-y-0 left-0 flex w-[260px] max-w-[80vw] flex-col border-r border-line/60 bg-surface-1 shadow-2xl">
+          <aside id="fx-mobile-nav" className="fixed inset-y-0 left-0 flex w-[260px] max-w-[80vw] flex-col border-r border-line/60 bg-surface-1 shadow-2xl motion-safe:animate-slide-in-left">
             <SidebarPanel {...props} />
           </aside>
         </div>
