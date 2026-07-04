@@ -94,13 +94,13 @@ No incumbent is built for either. That is the opening.
 
 **Everyone owns a fragment. Nobody owns the loop.**
 
-|     Category      |           Players           |    What they are    |                     What they aren't                     |
-|-------------------|-----------------------------|---------------------|----------------------------------------------------------|
-| Deal CRM          | DealCloud, Affinity, Dynamo | Pipeline databases  | Don't do the work                                        |
-| Fund admin        | Carta, Juniper Square       | Back-office records | No sourcing, no diligence                                |
-| AI research       | Hebbia, AlphaSense          | Document Q&A        | No execution, no system of record                        |
-| Horizontal glue   | Notion, Slack, Zapier       | Generic tools       | No domain model, no compounding                          |
-| Horizontal agents | Generic AI agent platforms  | Broad autonomy      | No private-markets domain, no approval-gated trust model |
+| Category | Players | What they are | What they aren't |
+|---|---|---|---|
+| Deal CRM | DealCloud, Affinity, Dynamo | Pipeline databases | Don't do the work |
+| Fund admin | Carta, Juniper Square | Back-office records | No sourcing, no diligence |
+| AI research | Hebbia, AlphaSense | Document Q&A | No execution, no system of record |
+| Horizontal glue | Notion, Slack, Zapier | Generic tools | No domain model, no compounding |
+| Horizontal agents | Generic AI agent platforms | Broad autonomy | No private-markets domain, no approval-gated trust model |
 
 **FundExecs OS is the only AI-native, approval-gated, full-lifecycle OS purpose-built for private-market operators.** (Full analysis: document 11.)
 
@@ -146,10 +146,10 @@ No incumbent is built for either. That is the opening.
 
 Illustrative plan (full model: document 08):
 
-|                  |  Y1   |  Y2   |  Y3   |   Y4   |  Y5   |
-|------------------|-------|-------|-------|--------|-------|
-| Customers (orgs) | 40    | 160   | 450   | 1,000  | 1,900 |
-| ARR              | $0.3M | $1.4M | $5.0M | $13.5M | $28M  |
+| | Y1 | Y2 | Y3 | Y4 | Y5 |
+|---|---|---|---|---|---|
+| Customers (orgs) | 40 | 160 | 450 | 1,000 | 1,900 |
+| ARR | $0.1M | $0.9M | $4.1M | $11.9M | $28M |
 
 Drivers: institutional pricing tiers, credit expansion as agents take on more of the work, marketplace and data layers from Y3.
 
@@ -159,11 +159,11 @@ Drivers: institutional pricing tiers, credit expansion as agents take on more of
 
 **$2.5M seed** · 21–24 months runway
 
-|                     Use                      |  %  |
-|----------------------------------------------|-----|
-| Product & engineering                        | 55% |
-| GTM & design-partner success                 | 20% |
-| Founder & ops                                | 15% |
+| Use | % |
+|---|---|
+| Product & engineering | 55% |
+| GTM & design-partner success | 20% |
+| Founder & ops | 15% |
 | Infrastructure, AI compute, legal/compliance | 10% |
 
 **Milestones:** GA of the four-hub platform → 25+ paying orgs → ~$1M ARR run-rate → Series A position.

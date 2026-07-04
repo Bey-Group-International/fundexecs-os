@@ -55,7 +55,7 @@ Planning ratios (illustrative): salon of 50 → ~15 signups → ~8 activated →
 ## 5. Pricing strategy
 
 - **Today (early access):** Starter $5 / Pro $30 / Scale $100 per month + credit packs — deliberately underpriced to remove all friction while the value evidence is built.
-- **Repricing (staged, Y1–Y2):** grandfather early cohorts; introduce institutional tiers as deliverable value is documented ($150–500 Starter-equivalent, $500–1,000 Pro, $2,500+ Scale — see document 08). Anchor: one Pro seat-month ≈ one hour of analyst payroll.
+- **Repricing (staged, Y1–Y2):** grandfather early cohorts; introduce institutional tiers as deliverable value is documented ($100–175 Starter-equivalent, $450–800 Pro, $1,250–2,000 Scale — see document 08). Anchor: one Pro seat-month ≈ a few hours of analyst payroll.
 - **Usage (credits)** keeps entry cheap and ties expansion to delegated work; reputation-based rebates (trust layer) reward tenure — pricing itself becomes a retention mechanic.
 
 ## 6. Positioning and message
