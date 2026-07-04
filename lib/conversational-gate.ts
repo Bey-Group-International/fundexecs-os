@@ -51,7 +51,21 @@ export async function gateConversationalSpend(
   label: string,
 ): Promise<ConversationalGateResult> {
   if (!anthropicConfigured()) return { ok: true };
-  const spent = await spendCredits(orgId, cost, label);
+  // spendCredits throws when the RPC itself fails (as opposed to a clean
+  // insufficient-balance result). Fail closed with a retryable 503 here so no
+  // calling route turns a transient DB error into an unmetered Claude call —
+  // or an unhandled 500.
+  let spent: Awaited<ReturnType<typeof spendCredits>>;
+  try {
+    spent = await spendCredits(orgId, cost, label);
+  } catch (err) {
+    console.error(`[conversational-gate] credit check failed (${label}):`, err);
+    return {
+      ok: false,
+      status: 503,
+      error: "Credit check unavailable — please try again shortly.",
+    };
+  }
   if (!spent.ok) {
     return {
       ok: false,

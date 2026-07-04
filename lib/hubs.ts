@@ -17,7 +17,6 @@ export interface HubDefinition {
   approvalGated?: boolean;
 }
 
-export const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
 
 export const HUBS: HubDefinition[] = [
   {
@@ -86,6 +85,10 @@ export const HUBS: HubDefinition[] = [
     ],
   },
 ];
+
+// Derived, not hand-maintained: adding/reordering hubs in HUBS is the single
+// source of truth and every hub menu follows automatically.
+export const HUB_ORDER: Hub[] = HUBS.map((h) => h.key);
 
 export const HUB_BY_KEY: Record<Hub, HubDefinition> = Object.fromEntries(
   HUBS.map((h) => [h.key, h]),
