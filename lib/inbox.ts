@@ -201,7 +201,7 @@ export function buildInbox(
 async function fetchAwaitingApproval(
   orgId: string,
 ): Promise<Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("tasks")
     .select("id, title, session_id, assigned_agent, description")

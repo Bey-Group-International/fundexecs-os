@@ -3,18 +3,19 @@ import { getSessionContext } from "@/lib/auth";
 import OnboardingWizard from "./wizard";
 import { DownloadOSFloat } from "@/components/DownloadOSFloat";
 
-export default async function OnboardingPage({
-  searchParams,
-}: {
-  searchParams: { error?: string };
-}) {
+export default async function OnboardingPage(
+  props: {
+    searchParams: Promise<{ error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (ctx.orgId) redirect("/workspace");
 
   // Fetch principal record to pre-fill the user profile step.
   const { createServerClient } = await import("@/lib/supabase/server");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: principal } = await supabase
     .from("principals")
     .select("full_name")

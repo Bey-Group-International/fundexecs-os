@@ -269,7 +269,7 @@ export function rollupRunConviction(
 export const getRunConviction = cache(async function getRunConviction(
   orgId: string,
 ): Promise<RunConviction> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [dealsRes, uwRes, dilRes, trackRes, mandate] = await Promise.all([
     supabase.from("deals").select("*").eq("organization_id", orgId),

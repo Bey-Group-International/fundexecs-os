@@ -55,14 +55,12 @@ function inline(s: string): string {
     .replace(/`(.+?)`/g, "<code>$1</code>");
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return new NextResponse("Unauthorized", { status: 401 });
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [docRes, orgRes] = await Promise.all([
     supabase
       .from("documents")

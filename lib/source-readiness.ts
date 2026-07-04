@@ -140,7 +140,7 @@ const STAGE_DEFS: Omit<SourceStage, "unlocked" | "current">[] = [
  * next-best move.
  */
 export async function getSourceMomentum(orgId: string): Promise<SourceMomentum> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Momentum reflects the live pipeline — archived records are excluded.
   const [invRes, dealRes, partRes, provRes, debtRes, fundRes, thesisRes] = await Promise.all([

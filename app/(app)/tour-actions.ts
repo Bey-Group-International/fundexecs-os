@@ -6,7 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 export async function setTourHidden(hidden: boolean): Promise<void> {
   const auth = await requireOrgContext();
   if (!auth.ok) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("organizations")
     .update({ setup_hidden: hidden })

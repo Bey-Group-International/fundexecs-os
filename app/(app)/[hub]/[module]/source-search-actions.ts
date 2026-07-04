@@ -63,7 +63,7 @@ export async function startSourceSearch(prompt: string): Promise<StartSearchResu
   if (!clean) return { ok: false, error: "Describe what you want to source." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const mandate = await loadMandate(orgId);
   const context = await buildOperatorContext(supabase, {
     orgId,
@@ -169,7 +169,7 @@ export async function runSourceStep(args: {
   if (!cfg) return { ok: false, error: "Unknown module." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   await supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", args.stepId);
   await supabase.from("task_events").insert({
@@ -217,7 +217,7 @@ export async function runSourceStep(args: {
 export async function completeSourceSearch(workflowId: string): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("tasks")
     .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })

@@ -60,7 +60,7 @@ export async function sourceTargets(hub: string, module: string, query?: string)
   const cfg = sourceConfigFor(key);
   if (!cfg) return { ok: false, error: "AI sourcing is not available for this module." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from(cfg.table as "investors")
     .select("name")
@@ -122,7 +122,7 @@ export async function addSourcedTargets(
   if (!cfg) return { ok: false, error: "Unknown module." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Filter to named candidates first so Apollo credits aren't spent on entries
   // that the clean step would drop anyway.
@@ -343,7 +343,7 @@ export async function scorePipeline(hub: string, module: string): Promise<ScoreP
   const cfg = sourceConfigFor(key);
   if (!cfg) return { ok: false, error: "AI sourcing is not available for this module." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from(cfg.table as "investors")
     .select("*")
@@ -394,7 +394,7 @@ export async function queueSourceAction(args: {
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const agent = AGENT_FOR_ACTION[args.action] ?? "executive_advisor";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
   const mandate = await getActiveMandate(supabase, orgId);
   const decision = gateDecision(args.action, mandate);

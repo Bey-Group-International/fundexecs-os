@@ -12,12 +12,13 @@ const SECTION_LABEL = new Map(DATA_ROOM_SECTIONS.map((s) => [s.key, s.label]));
 
 // Document builder: manual editing, parse/compose-from-data, or Earn chat.
 // Reached by clicking a file in the Materials & Data Room.
-export default async function DocumentBuilderPage({ params }: { params: { id: string } }) {
+export default async function DocumentBuilderPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("documents")
     .select("*")

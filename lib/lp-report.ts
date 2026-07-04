@@ -300,7 +300,7 @@ export const getLpReport = cache(async (orgId: string): Promise<LpReport> => {
   if (!orgId) return empty;
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const [fundsRes, assetsRes, eventsRes] = await Promise.all([
       supabase.from("funds").select("*").eq("organization_id", orgId),

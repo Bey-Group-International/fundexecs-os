@@ -27,7 +27,7 @@ export async function addStakeholder(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   const kind = String(formData.get("kind") ?? "person").trim();
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("stakeholders").insert({
     organization_id: ctx.orgId,
     name,
@@ -43,7 +43,7 @@ export async function deleteStakeholder(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("stakeholders").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath(ENTITY);
 }
@@ -54,7 +54,7 @@ export async function addShareClass(formData: FormData): Promise<void> {
   const entity_id = String(formData.get("entity_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   if (!entity_id || !name) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("share_classes").insert({
     organization_id: ctx.orgId,
     entity_id,
@@ -71,7 +71,7 @@ export async function addHolding(formData: FormData): Promise<void> {
   const entity_id = String(formData.get("entity_id") ?? "");
   const stakeholder_id = String(formData.get("stakeholder_id") ?? "");
   if (!entity_id || !stakeholder_id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("equity_holdings").insert({
     organization_id: ctx.orgId,
     entity_id,
@@ -90,7 +90,7 @@ export async function updateHolding(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("equity_holdings")
     .update({
@@ -109,7 +109,7 @@ export async function deleteHolding(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("equity_holdings").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath(ENTITY);
 }
@@ -124,7 +124,7 @@ export async function draftOwnershipWithEarn(
   if (!ctx?.orgId) return { error: "Not authenticated" };
   if (!description.trim()) return { error: "Describe the ownership first." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: ent } = await supabase
     .from("entities")
     .select("*")

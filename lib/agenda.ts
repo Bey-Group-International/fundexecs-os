@@ -65,7 +65,7 @@ export const getAgenda = cache(async (orgId: string): Promise<Agenda> => {
   };
   if (!orgId) return empty;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [diligenceRows, capitalRows, dealRows] = await Promise.all([
     readRows<DiligenceItem>(() =>

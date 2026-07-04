@@ -60,7 +60,7 @@ export async function ViewerAnalytics() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [sharesRes, viewsRes, docsRes] = await Promise.all([
     supabase

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Required: task_id" }, { status: 400 });
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // RLS already scopes every query below to the caller's org; the explicit
   // organization_id filter on the keystone lookup is defense-in-depth so a
   // future RLS regression can't turn this into a cross-org task read.

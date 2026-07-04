@@ -17,7 +17,7 @@ export interface AttributionResult {
 export async function loadAttribution(): Promise<AttributionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const attribution = await buildAttribution(supabase, auth.ctx.orgId);
   return { ok: true, attribution };
 }

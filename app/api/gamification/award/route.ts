@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "taskId required" }, { status: 400 });
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Fetch the task to verify ownership and get hub/priority
   const { data: task, error: taskError } = await supabase

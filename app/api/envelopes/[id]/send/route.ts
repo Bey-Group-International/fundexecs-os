@@ -11,12 +11,10 @@ interface Recipient {
   signing_token: string;
 }
 
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } },
-) {
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const envelopeId = params.id;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Authenticate
   const {

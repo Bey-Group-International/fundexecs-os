@@ -46,7 +46,7 @@ export async function applyDiligenceTemplate(formData: FormData): Promise<Dilige
   const category: DiligenceCategory | "all" =
     categoryRaw === "all" || isDiligenceCategory(categoryRaw) ? categoryRaw : "all";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: existing, error: readError } = await supabase
     .from("diligence_items")
     .select("title")
@@ -87,7 +87,7 @@ export async function updateDiligenceFinding(formData: FormData): Promise<Dilige
 
   const patch: Partial<Pick<DiligenceItem, "finding">> = { finding: text(formData, "finding") };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("diligence_items")
     .update(patch)
@@ -113,7 +113,7 @@ export async function setDiligenceOwnerDue(formData: FormData): Promise<Diligenc
     due_date: text(formData, "due_date"),
   };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("diligence_items")
     .update(patch)
@@ -141,7 +141,7 @@ export async function bulkUpdateDiligence(formData: FormData): Promise<Diligence
     return { ok: false, error: "Select at least one item and a target status." };
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("diligence_items")
     .update({ status: statusRaw as DiligenceStatus })

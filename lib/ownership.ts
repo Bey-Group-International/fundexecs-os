@@ -164,7 +164,7 @@ export function unifyOwnership(
 export const getUnifiedOwnership = cache(async function getUnifiedOwnership(
   orgId: string,
 ): Promise<UnifiedOwnership> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [stakeRes, holdRes, entRes, commitRes, invRes] = await Promise.all([
     supabase.from("stakeholders").select("*").eq("organization_id", orgId),
     supabase.from("equity_holdings").select("*").eq("organization_id", orgId),

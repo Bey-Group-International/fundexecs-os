@@ -5,14 +5,12 @@ import { discardSynthesis } from "@/lib/brains/synthesis";
 export const dynamic = "force-dynamic";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function POST(
-  _req: NextRequest,
-  { params }: RouteContext,
-): Promise<NextResponse> {
-  const supabase = createServerClient();
+export async function POST(_req: NextRequest, props: RouteContext): Promise<NextResponse> {
+  const params = await props.params;
+  const supabase = await createServerClient();
 
   const {
     data: { user },

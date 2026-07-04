@@ -28,7 +28,7 @@ export const getActivity = cache(
   async (orgId: string, limit = 40): Promise<ActivityEntry[]> => {
     if (!orgId) return [];
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
 
       const { data: workflowRows } = await supabase
         .from("tasks")

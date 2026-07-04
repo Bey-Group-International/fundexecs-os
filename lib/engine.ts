@@ -32,7 +32,7 @@ import { getActiveMandate } from "@/lib/mandates";
 import { observeOutput } from "@/lib/observe";
 import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
 
-type Client = ReturnType<typeof createServerClient>;
+type Client = Awaited<ReturnType<typeof createServerClient>>;
 
 interface Ctx {
   supabase: Client;

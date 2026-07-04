@@ -40,7 +40,7 @@ export interface ListSequencesResult {
 export async function listOutreachSequences(): Promise<ListSequencesResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const sequences = await listSequencesEngine(supabase, auth.ctx.orgId);
   return { ok: true, sequences };
 }
@@ -69,7 +69,7 @@ export async function createOutreachSequence(input: {
   if (!rawSteps.length) return { ok: false, error: "A sequence needs at least one step." };
 
   const channel: OutreachChannel = coerceChannel(input.channel ?? tpl?.channel ?? "email");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const res = await createSequenceEngine(supabase, {
     orgId: auth.ctx.orgId,
     createdBy: auth.ctx.userId,
@@ -106,7 +106,7 @@ export async function enrollOutreachTarget(input: {
 }): Promise<EnrollActionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const res = await enrollEngine(supabase, {
     orgId: auth.ctx.orgId,
     createdBy: auth.ctx.userId,
@@ -132,7 +132,7 @@ export interface ListEnrollmentsResult {
 export async function listOutreachEnrollments(sequenceId: string): Promise<ListEnrollmentsResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("outreach_steps")
     .select("step_order, delay_days, subject, body, action")
@@ -172,7 +172,7 @@ export interface AdvanceActionResult {
 export async function advanceOutreachEnrollment(enrollmentId: string): Promise<AdvanceActionResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
 
   const { data: enrollment } = await supabase
@@ -256,7 +256,7 @@ export async function deleteOutreachSequenceAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase
       .from("outreach_sequences")
       .delete()
@@ -275,7 +275,7 @@ export async function clearOutreachSequencesAction(): Promise<{ ok: boolean; err
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase
       .from("outreach_sequences")
       .delete()

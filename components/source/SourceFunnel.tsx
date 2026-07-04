@@ -51,7 +51,7 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
       ranInitial.current = true;
       refresh();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const maxCount = funnel

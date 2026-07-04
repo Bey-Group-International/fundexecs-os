@@ -17,7 +17,7 @@ export interface FunnelResult {
 export async function loadFunnel(): Promise<FunnelResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const funnel = await buildFunnel(supabase, auth.ctx.orgId);
   return { ok: true, funnel };
 }

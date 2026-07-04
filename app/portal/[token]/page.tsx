@@ -40,7 +40,8 @@ function Stat({ value, label, tone }: { value: string; label: string; tone?: str
   );
 }
 
-export default async function InvestorPortal({ params }: { params: { token: string } }) {
+export default async function InvestorPortal(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 

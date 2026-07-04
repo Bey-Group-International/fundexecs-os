@@ -65,12 +65,13 @@ function timeAgo(iso: string): string {
   return `${Math.floor(m / 12)}y ago`;
 }
 
-export default async function ListingDetailPage({ params }: { params: { id: string } }) {
+export default async function ListingDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: raw } = await supabase
     .from("marketplace_listings")

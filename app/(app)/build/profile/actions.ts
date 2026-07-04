@@ -37,7 +37,7 @@ export async function saveOrgProfile(
     updated_at: new Date().toISOString(),
   };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("organizations")
     .update(update as never)

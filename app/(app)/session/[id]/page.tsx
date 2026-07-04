@@ -13,11 +13,12 @@ export const dynamic = "force-dynamic";
 // A session IS the Earn conversation, scoped to this session. The transcript
 // shows every prompt and Earn's response in order; replying adds to it, with
 // the session's earlier turns carried into Earn's planning.
-export default async function SessionHome({ params }: { params: { id: string } }) {
+export default async function SessionHome(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const bundles = await loadWorkflowBundles(supabase, { sessionId: params.id });
   const connected = await orgConnectedChannels(supabase, ctx.orgId);
   const chat = toChatTurns(await loadSessionMessages(supabase, params.id));

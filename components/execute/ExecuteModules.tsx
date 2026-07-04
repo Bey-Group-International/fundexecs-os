@@ -33,7 +33,7 @@ function ReportLine({ label, value, sub }: { label: string; value: string; sub?:
 const REPORT_TYPES = ["lp_update", "summary", "analysis", "memo"] as const;
 
 export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [perf, artifactsRes] = await Promise.all([
     getExecutePerformance(orgId),
     supabase
@@ -210,7 +210,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
 // and which held positions are carrying the strongest marks (the natural next
 // harvests). Every exit logged feeds DPI in the command center.
 export async function ExecuteExitModule({ orgId }: { orgId: string }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [{ data }, perf] = await Promise.all([
     supabase.from("assets").select("*").eq("organization_id", orgId),
     getExecutePerformance(orgId),

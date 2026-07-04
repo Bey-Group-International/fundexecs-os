@@ -104,7 +104,7 @@ export async function ServiceProviderDirectoryLive() {
   try {
     const auth = await requireOrgContext();
     if (!auth.ok) return null;
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data } = await supabase
       .from("service_providers")

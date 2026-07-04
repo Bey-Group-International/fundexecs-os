@@ -50,7 +50,8 @@ const EMPTY_BLENDED: ViewerTrackRecord = {
   vintageRange: null,
 };
 
-export default async function PublicDataRoom({ params }: { params: { token: string } }) {
+export default async function PublicDataRoom(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 

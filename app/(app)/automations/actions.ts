@@ -25,7 +25,7 @@ export async function createAutomation(formData: FormData): Promise<{ error?: st
     return { error: "Pick a valid schedule" };
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("automations").insert({
     organization_id: ctx.orgId,
     name,
@@ -51,7 +51,7 @@ export async function toggleAutomation(formData: FormData): Promise<void> {
   const enabled = String(formData.get("enabled") ?? "") === "true";
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("automations")
     .update({ enabled: !enabled })
@@ -71,7 +71,7 @@ export async function updateAutomation(formData: FormData): Promise<void> {
   const autoApprove = formData.get("auto_approve") === "on";
   if (!id || !name || !prompt) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("automations")
     .update({ name, prompt, auto_approve: autoApprove })
@@ -86,7 +86,7 @@ export async function deleteAutomation(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("automations").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath("/automations");
 }
@@ -100,7 +100,7 @@ export async function runAutomationNow(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("automations")
     .select("*")

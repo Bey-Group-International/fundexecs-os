@@ -10,6 +10,11 @@ import { cookies } from "next/headers";
 import { createClient as createRawClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 
+type CookieStore = {
+  getAll?: () => { name: string; value: string }[];
+  set(name: string, value: string, options?: Record<string, unknown>): void;
+};
+
 export function hasSupabaseServerEnv() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
@@ -24,15 +29,15 @@ export function hasSupabaseServiceEnv() {
   );
 }
 
-export function createServerClient() {
-  const cookieStore = cookies();
+export async function createServerClient() {
+  const cookieStore = await cookies();
   return createSSRClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "",
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "",
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return cookieStore.getAll?.() ?? [];
         },
         setAll(
           cookiesToSet: {

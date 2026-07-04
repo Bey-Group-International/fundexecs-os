@@ -71,7 +71,7 @@ export async function addDiligenceItem(formData: FormData): Promise<ActionResult
   const title = text(formData, "title");
   if (!dealId || !title) return { ok: false, error: "Choose a deal and enter a title." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("diligence_items").insert({
     organization_id: ctx.orgId,
     deal_id: dealId,
@@ -105,7 +105,7 @@ export async function updateDiligenceItem(formData: FormData): Promise<ActionRes
   if (formData.has("likelihood")) patch.likelihood = sev(formData, "likelihood");
   if (Object.keys(patch).length === 0) return { ok: true };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("diligence_items")
     .update(patch)
@@ -125,7 +125,7 @@ export async function addUnderwriting(formData: FormData): Promise<ActionResult>
   const dealId = String(formData.get("deal_id") ?? "");
   if (!dealId) return { ok: false, error: "Choose a deal." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("underwritings").insert({
     organization_id: ctx.orgId,
     deal_id: dealId,
@@ -161,7 +161,7 @@ export async function recordIcDecision(formData: FormData): Promise<IcDecisionRe
     return { ok: false, error: "Choose a deal and a decision." };
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Record the conviction at the moment of the call so the log stands alone.
   const conviction = await computeDealConviction(supabase, ctx.orgId, dealId);
 

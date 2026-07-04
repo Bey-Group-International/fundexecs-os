@@ -51,7 +51,7 @@ export async function getInvestorRoom(
   orgId: string,
   dealId: string,
 ): Promise<InvestorRoomData | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const dealRes = await supabase
     .from("deals")

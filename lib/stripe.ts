@@ -25,6 +25,10 @@ import {
   type PlanKey,
 } from "@/lib/billing";
 
+type HeaderStore = {
+  get(name: string): string | null;
+};
+
 // Read keys trimmed — values pasted into env UIs frequently carry a trailing
 // newline/space, which Stripe rejects as "Invalid API Key".
 function secretKey(): string {
@@ -56,7 +60,7 @@ export function getStripe(): Stripe {
 // Absolute base URL for Checkout success/cancel redirects. Prefer the request's
 // own origin so previews and localhost work, then the configured app URL.
 function appBaseUrl(): string {
-  const h = headers();
+  const h = headers() as unknown as HeaderStore;
   const origin = h.get("origin");
   if (origin) return origin.replace(/\/$/, "");
   const host = h.get("host");

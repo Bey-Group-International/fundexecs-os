@@ -240,7 +240,7 @@ export default function Copilot({
           setChatTurns((prev) => (loaded.length > prev.length ? loaded : prev));
         }
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [sessionId]);
 
   // Fetch the most recent OTHER session so the API route can load its messages
@@ -259,7 +259,7 @@ export default function Copilot({
       const other = data.find((s) => s.id !== sessionId);
       if (other) setPriorSessionId(other.id as string);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [orgId, sessionId]);
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
@@ -323,7 +323,7 @@ export default function Copilot({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [paletteOpen, openMenu]);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.

@@ -44,7 +44,7 @@ Notes: "${notes.slice(0, 800)}"`,
 }
 
 export async function refreshNetworkStrength(orgId: string): Promise<void> {
-  const supabase = createServerClient() as any;
+  const supabase = await createServerClient() as any;
 
   const { data: rawContacts } = await supabase
     .from("network_contacts")
@@ -129,7 +129,7 @@ export async function bumpStrength(
   contactId: string,
   interactionType: "meeting" | "deal_share" | "task" | "email",
 ): Promise<void> {
-  const supabase = createServerClient() as any;
+  const supabase = await createServerClient() as any;
   const { data: contact } = await supabase
     .from("network_contacts")
     .select("strength_score")

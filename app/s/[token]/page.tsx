@@ -42,11 +42,12 @@ function Unavailable() {
   );
 }
 
-export default async function SharedSessionPage({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function SharedSessionPage(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   // No service role key configured (e.g. a preview without secrets) — fail
   // closed rather than crashing.
   if (!hasSupabaseServiceEnv()) return <Unavailable />;

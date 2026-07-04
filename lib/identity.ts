@@ -18,7 +18,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import type { Principal } from "@/lib/supabase/database.types";
 
-type Client = ReturnType<typeof createServerClient>;
+type Client = Awaited<ReturnType<typeof createServerClient>>;
 
 /**
  * Pure predicate: is this principal row identity-verified? True iff it carries a
@@ -71,7 +71,7 @@ export async function attestPrincipalIdentity(
   }
   if (!principalId) return { error: "principalId is required" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // PROVIDER HOOK: today this is a trusted internal attestation by an owner/admin.
   // When an external KYC/identity provider is wired up, replace the assignment

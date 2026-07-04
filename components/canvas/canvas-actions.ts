@@ -22,7 +22,7 @@ export async function createCanvas(
   const name =
     String(formData.get("name") ?? "").trim() || "Untitled Canvas";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("canvases" as never)
     .insert({ organization_id: ctx.orgId, name, created_by: ctx.userId } as never)
@@ -37,7 +37,7 @@ export async function listCanvases(): Promise<Canvas[]> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("canvases" as never)
     .select("*")
@@ -55,7 +55,7 @@ export async function listElements(canvasId: string): Promise<CanvasElement[]> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("canvas_elements" as never)
     .select("*")
@@ -91,7 +91,7 @@ export async function upsertElement(formData: FormData): Promise<void> {
     updated_at: new Date().toISOString(),
   };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("canvas_elements" as never)
     .upsert(row as never, { onConflict: "id" });
@@ -104,7 +104,7 @@ export async function deleteElement(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("canvas_elements" as never)
     .delete()

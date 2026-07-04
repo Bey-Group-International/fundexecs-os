@@ -109,7 +109,7 @@ export async function searchAll(
   if (!normalized) return emptyResults(display);
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const pattern = `%${normalized}%`;
 
     const [dealsRes, investorsRes, assetsRes] = await Promise.all([

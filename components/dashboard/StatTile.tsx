@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 function useCountUp(target: number, duration = 750) {
   const [current, setCurrent] = useState(0);
-  const raf = useRef<number>();
+  const raf = useRef<number | null>(null);
   useEffect(() => {
     const start = performance.now();
     function tick(now: number) {

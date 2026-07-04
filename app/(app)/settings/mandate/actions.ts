@@ -39,7 +39,7 @@ export async function saveMandate(formData: FormData): Promise<void> {
     ? Math.min(2, Math.max(1, Math.trunc(rawCeiling)))
     : 1;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Find the org's most-recent active mandate to update in place.
   const { data: existing } = await supabase

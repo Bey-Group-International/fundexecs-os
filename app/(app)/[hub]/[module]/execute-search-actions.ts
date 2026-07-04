@@ -37,7 +37,7 @@ export async function startExecuteSearch(prompt: string): Promise<StartExecuteRe
   if (!clean) return { ok: false, error: "Describe the operations work you need." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const plan = await planExecuteSearch(clean);
   if (!plan.steps.length) return { ok: false, error: "Couldn't plan that request." };
 
@@ -133,7 +133,7 @@ export async function runExecuteStep(args: {
   if (!auth.ok) return { ok: false, error: "Not authorized." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   await supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", args.stepId);
   await supabase.from("task_events").insert({
@@ -173,7 +173,7 @@ export async function runExecuteStep(args: {
 export async function completeExecuteSearch(workflowId: string): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("tasks")
     .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })

@@ -20,7 +20,7 @@ export async function updateUserProfile(
   const ctx = await getSessionContext();
   if (!ctx) return { error: "Not authenticated" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const full_name = String(formData.get("full_name") ?? "").trim() || null;
   const title = String(formData.get("title") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -72,7 +72,7 @@ export async function createOrganization(
     ? Math.trunc(rawFundCount)
     : null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = randomUUID();
   const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
 

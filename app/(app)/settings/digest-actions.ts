@@ -29,7 +29,7 @@ export async function loadDigestPrefs(): Promise<{
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, prefs: [], error: "Not authenticated" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("radar_digest_prefs")
     .select("*")
@@ -53,7 +53,7 @@ export async function upsertDigestPref(
   if (!result.ok) return { ok: false, error: result.error };
   const { channel, recipient, cadence, min_score, enabled } = result.value;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("radar_digest_prefs")
     .upsert(
@@ -88,7 +88,7 @@ export async function sendTestDigest(
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authenticated" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Prefer the org's saved config for this channel so the preview matches what
   // a real send would do; fall back to table defaults when no row exists yet.
   const { data: prefRow } = await supabase

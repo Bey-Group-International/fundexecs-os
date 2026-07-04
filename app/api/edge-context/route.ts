@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       const full = await processBackgroundTabs(tabs, partial);
 
       if (sessionId) {
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
         // Store serialized EdgeContextResult in the session row.
         await supabase
           .from("sessions")
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   // to read even before background processing finishes.
   if (sessionId) {
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       await supabase
         .from("sessions")
         .update({ edge_context: partial as never } as never)

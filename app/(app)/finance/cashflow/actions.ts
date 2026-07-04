@@ -32,7 +32,7 @@ export async function getCashflowProjection(input: {
   if (Number.isNaN(Date.parse(`${input.asOf}T00:00:00Z`))) {
     return { ok: false, error: "Invalid as-of date." };
   }
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Opening cash ≈ net of all staged bank transactions on/before as-of.
   const { data: accountRows } = await supabase

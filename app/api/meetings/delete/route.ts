@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function DELETE(req: NextRequest) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,7 +14,7 @@ export async function DELETE(req: NextRequest) {
   };
 
   // deleted_at added in migration 20260702000003; types not yet regenerated
-  const softPayload = { deleted_at: new Date().toISOString() } as any; // eslint-disable-line
+  const softPayload = { deleted_at: new Date().toISOString() } as any;  
 
   if (body.clearAll) {
     if (body.soft) {

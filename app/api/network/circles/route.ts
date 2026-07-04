@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const supabase = createServerClient() as any;
+  const supabase = await createServerClient() as any;
   const { data, error } = await supabase
     .from("syndicate_circles")
     .insert({

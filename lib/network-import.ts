@@ -1,8 +1,7 @@
-// Network contact import: LinkedIn CSV, person-list XLSX (family offices),
-// and firm-list XLSX (seed funds / VC lists).
+// Network contact import: LinkedIn CSV, person-list CSV (family offices),
+// and firm-list CSV (seed funds / VC lists).
 // Auto-detects format from headers; supports both person-level and firm-level rows.
 
-import * as XLSX from "xlsx";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { enrichPerson } from "@/lib/integrations/providers/apollo";
@@ -21,7 +20,7 @@ export interface ParsedContact {
   state: string | null;
   country: string | null;
   connectedOn: string | null;
-  source: "linkedin_csv" | "xlsx_person_list" | "xlsx_firm_list";
+  source: "linkedin_csv" | "csv_person_list" | "csv_firm_list";
 }
 
 // ── Sanitization helpers ──────────────────────────────────────────────────────
@@ -56,7 +55,7 @@ function normalizeDate(v: unknown): string | null {
   return null;
 }
 
-// ── XLSX parsing ──────────────────────────────────────────────────────────────
+// ── CSV parsing ───────────────────────────────────────────────────────────────
 
 const PERSON_SIGNALS = ["first name", "last name", "email", "linkedin", "job title", "company"];
 const FIRM_SIGNALS = ["firm", "fund", "city", "stage", "seed", "venture"];
@@ -83,22 +82,33 @@ function colIdx(headers: string[], ...names: string[]): number {
   return -1;
 }
 
-export function parseXlsx(buffer: ArrayBuffer, modeHint: ImportMode = "auto"): ParsedContact[] {
-  const wb = XLSX.read(buffer, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+export function parseNetworkCsv(csvText: string, modeHint: ImportMode = "auto"): ParsedContact[] {
+  const rows = csvText
+    .split(/\r?\n/)
+    .map(parseCsvRow)
+    .filter((row) => row.some((cell) => clean(cell)));
 
-  const found = findHeaderRow(raw);
+  const found = findHeaderRow(rows);
   if (!found) return [];
 
   const { idx: headerIdx, headers } = found;
   const mode = modeHint === "auto" ? detectMode(headers) : modeHint;
-  const dataRows = raw.slice(headerIdx + 1);
+  const dataRows = rows.slice(headerIdx + 1);
 
-  return mode === "firm" ? parseFirmRows(headers, dataRows) : parsePersonRows(headers, dataRows);
+  return mode === "firm"
+    ? parseFirmRows(headers, dataRows)
+    : parsePersonRows(headers, dataRows, isLinkedInExport(headers) ? "linkedin_csv" : "csv_person_list");
 }
 
-function parsePersonRows(headers: string[], rows: unknown[][]): ParsedContact[] {
+function isLinkedInExport(headers: string[]): boolean {
+  return headers.includes("connected on") || headers.includes("url");
+}
+
+function parsePersonRows(
+  headers: string[],
+  rows: unknown[][],
+  source: ParsedContact["source"] = "csv_person_list",
+): ParsedContact[] {
   const iFirst = colIdx(headers, "first name");
   const iLast = colIdx(headers, "last name");
   const iEmail = colIdx(headers, "email");
@@ -127,7 +137,7 @@ function parsePersonRows(headers: string[], rows: unknown[][]): ParsedContact[] 
         state: clean(row[iState]) || null,
         country: clean(row[iCountry]) || null,
         connectedOn: normalizeDate(row[iConnected]),
-        source: "xlsx_person_list",
+        source,
       };
     })
     .filter((r): r is ParsedContact => r !== null);
@@ -155,7 +165,7 @@ function parseFirmRows(headers: string[], rows: unknown[][]): ParsedContact[] {
         state: clean(row[iState]) || null,
         country: "United States",
         connectedOn: null,
-        source: "xlsx_firm_list",
+        source: "csv_firm_list",
       };
     })
     .filter((r): r is ParsedContact => r !== null);
@@ -164,35 +174,10 @@ function parseFirmRows(headers: string[], rows: unknown[][]): ParsedContact[] {
 // ── LinkedIn CSV parsing ──────────────────────────────────────────────────────
 
 export function parseLinkedInCsv(csvText: string): ParsedContact[] {
-  const lines = csvText.split(/\r?\n/);
-  const headerIdx = lines.findIndex(
-    (l) => l.toLowerCase().includes("first name") && l.toLowerCase().includes("last name"),
-  );
-  if (headerIdx === -1) return [];
-
-  const headers = parseCsvRow(lines[headerIdx]).map((h) => h.toLowerCase().trim());
-  const col = (name: string) => headers.indexOf(name);
-
-  return lines
-    .slice(headerIdx + 1)
-    .map((line): ParsedContact | null => {
-      const cells = parseCsvRow(line);
-      if (cells.length < 3) return null;
-      const firstName = clean(cells[col("first name")]);
-      const lastName = clean(cells[col("last name")]);
-      if (!firstName && !lastName) return null;
-      return {
-        firstName, lastName,
-        email: cleanEmail(cells[col("email address")]),
-        company: clean(cells[col("company")]) || null,
-        title: clean(cells[col("position")]) || null,
-        linkedinUrl: cleanUrl(cells[col("url")]),
-        phone: null, city: null, state: null, country: null,
-        connectedOn: normalizeDate(cells[col("connected on")]),
-        source: "linkedin_csv",
-      };
-    })
-    .filter((r): r is ParsedContact => r !== null);
+  return parseNetworkCsv(csvText, "person").map((contact) => ({
+    ...contact,
+    source: "linkedin_csv",
+  }));
 }
 
 function parseCsvRow(line: string): string[] {
@@ -217,7 +202,7 @@ function parseCsvRow(line: string): string[] {
 
 // ── DB insert ─────────────────────────────────────────────────────────────────
 
-const anyDb = (supabase: ReturnType<typeof createServerClient>) => supabase as any;
+const anyDb = (supabase: Awaited<ReturnType<typeof createServerClient>>) => supabase as any;
 
 export async function importContacts(
   contacts: ParsedContact[],
@@ -226,7 +211,7 @@ export async function importContacts(
   const auth = await requireOrgContext();
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const db = anyDb(supabase);
 
   if (contacts.length === 0) throw new Error("No valid contacts found");
@@ -292,7 +277,7 @@ export async function importLinkedInContacts(
 // ── Apollo enrichment ─────────────────────────────────────────────────────────
 
 export async function enrichContact(contactId: string): Promise<void> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const db = anyDb(supabase);
 
   const { data: contact } = await db

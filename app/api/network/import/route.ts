@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
-import { importContacts, parseLinkedInCsv, parseXlsx } from "@/lib/network-import";
+import { importContacts, parseNetworkCsv } from "@/lib/network-import";
 import type { ImportMode } from "@/lib/network-import";
 
 export const dynamic = "force-dynamic";
@@ -20,18 +20,17 @@ export async function POST(req: NextRequest) {
 
       const name = file.name.toLowerCase();
 
-      if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-        const buffer = await file.arrayBuffer();
-        const contacts = parseXlsx(buffer, modeHint);
-        if (contacts.length === 0) return NextResponse.json({ error: "No valid contacts found in spreadsheet" }, { status: 400 });
-        const result = await importContacts(contacts);
-        return NextResponse.json(result);
+      if (!name.endsWith(".csv")) {
+        return NextResponse.json(
+          { error: "Only CSV imports are accepted. Convert spreadsheets to CSV before uploading." },
+          { status: 400 },
+        );
       }
 
       // CSV (LinkedIn export or generic)
       const csvText = await file.text();
       if (!csvText.trim()) return NextResponse.json({ error: "Empty file" }, { status: 400 });
-      const contacts = parseLinkedInCsv(csvText);
+      const contacts = parseNetworkCsv(csvText, modeHint);
       if (contacts.length === 0) return NextResponse.json({ error: "No valid contacts found in CSV" }, { status: 400 });
       const result = await importContacts(contacts);
       return NextResponse.json(result);
@@ -40,7 +39,7 @@ export async function POST(req: NextRequest) {
     // JSON body fallback (csv string)
     const body = await req.json().catch(() => ({}));
     if (!body.csv?.trim()) return NextResponse.json({ error: "No data provided" }, { status: 400 });
-    const contacts = parseLinkedInCsv(body.csv);
+    const contacts = parseNetworkCsv(body.csv, modeHint);
     const result = await importContacts(contacts);
     return NextResponse.json(result);
 

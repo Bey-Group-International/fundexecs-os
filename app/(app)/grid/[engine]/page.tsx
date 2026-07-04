@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 // Per-engine drill-down: every routed workflow (parent task) for the org that
 // the Intelligence Layer sent to this one engine, with a status breakdown.
-export default async function GridEnginePage({ params }: { params: { engine: string } }) {
+export default async function GridEnginePage(props: { params: Promise<{ engine: string }> }) {
+  const params = await props.params;
   const engine = engineFromSlug(params.engine);
   if (!engine) redirect("/grid");
 
@@ -17,7 +18,7 @@ export default async function GridEnginePage({ params }: { params: { engine: str
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("tasks")
     .select("id, title, status, session_id, created_at, hub, description, lifecycle_stage, target_engine")

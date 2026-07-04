@@ -119,7 +119,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
   useEffect(() => {
     if (activeId) loadEnrollments(activeId);
     else setEnrollments([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [activeId]);
 
   async function buildFromTemplate(key: string) {

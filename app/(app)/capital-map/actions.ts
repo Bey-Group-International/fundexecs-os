@@ -69,7 +69,7 @@ export async function queueNextAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
 
   const { data: investor } = await supabase

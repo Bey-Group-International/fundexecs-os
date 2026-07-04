@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import type { CapitalMapEntry, Temperature } from "@/lib/capital-map";
 import { TEMP_STYLE } from "@/lib/capital-map";
 import type { ListingMatch } from "@/lib/matching";
@@ -60,11 +61,56 @@ export function CapitalMap({
 
   if (entries.length === 0) {
     return (
-      <div className="fx-card animate-fade-up p-10 text-center">
-        <p className="text-sm text-fg-muted">
-          No investors yet. Add LPs in Source › LP Pipeline — or ask Earn to build
-          a target list — and they appear here scored and mapped.
-        </p>
+      <div className="fx-card relative overflow-hidden p-8 motion-safe:animate-fade-up">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgb(var(--fx-accent-rgb)/0.18),transparent_34%),linear-gradient(135deg,rgb(var(--fx-accent-rgb)/0.08),transparent_55%)]" />
+        <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              Capital activation required
+            </p>
+            <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Build the allocator map before you route capital.
+            </h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-fg-secondary">
+              Add LPs in Source or ask Earn for a target list. Each allocator will
+              appear here with warmth, thesis fit, warm-intro path, and gated next action.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link href="/source/lp_pipeline" className="fx-btn-primary">
+                Open LP Pipeline
+              </Link>
+              <button
+                type="button"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("earn:open-with-context", {
+                      detail: { prompt: "Build a first allocator target list for my mandate." },
+                    }),
+                  )
+                }
+                className="fx-btn-secondary"
+              >
+                Ask Earn
+              </button>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-line/70 bg-surface-0/65 p-4">
+            {[
+              ["Cold", "Research thesis fit", "bg-slate-500"],
+              ["Warm", "Find intro path", "bg-amber-400"],
+              ["Active", "Route next action", "bg-sky-400"],
+              ["Committed", "Monitor capital", "bg-emerald-400"],
+            ].map(([label, hint, dot]) => (
+              <div key={label} className="flex items-center gap-3 border-b border-line/50 py-2 last:border-b-0">
+                <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-fg-primary">{label}</p>
+                  <p className="text-xs text-fg-muted">{hint}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

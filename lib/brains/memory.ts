@@ -173,7 +173,7 @@ export async function extractAndStoreMemories(
   const raw = await callClaudeExtract(taskOutput);
   if (raw.length === 0) return [];
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const rows = raw.map((m) => ({
     org_id: orgId,
@@ -209,13 +209,13 @@ export async function retrieveRelevantMemories(
   orgId: string,
   limit = 5,
 ): Promise<AgentMemory[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Attempt vector similarity search via RPC first.
   if (prompt.trim()) {
     try {
       const queryEmbedding = toVectorLiteral(await getEmbedder().embed(prompt, "query"));
-      const { data: vecData, error: vecError } = await (supabase as ReturnType<typeof createServerClient>).rpc(
+      const { data: vecData, error: vecError } = await (supabase as Awaited<ReturnType<typeof createServerClient>>).rpc(
         "match_agent_memories" as never,
         {
           query_embedding: queryEmbedding,

@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const ctx = { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId };
   const encoder = new TextEncoder();
 

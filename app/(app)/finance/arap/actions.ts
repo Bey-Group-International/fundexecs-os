@@ -44,7 +44,7 @@ export async function createParty(input: {
   if (!input.entityId || !input.name?.trim()) {
     return { ok: false, error: "Entity and name are required." };
   }
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("fin_parties")
     .insert({
@@ -93,7 +93,7 @@ export async function issueInvoice(input: {
   const totals = computeInvoiceTotals(input.lines);
   if (totals.total <= 0) return { ok: false, error: "Invoice total must be positive." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: invoice, error: invErr } = await supabase
     .from("fin_invoices")
     .insert({
@@ -179,7 +179,7 @@ export async function recordPayment(input: {
   ) {
     return { ok: false, error: "Allocations exceed the payment amount." };
   }
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // When no explicit allocations are supplied, the RPC auto-allocates oldest-due
   // first INSIDE the transaction (open invoices locked FOR UPDATE), so there is
@@ -217,7 +217,7 @@ export async function agingReport(input: {
   if (Number.isNaN(Date.parse(`${input.asOf}T00:00:00Z`))) {
     return { ok: false, error: "Invalid as-of date." };
   }
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: rows } = await supabase
     .from("fin_invoices")
     .select("id, party_id, total, amount_paid, due_date")
@@ -238,7 +238,7 @@ export async function agingReport(input: {
 
 // Resolve a party's AR (receivable) or AP (payable) control account + its name.
 async function resolveControlAccount(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
   partyId: string,
   receivable: boolean,
@@ -276,7 +276,7 @@ export async function postInvoice(input: {
 }): Promise<ArapResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: inv } = await supabase
     .from("fin_invoices")
@@ -391,7 +391,7 @@ export async function postPayment(input: {
 }): Promise<ArapResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: pay } = await supabase
     .from("fin_payments")

@@ -18,13 +18,18 @@ const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 // module switcher this layout renders above the active module's content. The
 // Build hub additionally gets a readiness panel that scores the foundation and
 // drives users toward the next-best step.
-export default async function HubLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { hub: string };
-}) {
+export default async function HubLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ hub: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   if (!HUB_KEYS.includes(params.hub as Hub)) notFound();
   const hub = HUB_BY_KEY[params.hub as Hub];
 

@@ -49,7 +49,7 @@ export async function createEntity(input: {
   if (!input.name?.trim() || !/^[A-Z]{3}$/.test(baseCurrency)) {
     return { ok: false, error: "Name and a 3-letter base currency are required." };
   }
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("fin_entities")
     .insert({
@@ -81,7 +81,7 @@ export async function createAccount(input: {
   }
   // Normal side follows the statement type: assets & expenses are debit-normal.
   const normalSide = input.type === "asset" || input.type === "expense" ? "debit" : "credit";
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("fin_accounts")
     .insert({
@@ -116,7 +116,7 @@ async function postToLedger(
     lines: JournalLineInput[];
   },
 ): Promise<FinResult> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const lines = normalizeLines(args.lines);
   const balance = assertBalanced(lines);
@@ -202,7 +202,7 @@ type PostPayload = Parameters<typeof postToLedger>[1];
 // are written as a pair: if either write fails the caller sees an error rather
 // than a silently orphaned task or a lost payload.
 async function routeClosedPeriodApproval(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   auth: { ctx: { orgId: string; userId: string } },
   args: PostPayload,
   tier: 1 | 2 | 3,
@@ -270,7 +270,7 @@ export async function reverseJournalEntry(args: {
 }): Promise<FinResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: entry } = await supabase
     .from("fin_journal_entries")

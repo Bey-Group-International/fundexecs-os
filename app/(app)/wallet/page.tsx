@@ -54,11 +54,12 @@ const TIER_META: Record<ReputationTier, { label: string; blurb: string }> = {
   },
 };
 
-export default async function WalletPage({
-  searchParams,
-}: {
-  searchParams: { checkout?: string };
-}) {
+export default async function WalletPage(
+  props: {
+    searchParams: Promise<{ checkout?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");

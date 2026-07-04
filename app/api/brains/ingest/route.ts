@@ -33,7 +33,7 @@ async function isAuthorized(request: Request): Promise<boolean> {
   }
   // 2) Authenticated-org-writer path (manual re-seed from a logged-in session).
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();

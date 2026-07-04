@@ -26,7 +26,7 @@ export async function createMandate(formData: FormData): Promise<{ error?: strin
     .map((v) => String(v) as ActionKind)
     .filter((v) => TIER_2_SET.has(v));
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Stand down any currently active mandate first — one active delegation at a time.
   await supabase
@@ -59,7 +59,7 @@ export async function setDiscoverable(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
   const next = String(formData.get("discoverable") ?? "") === "true";
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("organizations").update({ discoverable: next }).eq("id", ctx.orgId);
   if (error) { console.error("[setDiscoverable]", error.message); return; }
   revalidatePath("/settings");
@@ -73,7 +73,7 @@ export async function deactivateMandate(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("mandates")
     .update({ is_active: false })
@@ -87,7 +87,7 @@ export async function saveUserProfile(formData: FormData): Promise<{ error?: str
   const ctx = await getSessionContext();
   if (!ctx) return { error: "Not authenticated" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const str = (key: string) => String(formData.get(key) ?? "").trim() || null;
 
   const { error } = await supabase
@@ -107,7 +107,7 @@ export async function saveUserProfile(formData: FormData): Promise<{ error?: str
 }
 
 export async function changePassword(formData: FormData): Promise<{ error?: string }> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const password = String(formData.get("password") ?? "").trim();
   const confirm = String(formData.get("confirm") ?? "").trim();
 

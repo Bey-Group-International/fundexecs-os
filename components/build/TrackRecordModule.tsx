@@ -21,7 +21,7 @@ function compactUsd(n: number | null): string | null {
 export async function TrackRecordModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("track_records")
     .select("*")

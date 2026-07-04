@@ -180,7 +180,7 @@ export async function shareDeal(dealId: string): Promise<ShareDealResult> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authenticated." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Load the deal under RLS — only the owning org can share it.
   const { data: dealRow } = await supabase
@@ -232,7 +232,7 @@ export async function shareDeal(dealId: string): Promise<ShareDealResult> {
 /** Revoke a share so its link stops resolving (owner/writer, RLS-gated). */
 export async function revokeDealShare(shareId: string): Promise<{ ok: boolean }> {
   if (!shareId) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("deal_shares")
     .update({ revoked_at: new Date().toISOString() })
@@ -292,7 +292,7 @@ export interface DealFeedItem {
  */
 export async function getDealFeed(orgId: string): Promise<DealFeedItem[]> {
   if (!orgId) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: recRows } = await supabase
     .from("deal_share_recipients")
     .select("id, share_id, score, created_at")

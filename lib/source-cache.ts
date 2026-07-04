@@ -33,7 +33,7 @@ export function hashQuery(params: Record<string, unknown>): string {
 }
 
 // Access the cache table via unknown cast since it's not in generated types yet
-function cacheTable(supabase: ReturnType<typeof createServerClient>) {
+function cacheTable(supabase: Awaited<ReturnType<typeof createServerClient>>) {
   return (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
     .from('source_query_cache');
 }
@@ -45,7 +45,7 @@ export async function getCached<T>(
   params: Record<string, unknown>
 ): Promise<VerifiedResult<T> | null> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const hash = hashQuery(params);
     const now = new Date().toISOString();
 
@@ -84,7 +84,7 @@ export async function setCached<T>(
   ttlSeconds?: number
 ): Promise<void> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const hash = hashQuery(params);
     const ttl = ttlSeconds ?? TTL_SECONDS[module] ?? TTL_SECONDS.default;
     const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
@@ -114,7 +114,7 @@ export async function invalidateCache(
   provider?: string
 ): Promise<void> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const base = cacheTable(supabase)
       .delete()
       .eq('org_id', orgId)

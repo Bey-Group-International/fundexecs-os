@@ -16,7 +16,7 @@ import { DiligenceDealGroup } from "@/components/run/DiligenceDealGroup";
 // Deals you can still run evaluation work against — everything that hasn't been
 // passed on or died. Ordered newest-first for the picker.
 async function activeDeals(orgId: string): Promise<Deal[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("deals")
     .select("*")
@@ -60,7 +60,7 @@ function Stat({ label, value, danger }: { label: string; value: number; danger?:
 
 // --- Run › Diligence: org-wide checklist, now actionable -------------------
 export async function RunDiligenceModule({ orgId }: { orgId: string }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [deals, itemsRes] = await Promise.all([
     activeDeals(orgId),
     supabase

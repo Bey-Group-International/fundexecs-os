@@ -7,7 +7,7 @@ async function loadPartners() {
   try {
     const auth = await requireOrgContext();
     if (!auth.ok) return [];
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data } = await supabase
       .from("partners")
       .select(

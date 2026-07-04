@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 // compliance posture that must hold before anything is shared externally. The
 // internal (authed) operator view of what an investor would be permissioned to
 // see — distinct from the public, tokenized data room.
-export default async function InvestorRoomPage({ params }: { params: { id: string } }) {
+export default async function InvestorRoomPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");

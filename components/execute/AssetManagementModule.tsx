@@ -30,7 +30,7 @@ export async function ExecuteAssetManagementModule({
   orgId: string;
   sessionId?: string;
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   let query = supabase
     .from("assets")
     .select("*")

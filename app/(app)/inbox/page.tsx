@@ -33,11 +33,12 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function InboxPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; channel?: string; unread?: string; assigned?: string };
-}) {
+export default async function InboxPage(
+  props: {
+    searchParams: Promise<{ q?: string; channel?: string; unread?: string; assigned?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
@@ -63,7 +64,7 @@ export default async function InboxPage({
   };
   const hasFilters = Boolean(filters.q || filters.channel || filters.unreadOnly || filters.assignedTo);
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Wake any snoozed threads whose time has passed, so they reappear on this
   // render rather than the next one.
   await autoUnsnoozeExpired(supabase, ctx.orgId);

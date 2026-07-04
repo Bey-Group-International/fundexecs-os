@@ -47,7 +47,7 @@ const GROUPS: { key: string; label: string }[] = [
 export async function EntityModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // One parallel batch for everything independent (entities, cap-table tables,
   // team members, investors); principals depend on members so follow after.
   const [entitiesRes, stakeholdersRes, classesRes, holdingsRes, membersRes, investorRes] =

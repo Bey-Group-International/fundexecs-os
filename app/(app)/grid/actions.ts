@@ -34,7 +34,7 @@ export async function rerouteWorkflow(
   if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
   if (!isTargetEngine(toEngine)) return { ok: false, error: "Unknown engine." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: wf } = await supabase
     .from("tasks")
     .select("id, target_engine, session_id, title")
@@ -86,7 +86,7 @@ export async function escalateStuckWorkflow(
     const ctx = await getSessionContext();
     if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: wf } = await supabase
       .from("tasks")
       .select("id, title, hub, session_id")

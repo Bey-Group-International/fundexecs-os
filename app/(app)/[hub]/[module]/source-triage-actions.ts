@@ -62,7 +62,7 @@ export async function runTriage(prompt: string): Promise<RunTriageResult> {
   if (!clean) return { ok: false, error: "Describe what you want to triage." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const mandate = await loadMandate(orgId);
   const planContext = await buildOperatorContext(supabase, {
     orgId,

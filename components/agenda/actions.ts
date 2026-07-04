@@ -28,7 +28,7 @@ export async function chaseAgendaItem(input: ChaseInput): Promise<ChaseResult> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   try {
     const result = await handlePrompt(

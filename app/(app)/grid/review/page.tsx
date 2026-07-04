@@ -15,7 +15,7 @@ export default async function RoutingReviewPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [{ data: taskData }, { data: feedbackData }] = await Promise.all([
     supabase
       .from("tasks")

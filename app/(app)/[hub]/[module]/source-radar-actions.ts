@@ -27,7 +27,7 @@ export interface RadarResult {
 // ranking. Best-effort + read-only: any failure (table missing on a fresh DB, RLS,
 // etc.) falls back to no weights, leaving the static base score intact.
 async function loadLearnedWeights(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
 ): Promise<LearnedWeights | null> {
   try {
@@ -69,7 +69,7 @@ async function loadLearnedWeights(
 // failure degrades to no outcomes, leaving the feedback/engagement weights intact —
 // the radar must never break on attribution.
 async function loadOutcomeAggregates(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
 ): Promise<OutcomeAggregate[]> {
   try {
@@ -87,7 +87,7 @@ async function loadOutcomeAggregates(
 // Best-effort + read-only: any failure (table missing on a fresh DB, RLS) yields
 // no engagement, leaving the explicit-only weights intact.
 async function loadEngagementAggregates(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
 ): Promise<EngagementAggregate[]> {
   try {
@@ -123,7 +123,7 @@ async function loadEngagementAggregates(
 export async function loadRadar(kind?: EntityKind | null): Promise<RadarResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const weights = await loadLearnedWeights(supabase, auth.ctx.orgId);
   const items = await buildRadar(supabase, auth.ctx.orgId, { kind: kind ?? null, weights });
   return { ok: true, items, live: signalsLive(), tuned: weights?.active ?? false };
@@ -150,7 +150,7 @@ export interface RadarFeedbackResult {
 export async function recordRadarFeedback(input: RadarFeedbackInput): Promise<RadarFeedbackResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   try {
     const { error } = await supabase.from("radar_feedback").insert({
       organization_id: auth.ctx.orgId,
@@ -183,7 +183,7 @@ export async function scanRadarSignals(limit = 10): Promise<ScanResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Catalog entities, newest first.
   const { data: entityData } = await supabase

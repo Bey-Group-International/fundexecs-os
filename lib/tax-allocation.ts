@@ -156,7 +156,7 @@ export const getTaxAllocation = cache(async function getTaxAllocation(
   orgId: string,
   year: number,
 ): Promise<TaxAllocation> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [commitRes, invRes, eventsRes, assetsRes] = await Promise.all([
     supabase.from("commitments").select("*").eq("organization_id", orgId),
     supabase.from("investors").select("id,name").eq("organization_id", orgId),

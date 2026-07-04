@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   // On a re-route, the operator may delegate the rebuilt plan to a desk.
   const desk = isExecutive(payload.delegate) ? payload.delegate : undefined;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const result = await decideApproval(
     { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
     { approvalId: String(payload.approval_id), decision, note: payload.note, delegate: desk },

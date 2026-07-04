@@ -32,7 +32,7 @@ export async function runEquityWithEarn(formData: FormData): Promise<void> {
   const scenario = String(formData.get("scenario") ?? "").trim();
   if (scenario) prompt += `\n\nScenario to work:\n${scenario}`;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const result = await handlePrompt(
     { supabase, orgId: ctx.orgId, actorId: ctx.userId },
     prompt,

@@ -22,7 +22,7 @@ async function loadWorkspaceDocs(): Promise<WorkspaceDoc[]> {
     const auth = await requireOrgContext();
     if (!auth.ok) return [];
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data } = await supabase
       .from("documents")
       .select("id, name, doc_type, content, created_at")

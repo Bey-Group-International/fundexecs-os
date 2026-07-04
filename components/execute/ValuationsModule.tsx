@@ -26,7 +26,7 @@ function mark(a: Asset): number | null {
 // held book, the value created over cost, and the Analyst on tap to re-mark the
 // portfolio or any single holding.
 export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [perf, assetsRes, marks] = await Promise.all([
     getExecutePerformance(orgId),
     supabase

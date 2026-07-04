@@ -21,7 +21,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 export async function ThesisModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("investment_theses")
     .select("*")

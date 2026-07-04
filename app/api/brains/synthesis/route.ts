@@ -5,7 +5,7 @@ import { listPendingSyntheses } from "@/lib/brains/synthesis";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const {
     data: { user },

@@ -4,11 +4,12 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { signIn, signUp, signInWithGoogle } from "./actions";
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; mode?: string; message?: string };
-}) {
+export default async function LoginPage(
+  props: {
+    searchParams: Promise<{ error?: string; mode?: string; message?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (ctx) redirect(ctx.orgId ? "/workspace" : "/onboarding");
 

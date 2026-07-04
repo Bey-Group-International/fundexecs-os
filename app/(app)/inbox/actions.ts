@@ -78,7 +78,7 @@ async function performThreadAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
 
   const { data: thread } = await supabase
@@ -292,7 +292,7 @@ export async function getThreadMessages(threadId: string): Promise<ThreadMessage
   if (!threadId) return [];
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("inbox_messages")
@@ -332,7 +332,7 @@ export async function draftThreadReply(threadId: string): Promise<DraftReplyResu
   if (!threadId) return { ok: false, error: "Missing thread." };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: thread } = await supabase
     .from("inbox_threads")
@@ -389,7 +389,7 @@ export async function shareCommandCenter(formData: FormData): Promise<ThreadActi
 
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: thread } = await supabase
     .from("inbox_threads")
@@ -452,7 +452,7 @@ export async function setThreadStatus(formData: FormData): Promise<{ ok: boolean
 
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const patch: Partial<InboxThread> = { status: status as InboxThread["status"] };
   if (unreadRaw != null) patch.unread = unreadRaw === "true";
@@ -476,7 +476,7 @@ export async function setThreadStatus(formData: FormData): Promise<{ ok: boolean
 export async function markOpenThreadsRead(): Promise<void> {
   const auth = await requireOrgContext();
   if (!auth.ok) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("inbox_threads")
     .update({ unread: false })
@@ -504,7 +504,7 @@ export interface Teammate {
 export async function getOrgTeammates(): Promise<Teammate[]> {
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: members } = await supabase
     .from("organization_members")
@@ -531,7 +531,7 @@ export async function assignThread(threadId: string, assigneeId: string | null):
   if (!threadId) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Guard: an assignee must belong to this org (RLS scopes the read to the org).
   if (assigneeId) {
@@ -569,7 +569,7 @@ export async function bulkThreadAction(
   if (!ids.length) return { ok: false, count: 0 };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, count: 0 };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const patch: Partial<InboxThread> =
     action === "done"
@@ -602,7 +602,7 @@ export async function snoozeThread(threadId: string, untilIso: string): Promise<
   if (Number.isNaN(until.getTime())) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { error } = await supabase
     .from("inbox_threads")
@@ -730,7 +730,7 @@ const DEMO_THREADS: DemoThread[] = [
 export async function seedInboxDemo(): Promise<void> {
   const auth = await requireOrgContext();
   if (!auth.ok) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
 
   // Idempotent: clear the org's inbox first so repeated loads don't pile up.
@@ -812,7 +812,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
   if (!taskId) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("tasks")
     .update({ status: "cancelled" })
@@ -892,7 +892,7 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
   if (!taskIds.length) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("tasks")
     .update({ status: "cancelled" })
@@ -971,7 +971,7 @@ export async function deleteThreadAction(threadId: string): Promise<{ ok: boolea
   if (!threadId) return { ok: false };
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("inbox_threads")
     .delete()
@@ -988,7 +988,7 @@ export async function deleteThreadAction(threadId: string): Promise<{ ok: boolea
 export async function clearInbox(opts?: { category?: InboxCategory }): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Only wipe open threads — snoozed/done are deliberately parked and must survive.
   const base = supabase
     .from("inbox_threads")

@@ -37,7 +37,7 @@ export async function startRunSearch(prompt: string): Promise<StartRunSearchResu
   if (!clean) return { ok: false, error: "Describe what you want to evaluate." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const plan = await planRunSearch(clean);
   if (!plan.steps.length) return { ok: false, error: "Couldn't plan that evaluation." };
 
@@ -133,7 +133,7 @@ export async function runRunStep(args: {
   if (!auth.ok) return { ok: false, error: "Not authorized." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   await supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", args.stepId);
   await supabase.from("task_events").insert({
@@ -173,7 +173,7 @@ export async function runRunStep(args: {
 export async function completeRunSearch(workflowId: string): Promise<{ ok: boolean }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("tasks")
     .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })

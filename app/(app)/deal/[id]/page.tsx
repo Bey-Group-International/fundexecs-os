@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 // Per-deal war room: one deal's whole evaluation — conviction + trend,
 // underwriting, diligence, risk heatmap, and the IC decision log — on one page.
-export default async function DealPage({ params }: { params: { id: string } }) {
+export default async function DealPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");

@@ -3,7 +3,7 @@ import type { Task, Approval, Artifact } from "@/lib/supabase/database.types";
 import type { WorkflowBundle, SealedArtifact } from "@/components/Copilot";
 import { loadArtifactSealStatuses } from "@/lib/artifact-seal";
 
-type ServerClient = ReturnType<typeof createServerClient>;
+type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
 // Loads the workflow bundles (workflow + steps + artifacts + latest approval)
 // the Earn copilot renders. Shared by the workspace home and per-session views.

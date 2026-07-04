@@ -9,7 +9,7 @@ import type { createServerClient } from "@/lib/supabase/server";
 import type { Artifact } from "@/lib/supabase/database.types";
 import { verifyArtifactSeal, type ArtifactHashInput, type SealStatus } from "@/lib/attestation-seal";
 
-type ServerClient = ReturnType<typeof createServerClient>;
+type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
 // The salient verification fields the seal was computed over (see
 // attestation-seal.ts). Must mirror exactly what verifyArtifact hashed.

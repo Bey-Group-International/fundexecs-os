@@ -46,7 +46,7 @@ export async function createDashboardInvestor(formData: FormData) {
   const name = text(formData, "name");
   if (!name) throw new Error("Investor name is required.");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("investors")
     .insert({
@@ -80,7 +80,7 @@ export async function createDashboardDeal(formData: FormData) {
   const name = text(formData, "name");
   if (!name) throw new Error("Deal name is required.");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("deals")
     .insert({
@@ -114,7 +114,7 @@ export async function createDashboardFund(formData: FormData) {
   const name = text(formData, "name");
   if (!name) throw new Error("Fund name is required.");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("funds")
     .insert({
@@ -148,7 +148,7 @@ export async function createDashboardTask(formData: FormData) {
 
   const hub = (text(formData, "hub") || "source") as Hub;
   const assignedAgent = (text(formData, "assigned_agent") || "associate") as AgentKey;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("tasks")
     .insert({

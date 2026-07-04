@@ -29,7 +29,7 @@ function asModelObject(model: Json | null | undefined): Record<string, Json> {
 
 // Load one case scoped to the org, returning its id, deal, and current model.
 async function loadCase(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
   id: string,
 ): Promise<Pick<Underwriting, "id" | "deal_id" | "model"> | null> {
@@ -66,7 +66,7 @@ export async function setUnderwritingProbability(formData: FormData): Promise<Un
   if (probability > 1) probability = 1;
   if (probability < 0) probability = 0;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const row = await loadCase(supabase, ctx.orgId, id);
   if (!row) return { ok: false, error: "Case not found." };
 
@@ -104,7 +104,7 @@ export async function saveUnderwritingInputs(formData: FormData): Promise<Underw
   const holdYears = num(formData, "holdYears");
   const leverage = num(formData, "leverage");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const row = await loadCase(supabase, ctx.orgId, id);
   if (!row) return { ok: false, error: "Case not found." };
 
@@ -150,7 +150,7 @@ export async function setUnderwritingEquity(formData: FormData): Promise<Underwr
   const id = String(formData.get("id") ?? "");
   if (!id) return { ok: false, error: "Missing case." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const row = await loadCase(supabase, ctx.orgId, id);
   if (!row) return { ok: false, error: "Case not found." };
 

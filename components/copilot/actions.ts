@@ -54,7 +54,7 @@ export async function askEarn(input: {
   if (!body) return { ok: false, error: "Ask Earn something first." };
 
   const location = copilotContextFromPath(input.pathname);
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   try {
     const learned = await getOperatorLearningDigest(supabase, ctx.orgId, ctx.userId, location.scope);
     const learnedBlock = operatorLearningPreamble(learned);
@@ -83,7 +83,7 @@ function findSuggestion(loc: CopilotContext, id: string): CopilotSuggestion | nu
 export async function getMandateSummary(): Promise<Mandate | null> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return null;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   return (await getActiveMandate(supabase, ctx.orgId)) ?? null;
 }
 
@@ -102,7 +102,7 @@ export async function launchCopilotSuggestion(formData: FormData): Promise<void>
   const suggestion = findSuggestion(loc, id);
   if (!suggestion) redirect("/workspace");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const engineCtx = { supabase, orgId: ctx.orgId, actorId: ctx.userId };
   const result = await handlePrompt(engineCtx, `${contextPreamble(loc)} ${suggestion.prompt}`);
 
@@ -142,7 +142,7 @@ export interface RunSummary {
 export async function getRecentRuns(): Promise<RunSummary[]> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   try {
     const { data: workflows } = await supabase
@@ -215,7 +215,7 @@ function taskSummary(t: TeamTask): TeamTaskSummary {
 export async function getMyTeamTasks(): Promise<TeamTaskSummary[]> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const tasks = await listMyTeamTasks(supabase, ctx.orgId, ctx.userId, 5);
   return tasks.map(taskSummary);
 }
@@ -226,7 +226,7 @@ export async function completeMyTeamTask(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const taskId = String(formData.get("team_task_id") ?? "").trim();
   if (!taskId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const task = await getTeamTaskForAssignee(supabase, ctx.orgId, ctx.userId, taskId);
   if (!task) return;
   const statusUpdate = await updateTeamTaskStatus(supabase, {
@@ -258,7 +258,7 @@ export async function launchTeamTaskWithEarn(formData: FormData): Promise<void> 
   const pathname = String(formData.get("pathname") ?? "/");
   if (!taskId) redirect("/workspace");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const task = await getTeamTaskForAssignee(supabase, ctx.orgId, ctx.userId, taskId);
   if (!task) redirect("/workspace");
 
@@ -300,7 +300,7 @@ export async function approveRun(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const approvalId = String(formData.get("approval_id") ?? "");
   if (!approvalId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   try {
     await decideApproval(
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
@@ -327,7 +327,7 @@ export async function dismissRun(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const approvalId = String(formData.get("approval_id") ?? "");
   if (!approvalId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   try {
     await decideApproval(
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },
@@ -367,7 +367,7 @@ export async function verifyArtifact(artifactId: string, note?: string): Promise
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not authorized." };
   if (!artifactId) return { ok: false, error: "Missing artifact." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   return verifyArtifactEngine(
     { supabase, orgId: ctx.orgId, actorId: ctx.userId },
     artifactId,

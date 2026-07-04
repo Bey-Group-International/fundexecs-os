@@ -55,7 +55,7 @@ export function RadarAttribution({ live }: { live?: boolean; initialPrompt?: str
       ranInitial.current = true;
       refresh();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   return (

@@ -1,4 +1,5 @@
 import nextDynamic from "next/dynamic";
+import type React from "react";
 import { ModuleView } from "@/components/ModuleView";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
@@ -89,7 +90,7 @@ const GPProfileScorecard = nextDynamic(() =>
 // Each shares the same shape (a sourcing-live surface keyed off ?q), so they live
 // in one map instead of a long if-ladder — adding a module is a one-line entry.
 // (Bespoke source modules like `lp_pipeline` are handled separately below.)
-const SOURCE_MODULES: Record<string, (initialPrompt?: string) => JSX.Element> = {
+const SOURCE_MODULES: Record<string, (initialPrompt?: string) => React.ReactElement> = {
   search: (initialPrompt) => (
     <SourceSearch
       live={sourcingLive()}
@@ -116,13 +117,14 @@ export const dynamic = "force-dynamic";
 // this renders the module's view (shared with the in-session frame). A few hubs
 // route a pseudo-module ("search" / "triage") to a conversational, Earn-driven
 // surface instead of a table.
-export default async function ModulePage({
-  params,
-  searchParams,
-}: {
-  params: { hub: string; module: string };
-  searchParams?: { q?: string | string[] };
-}) {
+export default async function ModulePage(
+  props: {
+    params: Promise<{ hub: string; module: string }>;
+    searchParams?: Promise<{ q?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const q = Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q;
   const initialPrompt = typeof q === "string" && q.trim() ? q : undefined;
 
@@ -181,14 +183,14 @@ export default async function ModulePage({
   // Source › Network — relationship capital search, LinkedIn import, warm intros, syndicate circles.
   if (params.hub === "source" && params.module === "network") {
     const ctx = await getSessionContext();
-    const supabase = createServerClient() as any;
+    const supabase = await createServerClient() as any;
 
     // Count contacts for the org.
     let contactCount = 0;
     let circles: { id: string; name: string; description: string | null; memberCount: number; inviteCode: string; isActive: boolean; createdAt: string }[] = [];
 
     if (ctx?.orgId) {
-      const typedSupabase = createServerClient();
+      const typedSupabase = await createServerClient();
       const [contactsRes, circlesRes, principalRes] = await Promise.all([
         supabase.from("network_contacts").select("id", { count: "exact", head: true }).eq("organization_id", ctx.orgId),
         supabase.from("syndicate_circles").select("id, name, description, member_count, invite_code, is_active, created_at").eq("organization_id", ctx.orgId).eq("is_active", true).order("created_at", { ascending: false }),
@@ -253,7 +255,7 @@ export default async function ModulePage({
 
   if (needsCapitalMap || needsGPScorecard || isReporting || isDealPipeline) {
     const ctx = await getSessionContext();
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Source › LP Pipeline — GPLPMatch LP Discovery Engine.
     if (params.hub === "source" && params.module === "lp_pipeline") {

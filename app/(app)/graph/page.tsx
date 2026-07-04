@@ -16,7 +16,7 @@ export default async function GraphPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [relationship, deal, capital] = await Promise.all([
     buildGraph(supabase, "relationship"),
     buildGraph(supabase, "deal"),

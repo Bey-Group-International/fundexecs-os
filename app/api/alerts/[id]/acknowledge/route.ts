@@ -2,14 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function PATCH(
-  _req: NextRequest,
-  { params }: RouteContext,
-): Promise<NextResponse> {
-  const supabase = createServerClient();
+export async function PATCH(_req: NextRequest, props: RouteContext): Promise<NextResponse> {
+  const params = await props.params;
+  const supabase = await createServerClient();
 
   const {
     data: { user },

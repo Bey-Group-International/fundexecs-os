@@ -25,11 +25,12 @@ const OPERATING_LOOP = [
   },
 ];
 
-export default function LandingPage({
-  searchParams,
-}: {
-  searchParams: { code?: string; error?: string; error_description?: string };
-}) {
+export default async function LandingPage(
+  props: {
+    searchParams: Promise<{ code?: string; error?: string; error_description?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   if (searchParams.code) {
     redirect(`/auth/callback?code=${encodeURIComponent(searchParams.code)}`);
   }

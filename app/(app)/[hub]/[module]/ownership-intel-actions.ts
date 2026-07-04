@@ -32,7 +32,7 @@ async function resolveTarget(
   orgId: string,
   args: { targetName?: string | null; dealId?: string | null; sector?: string | null; geography?: string | null },
 ): Promise<TargetLike | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   if (args.dealId) {
     const { data } = await supabase
       .from("deals")
@@ -82,7 +82,7 @@ export async function buyersForTarget(args: {
   const target = await resolveTarget(orgId, args);
   if (!target) return { ok: false, error: "Name a target business or pick a deal." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [candidates, existing] = await Promise.all([
     discoverBuyers(target),
     listBuyers(supabase, orgId, { limit: 300 }),
@@ -152,7 +152,7 @@ export interface AcquisitionHistoryResult {
 export async function acquisitionHistory(args: { name?: string | null; limit?: number } = {}): Promise<AcquisitionHistoryResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const rows = await listAcquisitions(supabase, auth.ctx.orgId, {
     name: args.name ?? null,
     limit: Math.min(Math.max(args.limit ?? 100, 1), 300),
@@ -172,7 +172,7 @@ export async function recordAcquisitionRows(rows: AcquisitionInput[]): Promise<R
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: "Nothing to record." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const saved = await recordAcquisitions(supabase, auth.ctx.orgId, auth.ctx.userId, rows.slice(0, 100));
   if (saved > 0) revalidatePath("/source/buyers");
   return { ok: true, saved };
@@ -189,7 +189,7 @@ export async function recordBuyerRows(rows: BuyerInput[]): Promise<RecordBuyersR
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: "Nothing to record." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const saved = await recordBuyers(supabase, auth.ctx.orgId, auth.ctx.userId, rows.slice(0, 100));
   if (saved > 0) revalidatePath("/source/buyers");
   return { ok: true, saved };
@@ -205,7 +205,7 @@ export interface ListBuyersResult {
 export async function listBuyerProfiles(): Promise<ListBuyersResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const buyers = await listBuyers(supabase, auth.ctx.orgId, { limit: 200 });
   return { ok: true, buyers };
 }

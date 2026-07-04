@@ -28,7 +28,7 @@ export async function fetchDealComps(
   orgId: string,
   currentDealId: string,
 ): Promise<DealComp[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Fetch all non-archived deals in active/closed stages
   const { data: deals } = await supabase

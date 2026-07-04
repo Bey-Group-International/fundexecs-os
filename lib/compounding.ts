@@ -158,7 +158,7 @@ const UNRANKED: CompoundingProfile = profileFromSignals({
  * an org with no footprint, so callers can use it unconditionally.
  */
 export async function compoundingProfile(orgId: string): Promise<CompoundingProfile> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [stored, wallet] = await Promise.all([
     supabase.from("reputation_scores").select("score").eq("organization_id", orgId).maybeSingle(),

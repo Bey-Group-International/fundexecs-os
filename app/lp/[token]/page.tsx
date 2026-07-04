@@ -24,7 +24,8 @@ function Unavailable({ reason }: { reason?: string }) {
   );
 }
 
-export default async function LPOnboardingPortal({ params }: { params: { token: string } }) {
+export default async function LPOnboardingPortal(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
   const supabase = createServiceClient();
 

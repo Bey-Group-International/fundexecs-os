@@ -3,7 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { AlertEvent } from "@/lib/alert-rules";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const {
     data: { user },

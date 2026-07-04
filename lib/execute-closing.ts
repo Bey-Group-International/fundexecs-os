@@ -181,7 +181,7 @@ export function rollupExecuteClosing(
 export const getExecuteClosing = cache(async function getExecuteClosing(
   orgId: string,
 ): Promise<ClosingSummary> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [dealsRes, dilRes, provRes, fundRes] = await Promise.all([
     supabase.from("deals").select("*").eq("organization_id", orgId).in("stage", ["ic_review", "closing"]),
     supabase.from("diligence_items").select("*").eq("organization_id", orgId),

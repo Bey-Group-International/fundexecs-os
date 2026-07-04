@@ -26,7 +26,7 @@ export async function askDiligence(input: {
   const docText = (input.docText ?? "").trim();
   if (!docText) return { ok: false, error: "Paste or upload a document first." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const orgId = auth.ctx.orgId;
   const name = (input.docName ?? "").trim() || "Untitled document";
 
@@ -71,7 +71,7 @@ export async function classifyVisitor(answers: Record<string, string>): Promise<
   const pathKey = pathFromAnswers(answers);
   const path = PATHS[pathKey];
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const ctx: BrainContext = {
     supabase,
     orgId: auth.ctx.orgId,
