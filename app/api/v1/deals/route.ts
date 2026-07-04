@@ -1,5 +1,6 @@
-import { collection, failure, withApiKey } from "@/lib/api-v1";
+import { accepted, collection, failure, withApiKey } from "@/lib/api-v1";
 import { clampLimit, decodeCursor, encodeCursor, pgLiteral } from "@/lib/api-v1-cursor";
+import { createApiWriteApproval, parseApiWrite } from "@/lib/api-write-requests";
 import type { Deal } from "@/lib/supabase/database.types";
 
 // GET /api/v1/deals — the authenticated org's deals (most recently updated first).
@@ -63,3 +64,40 @@ export const GET = withApiKey(async ({ orgId, supabase }, request) => {
 
   return collection(deals, nextCursor);
 }, "read:deals");
+
+// POST /api/v1/deals — propose a deal (writes-as-approvals; scope write:deals).
+//
+//   curl -X POST https://app.fundexecs.com/api/v1/deals \
+//     -H "Authorization: Bearer fxsk_live_…" -H "Content-Type: application/json" \
+//     -d '{"name": "Riverside Industrial", "stage": "sourced", "target_amount": 25000000}'
+//
+// Nothing is committed here: the validated row parks as a task + approval pair
+// that an operator decides in the app (the Tier model — external writes never
+// bypass the human). Responds 202 with the approval handle; poll GET /deals to
+// see the row appear once approved.
+export const POST = withApiKey(async ({ orgId, keyId, mode, supabase }, request) => {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return failure("Request body must be JSON", 400);
+  }
+  const parsed = parseApiWrite("deals", body);
+  if (!parsed.ok) return failure(parsed.error, 422);
+
+  const queued = await createApiWriteApproval(supabase, {
+    orgId,
+    keyId,
+    mode,
+    resource: "deals",
+    row: parsed.row,
+  });
+  if (!queued.ok) return failure(queued.error, 500);
+
+  return accepted({
+    resource: "deals",
+    status: "pending_approval",
+    approval_id: queued.approvalId,
+    task_id: queued.taskId,
+  });
+}, "write:deals");

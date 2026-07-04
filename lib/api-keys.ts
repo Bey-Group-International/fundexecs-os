@@ -78,6 +78,8 @@ export const API_SCOPES = [
   "read:deals",
   "read:investors",
   "read:funds",
+  "write:deals",
+  "write:investors",
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];
@@ -87,7 +89,16 @@ export const API_SCOPE_LABELS: Record<ApiScope, string> = {
   "read:deals": "Read deals",
   "read:investors": "Read investors",
   "read:funds": "Read funds",
+  "write:deals": "Propose deals (approval-gated)",
+  "write:investors": "Propose investors (approval-gated)",
 };
+
+// What a key gets when the issuer picks nothing: the read set, exactly what
+// pre-scopes keys had. Write scopes are opt-in only — growing the catalog must
+// never silently widen keys issued through a form without the picker.
+export const DEFAULT_API_SCOPES: readonly ApiScope[] = API_SCOPES.filter((s) =>
+  s.startsWith("read:"),
+);
 
 export function isApiScope(value: string): value is ApiScope {
   return (API_SCOPES as readonly string[]).includes(value);

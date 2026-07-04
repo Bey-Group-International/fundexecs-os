@@ -14,7 +14,7 @@ jest.mock("@/lib/supabase/server", () => ({
 
 import { NextResponse } from "next/server";
 import { withApiKey } from "./api-v1";
-import { API_SCOPES, isApiScope } from "./api-keys";
+import { API_SCOPES, DEFAULT_API_SCOPES, isApiScope } from "./api-keys";
 
 function keyWith(scopes: string[]) {
   return { ok: true, key: { orgId: "org-1", mode: "live", keyId: "key-1", scopes } };
@@ -73,7 +73,18 @@ describe("withApiKey scope enforcement", () => {
 describe("scope catalog", () => {
   it("validates scope strings", () => {
     expect(isApiScope("read:deals")).toBe(true);
-    expect(isApiScope("write:deals")).toBe(false);
+    expect(isApiScope("write:deals")).toBe(true);
+    expect(isApiScope("write:funds")).toBe(false);
     expect(isApiScope("")).toBe(false);
+  });
+
+  it("default-issued keys get the read set only — write scopes are opt-in", () => {
+    expect(DEFAULT_API_SCOPES).toEqual([
+      "read:organization",
+      "read:deals",
+      "read:investors",
+      "read:funds",
+    ]);
+    expect(DEFAULT_API_SCOPES.some((s) => s.startsWith("write:"))).toBe(false);
   });
 });
