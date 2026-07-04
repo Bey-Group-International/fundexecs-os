@@ -130,6 +130,7 @@ export default function Copilot({
   sessionId,
   integrations = [],
   initialChat = [],
+  initialPrompt = "",
 }: {
   orgId: string;
   live: boolean;
@@ -143,9 +144,10 @@ export default function Copilot({
   // Persisted conversational turns for this session, so Earn's answers survive a
   // reload. Seeds the chat transcript on mount.
   initialChat?: ChatTurn[];
+  initialPrompt?: string;
 }) {
   const router = useRouter();
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [model, setModel] = useState<EarnModelKey>(() => {
     if (typeof window === "undefined") return DEFAULT_EARN_MODEL;
     return (localStorage.getItem("earn:model") as EarnModelKey) ?? DEFAULT_EARN_MODEL;
@@ -213,6 +215,13 @@ export default function Copilot({
     const timers = toastTimers.current;
     return () => timers.forEach(clearTimeout);
   }, []);
+
+  useEffect(() => {
+    const value = initialPrompt.trim();
+    if (!value) return;
+    setPrompt(value);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [initialPrompt]);
 
   useEffect(() => {
     function onWorkspacePrompt(event: Event) {

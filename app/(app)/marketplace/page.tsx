@@ -161,9 +161,9 @@ export default async function MarketplacePage() {
         {profile.tier === "unranked" ? (
           <div className="mt-2.5 flex flex-wrap gap-3">
             {[
-              { label: "Close a deal", href: "/deals" },
+              { label: "Close a deal", href: "/deals/feed" },
               { label: "Verify records", href: "/portfolio" },
-              { label: "Submit LP report", href: "/lp-report" },
+              { label: "Submit LP report", href: "/reports" },
             ].map((a) => (
               <Link
                 key={a.href}

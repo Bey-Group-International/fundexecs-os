@@ -93,7 +93,7 @@ export default async function HubLayout(
                 Inbox
               </a>
               . To widen or restrict AI permissions, visit{" "}
-              <a href="/settings#ai-permissions" className="text-gold-400 underline-offset-2 hover:underline">
+              <a href="/settings#mandates" className="text-gold-400 underline-offset-2 hover:underline">
                 AI Permissions
               </a>
               .

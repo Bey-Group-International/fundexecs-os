@@ -32,7 +32,11 @@ function relativeTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export default async function SessionsPage() {
+export default async function SessionsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string | string[] }>;
+}) {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
@@ -61,6 +65,8 @@ export default async function SessionsPage() {
   const groupById = new Map(groups.map((g) => [g.id, g.name]));
   const pinned = sessions.filter((s) => s.pinned_at);
   const recent = sessions.filter((s) => !s.pinned_at);
+  const params = await searchParams;
+  const queryPrompt = Array.isArray(params?.q) ? params.q[0] : params?.q;
 
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
@@ -129,6 +135,7 @@ export default async function SessionsPage() {
           live={copilotLive()}
           bundles={[]}
           integrations={getActiveIntegrations(connected)}
+          initialPrompt={queryPrompt ?? ""}
         />
       </div>
     </div>

@@ -23,7 +23,7 @@ const BASE_COMMANDS: NavCommand[] = [
   { label: "Graphs", href: "/graph", hint: "Three graphs", group: "nav" },
   { label: "Capital Map", href: "/capital-map", hint: "Relationship intelligence", group: "nav" },
   { label: "Portfolio", href: "/portfolio", hint: "Portfolio health", group: "nav" },
-  { label: "Deals", href: "/deals", hint: "Deal war rooms", group: "nav" },
+  { label: "Deals", href: "/deals/feed", hint: "Deal signal feed", group: "nav" },
   { label: "Envelopes", href: "/envelopes", hint: "Native e-sign", group: "nav" },
   { label: "Settings", href: "/settings", hint: "Account & org", group: "settings" },
   { label: "Integrations", href: "/settings#integrations", hint: "Connect tools", group: "settings" },
