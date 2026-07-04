@@ -1,9 +1,8 @@
 -- Institutional onboarding hardening.
--- Ensures first-run profile fields and strategy enums are present even for
--- environments that initialized before the original onboarding migrations.
-
-alter table public.principals
-  add column if not exists phone text default null;
+-- Constrains organizations.primary_strategy to the values live writers emit.
+-- (An earlier draft also re-added principals.phone here; that column already
+-- ships via 20260701074812/20260701200000, so this migration is now only the
+-- CHECK constraint.)
 
 do $$
 begin
