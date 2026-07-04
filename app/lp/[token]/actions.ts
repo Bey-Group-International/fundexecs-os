@@ -44,7 +44,10 @@ export async function submitAccreditationAction(
         status: "accreditation",
       })
       .eq("id", ctx.session.id);
-    if (error) return { error: error.message };
+    if (error) {
+    console.error("[lp-onboarding] session update failed:", error);
+    return { error: "Failed to save. Please try again or refresh this link." };
+  }
 
     revalidatePath(`/lp/${token}`);
     return { ok: true };
@@ -68,7 +71,10 @@ export async function signSubscriptionAction(
         status: "subscription",
       })
       .eq("id", ctx.session.id);
-    if (error) return { error: error.message };
+    if (error) {
+    console.error("[lp-onboarding] session update failed:", error);
+    return { error: "Failed to save. Please try again or refresh this link." };
+  }
 
     revalidatePath(`/lp/${token}`);
     return { ok: true };
@@ -89,7 +95,10 @@ export async function confirmCapitalCommitmentAction(
       .from("lp_onboarding_sessions")
       .update({ status: "committed" })
       .eq("id", ctx.session.id);
-    if (error) return { error: error.message };
+    if (error) {
+    console.error("[lp-onboarding] session update failed:", error);
+    return { error: "Failed to save. Please try again or refresh this link." };
+  }
 
     revalidatePath(`/lp/${token}`);
     return { ok: true };
