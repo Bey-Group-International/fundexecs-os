@@ -42,7 +42,7 @@ export async function formVehicle(formData: FormData): Promise<void> {
   const rawType = String(formData.get("entity_type") ?? "spv").trim();
   const entity_type = ENTITY_TYPES.has(rawType) ? rawType : "spv";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: inserted } = await supabase
     .from("entities")

@@ -109,7 +109,7 @@ const STAGE_DEFS: Omit<ReadinessStage, "unlocked" | "current">[] = [
  * parallel and returns per-module scores plus the rolled-up hub state.
  */
 export async function getBuildReadiness(orgId: string): Promise<BuildReadiness> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [orgRes, thesesRes, entitiesRes, recordsRes, membersRes, docsRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
@@ -347,7 +347,7 @@ export interface Mandate {
  * pipeline and evaluation — Build compounding outward across the OS.
  */
 export async function getMandate(orgId: string): Promise<Mandate | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("investment_theses")
     .select("*")

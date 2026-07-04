@@ -20,7 +20,7 @@ interface LiveMeeting {
 }
 
 async function getPastMeetings(userId: string): Promise<LiveMeeting[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: hosted } = await supabase
     .from("live_meetings")
@@ -59,7 +59,7 @@ async function getPastMeetings(userId: string): Promise<LiveMeeting[]> {
 }
 
 export default async function MeetingsPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const userId = user?.id ?? "";
   const meetings = userId ? await getPastMeetings(userId) : [];

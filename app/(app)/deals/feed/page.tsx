@@ -20,7 +20,7 @@ export default async function DealFeedPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [items, dealsRes] = await Promise.all([
     getDealFeed(ctx.orgId),

@@ -72,7 +72,7 @@ export async function discoverEntities(
   if (!clean) return { ok: false, error: "Describe what you're looking for." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   let discovered = 0;
   // Expand: generate fresh candidates for the implied module and fold them into
@@ -122,7 +122,7 @@ export interface SimilarResult {
 export async function findSimilarEntities(entityId: string): Promise<SimilarResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("sourcing_entities")
     .select("id, kind, name, categories, geography, description")
@@ -153,7 +153,7 @@ export async function indexPipeline(): Promise<IndexResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const modules = [
     "source/lp_pipeline",
     "source/deal_pipeline",
@@ -204,7 +204,7 @@ export interface AddEntityResult {
 export async function addEntityToPipeline(entityId: string): Promise<AddEntityResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("sourcing_entities")
     .select("kind, name, categories, description, source_url, metadata")

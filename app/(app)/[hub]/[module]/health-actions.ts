@@ -17,7 +17,7 @@ export interface CronHealthResult {
 export async function loadCronHealthAction(): Promise<CronHealthResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const health = await loadCronHealth(supabase);
   return { ok: true, health };
 }

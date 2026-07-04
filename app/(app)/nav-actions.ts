@@ -25,7 +25,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   if (!ctx?.orgId) return { messages: 0, deals: 0 };
   const orgId = ctx.orgId;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const base = () =>
     supabase
       .from("inbox_threads")
@@ -56,7 +56,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
 export async function markDealAlertsRead(): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("inbox_threads")
     .update({ unread: false })

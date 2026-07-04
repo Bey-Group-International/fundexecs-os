@@ -18,7 +18,7 @@ export default async function GridPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("tasks")
     .select("id, title, status, session_id, created_at, completed_at, hub, description, lifecycle_stage, target_engine")

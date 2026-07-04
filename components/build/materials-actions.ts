@@ -36,7 +36,7 @@ export async function addDocument(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   const link = safeLink(String(formData.get("url") ?? ""));
   if (!name || !link) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("documents").insert({
     organization_id: ctx.orgId,
     name,
@@ -55,7 +55,7 @@ export async function createDocument(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   const content = String(formData.get("content") ?? "").trim();
   if (!name || !content) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("documents").insert({
     organization_id: ctx.orgId,
     name,
@@ -84,7 +84,7 @@ export async function updateDocument(formData: FormData): Promise<void> {
     patch.storage_key = safeLink(String(formData.get("url") ?? "")) ?? null;
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("documents").update(patch).eq("id", id).eq("organization_id", ctx.orgId);
 
   // Snapshot version on every save (content only — links have no content to version).
@@ -104,7 +104,7 @@ export async function updateDocument(formData: FormData): Promise<void> {
 }
 
 async function notifyShareRecipientsDocumentUpdated(orgId: string, docName: string): Promise<void> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Fetch org name and active shares with recipient emails in one pass.
   const [{ data: orgRow }, { data: shares }] = await Promise.all([
     supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
@@ -133,7 +133,7 @@ export async function deleteDocument(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("documents").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath(ROOM);
 }
@@ -148,7 +148,7 @@ export async function moveDocument(formData: FormData): Promise<void> {
   if (!id || (dir !== "up" && dir !== "down")) return;
   const orgId = ctx.orgId;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: target } = await supabase
     .from("documents")
     .select("*")
@@ -190,7 +190,7 @@ export async function updateDocumentStatus(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const s = String(formData.get("status") ?? "");
   if (!id || !["draft", "review", "ready"].includes(s)) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("documents")
     .update({ status: s as import("@/lib/supabase/database.types").DocumentStatus })
@@ -247,7 +247,7 @@ export async function createShare(formData: FormData): Promise<void> {
     }
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: inserted } = await supabase
     .from("data_room_shares")
     .insert({
@@ -417,7 +417,7 @@ export async function revokeShare(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("data_room_shares")
     .update({ revoked_at: new Date().toISOString() })
@@ -430,7 +430,7 @@ export async function revokeShare(formData: FormData): Promise<void> {
 export async function listDocumentVersions(docId: string): Promise<DocumentVersion[]> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("document_versions")
     .select("*")
@@ -447,7 +447,7 @@ export async function restoreDocumentVersion(formData: FormData): Promise<void> 
   const versionId = String(formData.get("version_id") ?? "");
   const docId = String(formData.get("doc_id") ?? "");
   if (!versionId || !docId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("document_versions")
     .select("*")
@@ -475,7 +475,7 @@ export async function openSection(formData: FormData): Promise<void> {
   const sectionDef = DATA_ROOM_SECTIONS.find((s) => s.key === sectionKey);
   if (!sectionDef) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: existing } = await supabase
     .from("documents")
     .select("id")

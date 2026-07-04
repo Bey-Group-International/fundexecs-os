@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 // Per-LP war room: one investor's whole relationship — temperature and thesis
 // fit, every commitment with called/distributed progress, the capital flows
 // tied to them, the next best moves, and the warm intro path — on one page.
-export default async function InvestorPage({ params }: { params: { id: string } }) {
+export default async function InvestorPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");

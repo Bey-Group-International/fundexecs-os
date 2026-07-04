@@ -41,7 +41,7 @@ export async function updateProfile(formData: FormData) {
     fund_count = Number.isFinite(n) ? n : null;
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("organizations")
     .update({
@@ -96,7 +96,7 @@ export async function createModuleRow(
   if (!(key in ADD_ROW_CONFIGS)) return { ok: false, error: "Unknown module." };
 
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Session-scoped modules (migration 0022) tag new rows with the session when
   // added from inside the session frame; null otherwise (org-wide).
@@ -303,7 +303,7 @@ export async function draftDealComms(formData: FormData): Promise<void> {
   const build = COMMS_PROMPTS[kind];
   if (!dealId || !build) { redirect("/workspace"); }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: deal } = await supabase
     .from("deals")
     .select("name")
@@ -323,7 +323,7 @@ export async function logContactAction(investorId: string) {
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     await logLPContact(supabase, auth.ctx.orgId, investorId);
     revalidatePath("/source/lp_pipeline");
     return { ok: true };
@@ -350,7 +350,7 @@ export async function generateDocumentAction(formData: FormData) {
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const orgId = auth.ctx.orgId;
 
     const [orgResult, fundResult, investorResult] = await Promise.all([
@@ -416,7 +416,7 @@ export async function advanceContractAction(contractId: string) {
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: contract, error: selectError } = await supabase
       .from("contracts")
       .select("status")
@@ -464,7 +464,7 @@ export async function createLpInviteAction(formData: FormData) {
   if (!lpName || !lpEmail) return { error: "Name and email are required" };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const orgId = auth.ctx.orgId;
 
     const { data: session, error } = await supabase
@@ -539,7 +539,7 @@ export async function advanceDealStageAction(
   if (!DEAL_STAGE_VALUES.includes(newStage as DealStage)) return { error: "Invalid stage" };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { count, error } = await supabase
       .from("deals")
       .update({ stage: newStage as DealStage }, { count: "exact" })
@@ -571,7 +571,7 @@ export async function createProviderAction(
   if (!name) return { error: "Provider name is required" };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase.from("service_providers").insert({
       organization_id: auth.ctx.orgId,
       name,
@@ -611,7 +611,7 @@ export async function updateProviderAction(
   if (!name) return { error: "Provider name is required" };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("service_providers")
       .update({
@@ -647,7 +647,7 @@ export async function deleteProviderAction(
   if (!auth.ok) return { error: "Unauthorized" };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("service_providers")
       .update({ archived_at: new Date().toISOString() })
@@ -713,7 +713,7 @@ export async function archiveInvestorAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase
       .from("investors")
       .update({ archived_at: new Date().toISOString() })
@@ -755,7 +755,7 @@ export async function deleteDealAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase
       .from("deals")
       .update({ archived_at: new Date().toISOString() })
@@ -778,7 +778,7 @@ export async function clearDealsAction(): Promise<{ ok?: boolean; error?: string
     // The org-scoped client (not the service-role client this used to reach
     // for) so RLS's deals_write policy — which blocks the 'viewer' role —
     // actually applies here, same as deleteDealAction just above.
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase
       .from("deals")
       .update({ archived_at: new Date().toISOString() })
@@ -801,7 +801,7 @@ export async function deletePartnerAction(
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase
       .from("partners")
       .update({ archived_at: new Date().toISOString() })
@@ -887,7 +887,7 @@ export async function updateContactFieldsAction(
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from(table as "investors")
       .update(clean as never)

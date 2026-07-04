@@ -8,11 +8,12 @@ export const dynamic = "force-dynamic";
 
 // Global search: read ?q=, run the org-scoped search, render the box + grouped
 // results. Auth/org guarded like the rest of the authed shell.
-export default async function SearchPage({
-  searchParams,
-}: {
-  searchParams: { q?: string | string[] };
-}) {
+export default async function SearchPage(
+  props: {
+    searchParams: Promise<{ q?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");

@@ -13,8 +13,8 @@ import type { Hub } from "@/lib/supabase/database.types";
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
 interface PageProps {
-  params: { hub: string };
-  searchParams: { id?: string };
+  params: Promise<{ hub: string }>;
+  searchParams: Promise<{ id?: string }>;
 }
 
 // Derive short initials from an email address or display name.
@@ -27,7 +27,9 @@ function toInitials(email: string): string {
   return local.slice(0, 2).toUpperCase();
 }
 
-export default async function CanvasPage({ params, searchParams }: PageProps) {
+export default async function CanvasPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   if (!HUB_KEYS.includes(params.hub as Hub)) notFound();
 
   const ctx = await getSessionContext();
@@ -59,7 +61,7 @@ export default async function CanvasPage({ params, searchParams }: PageProps) {
   }
 
   // Verify canvas belongs to the org (RLS will enforce, but 404 gracefully)
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: canvasRaw } = await supabase
     .from("canvases" as never)
     .select("*")

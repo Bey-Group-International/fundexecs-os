@@ -26,7 +26,7 @@ const BUILD = "/build";
 export async function updateBrand(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("organizations")
     .update({
@@ -48,7 +48,7 @@ export async function createThesis(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("investment_theses").insert({
     organization_id: ctx.orgId,
     title,
@@ -69,7 +69,7 @@ export async function deleteThesis(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("investment_theses").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath(`${BUILD}/thesis`);
 }
@@ -80,7 +80,7 @@ export async function createEntity(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("entities").insert({
     organization_id: ctx.orgId,
     name,
@@ -99,7 +99,7 @@ export async function deleteEntity(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("entities").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath(`${BUILD}/entity`);
 }
@@ -110,7 +110,7 @@ export async function createTrackRecord(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const deal_name = String(formData.get("deal_name") ?? "").trim();
   if (!deal_name) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("track_records").insert({
     organization_id: ctx.orgId,
     deal_name,
@@ -130,7 +130,7 @@ export async function deleteTrackRecord(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.from("track_records").delete().eq("id", id).eq("organization_id", ctx.orgId);
   revalidatePath(`${BUILD}/track_record`);
 }
@@ -167,7 +167,7 @@ export async function draftWithEarn(formData: FormData): Promise<void> {
     prompt += `\n\n--- What we already know about the firm (use this; do not contradict it) ---\n${context}`;
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const result = await handlePrompt(
     { supabase, orgId: ctx.orgId, actorId: ctx.userId },
     prompt,

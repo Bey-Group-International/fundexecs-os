@@ -16,7 +16,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import { fetchDealComps, type DealComp } from "@/lib/deal-comps";
 
-type Client = ReturnType<typeof createServerClient>;
+type Client = Awaited<ReturnType<typeof createServerClient>>;
 
 export interface DealWarRoom {
   conviction: DealConviction;
@@ -99,7 +99,7 @@ export async function recordConvictionSnapshot(
  * log (newest first), and the conviction trend (oldest → newest for plotting).
  */
 export async function getDealWarRoom(orgId: string, dealId: string): Promise<DealWarRoom | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const conviction = await computeDealConviction(supabase, orgId, dealId);
   if (!conviction) return null;
 

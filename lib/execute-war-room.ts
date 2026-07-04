@@ -216,7 +216,7 @@ export async function getAssetWarRoom(
   orgId: string,
   assetId: string,
 ): Promise<AssetWarRoom | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: assetRow } = await supabase
     .from("assets")

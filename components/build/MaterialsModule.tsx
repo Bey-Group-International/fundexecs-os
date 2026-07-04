@@ -105,7 +105,7 @@ function CoverageArc({ percent }: { percent: number }) {
 export async function MaterialsModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes, docsRes, sharesRes] =
     await Promise.all([

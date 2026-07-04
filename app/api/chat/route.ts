@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   // --- Live DB context loading — parallel queries to minimize latency ---
   let liveContext = "";
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const [dealsResult, diligenceResult, tasksResult, contactsResult] = await Promise.allSettled([
       supabase
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
   //     reference prior work (memos, models, analyses) in its answers. ---
   let priorArtifacts: string | undefined;
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: artifacts } = await supabase
       .from("artifacts")
       .select("title, artifact_type, content")
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
   // generated types until the next type regeneration cycle.
   if (sessionId) {
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       const { data: sessionRow } = await (supabase
         .from("sessions")
         .select("edge_context")
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
   const priorSessId = typeof prior_session_id === "string" && prior_session_id ? prior_session_id : null;
   if (priorSessId) {
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       const { data: prevMsgs } = await supabase
         .from("session_messages")
         .select("role, content")
@@ -200,7 +200,7 @@ export async function POST(request: Request) {
   // a reload. Best-effort (RLS-gated insert); a failure never breaks the reply.
   async function persist(reply: string) {
     if (!sessionId || !reply.trim()) return;
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     await supabase
       .from("session_messages")
       .insert([

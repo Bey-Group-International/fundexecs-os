@@ -10,7 +10,7 @@ export async function DocumentsModuleLive() {
   try {
     const auth = await requireOrgContext();
     if (!auth.ok) return null;
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const orgId = auth.ctx.orgId;
 
     const [contractsResult, investorsResult, fundsResult] = await Promise.all([

@@ -23,7 +23,7 @@ const perRequest: typeof cache =
 export const getSessionContext = perRequest(async (): Promise<SessionContext | null> => {
   if (!hasSupabaseServerEnv()) return null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

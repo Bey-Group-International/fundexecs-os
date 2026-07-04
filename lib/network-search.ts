@@ -160,7 +160,7 @@ export async function searchNetwork(query: string, limit = 20): Promise<NetworkS
   const { ctx } = auth;
 
   // Cast to any — network_contacts is not yet in database.types.ts.
-  const supabase = createServerClient() as any;
+  const supabase = await createServerClient() as any;
 
   const intent = await parseQueryIntent(query);
   const allTerms = [

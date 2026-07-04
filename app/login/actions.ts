@@ -15,9 +15,9 @@ export async function signInWithGoogle() {
     redirect(`/login?error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const origin =
-    headers().get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -37,7 +37,7 @@ export async function signIn(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
@@ -54,7 +54,7 @@ export async function signUp(formData: FormData) {
     redirect(`/login?mode=signup&error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -90,7 +90,7 @@ export async function signUp(formData: FormData) {
 export async function signOut() {
   if (!hasSupabaseServerEnv()) redirect("/login");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.auth.signOut();
   redirect("/login");
 }

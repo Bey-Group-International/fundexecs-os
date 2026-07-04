@@ -15,7 +15,7 @@ async function loadCapitalRunData(orgId: string): Promise<{
   funds: FundOption[];
   commitmentsByFund: Record<string, CommitmentRow[]>;
 }> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [fundRes, commitRes, invRes] = await Promise.all([
     supabase.from("funds").select("id,name").eq("organization_id", orgId),
     supabase.from("commitments").select("*").eq("organization_id", orgId),

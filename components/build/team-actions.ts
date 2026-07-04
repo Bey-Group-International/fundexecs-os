@@ -55,7 +55,7 @@ export async function updateMyProfile(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("principals")
     .update({
@@ -82,7 +82,7 @@ export async function assignTeamTask(formData: FormData): Promise<{ error?: stri
   if (!assignedTo) return { error: "Choose a teammate." };
   if (!title) return { error: "Add a task title." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: member } = await supabase
     .from("organization_members")
     .select("principal_id")
@@ -136,7 +136,7 @@ export async function changeMemberRole(formData: FormData): Promise<void> {
   const role = parseRole(formData.get("role"));
   if (!memberId || !role) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Guard: don't strip the last owner of their owner role.
   if (role !== "owner") {
@@ -167,7 +167,7 @@ export async function removeMember(formData: FormData): Promise<void> {
   const memberId = String(formData.get("memberId") ?? "").trim();
   if (!memberId) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: target } = await supabase
     .from("organization_members")

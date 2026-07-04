@@ -57,7 +57,7 @@ export async function saveAutomationCanvas(
   automationId: string,
   layout: CanvasLayout,
 ): Promise<void> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { error } = await supabase
     .from("automations")
@@ -76,7 +76,7 @@ export async function saveAutomationCanvas(
 export async function loadAutomationCanvas(
   automationId: string,
 ): Promise<CanvasLayout | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("automations")
@@ -110,7 +110,7 @@ export async function loadAutomationCanvas(
 export async function listWorkflowTemplates(
   orgId: string,
 ): Promise<WorkflowTemplate[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("workflow_templates")
@@ -131,7 +131,7 @@ export async function listWorkflowTemplates(
 export async function createWorkflowTemplate(
   args: Omit<WorkflowTemplate, "id" | "created_at">,
 ): Promise<WorkflowTemplate> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("workflow_templates")

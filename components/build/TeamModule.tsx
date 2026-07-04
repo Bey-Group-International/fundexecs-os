@@ -10,7 +10,7 @@ import { TeamControls, type TeamMemberView } from "./TeamControls";
 export async function TeamModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: memberData } = await supabase
     .from("organization_members")

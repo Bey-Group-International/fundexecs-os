@@ -193,7 +193,7 @@ export function SourceSignals({
       ranInitial.current = true;
       loadFeed();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   return (

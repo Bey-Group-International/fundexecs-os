@@ -90,7 +90,7 @@ function demoTaskTitles(): string[] {
   return DEMO_WORKFLOWS.flatMap((w) => [w.title, ...w.steps.map((s) => s.title)]);
 }
 
-type Client = ReturnType<typeof createServerClient>;
+type Client = Awaited<ReturnType<typeof createServerClient>>;
 
 // Delete all demo rows for an org. No revalidation — callers handle that so we
 // don't double-revalidate when seeding (which clears first).
@@ -107,7 +107,7 @@ async function deleteDemoRows(supabase: Client, org: string): Promise<void> {
 export async function clearDemoData(): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await deleteDemoRows(supabase, ctx.orgId);
   revalidatePath("/dashboard");
   revalidatePath("/automations");
@@ -118,7 +118,7 @@ export async function clearDemoData(): Promise<void> {
 export async function deleteWorkflow(id: string): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("tasks")
     .delete()
@@ -134,7 +134,7 @@ export async function deleteWorkflow(id: string): Promise<{ ok: boolean; error?:
 export async function clearWorkflows(): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("tasks")
     .delete()
@@ -149,7 +149,7 @@ export async function clearWorkflows(): Promise<{ ok: boolean; error?: string }>
 export async function deleteDeal(id: string): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("deals")
     .delete()
@@ -170,7 +170,7 @@ export async function deleteDeal(id: string): Promise<{ ok: boolean; error?: str
 export async function clearDeals(): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("deals")
     .update({ archived_at: new Date().toISOString() })
@@ -184,7 +184,7 @@ export async function clearDeals(): Promise<{ ok: boolean; error?: string }> {
 export async function deleteArtifact(id: string): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("artifacts")
     .delete()
@@ -198,7 +198,7 @@ export async function deleteArtifact(id: string): Promise<{ ok: boolean; error?:
 export async function clearArtifacts(): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("artifacts")
     .delete()
@@ -213,7 +213,7 @@ export async function clearArtifacts(): Promise<{ ok: boolean; error?: string }>
 export async function seedDemoData(): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const org = ctx.orgId;
   const by = ctx.userId;
 

@@ -64,7 +64,7 @@ export function CronHealth({ live }: { live?: boolean; initialPrompt?: string })
       ranInitial.current = true;
       refresh();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   return (

@@ -115,7 +115,7 @@ export async function getInvestorWarRoom(
   orgId: string,
   investorId: string,
 ): Promise<InvestorWarRoom | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: investorRow } = await supabase
     .from("investors")

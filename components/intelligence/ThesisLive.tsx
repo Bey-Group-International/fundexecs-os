@@ -85,7 +85,7 @@ async function loadThesisData(): Promise<{
     const ctx = await getSessionContext();
     if (!ctx?.orgId) return { signals: [], cells: [] };
 
-    const sb = createServerClient();
+    const sb = await createServerClient();
 
     const [signalRes, heatmapRes] = await Promise.all([
       sb

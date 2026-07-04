@@ -24,7 +24,7 @@ export async function getOutreachProfile(): Promise<OutreachProfile | null> {
   if (!auth.ok) return null;
   const { ctx } = auth;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const db = supabase as any;
   const [principalRes, orgRes] = await Promise.all([
     db
@@ -59,7 +59,7 @@ export async function saveIntroBlurb(blurb: string): Promise<void> {
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
 
-  const db = createServerClient() as any;
+  const db = await createServerClient() as any;
   await db
     .from("principals")
     .update({ intro_blurb: blurb.trim(), intro_blurb_updated_at: new Date().toISOString() })

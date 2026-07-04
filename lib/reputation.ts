@@ -95,7 +95,7 @@ export async function grantReputation(
  * then falls back to the Phase 0 proxy). Read in the request context.
  */
 export async function getReputation(orgId: string): Promise<ReputationState | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("reputation_scores")
     .select("score, tier")
@@ -110,7 +110,7 @@ export async function getReputationLedger(
   orgId: string,
   limit = 25,
 ): Promise<ReputationLedgerEntry[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("reputation_ledger")
     .select("*")

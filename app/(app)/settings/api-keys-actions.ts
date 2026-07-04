@@ -47,7 +47,7 @@ export async function createApiKey(
 
   const { publishableKey, secretKey } = generateKeyPair(mode);
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("api_keys").insert({
     organization_id: ctx.orgId,
     name,
@@ -73,7 +73,7 @@ export async function revokeApiKey(formData: FormData): Promise<{ error?: string
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing key id" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("api_keys")
     .update({ revoked_at: new Date().toISOString() })
@@ -100,7 +100,7 @@ export async function rotateApiKey(
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing key id" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: existing, error: readError } = await supabase
     .from("api_keys")
     .select("mode, revoked_at")

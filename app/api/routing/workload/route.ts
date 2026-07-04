@@ -18,7 +18,7 @@ export async function GET(
   req: NextRequest,
 ): Promise<NextResponse<{ workload: WorkloadEntry[] } | { error: string }>> {
   // Auth guard.
-  const db = createServerClient();
+  const db = await createServerClient();
   const {
     data: { user },
     error: authError,

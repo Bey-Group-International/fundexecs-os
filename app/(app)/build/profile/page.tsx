@@ -63,7 +63,7 @@ export default async function ProfilePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: org } = await supabase
     .from("organizations")
     .select(

@@ -14,7 +14,7 @@ export default async function MarketplaceBrowsePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("marketplace_listings")
     .select("id, title, listing_type, summary, amount, status, created_at, organization_id, organizations(name)")

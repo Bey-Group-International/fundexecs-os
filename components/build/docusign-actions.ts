@@ -110,7 +110,7 @@ export async function sendSubscriptionEnvelope(
   try {
     const ctx = await getSessionContext();
     if (ctx?.orgId) {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       await supabase.from("docusign_envelopes" as never).insert({
         organization_id: ctx.orgId,
         envelope_id: envelopeId,
@@ -144,7 +144,7 @@ export async function getEnvelopeStatus(
     // Keep local DB in sync
     const ctx = await getSessionContext();
     if (ctx?.orgId) {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       await supabase
         .from("docusign_envelopes" as never)
         .update({
@@ -178,7 +178,7 @@ export async function listSentEnvelopes(): Promise<
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("docusign_envelopes" as never)
     .select(

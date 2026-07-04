@@ -41,7 +41,7 @@ export async function getOrCreateReferralCode(
   createdBy: string | null,
 ): Promise<string | null> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: existing } = await supabase
       .from("referral_codes")
       .select("code")
@@ -408,7 +408,7 @@ export async function purchaseGift(args: {
 
 export async function getSentGifts(orgId: string): Promise<CreditGift[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data } = await supabase
       .from("credit_gifts")
       .select("*")

@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const limitParam = parseInt(searchParams.get("limit") ?? "25", 10);
   const limit = Math.min(Math.max(1, isNaN(limitParam) ? 25 : limitParam), 100);
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   let query = supabase
     .from("tasks")
     .select("*")

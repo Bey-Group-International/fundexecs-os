@@ -54,7 +54,7 @@ function latestActivity(tasks: Task[], dispatches: DispatchLog[]): DashboardActi
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [
     investorsRes,
     dealsRes,

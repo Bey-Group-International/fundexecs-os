@@ -75,7 +75,7 @@ async function loadClosingData(): Promise<ClosingData> {
     if (!ctx?.orgId) return EMPTY;
     const orgId = ctx.orgId;
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const [sessionsRes, contractsRes, fundsRes, investorsRes] = await Promise.all([
       supabase

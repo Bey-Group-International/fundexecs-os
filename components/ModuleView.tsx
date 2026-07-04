@@ -165,7 +165,7 @@ export async function ModuleView({
   if (!ctx.orgId) redirect("/onboarding");
 
   const key = `${hub.key}/${mod.key}`;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Carry the firm's mandate (Build › Thesis) into the Source hub. The Run hub
   // gets the richer command center (in the hub layout) instead, which already

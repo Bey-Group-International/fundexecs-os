@@ -24,7 +24,7 @@ export async function linkStakeholder(formData: FormData): Promise<void> {
   if (linkType === "principal" && linkId) principal_id = linkId;
   else if (linkType === "investor" && linkId) investor_id = linkId;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("stakeholders")
     .update({ principal_id, investor_id })

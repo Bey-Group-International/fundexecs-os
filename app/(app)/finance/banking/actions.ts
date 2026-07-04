@@ -43,7 +43,7 @@ export async function createBankAccount(input: {
   }
   // Store only the last 4 of any account number — never the full PAN.
   const mask = input.accountNumber ? input.accountNumber.replace(/\s+/g, "").slice(-4) : null;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("fin_bank_accounts")
     .insert({
@@ -104,7 +104,7 @@ export async function importBankFile(input: {
   const format = input.format ?? detectFormat(input.fileText);
   if (!format) return { ok: false, error: "Could not detect the statement format (CSV/OFX/QIF/CAMT)." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: account } = await supabase
     .from("fin_bank_accounts")
     .select("id, entity_id, currency")
@@ -213,7 +213,7 @@ export async function matchTransaction(input: {
 }): Promise<BankResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: txnRow } = await supabase
     .from("fin_bank_transactions")
@@ -281,7 +281,7 @@ export async function matchTransaction(input: {
 // pair's audit-row insert and bank-txn status flip happen in one transaction,
 // so a link can never half-apply. One round-trip for the whole batch.
 async function applyReconciliations(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   actorId: string,
   pairs: { txnId: string; entryId: string }[],
   matchKind: "auto" | "manual",
@@ -308,7 +308,7 @@ export async function autoReconcile(input: {
 }): Promise<BankResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: account } = await supabase
     .from("fin_bank_accounts")
@@ -397,7 +397,7 @@ export async function createCategorizationRule(input: {
   if (!input.entityId || !input.name?.trim() || !input.pattern?.trim() || !input.targetAccountId) {
     return { ok: false, error: "Entity, name, pattern, and target account are required." };
   }
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("fin_txn_rules")
     .insert({

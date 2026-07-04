@@ -31,7 +31,7 @@ export async function NdaSignatures() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Fetch signatures for this org, joining the share label for display.
   const { data: rows } = await supabase

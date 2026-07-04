@@ -280,7 +280,7 @@ export const getPortfolioMonitor = cache(
   async (orgId: string): Promise<PortfolioMonitor> => {
     if (!orgId) return EMPTY;
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
 
       const { data: assetRows } = await supabase
         .from("assets")

@@ -146,7 +146,7 @@ async function loadDeals(): Promise<DealEntry[]> {
   const auth = await requireOrgContext();
   if (!auth.ok) return [];
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: orgData } = await supabase
     .from("organizations")

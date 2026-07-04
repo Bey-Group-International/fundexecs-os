@@ -25,7 +25,7 @@ import type { Deal, Underwriting } from "@/lib/supabase/database.types";
 // Deals you can still underwrite — everything that hasn't been passed on or
 // died. Ordered newest-first for the picker.
 async function activeDeals(orgId: string): Promise<Deal[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("deals")
     .select("*")
@@ -250,7 +250,7 @@ function DealPanel({
 
 // --- Run › Underwriting: org-wide cases, now actionable --------------------
 export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [deals, uwRes] = await Promise.all([
     activeDeals(orgId),
     supabase

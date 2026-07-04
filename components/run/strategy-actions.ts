@@ -29,7 +29,7 @@ export async function setThesisFit(formData: FormData): Promise<void> {
   const fit = clampUnit(pct / 100);
   if (fit == null) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("deals")
     .update({ thesis_fit: fit })

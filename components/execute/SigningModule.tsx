@@ -82,7 +82,7 @@ export async function SigningModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   let envelopes: Envelope[] = [];
   try {
     const { data, error } = await (supabase as any)

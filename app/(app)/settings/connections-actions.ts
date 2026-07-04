@@ -25,7 +25,7 @@ function isKnownChannel(channel: string): boolean {
 // The channel's current gateway status, for the audit row's before_state.
 // Best-effort: null (no row / read failure) reads as "never connected".
 async function currentStatus(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   orgId: string,
   channel: string,
 ): Promise<string | null> {
@@ -44,7 +44,7 @@ export async function connectIntegration(formData: FormData): Promise<{ error?: 
   const channel = String(formData.get("channel") ?? "");
   if (!isKnownChannel(channel)) return { error: "Unknown integration" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const priorStatus = await currentStatus(supabase, ctx.orgId, channel);
 
   // SEAM: a real gateway runs its hosted-auth handshake (Merge Link / Zernio
@@ -85,7 +85,7 @@ export async function disconnectIntegration(formData: FormData): Promise<{ error
   const channel = String(formData.get("channel") ?? "");
   if (!channel) return { error: "Missing integration" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const priorStatus = await currentStatus(supabase, ctx.orgId, channel);
 
   // An explicit revoked row overrides any env-level default, so disconnect is

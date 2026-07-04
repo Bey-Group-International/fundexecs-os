@@ -24,7 +24,7 @@ async function patch(
   if (!isManagedTable(table)) return { ok: false, error: "Unknown table." };
   if (!id) return { ok: false, error: "Missing record id." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from(table as "investors")
     .update(values as never)
@@ -96,7 +96,7 @@ export async function deleteRecord(
   if (!isManagedTable(table)) return { ok: false, error: "Unknown table." };
   if (!id) return { ok: false, error: "Missing record id." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from(table as "investors").delete().eq("organization_id", auth.ctx.orgId).eq("id", id);
   if (error) return { ok: false, error: error.message };
 

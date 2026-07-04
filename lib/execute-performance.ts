@@ -255,7 +255,7 @@ export function rollupExecutePerformance(
 export const getExecutePerformance = cache(async function getExecutePerformance(
   orgId: string,
 ): Promise<ExecutePerformance> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [assetsRes, eventsRes, fundsRes] = await Promise.all([
     supabase.from("assets").select("*").eq("organization_id", orgId).is("archived_at", null),

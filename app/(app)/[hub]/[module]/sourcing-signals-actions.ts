@@ -72,7 +72,7 @@ export async function scanSignals(entityId?: string): Promise<ScanResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const orgId = auth.ctx.orgId;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Resolve the entity to scan.
   let entity: { id: string; name: string; kind: string; description: string | null } | null = null;
@@ -140,7 +140,7 @@ export async function listEntitySignals(
 ): Promise<ListSignalsResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const signals = await listSignals(supabase, auth.ctx.orgId, {
     entityId: entityId ?? null,
     signalType: signalType ?? null,
@@ -159,7 +159,7 @@ export interface TopSignalsResult {
 export async function topSignals(): Promise<TopSignalsResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const signals = await listSignals(supabase, auth.ctx.orgId, { limit: 120 });
   return { ok: true, subjects: groupBySubject(signals) };
 }

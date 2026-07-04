@@ -9,7 +9,7 @@ import { BrandSheet } from "./BrandSheet";
 export async function BrandModule() {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) redirect("/login");
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase.from("organizations").select("*").eq("id", ctx.orgId).maybeSingle();
   const org = data as Organization | null;
   const palette = org?.brand_palette ?? [];

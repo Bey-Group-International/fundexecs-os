@@ -10,18 +10,23 @@ export const dynamic = "force-dynamic";
 // The session frame publishes its session into the global top bar (which then
 // shows Session Name + Share + ⋮ Session Actions). The bar itself lives in the
 // app shell, so switching modules below never reloads or exits the session.
-export default async function SessionLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { id: string };
-}) {
+export default async function SessionLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("sessions")
     .select("*")

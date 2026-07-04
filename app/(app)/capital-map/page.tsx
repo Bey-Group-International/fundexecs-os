@@ -18,7 +18,7 @@ export default async function CapitalMapPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const entries = await buildCapitalMap(supabase);
 
   // Allocator Directory: load investors to populate the FinTrx-style directory.

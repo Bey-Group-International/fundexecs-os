@@ -37,7 +37,7 @@ export async function createAnnotation(args: {
   positionJson?: Annotation["position_json"];
   parentId?: string;
 }): Promise<Annotation> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("annotations")
@@ -65,7 +65,7 @@ export async function listAnnotations(
   entityType: EntityType,
   entityId: string,
 ): Promise<Annotation[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("annotations")
@@ -86,7 +86,7 @@ export async function resolveAnnotation(
   id: string,
   userId: string,
 ): Promise<void> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { error } = await supabase
     .from("annotations")
@@ -103,7 +103,7 @@ export async function resolveAnnotation(
 }
 
 export async function deleteAnnotation(id: string): Promise<void> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { error } = await supabase.from("annotations").delete().eq("id", id);
 
@@ -115,7 +115,7 @@ export async function deleteAnnotation(id: string): Promise<void> {
 export async function getAnnotationThread(
   parentId: string,
 ): Promise<Annotation[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Use two parameterized queries instead of raw .or() string interpolation
   // to avoid PostgREST filter injection via a crafted parentId value.

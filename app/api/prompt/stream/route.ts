@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
   const desk = isExecutive(delegate) ? delegate : undefined;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const ctx = { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId };
   const encoder = new TextEncoder();
 

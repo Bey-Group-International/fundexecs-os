@@ -55,11 +55,12 @@ async function fetchSigningData(token: string): Promise<SigningData | null> {
   };
 }
 
-export default async function SignPage({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function SignPage(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const { token } = params;
   const signingData = await fetchSigningData(token);
 

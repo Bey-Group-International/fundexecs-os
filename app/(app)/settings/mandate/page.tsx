@@ -14,7 +14,7 @@ export default async function MandatePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const mandate = await getActiveMandate(supabase, ctx.orgId);
 
   return (

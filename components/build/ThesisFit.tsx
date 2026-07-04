@@ -9,7 +9,7 @@ import { scoreThesisFit } from "@/lib/capital-map";
 export async function ThesisFit({ thesis }: { thesis: InvestmentThesis | null }) {
   if (!thesis) return null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase.from("investors").select("*").limit(100);
   const investors = (data ?? []) as Investor[];
 

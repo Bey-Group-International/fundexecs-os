@@ -26,7 +26,8 @@ function Unavailable() {
   );
 }
 
-export default async function SharedDealPage({ params }: { params: { token: string } }) {
+export default async function SharedDealPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   // No service role key (e.g. a preview without secrets) — fail closed.
   if (!hasSupabaseServiceEnv()) return <Unavailable />;
 

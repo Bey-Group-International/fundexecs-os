@@ -236,7 +236,7 @@ export function ReadinessReport({ sections }: Props) {
 
       {/* Print styles (injected inline for server component compatibility) */}
       <style
-        // eslint-disable-next-line react/no-danger
+         
         dangerouslySetInnerHTML={{
           __html: `
             @media print {

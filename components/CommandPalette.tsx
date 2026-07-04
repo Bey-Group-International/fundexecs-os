@@ -86,9 +86,10 @@ export function CommandPalette({
             // finds Envelopes — matching the retired dashboard palette.
             (c.hint?.toLowerCase().includes(s) ?? false),
         );
-    // The free-text row joins the keyboard index as the first entry, so Enter
-    // on an unmatched query goes to the action instead of dead-ending.
-    if (queryAction && q.trim().length > 3) {
+    // Free-text handoff appears only when no command matches. This prevents
+    // Enter from accidentally opening the Earn dock when the operator is clearly
+    // searching for a registered navigation target.
+    if (queryAction && q.trim().length > 3 && matches.length === 0) {
       const query = q.trim();
       return [
         {
@@ -148,7 +149,7 @@ export function CommandPalette({
             }
           }}
           placeholder="Search commands…"
-          className="w-full border-b border-line/70 bg-transparent px-4 py-3 text-sm text-fg-primary outline-none placeholder:text-fg-muted"
+          className="w-full border-b border-line/70 bg-surface-0 px-4 py-3 text-sm font-medium text-fg-primary outline-none placeholder:text-fg-muted focus:bg-surface-0"
         />
         <ul className="max-h-80 overflow-y-auto p-1">
           {filtered.length ? (

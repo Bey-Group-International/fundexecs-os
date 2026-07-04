@@ -35,7 +35,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
 
   // Live portal links per holder, for the shareable read-only statements, with
   // an engagement signal (has the LP opened it, and when).
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: shareRows } = await supabase
     .from("investor_portal_shares")
     .select("id, investor_id, token")

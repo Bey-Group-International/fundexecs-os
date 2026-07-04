@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     return settingsRedirect("no_refresh_token");
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // 1. Refresh token into the vault (RLS-enforced write under the caller).
   const encrypted = encryptSecret(tokens.refreshToken);

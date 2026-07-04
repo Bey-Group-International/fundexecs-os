@@ -110,7 +110,7 @@ export default async function DashboardPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [
     allTasksRes,
     workflowsRes,

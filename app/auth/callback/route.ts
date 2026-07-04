@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent("Auth not configured.")}`);
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   if (code) {
     // OAuth flow (Google)
@@ -80,7 +80,7 @@ function sanitizeNextPath(rawNext: string | null, origin: string): string {
 // sees the incoming request cookies — the just-issued session cookies are on
 // the outgoing response and not visible to it yet.
 async function maybeGrantTrial(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
 ): Promise<void> {
   try {
     const {

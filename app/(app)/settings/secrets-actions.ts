@@ -51,7 +51,7 @@ export async function setOrgSecret(formData: FormData): Promise<OrgSecretResult>
   if (!value) return { ok: false, error: "Enter a credential value." };
 
   const encrypted = encryptSecret(value);
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("org_secrets").upsert(
     {
       organization_id: ctx.orgId,
@@ -83,7 +83,7 @@ export async function deleteOrgSecret(formData: FormData): Promise<OrgSecretResu
   const provider = String(formData.get("provider") ?? "").trim();
   if (!isAllowedKey(provider)) return { ok: false, error: "Unknown credential key." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("org_secrets")
     .delete()
@@ -99,7 +99,7 @@ export async function deleteOrgSecret(formData: FormData): Promise<OrgSecretResu
 export async function listOrgSecrets(): Promise<OrgSecretMeta[]> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return [];
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("org_secrets")
     .select("provider, last4, updated_at")

@@ -32,7 +32,7 @@ export function summarizeMarks(marks: ValuationMark[]): Map<string, AssetMarkSum
 
 /** Fetch an org's valuation marks, newest first. */
 export async function getValuationMarks(orgId: string): Promise<ValuationMark[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("valuation_marks")
     .select("*")

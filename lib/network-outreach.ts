@@ -117,7 +117,7 @@ export async function saveIntroRequest(params: {
   const auth = await requireOrgContext();
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
-  const supabase = createServerClient() as any;
+  const supabase = await createServerClient() as any;
 
   const { data } = await supabase
     .from("intro_requests")

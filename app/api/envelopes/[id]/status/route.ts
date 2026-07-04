@@ -3,12 +3,10 @@ import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } },
-) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const envelopeId = params.id;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {

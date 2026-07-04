@@ -44,7 +44,7 @@ export async function grantCredits(
 // returned as a positive number. Drives the plan recommender on the Wallet page.
 // Uses a DB-side aggregate so only a single scalar is transferred, not N rows.
 export async function recentSpend(orgId: string, days = 30): Promise<number> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const { data } = await supabase
     .from("credit_ledger")
@@ -98,7 +98,7 @@ export async function spendCredits(
 
 // The most recent ledger entries for an org, newest first.
 export async function getLedger(orgId: string, limit = 25): Promise<CreditLedgerEntry[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("credit_ledger")
     .select("*")

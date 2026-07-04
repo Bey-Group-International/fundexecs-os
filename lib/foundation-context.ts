@@ -26,7 +26,7 @@ function joinParts(parts: (string | null | undefined)[], sep: string): string {
  * across all Build modules. Returns "" when essentially nothing is known.
  */
 export async function gatherFoundationContext(orgId: string): Promise<string> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [orgRes, thesesRes, recordsRes, entitiesRes, membersRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),

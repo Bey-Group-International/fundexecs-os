@@ -9,7 +9,7 @@ export async function GET() {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [agents, activeTasks] = await Promise.all([
     supabase.from("ai_agents").select("*"),
     supabase

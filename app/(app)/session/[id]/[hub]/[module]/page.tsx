@@ -8,11 +8,12 @@ const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
 
 // A Hub Module running inside the session frame. The session layout (command
 // bar) persists above this, so opening a module never exits the session.
-export default function SessionModulePage({
-  params,
-}: {
-  params: { id: string; hub: string; module: string };
-}) {
+export default async function SessionModulePage(
+  props: {
+    params: Promise<{ id: string; hub: string; module: string }>;
+  }
+) {
+  const params = await props.params;
   const valid = HUB_KEYS.includes(params.hub as Hub);
   const hub = valid ? HUB_BY_KEY[params.hub as Hub] : null;
   const mod = hub?.modules.find((m) => m.key === params.module);

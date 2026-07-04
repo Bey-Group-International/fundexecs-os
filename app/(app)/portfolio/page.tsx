@@ -19,7 +19,7 @@ export default async function PortfolioPage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [data, docsRes, fundsRes] = await Promise.all([
     getPortfolioMonitor(ctx.orgId),

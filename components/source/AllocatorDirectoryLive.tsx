@@ -137,7 +137,7 @@ async function loadAllocatorEntries() {
   try {
     const auth = await requireOrgContext();
     if (!auth.ok) return [];
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: investorRows } = await supabase
       .from("investors")
       .select(
@@ -214,7 +214,7 @@ async function loadAllocatorEntries() {
 
 async function loadFunds(orgId: string) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data } = await supabase
       .from("funds")
       .select("id, name")

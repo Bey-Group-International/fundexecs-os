@@ -69,7 +69,7 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
     return { error: "Your plan or standing doesn't allow listing yet." };
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: listing, error } = await supabase
     .from("marketplace_listings")
     .insert({
@@ -146,7 +146,7 @@ export async function updateListingStatus(formData: FormData): Promise<void> {
   }
   if (!next) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("marketplace_listings")
     .update({ status: next })
@@ -215,7 +215,7 @@ export async function toggleListingPublic(formData: FormData): Promise<void> {
   const isPublic = String(formData.get("is_public") ?? "") === "true";
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("marketplace_listings")
     .update({ is_public: !isPublic })
@@ -232,7 +232,7 @@ export async function expressInterestInListing(
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: listing } = await supabase
     .from("marketplace_listings")
     .select("organization_id")
@@ -313,7 +313,7 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
     if (!Number.isNaN(parsed) && parsed > 0) holdPeriodYears = parsed;
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase
     .from("marketplace_listings")
     .update({
@@ -343,7 +343,7 @@ export async function deleteListing(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("marketplace_listings")
     .delete()

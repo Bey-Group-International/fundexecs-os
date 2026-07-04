@@ -14,7 +14,7 @@ export async function createSessionGroup(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("session_groups")
     .insert({ organization_id: ctx.orgId, name, created_by: ctx.userId });
@@ -28,7 +28,7 @@ export async function renameSession(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   if (!id || !name) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("sessions")
     .update({ name: name.slice(0, 120) })
@@ -45,7 +45,7 @@ export async function moveSessionToGroup(formData: FormData): Promise<void> {
   const group_id = raw === "" ? null : raw;
   if (!id) return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("sessions")
     .update({ group_id })
@@ -60,7 +60,7 @@ export async function setSessionColor(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const color = String(formData.get("color") ?? "").trim() || null;
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("sessions")
     .update({ color })
@@ -78,7 +78,7 @@ export async function setSessionPinned(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const pinned = String(formData.get("pinned") ?? "") === "true";
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("sessions")
     .update({ pinned_at: pinned ? new Date().toISOString() : null })
@@ -94,7 +94,7 @@ export async function setSessionUnread(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const unread = String(formData.get("unread") ?? "") === "true";
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("sessions")
     .update({ unread })
@@ -110,7 +110,7 @@ export async function setSessionArchived(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const archived = String(formData.get("archived") ?? "") === "true";
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("sessions")
     .update({ archived_at: archived ? new Date().toISOString() : null })
@@ -129,7 +129,7 @@ export async function deleteSession(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const noRedirect = String(formData.get("no_redirect") ?? "") === "true";
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("sessions").delete().eq("id", id).eq("organization_id", ctx.orgId);
   if (error) { console.error("[deleteSession]", error.message); return; }
   revalidatePath("/dashboard");
@@ -143,7 +143,7 @@ export async function createSessionShare(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const scope = String(formData.get("scope") ?? "org") === "public" ? "public" : "org";
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.from("session_shares").insert({
     organization_id: ctx.orgId,
     session_id: id,

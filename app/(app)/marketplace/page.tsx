@@ -69,7 +69,7 @@ export default async function MarketplacePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [listingsRes, investorsRes, dealsRes, profile] = await Promise.all([
     supabase.from("marketplace_listings").select("*").order("created_at", { ascending: false }),
     supabase.from("investors").select("*").limit(500),

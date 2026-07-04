@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   // Optional operator override: delegate this request to a specific desk.
   const desk = isExecutive(delegate) ? delegate : undefined;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const result = await handlePrompt(
     { supabase, orgId: auth.ctx.orgId, actorId: auth.ctx.userId },
     body,

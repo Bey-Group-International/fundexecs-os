@@ -10,12 +10,10 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getRoutingTrace } from "@/lib/routing-trace";
 import type { RoutingEvent } from "@/lib/routing-trace";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { taskId: string } },
-): Promise<NextResponse<{ events: RoutingEvent[] } | { error: string }>> {
+export async function GET(_req: NextRequest, props: { params: Promise<{ taskId: string }> }): Promise<NextResponse<{ events: RoutingEvent[] } | { error: string }>> {
+  const params = await props.params;
   // Verify the caller is authenticated via the cookie-bound RLS client.
-  const db = createServerClient();
+  const db = await createServerClient();
   const {
     data: { user },
     error: authError,

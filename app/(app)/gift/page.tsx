@@ -25,11 +25,12 @@ export const dynamic = "force-dynamic";
 
 const LEVEL_LABEL: Record<number, string> = { 1: "Direct", 2: "2nd level", 3: "3rd level" };
 
-export default async function GiftEarnPage({
-  searchParams,
-}: {
-  searchParams: { checkout?: string };
-}) {
+export default async function GiftEarnPage(
+  props: {
+    searchParams: Promise<{ checkout?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");

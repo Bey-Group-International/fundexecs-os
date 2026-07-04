@@ -137,7 +137,7 @@ export function rollupCapTable(
 
 /** Compute the firm-wide cap table for an org (commitments + investors + NAV). */
 export const getCapTable = cache(async function getCapTable(orgId: string): Promise<CapTable> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [commitRes, invRes, fundRes, assetRes] = await Promise.all([
     supabase.from("commitments").select("*").eq("organization_id", orgId),
     supabase.from("investors").select("*").eq("organization_id", orgId),

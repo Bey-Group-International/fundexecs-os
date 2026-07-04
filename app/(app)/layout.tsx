@@ -41,7 +41,7 @@ export default async function AppLayout({
 
   const balance = await getWalletBalance(ctx.orgId);
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [
     { data: principal },
     { data: wallet },

@@ -23,7 +23,8 @@ function safeHref(url: string | null): string | null {
 // the share's allowed_sections whitelist, logs a 'document' view, then
 // redirects to the document's external link. Invalid or ungated requests
 // bounce to the room.
-export async function GET(req: Request, { params }: { params: { token: string; id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ token: string; id: string }> }) {
+  const params = await props.params;
   const roomUrl = new URL(`/dataroom/${params.token}`, req.url);
   if (!hasSupabaseServiceEnv()) return NextResponse.redirect(roomUrl);
 

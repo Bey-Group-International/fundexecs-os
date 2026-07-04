@@ -27,7 +27,7 @@ export async function updateThesis(formData: FormData): Promise<void> {
   if (!id) return;
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("investment_theses")
     .update({
@@ -51,7 +51,7 @@ export async function setActiveThesis(formData: FormData): Promise<void> {
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Deactivate all theses for the org, then activate the chosen one.
   await supabase
     .from("investment_theses")
@@ -73,7 +73,7 @@ export async function updateEntity(formData: FormData): Promise<void> {
   if (!id) return;
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("entities")
     .update({
@@ -97,7 +97,7 @@ export async function updateTrackRecord(formData: FormData): Promise<void> {
   if (!id) return;
   const deal_name = String(formData.get("deal_name") ?? "").trim();
   if (!deal_name) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("track_records")
     .update({

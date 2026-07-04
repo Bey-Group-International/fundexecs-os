@@ -19,7 +19,7 @@ export async function draftLpUpdate(input: {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   try {
     const result = await handlePrompt(
       { supabase, orgId: ctx.orgId, actorId: ctx.userId },

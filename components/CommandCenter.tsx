@@ -24,7 +24,7 @@ function formatMeetingDate(dateStr: string): string {
 }
 
 async function RecentMeetingsCard() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const {
     data: { user },
@@ -112,7 +112,7 @@ async function RecentMeetingsCard() {
 }
 
 async function CommandCenterContent() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const ctx = await getSessionContext();
   const organizationId = ctx?.orgId;
 

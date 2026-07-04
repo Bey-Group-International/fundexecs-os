@@ -39,7 +39,7 @@ export async function promoteDealToAsset(formData: FormData): Promise<CapitalOpR
   const dealId = String(formData.get("deal_id") ?? "");
   if (!dealId) return { ok: false, error: "Missing deal." };
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: deal } = await supabase
     .from("deals")
     .select("id, asset_class")
@@ -97,7 +97,7 @@ export async function runWithEarn(formData: FormData): Promise<void> {
   const subject = String(formData.get("subject") ?? "").trim();
   if (subject) prompt += `\n\nSubject: ${subject}`;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const result = await handlePrompt(
     { supabase, orgId: ctx.orgId, actorId: ctx.userId },
     prompt,
@@ -114,7 +114,7 @@ export async function createInvestorPortalShare(formData: FormData): Promise<voi
   if (!ctx?.orgId) return;
   const investorId = String(formData.get("investor_id") ?? "");
   if (!investorId) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Reuse an existing live link if one exists; otherwise mint a new one.
   const { data: existing } = await supabase
     .from("investor_portal_shares")
@@ -136,7 +136,7 @@ export async function revokeInvestorPortalShare(formData: FormData): Promise<voi
   if (!ctx?.orgId) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase
     .from("investor_portal_shares")
     .update({ revoked_at: new Date().toISOString() })
@@ -165,7 +165,7 @@ export async function recordValuationMark(formData: FormData): Promise<CapitalOp
   const method = String(formData.get("method") ?? "").trim() || null;
   const note = String(formData.get("note") ?? "").trim() || null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.rpc("record_valuation_mark", {
     p_org: auth.ctx.orgId,
     p_asset_id: assetId,
@@ -208,7 +208,7 @@ export async function recordCapitalRun(formData: FormData): Promise<CapitalOpRes
     return { ok: false, error: "Enter a positive amount." };
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: fund } = await supabase
     .from("funds")
     .select("id")
@@ -280,7 +280,7 @@ export async function recordSecondaryTransfer(formData: FormData): Promise<Capit
   }
   const f = fraction >= 1 ? 1 : fraction;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { error } = await supabase.rpc("capital_secondary_transfer", {
     p_org: auth.ctx.orgId,
     p_seller_commitment_id: sellerCommitmentId,

@@ -29,7 +29,7 @@ function compactUsd(n: number | null): string | null {
 }
 
 async function loadFoundation(orgId: string): Promise<ComposeFoundation> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
     supabase
@@ -89,7 +89,7 @@ async function loadFoundation(orgId: string): Promise<ComposeFoundation> {
 export async function autoComposeContent(docId: string): Promise<{ content: string } | { error: string }> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("documents")
     .select("*")
@@ -111,7 +111,7 @@ export async function earnChat(
 ): Promise<{ reply: string; content: string } | { error: string }> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("documents")
     .select("*")
@@ -135,7 +135,7 @@ export async function earnChat(
 export async function suggestWizardAnswers(docId: string): Promise<Record<string, string>> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return {};
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("documents")
     .select("*")
@@ -186,7 +186,7 @@ export async function institutionalize(
 ): Promise<{ content: string } | { error: string }> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("documents")
     .select("*")
@@ -225,7 +225,7 @@ export async function finalizeWithEarn(
 ): Promise<{ content: string } | { error: string }> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("documents")
     .select("*")
@@ -304,7 +304,7 @@ export async function generateAiDocument(formData: FormData): Promise<void> {
 
   const content = aiContent.trim() ? aiContent : skeleton;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: created } = await supabase
     .from("documents")
     .insert({

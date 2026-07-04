@@ -27,21 +27,22 @@ export interface EnvelopeEvent {
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function EnvelopeDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function EnvelopeDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Fetch envelope, recipients, and events in parallel. All queries are
   // best-effort — if the table hasn't migrated yet we fall through to notFound.
   const [envRes, recipRes, eventsRes] = await Promise.all([
-    (supabase as ReturnType<typeof createServerClient> & {
+    (supabase as Awaited<ReturnType<typeof createServerClient>> & {
       from(t: string): any;
     })
       .from("signing_envelopes")
@@ -49,14 +50,14 @@ export default async function EnvelopeDetailPage({
       .eq("id", params.id)
       .eq("organization_id", ctx.orgId)
       .maybeSingle(),
-    (supabase as ReturnType<typeof createServerClient> & {
+    (supabase as Awaited<ReturnType<typeof createServerClient>> & {
       from(t: string): any;
     })
       .from("signing_recipients")
       .select("*")
       .eq("envelope_id", params.id)
       .order("routing_order", { ascending: true }),
-    (supabase as ReturnType<typeof createServerClient> & {
+    (supabase as Awaited<ReturnType<typeof createServerClient>> & {
       from(t: string): any;
     })
       .from("signing_events")
