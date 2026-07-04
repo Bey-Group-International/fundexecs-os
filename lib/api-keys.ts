@@ -80,6 +80,7 @@ export const API_SCOPES = [
   "read:funds",
   "write:deals",
   "write:investors",
+  "events:subscribe",
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];
@@ -91,6 +92,7 @@ export const API_SCOPE_LABELS: Record<ApiScope, string> = {
   "read:funds": "Read funds",
   "write:deals": "Propose deals (approval-gated)",
   "write:investors": "Propose investors (approval-gated)",
+  "events:subscribe": "Manage webhook subscriptions",
 };
 
 // What a key gets when the issuer picks nothing: the read set, exactly what

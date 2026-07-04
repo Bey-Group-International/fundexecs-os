@@ -4,6 +4,7 @@ import { runAutomation } from "@/lib/engine";
 import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import { runSlaEscalations } from "@/lib/sla-cron";
+import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outbound";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -142,6 +143,17 @@ export async function GET(request: Request) {
     escalated = 0;
   }
 
+  // Outbound webhook deliveries (audit P2 — v1 event subscriptions): send each
+  // active endpoint its undelivered task/dispatch events as one HMAC-signed
+  // batch. Best-effort like the blocks above — a delivery problem never aborts
+  // the sweep, and per-endpoint failure bookkeeping lives in the module.
+  let webhooks: DeliveryStats = { endpoints: 0, delivered: 0, failed: 0, disabled: 0 };
+  try {
+    webhooks = await runWebhookDeliveries(supabase, now);
+  } catch (e) {
+    console.error("webhook_deliveries failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -154,6 +166,8 @@ export async function GET(request: Request) {
         scannedOrgs: radar.scannedOrgs,
         generated: radar.generated,
         escalated,
+        webhooksDelivered: webhooks.delivered,
+        webhooksFailed: webhooks.failed,
       },
       startedAt: now,
     });
@@ -161,5 +175,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks });
 }
