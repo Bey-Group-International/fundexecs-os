@@ -114,7 +114,7 @@ function parsePersonRows(
   const iEmail = colIdx(headers, "email");
   const iTitle = colIdx(headers, "job title", "position", "title");
   const iCompany = colIdx(headers, "company name", "company");
-  const iLinkedin = colIdx(headers, "linkedin url", "linkedin");
+  const iLinkedin = colIdx(headers, "linkedin url", "linkedin", "profile url", "url");
   const iPhone = colIdx(headers, "phone number", "mobile phone", "phone");
   const iCity = colIdx(headers, "city");
   const iState = colIdx(headers, "state", "region");
