@@ -39,8 +39,8 @@ export default async function CapitalMapPage() {
     ticketMax: inv.typical_check_max ?? null,
     primaryStrategies: [],
     geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
-    accreditationStatus: "verified" as AccreditationStatus,
-    kycStatus: "verified" as const,
+    accreditationStatus: "unknown" as AccreditationStatus,
+    kycStatus: "not_started" as const,
     hqCity: undefined,
     hqCountry: inv.jurisdiction ?? undefined,
     fitScore: undefined,
@@ -103,7 +103,7 @@ export default async function CapitalMapPage() {
               LP &amp; Allocator Intelligence
             </h2>
             <p className="mt-1 text-sm text-fg-secondary">
-              Searchable directory of your allocators with AUM, ticket size, mandate fit, and compliance status.
+              Searchable directory of your allocators with AUM, ticket size, mandate fit, and compliance status when verified.
             </p>
           </header>
           <AllocatorDirectory entries={allocatorEntries} funds={[]} />

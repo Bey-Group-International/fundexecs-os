@@ -77,10 +77,10 @@ export default async function MarketplaceBrowsePage() {
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/10 text-lg text-gold-300">
             ◈
           </div>
-          <p className="text-sm font-medium text-fg-primary">Marketplace is launching soon</p>
+          <p className="text-sm font-medium text-fg-primary">No public listings yet</p>
           <p className="mt-2 max-w-sm mx-auto text-sm text-fg-muted">
-            The FundExecs Marketplace connects fund managers with LPs, co-investors, and
-            secondary buyers. Public listings from verified funds will appear here.
+            Public listings from verified funds will appear here once an operator
+            publishes one. Create a listing and mark it public to make it discoverable.
           </p>
           <Link
             href="/marketplace"

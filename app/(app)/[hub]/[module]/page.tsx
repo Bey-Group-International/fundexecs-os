@@ -10,7 +10,6 @@ import { buildCapitalMap } from "@/lib/capital-map";
 import { computeGPScorecard } from "@/lib/gp-scorecard";
 import type { LPMatch } from "@/components/source/LPDiscoveryPanel";
 import type { OutreachItem } from "@/components/source/OutreachPriorityQueue";
-import type { CommTemplate } from "@/components/execute/ShareholderComms";
 
 // Lazily loaded — each search/triage surface is heavy and hub-specific.
 // next/dynamic splits them into separate chunks loaded only when the matching
@@ -78,9 +77,6 @@ const DealStageFunnel = nextDynamic(() =>
 );
 const OutreachPriorityQueue = nextDynamic(() =>
   import("@/components/source/OutreachPriorityQueue").then((m) => m.OutreachPriorityQueue),
-);
-const ShareholderComms = nextDynamic(() =>
-  import("@/components/execute/ShareholderComms").then((m) => m.ShareholderComms),
 );
 const GPProfileScorecard = nextDynamic(() =>
   import("@/components/build/GPProfileScorecard").then((m) => m.GPProfileScorecard),
@@ -345,25 +341,6 @@ export default async function ModulePage(
       return (
         <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
           <DealStageFunnel stages={stages} />
-          <div className="border-t border-line pt-8">
-            <ModuleView hub={params.hub} module={params.module} />
-          </div>
-        </div>
-      );
-    }
-
-    // Execute › Reporting — ForgeGlobal shareholder comms with static seed templates.
-    if (params.hub === "execute" && params.module === "reporting") {
-      const templates: CommTemplate[] = [
-        { id: "q1", title: "Q1 Investor Update", type: "quarterly_update", lastSentDate: null, recipientCount: null, status: "draft" },
-        { id: "q2", title: "Q2 Investor Update", type: "quarterly_update", lastSentDate: null, recipientCount: null, status: "draft" },
-        { id: "cc1", title: "Capital Call Notice", type: "capital_call", lastSentDate: null, recipientCount: null, status: "draft" },
-        { id: "ar1", title: "Annual Report", type: "annual_report", lastSentDate: null, recipientCount: null, status: "draft" },
-        { id: "dn1", title: "Distribution Notice", type: "distribution_notice", lastSentDate: null, recipientCount: null, status: "draft" },
-      ];
-      return (
-        <div className="mx-auto max-w-5xl px-4 py-6 flex flex-col gap-8">
-          <ShareholderComms templates={templates} />
           <div className="border-t border-line pt-8">
             <ModuleView hub={params.hub} module={params.module} />
           </div>

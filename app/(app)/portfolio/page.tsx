@@ -36,14 +36,15 @@ export default async function PortfolioPage() {
       .order("created_at", { ascending: true }),
   ]);
 
-  // Map documents into Contract shape for ContractStatusBoard
+  // Map documents into Contract shape for ContractStatusBoard. A document row is
+  // not proof of signature; envelope status will upgrade this when wired.
   const contracts = (docsRes.data ?? []).map((d) => ({
     id: d.id,
     title: d.name ?? "Untitled Document",
     documentType: (d.doc_type ?? "other") as DocumentType,
-    status: "signed" as ContractStatus,
+    status: "draft" as ContractStatus,
     expiryDate: null,
-    signedAt: d.created_at,
+    signedAt: null,
     effectiveDate: d.created_at,
   }));
 

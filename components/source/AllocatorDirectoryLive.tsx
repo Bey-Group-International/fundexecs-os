@@ -183,9 +183,9 @@ async function loadAllocatorEntries() {
         ticketMax: inv.typical_check_max ?? null,
         primaryStrategies: enr.primaryStrategies,
         geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
-        // TODO: map from investors.accreditation_status once column exists
-        accreditationStatus: "verified" as AccreditationStatus,
-        kycStatus: "verified" as const,
+        // TODO: map from investors.accreditation_status / kyc_status once columns exist.
+        accreditationStatus: "unknown" as AccreditationStatus,
+        kycStatus: "not_started" as const,
         hqCity: enr.hqCity,
         // jurisdiction is legal domicile (e.g. "Delaware"), not HQ country — omit as fallback
         hqCountry: enr.hqCountry,

@@ -347,8 +347,8 @@ export default async function SettingsPage() {
               <a href="mailto:support@fundexecs.com" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Contact support" hint="support@fundexecs.com" external />
               </a>
-              <Link href="/" className="fx-card fx-card-hover group p-4">
-                <RowLink label="Documentation & guides" hint="Learn how each hub works" />
+              <Link href="/earn" className="fx-card fx-card-hover group p-4">
+                <RowLink label="Earn guide" hint="Learn how Earn routes work across hubs" />
               </Link>
             </div>
           </Section>

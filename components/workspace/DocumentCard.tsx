@@ -34,7 +34,7 @@ export function DocumentCard({ doc }: { doc: WorkspaceDoc }) {
 
   return (
     <Link
-      href={`/workspace/${doc.id}`}
+      href={`/document/${doc.id}`}
       className="group flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/30 hover:bg-surface-2/30"
     >
       <div className="flex items-start justify-between gap-2">
@@ -78,6 +78,14 @@ export function WorkspaceDocumentList({ docs }: { docs: WorkspaceDoc[] }) {
         <p className="mt-1 text-xs text-fg-secondary">
           Start from a template or create a blank note.
         </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Link href="/build/data_room" className="fx-btn-primary">
+            Open Data Room
+          </Link>
+          <Link href="/workspace" className="fx-btn-secondary">
+            Ask Earn
+          </Link>
+        </div>
       </div>
     );
   }
