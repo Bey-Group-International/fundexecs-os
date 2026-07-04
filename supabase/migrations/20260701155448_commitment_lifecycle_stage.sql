@@ -19,9 +19,9 @@ ALTER TABLE commitments
   ADD COLUMN IF NOT EXISTS notes           text;
 
 do $$ begin
-  COMMENT ON COLUMN commitments.lifecycle_stage IS 'Soft-circle → verbal → signed → funded → closed;
+  COMMENT ON COLUMN commitments.lifecycle_stage IS 'Soft-circle → verbal → signed → funded → closed; withdrawn at any pre-funded stage.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; withdrawn at any pre-funded stage.';
+exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
   COMMENT ON COLUMN commitments.notes          IS 'Free-text notes on this commitment (LP call summary, conditions, etc).';
 -- tolerated on fresh DBs where the regular sequence built a different shape

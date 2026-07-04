@@ -68,9 +68,9 @@ CREATE POLICY "org_members_pipeline_stages" ON pipeline_stages
 
 ALTER TABLE deals ADD COLUMN IF NOT EXISTS pipeline_stage_id uuid REFERENCES pipeline_stages(id) ON DELETE SET NULL;
 do $$ begin
-  COMMENT ON COLUMN deals.pipeline_stage_id IS 'Current pipeline stage for this deal;
+  COMMENT ON COLUMN deals.pipeline_stage_id IS 'Current pipeline stage for this deal; NULL means unassigned.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; NULL means unassigned.';
+exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
   CREATE INDEX IF NOT EXISTS deals_pipeline_stage_id_idx ON deals(pipeline_stage_id);
 -- tolerated on fresh DBs where the regular sequence built a different shape

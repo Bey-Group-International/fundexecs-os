@@ -30,9 +30,9 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
-  COMMENT ON COLUMN annotations.parent_id IS 'Non-null for threaded replies;
+  COMMENT ON COLUMN annotations.parent_id IS 'Non-null for threaded replies; references root annotation.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; references root annotation.';
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE annotations ENABLE ROW LEVEL SECURITY;
 

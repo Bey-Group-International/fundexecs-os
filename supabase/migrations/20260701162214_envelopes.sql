@@ -64,9 +64,9 @@ CREATE TABLE IF NOT EXISTS envelope_recipients (
 );
 
 do $$ begin
-  COMMENT ON TABLE envelope_recipients IS 'Signers for an envelope;
+  COMMENT ON TABLE envelope_recipients IS 'Signers for an envelope; each issued a unique public signing token.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; each issued a unique public signing token.';
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE envelope_recipients ENABLE ROW LEVEL SECURITY;
 

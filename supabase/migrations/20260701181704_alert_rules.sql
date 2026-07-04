@@ -33,9 +33,9 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
-  COMMENT ON COLUMN alert_rules.threshold_value IS 'Value to compare against;
+  COMMENT ON COLUMN alert_rules.threshold_value IS 'Value to compare against; null for "changed" operator.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; null for "changed" operator.';
+exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
   COMMENT ON COLUMN alert_rules.channel IS '{slack: bool, email: bool, in_app: bool} delivery channels.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
@@ -85,9 +85,9 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
-  COMMENT ON COLUMN alert_events.acknowledged_at IS 'When an operator dismissed this alert;
+  COMMENT ON COLUMN alert_events.acknowledged_at IS 'When an operator dismissed this alert; null = unacknowledged.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; null = unacknowledged.';
+exception when undefined_column or undefined_table then null; end $$;
 
 ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
 

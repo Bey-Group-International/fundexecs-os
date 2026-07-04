@@ -63,9 +63,9 @@ do $$ begin
 -- tolerated on fresh DBs where the regular sequence built a different shape
 exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
-  COMMENT ON COLUMN sequence_enrollments.next_step_at IS 'When the next step should be dispatched;
+  COMMENT ON COLUMN sequence_enrollments.next_step_at IS 'When the next step should be dispatched; checked by cron sweep.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
-exception when undefined_column or undefined_table then null; end $$; checked by cron sweep.';
+exception when undefined_column or undefined_table then null; end $$;
 do $$ begin
   COMMENT ON COLUMN sequence_enrollments.stopped_reason IS 'Why the sequence was stopped: reply_received | manual | completed.';
 -- tolerated on fresh DBs where the regular sequence built a different shape
