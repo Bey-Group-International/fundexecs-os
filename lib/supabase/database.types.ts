@@ -2466,6 +2466,18 @@ export type Database = {
         };
         Returns: number;
       };
+      // Atomically check grace-buffer runway, debit AI spend, and append the
+      // ledger row in one transaction (migration 20260704022000). Returns
+      // { ok, insufficient, balance }.
+      spend_org_credits: {
+        Args: {
+          p_org: string;
+          p_amount: number;
+          p_grace?: number;
+          p_note?: string | null;
+        };
+        Returns: Json;
+      };
       // Atomically credit an org's wallet (creating it if absent), clamped at 0
       // (migration 0039). Returns the new balance.
       increment_org_credits: {

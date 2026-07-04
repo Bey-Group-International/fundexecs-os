@@ -32,9 +32,11 @@ export async function submitAccreditationAction(
   try {
     const ctx = await getValidSession(token);
     if (!ctx) return { error: "Invalid or expired link" };
-    if (ctx.session.status !== "pending") return { error: "Already completed" };
+    if (ctx.session.status !== "pending") {
+      return { error: "Complete the previous step first or refresh this onboarding link." };
+    }
 
-    await ctx.supabase
+    const { error } = await ctx.supabase
       .from("lp_onboarding_sessions")
       .update({
         accreditation_type: accreditationType,
@@ -42,6 +44,7 @@ export async function submitAccreditationAction(
         status: "accreditation",
       })
       .eq("id", ctx.session.id);
+    if (error) return { error: error.message };
 
     revalidatePath(`/lp/${token}`);
     return { ok: true };
@@ -58,13 +61,14 @@ export async function signSubscriptionAction(
     if (!ctx) return { error: "Invalid or expired link" };
     if (ctx.session.status !== "accreditation") return { error: "Not at subscription step" };
 
-    await ctx.supabase
+    const { error } = await ctx.supabase
       .from("lp_onboarding_sessions")
       .update({
         subscription_signed_at: new Date().toISOString(),
         status: "subscription",
       })
       .eq("id", ctx.session.id);
+    if (error) return { error: error.message };
 
     revalidatePath(`/lp/${token}`);
     return { ok: true };
@@ -81,10 +85,11 @@ export async function confirmCapitalCommitmentAction(
     if (!ctx) return { error: "Invalid or expired link" };
     if (ctx.session.status !== "subscription") return { error: "Not at commitment step" };
 
-    await ctx.supabase
+    const { error } = await ctx.supabase
       .from("lp_onboarding_sessions")
       .update({ status: "committed" })
       .eq("id", ctx.session.id);
+    if (error) return { error: error.message };
 
     revalidatePath(`/lp/${token}`);
     return { ok: true };

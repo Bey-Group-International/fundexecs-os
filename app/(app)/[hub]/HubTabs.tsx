@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { HubModule } from "@/lib/hubs";
+import { navHrefActive } from "@/lib/nav-active";
 
 type ModuleStatus = "empty" | "started" | "complete";
 
@@ -33,7 +34,7 @@ export function HubTabs({
     <div className="mb-6 flex gap-0.5 overflow-x-auto border-b border-line">
       {modules.map((m) => {
         const href = `/${hubKey}/${m.key}`;
-        const active = pathname === href;
+        const active = navHrefActive(pathname, href);
         const status = statuses?.[m.key];
         return (
           <Link

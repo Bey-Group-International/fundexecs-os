@@ -33,7 +33,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 ### What has been designed
 
 - ✅ Full database schema (PostgreSQL / Supabase)
-- ✅ API contract layer (REST + GraphQL)
+- ✅ API contract layer (native REST)
 - ✅ WebSocket event stream architecture
 - ✅ Six AI agent definitions and capability specs
 - ✅ Four hub architecture (Build · Source · Run · Execute)
@@ -51,7 +51,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ Six-agent catalog seeded; hub/agent/event catalogs in `lib/`
 - ✅ Typed data layer (`lib/supabase/`) — browser, server, and service clients
 - ✅ Auth (email/password + Google OAuth via `/auth/callback`) + middleware session refresh + org onboarding
-- ✅ API layer: `/prompt`, `/task`, `/handoff`, `/approve`, `/report`, `/agents`
+- ✅ API layer: `/api/prompt`, `/api/task`, `/api/approve`, `/api/report`, `/api/agents`
 - ✅ Task engine (`lib/engine.ts`) — mock agent execution driving the full loop
 - ✅ Realtime over `task_events` (the WebSocket event gateway) — live workspace feed
 - ✅ Build › Profile hub module
@@ -106,7 +106,7 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 
 - ❌ Import external SDKs for core intelligence — all AI agents, graphs, and workflows run natively
 - ❌ Build UI before the data model is stable
-- ❌ Skip the task engine — every user action flows through `/prompt → /task → /handoff → /approve`
+- ❌ Skip the task engine — every user action flows through `/api/prompt → /api/task → internal handoff packet → /api/approve`
 - ❌ Treat this as a CRUD app — it is an event-driven, agent-orchestrated operating system
 - ❌ Overwrite this file without appending a changelog entry at the bottom
 
@@ -202,13 +202,13 @@ Capital Graph       →  lower hemisphere — LPs, lenders, family offices, bank
 User prompt
   → Intent parser
   → Hub router
-  → Task engine (/task POST)
+  → Task engine (/api/task)
   → Agent assignment
   → Agent execution
-  → Handoff events (/handoff POST)
-  → Approval request (/approve)
+  → Internal handoff packet
+  → Approval request (/api/approve)
   → User response
-  → Report generation (/report GET)
+  → Report generation (/api/report)
   → Graph update
   → Loop
 ```
@@ -217,7 +217,7 @@ User prompt
 
 ```
 Frontend      →  Next.js · React · Tailwind CSS · Three.js · GSAP
-Backend       →  Node.js · Python · GraphQL · Event-driven task engine
+Backend       →  Node.js · Python · Native REST · Event-driven task engine
 Database      →  PostgreSQL · Supabase · Redis
 Storage       →  S3
 Infrastructure →  Vercel · Cloudflare · AWS · GitHub Actions
@@ -244,7 +244,7 @@ Always build in this sequence:
 
 ```
 1. Data model first — schema, migrations, RLS policies
-2. API layer second — endpoints, GraphQL resolvers, auth
+2. API layer second — endpoints, route handlers, auth
 3. Agent logic third — task engine, handoff protocol, approval loop
 4. WebSocket layer fourth — event emitters, client listeners
 5. Frontend last — components, workspace, avatar animations
@@ -363,13 +363,14 @@ Deployed, monitoring               →  live, observability active
              |  six-agent seed; typed lib/ data layer + hub/agent/event catalogs; static
              |  architecture landing page.
              |  Confidence: Scaffolded, not yet functional.
-             |  Next: deploy schema to a Supabase project, then build the /prompt → /task →
-             |  /handoff → /approve API loop with mock agents and Realtime task.* events.
+             |  Next: deploy schema to a Supabase project, then build the /api/prompt →
+             |  /api/task → internal handoff → /api/approve loop with mock agents and
+             |  Realtime task.* events.
 
 2026-06-18  |  Task-engine loop  |  Built the full sacred loop end-to-end (mock agents).
              |  Decisions (per founder): full task-engine increment; stay migrations/preview-only.
              |  Added: email/password auth + middleware session refresh + org onboarding;
-             |  API routes /prompt /task /handoff /approve /report /agents; lib/engine.ts
+             |  API routes /api/prompt /api/task /api/approve /api/report /api/agents; lib/engine.ts
              |  (keyword intent routing + mock execution + approval resolution); Realtime
              |  over task_events (migration 0012) feeding a live workspace; Build › Profile module.
              |  Notable fix: hand-written Database Row types were `interface`s, which are NOT

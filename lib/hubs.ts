@@ -17,6 +17,8 @@ export interface HubDefinition {
   approvalGated?: boolean;
 }
 
+export const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
+
 export const HUBS: HubDefinition[] = [
   {
     key: "build",
@@ -45,6 +47,7 @@ export const HUBS: HubDefinition[] = [
       { key: "partners", label: "Partners" },
       { key: "providers", label: "Providers" },
       { key: "deal_pipeline", label: "Deal Pipeline" },
+      { key: "outreach", label: "Outreach" },
     ],
   },
   {

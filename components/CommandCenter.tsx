@@ -52,10 +52,10 @@ async function RecentMeetingsCard() {
   );
 
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
-      <h2 className="text-sm font-semibold text-[var(--fg-1)] mb-3">Recent Meetings</h2>
+    <div className="rounded-xl border border-line bg-surface-1 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-fg-primary">Recent Meetings</h2>
       {meetingsWithReports.length === 0 ? (
-        <p className="text-xs text-[var(--fg-muted)] py-4 text-center">No meetings yet</p>
+        <p className="py-4 text-center text-xs text-fg-muted">No meetings yet</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {meetingsWithReports.map((meeting) => {
@@ -71,13 +71,13 @@ async function RecentMeetingsCard() {
               <li key={meeting.id}>
                 <Link
                   href={`/meetings/${meeting.room_code}/report`}
-                  className="flex flex-col gap-1 rounded-lg p-2 -mx-2 hover:bg-[var(--surface-2)] transition-colors"
+                  className="-mx-2 flex flex-col gap-1 rounded-lg p-2 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-[var(--fg-1)] truncate">
+                    <span className="truncate text-sm font-medium text-fg-primary">
                       {meeting.title ?? "Untitled Meeting"}
                     </span>
-                    <span className="text-xs text-[var(--fg-muted)] shrink-0">
+                    <span className="shrink-0 text-xs text-fg-muted">
                       {formatMeetingDate(meeting.created_at)}
                     </span>
                   </div>
@@ -86,9 +86,9 @@ async function RecentMeetingsCard() {
                       {keyPoints.slice(0, 2).map((point, i) => (
                         <li
                           key={i}
-                          className="text-xs text-[var(--fg-muted)] flex gap-1.5 items-start"
+                          className="flex items-start gap-1.5 text-xs text-fg-muted"
                         >
-                          <span className="mt-1.5 w-1 h-1 rounded-full bg-[var(--fg-muted)] shrink-0" />
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-fg-muted" />
                           <span className="line-clamp-1">{String(point)}</span>
                         </li>
                       ))}
@@ -96,7 +96,7 @@ async function RecentMeetingsCard() {
                   )}
                   {actionCount > 0 && (
                     <div className="mt-1">
-                      <span className="inline-flex items-center rounded-full bg-[var(--surface-2)] border border-[var(--line)] px-2 py-0.5 text-xs text-[var(--fg-muted)]">
+                      <span className="inline-flex items-center rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
                         {actionCount} {actionCount === 1 ? "action" : "actions"}
                       </span>
                     </div>
@@ -145,7 +145,7 @@ async function CommandCenterContent() {
 
     if (insights.length === 0 && nbaItems.length === 0) {
       return (
-        <div className="text-fg-muted text-sm text-center py-8">
+        <div className="rounded-xl border border-dashed border-line bg-surface-1/60 px-6 py-8 text-center text-sm text-fg-muted">
           No insights or actions at this time. Check back after syncing your relationships.
         </div>
       );
@@ -156,7 +156,7 @@ async function CommandCenterContent() {
         {insights.length > 0 && <IntelligenceStrip insights={insights} />}
         <Suspense
           fallback={
-            <div className="h-32 rounded-xl bg-[var(--surface-1)] animate-pulse" />
+            <div className="h-32 rounded-xl bg-surface-1 motion-safe:animate-pulse" />
           }
         >
           <RecentMeetingsCard />
@@ -169,7 +169,7 @@ async function CommandCenterContent() {
   } catch (err) {
     console.error("[CommandCenter] failed to build insights/NBA:", err);
     return (
-      <div className="text-fg-muted text-sm text-center py-8">
+      <div className="rounded-xl border border-dashed border-line bg-surface-1/60 px-6 py-8 text-center text-sm text-fg-muted">
         No insights or actions at this time. Check back after syncing your relationships.
       </div>
     );

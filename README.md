@@ -63,7 +63,7 @@ semantic states, and centralized logo usage.
 
 **What exists today:**
 - ✅ Full database schema (PostgreSQL / Supabase)
-- ✅ API contract layer (REST + GraphQL)
+- ✅ API contract layer (native REST)
 - ✅ WebSocket event stream architecture
 - ✅ Agent definitions and capability specs
 - ✅ UI component library spec
@@ -78,7 +78,7 @@ semantic states, and centralized logo usage.
 
 **What is being built next:**
 - 🔧 Deploy schema to a live Supabase project
-- 🔧 Backend API services — the `/prompt → /task → /handoff → /approve` loop
+- 🔧 Backend API services — the `/prompt → /task → internal handoff → /approve` loop
 - 🔧 AI agent engine (Analyst, Associate, IR, Portfolio Ops, Diligence, Fund Admin)
 - 🔧 WebSocket event gateway (Realtime over `task_events`)
 - 🔧 Animated 3D workspace (Three.js + GSAP)
@@ -126,7 +126,7 @@ All graphs are **native, first-party data structures** — no external dependenc
 |     Layer      |                          Technology                           |
 |----------------|---------------------------------------------------------------|
 | Frontend       | Next.js · React · Tailwind CSS · Three.js · GSAP              |
-| Backend        | Node.js · Python · GraphQL · Event-driven task engine         |
+| Backend        | Node.js · Python · Native REST · Event-driven task engine      |
 | Database       | PostgreSQL · Supabase · Redis                                 |
 | Storage        | S3 for documents                                              |
 | Infrastructure | Vercel · Cloudflare · AWS · GitHub Actions                    |
@@ -154,19 +154,19 @@ security.
 
 ## API Contract
 
-All endpoints are native REST + GraphQL. No external SDKs.
+All endpoints are native REST. No external SDKs.
 
 |       Endpoint        | Method |                  Description                   |
 |-----------------------|--------|------------------------------------------------|
-| `/prompt`             | POST   | Accepts user prompt; routes to hub and agent   |
-| `/task`               | POST   | Creates task; assigns to agent; returns status |
-| `/handoff`            | POST   | Transfers task between agents                  |
-| `/approve`            | POST   | Captures user approval; triggers automation    |
-| `/report`             | GET    | Retrieves task output and analytics            |
-| `/agents`             | GET    | Lists active agents and workloads              |
-| `/graph/relationship` | GET    | Returns relationship graph                     |
-| `/graph/deal`         | GET    | Returns deal graph                             |
-| `/graph/capital`      | GET    | Returns capital graph                          |
+| `/api/prompt`             | POST   | Accepts user prompt; routes to hub and agent   |
+| `/api/task`               | GET    | Lists workflows and status                     |
+| Internal handoff packet   | —      | Transfers structured context between agents    |
+| `/api/approve`            | POST   | Captures user approval; triggers automation    |
+| `/api/report`             | GET    | Retrieves task output and analytics            |
+| `/api/agents`             | GET    | Lists active agents and workloads              |
+| `/api/graph/relationship` | GET    | Returns relationship graph                     |
+| `/api/graph/deal`         | GET    | Returns deal graph                             |
+| `/api/graph/capital`      | GET    | Returns capital graph                          |
 
 Full API spec available in [`/docs/api-contract.md`](./docs/api-contract.md)
 

@@ -8,6 +8,8 @@ import { sanitizeMandateActions } from "@/lib/mandate-options";
 import { matchNewOrgAndNotify } from "@/lib/ecosystem-match.server";
 import { claimReferralCode } from "@/lib/gift-earn";
 import { grantTrialCreditsIfEligible } from "@/lib/trial";
+import { HUB_BY_KEY } from "@/lib/hubs";
+import type { Hub } from "@/lib/supabase/database.types";
 
 // Updates the authenticated principal's personal profile fields collected in the
 // first onboarding step. Returns a result object so the wizard can stay on the
@@ -54,12 +56,21 @@ function slugify(name: string): string {
 // try/catch.
 export async function createOrganization(
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; redirectTo?: string }> {
   const ctx = await getSessionContext();
   if (!ctx) return { error: "Not authenticated" };
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Organization name is required" };
+
+  const operatorRole = optionalAllowed(formData, "role", ["gp", "family_office", "advisory", "operator"] as const);
+  const aumRange = optionalAllowed(formData, "aum_range", ["sub_25m", "25m_100m", "100m_500m", "500m_1b", "over_1b"] as const);
+  const primaryStrategy = optionalAllowed(formData, "strategy", ["real_estate", "private_equity", "credit", "multi"] as const);
+  const firstHub = optionalAllowed(formData, "first_hub", ["build", "source", "run", "execute"] as const);
+  const rawFundCount = Number(formData.get("fund_count"));
+  const fundCount = Number.isFinite(rawFundCount) && rawFundCount >= 0
+    ? Math.trunc(rawFundCount)
+    : null;
 
   const supabase = createServerClient();
   const orgId = randomUUID();
@@ -73,11 +84,11 @@ export async function createOrganization(
       slug,
       entity_type: String(formData.get("entity_type") ?? "") || null,
       hq_location: String(formData.get("hq_location") ?? "") || null,
-      operator_role: String(formData.get("role") ?? "") || null,
-      aum_range: String(formData.get("aum_range") ?? "") || null,
-      fund_count: Number(formData.get("fund_count")) || null,
-      primary_strategy: String(formData.get("strategy") ?? "") || null,
-      first_hub: String(formData.get("first_hub") ?? "") || null,
+      operator_role: operatorRole,
+      aum_range: aumRange,
+      fund_count: fundCount,
+      primary_strategy: primaryStrategy,
+      first_hub: firstHub,
       created_by: ctx.userId,
     });
 
@@ -87,8 +98,9 @@ export async function createOrganization(
   // The org is brand-new, so there's never a prior active row to update — we
   // insert one. We mirror the settings editor's invariants: auto_approve is
   // sanitized down to valid Tier-2 kinds, and the ceiling is clamped to 1–2
-  // (Tier 3 is never delegable). A non-blocking failure here must not strand the
-  // operator outside their freshly created org, so we ignore the mandate error.
+  // (Tier 3 is never delegable). If this fails, the onboarding is incomplete:
+  // the org exists, but the delegation posture did not persist and must be fixed
+  // before the user enters an automation-first workspace.
   const autoApprove = sanitizeMandateActions(
     formData.getAll("auto_approve").map((v) => String(v)),
   );
@@ -97,7 +109,7 @@ export async function createOrganization(
     ? Math.min(2, Math.max(1, Math.trunc(rawCeiling)))
     : 1;
 
-  await supabase.from("mandates").insert({
+  const { error: mandateError } = await supabase.from("mandates").insert({
     organization_id: orgId,
     name: STANDING_MANDATE_NAME,
     auto_approve: autoApprove,
@@ -105,6 +117,9 @@ export async function createOrganization(
     is_active: true,
     created_by: ctx.userId,
   });
+  if (mandateError) {
+    return { error: `Organization created, but mandate could not be saved: ${mandateError.message}` };
+  }
 
   // Welcome trial credits. The auth-callback grant only reaches principals who
   // already had an org when they verified; a brand-new signup gets theirs here,
@@ -140,5 +155,20 @@ export async function createOrganization(
     // ignore
   }
 
-  return {};
+  return { redirectTo: firstHubRedirect(firstHub) };
+}
+
+function optionalAllowed<T extends readonly string[]>(
+  formData: FormData,
+  key: string,
+  allowed: T,
+): T[number] | null {
+  const value = String(formData.get(key) ?? "").trim();
+  return (allowed as readonly string[]).includes(value) ? (value as T[number]) : null;
+}
+
+function firstHubRedirect(firstHub: Hub | null): string {
+  if (!firstHub) return "/workspace";
+  const moduleKey = HUB_BY_KEY[firstHub]?.modules[0]?.key;
+  return moduleKey ? `/${firstHub}/${moduleKey}` : "/workspace";
 }

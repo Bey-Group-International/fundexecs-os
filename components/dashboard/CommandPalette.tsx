@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { HUBS } from "@/lib/hubs";
 
 const BASE_COMMANDS = [
   // Navigation
@@ -12,23 +13,8 @@ const BASE_COMMANDS = [
   { label: "Automated Sessions", href: "/automations", hint: "Workflow automation", group: "nav" },
   { label: "Inbox", href: "/inbox", hint: "Unified messages", group: "nav" },
   { label: "Search", href: "/search", hint: "Full-text search", group: "nav" },
-  // Build Hub
-  { label: "Build: Profile", href: "/build/profile", hint: "Org profile", group: "build" },
-  { label: "Build: Track Record", href: "/build/track-record", hint: "Historical performance", group: "build" },
-  { label: "Build: Materials", href: "/build/materials", hint: "Investor materials", group: "build" },
-  // Source Hub
-  { label: "Source: Deal Pipeline", href: "/source/pipeline", hint: "Live deal funnel", group: "source" },
   { label: "Source: Capital Map", href: "/capital-map", hint: "Relationship intelligence", group: "source" },
-  { label: "Source: Allocator Directory", href: "/source/allocators", hint: "LP directory", group: "source" },
-  { label: "Source: Outreach Studio", href: "/source/outreach", hint: "Prospecting workflow", group: "source" },
-  // Run Hub
-  { label: "Run: Deal War Room", href: "/run/deal", hint: "Deal evaluation", group: "run" },
-  { label: "Run: Underwriting", href: "/run/underwriting", hint: "LBO model engine", group: "run" },
-  { label: "Run: Diligence", href: "/run/diligence", hint: "Diligence workbench", group: "run" },
-  // Execute Hub
-  { label: "Execute: Cap Table", href: "/execute/cap-table", hint: "Equity tracking", group: "execute" },
-  { label: "Execute: Portfolio", href: "/execute/portfolio", hint: "Portfolio health", group: "execute" },
-  { label: "Execute: Closing", href: "/execute/closing", hint: "Closing checklist", group: "execute" },
+  { label: "Portfolio", href: "/portfolio", hint: "Portfolio health", group: "execute" },
   // Settings
   { label: "Settings", href: "/settings", hint: "Account & org", group: "settings" },
   { label: "Integrations", href: "/settings/integrations", hint: "Connect tools", group: "settings" },
@@ -40,6 +26,14 @@ export function CommandPalette() {
   const commands = useMemo(
     () => [
       ...BASE_COMMANDS,
+      ...HUBS.flatMap((hub) =>
+        hub.modules.map((module) => ({
+          label: `${hub.label}: ${module.label}`,
+          href: `/${hub.key}/${module.key}`,
+          hint: hub.purpose,
+          group: hub.key,
+        })),
+      ),
       ...dashboardWorkspaces.map((workspace) => ({
         label: workspace.title,
         href: workspace.href,
