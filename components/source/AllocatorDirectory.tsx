@@ -4,6 +4,7 @@
 // Allocator Intelligence Directory — searchable, filterable LP list with
 // relationship tracking (last contact, next action, pipeline stage).
 import { useState, useMemo, useTransition } from "react";
+import Link from "next/link";
 import {
   ALLOCATOR_TYPE_LABELS,
   ACCREDITATION_LABELS,
@@ -532,8 +533,36 @@ export function AllocatorDirectory({ entries, funds }: Props) {
           <span className="hidden w-44 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
         </div>
         {filtered.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">No allocators match your filters</p>
+          <div className="px-4 py-10 text-center">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+              {entries.length === 0 ? "No allocators yet" : "No allocators match your filters"}
+            </p>
+            {entries.length === 0 ? (
+              <>
+                <p className="mx-auto mt-2 max-w-sm text-sm text-fg-secondary">
+                  Import LPs or ask Earn for a target list to populate allocator
+                  intelligence, compliance status, and warm-intro paths.
+                </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Link href="/source/lp_pipeline" className="fx-btn-primary">
+                    Open LP Pipeline
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent("earn:open-with-context", {
+                          detail: { prompt: "Build a first allocator target list for my mandate." },
+                        }),
+                      )
+                    }
+                    className="fx-btn-secondary"
+                  >
+                    Ask Earn
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : (
           filtered.map((entry) => <AllocatorRow key={entry.id} entry={entry} funds={funds} cols={cols} />)
