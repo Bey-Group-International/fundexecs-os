@@ -126,7 +126,7 @@ All graphs are **native, first-party data structures** — no external dependenc
 |     Layer      |                          Technology                           |
 |----------------|---------------------------------------------------------------|
 | Frontend       | Next.js · React · Tailwind CSS · Three.js · GSAP              |
-| Backend        | Node.js · Python · Native REST · Event-driven task engine      |
+| Backend        | Node.js · Python · Native REST · Event-driven task engine     |
 | Database       | PostgreSQL · Supabase · Redis                                 |
 | Storage        | S3 for documents                                              |
 | Infrastructure | Vercel · Cloudflare · AWS · GitHub Actions                    |
@@ -156,17 +156,17 @@ security.
 
 All endpoints are native REST. No external SDKs.
 
-|       Endpoint        | Method |                  Description                   |
-|-----------------------|--------|------------------------------------------------|
-| `/api/prompt`             | POST   | Accepts user prompt; routes to hub and agent   |
-| `/api/task`               | GET    | Lists workflows and status                     |
-| Internal handoff packet   | —      | Transfers structured context between agents    |
-| `/api/approve`            | POST   | Captures user approval; triggers automation    |
-| `/api/report`             | GET    | Retrieves task output and analytics            |
-| `/api/agents`             | GET    | Lists active agents and workloads              |
-| `/api/graph/relationship` | GET    | Returns relationship graph                     |
-| `/api/graph/deal`         | GET    | Returns deal graph                             |
-| `/api/graph/capital`      | GET    | Returns capital graph                          |
+|         Endpoint          | Method |                 Description                  |
+|---------------------------|--------|----------------------------------------------|
+| `/api/prompt`             | POST   | Accepts user prompt; routes to hub and agent |
+| `/api/task`               | GET    | Lists workflows and status                   |
+| Internal handoff packet   | —      | Transfers structured context between agents  |
+| `/api/approve`            | POST   | Captures user approval; triggers automation  |
+| `/api/report`             | GET    | Retrieves task output and analytics          |
+| `/api/agents`             | GET    | Lists active agents and workloads            |
+| `/api/graph/relationship` | GET    | Returns relationship graph                   |
+| `/api/graph/deal`         | GET    | Returns deal graph                           |
+| `/api/graph/capital`      | GET    | Returns capital graph                        |
 
 Full API spec available in [`/docs/api-contract.md`](./docs/api-contract.md)
 
