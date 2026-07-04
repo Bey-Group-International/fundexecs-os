@@ -21,6 +21,7 @@ import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable } from "./actions";
 import { UserProfileForm } from "./UserProfileForm";
+import { canAdminOrg } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "integrations", label: "Integrations" },
   { id: "digest", label: "Digest" },
   { id: "api", label: "API keys" },
+  { id: "audit", label: "Audit export" },
   { id: "shortcuts", label: "Shortcuts" },
   { id: "help", label: "Help" },
   { id: "about", label: "About" },
@@ -323,6 +325,34 @@ export default async function SettingsPage() {
             description="Issue FundExecs-native credentials to call the FundExecs OS API. Each key is a publishable/secret pair: the publishable key is safe to embed, the secret authenticates server-to-server (send it as an Authorization: Bearer header). The secret is shown once at creation — store it safely, and rotate or revoke any time."
           >
             <ApiKeys keys={apiKeys} />
+          </Section>
+
+          <Section
+            id="audit"
+            eyebrow="Evidence"
+            title="Audit export"
+            description="Download recent append-only audit rows for approvals, integrations, API keys, and other controlled actions. Owner/admin only."
+          >
+            <div className="fx-card p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-fg-primary">Audit evidence bundle</p>
+                  <p className="mt-1 text-xs leading-snug text-fg-secondary">
+                    CSV export of up to 5,000 recent organization audit events, scoped by
+                    organization and admin role.
+                  </p>
+                </div>
+                {canAdminOrg(ctx.role) ? (
+                  <a href="/api/audit/export" className="fx-btn-primary shrink-0">
+                    Download CSV
+                  </a>
+                ) : (
+                  <span className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-muted">
+                    Owner/admin required
+                  </span>
+                )}
+              </div>
+            </div>
           </Section>
 
           {/* Shortcuts & Customization */}
