@@ -153,17 +153,25 @@ async function CommandCenterContent() {
 
     return (
       <div className="flex flex-col gap-6">
+        {/* Full-width signal strip across the top of mission control. */}
         {insights.length > 0 && <IntelligenceStrip insights={insights} />}
-        <Suspense
-          fallback={
-            <div className="h-32 rounded-xl bg-surface-1 motion-safe:animate-pulse" />
-          }
-        >
-          <RecentMeetingsCard />
-        </Suspense>
-        <section>
-          <NextBestAction items={nbaItems} />
-        </section>
+
+        {/* Two-column operations grid: next-best actions lead, recent
+            meetings ride alongside as a side rail. Stacks on small screens. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+          <section className="lg:col-span-2" aria-label="Next best actions">
+            <NextBestAction items={nbaItems} />
+          </section>
+          <aside className="lg:col-span-1" aria-label="Recent meetings">
+            <Suspense
+              fallback={
+                <div className="h-32 rounded-xl bg-surface-1 motion-safe:animate-pulse" />
+              }
+            >
+              <RecentMeetingsCard />
+            </Suspense>
+          </aside>
+        </div>
       </div>
     );
   } catch (err) {
