@@ -53,7 +53,8 @@ export type SceneCommand =
   | { type: "npc-goto"; agentId: AgentId; roomKey: RoomKey }
   | { type: "npc-state"; agentId: AgentId; state: AgentState; label: string }
   | { type: "room-activity"; roomKey: RoomKey; active: boolean; taskCount: number; tier: RiskTier | null }
-  | { type: "handoff"; toAgentId: AgentId };
+  | { type: "handoff"; toAgentId: AgentId }
+  | { type: "approval-gate"; roomKey: RoomKey; active: boolean; tier: Exclude<RiskTier, "internal"> | null; title: string };
 
 type SceneListener = (cmd: SceneCommand) => void;
 
@@ -635,6 +636,9 @@ export function createApprovalGate(workflowId: string, title: string, tier: Excl
   };
   setState({ approvals: [...state.approvals, gate] });
   addAuditEvent({ actor: "Risk & Compliance", action: `Approval required — ${gate.title}`, room: "Boardroom", tier, status: "pending" });
+  // Light the on-floor approval gate so the pending decision is unmissable
+  // in the room itself, not only in the side panel.
+  sceneBus.emit({ type: "approval-gate", roomKey: gate.roomKey, active: true, tier, title: gate.title });
   return gate;
 }
 
@@ -703,6 +707,8 @@ export async function resolveApprovalGate(gateId: string, decision: "approved" |
   }
 
   setState({ approvals: state.approvals.map((g) => (g.id === gateId ? { ...g, status: decision } : g)) });
+  // Clear the on-floor gate marker now that the decision is made.
+  sceneBus.emit({ type: "approval-gate", roomKey: gate.roomKey, active: false, tier: gate.tier, title: gate.title });
   addAuditEvent({
     actor: "You",
     action: decision === "approved"
@@ -856,6 +862,83 @@ export function interactWithAgent(agentId: AgentId) {
         ? "This action requires your approval before I can continue."
         : agent.idleLine;
   pushChat("agent_update", agent.name, line);
+}
+
+/**
+ * Request a review of an agent's owned output. Honest and visible: it posts
+ * the request and the agent's hand-back to chat and records an audit event.
+ * No-op if the agent owns nothing right now.
+ */
+export function requestAgentReview(agentId: AgentId) {
+  const rt = state.agents[agentId];
+  const agent = AGENT_BY_ID[agentId];
+  if (!rt || !agent || !rt.owns) return;
+  pushChat("user_command", "You", `Review ${agent.name}'s output — ${rt.owns}.`);
+  pushChat(
+    "agent_update",
+    agent.name,
+    `Sharing ${rt.owns} for your review — currently at ${rt.progress}%${rt.state === "complete" ? " and ready to finalize." : "."}`,
+  );
+  addAuditEvent({
+    actor: "You",
+    action: `Output review requested — ${rt.owns}`,
+    room: ROOM_BY_KEY[rt.roomKey].label,
+    tier: state.activeWorkflow?.riskTier ?? null,
+    status: "info",
+  });
+}
+
+/** Agents eligible to take over a reassignment: idle and not already on the
+ *  active workflow. Empty when there is no active workflow. */
+export function reassignmentTargets(fromAgentId: AgentId): AgentId[] {
+  const wf = state.activeWorkflow;
+  if (!wf) return [];
+  const onWorkflow = new Set(wf.assignments.map((a) => a.agentId));
+  return PROGRAM_AGENTS
+    .filter((a) => a.id !== fromAgentId && a.id !== "earn" && !onWorkflow.has(a.id) && state.agents[a.id].state === "idle")
+    .map((a) => a.id);
+}
+
+/**
+ * Reassign the deliverable owned by `fromAgentId` to `toAgentId`. A real
+ * mutation: the assignment changes hands, the outgoing agent stands down to
+ * its home room, the incoming agent moves in and picks the work up at the
+ * same progress, and the handoff animates on the floor. No-op if the source
+ * has no live assignment or the target is ineligible.
+ */
+export function reassignAgentTask(fromAgentId: AgentId, toAgentId: AgentId) {
+  const wf = state.activeWorkflow;
+  if (!wf) return;
+  const idx = wf.assignments.findIndex((a) => a.agentId === fromAgentId && !a.done);
+  if (idx < 0) return;
+  if (!reassignmentTargets(fromAgentId).includes(toAgentId)) return;
+
+  const a = wf.assignments[idx];
+  const from = AGENT_BY_ID[fromAgentId];
+  const to = AGENT_BY_ID[toAgentId];
+
+  patchWorkflow({ assignments: wf.assignments.map((x, i) => (i === idx ? { ...x, agentId: toAgentId } : x)) });
+
+  // Outgoing agent stands down to its home room.
+  patchAgent(fromAgentId, { owns: null, progress: 0, workload: 0 });
+  updateNPCState(fromAgentId, "idle", from.role);
+  moveNPCToRoom(fromAgentId, from.homeRoom);
+
+  // Incoming agent moves in and resumes at the same progress.
+  patchAgent(toAgentId, { owns: a.owns, progress: a.progress, workload: 1 });
+  updateNPCState(toAgentId, "moving", `Taking over: ${a.owns}`);
+  moveNPCToRoom(toAgentId, a.roomKey);
+  sceneBus.emit({ type: "handoff", toAgentId });
+  after(900, () => updateNPCState(toAgentId, a.done ? "complete" : "working", a.status));
+
+  pushChat("earn", "Earn", `Reassigned "${a.owns}" from ${from.name} to ${to.name}. ${to.name} is taking over now.`);
+  addAuditEvent({
+    actor: "You",
+    action: `Reassigned ${a.owns}: ${from.name} → ${to.name}`,
+    room: ROOM_BY_KEY[a.roomKey].label,
+    tier: wf.riskTier,
+    status: "info",
+  });
 }
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────

@@ -13,8 +13,9 @@ import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
 import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
-import { sceneBus, interactWithAgent, shutdownOfficeProgram } from "./program/officeProgramStore";
-import type { AgentId } from "./program/officeProgram";
+import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
+import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
+import { AgentFloorInspector } from "./program/AgentFloorInspector";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -218,6 +219,8 @@ export function VirtualOfficeGame({
   const [canvasFocused, setCanvasFocused] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string>("");
   const [isTouch, setIsTouch] = useState(false);
+  // Which executive's on-floor inspector is open (null = none).
+  const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -295,10 +298,14 @@ export function VirtualOfficeGame({
         // NPC click bridge — opens Earn AI sidebar scoped to the clicked executive
         // and records a role-specific interaction response in office chat.
         game.events.on("npc:click", (payload: NpcClickPayload) => {
+          // Clicking an executive opens the on-floor inspector (what they own,
+          // why this agent, and live actions). Ask Earn from inside the panel
+          // preserves the copilot hand-off. Non-agent NPCs fall through.
           if (payload.npcId.startsWith("agent:")) {
-            interactWithAgent(payload.npcId.slice("agent:".length) as AgentId);
+            setInspectAgentId(payload.npcId.slice("agent:".length) as AgentId);
+          } else {
+            onNpcClickRef.current?.(payload);
           }
-          onNpcClickRef.current?.(payload);
         });
 
         // Room enter bridge — updates room-specific action panel + current room state
@@ -355,6 +362,9 @@ export function VirtualOfficeGame({
               break;
             case "handoff":
               game.events.emit("program:handoff", cmd.toAgentId);
+              break;
+            case "approval-gate":
+              game.events.emit("program:approval-gate", cmd.roomKey, cmd.active, cmd.tier, cmd.title);
               break;
           }
         });
@@ -581,6 +591,18 @@ export function VirtualOfficeGame({
 
         {/* Touch D-pad — mobile only; positioned above the in-canvas minimap */}
         {isTouch && <TouchDpad onMove={emitTouchMove} />}
+
+        {/* On-floor agent inspector — opens when an executive is clicked */}
+        {inspectAgentId && (
+          <AgentFloorInspector
+            agentId={inspectAgentId}
+            onAskEarn={() => {
+              const m = AGENT_BY_ID[inspectAgentId];
+              onNpcClickRef.current?.({ npcId: `agent:${inspectAgentId}`, spriteKey: m.spriteKey, name: m.name });
+            }}
+            onClose={() => setInspectAgentId(null)}
+          />
+        )}
       </div>
           </div>
 

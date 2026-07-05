@@ -220,6 +220,10 @@ export class OfficeScene extends Phaser.Scene {
   /** 2.5D environment (extruded walls + department furniture) for cleanup. */
   private envWalls: Phaser.GameObjects.Graphics | null = null;
   private furniture: FurniturePiece[] = [];
+  /** On-floor approval-gate banner (one at a time; lives in the gate's room). */
+  private approvalGateMarker: Phaser.GameObjects.Container | null = null;
+  /** Throttle counter for the task-handoff motion trail. */
+  private _handoffTrailTick = 0;
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -378,6 +382,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("program:npc-state");
     this.game.events.off("program:room-activity");
     this.game.events.off("program:handoff");
+    this.game.events.off("program:approval-gate");
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -397,6 +402,12 @@ export class OfficeScene extends Phaser.Scene {
     this.envWalls?.destroy();
     for (const piece of this.furniture) piece.gfx.destroy();
     this.furniture = [];
+    // Tear down the approval-gate banner if one is showing.
+    if (this.approvalGateMarker) {
+      this.tweens.killTweensOf(this.approvalGateMarker);
+      this.approvalGateMarker.destroy(true);
+      this.approvalGateMarker = null;
+    }
   }
 
   // ── private helpers ─────────────────────────────────────────────────────────
@@ -967,6 +978,54 @@ export class OfficeScene extends Phaser.Scene {
       if (!from || !to) return;
       this._animateTaskHandoff(from.sprite.x, from.sprite.y - 12, to.sprite.x, to.sprite.y - 12);
     });
+
+    // On-floor approval gate — a pulsing banner in the room where the
+    // capital-binding / external-facing decision is pending.
+    this.game.events.on(
+      "program:approval-gate",
+      (roomKey: RoomKey, active: boolean, tier: Exclude<RiskTier, "internal"> | null, title: string) => {
+        this._renderApprovalGate(roomKey, active, tier, title);
+      }
+    );
+  }
+
+  /** On-floor approval-gate banner. One at a time; cleared when resolved. */
+  private _renderApprovalGate(
+    roomKey: RoomKey, active: boolean, tier: Exclude<RiskTier, "internal"> | null, _title: string,
+  ) {
+    if (this.approvalGateMarker) {
+      this.tweens.killTweensOf(this.approvalGateMarker);
+      this.approvalGateMarker.destroy(true);
+      this.approvalGateMarker = null;
+    }
+    if (!active) return;
+    const room = ROOMS.find((r) => r.key === roomKey);
+    if (!room) return;
+
+    const hex = tier ? RISK_TIERS[tier].color : "#f59e0b";
+    const color = parseInt(hex.slice(1), 16);
+    const short = tier ? RISK_TIERS[tier].short : "";
+    const cx = room.col * ROOM_W + ROOM_W / 2;
+    const cy = room.row * ROOM_H + 42;
+
+    const g = this.add.graphics();
+    const w = 152, h = 26;
+    g.fillStyle(0x0a0806, 0.92); g.fillRoundedRect(-w / 2, -h / 2, w, h, 6);
+    g.fillStyle(color, 0.14); g.fillRoundedRect(-w / 2, -h / 2, w, h, 6);
+    g.lineStyle(1.5, color, 0.9); g.strokeRoundedRect(-w / 2, -h / 2, w, h, 6);
+    const label = this.add.text(0, 0, `⚖  APPROVAL REQUIRED${short ? ` · ${short}` : ""}`, {
+      fontFamily: "'Georgia','Times New Roman',serif",
+      fontSize: "9px",
+      color: hex,
+      letterSpacing: 1,
+    }).setOrigin(0.5, 0.5);
+
+    const container = this.add.container(cx, cy, [g, label]).setDepth(DEPTH_LABEL + 0.2);
+    this.approvalGateMarker = container;
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: container, alpha: 0.55, duration: 820, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.tweens.add({ targets: container, scaleX: 1.04, scaleY: 1.04, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
   }
 
   /** Compact status text for the floor label (full text lives in the panel). */
@@ -1038,7 +1097,8 @@ export class OfficeScene extends Phaser.Scene {
     overlay.badgeBg.fillRoundedRect(bx, by, overlay.badge.width + 10, 15, 3);
   }
 
-  /** Gold task card tween — the visible delegation from Earn to an agent. */
+  /** Gold task card tween with a fading motion trail — the visible delegation
+   *  from Earn to an agent. The trail is suppressed under reduced motion. */
   private _animateTaskHandoff(fromX: number, fromY: number, toX: number, toY: number) {
     const card = this.add.graphics().setDepth(14);
     card.fillStyle(0xc9a84c, 0.95);
@@ -1046,12 +1106,26 @@ export class OfficeScene extends Phaser.Scene {
     card.lineStyle(0.5, 0x0a0806, 0.9);
     card.strokeRoundedRect(-5, -3.5, 10, 7, 1.5);
     card.setPosition(fromX, fromY);
+    const trail = !this.reducedMotion;
+    this._handoffTrailTick = 0;
     this.tweens.add({
       targets: card,
       x: toX,
       y: toY,
       duration: 620,
       ease: "Cubic.easeInOut",
+      onUpdate: trail
+        ? () => {
+            // Drop a fading gold mote every few frames along the card's path.
+            this._handoffTrailTick = (this._handoffTrailTick + 1) % 3;
+            if (this._handoffTrailTick !== 0) return;
+            const mote = this.add.circle(card.x, card.y, 2.4, 0xc9a84c, 0.7).setDepth(13);
+            this.tweens.add({
+              targets: mote, alpha: 0, scale: 0.3, duration: 360,
+              onComplete: () => mote.destroy(),
+            });
+          }
+        : undefined,
       onComplete: () => {
         this.tweens.add({
           targets: card, alpha: 0, scale: 1.6, duration: 220,
