@@ -941,6 +941,14 @@ export class OfficeScene extends Phaser.Scene {
         newFacing = dxp * dxp + dyp * dyp < OfficeScene.LOOK_RADIUS_SQ
           ? velocityToFacing(dxp, dyp)
           : ("down" as AvatarFacing);
+      } else if (!walking && state.programState === "collaborating") {
+        // Meeting presence: collaborators turn inward to face the center of
+        // the room they're meeting in, so a Boardroom huddle reads as a group.
+        const col = Math.floor(state.sprite.x / ROOM_W);
+        const row = Math.floor(state.sprite.y / ROOM_H);
+        const dxc = col * ROOM_W + ROOM_W / 2 - state.sprite.x;
+        const dyc = row * ROOM_H + ROOM_H / 2 - state.sprite.y;
+        if (Math.abs(dxc) > 6 || Math.abs(dyc) > 6) newFacing = velocityToFacing(dxc, dyc);
       }
 
       if (newFacing) state.avatar.setFacing(newFacing);
