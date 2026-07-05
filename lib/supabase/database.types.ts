@@ -871,6 +871,30 @@ export type NetworkContact = {
   notes: string | null;
   tags: string[];
   pooled: boolean;
+  // Professional Network layer (migration 20260705120000)
+  capital_role: string;
+  relationship_type: string | null;
+  relevance_score: number;
+  permission_status: string;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Approval-gated outreach artifacts (migration 20260705120000). Drafting is
+// Tier-1 internal work; sending routes through the dispatch gate layer.
+export type OutreachDraft = {
+  id: string;
+  organization_id: string;
+  contact_id: string | null;
+  created_by: string | null;
+  channel: string;
+  subject: string | null;
+  body: string;
+  rationale: string | null;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -2349,6 +2373,7 @@ export type Database = {
       canvas_elements: TableShape<CanvasElement>;
       meeting_briefs: TableShape<MeetingBrief>;
       network_contacts: TableShape<NetworkContact>;
+      outreach_drafts: TableShape<OutreachDraft>;
       network_import_jobs: TableShape<NetworkImportJob>;
       intro_requests: TableShape<IntroRequest>;
       syndicate_circles: TableShape<SyndicateCircle>;

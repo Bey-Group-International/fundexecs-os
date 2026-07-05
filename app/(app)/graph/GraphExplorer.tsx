@@ -67,6 +67,9 @@ const TYPE_COLOR: Record<string, string> = {
   co_gp: "#67c587",
   principal: "#f2c14e",
   organization: "#7a8aff",
+  // Professional Network contacts imported through the professional-network
+  // pipeline (network_contacts) — teal to stand apart from investors/principals.
+  contact: "#2dd4bf",
 };
 
 function colorFor(type: string): string {
