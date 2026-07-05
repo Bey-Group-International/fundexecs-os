@@ -915,6 +915,28 @@ export type NetworkImportJob = {
   created_at: string;
 };
 
+// Backend connector sync runs (migration 20260705140000). Records every
+// Professional Network sync attempt — including honest "paused / pending
+// authorization" cases where no provider credentials exist yet. No secrets
+// live here; token storage/revocation is a separate SEAM (TODO(oauth)).
+export type ProfessionalNetworkSyncJob = {
+  id: string;
+  organization_id: string;
+  connection_id: string | null;
+  provider: string;
+  status: string;
+  sync_type: string;
+  records_seen: number;
+  records_created: number;
+  records_updated: number;
+  records_deduped: number;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type IntroRequest = {
   id: string;
   organization_id: string;
@@ -2397,6 +2419,7 @@ export type Database = {
       meeting_briefs: TableShape<MeetingBrief>;
       network_contacts: TableShape<NetworkContact>;
       outreach_drafts: TableShape<OutreachDraft>;
+      professional_network_sync_jobs: TableShape<ProfessionalNetworkSyncJob>;
       network_import_jobs: TableShape<NetworkImportJob>;
       intro_requests: TableShape<IntroRequest>;
       syndicate_circles: TableShape<SyndicateCircle>;
