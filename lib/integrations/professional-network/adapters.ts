@@ -46,6 +46,16 @@ export function fromManualEntry(input: ProfileInput): AdapterResult {
 }
 
 /**
+ * contacts adapter — a Google People API connection (already parsed into a
+ * ProfileInput by google-people.server) into the shared pipeline. No enrichment
+ * or scraping: it carries only fields the People API returned for a connection
+ * the user authorized.
+ */
+export function fromGoogleContacts(input: ProfileInput): AdapterResult {
+  return normalizeProfile(input, "contacts");
+}
+
+/**
  * csv adapter (fallback path) — wraps a row from the existing CSV parsers
  * (lib/network-import) into the shared pipeline. Bulk CSV import continues to
  * run through importContacts for throughput; this adapter exists so per-row

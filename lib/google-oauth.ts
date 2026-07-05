@@ -33,6 +33,16 @@ const TOKEN_FETCH_TIMEOUT_MS = 10_000;
 /** The vault key the refresh token is stored under (org_secrets.provider). */
 export const GOOGLE_REFRESH_TOKEN_KEY = "GOOGLE_REFRESH_TOKEN";
 
+// People API read-only lives under a DISTINCT vault key + scope so the Contacts
+// grant and the Gmail grant coexist: connecting one never clobbers the other's
+// refresh token or downgrades its scope.
+/** The vault key the People API refresh token is stored under. */
+export const GOOGLE_PEOPLE_REFRESH_TOKEN_KEY = "GOOGLE_PEOPLE_REFRESH_TOKEN";
+// contacts.readonly is the only People scope the OS needs (relationship import);
+// openid email lets the callback label the connection with the account address.
+export const GOOGLE_PEOPLE_SCOPES =
+  "openid email https://www.googleapis.com/auth/contacts.readonly";
+
 export function googleOAuthConfigured(): boolean {
   return Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET,
@@ -90,12 +100,18 @@ export function verifyOAuthState(raw: string, nowMs: number = Date.now()): OAuth
 
 // ── Authorization URL ─────────────────────────────────────────────────────────
 
-export function buildGoogleAuthUrl(state: string, redirectUri: string): string {
+export function buildGoogleAuthUrl(
+  state: string,
+  redirectUri: string,
+  // Defaults to the Gmail SCOPES so existing callers are unchanged; the People
+  // flow passes GOOGLE_PEOPLE_SCOPES to request the Contacts grant instead.
+  scopes: string = SCOPES,
+): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: SCOPES,
+    scope: scopes,
     // offline + consent is what makes Google return a refresh token.
     access_type: "offline",
     prompt: "consent",
@@ -231,7 +247,56 @@ export function invalidateGoogleTokenCache(orgId: string): void {
   tokenCache.delete(orgId);
 }
 
-/** Test hook — clears the in-process access-token cache. */
+// ── People API runtime resolver ───────────────────────────────────────────────
+// A separate cache keyed by org so the People access token never collides with
+// the Gmail one (both are per-org but minted from different refresh tokens /
+// scopes). Mirrors getGoogleAccessToken; the People refresh token lives under
+// GOOGLE_PEOPLE_REFRESH_TOKEN_KEY.
+const peopleTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+/**
+ * A live People API access token for the org, minted from its vaulted People
+ * refresh token. Null when the org hasn't connected Google Contacts or OAuth
+ * isn't configured — callers degrade to a clean "pending authorization".
+ */
+export async function getGooglePeopleAccessToken(
+  orgId: string,
+  refreshToken?: string | null,
+): Promise<string | null> {
+  if (!googleOAuthConfigured()) return null;
+
+  const cached = peopleTokenCache.get(orgId);
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
+
+  if (refreshToken === undefined) {
+    try {
+      refreshToken = await getOrgSecret(orgId, GOOGLE_PEOPLE_REFRESH_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  }
+  if (!refreshToken) return null;
+
+  try {
+    const { accessToken, expiresInSec } = await refreshAccessToken(refreshToken);
+    peopleTokenCache.set(orgId, {
+      token: accessToken,
+      expiresAt: Date.now() + expiresInSec * 1000 - SAFETY_MARGIN_MS,
+    });
+    return accessToken;
+  } catch (err) {
+    console.error(`[google-oauth] people token refresh failed for org ${orgId}:`, err);
+    return null;
+  }
+}
+
+/** Drop one org's cached People access token (reconnect / disconnect). */
+export function invalidateGooglePeopleTokenCache(orgId: string): void {
+  peopleTokenCache.delete(orgId);
+}
+
+/** Test hook — clears the in-process access-token caches (Gmail + People). */
 export function clearGoogleTokenCache(): void {
   tokenCache.clear();
+  peopleTokenCache.clear();
 }

@@ -1,15 +1,16 @@
 // POST /api/professional-network/disconnect — best-effort disconnect of a
 // backend connector for the org.
 //
-// There are no provider secrets to revoke yet, so this marks the org's
-// non-terminal sync jobs for the provider as 'paused' to reflect the
-// disconnected state in the UI. TODO(oauth): revoke stored OAuth tokens and
-// tear down the connection record once credential storage exists.
+// Clears the connector's stored refresh token (so /status flips back to
+// "not connected") and pauses any in-flight sync jobs. Token deletion runs
+// under the caller's RLS session and is best-effort — a failed delete still
+// pauses the jobs rather than throwing.
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { invalidateGooglePeopleTokenCache } from "@/lib/google-oauth";
 import { PROFESSIONAL_NETWORK_CONNECTORS } from "@/lib/integrations/professional-network";
 import type { ProfessionalNetworkSource } from "@/lib/integrations/professional-network";
 
@@ -46,8 +47,20 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createServerClient();
 
-  // Best-effort: pause any in-flight/queued runs for this provider. No secrets
-  // to revoke yet. TODO(oauth): revoke stored tokens + drop the connection.
+  // Clear the stored refresh token so the connector reads as "not connected".
+  // Best-effort: the job pause below still runs even if the delete fails.
+  if (connector.secretKey) {
+    await supabase
+      .from("org_secrets")
+      .delete()
+      .eq("organization_id", auth.ctx.orgId)
+      .eq("provider", connector.secretKey);
+    if (connector.provider === "contacts") {
+      invalidateGooglePeopleTokenCache(auth.ctx.orgId);
+    }
+  }
+
+  // Best-effort: pause any in-flight/queued runs for this provider.
   await supabase
     .from("professional_network_sync_jobs")
     .update({ status: "paused" })
