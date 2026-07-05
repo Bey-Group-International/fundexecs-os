@@ -192,7 +192,7 @@ export default async function SessionsPage({
         </>
       )}
 
-      <div className="relative mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
+      <div id="earn-composer" className="relative mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
         <p className="mb-2 px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
           Earn can · source LPs · draft memos · run diligence · build models · map capital networks
         </p>
