@@ -20,12 +20,9 @@ import type { HttpFetch } from "@/lib/earn/browser-operator/sources/http";
 import { composioConfigForOrg, type ComposioConfig } from "./client.server";
 import { searchEdgarFilingsViaGoogle } from "./edgar-search.server";
 import {
-  fetchMarketstackCompany,
+  fetchMarketstackCompanyViaComposio,
   mapMarketstackToDataPoints,
-  resolveMarketstackApiKey,
 } from "./marketstack.server";
-
-type FetchLike = typeof fetch;
 
 /** Synthesize the EdgarCompany the ExtractEdgarResult contract carries. */
 function companyFromPoints(points: ExtractedDataPoint[], query: string): EdgarCompany {
@@ -42,21 +39,18 @@ export interface ExtractEdgarPreferComposioInput {
 }
 
 export interface ExtractEdgarPreferComposioDeps {
-  /** Org whose vaulted Composio / Marketstack keys (if any) to use. */
+  /** Org whose vaulted Composio key (if any) to use. */
   orgId?: string;
-  /** Test seam: a ready ComposioConfig for the Google search; null skips it. */
+  /** Test seam: a ready ComposioConfig; null skips both Composio-driven sources. */
   composio?: ComposioConfig | null;
-  /** Test seam: a Marketstack access key; null skips the Marketstack lookup. */
-  marketstackKey?: string | null;
-  /** Test seam: injected fetch for the Marketstack REST calls. */
-  marketstackFetch?: FetchLike;
 }
 
 /**
- * Extract company facts (Marketstack) + EDGAR filings (Google web search via
- * Composio). Runs the two sources concurrently and merges their points. When
- * neither source is configured or both come back empty, falls back to the direct
- * SEC JSON path so the feature never hard-fails.
+ * Extract company facts (Marketstack, executed through Composio) + EDGAR filings
+ * (Google web search, also through Composio). Both are driven by the one Composio
+ * config, run concurrently, and their points are merged. When Composio is
+ * unconfigured or both sources come back empty, falls back to the direct SEC JSON
+ * path so the feature never hard-fails.
  */
 export async function extractEdgarPreferComposio(
   input: ExtractEdgarPreferComposioInput,
@@ -67,14 +61,12 @@ export async function extractEdgarPreferComposio(
 
   const composio =
     deps.composio !== undefined ? deps.composio : await composioConfigForOrg(deps.orgId);
-  const marketstackKey =
-    deps.marketstackKey !== undefined ? deps.marketstackKey : await resolveMarketstackApiKey(deps.orgId);
 
   const [factPoints, filingPoints] = await Promise.all([
-    // Company / market facts via Marketstack.
+    // Company / market facts via Marketstack (through Composio).
     (async (): Promise<ExtractedDataPoint[]> => {
-      if (!marketstackKey) return [];
-      const company = await fetchMarketstackCompany(marketstackKey, query, { fetchImpl: deps.marketstackFetch });
+      if (!composio) return [];
+      const company = await fetchMarketstackCompanyViaComposio(composio, query);
       return company ? mapMarketstackToDataPoints(company) : [];
     })(),
     // EDGAR filings via Google web search (through Composio).
