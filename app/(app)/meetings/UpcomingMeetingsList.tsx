@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { formatAttendeeInput, parseAttendeeInput } from "@/lib/meetings/attendees";
 
 export interface UpcomingMeeting {
   id: string;
@@ -162,7 +163,15 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
                   <StatusPill label={meeting.source ?? "fundexecs"} />
                   <StatusPill label={meeting.sync_status ?? "local_only"} />
                   {meeting.priority ? <StatusPill label={meeting.priority} /> : null}
+                  {meeting.attendees?.length ? (
+                    <StatusPill label={`${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`} />
+                  ) : null}
                 </div>
+                {meeting.attendees?.length ? (
+                  <p className="mt-2 max-w-xl truncate text-xs text-[var(--fg-muted)]">
+                    {meeting.attendees.map((a) => a.email ?? a.name).join(", ")}
+                  </p>
+                ) : null}
               </div>
               <Link href={`/meetings/${meeting.room_code}`} className="rounded-full bg-[var(--gold-400)]/10 px-2 py-0.5 text-xs font-medium text-[var(--gold-400)]">
                 Join →
@@ -255,13 +264,6 @@ function csvToList(value: string): string[] {
   return value.split(",").map((v) => v.trim()).filter(Boolean);
 }
 
-function parseAttendees(value: string): UpcomingMeeting["attendees"] {
-  return csvToList(value).map((entry) => {
-    const [name, email] = entry.split("<").map((part) => part.replace(/>/g, "").trim());
-    return { name: name || email || "Guest", email: email || undefined, type: "external" };
-  });
-}
-
 function EditMeetingCard({
   meeting,
   onCancel,
@@ -280,7 +282,7 @@ function EditMeetingCard({
   const [meetingType, setMeetingType] = useState(meeting.meeting_type ?? "internal");
   const [priority, setPriority] = useState(meeting.priority ?? "normal");
   const [tags, setTags] = useState((meeting.tags ?? []).join(", "));
-  const [attendees, setAttendees] = useState((meeting.attendees ?? []).map((a) => a.email ? `${a.name} <${a.email}>` : a.name).join(", "));
+  const [attendees, setAttendees] = useState(formatAttendeeInput(meeting.attendees));
   const [syncMode, setSyncMode] = useState<"local_only" | "pending_external">("local_only");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -301,7 +303,7 @@ function EditMeetingCard({
         meetingType,
         priority,
         tags: csvToList(tags),
-        attendees: parseAttendees(attendees),
+        attendees: parseAttendeeInput(attendees),
         syncMode,
       }),
     });
@@ -340,7 +342,13 @@ function EditMeetingCard({
           }}
         />
         <Field label="Tags (comma separated)" value={tags} onChange={setTags} />
-        <Field label="Attendees (comma separated)" value={attendees} onChange={setAttendees} className="sm:col-span-2" />
+        <Field
+          label="Guest emails"
+          value={attendees}
+          onChange={setAttendees}
+          className="sm:col-span-2"
+          hint="Enter emails separated by commas, semicolons, or new lines. Optional: Name <email@company.com>."
+        />
         <Field label="Description / notes" value={description} onChange={setDescription} className="sm:col-span-2" />
       </div>
       {externalSource ? (
@@ -374,12 +382,14 @@ function Field({
   onChange,
   type = "text",
   className = "",
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   className?: string;
+  hint?: string;
 }) {
   return (
     <label className={`flex flex-col gap-1.5 ${className}`}>
@@ -390,6 +400,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
       />
+      {hint ? <span className="text-[11px] leading-snug text-[var(--fg-muted)]">{hint}</span> : null}
     </label>
   );
 }
