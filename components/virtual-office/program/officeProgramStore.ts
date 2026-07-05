@@ -617,6 +617,14 @@ export function resolveApprovalGate(gateId: string, decision: "approved" | "reje
 
   // Role enforcement: capital-binding and external-facing approvals may only
   // be granted by authorized roles. Anyone may reject (halt) a gate.
+  //
+  // SECURITY BOUNDARY: this is a client-side UX gate over a visual
+  // simulation — it is NOT a security control. Before any real
+  // external-facing or capital-binding action is wired up, the approval
+  // authority MUST be re-checked server-side (Supabase RLS / the role-based
+  // permission system). Never treat this branch as the sole guard on a
+  // privileged action. See TODO(permissions) on OfficeRole and
+  // createApprovalGate.
   if (decision === "approved" && !canRoleApprove(state.userRole, gate.tier)) {
     pushChat(
       "approval",
