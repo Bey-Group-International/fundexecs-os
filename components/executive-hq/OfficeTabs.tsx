@@ -5,8 +5,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
-import { setUserRole } from "@/components/virtual-office/program/officeProgramStore";
-import { OFFICE_ROLES, type OfficeRole } from "@/components/virtual-office/program/officeProgram";
+import { setApprovalDecider, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
+import { officeRoleFromMemberRole } from "@/lib/office/approvalAuthority";
+import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
+import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
 import {
@@ -70,19 +72,37 @@ export function OfficeTabs() {
         setCharacterId(meta.character_id as string);
       }
       if (meta?.display_name) setDisplayName(meta.display_name as string);
-      // Seed the office role for approval-tier permissions (defaults to
-      // Managing Partner in the store when unset).
-      if (meta?.office_role) {
-        const role = meta.office_role as string;
-        if (OFFICE_ROLES.includes(role as OfficeRole)) setUserRole(role as OfficeRole);
-      }
       // Populate dynamic zone URLs from integration metadata
       const overrides: Record<string, string> = {};
       if (meta?.calendly_scheduling_url) overrides["calendly"] = meta.calendly_scheduling_url as string;
       if (meta?.lp_portal_url) overrides["lp-portal"] = meta.lp_portal_url as string;
       if (Object.keys(overrides).length > 0) setZoneUrlOverrides(overrides);
+
+      // Approval authority comes from the TRUSTED org membership role, not
+      // client-set metadata. Seed the office role and register the
+      // server-side decider so Tier 2/3 approvals are enforced by the
+      // office_decide_approval RPC (RLS), not the client store.
+      const userId = data.session?.user?.id;
+      if (userId) {
+        supabase
+          .from("organization_members")
+          .select("organization_id, role")
+          .eq("principal_id", userId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data: membership }) => {
+            if (!membership) return;
+            const m = membership as { organization_id: string; role: MemberRole };
+            setUserRole(officeRoleFromMemberRole(m.role));
+            setApprovalDecider(makeServerApprovalDecider(supabase, m.organization_id));
+          });
+      }
       setSessionChecked(true);
     });
+
+    // On unmount, stop routing approvals to a stale client/org.
+    return () => setApprovalDecider(null);
   }, [setCharacterId]);
 
   // Auto-teleport when ?room= param is present (guest join links)
