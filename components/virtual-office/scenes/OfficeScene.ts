@@ -31,6 +31,8 @@ import {
   type RiskTier,
   type RoomKey,
 } from "../program/officeProgram";
+import { ExecutiveAvatar, type AvatarFacing } from "../avatar/ExecutiveAvatar";
+import { agentAvatarSpec, remoteAvatarSpec, USER_SPEC } from "../avatar/avatarPalette";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ type RoomZone = { zone: Phaser.GameObjects.Zone; key: string; label: string };
 
 type RemoteAvatarState = {
   sprite: Phaser.Physics.Arcade.Sprite;
+  avatar: ExecutiveAvatar;
   label: Phaser.GameObjects.Text;
   nameTag: Phaser.GameObjects.Graphics;
   targetX: number;
@@ -47,7 +50,10 @@ type RemoteAvatarState = {
 };
 
 type NpcAvatarState = {
+  /** Invisible position anchor moved by path-following. */
   sprite: Phaser.GameObjects.Sprite;
+  /** Humanized vector executive figure rendered on top of the anchor. */
+  avatar: ExecutiveAvatar;
   label: Phaser.GameObjects.Text;
   targetX: number;
   targetY: number;
@@ -60,8 +66,6 @@ type NpcAvatarState = {
   programState: AgentState;
   /** Status line rendered under the name label. */
   statusText: Phaser.GameObjects.Text;
-  /** Soft glow ring under the avatar — the AI-native visual cue. */
-  aura: Phaser.GameObjects.Arc;
   /** Active waypoint path when the agent is walking to a room. */
   path: Array<{ x: number; y: number }>;
 };
@@ -106,11 +110,18 @@ function facingToAnimKey(facing: Facing, spriteKey = "earnest-fundmaker"): strin
   }
 }
 
+/** Map a velocity vector to a four-way avatar facing. */
+function velocityToFacing(vx: number, vy: number): AvatarFacing {
+  if (Math.abs(vx) > Math.abs(vy)) return vx < 0 ? "left" : "right";
+  return vy < 0 ? "up" : "down";
+}
+
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 export class OfficeScene extends Phaser.Scene {
   // M0 properties
   private player!: Phaser.Physics.Arcade.Sprite;
+  private playerAvatar!: ExecutiveAvatar;
   private walls!: Phaser.Physics.Arcade.StaticGroup;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: {
@@ -295,6 +306,7 @@ export class OfficeScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     this._updateFollowMode(delta);
     this._handleMovement();
+    this._updatePlayerAvatar(delta);
     this._updateInteractives();
     this._updateEmotes(delta);
     this._updateRoomLabel();
@@ -330,6 +342,10 @@ export class OfficeScene extends Phaser.Scene {
     this.sfuMode = false;
     this.socket?.disconnect();
     this.socket = null;
+    // Tear down vector avatars (containers + tweened auras).
+    this.playerAvatar?.destroy();
+    for (const [, s] of this.npcAvatars) s.avatar.destroy();
+    for (const [, s] of this.remotePlayers) s.avatar.destroy();
   }
 
   // ── private helpers ─────────────────────────────────────────────────────────
@@ -343,25 +359,62 @@ export class OfficeScene extends Phaser.Scene {
     map.createLayer("floor", tileset, 0, 0)?.setDepth(0);
     map.createLayer("decor", tileset, 0, 0)?.setDepth(1);
 
-    // Room borders and name labels on top of tiles
+    // Per-room premium dressing: floor wash, ambient light pool, corner
+    // accents, inner shadow frame, and a clean executive label.
     for (const room of ROOMS) {
-      // Subtle gold room border
-      const gfx = this.add.graphics().setDepth(2);
-      gfx.lineStyle(1.5, 0xc9a84c, 0.25);
-      gfx.strokeRect(room.col * ROOM_W + 2, room.row * ROOM_H + 2, ROOM_W - 4, ROOM_H - 4);
+      const rx = room.col * ROOM_W;
+      const ry = room.row * ROOM_H;
 
-      // Professional room label — pill badge bottom-left of room
-      const lx = room.col * ROOM_W + 10;
-      const ly = room.row * ROOM_H + ROOM_H - 24;
-      const label = this.add.text(lx + 6, ly + 3, room.label.toUpperCase(), {
+      // Soft floor wash — subtly darkens the room field for depth.
+      const wash = this.add.graphics().setDepth(1);
+      wash.fillStyle(0x0a0e16, 0.28);
+      wash.fillRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+
+      // Ambient light pool at room center — layered discs fake a soft glow.
+      const cx = rx + ROOM_W / 2;
+      const cy = ry + ROOM_H / 2;
+      const pool = this.add.graphics().setDepth(1);
+      for (let i = 3; i >= 1; i--) {
+        pool.fillStyle(0xc9a84c, 0.015 * i);
+        pool.fillCircle(cx, cy, 40 + i * 26);
+      }
+
+      // Inner shadow frame + gold hairline border.
+      const gfx = this.add.graphics().setDepth(2);
+      gfx.lineStyle(3, 0x000000, 0.22);
+      gfx.strokeRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+      gfx.lineStyle(1, 0xc9a84c, 0.22);
+      gfx.strokeRect(rx + 2, ry + 2, ROOM_W - 4, ROOM_H - 4);
+
+      // Gold corner accents (L-ticks) for a command-floor feel.
+      const t = 10;
+      gfx.lineStyle(1.5, 0xc9a84c, 0.5);
+      const corners: Array<[number, number, number, number]> = [
+        [rx + 6, ry + 6, 1, 1], [rx + ROOM_W - 6, ry + 6, -1, 1],
+        [rx + 6, ry + ROOM_H - 6, 1, -1], [rx + ROOM_W - 6, ry + ROOM_H - 6, -1, -1],
+      ];
+      for (const [x, y, sx, sy] of corners) {
+        gfx.beginPath();
+        gfx.moveTo(x + sx * t, y); gfx.lineTo(x, y); gfx.lineTo(x, y + sy * t);
+        gfx.strokePath();
+      }
+
+      // Executive label — pill badge with an accent dot, bottom-left.
+      const lx = rx + 10;
+      const ly = ry + ROOM_H - 24;
+      const label = this.add.text(lx + 14, ly + 3, room.label.toUpperCase(), {
         fontFamily: "'Georgia','Times New Roman',serif",
         fontSize: "8px",
-        color: "#c9a84c",
+        color: "#d8c07a",
         letterSpacing: 2,
-      }).setDepth(4).setAlpha(0.9);
+      }).setDepth(4).setAlpha(0.95);
       const bg = this.add.graphics().setDepth(3);
-      bg.fillStyle(0x0f172a, 0.72);
-      bg.fillRoundedRect(lx, ly, label.width + 12, 18, 4);
+      bg.fillStyle(0x0a0806, 0.82);
+      bg.fillRoundedRect(lx, ly, label.width + 22, 18, 4);
+      bg.lineStyle(1, 0xc9a84c, 0.28);
+      bg.strokeRoundedRect(lx, ly, label.width + 22, 18, 4);
+      bg.fillStyle(0xc9a84c, 0.9);
+      bg.fillCircle(lx + 8, ly + 9, 2);
     }
   }
 
@@ -426,8 +479,28 @@ export class OfficeScene extends Phaser.Scene {
     this.player.setDepth(10);
     this.player.setBodySize(20, 20);
     this.player.setOffset(6, 12);
+    // The arcade sprite stays as the invisible physics/collision anchor;
+    // the humanized vector avatar rides on top of it.
+    this.player.setVisible(false);
 
     this.physics.add.collider(this.player, this.walls);
+
+    this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, USER_SPEC, 10);
+  }
+
+  /** Sync the humanized player avatar to the physics anchor and velocity. */
+  private _updatePlayerAvatar(delta: number) {
+    if (!this.playerAvatar) return;
+    this.playerAvatar.setPosition(this.player.x, this.player.y);
+    const body = this.player.body as Phaser.Physics.Arcade.Body | null;
+    const vx = body?.velocity.x ?? 0;
+    const vy = body?.velocity.y ?? 0;
+    const moving = Math.abs(vx) > 4 || Math.abs(vy) > 4;
+    if (moving) {
+      this.playerAvatar.setFacing(velocityToFacing(vx, vy));
+    }
+    this.playerAvatar.setWalking(moving);
+    this.playerAvatar.update(delta);
   }
 
   private _textureKeyForCharacter(characterId: string): string {
@@ -681,11 +754,19 @@ export class OfficeScene extends Phaser.Scene {
   // ── Multiplayer: remote avatar rendering ────────────────────────────────────
 
   private _updateRemoteAvatars() {
-    // Interpolate every other frame — server sends at ~10 Hz so 30 Hz is plenty
-    if (this._interpFrame !== 0) return;
     for (const [, state] of this.remotePlayers) {
-      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.3);
-      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.3);
+      const prevX = state.sprite.x;
+      const prevY = state.sprite.y;
+      // Interpolate toward the last server target every frame (cheap lerp).
+      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.2);
+      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.2);
+      const moving = Math.hypot(state.sprite.x - prevX, state.sprite.y - prevY) > 0.4;
+      if (moving) {
+        state.avatar.setFacing(velocityToFacing(state.sprite.x - prevX, state.sprite.y - prevY));
+      }
+      state.avatar.setWalking(moving);
+      state.avatar.setPosition(state.sprite.x, state.sprite.y);
+      state.avatar.update(16);
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
       state.nameTag.setPosition(state.sprite.x, state.sprite.y - 40);
     }
@@ -700,7 +781,9 @@ export class OfficeScene extends Phaser.Scene {
   private _updateNpcAvatars(delta: number) {
     const step = (OfficeScene.NPC_SPEED * delta) / 1000;
     for (const [, state] of this.npcAvatars) {
+      let walking = false;
       if (state.path.length > 0) {
+        walking = true;
         const next = state.path[0];
         const dx = next.x - state.sprite.x;
         const dy = next.y - state.sprite.y;
@@ -709,28 +792,27 @@ export class OfficeScene extends Phaser.Scene {
           state.sprite.setPosition(next.x, next.y);
           state.path.shift();
           if (state.path.length === 0) {
-            state.sprite.anims.play(facingToAnimKey("idle", state.spriteKey), true);
-            state.facing = "idle" as Facing;
+            walking = false;
+            state.facing = "down" as Facing;
           }
         } else {
           state.sprite.x += (dx / dist) * step;
           state.sprite.y += (dy / dist) * step;
-          const facing: Facing = Math.abs(dx) > Math.abs(dy)
-            ? (dx < 0 ? "left" : "right")
-            : (dy < 0 ? "up" : "down");
-          if (state.facing !== facing) {
-            state.facing = facing;
-            state.sprite.anims.play(facingToAnimKey(facing, state.spriteKey), true);
-          }
+          const facing = velocityToFacing(dx, dy);
+          state.facing = facing as Facing;
+          state.avatar.setFacing(facing);
         }
       } else if (state.targetX !== state.sprite.x || state.targetY !== state.sprite.y) {
         // Legacy lerp target (kept for future server-driven agents).
         state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
         state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       }
+
+      state.avatar.setWalking(walking);
+      state.avatar.setPosition(state.sprite.x, state.sprite.y);
+      state.avatar.update(delta);
       state.label.setPosition(state.sprite.x, state.sprite.y - 30);
       state.statusText.setPosition(state.sprite.x, state.sprite.y - 22);
-      state.aura.setPosition(state.sprite.x, state.sprite.y + 10);
     }
   }
 
@@ -754,7 +836,7 @@ export class OfficeScene extends Phaser.Scene {
         if (!npc) return;
         npc.programState = state;
         npc.statusText.setText(this._shortStatus(state, label));
-        this._applyAgentAura(npc, state);
+        npc.avatar.setState(state);
       }
     );
 
@@ -780,44 +862,6 @@ export class OfficeScene extends Phaser.Scene {
     if (state === "idle") return "";
     const max = 26;
     return label.length > max ? `${label.slice(0, max - 1)}…` : label;
-  }
-
-  private _applyAgentAura(npc: NpcAvatarState, state: AgentState) {
-    const colors: Partial<Record<AgentState, number>> = {
-      classifying: 0xfbbf24,
-      listening: 0xfbbf24,
-      assigned: 0xc9a84c,
-      moving: 0xc9a84c,
-      working: 0x38bdf8,
-      collaborating: 0x38bdf8,
-      reviewing: 0xa855f7,
-      waiting_for_approval: 0xf59e0b,
-      complete: 0x22c55e,
-      blocked: 0xef4444,
-    };
-    const color = colors[state];
-    this.tweens.killTweensOf(npc.aura);
-    if (!color) {
-      npc.aura.setVisible(false);
-      return;
-    }
-    npc.aura.setVisible(true);
-    npc.aura.setStrokeStyle(1.5, color, 0.85);
-    npc.aura.setFillStyle(color, 0.08);
-    npc.aura.setScale(1);
-    npc.aura.setAlpha(1);
-    // Work pulse — only while actively engaged, per the "glow when active" rule
-    if (state === "working" || state === "classifying" || state === "waiting_for_approval") {
-      this.tweens.add({
-        targets: npc.aura,
-        scale: 1.25,
-        alpha: 0.55,
-        duration: 850,
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.easeInOut",
-      });
-    }
   }
 
   /** Room activation overlay: soft glow border + "N active · tier" badge. */
@@ -1329,33 +1373,30 @@ export class OfficeScene extends Phaser.Scene {
     agentId: AgentId | null = null,
   ) {
     if (this.npcAvatars.has(npcId)) return;
-    const textureKey = this._textureKeyForCharacter(spriteKey);
-    const frameMap = spriteFrameMaps[this._frameMapKindForCharacter(spriteKey)];
-    const sprite = this.add.sprite(x, y, textureKey);
-    sprite.setScale(frameMap.scale);
-    sprite.setDepth(8);
-    sprite.anims.play(facingToAnimKey(facing, spriteKey), true);
 
-    // Make NPC clickable — emits npc:click so the React layer can open AI chat
-    sprite.setInteractive({ useHandCursor: true });
-    sprite.on("pointerdown", () => {
+    // Invisible arcade-free anchor the path-follower moves; the humanized
+    // vector avatar rides on top of it.
+    const sprite = this.add.sprite(x, y, this._textureKeyForCharacter(spriteKey));
+    sprite.setVisible(false);
+    sprite.setActive(false);
+
+    const accentHex = agentId ? AGENT_BY_ID[agentId].accent : "#fbbf24";
+    const spec = agentId
+      ? agentAvatarSpec(agentId, accentHex)
+      : agentAvatarSpec("associate", accentHex);
+    const avatar = new ExecutiveAvatar(this, x, y, spec, 8);
+    avatar.setFacing(facing === "idle" ? "down" : (facing as AvatarFacing));
+
+    // Make the humanized figure clickable — emits npc:click so the React
+    // layer can open the AI chat and log a role-specific interaction.
+    avatar.setInteractive(() => {
       this.game.events.emit("npc:click", { npcId, spriteKey, name });
     });
-    sprite.on("pointerover", () => {
-      sprite.setTint(0xffffff);
-      // Subtle highlight: slightly brighten
-      sprite.setAlpha(0.85);
-    });
-    sprite.on("pointerout", () => {
-      sprite.clearTint();
-      sprite.setAlpha(1);
-    });
 
-    const accent = agentId ? AGENT_BY_ID[agentId].accent : "#fbbf24";
     const label = this.add.text(x, y - 30, name, {
       fontFamily: "monospace",
       fontSize: "8px",
-      color: accent,
+      color: accentHex,
       stroke: "#0f172a",
       strokeThickness: 2,
     }).setOrigin(0.5, 1).setDepth(9);
@@ -1369,16 +1410,9 @@ export class OfficeScene extends Phaser.Scene {
       strokeThickness: 2,
     }).setOrigin(0.5, 1).setDepth(9);
 
-    // AI-native glow ring at the agent's feet; hidden while idle
-    const aura = this.add.arc(x, y + 10, 11, 0, 360, false)
-      .setStrokeStyle(1.5, 0xc9a84c, 0.85)
-      .setFillStyle(0xc9a84c, 0.08)
-      .setDepth(7)
-      .setVisible(false);
-
     this.npcAvatars.set(npcId, {
-      sprite, label, targetX: x, targetY: y, facing, spriteKey,
-      agentId, programState: "idle", statusText, aura, path: [],
+      sprite, avatar, label, targetX: x, targetY: y, facing, spriteKey,
+      agentId, programState: "idle", statusText, path: [],
     });
   }
 
@@ -1404,21 +1438,19 @@ export class OfficeScene extends Phaser.Scene {
     const textureKey = this._textureKeyForCharacter(spriteKey);
     const frameMap = spriteFrameMaps[this._frameMapKindForCharacter(spriteKey)];
 
+    // Invisible physics anchor keeps collision + server reconciliation intact.
     const sprite = this.physics.add.sprite(remote.x, remote.y, textureKey);
     sprite.setScale(frameMap.scale);
     sprite.setDepth(9);
     sprite.setBodySize(20, 20);
     sprite.setOffset(6, 12);
-
-    // Only tint unknown players; identified executives render with their own colours
-    const isIdentified = executiveCharacters.some((c) => c.id === spriteKey && c.spriteSheet);
-    if (!isIdentified) {
-      const hue = playerIdToHue(remote.id);
-      const color = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)];
-      sprite.setTint(color.color);
-    }
+    sprite.setVisible(false);
 
     this.physics.add.collider(sprite, this.walls);
+
+    // Remote humans render as distinct executives (suit/accent from their id).
+    const avatar = new ExecutiveAvatar(this, remote.x, remote.y, remoteAvatarSpec(remote.id), 9);
+    avatar.setFacing(remote.facing === "idle" ? "down" : (remote.facing as AvatarFacing));
 
     const label = this.add.text(remote.x, remote.y - 28, remote.name, {
       fontFamily: "monospace",
@@ -1430,7 +1462,7 @@ export class OfficeScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(11);
 
-    // Small colored avatar dot above the name tag
+    // Small colored presence dot above the name tag
     const hue = playerIdToHue(remote.id);
     const dotColor = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)].color;
     const nameTag = this.add.graphics().setDepth(12);
@@ -1439,10 +1471,9 @@ export class OfficeScene extends Phaser.Scene {
     nameTag.lineStyle(1, 0x0f172a, 0.8);
     nameTag.strokeCircle(0, 0, 5);
 
-    sprite.anims.play(facingToAnimKey(remote.facing, spriteKey), true);
-
     this.remotePlayers.set(remote.id, {
       sprite,
+      avatar,
       label,
       nameTag,
       targetX: remote.x,
@@ -1455,6 +1486,7 @@ export class OfficeScene extends Phaser.Scene {
   private _removeRemotePlayer(playerId: string) {
     const state = this.remotePlayers.get(playerId);
     if (!state) return;
+    state.avatar.destroy();
     state.sprite.destroy();
     state.label.destroy();
     state.nameTag.destroy();

@@ -1,8 +1,9 @@
-import { routeTaskToAgents, PROGRAM_AGENTS, PROGRAM_ROOMS } from "./officeProgram";
+import { routeTaskToAgents, PROGRAM_AGENTS, PROGRAM_ROOMS, canRoleApprove } from "./officeProgram";
 import {
   getOfficeProgramState,
   resolveApprovalGate,
   sceneBus,
+  setUserRole,
   setWorkflowMode,
   shutdownOfficeProgram,
   submitOfficeTask,
@@ -124,7 +125,46 @@ describe("office program workflow simulation", () => {
     unsub();
   });
 
+  it("blocks unauthorized roles from clearing a capital-binding gate", () => {
+    setWorkflowMode("workflow");
+    setUserRole("analyst"); // not authorized for any approval tier
+    submitOfficeTask("Prepare closing wires"); // Tier 3 capital-binding
+    jest.advanceTimersByTime(60_000);
+
+    let s = getOfficeProgramState();
+    const gate = s.approvals.find((g) => g.status === "pending");
+    expect(gate?.tier).toBe("capital_binding");
+
+    // Analyst cannot approve — the gate stays pending, no archive.
+    resolveApprovalGate(gate!.id, "approved");
+    jest.advanceTimersByTime(5_000);
+    s = getOfficeProgramState();
+    expect(s.approvals.find((g) => g.id === gate!.id)?.status).toBe("pending");
+    expect(s.activeWorkflow).not.toBeNull();
+    expect(s.audit.some((e) => e.action.includes("Approval blocked"))).toBe(true);
+
+    // A Managing Partner can clear it → workflow completes.
+    setUserRole("managing_partner");
+    resolveApprovalGate(gate!.id, "approved");
+    jest.advanceTimersByTime(10_000);
+    s = getOfficeProgramState();
+    expect(s.activeWorkflow).toBeNull();
+    expect(s.archive[0]?.outcome).toBe("complete");
+
+    setUserRole("managing_partner"); // restore default for other tests
+  });
+
+  it("encodes the tier authorization matrix", () => {
+    expect(canRoleApprove("managing_partner", "capital_binding")).toBe(true);
+    expect(canRoleApprove("compliance", "capital_binding")).toBe(true);
+    expect(canRoleApprove("principal", "capital_binding")).toBe(false);
+    expect(canRoleApprove("principal", "external_facing")).toBe(true);
+    expect(canRoleApprove("analyst", "external_facing")).toBe(false);
+    expect(canRoleApprove("observer", "external_facing")).toBe(false);
+  });
+
   it("keeps conversation mode free of autonomous work", () => {
+    setUserRole("managing_partner");
     setWorkflowMode("conversation");
     const before = getOfficeProgramState().archive.length;
     submitOfficeTask("Build investor-ready data room");

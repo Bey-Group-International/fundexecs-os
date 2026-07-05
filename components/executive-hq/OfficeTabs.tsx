@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
+import { setUserRole } from "@/components/virtual-office/program/officeProgramStore";
+import { OFFICE_ROLES, type OfficeRole } from "@/components/virtual-office/program/officeProgram";
 import { executiveCharacters } from "@/components/characters/characterConfig";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
 import {
@@ -68,6 +70,12 @@ export function OfficeTabs() {
         setCharacterId(meta.character_id as string);
       }
       if (meta?.display_name) setDisplayName(meta.display_name as string);
+      // Seed the office role for approval-tier permissions (defaults to
+      // Managing Partner in the store when unset).
+      if (meta?.office_role) {
+        const role = meta.office_role as string;
+        if (OFFICE_ROLES.includes(role as OfficeRole)) setUserRole(role as OfficeRole);
+      }
       // Populate dynamic zone URLs from integration metadata
       const overrides: Record<string, string> = {};
       if (meta?.calendly_scheduling_url) overrides["calendly"] = meta.calendly_scheduling_url as string;
