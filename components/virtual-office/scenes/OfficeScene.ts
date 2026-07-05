@@ -871,6 +871,8 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private static readonly NPC_SPEED = 105; // px/s — purposeful executive pace
+  /** Radius² within which an idle executive turns to face the player. */
+  private static readonly LOOK_RADIUS_SQ = 96 * 96;
 
   /**
    * Program agents walk waypoint paths issued by the office program
@@ -927,6 +929,18 @@ export class OfficeScene extends Phaser.Scene {
         state.avatar.container.setVisible(true);
         state.label.setVisible(true);
         state.statusText.setVisible(true);
+      }
+
+      // Reactive presence (ACE-style "face the user when addressed"): an idle
+      // executive turns to look at the player when they come near, and settles
+      // back to a neutral facing once the player moves off. Never changes
+      // position — movement stays program-driven.
+      if (!walking && state.path.length === 0 && state.programState === "idle") {
+        const dxp = this.player.x - state.sprite.x;
+        const dyp = this.player.y - state.sprite.y;
+        newFacing = dxp * dxp + dyp * dyp < OfficeScene.LOOK_RADIUS_SQ
+          ? velocityToFacing(dxp, dyp)
+          : ("down" as AvatarFacing);
       }
 
       if (newFacing) state.avatar.setFacing(newFacing);
@@ -1605,8 +1619,9 @@ export class OfficeScene extends Phaser.Scene {
     avatar.setFacing(facing === "idle" ? "down" : (facing as AvatarFacing));
 
     // Make the humanized figure clickable — emits npc:click so the React
-    // layer can open the AI chat and log a role-specific interaction.
+    // layer can open the inspector, and the figure nods to acknowledge the tap.
     avatar.setInteractive(() => {
+      avatar.react();
       this.game.events.emit("npc:click", { npcId, spriteKey, name });
     });
 

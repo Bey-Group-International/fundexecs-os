@@ -79,6 +79,9 @@ export class ExecutiveAvatar {
   private thinkPhase = Math.random() * Math.PI * 2;
   private bobPhase = Math.random() * Math.PI * 2;
   private lastPoseKey = "";
+  // Blink: staggered so a room of executives never blinks in unison.
+  private blinkTimer = 1200 + Math.random() * 4200;
+  private eyesClosed = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, spec: AvatarSpec, depth = 8) {
     this.scene = scene;
@@ -170,6 +173,10 @@ export class ExecutiveAvatar {
   update(delta: number) {
     const dt = delta / 1000;
 
+    // Blinking — a small, discrete life cue. Runs while walking or idle (but
+    // not under reduced motion). Redraws only on the open/close transition.
+    if (!ExecutiveAvatar.reducedMotion) this._updateBlink(delta);
+
     if (this.walking) {
       this.walkPhase += dt * 9; // ~9 steps/sec
       const step = Math.floor(this.walkPhase) % 4;
@@ -208,6 +215,35 @@ export class ExecutiveAvatar {
       const p = (Math.sin(this.thinkPhase) + 1) / 2; // 0..1
       this.think.setAlpha(0.35 + p * 0.6).setScale(0.8 + p * 0.35);
     }
+  }
+
+  /**
+   * A quick acknowledgment "nod" — a scale pop used when the figure is
+   * clicked/addressed, so the executive visibly registers the interaction.
+   * Scale is safe: the scene drives position/depth each frame but never scale.
+   */
+  react() {
+    if (ExecutiveAvatar.reducedMotion) return;
+    this.scene.tweens.killTweensOf(this.container);
+    this.container.setScale(1);
+    this.scene.tweens.add({
+      targets: this.container, scaleX: 1.13, scaleY: 1.13,
+      duration: 130, yoyo: true, ease: "Back.easeOut",
+    });
+  }
+
+  /** Advance the blink timer; toggle the eyes and redraw on transition. */
+  private _updateBlink(delta: number) {
+    this.blinkTimer -= delta;
+    if (this.blinkTimer > 0) return;
+    if (!this.eyesClosed) {
+      this.eyesClosed = true;
+      this.blinkTimer = 120;              // eyes shut briefly
+    } else {
+      this.eyesClosed = false;
+      this.blinkTimer = 2600 + Math.random() * 4200; // next blink
+    }
+    this._redraw();
   }
 
   destroy() {
@@ -511,13 +547,19 @@ export class ExecutiveAvatar {
     g.fillStyle(this._shade(s.hair, 0.85), 0.85);
     g.fillRect(ox - 3.2, oy - 13.7, 2.4, 0.7);
     g.fillRect(ox + 0.8, oy - 13.7, 2.4, 0.7);
-    // Eyes with a tiny catchlight.
-    g.fillStyle(0x2a2320, 1);
-    g.fillEllipse(ox - 2, oy - 12.4, 1.5, 1.7);
-    g.fillEllipse(ox + 2, oy - 12.4, 1.5, 1.7);
-    g.fillStyle(0xf4f0e8, 0.85);
-    g.fillCircle(ox - 2.4, oy - 12.8, 0.4);
-    g.fillCircle(ox + 1.6, oy - 12.8, 0.4);
+    // Eyes — open (with a catchlight) or a thin closed line while blinking.
+    if (this.eyesClosed) {
+      g.fillStyle(this._shade(s.skin, 0.55), 0.9);
+      g.fillRect(ox - 2.9, oy - 12.4, 1.9, 0.7);
+      g.fillRect(ox + 1, oy - 12.4, 1.9, 0.7);
+    } else {
+      g.fillStyle(0x2a2320, 1);
+      g.fillEllipse(ox - 2, oy - 12.4, 1.5, 1.7);
+      g.fillEllipse(ox + 2, oy - 12.4, 1.5, 1.7);
+      g.fillStyle(0xf4f0e8, 0.85);
+      g.fillCircle(ox - 2.4, oy - 12.8, 0.4);
+      g.fillCircle(ox + 1.6, oy - 12.8, 0.4);
+    }
     // Nose shadow to the shaded side.
     g.fillStyle(skinLo, 0.5);
     g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
@@ -636,13 +678,18 @@ export class ExecutiveAvatar {
       g.fillStyle(this._shade(s.hair, 1.3), 0.45);
       g.fillEllipse(hx - dir * 1.4, -16.4, 3.4, 1.6);
     }
-    // Brow + eye on the facing side, with a catchlight.
+    // Brow + eye on the facing side (catchlight when open, thin line blinking).
     g.fillStyle(this._shade(s.hair, 0.85), 0.85);
     g.fillRect(hx + dir * 1.1, -13.9, 1.8, 0.7);
-    g.fillStyle(0x2a2320, 1);
-    g.fillEllipse(hx + dir * 1.9, -12.6, 1.3, 1.6);
-    g.fillStyle(0xf4f0e8, 0.85);
-    g.fillCircle(hx + dir * 1.6, -13, 0.35);
+    if (this.eyesClosed) {
+      g.fillStyle(this._shade(s.skin, 0.55), 0.9);
+      g.fillRect(hx + dir * 1.1, -12.6, 1.8, 0.6);
+    } else {
+      g.fillStyle(0x2a2320, 1);
+      g.fillEllipse(hx + dir * 1.9, -12.6, 1.3, 1.6);
+      g.fillStyle(0xf4f0e8, 0.85);
+      g.fillCircle(hx + dir * 1.6, -13, 0.35);
+    }
     // Mouth hint
     g.fillStyle(this._shade(s.skin, 0.66), 0.55);
     g.fillRect(hx + dir * 1.6, -10.2, 1.8, 0.6);
