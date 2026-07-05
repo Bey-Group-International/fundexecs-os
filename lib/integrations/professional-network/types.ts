@@ -12,6 +12,9 @@
 //   source adapter → permission check → normalize → dedupe → score →
 //   network_contacts insert → relationship edge → copilot context
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
+
 /** Where a professional profile record came from. */
 export type ProfessionalNetworkSource =
   | "linkedin_url"      // user-provided profile URL — reference only, no scraping
@@ -129,20 +132,36 @@ export type ConnectorSyncResult = {
   ok: boolean;
   recordsSeen: number;
   recordsImported: number;
+  /** Records skipped because they matched an existing contact (dedupe). */
+  recordsDeduped?: number;
   error?: string;
+};
+
+// The server-side context a live connector needs to write records: the caller's
+// RLS-scoped Supabase client and the acting user id. Passed by runProviderSync
+// (sync.server), which already holds both. Optional on the interface so a
+// still-pending connector (no live pull yet) can ignore it.
+export type ConnectorSyncContext = {
+  supabase: SupabaseClient<Database>;
+  userId: string;
 };
 
 export interface ProfessionalNetworkConnector {
   provider: ProfessionalNetworkSource;
   label: string;
+  /**
+   * The org-secret (org_secrets.provider) key whose presence marks this
+   * connector as truly "connected". Undefined for connectors that store no
+   * token (e.g. still-pending LinkedIn). Read by /status.
+   */
+  secretKey?: string;
   /** Whether this connector can run today (credentials/API access present). */
   availability(): ConnectorAvailability;
   /**
    * Begin a user-authorized connection (OAuth or equivalent). Returns the URL
    * to send the user to, or null when the provider needs no interactive step.
-   * TODO(oauth): wire real flows per provider; tokens live in org secrets.
    */
   connectUrl(orgId: string): string | null;
   /** Pull permitted records into the normalize pipeline. Server-side only. */
-  sync(orgId: string): Promise<ConnectorSyncResult>;
+  sync(orgId: string, ctx?: ConnectorSyncContext): Promise<ConnectorSyncResult>;
 }

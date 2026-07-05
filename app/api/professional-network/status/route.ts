@@ -45,6 +45,22 @@ export async function GET(_req: NextRequest) {
     if (!latestByProvider.has(job.provider)) latestByProvider.set(job.provider, job);
   }
 
+  // Real connectivity: a connector is "connected" when its refresh token secret
+  // exists in the org vault. We check presence only (RLS-scoped), never the
+  // ciphertext or the token itself.
+  const secretKeys = PROFESSIONAL_NETWORK_CONNECTORS.map((c) => c.secretKey).filter(
+    (k): k is string => Boolean(k),
+  );
+  const connectedKeys = new Set<string>();
+  if (secretKeys.length > 0) {
+    const { data: secrets } = await supabase
+      .from("org_secrets")
+      .select("provider")
+      .eq("organization_id", auth.ctx.orgId)
+      .in("provider", secretKeys);
+    for (const row of secrets ?? []) connectedKeys.add(row.provider);
+  }
+
   const connectors = PROFESSIONAL_NETWORK_CONNECTORS.map((c) => {
     const availability = c.availability();
     const lastJob = latestByProvider.get(c.provider) ?? null;
@@ -52,6 +68,7 @@ export async function GET(_req: NextRequest) {
       provider: c.provider,
       label: c.label,
       available: availability.available,
+      connected: c.secretKey ? connectedKeys.has(c.secretKey) : false,
       reason: availability.available ? null : availability.reason,
       lastSync: lastJob
         ? {

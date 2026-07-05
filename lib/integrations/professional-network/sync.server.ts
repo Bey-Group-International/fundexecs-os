@@ -88,18 +88,17 @@ export async function runProviderSync(
     return { ok: false, pending: true, reason: availability.reason, job: paused ?? job };
   }
 
-  // 4. Live pull. connector.sync ultimately routes records through
-  // addProfessionalContact (pipeline.server) so every source lands identically
-  // in the Capital Relationship Graph.
-  // TODO(oauth): once provider credentials exist, connector.sync will fetch
-  // authorized records server-side and feed them through addProfessionalContact,
-  // reporting recordsSeen/created/updated/deduped back here.
+  // 4. Live pull. connector.sync routes records through addProfessionalContact
+  // (pipeline.server) so every source lands identically in the Capital
+  // Relationship Graph. We hand it the caller's RLS client + user id so its
+  // writes stay tenant-scoped under the same session that started the job.
   try {
-    const result = await connector.sync(orgId);
+    const result = await connector.sync(orgId, { supabase, userId });
     const finished = await finalizeJob(supabase, job.id, {
       status: result.ok ? "completed" : "failed",
       records_seen: result.recordsSeen,
       records_created: result.recordsImported,
+      records_deduped: result.recordsDeduped ?? 0,
       error_message: result.ok ? null : result.error ?? "Sync failed",
     });
     if (!result.ok) {

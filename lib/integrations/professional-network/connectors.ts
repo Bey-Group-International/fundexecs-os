@@ -11,6 +11,9 @@
 // storing tokens in the org secret vault (lib/org-secrets.ts) and recording
 // runs in network_import_jobs.
 
+import { GOOGLE_PEOPLE_REFRESH_TOKEN_KEY, googleOAuthConfigured } from "@/lib/google-oauth";
+import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { syncGooglePeople } from "./google-people.server";
 import type { ConnectorAvailability, ProfessionalNetworkConnector } from "./types";
 
 function notYet(reason: string): ConnectorAvailability {
@@ -21,18 +24,28 @@ function notYet(reason: string): ConnectorAvailability {
 export const googleContactsConnector: ProfessionalNetworkConnector = {
   provider: "contacts",
   label: "Google Contacts",
+  // Presence of this vaulted refresh token is what /status reads as "connected".
+  secretKey: GOOGLE_PEOPLE_REFRESH_TOKEN_KEY,
   availability() {
-    // SEAM(google-people): flips available when OAuth client credentials are
-    // configured for the People API scope.
-    return process.env.GOOGLE_PEOPLE_CLIENT_ID
+    // Live once the Google OAuth client is configured — the same signal Gmail
+    // uses. No separate env var: the People flow reuses one Google client and
+    // simply requests the contacts.readonly scope.
+    return googleOAuthConfigured()
       ? { available: true }
       : notYet("Google Contacts sync is pending OAuth configuration. Use manual entry, a LinkedIn profile URL, or the CSV fallback today.");
   },
   connectUrl() {
-    return null; // TODO(oauth): People API consent URL
+    // Dedicated People consent flow (distinct scope + vault key) so connecting
+    // Contacts never disturbs the Gmail grant. The start route mints the signed
+    // state and redirects to Google.
+    return `${getAppUrl()}/api/oauth/google/people/start`;
   },
-  async sync() {
-    return { ok: false, recordsSeen: 0, recordsImported: 0, error: "Google Contacts sync not yet configured." };
+  async sync(orgId, ctx) {
+    if (!ctx) {
+      // A live sync needs the caller's RLS client + user to write records.
+      return { ok: false, recordsSeen: 0, recordsImported: 0, error: "Google Contacts sync requires a server sync context." };
+    }
+    return syncGooglePeople(orgId, ctx);
   },
 };
 

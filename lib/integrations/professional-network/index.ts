@@ -9,5 +9,5 @@ export * from "./types";
 export { normalizeProfile, normalizeLinkedInUrl, nameFromLinkedInSlug, inferCapitalRole, SOURCE_BASE_CONFIDENCE } from "./normalize-profile";
 export { findDuplicates, blockingDuplicates } from "./dedupe-contacts";
 export { scoreStrength, scoreRelevance, strengthLabel, initialScores, type StrengthInputs, type RelevanceInputs } from "./score-relationship";
-export { fromLinkedInUrl, fromManualEntry, fromCsvRow, type AdapterResult } from "./adapters";
+export { fromLinkedInUrl, fromManualEntry, fromCsvRow, fromGoogleContacts, type AdapterResult } from "./adapters";
 export { PROFESSIONAL_NETWORK_CONNECTORS, googleContactsConnector, linkedinApiConnector } from "./connectors";
