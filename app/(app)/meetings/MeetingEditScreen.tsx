@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AGENTS } from "@/lib/agents";
+import { parseAttendeeInput } from "@/lib/meetings/attendees";
 import {
   MEETING_TYPES,
   CALENDAR_VISIBILITIES,
@@ -126,6 +127,7 @@ export function MeetingEditScreen({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<"save" | "draft" | null>(null);
+  const [savedResult, setSavedResult] = useState<MeetingSaveResult | null>(null);
 
   // Keep end time sensible when start moves past it.
   useEffect(() => {
@@ -148,12 +150,11 @@ export function MeetingEditScreen({
   }
 
   function buildPayload(draft: boolean) {
-    // Internal attendees prefixed so the server can tag them; simple newline/comma parse.
-    const internalList = internalAttendees
-      .split(/[,;\n]/)
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .map((v) => ({ name: v, type: "internal" as const }));
+    // parseAttendeeInput extracts "Name <email>" / bare emails into a validated
+    // { name, email } shape; we just override the type per field. Without this
+    // the raw string lands in `name` and the email is lost.
+    const internalList = parseAttendeeInput(internalAttendees).map((a) => ({ ...a, type: "internal" as const }));
+    const externalList = parseAttendeeInput(externalGuests).map((a) => ({ ...a, type: "external" as const }));
     return {
       meetingId: initial?.meetingId,
       draft,
@@ -167,10 +168,7 @@ export function MeetingEditScreen({
       objective: objective.trim() || null,
       agenda: agenda.trim() || null,
       preparationRequirements: preparationRequirements.trim() || null,
-      attendees: [
-        ...internalList,
-        ...externalGuests.split(/[,;\n]/).map((v) => v.trim()).filter(Boolean).map((v) => ({ name: v, type: "external" as const })),
-      ],
+      attendees: [...internalList, ...externalList],
       attachments: attachments
         .split(/[\n]/)
         .map((v) => v.trim())
@@ -253,17 +251,31 @@ export function MeetingEditScreen({
         throw new Error(json.error ?? "Failed to save meeting");
       }
 
-      const json = (await res.json().catch(() => ({}))) as MeetingSaveResult & { externalSyncError?: string };
-      if (json.externalSyncError) {
-        setNotice(`Meeting saved, external calendar sync failed: ${json.externalSyncError}`);
-      }
-      onSaved({
+      const json = (await res.json().catch(() => ({}))) as MeetingSaveResult & { externalSyncError?: string; invited?: number };
+      const result: MeetingSaveResult = {
         id: json.id ?? initial?.meetingId ?? "",
         roomCode: json.roomCode ?? "",
         isDraft: draft,
         externalCalendarSyncStatus: json.externalCalendarSyncStatus,
         externalSyncError: json.externalSyncError,
-      });
+      };
+
+      // Keep the screen open to confirm noteworthy outcomes (guests invited,
+      // sync failed); otherwise close immediately. The list refreshes either way
+      // via its realtime subscription.
+      const messages: string[] = [];
+      if (json.invited && json.invited > 0) {
+        messages.push(`invited ${json.invited} guest${json.invited === 1 ? "" : "s"} by email`);
+      }
+      if (json.externalSyncError) {
+        messages.push(`external calendar sync failed: ${json.externalSyncError}`);
+      }
+      if (messages.length > 0) {
+        setNotice(`Meeting saved — ${messages.join("; ")}.`);
+        setSavedResult(result);
+        return;
+      }
+      onSaved(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -413,27 +425,39 @@ export function MeetingEditScreen({
 
         {/* Footer */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--line)] px-5 py-4">
-          <button type="button" onClick={onClose} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
-            Cancel
-          </button>
-          {mode === "create" ? (
+          {savedResult ? (
             <button
               type="button"
-              onClick={() => void submit(true)}
-              disabled={busy !== null}
-              className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] disabled:opacity-50"
+              onClick={() => onSaved(savedResult)}
+              className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--gold-500)]"
             >
-              {busy === "draft" ? "Saving…" : "Save as draft"}
+              Done
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void submit(false)}
-            disabled={busy !== null}
-            className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--gold-500)] disabled:opacity-50"
-          >
-            {busy === "save" ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Meeting"}
-          </button>
+          ) : (
+            <>
+              <button type="button" onClick={onClose} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
+                Cancel
+              </button>
+              {mode === "create" ? (
+                <button
+                  type="button"
+                  onClick={() => void submit(true)}
+                  disabled={busy !== null}
+                  className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] disabled:opacity-50"
+                >
+                  {busy === "draft" ? "Saving…" : "Save as draft"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void submit(false)}
+                disabled={busy !== null}
+                className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--gold-500)] disabled:opacity-50"
+              >
+                {busy === "save" ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Meeting"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
