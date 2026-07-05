@@ -155,14 +155,14 @@ export function OfficeTabs() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">
-              Visual execution layer
+              FundExecs OS · Office Program
             </p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
-              Virtual Office
+              AI Execution Floor
             </h1>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-fg-secondary">
-              Earn and the executive AI team route private-market work through rooms,
-              agents, approval gates, and live task context.
+              Command Earn, and the executive AI team routes private-market work through
+              rooms, agents, approval gates, and an audit-ready trail — live on the floor.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
@@ -176,7 +176,7 @@ export function OfficeTabs() {
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-line/60 bg-surface-1/80 px-4 pt-3">
         <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
-          Virtual Office
+          Execution Floor
         </TabButton>
         <TabButton active={tab === "hq"} onClick={() => activateTab("hq")}>
           Overview

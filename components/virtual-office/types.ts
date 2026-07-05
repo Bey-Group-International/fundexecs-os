@@ -147,16 +147,18 @@ export const PLAYER_SPEED = 160;
 export const WALL_THICKNESS = 8;
 export const DOOR_GAP = 64;
 
+// Labels are the institutional room purposes of the FundExecs execution
+// floor — they must stay in sync with PROGRAM_ROOMS in program/officeProgram.ts.
 export const ROOMS: RoomDef[] = [
-  { key: "ceo",       label: "CEO Office",    imagePath: "/assets/fundexecs/office/rooms/day/ceo-office-day-empty.png",      col: 0, row: 0, href: "/dashboard" },
-  { key: "boardroom", label: "Boardroom",     imagePath: "/assets/fundexecs/office/rooms/day/boardroom-day-empty.png",        col: 1, row: 0, href: "/dashboard" },
-  { key: "trading",   label: "Trading Floor", imagePath: "/assets/fundexecs/office/rooms/day/trading-floor-day-empty.png",    col: 2, row: 0, href: "/dashboard/deals" },
-  { key: "research",  label: "Research Hub",  imagePath: "/assets/fundexecs/office/rooms/day/research-hub-day-empty.png",     col: 0, row: 1, href: "/dashboard" },
-  { key: "office",    label: "Main Office",   imagePath: "/assets/fundexecs/office/rooms/day/office-day-empty.png",           col: 1, row: 1, href: "/dashboard" },
-  { key: "ops",       label: "Operations",    imagePath: "/assets/fundexecs/office/rooms/day/operations-hub-day-empty.png",   col: 2, row: 1, href: "/dashboard/automation" },
-  { key: "legal",     label: "Legal Corner",  imagePath: "/assets/fundexecs/office/rooms/day/legal-corner-day-empty.png",     col: 0, row: 2, href: "/dashboard/capital" },
-  { key: "marketing", label: "Marketing",     imagePath: "/assets/fundexecs/office/rooms/day/marketing-saloon-day-empty.png", col: 1, row: 2, href: "/dashboard/marketing" },
-  { key: "reception", label: "Reception",     imagePath: "/assets/fundexecs/office/rooms/day/reception-lounge-day-empty.png", col: 2, row: 2, href: "/dashboard" },
+  { key: "ceo",       label: "Command Center",    imagePath: "/assets/fundexecs/office/rooms/day/ceo-office-day-empty.png",      col: 0, row: 0, href: "/dashboard" },
+  { key: "boardroom", label: "Boardroom",         imagePath: "/assets/fundexecs/office/rooms/day/boardroom-day-empty.png",        col: 1, row: 0, href: "/dashboard" },
+  { key: "trading",   label: "Deal Room",         imagePath: "/assets/fundexecs/office/rooms/day/trading-floor-day-empty.png",    col: 2, row: 0, href: "/dashboard/deals" },
+  { key: "research",  label: "Diligence Room",    imagePath: "/assets/fundexecs/office/rooms/day/research-hub-day-empty.png",     col: 0, row: 1, href: "/dashboard" },
+  { key: "office",    label: "Underwriting Desk", imagePath: "/assets/fundexecs/office/rooms/day/office-day-empty.png",           col: 1, row: 1, href: "/dashboard" },
+  { key: "ops",       label: "Portfolio Ops",     imagePath: "/assets/fundexecs/office/rooms/day/operations-hub-day-empty.png",   col: 2, row: 1, href: "/dashboard/automation" },
+  { key: "legal",     label: "Compliance & Legal", imagePath: "/assets/fundexecs/office/rooms/day/legal-corner-day-empty.png",    col: 0, row: 2, href: "/dashboard/capital" },
+  { key: "marketing", label: "Treasury Desk",     imagePath: "/assets/fundexecs/office/rooms/day/marketing-saloon-day-empty.png", col: 1, row: 2, href: "/dashboard/marketing" },
+  { key: "reception", label: "IR Lounge",         imagePath: "/assets/fundexecs/office/rooms/day/reception-lounge-day-empty.png", col: 2, row: 2, href: "/dashboard" },
 ];
 
 // Sprite animation rows — mirrors spriteFrameMap.ts

@@ -22,6 +22,15 @@ import { MeshManager } from "../rtc/MeshManager";
 import { SfuManager } from "../rtc/SfuManager";
 import { executiveCharacters } from "../../characters/characterConfig";
 import { spriteFrameMaps } from "../../characters/spriteFrameMap";
+import {
+  AGENT_BY_ID,
+  PROGRAM_AGENTS,
+  RISK_TIERS,
+  type AgentId,
+  type AgentState,
+  type RiskTier,
+  type RoomKey,
+} from "../program/officeProgram";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
@@ -44,6 +53,23 @@ type NpcAvatarState = {
   targetY: number;
   facing: Facing;
   spriteKey: string;
+  // ── Office-program agent fields ──
+  /** Program agent id when this NPC is an AI executive agent. */
+  agentId: AgentId | null;
+  /** Current program state — drives aura color, pulse, and status label. */
+  programState: AgentState;
+  /** Status line rendered under the name label. */
+  statusText: Phaser.GameObjects.Text;
+  /** Soft glow ring under the avatar — the AI-native visual cue. */
+  aura: Phaser.GameObjects.Arc;
+  /** Active waypoint path when the agent is walking to a room. */
+  path: Array<{ x: number; y: number }>;
+};
+
+type RoomOverlay = {
+  glow: Phaser.GameObjects.Graphics;
+  badge: Phaser.GameObjects.Text;
+  badgeBg: Phaser.GameObjects.Graphics;
 };
 
 /** Data passed from VirtualOfficeGame into the scene via scene.init() */
@@ -151,8 +177,14 @@ export class OfficeScene extends Phaser.Scene {
 
   // Emotes
   private emoteKeys: Phaser.Input.Keyboard.Key[] = [];
-  // Start within the natural 9-16s window so no ambient emote fires on frame 1
-  private npcEmoteTimer = 9000 + Math.random() * 7000;
+  // Start within the natural 14-26s window so no ambient emote fires on frame 1
+  private npcEmoteTimer = 14000 + Math.random() * 12000;
+
+  // ── Office-program layer ──
+  /** Room activation overlays (glow + task badge), created lazily per room. */
+  private roomOverlays = new Map<string, RoomOverlay>();
+  /** Which agents currently occupy each room, for slot placement. */
+  private roomAgentSlots = new Map<string, AgentId[]>();
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -222,7 +254,8 @@ export class OfficeScene extends Phaser.Scene {
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
-    this._spawnExecNpcs();
+    this._spawnProgramAgents();
+    this._setupProgramBridge();
     this._setupPointerTeleport();
     this._createMinimap();
     this._createInteractives();
@@ -267,7 +300,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateRoomLabel();
     this._updateIframeZones();
     this._updateRemoteAvatars();
-    this._updateNpcAvatars();
+    this._updateNpcAvatars(delta);
     this._updateSpatialAudio();
     this._updateMinimap();
 
@@ -282,6 +315,10 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:emote");
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
+    this.game.events.off("program:npc-goto");
+    this.game.events.off("program:npc-state");
+    this.game.events.off("program:room-activity");
+    this.game.events.off("program:handoff");
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -654,13 +691,226 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
-  private _updateNpcAvatars() {
-    if (this._interpFrame !== 0) return;
+  private static readonly NPC_SPEED = 105; // px/s — purposeful executive pace
+
+  /**
+   * Program agents walk waypoint paths issued by the office program
+   * (task routing, meetings, approvals). Movement is never random.
+   */
+  private _updateNpcAvatars(delta: number) {
+    const step = (OfficeScene.NPC_SPEED * delta) / 1000;
     for (const [, state] of this.npcAvatars) {
-      state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
-      state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
-      state.label.setPosition(state.sprite.x, state.sprite.y - 28);
+      if (state.path.length > 0) {
+        const next = state.path[0];
+        const dx = next.x - state.sprite.x;
+        const dy = next.y - state.sprite.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist <= step) {
+          state.sprite.setPosition(next.x, next.y);
+          state.path.shift();
+          if (state.path.length === 0) {
+            state.sprite.anims.play(facingToAnimKey("idle", state.spriteKey), true);
+            state.facing = "idle" as Facing;
+          }
+        } else {
+          state.sprite.x += (dx / dist) * step;
+          state.sprite.y += (dy / dist) * step;
+          const facing: Facing = Math.abs(dx) > Math.abs(dy)
+            ? (dx < 0 ? "left" : "right")
+            : (dy < 0 ? "up" : "down");
+          if (state.facing !== facing) {
+            state.facing = facing;
+            state.sprite.anims.play(facingToAnimKey(facing, state.spriteKey), true);
+          }
+        }
+      } else if (state.targetX !== state.sprite.x || state.targetY !== state.sprite.y) {
+        // Legacy lerp target (kept for future server-driven agents).
+        state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
+        state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
+      }
+      state.label.setPosition(state.sprite.x, state.sprite.y - 30);
+      state.statusText.setPosition(state.sprite.x, state.sprite.y - 22);
+      state.aura.setPosition(state.sprite.x, state.sprite.y + 10);
     }
+  }
+
+  // ── Office-program bridge — NPC reactivity, room activation, handoffs ──────
+
+  private _setupProgramBridge() {
+    // Agent walks to a room with purpose (task assignment / approval / return).
+    this.game.events.on("program:npc-goto", (agentId: AgentId, roomKey: RoomKey) => {
+      const npc = this.npcAvatars.get(`agent:${agentId}`);
+      if (!npc) return;
+      const dest = this._claimRoomSlot(agentId, roomKey);
+      npc.path = this._findPath(npc.sprite.x, npc.sprite.y, dest.x, dest.y);
+      if (npc.path.length === 0) npc.path = [dest];
+    });
+
+    // Agent state change — aura color, pulse, and executive status line.
+    this.game.events.on(
+      "program:npc-state",
+      (agentId: AgentId, state: AgentState, label: string) => {
+        const npc = this.npcAvatars.get(`agent:${agentId}`);
+        if (!npc) return;
+        npc.programState = state;
+        npc.statusText.setText(this._shortStatus(state, label));
+        this._applyAgentAura(npc, state);
+      }
+    );
+
+    // Room activation — glow border + task/tier badge.
+    this.game.events.on(
+      "program:room-activity",
+      (roomKey: RoomKey, active: boolean, taskCount: number, tier: RiskTier | null) => {
+        this._renderRoomOverlay(roomKey, active, taskCount, tier);
+      }
+    );
+
+    // Visible work handoff — a task card travels from Earn to the agent.
+    this.game.events.on("program:handoff", (toAgentId: AgentId) => {
+      const from = this.npcAvatars.get("agent:earn");
+      const to = this.npcAvatars.get(`agent:${toAgentId}`);
+      if (!from || !to) return;
+      this._animateTaskHandoff(from.sprite.x, from.sprite.y - 12, to.sprite.x, to.sprite.y - 12);
+    });
+  }
+
+  /** Compact status text for the floor label (full text lives in the panel). */
+  private _shortStatus(state: AgentState, label: string): string {
+    if (state === "idle") return "";
+    const max = 26;
+    return label.length > max ? `${label.slice(0, max - 1)}…` : label;
+  }
+
+  private _applyAgentAura(npc: NpcAvatarState, state: AgentState) {
+    const colors: Partial<Record<AgentState, number>> = {
+      classifying: 0xfbbf24,
+      listening: 0xfbbf24,
+      assigned: 0xc9a84c,
+      moving: 0xc9a84c,
+      working: 0x38bdf8,
+      collaborating: 0x38bdf8,
+      reviewing: 0xa855f7,
+      waiting_for_approval: 0xf59e0b,
+      complete: 0x22c55e,
+      blocked: 0xef4444,
+    };
+    const color = colors[state];
+    this.tweens.killTweensOf(npc.aura);
+    if (!color) {
+      npc.aura.setVisible(false);
+      return;
+    }
+    npc.aura.setVisible(true);
+    npc.aura.setStrokeStyle(1.5, color, 0.85);
+    npc.aura.setFillStyle(color, 0.08);
+    npc.aura.setScale(1);
+    npc.aura.setAlpha(1);
+    // Work pulse — only while actively engaged, per the "glow when active" rule
+    if (state === "working" || state === "classifying" || state === "waiting_for_approval") {
+      this.tweens.add({
+        targets: npc.aura,
+        scale: 1.25,
+        alpha: 0.55,
+        duration: 850,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    }
+  }
+
+  /** Room activation overlay: soft glow border + "N active · tier" badge. */
+  private _renderRoomOverlay(roomKey: string, active: boolean, taskCount: number, tier: RiskTier | null) {
+    const room = ROOMS.find((r) => r.key === roomKey);
+    if (!room) return;
+    let overlay = this.roomOverlays.get(roomKey);
+    if (!overlay) {
+      const glow = this.add.graphics().setDepth(3);
+      const badgeBg = this.add.graphics().setDepth(4);
+      const badge = this.add.text(0, 0, "", {
+        fontFamily: "'Georgia','Times New Roman',serif",
+        fontSize: "8px",
+        color: "#c9a84c",
+        letterSpacing: 1,
+      }).setDepth(5);
+      overlay = { glow, badge, badgeBg };
+      this.roomOverlays.set(roomKey, overlay);
+    }
+
+    overlay.glow.clear();
+    overlay.badgeBg.clear();
+    this.tweens.killTweensOf(overlay.glow);
+
+    if (!active) {
+      overlay.badge.setVisible(false);
+      return;
+    }
+
+    const tierColor = tier ? parseInt(RISK_TIERS[tier].color.slice(1), 16) : 0xc9a84c;
+    const rx = room.col * ROOM_W + 3;
+    const ry = room.row * ROOM_H + 3;
+    overlay.glow.lineStyle(2, tierColor, 0.5);
+    overlay.glow.strokeRect(rx, ry, ROOM_W - 6, ROOM_H - 6);
+    overlay.glow.setAlpha(1);
+    this.tweens.add({
+      targets: overlay.glow, alpha: 0.45, duration: 1300, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+    });
+
+    const tierShort = tier ? RISK_TIERS[tier].short : "";
+    overlay.badge.setText(`● ${taskCount} ACTIVE${tierShort ? ` · ${tierShort}` : ""}`);
+    overlay.badge.setColor(tier ? RISK_TIERS[tier].color : "#c9a84c");
+    const bx = room.col * ROOM_W + ROOM_W - overlay.badge.width - 16;
+    const by = room.row * ROOM_H + 8;
+    overlay.badge.setPosition(bx + 5, by + 3).setVisible(true);
+    overlay.badgeBg.fillStyle(0x0a0806, 0.82);
+    overlay.badgeBg.fillRoundedRect(bx, by, overlay.badge.width + 10, 15, 3);
+  }
+
+  /** Gold task card tween — the visible delegation from Earn to an agent. */
+  private _animateTaskHandoff(fromX: number, fromY: number, toX: number, toY: number) {
+    const card = this.add.graphics().setDepth(14);
+    card.fillStyle(0xc9a84c, 0.95);
+    card.fillRoundedRect(-5, -3.5, 10, 7, 1.5);
+    card.lineStyle(0.5, 0x0a0806, 0.9);
+    card.strokeRoundedRect(-5, -3.5, 10, 7, 1.5);
+    card.setPosition(fromX, fromY);
+    this.tweens.add({
+      targets: card,
+      x: toX,
+      y: toY,
+      duration: 620,
+      ease: "Cubic.easeInOut",
+      onComplete: () => {
+        this.tweens.add({
+          targets: card, alpha: 0, scale: 1.6, duration: 220,
+          onComplete: () => card.destroy(),
+        });
+      },
+    });
+  }
+
+  /** Deterministic in-room slot so agents never stack on one tile. */
+  private _claimRoomSlot(agentId: AgentId, roomKey: RoomKey): { x: number; y: number } {
+    // Release any slot the agent holds elsewhere
+    for (const [key, ids] of this.roomAgentSlots) {
+      const idx = ids.indexOf(agentId);
+      if (idx >= 0 && key !== roomKey) ids.splice(idx, 1);
+    }
+    const ids = this.roomAgentSlots.get(roomKey) ?? [];
+    if (!ids.includes(agentId)) ids.push(agentId);
+    this.roomAgentSlots.set(roomKey, ids);
+
+    const room = ROOMS.find((r) => r.key === roomKey)!;
+    const offsets = [
+      { dx: -60, dy: 20 }, { dx: 60, dy: 20 }, { dx: -60, dy: 64 },
+      { dx: 60, dy: 64 }, { dx: 0, dy: 44 }, { dx: 0, dy: -8 },
+    ];
+    const off = offsets[ids.indexOf(agentId) % offsets.length];
+    return {
+      x: room.col * ROOM_W + ROOM_W / 2 + off.dx,
+      y: room.row * ROOM_H + ROOM_H / 2 + off.dy,
+    };
   }
 
   // ── Interactive objects — WorkAdventure-style "press X" hotspots ────────────
@@ -821,14 +1071,16 @@ export class OfficeScene extends Phaser.Scene {
         this._triggerLocalEmote(OfficeScene.EMOTES[i]);
       }
     }
-    // Ambient NPC emotes — a random exec reacts every 9-16s for liveliness
+    // Light purposeful idle activity — only idle agents, infrequent, and
+    // restricted to work-flavored icons. Active agents never emote randomly;
+    // their state is communicated by aura + status label instead.
     this.npcEmoteTimer -= delta;
     if (this.npcEmoteTimer <= 0) {
-      this.npcEmoteTimer = 9000 + Math.random() * 7000;
-      const npcs = [...this.npcAvatars.values()];
-      if (npcs.length > 0) {
-        const npc = npcs[Math.floor(Math.random() * npcs.length)];
-        const ambient = ["💬", "📊", "✦", "📈", "☕"];
+      this.npcEmoteTimer = 14000 + Math.random() * 12000;
+      const idle = [...this.npcAvatars.values()].filter((n) => n.programState === "idle");
+      if (idle.length > 0) {
+        const npc = idle[Math.floor(Math.random() * idle.length)];
+        const ambient = ["📊", "✦", "📈"];
         this._showEmote(npc.sprite.x, npc.sprite.y, ambient[Math.floor(Math.random() * ambient.length)]);
       }
     }
@@ -1054,30 +1306,28 @@ export class OfficeScene extends Phaser.Scene {
     return true;
   }
 
-  private _spawnExecNpcs() {
-    // Offset slots so multiple NPCs in the same room don't stack
-    const roomSlots: Record<string, number> = {};
-    for (const ch of executiveCharacters) {
-      if (!ch.roomKey || !ch.spriteSheet) continue;
-      const room = ROOMS.find((r) => r.key === ch.roomKey);
-      if (!room) continue;
-      const slot = roomSlots[ch.roomKey] ?? 0;
-      roomSlots[ch.roomKey] = slot + 1;
-      // Spread up to 4 NPCs per room in a 2×2 grid offset from center
-      const offsets = [
-        { dx: -56, dy: 24 },
-        { dx:  56, dy: 24 },
-        { dx: -56, dy: 64 },
-        { dx:  56, dy: 64 },
-      ];
-      const off = offsets[slot % offsets.length];
-      const x = room.col * ROOM_W + ROOM_W / 2 + off.dx;
-      const y = room.row * ROOM_H + ROOM_H / 2 + off.dy;
-      this._spawnNpc(ch.id, x, y, "down", ch.id, ch.nickname ?? ch.name.split(" ")[0]);
+  /**
+   * Spawn the AI executive agents at their home rooms. Agents are
+   * humanized executive sprites with a name label, role status line,
+   * and an AI-native glow ring that activates only when they work.
+   * All movement is issued by the office program — never random.
+   */
+  private _spawnProgramAgents() {
+    for (const agent of PROGRAM_AGENTS) {
+      const pos = this._claimRoomSlot(agent.id, agent.homeRoom);
+      this._spawnNpc(`agent:${agent.id}`, pos.x, pos.y, "down", agent.spriteKey, agent.name, agent.id);
     }
   }
 
-  private _spawnNpc(npcId: string, x: number, y: number, facing: Facing, spriteKey: string, name: string) {
+  private _spawnNpc(
+    npcId: string,
+    x: number,
+    y: number,
+    facing: Facing,
+    spriteKey: string,
+    name: string,
+    agentId: AgentId | null = null,
+  ) {
     if (this.npcAvatars.has(npcId)) return;
     const textureKey = this._textureKeyForCharacter(spriteKey);
     const frameMap = spriteFrameMaps[this._frameMapKindForCharacter(spriteKey)];
@@ -1101,26 +1351,35 @@ export class OfficeScene extends Phaser.Scene {
       sprite.setAlpha(1);
     });
 
-    const label = this.add.text(x, y - 28, name, {
+    const accent = agentId ? AGENT_BY_ID[agentId].accent : "#fbbf24";
+    const label = this.add.text(x, y - 30, name, {
       fontFamily: "monospace",
       fontSize: "8px",
-      color: "#fbbf24",
+      color: accent,
       stroke: "#0f172a",
       strokeThickness: 2,
     }).setOrigin(0.5, 1).setDepth(9);
 
-    this.npcAvatars.set(npcId, { sprite, label, targetX: x, targetY: y, facing, spriteKey });
-  }
+    // Executive status line under the name — updated by the program layer
+    const statusText = this.add.text(x, y - 22, "", {
+      fontFamily: "monospace",
+      fontSize: "6px",
+      color: "#cbd5e1",
+      stroke: "#0f172a",
+      strokeThickness: 2,
+    }).setOrigin(0.5, 1).setDepth(9);
 
-  private _updateNpcState(npcId: string, x: number, y: number, facing: Facing, spriteKey: string) {
-    const state = this.npcAvatars.get(npcId);
-    if (!state) return;
-    state.targetX = x;
-    state.targetY = y;
-    if (state.facing !== facing) {
-      state.facing = facing;
-      state.sprite.anims.play(facingToAnimKey(facing, spriteKey), true);
-    }
+    // AI-native glow ring at the agent's feet; hidden while idle
+    const aura = this.add.arc(x, y + 10, 11, 0, 360, false)
+      .setStrokeStyle(1.5, 0xc9a84c, 0.85)
+      .setFillStyle(0xc9a84c, 0.08)
+      .setDepth(7)
+      .setVisible(false);
+
+    this.npcAvatars.set(npcId, {
+      sprite, label, targetX: x, targetY: y, facing, spriteKey,
+      agentId, programState: "idle", statusText, aura, path: [],
+    });
   }
 
   private _updateSpatialAudio() {
@@ -1355,18 +1614,13 @@ export class OfficeScene extends Phaser.Scene {
         this.sfu?.handleProducerClosed(msg);
         break;
       }
-      case "npc.snapshot": {
-        for (const npc of msg.npcs) {
-          this._spawnNpc(npc.npcId, npc.x, npc.y, npc.facing, npc.spriteKey, npc.name);
-        }
-        break;
-      }
+      case "npc.snapshot":
       case "npc.state": {
-        if (!this.npcAvatars.has(msg.npcId)) {
-          this._spawnNpc(msg.npcId, msg.x, msg.y, msg.facing, msg.spriteKey, msg.name);
-        } else {
-          this._updateNpcState(msg.npcId, msg.x, msg.y, msg.facing, msg.spriteKey);
-        }
+        // Server-driven wandering NPCs are intentionally ignored: the office
+        // program is the local authority on agent presence and movement, and
+        // every agent move must correspond to a task, approval, or meeting.
+        // TODO(websocket): once the workflow engine runs server-side, map
+        // npc.state messages onto program agents here instead.
         break;
       }
       case "room.occupancy": {
