@@ -13,6 +13,9 @@
 
 import { GOOGLE_PEOPLE_REFRESH_TOKEN_KEY, googleOAuthConfigured } from "@/lib/google-oauth";
 import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { composioConfigured } from "@/lib/integrations/composio/client.server";
+import { syncGmailContacts } from "@/lib/integrations/composio/gmail.server";
+import { syncLinkedInSelf } from "@/lib/integrations/composio/linkedin.server";
 import { syncGooglePeople } from "./google-people.server";
 import type { ConnectorAvailability, ProfessionalNetworkConnector } from "./types";
 
@@ -49,26 +52,59 @@ export const googleContactsConnector: ProfessionalNetworkConnector = {
   },
 };
 
-/** Official LinkedIn API — compliant adapter, credentials-gated. */
+/**
+ * Gmail correspondents (via Composio) — metadata-only relationship signal.
+ * Reads sender identity of recent mail; never message bodies, never outreach.
+ */
+export const gmailComposioConnector: ProfessionalNetworkConnector = {
+  provider: "email",
+  label: "Gmail (via Composio)",
+  availability() {
+    return composioConfigured()
+      ? { available: true }
+      : notYet("Gmail relationship signal is pending Composio configuration. Use Google Contacts, a LinkedIn profile URL, manual entry, or the CSV fallback today.");
+  },
+  connectUrl() {
+    // Connections are authorized in Composio, not via an app-owned OAuth route.
+    return null;
+  },
+  async sync(orgId, ctx) {
+    if (!ctx) {
+      return { ok: false, recordsSeen: 0, recordsImported: 0, error: "Gmail sync requires a server sync context." };
+    }
+    return syncGmailContacts(orgId, ctx);
+  },
+};
+
+/**
+ * Official LinkedIn API — compliant adapter, now wired through Composio.
+ * Available when Composio is configured (or legacy partner creds are present).
+ * Imports the authenticated member's own verified profile only: LinkedIn's
+ * official API offers no connection-list export and no URL-to-data lookup, so
+ * there is no bulk import and — by design — no scraping fallback.
+ */
 export const linkedinApiConnector: ProfessionalNetworkConnector = {
   provider: "linkedin_api",
   label: "LinkedIn (official API)",
   availability() {
-    // SEAM(linkedin-api): flips available only with approved official API /
-    // partner API credentials. There is no scraping fallback by design.
-    return process.env.LINKEDIN_API_CLIENT_ID
+    return composioConfigured() || process.env.LINKEDIN_API_CLIENT_ID
       ? { available: true }
       : notYet("LinkedIn connection pending official API access. Use a LinkedIn profile URL, manual entry, or the CSV export fallback to build your Capital Network today.");
   },
   connectUrl() {
-    return null; // TODO(oauth): LinkedIn OAuth URL once API access is approved
+    // Connections are authorized in Composio, not via an app-owned OAuth route.
+    return null;
   },
-  async sync() {
-    return { ok: false, recordsSeen: 0, recordsImported: 0, error: "LinkedIn official API access not configured." };
+  async sync(orgId, ctx) {
+    if (!ctx) {
+      return { ok: false, recordsSeen: 0, recordsImported: 0, error: "LinkedIn sync requires a server sync context." };
+    }
+    return syncLinkedInSelf(orgId, ctx);
   },
 };
 
 export const PROFESSIONAL_NETWORK_CONNECTORS: ProfessionalNetworkConnector[] = [
   googleContactsConnector,
+  gmailComposioConnector,
   linkedinApiConnector,
 ];

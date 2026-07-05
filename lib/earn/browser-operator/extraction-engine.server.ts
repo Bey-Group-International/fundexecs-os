@@ -19,9 +19,9 @@ import type { BrowserDataSource, ExtractedDataPoint } from "./types";
 import { policyForSource } from "./source-policy";
 import { buildReviewRecord, type ReviewRecord } from "./review-queue";
 import { transitionSession, writeAudit } from "./server";
-import { extractFromEdgar } from "./sources/edgar.server";
 import { extractFromPublicWeb } from "./sources/public-web.server";
 import type { HttpFetch } from "./sources/http";
+import { extractEdgarPreferComposio } from "@/lib/integrations/composio/edgar.server";
 
 type Client = SupabaseClient<Database>;
 
@@ -75,10 +75,16 @@ async function extractPoints(
   source: BrowserDataSource,
   target: ExtractionTarget,
   http?: HttpFetch,
+  orgId?: string,
 ): Promise<{ ok: true; points: ExtractedDataPoint[]; url?: string } | { ok: false; message: string }> {
   if (source === "edgar") {
     if (!target.query?.trim()) return { ok: false, message: "EDGAR extraction needs a ticker or company name." };
-    const res = await extractFromEdgar({ query: target.query, limit: target.limit, http });
+    // Prefer Composio's SEC-filings tool when configured; otherwise (and on any
+    // Composio miss) fall back to the direct SEC JSON API — same output shape.
+    const res = await extractEdgarPreferComposio(
+      { query: target.query, limit: target.limit, http },
+      { orgId },
+    );
     if (!res.ok) return { ok: false, message: res.message };
     return { ok: true, points: res.points };
   }
@@ -137,8 +143,8 @@ export async function runExtraction(
     input: { action: "extraction_started", sourceType: source, url: target.url ?? session.current_url ?? null },
   });
 
-  // 3. Extract from the source module.
-  const extracted = await extractPoints(source, target, args.http);
+  // 3. Extract from the source module (EDGAR prefers Composio, scoped to the org).
+  const extracted = await extractPoints(source, target, args.http, session.organization_id);
   if (!extracted.ok) {
     await transitionSession(supabase, session, "fail");
     await writeAudit(supabase, {

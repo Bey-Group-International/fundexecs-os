@@ -82,6 +82,7 @@ export const SOURCE_BASE_CONFIDENCE: Record<ProfessionalNetworkSource, number> =
   linkedin_csv: 65,  // platform export, but point-in-time
   csv: 50,
   contacts: 60,
+  email: 55,          // you demonstrably correspond with them; identity inferred from headers
   calendar: 45,
   crm: 60,
   linkedin_url: 35,  // URL reference only; fields are inferred until confirmed
