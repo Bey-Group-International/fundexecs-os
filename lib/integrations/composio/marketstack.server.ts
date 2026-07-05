@@ -1,59 +1,37 @@
-// Company / market facts via the Marketstack API (https://marketstack.com).
+// Company / market facts via Marketstack — executed THROUGH Composio.
 //
-// This replaces the SEC company-facts lookup: given a ticker or company name we
-// resolve the registrant's market identity (name, symbol, exchange) and its
-// latest end-of-day price from Marketstack, then emit the same
-// `ExtractedDataPoint[]` shape the review queue already understands. The EDGAR
-// *filings* themselves are discovered separately via Google web search
-// (edgar-search.server.ts) — Marketstack supplies market data, not filings.
+// Marketstack is connected inside Composio (its API key lives in the Composio
+// connected account), so the app calls Marketstack via Composio's tool-execute
+// endpoint and Composio injects the credential. This is driven by the same
+// COMPOSIO_API_KEY the rest of the layer uses — there is no separate Marketstack
+// key in the app.
 //
-// Key handling mirrors the Composio layer: the Marketstack access key is resolved
-// per-org from the vault (provider `marketstack`) falling back to a process-level
-// `MARKETSTACK_API_KEY`. With no key configured, `marketstackConfigured()` is
-// false and callers degrade cleanly. The fetch layer is injectable so the mapper
-// and the fetch path are unit tested with sample payloads and zero network.
+// Given a ticker or company name we resolve the registrant's market identity
+// (name, symbol, exchange) and, best-effort, its latest EOD close, then emit the
+// same `ExtractedDataPoint[]` the review queue understands. The EDGAR *filings*
+// are discovered separately via Google web search (edgar-search.server.ts).
+//
+// The Composio Marketstack tool slugs are env-overridable because the exact slug
+// depends on how the toolkit is registered in Composio; the defaults follow
+// Composio's TOOLKIT_ACTION convention. The mapper is pure and the fetch path is
+// unit tested through the injectable Composio fetch.
 
-import { getOrgSecret } from "@/lib/org-secrets";
 import type { ExtractedDataPoint } from "@/lib/earn/browser-operator/types";
+import {
+  executeComposioTool,
+  type ComposioConfig,
+  type ComposioExecuteResult,
+} from "./client.server";
 
-type FetchLike = typeof fetch;
+/** Composio tool slug for Marketstack ticker lookup (env-overridable). */
+export const MARKETSTACK_TICKERS_TOOL =
+  process.env.MARKETSTACK_TICKERS_TOOL || "MARKETSTACK_GET_TICKERS";
+/** Composio tool slug for Marketstack latest EOD price (env-overridable). */
+export const MARKETSTACK_EOD_TOOL =
+  process.env.MARKETSTACK_EOD_TOOL || "MARKETSTACK_GET_EOD_LATEST";
 
-/** Env var holding the process-level Marketstack access key. */
-export const MARKETSTACK_API_KEY_ENV = "MARKETSTACK_API_KEY";
-/** Env var overriding the Marketstack base URL (v1 vs v2 / http vs https). */
-export const MARKETSTACK_BASE_URL_ENV = "MARKETSTACK_BASE_URL";
-/** org_secrets.provider key for a per-org Marketstack access key. */
-export const MARKETSTACK_SECRET_KEY = "marketstack";
-
-const DEFAULT_BASE_URL = "https://api.marketstack.com/v1";
-const DEFAULT_TIMEOUT_MS = 12_000;
 // Marketstack market data is authoritative for identity/price → high confidence.
 const MARKETSTACK_CONFIDENCE = 90;
-
-/** True when a process-level Marketstack key is configured. */
-export function marketstackConfigured(): boolean {
-  return Boolean(process.env[MARKETSTACK_API_KEY_ENV]);
-}
-
-/**
- * Resolve the Marketstack key for an org: a vaulted per-org key wins over the
- * process-level env key. Returns null when neither is present.
- */
-export async function resolveMarketstackApiKey(orgId?: string): Promise<string | null> {
-  if (orgId) {
-    try {
-      const scoped = await getOrgSecret(orgId, MARKETSTACK_SECRET_KEY);
-      if (scoped) return scoped;
-    } catch {
-      // A vault miss/decrypt error must not block the env-key fallback.
-    }
-  }
-  return process.env[MARKETSTACK_API_KEY_ENV] ?? null;
-}
-
-function baseUrl(): string {
-  return process.env[MARKETSTACK_BASE_URL_ENV] || DEFAULT_BASE_URL;
-}
 
 // ── Marketstack response shapes (only the fields we read) ─────────────────────
 
@@ -61,28 +39,18 @@ interface MarketstackExchange {
   name?: string;
   acronym?: string;
   mic?: string;
-  country?: string;
-  city?: string;
 }
 interface MarketstackTicker {
   name?: string;
   symbol?: string;
   stock_exchange?: MarketstackExchange;
-  // v2 flattens the exchange onto the ticker in some responses.
   exchange?: string;
   exchange_acronym?: string;
-}
-interface MarketstackTickersResponse {
-  data?: MarketstackTicker[];
 }
 interface MarketstackEod {
   symbol?: string;
   close?: number;
   date?: string;
-  exchange?: string;
-}
-interface MarketstackEodResponse {
-  data?: MarketstackEod[];
 }
 
 /** The normalized market identity we extract from Marketstack. */
@@ -92,6 +60,27 @@ export interface MarketstackCompany {
   exchange: string | null;
   latestClose: number | null;
   latestDate: string | null;
+}
+
+/**
+ * Marketstack wraps rows under `data`, and Composio may wrap the whole response
+ * again under `data`. Dig defensively for the first array of rows.
+ */
+function firstRow<T>(payload: unknown): T | undefined {
+  const seen = new Set<unknown>();
+  let node: unknown = payload;
+  for (let depth = 0; depth < 4 && node && !seen.has(node); depth += 1) {
+    seen.add(node);
+    if (Array.isArray(node)) return node[0] as T | undefined;
+    if (typeof node === "object") {
+      const data = (node as { data?: unknown }).data;
+      if (Array.isArray(data)) return data[0] as T | undefined;
+      node = data;
+    } else {
+      break;
+    }
+  }
+  return undefined;
 }
 
 function exchangeLabel(t: MarketstackTicker | undefined): string | null {
@@ -105,72 +94,51 @@ function exchangeLabel(t: MarketstackTicker | undefined): string | null {
 
 /**
  * Resolve a query (ticker or company name) to a Marketstack market identity +
- * latest EOD price. Two hops: `/tickers?search=` then `/eod/latest?symbols=`.
- * Returns null when the key is missing or nothing matched. Never throws.
+ * latest EOD price, executing both hops through Composio. Returns null when the
+ * ticker lookup misses. Never throws — a Composio miss on the price hop just
+ * drops the price.
  */
-export async function fetchMarketstackCompany(
-  apiKey: string,
+export async function fetchMarketstackCompanyViaComposio(
+  config: ComposioConfig,
   query: string,
-  opts: { fetchImpl?: FetchLike; timeoutMs?: number } = {},
 ): Promise<MarketstackCompany | null> {
-  const fetchImpl = opts.fetchImpl ?? fetch;
   const q = query.trim();
-  if (!apiKey || !q) return null;
-
-  const withTimeout = (): { signal?: AbortSignal; done: () => void } => {
-    if (typeof AbortController !== "function") return { done: () => {} };
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    return { signal: c.signal, done: () => clearTimeout(t) };
-  };
+  if (!q) return null;
 
   // 1. Resolve the ticker.
-  let ticker: MarketstackTicker | undefined;
-  {
-    const guard = withTimeout();
-    try {
-      const url = `${baseUrl()}/tickers?access_key=${encodeURIComponent(apiKey)}&search=${encodeURIComponent(q)}&limit=1`;
-      const res = await fetchImpl(url, { signal: guard.signal });
-      if (!res.ok) return null;
-      const body = (await res.json()) as MarketstackTickersResponse;
-      ticker = body.data?.[0];
-    } catch {
-      return null;
-    } finally {
-      guard.done();
-    }
-  }
+  const tickersRes: ComposioExecuteResult<unknown> = await executeComposioTool(
+    config,
+    MARKETSTACK_TICKERS_TOOL,
+    { search: q, limit: 1 },
+  );
+  if (!tickersRes.ok) return null;
+  const ticker = firstRow<MarketstackTicker>(tickersRes.data);
   if (!ticker?.symbol) return null;
 
+  const symbol = ticker.symbol.trim().toUpperCase();
+
   // 2. Best-effort latest EOD price (a miss here is non-fatal).
-  let close: number | null = null;
-  let date: string | null = null;
-  {
-    const guard = withTimeout();
-    try {
-      const url = `${baseUrl()}/eod/latest?access_key=${encodeURIComponent(apiKey)}&symbols=${encodeURIComponent(ticker.symbol)}`;
-      const res = await fetchImpl(url, { signal: guard.signal });
-      if (res.ok) {
-        const body = (await res.json()) as MarketstackEodResponse;
-        const eod = body.data?.[0];
-        if (eod && typeof eod.close === "number") {
-          close = eod.close;
-          date = eod.date ?? null;
-        }
-      }
-    } catch {
-      // ignore — price is enrichment, not required.
-    } finally {
-      guard.done();
+  let latestClose: number | null = null;
+  let latestDate: string | null = null;
+  const eodRes: ComposioExecuteResult<unknown> = await executeComposioTool(
+    config,
+    MARKETSTACK_EOD_TOOL,
+    { symbols: symbol },
+  );
+  if (eodRes.ok) {
+    const eod = firstRow<MarketstackEod>(eodRes.data);
+    if (eod && typeof eod.close === "number") {
+      latestClose = eod.close;
+      latestDate = eod.date ? eod.date.slice(0, 10) : null;
     }
   }
 
   return {
     name: ticker.name?.trim() || q,
-    symbol: ticker.symbol.trim().toUpperCase(),
+    symbol,
     exchange: exchangeLabel(ticker),
-    latestClose: close,
-    latestDate: date ? date.slice(0, 10) : null,
+    latestClose,
+    latestDate,
   };
 }
 

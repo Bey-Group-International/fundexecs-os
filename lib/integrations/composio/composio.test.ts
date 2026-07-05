@@ -15,8 +15,10 @@ import {
   searchEdgarFilingsViaGoogle,
 } from "./edgar-search.server";
 import {
-  fetchMarketstackCompany,
+  fetchMarketstackCompanyViaComposio,
   mapMarketstackToDataPoints,
+  MARKETSTACK_TICKERS_TOOL,
+  MARKETSTACK_EOD_TOOL,
   type MarketstackCompany,
 } from "./marketstack.server";
 import {
@@ -52,6 +54,22 @@ const cfg = (fetchImpl: ComposioConfig["fetchImpl"]): ComposioConfig => ({
   userId: "entity-1",
   fetchImpl,
 });
+
+// Route Composio execute calls to different envelopes by tool slug in the URL.
+function fakeComposioRouter(
+  routes: Array<{ match: string; envelope: unknown }>,
+  cap?: Captured[],
+): ComposioConfig["fetchImpl"] {
+  return (async (url: string, init?: RequestInit) => {
+    cap?.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    const hit = routes.find((r) => String(url).includes(r.match));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => hit?.envelope ?? { successful: true, data: {} },
+    };
+  }) as unknown as ComposioConfig["fetchImpl"];
+}
 
 // ── client.server ────────────────────────────────────────────────────────────
 
@@ -104,26 +122,35 @@ describe("executeComposioTool", () => {
   });
 });
 
-// ── marketstack.server ───────────────────────────────────────────────────────
+// ── marketstack.server (executed through Composio) ───────────────────────────
 
-// A Marketstack REST fake: routes by URL substring to a JSON body.
-function fakeMarketstackFetch(routes: Array<{ match: string; body: unknown; ok?: boolean }>): typeof fetch {
-  return (async (url: string) => {
-    const hit = routes.find((r) => String(url).includes(r.match));
-    return { ok: hit?.ok ?? Boolean(hit), status: hit ? 200 : 404, json: async () => hit?.body ?? {} };
-  }) as unknown as typeof fetch;
-}
+// Envelopes as Composio returns them (executeComposioTool unwraps `.data`, and
+// Marketstack itself wraps rows under `data`).
+const MS_TICKERS_OK = {
+  successful: true,
+  data: { data: [{ name: "Apple Inc", symbol: "aapl", stock_exchange: { name: "NASDAQ Stock Exchange", acronym: "NASDAQ" } }] },
+};
+const MS_EOD_OK = {
+  successful: true,
+  data: { data: [{ symbol: "AAPL", close: 190.5, date: "2024-11-01T00:00:00+0000" }] },
+};
 
-describe("fetchMarketstackCompany + mapMarketstackToDataPoints", () => {
-  const msFetch = fakeMarketstackFetch([
-    { match: "/tickers", body: { data: [{ name: "Apple Inc", symbol: "aapl", stock_exchange: { name: "NASDAQ Stock Exchange", acronym: "NASDAQ" } }] } },
-    { match: "/eod/latest", body: { data: [{ symbol: "AAPL", close: 190.5, date: "2024-11-01T00:00:00+0000" }] } },
-  ]);
-
-  test("resolves ticker + latest close and maps to authoritative company points", async () => {
-    const company = await fetchMarketstackCompany("key", "Apple", { fetchImpl: msFetch });
+describe("fetchMarketstackCompanyViaComposio + mapMarketstackToDataPoints", () => {
+  test("resolves ticker + latest close through Composio and maps authoritative points", async () => {
+    const cap: Captured[] = [];
+    const config = cfg(fakeComposioRouter(
+      [
+        { match: MARKETSTACK_TICKERS_TOOL, envelope: MS_TICKERS_OK },
+        { match: MARKETSTACK_EOD_TOOL, envelope: MS_EOD_OK },
+      ],
+      cap,
+    ));
+    const company = await fetchMarketstackCompanyViaComposio(config, "Apple");
     // name already contains the acronym, so no redundant parenthetical is added.
     expect(company).toMatchObject({ name: "Apple Inc", symbol: "AAPL", exchange: "NASDAQ Stock Exchange", latestClose: 190.5, latestDate: "2024-11-01" });
+    // Both hops executed via the Composio execute endpoint.
+    expect(cap.some((c) => c.url.includes(MARKETSTACK_TICKERS_TOOL))).toBe(true);
+    expect(cap.some((c) => c.url.includes(MARKETSTACK_EOD_TOOL))).toBe(true);
 
     const points = mapMarketstackToDataPoints(company as MarketstackCompany);
     const byField = Object.fromEntries(points.map((p) => [p.field_name, p]));
@@ -131,22 +158,23 @@ describe("fetchMarketstackCompany + mapMarketstackToDataPoints", () => {
     expect(byField.company_ticker.extracted_value).toBe("AAPL");
     expect(byField.company_exchange.extracted_value).toContain("NASDAQ");
     expect(byField.market_price.extracted_value).toContain("190.5");
-    // Market data is authoritative — no per-field confirmation, source_type edgar.
     for (const p of points) {
       expect(p.source_type).toBe("edgar");
       expect(p.requires_user_confirmation).toBe(false);
     }
   });
 
-  test("returns null when the ticker search finds nothing", async () => {
-    const none = await fetchMarketstackCompany("key", "ZZZZ", { fetchImpl: fakeMarketstackFetch([{ match: "/tickers", body: { data: [] } }]) });
-    expect(none).toBeNull();
+  test("returns null when the ticker lookup finds nothing", async () => {
+    const config = cfg(fakeComposioRouter([{ match: MARKETSTACK_TICKERS_TOOL, envelope: { successful: true, data: { data: [] } } }]));
+    expect(await fetchMarketstackCompanyViaComposio(config, "ZZZZ")).toBeNull();
   });
 
-  test("still returns identity when the EOD price call misses", async () => {
-    const company = await fetchMarketstackCompany("key", "Apple", {
-      fetchImpl: fakeMarketstackFetch([{ match: "/tickers", body: { data: [{ name: "Apple Inc", symbol: "AAPL" }] } }]),
-    });
+  test("still returns identity when the EOD hop misses", async () => {
+    const config = cfg(fakeComposioRouter([
+      { match: MARKETSTACK_TICKERS_TOOL, envelope: { successful: true, data: { data: [{ name: "Apple Inc", symbol: "AAPL" }] } } },
+      { match: MARKETSTACK_EOD_TOOL, envelope: { successful: false, error: "no data" } },
+    ]));
+    const company = await fetchMarketstackCompanyViaComposio(config, "Apple");
     expect(company).toMatchObject({ symbol: "AAPL", latestClose: null });
   });
 });
@@ -222,17 +250,19 @@ describe("extractEdgarPreferComposio", () => {
     const res: HttpResponse = { ok: body !== undefined, status: body ? 200 : 404, headers: { get: () => null }, text: async () => body ?? "" };
     return Promise.resolve(res);
   };
-  const msFetch = fakeMarketstackFetch([
-    { match: "/tickers", body: { data: [{ name: "Apple Inc", symbol: "AAPL", stock_exchange: { name: "NASDAQ", acronym: "NASDAQ" } }] } },
-    { match: "/eod/latest", body: { data: [{ symbol: "AAPL", close: 190.5, date: "2024-11-01" }] } },
-  ]);
-  const googleCfg = () => cfg(fakeComposioFetch({ data: { results: { citations: [{ url: "https://www.sec.gov/Archives/edgar/data/320193/10k.htm", title: "Apple 10-K 2024-11-01" }] } }, successful: true }));
+  const WEB_OK = {
+    successful: true,
+    data: { results: { citations: [{ url: "https://www.sec.gov/Archives/edgar/data/320193/10k.htm", title: "Apple 10-K 2024-11-01" }] } },
+  };
+  // One Composio config drives Marketstack (facts) + web search (filings).
+  const allViaComposio = () => cfg(fakeComposioRouter([
+    { match: MARKETSTACK_TICKERS_TOOL, envelope: MS_TICKERS_OK },
+    { match: MARKETSTACK_EOD_TOOL, envelope: MS_EOD_OK },
+    { match: "COMPOSIO_SEARCH_WEB", envelope: WEB_OK },
+  ]));
 
-  test("merges Marketstack company facts + Google-searched filings (no SEC API)", async () => {
-    const res = await extractEdgarPreferComposio(
-      { query: "Apple", http: secFetch },
-      { composio: googleCfg(), marketstackKey: "key", marketstackFetch: msFetch },
-    );
+  test("merges Marketstack facts + Google-searched filings, both via Composio (no SEC API)", async () => {
+    const res = await extractEdgarPreferComposio({ query: "Apple", http: secFetch }, { composio: allViaComposio() });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.company.title).toBe("Apple Inc");
@@ -243,20 +273,21 @@ describe("extractEdgarPreferComposio", () => {
     }
   });
 
-  test("works with Google filings alone when Marketstack is unconfigured", async () => {
-    const res = await extractEdgarPreferComposio(
-      { query: "Apple", http: secFetch },
-      { composio: googleCfg(), marketstackKey: null },
-    );
+  test("works with Google filings alone when the Marketstack tool errors", async () => {
+    const config = cfg(fakeComposioRouter([
+      { match: MARKETSTACK_TICKERS_TOOL, envelope: { successful: false, error: "tool not found" } },
+      { match: "COMPOSIO_SEARCH_WEB", envelope: WEB_OK },
+    ]));
+    const res = await extractEdgarPreferComposio({ query: "Apple", http: secFetch }, { composio: config });
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.points.some((p) => p.field_name === "filing_1")).toBe(true);
+    if (res.ok) {
+      expect(res.points.some((p) => p.field_name === "filing_1")).toBe(true);
+      expect(res.points.some((p) => p.field_name === "company_ticker")).toBe(false);
+    }
   });
 
-  test("falls back to the direct SEC path only when nothing else is configured", async () => {
-    const res = await extractEdgarPreferComposio(
-      { query: "AAPL", http: secFetch },
-      { composio: null, marketstackKey: null },
-    );
+  test("falls back to the direct SEC path only when Composio is unconfigured", async () => {
+    const res = await extractEdgarPreferComposio({ query: "AAPL", http: secFetch }, { composio: null });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.company.cikPadded).toBe("0000320193");
