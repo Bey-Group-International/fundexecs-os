@@ -22,6 +22,7 @@ export type ProfessionalNetworkSource =
   | "csv"               // generic CSV upload (fallback path)
   | "manual"            // typed in by the user
   | "contacts"          // Google Contacts / People API (backend connector)
+  | "email"             // email correspondents (Gmail via Composio) — metadata only
   | "calendar"          // Google Calendar attendee metadata (backend connector)
   | "crm"               // CRM import (future connector)
   | "public_web"        // compliant public-web enrichment (future)
