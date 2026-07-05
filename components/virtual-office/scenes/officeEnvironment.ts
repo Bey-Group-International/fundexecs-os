@@ -257,7 +257,7 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
 
     // Desk workstations: a chair drawn behind the seat (lower depth) and the
     // desk + computer in front (higher depth, occluding the seated lap).
-    for (const w of WORKSTATIONS[room.key] ?? []) {
+    (WORKSTATIONS[room.key] ?? []).forEach((w, i) => {
       const sx = ox + w.sx;
       const sy = oy + w.sy;
 
@@ -268,9 +268,10 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
 
       const deskFoot = sy + DESK_DY;
       const desk = scene.add.graphics().setDepth(yDepth(deskFoot));
-      drawWorkdesk(desk, sx, deskFoot, accent);
+      // Vary the rig per desk so a bank of workstations doesn't look cloned.
+      drawWorkdesk(desk, sx, deskFoot, accent, (room.col + room.row + i) % 3);
       pieces.push({ gfx: desk, footY: deskFoot });
-    }
+    });
   }
 
   return pieces;
@@ -296,34 +297,74 @@ function drawChair(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accen
   g.fillRect(cx - 6.5, fy - 6, 13, 1); // accent trim
 }
 
-/**
- * A desk with a computer, keyboard, mouse, mug, and papers. The monitor sits
- * to the side of the seat so it never covers the seated occupant's face; the
- * desk front occludes their lap.
- */
-function drawWorkdesk(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number) {
-  box(g, cx, fy, 46, 7, 11, C.deskTop, C.deskFront);
-  const surfaceY = fy - 11 - 7; // top face of the desk
-  // Monitor offset to the occupant's side (viewer-left) with the screen light
-  // spilling up. Seen from behind (dark shell).
-  const mx = cx - 13;
+/** A single monitor seen from behind, at (mx) rising from the desk surface. */
+function deskMonitor(g: Phaser.GameObjects.Graphics, mx: number, surfaceY: number, accent: number, w = 14, h = 10) {
   g.fillStyle(C.legDark, 1);
   g.fillRect(mx - 1, surfaceY - 2, 2, 3); // stand
   g.fillStyle(0x171b23, 1);
-  g.fillRoundedRect(mx - 7, surfaceY - 11, 14, 10, 1.5); // monitor back
+  g.fillRoundedRect(mx - w / 2, surfaceY - h - 1, w, h, 1.5); // shell
   g.fillStyle(shade(0x171b23, 1.5), 1);
-  g.fillRect(mx - 7, surfaceY - 11, 14, 1.4); // top edge
+  g.fillRect(mx - w / 2, surfaceY - h - 1, w, 1.4);           // lit top edge
   g.fillStyle(accent, 0.5);
-  g.fillRect(mx - 6, surfaceY - 12.3, 12, 1.3); // screen glow spill
-  // Keyboard + mouse in front of the occupant.
-  g.fillStyle(0x2a3140, 1);
-  g.fillRoundedRect(cx - 3, surfaceY + 1.4, 13, 2.6, 0.6); // keyboard
-  g.fillCircle(cx + 14, surfaceY + 2.7, 1.2);              // mouse
-  // Papers + mug.
+  g.fillRect(mx - w / 2 + 1, surfaceY - h - 2.3, w - 2, 1.3); // screen glow spill
+}
+
+/**
+ * A desk with a computer, keyboard, mouse, and clutter. Monitors sit to the
+ * occupant's side so they never cover the face; the desk front occludes the
+ * lap. `variant` (0–2) varies the rig — single monitor, dual monitors, or a
+ * laptop — and the monitor casts a soft light pool over the occupant so a
+ * staffed desk reads as powered-on.
+ */
+function drawWorkdesk(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number, variant = 0) {
+  box(g, cx, fy, 46, 7, 11, C.deskTop, C.deskFront);
+  const surfaceY = fy - 11 - 7; // top face of the desk
+
+  // Soft monitor light pool spilling up over the seated occupant.
+  g.fillStyle(accent, 0.06);
+  g.fillEllipse(cx - 6, surfaceY - 8, 44, 30);
+
+  if (variant === 2) {
+    // Laptop — low screen that stays below the occupant's face, offset left.
+    const lx = cx - 11;
+    g.fillStyle(0x171b23, 1);
+    g.fillRoundedRect(lx - 7, surfaceY - 5, 14, 5, 1);   // screen
+    g.fillStyle(accent, 0.5);
+    g.fillRect(lx - 6, surfaceY - 4.2, 12, 1.1);
+    g.fillStyle(0x2a3140, 1);
+    g.fillRoundedRect(lx - 7.5, surfaceY, 15, 2.4, 0.6); // base/keyboard
+  } else if (variant === 1) {
+    // Dual monitors, both to the occupant's side.
+    deskMonitor(g, cx - 18, surfaceY, accent, 13, 9);
+    deskMonitor(g, cx - 6, surfaceY, accent, 13, 9);
+    g.fillStyle(0x2a3140, 1);
+    g.fillRoundedRect(cx + 4, surfaceY + 1.4, 12, 2.6, 0.6); // keyboard
+  } else {
+    // Single side monitor + keyboard.
+    deskMonitor(g, cx - 13, surfaceY, accent);
+    g.fillStyle(0x2a3140, 1);
+    g.fillRoundedRect(cx - 3, surfaceY + 1.4, 13, 2.6, 0.6); // keyboard
+    g.fillCircle(cx + 14, surfaceY + 2.7, 1.2);              // mouse
+  }
+
+  // Desk clutter varies too: papers always; a mug, a desk phone, or a tiny
+  // succulent as the accent item.
   g.fillStyle(0xe8eef5, 0.9);
-  g.fillRect(cx - 6, surfaceY + 0.6, 6, 4);   // papers
-  g.fillStyle(shade(accent, 1.1), 1);
-  g.fillCircle(cx + 9, surfaceY - 0.8, 1.6);  // mug
+  g.fillRect(cx - 6, surfaceY + 0.6, 6, 4); // papers
+  if (variant === 0) {
+    g.fillStyle(shade(accent, 1.1), 1);
+    g.fillCircle(cx + 9, surfaceY - 0.8, 1.6); // mug
+  } else if (variant === 1) {
+    g.fillStyle(0x14532d, 1);
+    g.fillCircle(cx + 15, surfaceY - 1, 2);    // succulent
+    g.fillStyle(C.wood, 1);
+    g.fillRect(cx + 13.6, surfaceY - 0.4, 2.8, 2);
+  } else {
+    g.fillStyle(0x11151f, 1);
+    g.fillRoundedRect(cx + 12, surfaceY - 2, 5, 4, 0.8); // desk phone
+    g.fillStyle(shade(accent, 1.2), 0.9);
+    g.fillRect(cx + 12.6, surfaceY - 1.4, 3.8, 0.8);
+  }
 }
 
 /** A light-from-above extruded block: front face + top cap + soft shadow. */
