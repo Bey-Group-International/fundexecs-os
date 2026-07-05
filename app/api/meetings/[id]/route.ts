@@ -42,6 +42,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         relatedDealId: cleanString(body.relatedDealId),
         relatedFundId: cleanString(body.relatedFundId),
         syncMode: body.syncMode === "pending_external" ? "pending_external" : "local_only",
+        objective: cleanString(body.objective),
+        agenda: cleanString(body.agenda),
+        preparationRequirements: cleanString(body.preparationRequirements),
+        attachments: Array.isArray(body.attachments) ? body.attachments : undefined,
+        calendarVisibility: body.calendarVisibility === undefined ? undefined : String(body.calendarVisibility),
+        reminderMinutes: body.reminderMinutes === undefined ? undefined : (body.reminderMinutes === null ? null : Number(body.reminderMinutes)),
+        assignedCopilotAgent: cleanString(body.assignedCopilotAgent),
+        relatedRecordType: cleanString(body.relatedRecordType),
+        relatedRecordId: cleanString(body.relatedRecordId),
+        externalCalendarProvider: cleanString(body.externalCalendarProvider),
+        externalCalendarSyncEnabled: typeof body.externalCalendarSyncEnabled === "boolean" ? body.externalCalendarSyncEnabled : undefined,
       },
     );
     return NextResponse.json(result);
