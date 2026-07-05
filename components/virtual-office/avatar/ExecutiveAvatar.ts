@@ -356,48 +356,61 @@ export class ExecutiveAvatar {
   private _drawFront(g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number, arm: ArmMode, workStep: number) {
     const sw = this._shoulder(s);
 
-    // Legs
-    g.fillStyle(s.trouser, 1);
-    g.fillRoundedRect(-4.5, 6 - Math.max(0, swing), 3.5, 9 + Math.abs(swing) * 0.4, 1.4);
-    g.fillRoundedRect(1, 6 - Math.max(0, -swing), 3.5, 9 + Math.abs(swing) * 0.4, 1.4);
-    // Shoes with a small toe highlight
+    // Legs — soft vertical gradient (lit at the thigh, shaded at the cuff).
+    const legHi = this._shade(s.trouser, 1.18);
+    const legLo = this._shade(s.trouser, 0.82);
+    g.fillGradientStyle(legHi, legHi, legLo, legLo, 1);
+    g.fillRect(-4.5, 6 - Math.max(0, swing), 3.5, 9 + Math.abs(swing) * 0.4);
+    g.fillRect(1, 6 - Math.max(0, -swing), 3.5, 9 + Math.abs(swing) * 0.4);
+    // Shoes — dark leather with a specular toe highlight.
     g.fillStyle(0x14110d, 1);
     g.fillEllipse(-2.7, 15 - Math.max(0, swing), 4.4, 2.4);
     g.fillEllipse(2.7, 15 - Math.max(0, -swing), 4.4, 2.4);
-    g.fillStyle(0x2a2620, 1);
-    g.fillEllipse(-3.3, 14.6 - Math.max(0, swing), 1.6, 0.9);
-    g.fillEllipse(2.1, 14.6 - Math.max(0, -swing), 1.6, 0.9);
+    g.fillStyle(0x3c362c, 0.9);
+    g.fillEllipse(-3.3, 14.5 - Math.max(0, swing), 1.7, 0.9);
+    g.fillEllipse(2.1, 14.5 - Math.max(0, -swing), 1.7, 0.9);
 
     // Arms — pose depends on the work animation.
     this._drawFrontArms(g, s, swing, arm, workStep);
 
-    // Torso — tapered blazer via polygon, with a volume highlight + shadow.
-    g.fillStyle(s.suit, 1);
+    // Torso — tapered blazer with a directional gradient (lit upper-left →
+    // deeper waist) for real volume.
+    const suitHi = this._shade(s.suit, 1.35);
+    const suitMid = this._shade(s.suit, 1.08);
+    const suitLo = this._shade(s.suit, 0.7);
+    g.fillGradientStyle(suitHi, suitMid, suitLo, this._shade(s.suit, 0.85), 1);
     g.fillPoints([
       new Phaser.Geom.Point(-sw, -6), new Phaser.Geom.Point(sw, -6),
       new Phaser.Geom.Point(5.5, 7), new Phaser.Geom.Point(-5.5, 7),
     ], true);
-    // Left-shoulder highlight (directional light from upper-left).
-    g.fillStyle(this._shade(s.suit, 1.28), 0.5);
-    g.fillTriangle(-sw, -6, -sw + 3.2, -6, -3.4, 6.4);
-    // Right-side shadow for roundness.
-    g.fillStyle(this._shade(s.suit, 0.72), 0.5);
-    g.fillTriangle(sw, -6, sw - 2.6, -6, 4.6, 6.6);
+    // Waist ambient occlusion for a grounded torso.
+    g.fillStyle(this._shade(s.suit, 0.55), 0.3);
+    g.fillTriangle(-5.5, 7, 5.5, 7, 0, 2.5);
 
-    // Shirt V
-    g.fillStyle(s.shirt, 1);
+    // Shirt V with a soft chest gradient.
+    const shHi = this._shade(s.shirt, 1.06);
+    const shLo = this._shade(s.shirt, 0.82);
+    g.fillGradientStyle(shHi, shHi, shLo, shLo, 1);
     g.fillTriangle(-2.6, -6, 2.6, -6, 0, 2.5);
     // Collar edges
-    g.fillStyle(this._shade(s.shirt, 0.9), 1);
+    g.fillStyle(this._shade(s.shirt, 0.86), 1);
     g.fillTriangle(-2.6, -6, -1.2, -6, -1.9, -2.6);
     g.fillTriangle(2.6, -6, 1.2, -6, 1.9, -2.6);
-    // Lapels
-    g.fillStyle(this._shade(s.suit, 0.82), 1);
+    // Lapels — shaded plane + a lit outer edge.
+    g.fillStyle(this._shade(s.suit, 0.8), 1);
     g.fillTriangle(-3.2, -6, -0.4, -6, -2.2, 1);
     g.fillTriangle(3.2, -6, 0.4, -6, 2.2, 1);
-    // Tie / accent with a small knot
+    g.lineStyle(0.4, this._shade(s.suit, 1.4), 0.7);
+    g.beginPath(); g.moveTo(-3.2, -6); g.lineTo(-2.2, 1); g.strokePath();
+    g.beginPath(); g.moveTo(3.2, -6); g.lineTo(2.2, 1); g.strokePath();
+    // Pocket square — a small folded accent on the left chest.
+    g.fillStyle(this._shade(s.accent, 1.1), 0.95);
+    g.fillTriangle(-4.6, -2.2, -3.2, -2.2, -3.9, -3.6);
+    // Tie with a knot and a highlighted center ridge.
     g.fillStyle(s.accent, 1);
     g.fillTriangle(-1.1, -5, 1.1, -5, 0, 4);
+    g.fillStyle(this._shade(s.accent, 1.25), 0.8);
+    g.fillTriangle(-0.4, -4.6, 0.4, -4.6, 0, 3.4);
     g.fillStyle(this._shade(s.accent, 1.15), 1);
     g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
 
@@ -449,38 +462,68 @@ export class ExecutiveAvatar {
 
   /** Shared head/hair/face block, offset by (ox, oy). */
   private _drawHead(g: Phaser.GameObjects.Graphics, s: AvatarSpec, ox: number, oy: number) {
-    // Neck
-    g.fillStyle(this._shade(s.skin, 0.9), 1);
-    g.fillRect(ox - 1.7, oy - 9, 3.4, 3.5);
-    // Head
+    const skinLo = this._shade(s.skin, 0.82);
+    // Neck with an ambient-occlusion shadow just under the jaw.
+    g.fillStyle(this._shade(s.skin, 0.88), 1);
+    g.fillRect(ox - 1.8, oy - 9, 3.6, 3.6);
+    g.fillStyle(skinLo, 0.55);
+    g.fillRect(ox - 1.8, oy - 9, 3.6, 1.4);
+    // Ears
+    g.fillStyle(this._shade(s.skin, 0.94), 1);
+    g.fillEllipse(ox - 4.7, oy - 12.6, 2, 3.2);
+    g.fillEllipse(ox + 4.7, oy - 12.6, 2, 3.2);
+    // Head base
     g.fillStyle(s.skin, 1);
     g.fillEllipse(ox, oy - 13, 9.5, 11);
-    // Cheek shading for volume
-    g.fillStyle(this._shade(s.skin, 0.88), 0.5);
-    g.fillEllipse(ox + 2.6, oy - 12, 3.4, 6);
+    // Forehead highlight (top-lit) + jaw / right-cheek shading for volume.
+    g.fillStyle(this._shade(s.skin, 1.12), 0.5);
+    g.fillEllipse(ox - 1, oy - 15, 6, 4);
+    g.fillStyle(skinLo, 0.45);
+    g.fillEllipse(ox, oy - 9.6, 7, 3.4);      // jaw
+    g.fillEllipse(ox + 2.9, oy - 12, 3.2, 6); // cheek
     // Hair
     if (s.hairStyle !== "bald") {
       g.fillStyle(s.hair, 1);
-      g.fillEllipse(ox, oy - 15.5, 10, 7);
-      g.fillRect(ox - 5, oy - 15.5, 10, 2.5);
+      g.fillEllipse(ox, oy - 15.6, 10, 7.2);
+      g.fillRect(ox - 5, oy - 15.6, 10, 2.6);
+      // Sideburns framing the face.
+      g.fillEllipse(ox - 4.5, oy - 15, 1.6, 3.4);
+      g.fillEllipse(ox + 4.5, oy - 15, 1.6, 3.4);
       if (s.hairStyle === "textured") {
-        g.fillStyle(this._shade(s.hair, 1.3), 0.5);
-        g.fillEllipse(ox - 2.4, oy - 17, 4, 2);
+        g.fillStyle(this._shade(s.hair, 1.35), 0.5);
+        g.fillEllipse(ox - 2.4, oy - 17.2, 4.2, 2.2);
+        g.fillStyle(this._shade(s.hair, 0.7), 0.4);
+        g.fillEllipse(ox + 2.6, oy - 15.6, 3, 2);
       } else if (s.hairStyle === "tied") {
         g.fillStyle(s.hair, 1);
-        g.fillCircle(ox, oy - 18.4, 2.1); // top knot
+        g.fillCircle(ox, oy - 18.6, 2.2); // top knot
+        g.fillStyle(this._shade(s.hair, 1.3), 0.4);
+        g.fillEllipse(ox - 1.6, oy - 17.4, 3, 1.5);
       } else {
-        g.fillStyle(this._shade(s.hair, 1.28), 0.45); // sheen
-        g.fillEllipse(ox - 2, oy - 17, 3.4, 1.6);
+        g.fillStyle(this._shade(s.hair, 1.32), 0.5); // sheen
+        g.fillEllipse(ox - 2, oy - 17.4, 3.6, 1.7);
       }
+      // Hairline shadow where hair meets the forehead.
+      g.fillStyle(this._shade(s.hair, 0.7), 0.4);
+      g.fillEllipse(ox, oy - 16.4, 8.6, 1.4);
     }
-    // Brows + eyes
+    // Brows
+    g.fillStyle(this._shade(s.hair, 0.85), 0.85);
+    g.fillRect(ox - 3.2, oy - 13.7, 2.4, 0.7);
+    g.fillRect(ox + 0.8, oy - 13.7, 2.4, 0.7);
+    // Eyes with a tiny catchlight.
     g.fillStyle(0x2a2320, 1);
-    g.fillCircle(ox - 2, oy - 12.5, 0.85);
-    g.fillCircle(ox + 2, oy - 12.5, 0.85);
-    // Subtle mouth
-    g.fillStyle(this._shade(s.skin, 0.7), 0.55);
-    g.fillRect(ox - 1.4, oy - 9.8, 2.8, 0.7);
+    g.fillEllipse(ox - 2, oy - 12.4, 1.5, 1.7);
+    g.fillEllipse(ox + 2, oy - 12.4, 1.5, 1.7);
+    g.fillStyle(0xf4f0e8, 0.85);
+    g.fillCircle(ox - 2.4, oy - 12.8, 0.4);
+    g.fillCircle(ox + 1.6, oy - 12.8, 0.4);
+    // Nose shadow to the shaded side.
+    g.fillStyle(skinLo, 0.5);
+    g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
+    // Mouth
+    g.fillStyle(this._shade(s.skin, 0.66), 0.6);
+    g.fillRect(ox - 1.5, oy - 10, 3, 0.7);
   }
 
   /** Back view (facing up / away). */
@@ -500,13 +543,15 @@ export class ExecutiveAvatar {
     g.fillCircle(-6.4, 6 - swing * 0.4, 1.7);
     g.fillCircle(6.4, 6 + swing * 0.4, 1.7);
 
-    // Solid blazer back with a subtle center seam + collar
-    g.fillStyle(s.suit, 1);
+    // Blazer back — vertical gradient with a subtle center seam + collar.
+    const bHi = this._shade(s.suit, 1.24);
+    const bLo = this._shade(s.suit, 0.74);
+    g.fillGradientStyle(bHi, bHi, bLo, bLo, 1);
     g.fillPoints([
       new Phaser.Geom.Point(-sw, -6), new Phaser.Geom.Point(sw, -6),
       new Phaser.Geom.Point(5.5, 7), new Phaser.Geom.Point(-5.5, 7),
     ], true);
-    g.fillStyle(this._shade(s.suit, 1.2), 0.4);
+    g.fillStyle(this._shade(s.suit, 1.35), 0.35);
     g.fillTriangle(-sw, -6, -sw + 3, -6, -3.4, 6.4);
     g.lineStyle(0.6, this._shade(s.suit, 0.8), 0.8);
     g.beginPath(); g.moveTo(0, -6); g.lineTo(0, 7); g.strokePath();
@@ -546,14 +591,16 @@ export class ExecutiveAvatar {
     g.fillStyle(this._shade(s.suit, 0.85), 1);
     g.fillRoundedRect(-1.7 - dir * swing * 0.7, -5, 3, 11, 1.5);
 
-    // Torso
-    g.fillStyle(s.suit, 1);
+    // Torso — vertical gradient for volume (lit top → shaded hem).
+    const pHi = this._shade(s.suit, 1.28);
+    const pLo = this._shade(s.suit, 0.72);
+    g.fillGradientStyle(pHi, pHi, pLo, pLo, 1);
     g.fillPoints([
       new Phaser.Geom.Point(-5, -6), new Phaser.Geom.Point(5, -6),
       new Phaser.Geom.Point(4, 7), new Phaser.Geom.Point(-4, 7),
     ], true);
-    // Front-facing volume highlight
-    g.fillStyle(this._shade(s.suit, 1.24), 0.4);
+    // Front-facing sheen band on the facing side.
+    g.fillStyle(this._shade(s.suit, 1.3), 0.35);
     g.fillRect(dir * 1.8, -6, dir * 2.4, 12);
     // Accent placket down the facing side
     g.fillStyle(s.accent, 1);
@@ -564,10 +611,20 @@ export class ExecutiveAvatar {
 
     // Neck + head, gently shifted toward the facing direction
     const hx = dir * 1.3;
-    g.fillStyle(this._shade(s.skin, 0.9), 1);
+    g.fillStyle(this._shade(s.skin, 0.88), 1);
     g.fillRect(hx - 1.5, -9.5, 3, 4);
+    g.fillStyle(this._shade(s.skin, 0.68), 0.5); // jaw AO
+    g.fillRect(hx - 1.5, -9.5, 3, 1.3);
+    // Ear on the near side
+    g.fillStyle(this._shade(s.skin, 0.92), 1);
+    g.fillEllipse(hx - dir * 1.4, -12.6, 2, 3);
     g.fillStyle(s.skin, 1);
     g.fillEllipse(hx, -13, 9.2, 10.8);
+    // Forehead highlight + jaw shading.
+    g.fillStyle(this._shade(s.skin, 1.12), 0.5);
+    g.fillEllipse(hx + dir * 1.4, -15, 4.4, 3.4);
+    g.fillStyle(this._shade(s.skin, 0.8), 0.4);
+    g.fillEllipse(hx + dir * 1.6, -10, 4.4, 2.8);
     // Subtle nose just past the face edge
     g.fillTriangle(hx + dir * 4.2, -13, hx + dir * 4.2, -11.6, hx + dir * 5.1, -12.4);
     // Hair — crown cap and back of the head, sitting on the skull
@@ -576,12 +633,19 @@ export class ExecutiveAvatar {
       g.fillEllipse(hx - dir * 1.4, -15, 9, 6.5);
       g.fillEllipse(hx - dir * 3.4, -13, 4.6, 8);
       if (s.hairStyle === "tied") g.fillCircle(hx - dir * 4.2, -13.5, 2);
-      g.fillStyle(this._shade(s.hair, 1.25), 0.4);
+      g.fillStyle(this._shade(s.hair, 1.3), 0.45);
       g.fillEllipse(hx - dir * 1.4, -16.4, 3.4, 1.6);
     }
-    // One eye on the facing side
+    // Brow + eye on the facing side, with a catchlight.
+    g.fillStyle(this._shade(s.hair, 0.85), 0.85);
+    g.fillRect(hx + dir * 1.1, -13.9, 1.8, 0.7);
     g.fillStyle(0x2a2320, 1);
-    g.fillCircle(hx + dir * 1.9, -12.6, 0.8);
+    g.fillEllipse(hx + dir * 1.9, -12.6, 1.3, 1.6);
+    g.fillStyle(0xf4f0e8, 0.85);
+    g.fillCircle(hx + dir * 1.6, -13, 0.35);
+    // Mouth hint
+    g.fillStyle(this._shade(s.skin, 0.66), 0.55);
+    g.fillRect(hx + dir * 1.6, -10.2, 1.8, 0.6);
   }
 
   private _drawProfileArm(
