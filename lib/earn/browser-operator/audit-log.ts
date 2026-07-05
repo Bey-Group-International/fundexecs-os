@@ -28,6 +28,7 @@ const ACTION_DESCRIPTIONS: Record<EarnBrowserAuditAction, string> = {
   user_auth_completed: "You confirmed sign-in; Earn resumed",
   extraction_started: "Started extracting data from the page",
   extraction_completed: "Finished extracting data",
+  data_extracted: "Extracted data points from a permitted source",
   normalized: "Normalized extracted data for review",
   review_requested: "Sent extracted data to you for review",
   field_approved: "You approved a field for saving",

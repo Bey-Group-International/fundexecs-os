@@ -944,6 +944,39 @@ export type EarnReviewQueueItem = {
   created_at: string;
 };
 
+// ── SEAM #2 — Earn browser-free live-extraction record homes (20260705160000) ──
+
+export type EdgarFilingRecord = {
+  id: string;
+  organization_id: string;
+  session_id: string | null;
+  created_by: string | null;
+  company_name: string | null;
+  cik: string | null;
+  form: string | null;
+  filing_date: string | null;
+  accession_number: string | null;
+  primary_doc_url: string | null;
+  source_url: string | null;
+  filed_summary: string | null;
+  raw: Json;
+  created_at: string;
+};
+
+export type DiligenceReport = {
+  id: string;
+  organization_id: string;
+  session_id: string | null;
+  created_by: string | null;
+  subject: string;
+  source_type: string | null;
+  source_url: string | null;
+  summary: string | null;
+  data: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 export type NetworkImportJob = {
   id: string;
   organization_id: string;
@@ -2483,6 +2516,8 @@ export type Database = {
       earn_browser_sessions: TableShape<EarnBrowserSession>;
       earn_browser_audit_logs: TableShape<EarnBrowserAuditLog>;
       earn_review_queue: TableShape<EarnReviewQueueItem>;
+      edgar_filing_records: TableShape<EdgarFilingRecord>;
+      diligence_reports: TableShape<DiligenceReport>;
       intro_requests: TableShape<IntroRequest>;
       syndicate_circles: TableShape<SyndicateCircle>;
       circle_memberships: TableShape<CircleMembership>;
