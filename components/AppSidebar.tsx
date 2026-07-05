@@ -51,20 +51,21 @@ const HUB_IDENTITY: Record<string, { icon: string; color: string }> = {
   execute: { icon: "▶", color: "#a78bfa" },  // violet — outbound
 };
 
-// Secondary destinations folded under "More".
+// Secondary destinations folded under "More". Kept intentionally lean: entries
+// that duplicate a hub module or another destination live where they belong and
+// are not repeated here. Notably "LP Report" is gone — Execute › Reporting is
+// the single reporting surface (/reports now redirects there); "Portfolio"
+// lives under Execute › Asset Management; "Command Center" is the /command-center
+// / dashboard surface; and "Capital Map" overlaps Graphs + Source › LP Pipeline.
 const MORE_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Command Center" },
   { href: "/grid", label: "Execution Grid" },
   { href: "/grid/review", label: "Routing Review" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/agenda", label: "Agenda" },
-  { href: "/reports", label: "LP Report" },
-  { href: "/search", label: "Search" },
   { href: "/activity", label: "Activity" },
-  { href: "/capital-map", label: "Capital Map" },
+  { href: "/agenda", label: "Agenda" },
+  { href: "/meetings", label: "Meetings" },
+  { href: "/search", label: "Search" },
   { href: "/graph", label: "Graphs" },
   { href: "/marketplace", label: "Marketplace" },
-  { href: "/meetings", label: "Meetings" },
 ];
 
 // Account menu, in display order. Items with a real destination are links;

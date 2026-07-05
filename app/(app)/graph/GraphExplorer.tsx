@@ -435,7 +435,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
                     className={focused ? "fill-fg-primary" : "fill-fg-secondary"}
                     style={{ fontSize: focused ? 11 : 10, fontWeight: focused ? 600 : 400 }}
                   >
-                    {node.label.length > 28 ? `${node.label.slice(0, 27)}…` : node.label}
+                    {(node.label ?? "").length > 28 ? `${(node.label ?? "").slice(0, 27)}…` : (node.label ?? "")}
                   </text>
                 </g>
               );

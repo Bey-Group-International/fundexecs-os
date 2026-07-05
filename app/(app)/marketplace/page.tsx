@@ -163,7 +163,7 @@ export default async function MarketplacePage() {
             {[
               { label: "Close a deal", href: "/deals/feed" },
               { label: "Verify records", href: "/portfolio" },
-              { label: "Submit LP report", href: "/reports" },
+              { label: "Submit LP report", href: "/execute/reporting" },
             ].map((a) => (
               <Link
                 key={a.href}
