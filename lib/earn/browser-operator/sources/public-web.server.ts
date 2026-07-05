@@ -91,12 +91,14 @@ const ROLE_KEYWORDS = [
 
 function decodeEntities(s: string): string {
   return s
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&nbsp;/g, " ")
+    // Decode the ampersand LAST so a sequence like "&amp;lt;" resolves to the
+    // literal "&lt;" rather than being double-unescaped into "<" (CWE-116).
+    .replace(/&amp;/g, "&")
     .trim();
 }
 
@@ -106,8 +108,12 @@ function decodeEntities(s: string): string {
  */
 function htmlToLines(html: string): string[] {
   return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    // Strip script/style blocks. The closing tag allows whitespace before ">"
+    // (e.g. "</script >") and any leftover unclosed tag is removed by the
+    // catch-all below, so no executable content survives (CWE-116/mXSS-safe).
+    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style\s*>/gi, " ")
+    .replace(/<\/?(?:script|style)\b[^>]*>/gi, " ")
     // Block-level and break boundaries become line breaks.
     .replace(/<\s*br\s*\/?\s*>/gi, "\n")
     .replace(/<\/?\s*(?:p|div|li|ul|ol|section|article|tr|td|th|h[1-6]|header|footer)\b[^>]*>/gi, "\n")

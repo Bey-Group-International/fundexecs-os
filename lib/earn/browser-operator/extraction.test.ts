@@ -192,6 +192,22 @@ describe("public-web — parsing", () => {
     for (const p of points) expect(p.requires_user_confirmation).toBe(true);
   });
 
+  it("strips script/style even with whitespace end tags and no leftover markup (CWE-116)", () => {
+    const html =
+      "<html><head><title>Acme &amp;lt;Co&amp;gt;</title>" +
+      "<script >window.x='<b>leak</b>'</script >" +
+      "<style\n>.a{color:red}</style>" +
+      "</head><body><p>Contact ir@acme.com</p></body></html>";
+    const points = extractDataPointsFromHtml(html, { url: "https://acme.com" });
+    const values = points.map((p) => p.extracted_value).join(" | ");
+    // No script/style contents survive the strip.
+    expect(values).not.toContain("window.x");
+    expect(values).not.toContain("color:red");
+    // "&amp;lt;" decodes to the literal "&lt;", not double-unescaped to "<".
+    const title = points.find((p) => p.field_name === "company_name");
+    expect(title?.extracted_value).toBe("Acme &lt;Co&gt;");
+  });
+
   it("fetches a page via injected HTTP and returns points", async () => {
     const http = fakeFetch({ "https://cedarridge.com/team": SAMPLE_HTML });
     const res = await extractFromPublicWeb({ url: "https://cedarridge.com/team", http, skipRobots: true });
