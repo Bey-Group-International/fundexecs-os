@@ -88,8 +88,22 @@ export function verificationRank(level: VerificationLevel): number {
 export function scoreSourceQuality(sources: SourceReference[]): VerificationLevel {
   if (sources.some((s) => s.sourceType === "primary" || s.sourceType === "filing")) return "verified";
   if (sources.length >= 2 && sources.some((s) => s.sourceType === "news" || s.sourceType === "database")) return "high_confidence";
-  if (sources.length === 1) return "medium_confidence";
+  if (sources.length >= 1) return "medium_confidence";
   return "unavailable";
+}
+
+function normalizePointOfContact(input: Partial<PointOfContact> | undefined, fallbackSourceUrl: string): PointOfContact {
+  const fallback = emptyPointOfContact(fallbackSourceUrl);
+  if (!input) return fallback;
+  return {
+    name: input.name?.trim() || fallback.name,
+    role: input.role?.trim() || fallback.role,
+    email: input.email?.trim() || fallback.email,
+    phone: input.phone?.trim() || fallback.phone,
+    linkedin: input.linkedin?.trim() || fallback.linkedin,
+    verification: input.verification ?? fallback.verification,
+    sourceUrl: input.sourceUrl?.trim() || fallback.sourceUrl,
+  };
 }
 
 export function normalizeResearchEntity(input: Partial<ResearchEntity> & Pick<ResearchEntity, "entity" | "category">): ResearchEntity {
@@ -106,7 +120,7 @@ export function normalizeResearchEntity(input: Partial<ResearchEntity> & Pick<Re
     website: input.website?.trim() || UNVERIFIED,
     headquarters: input.headquarters?.trim() || UNVERIFIED,
     industry: input.industry?.trim() || UNVERIFIED,
-    pointOfContact: input.pointOfContact ?? emptyPointOfContact(sources[0]?.url ?? UNVERIFIED),
+    pointOfContact: normalizePointOfContact(input.pointOfContact, sources[0]?.url ?? UNVERIFIED),
     strategicFit: input.strategicFit?.trim() || "Fit requires additional verification.",
     risks: input.risks?.length ? input.risks : ["Data completeness requires verification."],
     confidence,
