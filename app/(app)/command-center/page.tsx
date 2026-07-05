@@ -10,7 +10,7 @@ export default async function CommandCenterPage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   return (
-    <div className="fx-ambient mx-auto max-w-5xl">
+    <div className="fx-ambient mx-auto max-w-6xl">
       <header className="mb-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
           Command Center
