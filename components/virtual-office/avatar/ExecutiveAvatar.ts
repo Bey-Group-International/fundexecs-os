@@ -49,6 +49,15 @@ type ArmMode = "walk" | "idle" | "type" | "review" | "present";
  * upgraded, only this class is replaced.
  */
 export class ExecutiveAvatar {
+  /**
+   * Global accessibility flag. When true (user has
+   * `prefers-reduced-motion: reduce`), all decorative *looping* motion is
+   * suppressed — aura/rim pulse, breathing bob, typing keystroke motion, and
+   * the thinking-dot pulse. The figure still shows the correct pose, state
+   * color, and badges statically. Set by OfficeScene before avatars spawn.
+   */
+  static reducedMotion = false;
+
   readonly container: Phaser.GameObjects.Container;
 
   private scene: Phaser.Scene;
@@ -170,6 +179,16 @@ export class ExecutiveAvatar {
       return;
     }
 
+    // Reduced-motion: hold the figure statically. The correct pose/state is
+    // already drawn by _redraw(); we only suppress decorative looping motion
+    // (breathing bob, typing keystrokes, thinking-dot pulse). The thinking
+    // dots remain visible at a fixed alpha/scale.
+    if (ExecutiveAvatar.reducedMotion) {
+      this.body.setY(0);
+      if (this.think.visible) this.think.setAlpha(0.9).setScale(1);
+      return;
+    }
+
     // Subtle breathing bob — transform only, no redraw.
     this.bobPhase += dt;
     const bob = Math.sin(this.bobPhase * 1.6) * 0.4;
@@ -281,10 +300,11 @@ export class ExecutiveAvatar {
     this.rim.setFillStyle(color, 0.1).setScale(1).setAlpha(1);
 
     const pulses =
-      this.programState === "working" ||
-      this.programState === "classifying" ||
-      this.programState === "collaborating" ||
-      this.programState === "waiting_for_approval";
+      !ExecutiveAvatar.reducedMotion &&
+      (this.programState === "working" ||
+        this.programState === "classifying" ||
+        this.programState === "collaborating" ||
+        this.programState === "waiting_for_approval");
     if (pulses) {
       this.scene.tweens.add({
         targets: this.aura, scale: 1.24, alpha: 0.5,

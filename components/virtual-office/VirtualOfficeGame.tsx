@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent, type CSSProperties } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
 import type { InteractiveObject, RoomAction, ZoneDef } from "./types";
@@ -58,6 +58,93 @@ type VideoTile = {
   label: string;
   el: HTMLVideoElement;
 };
+
+/**
+ * On-screen 4-way directional pad for touch devices. Emits a normalized
+ * movement vector via `onMove(dx, dy)` (each in [-1, 1]); `onMove(0, 0)` on
+ * release. Pointer events (not touch/mouse) keep it robust across inputs.
+ * Styled to match the dark/gold office UI. Desktop keyboard + click-to-walk
+ * are unaffected — this only renders when a touch device is detected.
+ */
+function TouchDpad({ onMove }: { onMove: (dx: number, dy: number) => void }) {
+  const press = useCallback(
+    (dx: number, dy: number) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      onMove(dx, dy);
+    },
+    [onMove],
+  );
+  const release = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onMove(0, 0);
+    },
+    [onMove],
+  );
+
+  // Reset movement if the pad unmounts mid-press so the avatar never sticks.
+  useEffect(() => () => onMove(0, 0), [onMove]);
+
+  const buttonStyle: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    fontSize: 16,
+    lineHeight: 1,
+    color: "#c9a84c",
+    background: "rgba(10,8,6,0.88)",
+    border: "1px solid rgba(201,168,76,0.35)",
+    borderRadius: 8,
+    touchAction: "none",
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    WebkitTapHighlightColor: "transparent",
+  };
+
+  const dirs: Array<{ label: string; dx: number; dy: number; col: number; row: number; aria: string }> = [
+    { label: "▲", dx: 0, dy: -1, col: 2, row: 1, aria: "Move up" },
+    { label: "◀", dx: -1, dy: 0, col: 1, row: 2, aria: "Move left" },
+    { label: "▶", dx: 1, dy: 0, col: 3, row: 2, aria: "Move right" },
+    { label: "▼", dx: 0, dy: 1, col: 2, row: 3, aria: "Move down" },
+  ];
+
+  return (
+    <div
+      className="absolute z-10"
+      style={{
+        right: 12,
+        bottom: 92,
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 40px)",
+        gridTemplateRows: "repeat(3, 40px)",
+        gap: 4,
+        touchAction: "none",
+      }}
+      aria-label="Movement controls"
+    >
+      {dirs.map((d) => (
+        <button
+          key={d.aria}
+          type="button"
+          aria-label={d.aria}
+          onPointerDown={press(d.dx, d.dy)}
+          onPointerUp={release}
+          onPointerCancel={release}
+          onPointerLeave={release}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ ...buttonStyle, gridColumn: d.col, gridRow: d.row }}
+        >
+          {d.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 type NpcClickPayload = { npcId: string; spriteKey: string; name: string };
 
@@ -130,6 +217,19 @@ export function VirtualOfficeGame({
   const [activeZone, setActiveZone] = useState<ZoneDef | null>(null);
   const [canvasFocused, setCanvasFocused] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string>("");
+  const [isTouch, setIsTouch] = useState(false);
+
+  // Detect a touch-capable device once on mount (client-only). Desktop keeps
+  // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  // Emit the normalized D-pad vector to the Phaser scene's movement handler.
+  const emitTouchMove = useCallback((dx: number, dy: number) => {
+    gameRef.current?.events.emit("office:touch-move", { dx, dy });
+  }, []);
 
   const requestMedia = useCallback(async () => {
     try {
@@ -478,7 +578,10 @@ export function VirtualOfficeGame({
           onBlur={() => setCanvasFocused(false)}
           onFocus={() => setCanvasFocused(true)}
         />
-          </div>
+
+        {/* Touch D-pad — mobile only; positioned above the in-canvas minimap */}
+        {isTouch && <TouchDpad onMove={emitTouchMove} />}
+      </div>
           </div>
 
           {/* Audit-ready activity log */}
