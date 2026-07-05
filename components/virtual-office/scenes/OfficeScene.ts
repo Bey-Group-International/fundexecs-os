@@ -894,11 +894,23 @@ export class OfficeScene extends Phaser.Scene {
     const tierColor = tier ? parseInt(RISK_TIERS[tier].color.slice(1), 16) : 0xc9a84c;
     const rx = room.col * ROOM_W + 3;
     const ry = room.row * ROOM_H + 3;
+    // Soft interior illumination — layered discs at room center fake a
+    // directional light pool so an active room visibly "turns on".
+    const cx = room.col * ROOM_W + ROOM_W / 2;
+    const cy = room.row * ROOM_H + ROOM_H / 2;
+    for (let i = 3; i >= 1; i--) {
+      overlay.glow.fillStyle(tierColor, 0.03 * i);
+      overlay.glow.fillCircle(cx, cy, 46 + i * 30);
+    }
+    // Gold-lit floor wash tint across the room field.
+    overlay.glow.fillStyle(tierColor, 0.05);
+    overlay.glow.fillRect(rx, ry, ROOM_W - 6, ROOM_H - 6);
+    // Pulsing accent border.
     overlay.glow.lineStyle(2, tierColor, 0.5);
     overlay.glow.strokeRect(rx, ry, ROOM_W - 6, ROOM_H - 6);
     overlay.glow.setAlpha(1);
     this.tweens.add({
-      targets: overlay.glow, alpha: 0.45, duration: 1300, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+      targets: overlay.glow, alpha: 0.5, duration: 1300, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
     });
 
     const tierShort = tier ? RISK_TIERS[tier].short : "";
