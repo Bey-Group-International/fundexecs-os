@@ -16,7 +16,14 @@ import {
 // Load Phaser only in the browser
 const VirtualOfficeGame = dynamic(
   () => import("@/components/virtual-office/VirtualOfficeGame").then((m) => m.VirtualOfficeGame),
-  { ssr: false, loading: () => <div className="h-[600px] flex items-center justify-center text-slate-500 text-sm">Loading virtual office…</div> }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[640px] items-center justify-center rounded-2xl border border-line/60 bg-surface-0 text-sm text-fg-muted">
+        Loading the execution office…
+      </div>
+    ),
+  }
 );
 
 type Tab = "hq" | "virtual";
@@ -25,7 +32,8 @@ type Tab = "hq" | "virtual";
 const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
 
 export function OfficeTabs() {
-  const [tab, setTab] = useState<Tab>("hq");
+  const [tab, setTab] = useState<Tab>("virtual");
+  const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true });
   const [token, setToken] = useState<string | undefined>(undefined);
   const [characterId, setCharacterId] = useCharacterSelection();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -42,6 +50,11 @@ export function OfficeTabs() {
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const searchParams = useSearchParams();
+
+  const activateTab = useCallback((next: Tab) => {
+    setTab(next);
+    setOpened((prev) => ({ ...prev, [next]: true }));
+  }, []);
 
   // Fetch Supabase access token and character identity once on mount
   useEffect(() => {
@@ -67,18 +80,24 @@ export function OfficeTabs() {
   // Auto-teleport when ?room= param is present (guest join links)
   useEffect(() => {
     const room = searchParams.get("room");
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab === "overview" || requestedTab === "hq") {
+      activateTab("hq");
+    } else if (requestedTab === "virtual") {
+      activateTab("virtual");
+    }
     if (!room || !sessionChecked) return;
     if (token) {
       // Authenticated — go straight to the room
-      setTab("virtual");
+      activateTab("virtual");
       setTeleportTarget(room);
       setTimeout(() => setTeleportTarget(null), 100);
     } else {
       // No session — show guest name prompt, remember the target room
       setGuestPrompt(true);
-      setTab("virtual");
+      activateTab("virtual");
     }
-  }, [searchParams, sessionChecked, token]);
+  }, [activateTab, searchParams, sessionChecked, token]);
 
   const handleGuestJoin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,33 +141,58 @@ export function OfficeTabs() {
   const handleNavigateRoom = (hqRoomId: string) => {
     const virtualKey = HQ_TO_VIRTUAL[hqRoomId] ?? hqRoomId;
     setTeleportTarget(virtualKey);
-    setTab("virtual");
+    activateTab("virtual");
     // Clear target after one frame so repeated clicks on same room re-trigger
     setTimeout(() => setTeleportTarget(null), 100);
   };
 
+  const activeRoomCount = Object.values(occupancy).filter((n) => n > 0).length;
+  const totalOccupancy = Object.values(occupancy).reduce((sum, n) => sum + n, 0);
+
   return (
-    <div>
+    <div className="bg-surface-0">
+      <div className="border-b border-line/60 bg-gradient-to-r from-surface-1 via-surface-0 to-surface-1 px-4 py-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">
+              Visual execution layer
+            </p>
+            <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+              Virtual Office
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-fg-secondary">
+              Earn and the executive AI team route private-market work through rooms,
+              agents, approval gates, and live task context.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+            <OfficeMetric label="Mode" value={tab === "virtual" ? "Execution" : "Overview"} />
+            <OfficeMetric label="Rooms live" value={`${activeRoomCount}/9`} />
+            <OfficeMetric label="Presence" value={token ? `${Math.max(totalOccupancy, 1)} online` : "Offline"} />
+          </div>
+        </div>
+      </div>
+
       {/* Tab bar */}
-      <div className="flex border-b border-line/60 bg-surface px-4 pt-3 gap-1">
-        <TabButton active={tab === "hq"} onClick={() => setTab("hq")}>
-          HQ Overview
-        </TabButton>
-        <TabButton active={tab === "virtual"} onClick={() => { setTab("virtual"); }}>
+      <div className="flex gap-1 border-b border-line/60 bg-surface-1/80 px-4 pt-3">
+        <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
           Virtual Office
-          <span className="ml-2 text-[9px] bg-amber-400/20 text-amber-400 border border-amber-400/30 rounded px-1 py-0.5 font-mono uppercase tracking-wide">
-            M4
-          </span>
+        </TabButton>
+        <TabButton active={tab === "hq"} onClick={() => activateTab("hq")}>
+          Overview
         </TabButton>
       </div>
 
-      {/* Panels — keep both mounted so Phaser doesn't reinitialise on tab switch */}
-      <div className={tab === "hq" ? "block" : "hidden"}>
-        <ExecutiveHQ onNavigateRoom={handleNavigateRoom} roomOccupancy={occupancy} />
-      </div>
+      {/* Overview is secondary and mounts only when requested. */}
+      {opened.hq ? (
+        <div className={tab === "hq" ? "block" : "hidden"}>
+          <ExecutiveHQ onNavigateRoom={handleNavigateRoom} roomOccupancy={occupancy} />
+        </div>
+      ) : null}
 
-      {/* Virtual panel: always in DOM but hidden via CSS visibility so Phaser can
-          measure dimensions correctly after the first activation. */}
+      {/* Virtual panel stays mounted after first activation so Phaser does not
+          reinitialise on tab switch, but is not mounted before it is needed. */}
+      {opened.virtual ? (
       <div className={tab === "virtual" ? "block p-4" : "invisible h-0 overflow-hidden"}>
         {/* Guest join prompt — shown when no session and virtual tab is active */}
         {guestPrompt ? (
@@ -221,9 +265,19 @@ export function OfficeTabs() {
           </>
         )}
       </div>
+      ) : null}
 
       {/* Meeting modal — listens for office:start-meeting window event */}
       <MeetingModal />
+    </div>
+  );
+}
+
+function OfficeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-line/70 bg-surface-0/70 px-3 py-2">
+      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-fg-primary">{value}</p>
     </div>
   );
 }
