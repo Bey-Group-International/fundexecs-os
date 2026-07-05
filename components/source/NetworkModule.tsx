@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { NetworkSearch } from "./NetworkSearch";
 import { AddContactPanel } from "./AddContactPanel";
+import { BackendConnectors } from "./BackendConnectors";
 import { LinkedInImportModal } from "./LinkedInImportModal";
 import { WarmIntroPanel } from "./WarmIntroPanel";
 import { SyndicateCircle } from "./SyndicateCircle";
@@ -156,22 +157,8 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
             {/* Primary path: per-contact add through the adapter pipeline */}
             <AddContactPanel onAdded={() => setContactCount((prev) => prev + 1)} />
 
-            {/* Backend connector — available when OAuth is configured */}
-            <div className="rounded-xl border border-line bg-surface p-6 flex flex-col gap-3 opacity-60">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-fg-muted/10">
-                  <svg className="h-5 w-5 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path d="M21.75 9v.906a2.25 2.25 0 0 1-1.183 1.981l-6.478 3.488M2.25 9v.906a2.25 2.25 0 0 0 1.183 1.981l6.478 3.488m8.839 2.51-4.66-2.51m0 0-1.023-.55a2.25 2.25 0 0 0-2.134 0l-1.022.55m0 0-4.661 2.51m16.5 1.615a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V8.844a2.25 2.25 0 0 1 1.183-1.981l7.5-4.039a2.25 2.25 0 0 1 2.134 0l7.5 4.039a2.25 2.25 0 0 1 1.183 1.98V19.5Z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-medium text-fg text-sm">Google Contacts · LinkedIn (official API)</p>
-                  <p className="text-xs text-fg-muted">
-                    Backend sync pending provider authorization — connect once configured in Settings → Integrations.
-                  </p>
-                </div>
-              </div>
-            </div>
+            {/* Backend connectors — primary sync path, credential-gated */}
+            <BackendConnectors />
 
             {/* Fallback path: bulk CSV export upload */}
             <div className="rounded-xl border border-line bg-surface p-6 flex flex-col gap-4">
