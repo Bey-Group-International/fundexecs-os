@@ -33,6 +33,13 @@ import {
 } from "../program/officeProgram";
 import { ExecutiveAvatar, type AvatarFacing } from "../avatar/ExecutiveAvatar";
 import { agentAvatarSpec, remoteAvatarSpec, USER_SPEC } from "../avatar/avatarPalette";
+import {
+  createWallVisuals,
+  createFurniture,
+  yDepth,
+  DEPTH_LABEL,
+  type FurniturePiece,
+} from "./officeEnvironment";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
@@ -196,6 +203,9 @@ export class OfficeScene extends Phaser.Scene {
   private roomOverlays = new Map<string, RoomOverlay>();
   /** Which agents currently occupy each room, for slot placement. */
   private roomAgentSlots = new Map<string, AgentId[]>();
+  /** 2.5D environment (extruded walls + department furniture) for cleanup. */
+  private envWalls: Phaser.GameObjects.Graphics | null = null;
+  private furniture: FurniturePiece[] = [];
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -258,6 +268,11 @@ export class OfficeScene extends Phaser.Scene {
 
     this._createTilemap();
     this._createWalls();
+    // 2.5D department dressing sits above the tile floor and room overlays,
+    // below the y-sorted avatar band. Extruded walls line up with the
+    // invisible physics walls; furniture y-sorts with avatars for occlusion.
+    this.envWalls = createWallVisuals(this);
+    this.furniture = createFurniture(this);
     this._createPlayer();
     this._createAnimations();
     this._createRoomZones();
@@ -346,6 +361,10 @@ export class OfficeScene extends Phaser.Scene {
     this.playerAvatar?.destroy();
     for (const [, s] of this.npcAvatars) s.avatar.destroy();
     for (const [, s] of this.remotePlayers) s.avatar.destroy();
+    // Tear down the 2.5D environment (walls + furniture graphics).
+    this.envWalls?.destroy();
+    for (const piece of this.furniture) piece.gfx.destroy();
+    this.furniture = [];
   }
 
   // ── private helpers ─────────────────────────────────────────────────────────
@@ -501,6 +520,8 @@ export class OfficeScene extends Phaser.Scene {
     }
     this.playerAvatar.setWalking(moving);
     this.playerAvatar.update(delta);
+    // y-sort so the player passes behind/in front of furniture by depth.
+    this.playerAvatar.container.setDepth(yDepth(this.player.y));
   }
 
   private _textureKeyForCharacter(characterId: string): string {
@@ -767,6 +788,7 @@ export class OfficeScene extends Phaser.Scene {
       state.avatar.setWalking(moving);
       state.avatar.setPosition(state.sprite.x, state.sprite.y);
       state.avatar.update(16);
+      state.avatar.container.setDepth(yDepth(state.sprite.y));
       state.label.setPosition(state.sprite.x, state.sprite.y - 28);
       state.nameTag.setPosition(state.sprite.x, state.sprite.y - 40);
     }
@@ -811,6 +833,7 @@ export class OfficeScene extends Phaser.Scene {
       state.avatar.setWalking(walking);
       state.avatar.setPosition(state.sprite.x, state.sprite.y);
       state.avatar.update(delta);
+      state.avatar.container.setDepth(yDepth(state.sprite.y));
       state.label.setPosition(state.sprite.x, state.sprite.y - 30);
       state.statusText.setPosition(state.sprite.x, state.sprite.y - 22);
     }
@@ -986,7 +1009,7 @@ export class OfficeScene extends Phaser.Scene {
         fontFamily: "monospace",
         fontSize: "10px",
         color: "#c9a84c",
-      }).setOrigin(0.5, 0.5).setDepth(7).setAlpha(0.7);
+      }).setOrigin(0.5, 0.5).setDepth(DEPTH_LABEL - 0.2).setAlpha(0.7);
       this.tweens.add({
         targets: marker, y: wy - 24, alpha: 0.35,
         duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
@@ -1148,7 +1171,7 @@ export class OfficeScene extends Phaser.Scene {
       fontSize: "14px",
       backgroundColor: "#0a0806cc",
       padding: { x: 5, y: 3 },
-    }).setOrigin(0.5, 1).setDepth(15).setScale(0.4);
+    }).setOrigin(0.5, 1).setDepth(DEPTH_LABEL + 0.3).setScale(0.4);
     this.tweens.add({
       targets: bubble, scale: 1, y: y - 44, duration: 180, ease: "Back.easeOut",
       onComplete: () => {
@@ -1317,7 +1340,7 @@ export class OfficeScene extends Phaser.Scene {
     if (this.walkPath.length === 0) return;
     // Destination marker — gold pulse ring that fades
     this.walkMarker?.destroy();
-    this.walkMarker = this.add.arc(wx, wy, 8, 0, 360, false).setStrokeStyle(1.5, 0xc9a84c, 0.9).setDepth(7);
+    this.walkMarker = this.add.arc(wx, wy, 8, 0, 360, false).setStrokeStyle(1.5, 0xc9a84c, 0.9).setDepth(DEPTH_LABEL - 0.3);
     this.tweens.add({
       targets: this.walkMarker, scale: 0.3, alpha: 0, duration: 600,
       onComplete: () => { this.walkMarker?.destroy(); this.walkMarker = null; },
@@ -1411,7 +1434,7 @@ export class OfficeScene extends Phaser.Scene {
       color: accentHex,
       stroke: "#0f172a",
       strokeThickness: 2,
-    }).setOrigin(0.5, 1).setDepth(9);
+    }).setOrigin(0.5, 1).setDepth(DEPTH_LABEL);
 
     // Executive status line under the name — updated by the program layer
     const statusText = this.add.text(x, y - 22, "", {
@@ -1420,7 +1443,7 @@ export class OfficeScene extends Phaser.Scene {
       color: "#cbd5e1",
       stroke: "#0f172a",
       strokeThickness: 2,
-    }).setOrigin(0.5, 1).setDepth(9);
+    }).setOrigin(0.5, 1).setDepth(DEPTH_LABEL);
 
     this.npcAvatars.set(npcId, {
       sprite, avatar, label, targetX: x, targetY: y, facing, spriteKey,
@@ -1472,12 +1495,12 @@ export class OfficeScene extends Phaser.Scene {
       strokeThickness: 2,
     })
       .setOrigin(0.5, 1)
-      .setDepth(11);
+      .setDepth(DEPTH_LABEL);
 
     // Small colored presence dot above the name tag
     const hue = playerIdToHue(remote.id);
     const dotColor = Phaser.Display.Color.HSVColorWheel()[Math.round(hue / 360 * 359)].color;
-    const nameTag = this.add.graphics().setDepth(12);
+    const nameTag = this.add.graphics().setDepth(DEPTH_LABEL + 0.1);
     nameTag.fillStyle(dotColor, 1);
     nameTag.fillCircle(0, 0, 5);
     nameTag.lineStyle(1, 0x0f172a, 0.8);
