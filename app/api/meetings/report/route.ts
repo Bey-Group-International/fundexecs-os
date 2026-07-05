@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import { createTeamTask } from "@/lib/team-tasks";
+import { persistInstitutionalMeetingRecord } from "@/lib/meetings/service";
 
 export const runtime = "nodejs";
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     // Verify caller is the meeting host
     const { data: meeting } = await supabase
       .from("live_meetings")
-      .select("id, host_id, organization_id, title")
+      .select("id, host_id, organization_id, deal_id, title")
       .eq("id", body.meetingId)
       .single();
 
@@ -132,6 +133,14 @@ Generate a comprehensive post-meeting report.`,
       .from("live_meetings")
       .update({ status: "ended", ended_at: new Date().toISOString() })
       .eq("id", body.meetingId);
+
+    await persistInstitutionalMeetingRecord(supabase, {
+      meeting,
+      actorId: user.id,
+      participants: body.participants ?? [],
+      transcript,
+      analysis,
+    });
 
     // Fire-and-forget: create a task for each action item
     const actionItems = Array.isArray(analysis.action_items) ? analysis.action_items as string[] : [];

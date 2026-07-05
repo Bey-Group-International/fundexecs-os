@@ -2077,6 +2077,13 @@ export type LiveMeeting = {
   organization_id: string | null;
   deal_id: string | null;
   status: string;
+  scheduled_at: string | null;
+  duration_minutes: number;
+  timezone: string;
+  meeting_type: string;
+  preparation_status: string;
+  followup_status: string;
+  notes_snapshot: Json | null;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
@@ -2108,6 +2115,21 @@ export type LiveMeetingReport = {
   full_transcript: string | null;
   analysis: Json | null;
   created_at: string;
+};
+
+export type MeetingNote = {
+  id: string;
+  organization_id: string;
+  deal_id: string | null;
+  title: string;
+  occurred_at: string;
+  participants: string[];
+  transcript: string | null;
+  calendar_event_id: string | null;
+  analysis: Json | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type AgentMemory = {
@@ -2334,6 +2356,7 @@ export type Database = {
       live_meeting_participants: TableShape<LiveMeetingParticipant>;
       live_meeting_transcripts: TableShape<LiveMeetingTranscript>;
       live_meeting_reports: TableShape<LiveMeetingReport>;
+      meeting_notes: TableShape<MeetingNote>;
       agent_memories: TableShape<AgentMemory>;
       pipeline_stages: TableShape<PipelineStage>;
       sequence_enrollments: TableShape<SequenceEnrollment>;

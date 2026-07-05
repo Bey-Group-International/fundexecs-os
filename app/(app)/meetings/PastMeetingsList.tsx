@@ -13,6 +13,8 @@ interface LiveMeeting {
   created_at: string;
   started_at: string | null;
   ended_at: string | null;
+  scheduled_at: string | null;
+  duration_minutes: number | null;
 }
 
 interface Props {
@@ -109,7 +111,7 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
     async function refresh() {
       const { data: hosted } = await supabase
         .from("live_meetings")
-        .select("id, room_code, title, status, host_id, created_at, started_at, ended_at")
+        .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes")
         .eq("host_id", userId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -128,7 +130,7 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
         if (nonHostedIds.length > 0) {
           const { data } = await supabase
             .from("live_meetings")
-            .select("id, room_code, title, status, host_id, created_at, started_at, ended_at")
+            .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes")
             .in("id", nonHostedIds)
             .is("deleted_at", null)
             .order("created_at", { ascending: false })

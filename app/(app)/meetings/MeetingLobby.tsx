@@ -207,6 +207,7 @@ function CalendarIcon() {
 }
 
 function ScheduleModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Default datetime: next hour
@@ -249,18 +250,18 @@ function ScheduleModal({ onClose }: { onClose: () => void }) {
     setLoading(true);
     try {
       const startIso = new Date(startDatetime).toISOString();
-      const roomCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
       const params = new URLSearchParams({
         title: schedTitle.trim() || "Meeting",
         startIso,
         durationMinutes: duration,
-        roomCode,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       const res = await fetch(`/api/meetings/calendar-link?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to build calendar link");
-      const data = await res.json() as { url: string };
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      if (!res.ok) throw new Error("Failed to schedule meeting");
+      const data = await res.json() as { roomCode: string };
       onClose();
+      router.refresh();
+      router.push(`/meetings/${data.roomCode}`);
     } catch (err) {
       setSchedError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -356,9 +357,9 @@ function ScheduleModal({ onClose }: { onClose: () => void }) {
             className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold py-2.5 transition-colors flex items-center justify-center gap-2"
           >
             {loading ? (
-              <><SpinnerIcon /> Opening calendar…</>
+              <><SpinnerIcon /> Scheduling…</>
             ) : (
-              <><CalendarIcon /> Schedule &amp; open in Google Calendar</>
+              <><CalendarIcon /> Schedule native meeting</>
             )}
           </button>
         </form>
