@@ -36,9 +36,11 @@ import { agentAvatarSpec, remoteAvatarSpec, USER_SPEC } from "../avatar/avatarPa
 import {
   createWallVisuals,
   createFurniture,
+  officeSeats,
   yDepth,
   DEPTH_LABEL,
   type FurniturePiece,
+  type SeatAnchor,
 } from "./officeEnvironment";
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
@@ -75,6 +77,8 @@ type NpcAvatarState = {
   statusText: Phaser.GameObjects.Text;
   /** Active waypoint path when the agent is walking to a room. */
   path: Array<{ x: number; y: number }>;
+  /** True while the agent is sitting at a desk (idle stance). */
+  seated: boolean;
 };
 
 type RoomOverlay = {
@@ -224,6 +228,17 @@ export class OfficeScene extends Phaser.Scene {
   private approvalGateMarker: Phaser.GameObjects.Container | null = null;
   /** Throttle counter for the task-handoff motion trail. */
   private _handoffTrailTick = 0;
+  // ── Desk seating ──
+  /** All desk seats on the floor. */
+  private seats: SeatAnchor[] = [];
+  /** Seats not currently occupied by an NPC or the user. */
+  private freeSeats = new Set<SeatAnchor>();
+  /** Seat each NPC currently occupies, keyed by npcId. */
+  private npcSeat = new Map<string, SeatAnchor>();
+  /** The seat the local player is sitting in, if any. */
+  private playerSeat: SeatAnchor | null = null;
+  private keyE!: Phaser.Input.Keyboard.Key;
+  private sitPrompt!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -301,6 +316,9 @@ export class OfficeScene extends Phaser.Scene {
     // invisible physics walls; furniture y-sorts with avatars for occlusion.
     this.envWalls = createWallVisuals(this);
     this.furniture = createFurniture(this);
+    // Desk seats (must exist before agents spawn so they can take a seat).
+    this.seats = officeSeats();
+    this.freeSeats = new Set(this.seats);
     this._createPlayer();
     this._createAnimations();
     this._createRoomZones();
@@ -308,6 +326,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createNetDot();
     this._setupCamera();
     this._setupInput();
+    this._setupSeating();
     this._spawnProgramAgents();
     this._setupProgramBridge();
     this._setupPointerTeleport();
@@ -345,6 +364,7 @@ export class OfficeScene extends Phaser.Scene {
       if (!room) return;
       const tx = room.col * ROOM_W + ROOM_W / 2;
       const ty = room.row * ROOM_H + ROOM_H / 2;
+      this._playerStand();
       this.player.setPosition(tx, ty);
       this._cancelWalk();
       this.game.canvas.focus();
@@ -355,6 +375,7 @@ export class OfficeScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     this._updateFollowMode(delta);
+    this._updateSitting();
     this._handleMovement();
     this._updatePlayerAvatar(delta);
     this._updateInteractives();
@@ -719,6 +740,12 @@ export class OfficeScene extends Phaser.Scene {
     const kbActive = up || down || left || right;
     const touchActive = this.touchVector.dx !== 0 || this.touchVector.dy !== 0;
 
+    // Seated: any movement input stands the player up; otherwise stay put.
+    if (this.playerSeat) {
+      if (kbActive || touchActive) this._playerStand();
+      else { this.player.setVelocity(0, 0); return; }
+    }
+
     // Keyboard and touch both override click-to-walk and follow-mode; keyboard
     // takes precedence over touch when both are engaged.
     if (kbActive || touchActive) { this._cancelWalk(); this._cancelFollow(); }
@@ -883,6 +910,7 @@ export class OfficeScene extends Phaser.Scene {
     const view = this.cameras.main.worldView;
     const M = OfficeScene.CULL_MARGIN;
     for (const [, state] of this.npcAvatars) {
+      if (state.seated) { this._updateSeatedNpc(state, delta); continue; }
       let walking = false;
       // Facing update is deferred so it (and its redraw) is skipped when culled.
       let newFacing: AvatarFacing | null = null;
@@ -968,6 +996,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.on("program:npc-goto", (agentId: AgentId, roomKey: RoomKey) => {
       const npc = this.npcAvatars.get(`agent:${agentId}`);
       if (!npc) return;
+      this._standNpc(`agent:${agentId}`, npc); // stand up before walking
       const dest = this._claimRoomSlot(agentId, roomKey);
       npc.path = this._findPath(npc.sprite.x, npc.sprite.y, dest.x, dest.y);
       if (npc.path.length === 0) npc.path = [dest];
@@ -982,6 +1011,13 @@ export class OfficeScene extends Phaser.Scene {
         npc.programState = state;
         npc.statusText.setText(this._shortStatus(state, label));
         npc.avatar.setState(state);
+        // Sitting is the idle stance: sit when the agent goes idle (and isn't
+        // walking), stand for any active state.
+        if (state === "idle") {
+          if (npc.path.length === 0 && !npc.seated) this._sitNpc(`agent:${agentId}`, npc);
+        } else if (npc.seated) {
+          this._standNpc(`agent:${agentId}`, npc);
+        }
       }
     );
 
@@ -1449,6 +1485,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.on("office:teleport-room", (roomKey: string) => {
       const room = ROOMS.find((r) => r.key === roomKey);
       if (!room) return;
+      this._playerStand();
       this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
       this._cancelWalk();
       this._cancelFollow();
@@ -1540,6 +1577,7 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private _walkTo(wx: number, wy: number) {
+    if (this.playerSeat) this._playerStand(); // clicking to walk stands you up
     this.walkPath = this._findPath(this.player.x, this.player.y, wx, wy);
     if (this.walkPath.length === 0) return;
     // Destination marker — gold pulse ring that fades
@@ -1599,7 +1637,138 @@ export class OfficeScene extends Phaser.Scene {
     for (const agent of PROGRAM_AGENTS) {
       const pos = this._claimRoomSlot(agent.id, agent.homeRoom);
       this._spawnNpc(`agent:${agent.id}`, pos.x, pos.y, "down", agent.spriteKey, agent.name, agent.id);
+      // Idle executives start the day sitting at a desk in their home room.
+      const st = this.npcAvatars.get(`agent:${agent.id}`);
+      if (st) this._sitNpc(`agent:${agent.id}`, st);
     }
+  }
+
+  // ── Desk seating ──────────────────────────────────────────────────────────
+
+  private static readonly SIT_RADIUS_SQ = 46 * 46;
+
+  private _setupSeating() {
+    this.keyE = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.sitPrompt = this.add.text(0, 0, "", {
+      fontFamily: "'Georgia','Times New Roman',serif",
+      fontSize: "10px",
+      color: "#c9a84c",
+      backgroundColor: "#0a0806e6",
+      padding: { x: 10, y: 5 },
+    }).setScrollFactor(0).setDepth(25).setVisible(false);
+  }
+
+  /** Room key containing a world point, or null. */
+  private _roomKeyAt(x: number, y: number): RoomKey | null {
+    const col = Math.floor(x / ROOM_W);
+    const row = Math.floor(y / ROOM_H);
+    const room = ROOMS.find((r) => r.col === col && r.row === row);
+    return (room?.key as RoomKey) ?? null;
+  }
+
+  /** Nearest free seat in a room to a point. */
+  private _nearestFreeSeat(roomKey: RoomKey, x: number, y: number): SeatAnchor | null {
+    let best: SeatAnchor | null = null;
+    let bd = Infinity;
+    for (const s of this.freeSeats) {
+      if (s.roomKey !== roomKey) continue;
+      const d = (s.x - x) ** 2 + (s.y - y) ** 2;
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+
+  /** Seat an NPC at the nearest free desk in its current room. */
+  private _sitNpc(npcId: string, state: NpcAvatarState): boolean {
+    const rk = this._roomKeyAt(state.sprite.x, state.sprite.y);
+    const seat = rk ? this._nearestFreeSeat(rk, state.sprite.x, state.sprite.y) : null;
+    if (!seat) return false;
+    this.freeSeats.delete(seat);
+    this.npcSeat.set(npcId, seat);
+    state.seated = true;
+    state.path = [];
+    state.sprite.setPosition(seat.x, seat.y);
+    state.avatar.setSeated(true);
+    state.avatar.setFacing("down");
+    state.avatar.setPosition(seat.x, seat.y);
+    return true;
+  }
+
+  /** Stand an NPC up, releasing its seat. */
+  private _standNpc(npcId: string, state: NpcAvatarState) {
+    const seat = this.npcSeat.get(npcId);
+    if (seat) { this.freeSeats.add(seat); this.npcSeat.delete(npcId); }
+    if (state.seated) { state.seated = false; state.avatar.setSeated(false); }
+  }
+
+  /** Per-frame update for a seated NPC: hold position, breathe/blink, cull. */
+  private _updateSeatedNpc(state: NpcAvatarState, delta: number) {
+    const view = this.cameras.main.worldView;
+    const M = OfficeScene.CULL_MARGIN;
+    const onScreen =
+      state.sprite.x >= view.x - M && state.sprite.x <= view.right + M &&
+      state.sprite.y >= view.y - M && state.sprite.y <= view.bottom + M;
+    if (!onScreen) {
+      if (state.avatar.container.visible) {
+        state.avatar.container.setVisible(false);
+        state.label.setVisible(false);
+        state.statusText.setVisible(false);
+      }
+      return;
+    }
+    if (!state.avatar.container.visible) {
+      state.avatar.container.setVisible(true);
+      state.label.setVisible(true);
+      state.statusText.setVisible(true);
+    }
+    state.avatar.setPosition(state.sprite.x, state.sprite.y);
+    state.avatar.update(delta);
+    state.avatar.container.setDepth(yDepth(state.sprite.y));
+    state.label.setPosition(state.sprite.x, state.sprite.y - 30);
+    state.statusText.setPosition(state.sprite.x, state.sprite.y - 22);
+  }
+
+  /** Player sit/stand: press E near a free desk to sit; move or press E to stand. */
+  private _updateSitting() {
+    if (this.playerSeat) {
+      if (Phaser.Input.Keyboard.JustDown(this.keyE)) this._playerStand();
+      return;
+    }
+    let best: SeatAnchor | null = null;
+    let bd = OfficeScene.SIT_RADIUS_SQ;
+    for (const s of this.freeSeats) {
+      const d = (s.x - this.player.x) ** 2 + (s.y - this.player.y) ** 2;
+      if (d < bd) { bd = d; best = s; }
+    }
+    if (best) {
+      if (!this.sitPrompt.visible) {
+        this.sitPrompt.setText("🪑  Press E — sit").setVisible(true);
+        const cam = this.cameras.main;
+        this.sitPrompt.setPosition(cam.width / 2 - this.sitPrompt.width / 2, cam.height - 66);
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyE)) this._playerSit(best);
+    } else if (this.sitPrompt.visible) {
+      this.sitPrompt.setVisible(false);
+    }
+  }
+
+  private _playerSit(seat: SeatAnchor) {
+    this.freeSeats.delete(seat);
+    this.playerSeat = seat;
+    this._cancelWalk();
+    this._cancelFollow();
+    this.player.setVelocity(0, 0);
+    this.player.setPosition(seat.x, seat.y);
+    this.playerAvatar.setSeated(true);
+    this.playerAvatar.setFacing("down");
+    this.sitPrompt.setVisible(false);
+  }
+
+  private _playerStand() {
+    if (!this.playerSeat) return;
+    this.freeSeats.add(this.playerSeat);
+    this.playerSeat = null;
+    this.playerAvatar.setSeated(false);
   }
 
   private _spawnNpc(
@@ -1652,7 +1821,7 @@ export class OfficeScene extends Phaser.Scene {
 
     this.npcAvatars.set(npcId, {
       sprite, avatar, label, targetX: x, targetY: y, facing, spriteKey,
-      agentId, programState: "idle", statusText, path: [],
+      agentId, programState: "idle", statusText, path: [], seated: false,
     });
   }
 
