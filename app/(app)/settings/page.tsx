@@ -331,7 +331,7 @@ export default async function SettingsPage() {
             id="audit"
             eyebrow="Evidence"
             title="Audit export"
-            description="Download recent append-only audit rows for approvals, integrations, API keys, and other controlled actions. Owner/admin only."
+            description="Download recent audit rows and run deterministic intelligence checks for institutional evidence review. Owner/admin only."
           >
             <div className="fx-card p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -345,6 +345,26 @@ export default async function SettingsPage() {
                 {canAdminOrg(ctx.role) ? (
                   <a href="/api/audit/export" className="fx-btn-primary shrink-0">
                     Download CSV
+                  </a>
+                ) : (
+                  <span className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-muted">
+                    Owner/admin required
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="fx-card mt-3 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-fg-primary">Intelligence evaluation harness</p>
+                  <p className="mt-1 text-xs leading-snug text-fg-secondary">
+                    Runs deterministic golden prompts against the routing layer and returns
+                    pass/fail evidence for model-risk review.
+                  </p>
+                </div>
+                {canAdminOrg(ctx.role) ? (
+                  <a href="/api/intelligence/evaluate" className="fx-btn-secondary shrink-0">
+                    Run evaluation
                   </a>
                 ) : (
                   <span className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-muted">
