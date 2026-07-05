@@ -106,7 +106,7 @@ export const ROOM_ACTIONS: Record<string, RoomAction[]> = {
   ],
   trading: [
     { id: "view-deals",  label: "View Deals",     icon: "◈", href: "/dashboard/deals" },
-    { id: "add-deal",    label: "Add Deal",        icon: "+", href: "/dashboard/deals/new" },
+    { id: "add-deal",    label: "Add Deal",        icon: "+", href: "/source/deal_pipeline" },
   ],
   research: [
     { id: "ask-earn",    label: "Research Brief",  icon: "✦", event: "earn:open-with-context" },
