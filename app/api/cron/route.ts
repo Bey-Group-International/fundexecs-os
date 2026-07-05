@@ -5,6 +5,7 @@ import { nextRun } from "@/lib/cron";
 import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import { runSlaEscalations } from "@/lib/sla-cron";
 import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outbound";
+import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -154,6 +155,18 @@ export async function GET(request: Request) {
     console.error("webhook_deliveries failed", e);
   }
 
+  // Proactive Initiative sweep (surface-on-open, opt-in): detect signals nobody
+  // asked about, prioritize against the trust budget, author + pre-run the
+  // draftable Command, and persist finished items for the Report dashboard.
+  // Gated behind PROACTIVE_INITIATIVE_ENABLED (the function no-ops when off) and
+  // best-effort like every block above — a failure never aborts the sweep.
+  let proactive = { orgs: 0, surfaced: 0 };
+  try {
+    proactive = await runProactiveSweepAllOrgs(supabase, { maxOrgs: MAX_PER_SWEEP });
+  } catch (e) {
+    console.error("proactive_sweep failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -168,6 +181,7 @@ export async function GET(request: Request) {
         escalated,
         webhooksDelivered: webhooks.delivered,
         webhooksFailed: webhooks.failed,
+        proactiveSurfaced: proactive.surfaced,
       },
       startedAt: now,
     });
@@ -175,5 +189,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive });
 }

@@ -20,6 +20,7 @@ import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 import { FirstMissionCoach } from "@/components/dashboard/FirstMissionCoach";
 import { StaleDealAlerts } from "@/components/dashboard/StaleDealAlerts";
+import { ProactiveSection } from "./ProactiveSection";
 import {
   DeleteWorkflowBtn,
   ClearWorkflowsBtn,
@@ -257,6 +258,10 @@ export default async function DashboardPage() {
       <div className="mb-6">
         <MissionControl orgId={ctx.orgId} />
       </div>
+
+      {/* Earn Initiative — self-authored Commands surfaced as finished decisions,
+          with pre-run drafts, provenance, and blast-radius gates. */}
+      <ProactiveSection orgId={ctx.orgId} />
 
       {/* Entry into the Gather-style spatial office where Earn orchestrates the
           executive team in real time. */}

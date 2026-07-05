@@ -542,6 +542,41 @@ Deployed, monitoring               →  live, observability active
              |  state.
              |  Confidence: Tested by unit/lint/typecheck/build/Jest and browser video
              |  walkthrough.
+
+2026-07-05  |  Proactive Initiative (market-aware) — Earn authors its own Commands.
+             |  Built lib/proactive/*: a Signal → Trigger → Prioritize → Propose(Command) →
+             |  Plan+Draft → Surface → Gate → Learn pipeline that runs THROUGH the existing
+             |  loop (runAutomation, engine.ts) and gates (gates.ts), never a parallel one.
+             |  - Typed signal model (internal + market classes) + pluggable trigger registry;
+             |    cold-LP wired end-to-end (detects relationship_scores.decay_alert).
+             |  - PMI source registry (query/enrich/benchmark → VerifiedResult provenance,
+             |    source-cache TTL + staleness downgrade). Carta live via a Composio seam
+             |    (CARTA_BENCHMARK_TOOL) with a modeled track_records fallback — honest
+             |    provenance (verified:false, "carta·modeled") so an estimate never poses as
+             |    a live Carta fact. Apollo/Datasite/CourtListener/Semrush/Day AI scaffolded.
+             |  - Prioritizer with an ENFORCED, config-driven trust budget: per-hub cutoffs
+             |    (Build loose, Run tight) + per-hub/global ceilings; urgency×blast×confidence
+             |    ×learned-weight; below cutoff is suppressed, not queued. PMI feeds ranking.
+             |  - Gate reuse: draft pre-runs (Tier 1), the surfaced SEND is tiered by
+             |    ActionKind; any PMI-grounded draft floored to investor-facing (Tier 2 min);
+             |    Tier 3 non-skippable, mandate can never lift it. Proactive TIGHTENS gates.
+             |  - Surface: migration 20260705180000_proactive_commands; ProactiveSection on
+             |    the Command Center (NO new floating widget) with inline drafts + visible
+             |    provenance + Earn-level count; approve/dismiss/snooze feed budget decay.
+             |  - Cron: a best-effort block in /api/cron behind PROACTIVE_INITIATIVE_ENABLED;
+             |    background push is a later config flag (PROACTIVE_BACKGROUND_PUSH), not a
+             |    rewrite. Ships surface-on-open first.
+             |  Real vs scaffolded: agents run REAL Claude when ANTHROPIC_API_KEY is set (the
+             |  drafting agents produce the pre-run deliverable); Carta live-fetch is the
+             |  scaffolded seam (modeled fallback active); other PMI sources are stubs.
+             |  Decision: generalize the Source Radar's proven signal→rank→learn machinery
+             |  into a hub-spanning, budget-governed pipeline that emits finished Commands
+             |  (not alerts), rather than build a parallel notification feed.
+             |  Confidence: Tested by unit/typecheck/lint/Jest (36 new tests; 1979 total green);
+             |  live DB/auth flow not exercised (no local Supabase). Next: wire the actual
+             |  gated SEND on approve; add Build (term-drift) + Run (stale-mark) triggers;
+             |  connect a live Carta Composio toolkit; graduate high-confidence Execute
+             |  signals to background push.
 ```
 
 ---
