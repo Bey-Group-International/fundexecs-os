@@ -195,8 +195,8 @@ describe("public-web — parsing", () => {
   it("strips script/style even with whitespace end tags and no leftover markup (CWE-116)", () => {
     const html =
       "<html><head><title>Acme &amp;lt;Co&amp;gt;</title>" +
-      "<script >window.x='<b>leak</b>'</script >" +
-      "<style\n>.a{color:red}</style>" +
+      "<script >window.x='<b>leak</b>'</script\n bar>" +
+      "<style\n>.a{color:red}</style xyz>" +
       "</head><body><p>Contact ir@acme.com</p></body></html>";
     const points = extractDataPointsFromHtml(html, { url: "https://acme.com" });
     const values = points.map((p) => p.extracted_value).join(" | ");

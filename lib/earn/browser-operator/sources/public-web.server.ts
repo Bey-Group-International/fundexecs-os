@@ -108,11 +108,13 @@ function decodeEntities(s: string): string {
  */
 function htmlToLines(html: string): string[] {
   return html
-    // Strip script/style blocks. The closing tag allows whitespace before ">"
-    // (e.g. "</script >") and any leftover unclosed tag is removed by the
-    // catch-all below, so no executable content survives (CWE-116/mXSS-safe).
-    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style\s*>/gi, " ")
+    // Strip script/style blocks including their CONTENT. Both the opening and
+    // closing tags tolerate arbitrary attributes/whitespace before ">" (e.g.
+    // "</script\n bar>"), so junk in the end tag can't leave the script body
+    // behind as text; any leftover unclosed tag is dropped by the catch-all
+    // below. No executable content survives (CWE-116 / mXSS-safe).
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, " ")
     .replace(/<\/?(?:script|style)\b[^>]*>/gi, " ")
     // Block-level and break boundaries become line breaks.
     .replace(/<\s*br\s*\/?\s*>/gi, "\n")
