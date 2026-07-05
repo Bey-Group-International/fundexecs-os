@@ -31,6 +31,8 @@ describe("GET /api/intelligence/evaluate", () => {
     const json = await res.json();
     expect(json.routing.score).toBe(1);
     expect(json.routing.failed).toBe(0);
+    expect(json.research_output_standard.required_columns).toContain("Point of Contact");
+    expect(json.research_output_standard.sample_browser_decision).toBe(true);
     expect(json.generated_at).toEqual(expect.any(String));
   });
 });
