@@ -198,6 +198,20 @@ export class OfficeScene extends Phaser.Scene {
   // Start within the natural 14-26s window so no ambient emote fires on frame 1
   private npcEmoteTimer = 14000 + Math.random() * 12000;
 
+  // ── Accessibility / performance ──
+  /** True when the user prefers reduced motion; suppresses decorative loops. */
+  private reducedMotion = false;
+  /** Off-screen cull margin (world px) around the camera view for avatars. */
+  private static readonly CULL_MARGIN = 80;
+
+  // ── Touch controls ──
+  /**
+   * Normalized movement vector from the on-screen D-pad (mobile/touch), each
+   * component in [-1, 1]. {0,0} means released. Consumed in _handleMovement,
+   * where it overrides click-to-walk but yields to physical keyboard input.
+   */
+  private touchVector = { dx: 0, dy: 0 };
+
   // ── Office-program layer ──
   /** Room activation overlays (glow + task badge), created lazily per room. */
   private roomOverlays = new Map<string, RoomOverlay>();
@@ -264,6 +278,16 @@ export class OfficeScene extends Phaser.Scene {
   // ── create ──────────────────────────────────────────────────────────────────
 
   create() {
+    // Accessibility: honor the OS "reduce motion" setting. Detected once and
+    // shared with ExecutiveAvatar (via a static) BEFORE any avatar spawns so
+    // the aura/breathing/typing loops are never scheduled. Guarded for SSR
+    // and browsers without matchMedia.
+    this.reducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ExecutiveAvatar.reducedMotion = this.reducedMotion;
+
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
     this._createTilemap();
@@ -304,6 +328,13 @@ export class OfficeScene extends Phaser.Scene {
       this.sfu?.setLocalStream(stream);
     });
 
+    // Mobile/touch D-pad → normalized movement vector. Consumed each frame in
+    // _handleMovement; {0,0} on release. Keyboard still takes precedence.
+    this.game.events.on("office:touch-move", (v: { dx: number; dy: number }) => {
+      this.touchVector.dx = v?.dx ?? 0;
+      this.touchVector.dy = v?.dy ?? 0;
+    });
+
     // M5c: teleport to a room by key
     this.game.events.on("office:teleport", (roomKey: string) => {
       const room = ROOMS.find((r) => r.key === roomKey);
@@ -339,6 +370,7 @@ export class OfficeScene extends Phaser.Scene {
   shutdown() {
     this.game.events.off("office:teleport");
     this.game.events.off("office:teleport-room");
+    this.game.events.off("office:touch-move");
     this.game.events.off("office:emote");
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
@@ -673,23 +705,33 @@ export class OfficeScene extends Phaser.Scene {
     const down  = this.cursors.down.isDown  || this.wasd.down.isDown;
     const left  = this.cursors.left.isDown  || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
+    const kbActive = up || down || left || right;
+    const touchActive = this.touchVector.dx !== 0 || this.touchVector.dy !== 0;
 
-    // Keyboard input always overrides click-to-walk and follow-mode
-    if (up || down || left || right) { this._cancelWalk(); this._cancelFollow(); }
+    // Keyboard and touch both override click-to-walk and follow-mode; keyboard
+    // takes precedence over touch when both are engaged.
+    if (kbActive || touchActive) { this._cancelWalk(); this._cancelFollow(); }
     else if (this._followWalkPath()) return;
 
     let vx = 0;
     let vy = 0;
 
-    if (left)  vx -= PLAYER_SPEED;
-    if (right) vx += PLAYER_SPEED;
-    if (up)    vy -= PLAYER_SPEED;
-    if (down)  vy += PLAYER_SPEED;
-
-    // Normalize diagonal
-    if (vx !== 0 && vy !== 0) {
-      vx *= 0.707;
-      vy *= 0.707;
+    if (kbActive) {
+      if (left)  vx -= PLAYER_SPEED;
+      if (right) vx += PLAYER_SPEED;
+      if (up)    vy -= PLAYER_SPEED;
+      if (down)  vy += PLAYER_SPEED;
+      // Normalize diagonal
+      if (vx !== 0 && vy !== 0) {
+        vx *= 0.707;
+        vy *= 0.707;
+      }
+    } else if (touchActive) {
+      // Drive velocity from the on-screen D-pad vector, normalized to unit
+      // length so diagonals match keyboard speed.
+      const len = Math.hypot(this.touchVector.dx, this.touchVector.dy) || 1;
+      vx = (this.touchVector.dx / len) * PLAYER_SPEED;
+      vy = (this.touchVector.dy / len) * PLAYER_SPEED;
     }
 
     this.player.setVelocity(vx, vy);
@@ -775,13 +817,36 @@ export class OfficeScene extends Phaser.Scene {
   // ── Multiplayer: remote avatar rendering ────────────────────────────────────
 
   private _updateRemoteAvatars() {
+    const view = this.cameras.main.worldView;
+    const M = OfficeScene.CULL_MARGIN;
     for (const [, state] of this.remotePlayers) {
       const prevX = state.sprite.x;
       const prevY = state.sprite.y;
       // Interpolate toward the last server target every frame (cheap lerp).
+      // Position math always runs so re-entry into view is seamless.
       state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.2);
       state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.2);
       const moving = Math.hypot(state.sprite.x - prevX, state.sprite.y - prevY) > 0.4;
+
+      // Off-screen culling: skip the expensive redraw + label repositioning and
+      // hide the visuals when outside the camera view (plus a margin).
+      const onScreen =
+        state.sprite.x >= view.x - M && state.sprite.x <= view.right + M &&
+        state.sprite.y >= view.y - M && state.sprite.y <= view.bottom + M;
+      if (!onScreen) {
+        if (state.avatar.container.visible) {
+          state.avatar.container.setVisible(false);
+          state.label.setVisible(false);
+          state.nameTag.setVisible(false);
+        }
+        continue;
+      }
+      if (!state.avatar.container.visible) {
+        state.avatar.container.setVisible(true);
+        state.label.setVisible(true);
+        state.nameTag.setVisible(true);
+      }
+
       if (moving) {
         state.avatar.setFacing(velocityToFacing(state.sprite.x - prevX, state.sprite.y - prevY));
       }
@@ -802,8 +867,12 @@ export class OfficeScene extends Phaser.Scene {
    */
   private _updateNpcAvatars(delta: number) {
     const step = (OfficeScene.NPC_SPEED * delta) / 1000;
+    const view = this.cameras.main.worldView;
+    const M = OfficeScene.CULL_MARGIN;
     for (const [, state] of this.npcAvatars) {
       let walking = false;
+      // Facing update is deferred so it (and its redraw) is skipped when culled.
+      let newFacing: AvatarFacing | null = null;
       if (state.path.length > 0) {
         walking = true;
         const next = state.path[0];
@@ -822,7 +891,7 @@ export class OfficeScene extends Phaser.Scene {
           state.sprite.y += (dy / dist) * step;
           const facing = velocityToFacing(dx, dy);
           state.facing = facing as Facing;
-          state.avatar.setFacing(facing);
+          newFacing = facing;
         }
       } else if (state.targetX !== state.sprite.x || state.targetY !== state.sprite.y) {
         // Legacy lerp target (kept for future server-driven agents).
@@ -830,6 +899,26 @@ export class OfficeScene extends Phaser.Scene {
         state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
       }
 
+      // Off-screen culling: movement math above still ran, but skip the
+      // per-frame redraw + label repositioning and hide the visuals.
+      const onScreen =
+        state.sprite.x >= view.x - M && state.sprite.x <= view.right + M &&
+        state.sprite.y >= view.y - M && state.sprite.y <= view.bottom + M;
+      if (!onScreen) {
+        if (state.avatar.container.visible) {
+          state.avatar.container.setVisible(false);
+          state.label.setVisible(false);
+          state.statusText.setVisible(false);
+        }
+        continue;
+      }
+      if (!state.avatar.container.visible) {
+        state.avatar.container.setVisible(true);
+        state.label.setVisible(true);
+        state.statusText.setVisible(true);
+      }
+
+      if (newFacing) state.avatar.setFacing(newFacing);
       state.avatar.setWalking(walking);
       state.avatar.setPosition(state.sprite.x, state.sprite.y);
       state.avatar.update(delta);
@@ -928,13 +1017,16 @@ export class OfficeScene extends Phaser.Scene {
     // Gold-lit floor wash tint across the room field.
     overlay.glow.fillStyle(tierColor, 0.05);
     overlay.glow.fillRect(rx, ry, ROOM_W - 6, ROOM_H - 6);
-    // Pulsing accent border.
+    // Accent border — pulses unless reduced motion, in which case it holds a
+    // static glow so the "room is active" cue remains legible.
     overlay.glow.lineStyle(2, tierColor, 0.5);
     overlay.glow.strokeRect(rx, ry, ROOM_W - 6, ROOM_H - 6);
     overlay.glow.setAlpha(1);
-    this.tweens.add({
-      targets: overlay.glow, alpha: 0.5, duration: 1300, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
-    });
+    if (!this.reducedMotion) {
+      this.tweens.add({
+        targets: overlay.glow, alpha: 0.5, duration: 1300, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+      });
+    }
 
     const tierShort = tier ? RISK_TIERS[tier].short : "";
     overlay.badge.setText(`● ${taskCount} ACTIVE${tierShort ? ` · ${tierShort}` : ""}`);
@@ -1010,10 +1102,13 @@ export class OfficeScene extends Phaser.Scene {
         fontSize: "10px",
         color: "#c9a84c",
       }).setOrigin(0.5, 0.5).setDepth(DEPTH_LABEL - 0.2).setAlpha(0.7);
-      this.tweens.add({
-        targets: marker, y: wy - 24, alpha: 0.35,
-        duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
-      });
+      // Bob the hotspot marker unless reduced motion — then it sits static.
+      if (!this.reducedMotion) {
+        this.tweens.add({
+          targets: marker, y: wy - 24, alpha: 0.35,
+          duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+        });
+      }
     }
 
     // Scroll-locked prompt shown when standing near a hotspot
@@ -1152,7 +1247,9 @@ export class OfficeScene extends Phaser.Scene {
     }
     // Light purposeful idle activity — only idle agents, infrequent, and
     // restricted to work-flavored icons. Active agents never emote randomly;
-    // their state is communicated by aura + status label instead.
+    // their state is communicated by aura + status label instead. Suppressed
+    // entirely under reduced motion (ambient decorative motion).
+    if (this.reducedMotion) return;
     this.npcEmoteTimer -= delta;
     if (this.npcEmoteTimer <= 0) {
       this.npcEmoteTimer = 14000 + Math.random() * 12000;
@@ -1171,7 +1268,18 @@ export class OfficeScene extends Phaser.Scene {
       fontSize: "14px",
       backgroundColor: "#0a0806cc",
       padding: { x: 5, y: 3 },
-    }).setOrigin(0.5, 1).setDepth(DEPTH_LABEL + 0.3).setScale(0.4);
+    }).setOrigin(0.5, 1).setDepth(DEPTH_LABEL + 0.3);
+    if (this.reducedMotion) {
+      // Reduced motion: appear at full scale, then a single fade-out (no pop
+      // or float). The emote is still shown and readable.
+      bubble.setScale(1);
+      this.tweens.add({
+        targets: bubble, alpha: 0, duration: 900, delay: 900,
+        onComplete: () => bubble.destroy(),
+      });
+      return;
+    }
+    bubble.setScale(0.4);
     this.tweens.add({
       targets: bubble, scale: 1, y: y - 44, duration: 180, ease: "Back.easeOut",
       onComplete: () => {
