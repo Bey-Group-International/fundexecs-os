@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireOrgContext } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase/server";
+import { buildMeetingInviteUrl, buildMeetingRoomUrl, createMeeting } from "@/lib/meetings/service";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -18,12 +21,17 @@ function toGCalDate(d: Date): string {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
   const { searchParams } = req.nextUrl;
 
   const title = searchParams.get("title") || "Meeting";
   const roomCode = searchParams.get("roomCode") || "";
   const startIso = searchParams.get("startIso") || new Date().toISOString();
   const durationMinutes = parseInt(searchParams.get("durationMinutes") || "60", 10);
+  const timezone = searchParams.get("timezone") || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const meetingType = searchParams.get("meetingType") || "internal_strategy";
 
   const start = new Date(startIso);
   if (isNaN(start.getTime())) {
@@ -33,7 +41,20 @@ export async function GET(req: NextRequest) {
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
   const origin = req.nextUrl.origin;
-  const joinUrl = roomCode ? `${origin}/meetings/${roomCode}` : `${origin}/meetings`;
+  const supabase = await createServerClient();
+  const meeting = await createMeeting(supabase, {
+    title,
+    orgId: auth.ctx.orgId,
+    hostId: auth.ctx.userId,
+    roomCode: roomCode || null,
+    scheduledAt: start.toISOString(),
+    durationMinutes,
+    timezone,
+    meetingType,
+  });
+
+  const joinUrl = buildMeetingInviteUrl(origin, meeting.roomCode);
+  const roomUrl = buildMeetingRoomUrl(origin, meeting.roomCode);
 
   const details = `Join meeting: ${joinUrl}`;
 
@@ -44,7 +65,15 @@ export async function GET(req: NextRequest) {
     details,
   });
 
-  const url = `https://calendar.google.com/calendar/render?${params.toString()}`;
+  const googleCalendarUrl = `https://calendar.google.com/calendar/render?${params.toString()}`;
 
-  return NextResponse.json({ url });
+  return NextResponse.json({
+    id: meeting.id,
+    roomCode: meeting.roomCode,
+    scheduledAt: meeting.scheduledAt,
+    durationMinutes: meeting.durationMinutes,
+    url: roomUrl,
+    inviteUrl: joinUrl,
+    googleCalendarUrl,
+  });
 }

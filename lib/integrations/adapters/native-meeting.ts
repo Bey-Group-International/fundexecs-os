@@ -16,18 +16,7 @@ import type {
   DispatchResult,
 } from "../types";
 import { getAppUrl } from "./app-url";
-
-function generateRoomCode(): string {
-  const chars = "abcdefghijkmnpqrstuvwxyz23456789";
-  const bytes = new Uint8Array(10);
-  crypto.getRandomValues(bytes);
-  let code = "";
-  for (let i = 0; i < 10; i++) {
-    if (i === 3 || i === 7) { code += "-"; continue; }
-    code += chars[bytes[i] % chars.length];
-  }
-  return code;
-}
+import { buildMeetingInviteUrl, generateRoomCode } from "@/lib/meetings/service";
 
 export const nativeMeetingAdapter: DispatchAdapter = {
   channel: "native_meeting",
@@ -36,7 +25,8 @@ export const nativeMeetingAdapter: DispatchAdapter = {
     const target = ctx.target?.name ?? ctx.target?.email ?? "the counterparty";
     const topic = ctx.subject ?? (ctx.metadata?.["stepTitle"] as string | undefined) ?? "Meeting";
     const roomCode = generateRoomCode();
-    const meetingUrl = `${getAppUrl()}/meeting-room/${roomCode}`;
+    const meetingUrl = buildMeetingInviteUrl(getAppUrl(), roomCode);
+    const scheduledAt = typeof ctx.metadata?.["scheduledAt"] === "string" ? ctx.metadata["scheduledAt"] : null;
 
     // Pre-persist the meeting row so the room is in "waiting" state before
     // the link is shared. Non-fatal if this fails — the room page creates it
@@ -50,6 +40,12 @@ export const nativeMeetingAdapter: DispatchAdapter = {
             host_id: ctx.actorId !== "system" ? ctx.actorId : null,
             organization_id: ctx.orgId,
             status: "waiting",
+            scheduled_at: scheduledAt,
+            duration_minutes: 60,
+            timezone: "UTC",
+            meeting_type: "internal_strategy",
+            preparation_status: scheduledAt ? "prep_needed" : "ready",
+            followup_status: "not_started",
           },
           { onConflict: "room_code", ignoreDuplicates: false },
         );
