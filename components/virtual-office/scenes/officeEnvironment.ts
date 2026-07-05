@@ -115,10 +115,51 @@ const LAYOUT: Record<string, Piece[]> = {
   ],
   reception: [
     { type: "reception", rx: 96, ry: 54 },
-    { type: "sofa", rx: 300, ry: 226 },
     { type: "plant", rx: 40, ry: 232 },
   ],
 };
+
+/**
+ * A seat: where an executive (or the user) sits at a desk, room-relative.
+ * The occupant faces "down" (toward the viewer) with the desk drawn in front,
+ * so the desk occludes the lap and the face stays visible. A chair is drawn
+ * just behind the seat; the desk + computer just in front.
+ */
+export type SeatAnchor = { roomKey: string; x: number; y: number; facing: "down" };
+
+/** Offsets from a seat to its chair (behind) and desk (in front). */
+const CHAIR_DY = -1;
+const DESK_DY = 13;
+
+/**
+ * Desk workstations per room, keyed by room, in room-relative seat pixels.
+ * Every department gets a small bank of desks so each room reads as a staffed
+ * office. Seats avoid the door lanes (rx 152–232, ry 112–176) and corners.
+ */
+const WORKSTATIONS: Record<string, Array<{ sx: number; sy: number }>> = {
+  ceo:       [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }],
+  boardroom: [{ sx: 74, sy: 84 }, { sx: 310, sy: 84 }],
+  trading:   [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }],
+  research:  [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }],
+  office:    [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }, { sx: 306, sy: 214 }],
+  ops:       [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }],
+  legal:     [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }],
+  marketing: [{ sx: 78, sy: 80 }, { sx: 306, sy: 80 }, { sx: 78, sy: 214 }],
+  reception: [{ sx: 306, sy: 80 }, { sx: 306, sy: 214 }],
+};
+
+/** World-space seat anchors for the whole floor (NPC/user sitting). */
+export function officeSeats(): SeatAnchor[] {
+  const out: SeatAnchor[] = [];
+  for (const room of ROOMS) {
+    const ox = room.col * ROOM_W;
+    const oy = room.row * ROOM_H;
+    for (const w of WORKSTATIONS[room.key] ?? []) {
+      out.push({ roomKey: room.key, x: ox + w.sx, y: oy + w.sy, facing: "down" });
+    }
+  }
+  return out;
+}
 
 // ── Walls ────────────────────────────────────────────────────────────────────
 
@@ -213,9 +254,76 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
       drawPiece(g, p.type, x, footY, accent);
       pieces.push({ gfx: g, footY });
     }
+
+    // Desk workstations: a chair drawn behind the seat (lower depth) and the
+    // desk + computer in front (higher depth, occluding the seated lap).
+    for (const w of WORKSTATIONS[room.key] ?? []) {
+      const sx = ox + w.sx;
+      const sy = oy + w.sy;
+
+      const chairFoot = sy + CHAIR_DY;
+      const chair = scene.add.graphics().setDepth(yDepth(chairFoot));
+      drawChair(chair, sx, chairFoot, accent);
+      pieces.push({ gfx: chair, footY: chairFoot });
+
+      const deskFoot = sy + DESK_DY;
+      const desk = scene.add.graphics().setDepth(yDepth(deskFoot));
+      drawWorkdesk(desk, sx, deskFoot, accent);
+      pieces.push({ gfx: desk, footY: deskFoot });
+    }
   }
 
   return pieces;
+}
+
+/** An executive chair — the backrest rises behind the seated occupant. */
+function drawChair(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number) {
+  // Soft shadow under the chair base.
+  g.fillStyle(0x000000, 0.2);
+  g.fillEllipse(cx, fy + 3, 20, 6);
+  // Five-star base + post (mostly hidden behind the desk/occupant).
+  g.fillStyle(C.legDark, 1);
+  g.fillRect(cx - 1.4, fy - 2, 2.8, 5);
+  // Seat cushion.
+  g.fillStyle(0x2a3140, 1);
+  g.fillRoundedRect(cx - 8, fy - 4, 16, 5, 2);
+  // Backrest rising behind the occupant.
+  g.fillStyle(0x232a37, 1);
+  g.fillRoundedRect(cx - 8, fy - 17, 16, 14, 3);
+  g.fillStyle(shade(0x232a37, 1.4), 0.7);
+  g.fillRoundedRect(cx - 8, fy - 17, 16, 2.2, 3); // lit top of backrest
+  g.fillStyle(accent, 0.55);
+  g.fillRect(cx - 6.5, fy - 6, 13, 1); // accent trim
+}
+
+/**
+ * A desk with a computer, keyboard, mouse, mug, and papers. The monitor sits
+ * to the side of the seat so it never covers the seated occupant's face; the
+ * desk front occludes their lap.
+ */
+function drawWorkdesk(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number) {
+  box(g, cx, fy, 46, 7, 11, C.deskTop, C.deskFront);
+  const surfaceY = fy - 11 - 7; // top face of the desk
+  // Monitor offset to the occupant's side (viewer-left) with the screen light
+  // spilling up. Seen from behind (dark shell).
+  const mx = cx - 13;
+  g.fillStyle(C.legDark, 1);
+  g.fillRect(mx - 1, surfaceY - 2, 2, 3); // stand
+  g.fillStyle(0x171b23, 1);
+  g.fillRoundedRect(mx - 7, surfaceY - 11, 14, 10, 1.5); // monitor back
+  g.fillStyle(shade(0x171b23, 1.5), 1);
+  g.fillRect(mx - 7, surfaceY - 11, 14, 1.4); // top edge
+  g.fillStyle(accent, 0.5);
+  g.fillRect(mx - 6, surfaceY - 12.3, 12, 1.3); // screen glow spill
+  // Keyboard + mouse in front of the occupant.
+  g.fillStyle(0x2a3140, 1);
+  g.fillRoundedRect(cx - 3, surfaceY + 1.4, 13, 2.6, 0.6); // keyboard
+  g.fillCircle(cx + 14, surfaceY + 2.7, 1.2);              // mouse
+  // Papers + mug.
+  g.fillStyle(0xe8eef5, 0.9);
+  g.fillRect(cx - 6, surfaceY + 0.6, 6, 4);   // papers
+  g.fillStyle(shade(accent, 1.1), 1);
+  g.fillCircle(cx + 9, surfaceY - 0.8, 1.6);  // mug
 }
 
 /** A light-from-above extruded block: front face + top cap + soft shadow. */

@@ -71,6 +71,7 @@ export class ExecutiveAvatar {
 
   private facing: AvatarFacing = "down";
   private walking = false;
+  private seated = false;
   private programState: AgentState = "idle";
   private animState: AnimationState = "idle_breathing";
 
@@ -144,6 +145,15 @@ export class ExecutiveAvatar {
     if (this.walking === walking) return;
     this.walking = walking;
     if (!walking) this.walkPhase = 0;
+    this._resolveAnim();
+    this._redraw();
+  }
+
+  /** Sit / stand. Seated is a stationary idle stance drawn behind a desk. */
+  setSeated(seated: boolean) {
+    if (this.seated === seated) return;
+    this.seated = seated;
+    if (seated) { this.walking = false; this.walkPhase = 0; }
     this._resolveAnim();
     this._redraw();
   }
@@ -260,6 +270,7 @@ export class ExecutiveAvatar {
 
   /** Map program state → a visual animation state. */
   private _resolveAnim() {
+    if (this.seated) { this.animState = "idle_breathing"; this.think.setVisible(false); return; }
     if (this.walking) { this.animState = "walking"; return; }
     switch (this.programState) {
       case "working":              this.animState = "typing"; break;
@@ -359,7 +370,7 @@ export class ExecutiveAvatar {
   // ── Figure drawing ──────────────────────────────────────────────────────────
 
   private _poseKey(step: number, workStep: number): string {
-    return `${this.facing}:w${step}:k${workStep}:${this.animState}:${this.spec.kind}`;
+    return `${this.facing}:w${step}:k${workStep}:${this.animState}:${this.seated ? "S" : "_"}:${this.spec.kind}`;
   }
 
   /** Redraw rate for the current gesture (0 = no redraw-based gesture). */
@@ -378,6 +389,8 @@ export class ExecutiveAvatar {
     this.lastPoseKey = this._poseKey(step, workStep);
     const g = this.body;
     g.clear();
+
+    if (this.seated) { this._drawSeated(g, this.spec); return; }
 
     // Walk-cycle limb offsets (discrete 4-frame swing). step -1 = idle.
     const swing = step === -1 ? 0 : [3, 0, -3, 0][step];
@@ -399,6 +412,51 @@ export class ExecutiveAvatar {
       case "broad": return 8;
       default:      return 7;
     }
+  }
+
+  /**
+   * Seated stance (facing the viewer). The desk drawn in front occludes the
+   * lap, so we draw a short seated base, hands resting toward the desk, the
+   * gradient blazer, and the full head — head and shoulders read above the
+   * desk while the legs stay hidden behind it.
+   */
+  private _drawSeated(g: Phaser.GameObjects.Graphics, s: AvatarSpec) {
+    const sw = this._shoulder(s);
+
+    // Short seated thighs (mostly hidden by the desk in front).
+    g.fillStyle(this._shade(s.trouser, 0.92), 1);
+    g.fillRoundedRect(-4.4, 4, 3.8, 8, 1.6);
+    g.fillRoundedRect(0.6, 4, 3.8, 8, 1.6);
+
+    // Forearms resting toward the desk, hands just ahead of the lap.
+    g.fillStyle(s.suit, 1);
+    g.fillRoundedRect(-7.4, -4, 3, 9, 1.5);
+    g.fillRoundedRect(4.4, -4, 3, 9, 1.5);
+    g.fillStyle(s.skin, 1);
+    g.fillCircle(-4.6, 4.5, 1.7);
+    g.fillCircle(4.6, 4.5, 1.7);
+
+    // Torso — gradient blazer (same directional light as the standing pose).
+    const suitHi = this._shade(s.suit, 1.35);
+    const suitMid = this._shade(s.suit, 1.08);
+    const suitLo = this._shade(s.suit, 0.7);
+    g.fillGradientStyle(suitHi, suitMid, suitLo, this._shade(s.suit, 0.85), 1);
+    g.fillPoints([
+      new Phaser.Geom.Point(-sw, -6), new Phaser.Geom.Point(sw, -6),
+      new Phaser.Geom.Point(5.5, 7), new Phaser.Geom.Point(-5.5, 7),
+    ], true);
+    // Shirt V + collar + tie.
+    g.fillStyle(this._shade(s.shirt, 1.02), 1);
+    g.fillTriangle(-2.6, -6, 2.6, -6, 0, 2.5);
+    g.fillStyle(this._shade(s.suit, 0.8), 1);
+    g.fillTriangle(-3.2, -6, -0.4, -6, -2.2, 1);
+    g.fillTriangle(3.2, -6, 0.4, -6, 2.2, 1);
+    g.fillStyle(s.accent, 1);
+    g.fillTriangle(-1.1, -5, 1.1, -5, 0, 4);
+    g.fillStyle(this._shade(s.accent, 1.15), 1);
+    g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
+
+    this._drawHead(g, s, 0, 0);
   }
 
   /** Front view (facing down / toward the viewer). */
