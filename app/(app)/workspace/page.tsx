@@ -7,6 +7,7 @@ import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
 import { PromptChips } from "@/components/workspace/PromptChips";
+import { StartEarnButton } from "@/components/workspace/StartEarnButton";
 import { buildOperatingBrief, type OperatingBrief } from "@/lib/operating-brief";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
@@ -208,81 +209,111 @@ export default async function SessionsPage({
 }
 
 function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
+  const primaryAttention = brief.needsAttention[0] ?? "No urgent attention items.";
+  const primaryApproval = brief.readyForApproval[0] ?? "No approval gates are currently waiting.";
+  const primaryBlocker = brief.blocked[0] ?? "No blocked workflows detected.";
+  const primaryNextAction = brief.nextActions[0] ?? "Ask Earn what to move forward next.";
+
   return (
-    <section className="sticky top-0 z-20 mb-8 grid gap-4 bg-surface-0/95 py-3 backdrop-blur-xl lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="fx-card relative overflow-hidden p-5">
+    <section className="mb-5">
+      <div className="fx-card relative overflow-hidden p-4">
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgb(var(--fx-accent-rgb)/0.14),transparent_36%)]"
         />
-        <div className="relative">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
-            AI Operating Brief
-          </p>
-          <h2 className="mt-2 font-display text-xl font-semibold tracking-tight text-fg-primary">
-            What Earn knows before you type
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <BriefBlock title="Needs attention" items={brief.needsAttention} tone="warn" />
-            <BriefBlock title="Approval gates" items={brief.readyForApproval} tone="gate" />
-            <BriefBlock title="Blocked" items={brief.blocked} tone="risk" />
-            <BriefBlock title="Can automate" items={brief.canAutomate} tone="auto" />
-          </div>
-        </div>
-      </div>
-
-      <div className="fx-card p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fg-muted">
-          Active context
-        </p>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {brief.context.map((line) => (
-            <span
-              key={line}
-              className="rounded-full border border-line bg-surface-0 px-2.5 py-1 text-[11px] text-fg-secondary"
-            >
-              {line}
-            </span>
-          ))}
-        </div>
-        <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.24em] text-fg-muted">
-          Suggested executive team
-        </p>
-        <div className="mt-3 flex flex-col gap-2">
-          {brief.suggestedRoles.map((role) => (
-            <div key={role.role} className="rounded-xl border border-line bg-surface-0 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-fg-primary">{role.label}</p>
-                <span className="rounded-full border border-gold-500/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
-                  {role.approvalBoundary.replace(/_/g, " ")}
-                </span>
-              </div>
-              <p className="mt-1 text-xs leading-snug text-fg-muted">{role.rationale}</p>
+        <div className="relative flex flex-col gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+                AI Operating Brief
+              </p>
+              <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-fg-primary">
+                {primaryAttention}
+              </h2>
+              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-fg-secondary">
+                {primaryApproval} {primaryBlocker}
+              </p>
             </div>
-          ))}
-        </div>
-        <div className="mt-4 rounded-xl border border-line bg-surface-0/70 p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-            Recommended next actions
-          </p>
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-snug text-fg-secondary">
-            {brief.nextActions.map((action) => (
-              <li key={action}>{action}</li>
-            ))}
-          </ul>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <StartEarnButton prompt={primaryNextAction} />
+              <a href="#earn-composer" className="fx-btn-secondary">
+                Focus composer
+              </a>
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-4">
+            <CompactSignal title="Approvals" value={brief.readyForApproval[0]} tone="gate" />
+            <CompactSignal title="Blocked" value={brief.blocked[0]} tone="risk" />
+            <CompactSignal title="Automation" value={brief.canAutomate[0]} tone="auto" />
+            <CompactSignal title="Next action" value={primaryNextAction} tone="warn" />
+          </div>
+
+          <details className="group rounded-xl border border-line/70 bg-surface-0/70 px-3 py-2">
+            <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-[0.22em] text-fg-muted transition hover:text-fg-secondary">
+              Show context and executive team
+              <span className="ml-2 text-gold-400 group-open:hidden">+</span>
+              <span className="ml-2 hidden text-gold-400 group-open:inline">-</span>
+            </summary>
+            <div className="mt-3 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  Active context
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {brief.context.map((line) => (
+                    <span
+                      key={line}
+                      className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-[11px] text-fg-secondary"
+                    >
+                      {line}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  Suggested executive team
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {brief.suggestedRoles.map((role) => (
+                    <div key={role.role} className="rounded-xl border border-line bg-surface-1 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-fg-primary">{role.label}</p>
+                        <span className="rounded-full border border-gold-500/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                          {role.approvalBoundary.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-snug text-fg-muted">{role.rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-xl border border-line bg-surface-1 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                Recommended next actions
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-snug text-fg-secondary">
+                {brief.nextActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            </div>
+          </details>
         </div>
       </div>
     </section>
   );
 }
 
-function BriefBlock({
+function CompactSignal({
   title,
-  items,
+  value,
   tone,
 }: {
   title: string;
-  items: string[];
+  value: string | undefined;
   tone: "warn" | "gate" | "risk" | "auto";
 }) {
   const toneClass = {
@@ -296,11 +327,9 @@ function BriefBlock({
       <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${toneClass}`}>
         {title}
       </span>
-      <ul className="mt-2 space-y-1 text-xs leading-snug text-fg-secondary">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
+      <p className="mt-2 line-clamp-2 text-xs leading-snug text-fg-secondary">
+        {value ?? "No signal."}
+      </p>
     </div>
   );
 }
