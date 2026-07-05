@@ -280,7 +280,7 @@ function RoomCell({
   onHoverChange, debugGrid, agentActivity, onAutoActiveBubble,
 }: {
   room: RoomData; roomIndex: number;
-  onExecClick: (exec: ExecData) => void;
+  onExecClick: (exec: ExecData, room: RoomData) => void;
   onRoomClick: (roomId: string, href: string) => void;
   zoomingRoom: string | null; activeBubble: BubbleState;
   reducedEffects: boolean; nightMode: boolean;
@@ -402,7 +402,7 @@ function RoomCell({
                 if (execActivity?.status === "working" && execActivity.taskTitle) {
                   onAutoActiveBubble(exec.id, execActivity.taskTitle);
                 }
-                onExecClick(exec);
+                onExecClick(exec, room);
               }}
               activeBubble={activeBubble}
               activity={execActivity}
@@ -673,6 +673,263 @@ function BoardroomScene({
   );
 }
 
+// ─── Inspector (agent / room) ───────────────────────────────────────────────
+
+type InspectState =
+  | { kind: "agent"; exec: ExecData; room: RoomData }
+  | { kind: "room"; room: RoomData }
+  | null;
+
+/** Why the office routes a given function to this executive — shown in the
+ *  agent inspector. Keyed by exec id; falls back to a role-neutral line. */
+const WHY_AGENT: Record<string, string> = {
+  "earnest-fundmaker":   "Command operator — receives every instruction, classifies intent, and delegates work across the floor.",
+  "executive-advisor":   "Owns strategic review and IC judgment; the deals desk escalates decisions here.",
+  "deal-sourcer":        "First touch on new opportunities — screening, data-room setup, and pipeline hygiene.",
+  "capital-raiser":      "Runs the underwriting and fund-room work behind each raise.",
+  "workflow-instructor": "Controls & compliance — gates external-facing and capital-binding actions.",
+  "capital-connector":   "Moves and settles capital; owns follow-ups on commitments.",
+  "automater":           "Post-close execution — KPIs, operating plans, and repeatable workflows.",
+  "rainmaker":           "Sourcing and partnerships; surfaces high-value relationships.",
+  "pr-director":         "Shapes the firm narrative and LP-facing positioning.",
+  "lead-generator":      "Owns LP outreach and connection sequencing.",
+  "seo-disruptor":       "Builds firm visibility and market authority.",
+  "curator":             "Drafts thought leadership and content for the firm's voice.",
+  "investor-relations":  "LP communications — updates, reporting cadence, and investor comms.",
+  "office-manager":      "Fund administration and operational continuity across the floor.",
+};
+
+function statusMeta(status?: string): { label: string; color: string; glow: string } {
+  switch (status) {
+    case "working":   return { label: "Working",           color: "#fbbf24", glow: "0 0 8px #fbbf24aa" };
+    case "awaiting":  return { label: "Awaiting approval",  color: "#60a5fa", glow: "0 0 8px #60a5fa88" };
+    case "completed": return { label: "Complete",           color: "#22c55e", glow: "0 0 8px #22c55e88" };
+    default:           return { label: "Idle",               color: "#94a3b8", glow: "none" };
+  }
+}
+
+function execActivityFor(execId: string, agentActivity: AgentActivityMap): AgentActivityInfo | undefined {
+  return Object.entries(agentActivity).find(([k]) => agentKeyToExecId(k) === execId)?.[1];
+}
+
+const PANEL_BG = "linear-gradient(180deg, rgba(12,10,7,0.92) 0%, rgba(8,6,4,0.95) 100%)";
+
+function InspectorHeaderAvatar({ exec, size = 40 }: { exec: ExecData; size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      border: `1.5px solid ${exec.themeColor}aa`,
+      background: `radial-gradient(circle at 40% 35%, ${exec.themeColor}22 0%, rgba(8,6,4,0.85) 70%)`,
+      boxShadow: `0 0 14px ${exec.themeColor}33`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "Georgia,serif", fontWeight: 600, color: exec.themeColor,
+      fontSize: Math.round(size * 0.34),
+    }}>
+      {getInitials(exec.name)}
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status?: string }) {
+  const m = statusMeta(status);
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      fontFamily: "'Courier New',monospace", fontSize: 9, letterSpacing: "0.06em",
+      color: m.color, background: `${m.color}14`, border: `1px solid ${m.color}44`,
+      borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap",
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: m.color, boxShadow: m.glow }} />
+      {m.label}
+    </span>
+  );
+}
+
+function InspectorSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{
+        fontFamily: "Georgia,serif", fontSize: 8, letterSpacing: "0.22em",
+        textTransform: "uppercase", color: `${GOLD}aa`,
+      }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function InspectorPanel({
+  state, agentActivity, occupancy, onEnterRoom, onAskEarn, onClose,
+}: {
+  state: NonNullable<InspectState>;
+  agentActivity: AgentActivityMap;
+  occupancy: Record<string, number>;
+  onEnterRoom: (room: RoomData) => void;
+  onAskEarn: (exec: ExecData) => void;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { closeRef.current?.focus(); }, [state]);
+
+  const room = state.room;
+  const virtualKey = HQ_TO_VIRTUAL_KEY[room.id] ?? room.id;
+  const occ = occupancy[virtualKey] ?? 0;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="false"
+      aria-label={state.kind === "agent" ? `${state.exec.name} inspector` : `${room.label} inspector`}
+      style={{
+        position: "absolute", top: 0, right: 0, bottom: 0, zIndex: 60,
+        width: "min(320px, 78%)",
+        background: PANEL_BG,
+        backdropFilter: "blur(14px)",
+        borderLeft: `1px solid ${GOLD}44`,
+        boxShadow: "-16px 0 48px rgba(0,0,0,0.55), inset 1px 0 0 rgba(201,168,76,0.1)",
+        display: "flex", flexDirection: "column",
+        animation: "inspect-in 0.28s cubic-bezier(0.2,0,0,1)",
+        fontFamily: "monospace",
+      }}
+    >
+      {/* Gold top hairline */}
+      <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${GOLD}, transparent)` }} />
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 14px 10px" }}>
+        {state.kind === "agent" ? (
+          <InspectorHeaderAvatar exec={state.exec} />
+        ) : (
+          <div style={{
+            width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+            border: `1.5px solid ${room.accentColor}aa`,
+            background: `radial-gradient(circle at 40% 35%, ${room.accentColor}22 0%, rgba(8,6,4,0.85) 70%)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: room.accentColor, fontFamily: "Georgia,serif", fontSize: 16,
+          }}>◧</div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: "Georgia,serif", fontSize: 14, color: "rgba(255,248,220,0.95)",
+            letterSpacing: "0.02em", lineHeight: 1.2,
+          }}>
+            {state.kind === "agent" ? state.exec.name : room.label.replace(/\b\w/g, c => c.toUpperCase())}
+          </div>
+          <div style={{
+            fontFamily: "'Courier New',monospace", fontSize: 9, color: "rgba(255,248,220,0.45)",
+            letterSpacing: "0.08em", marginTop: 2,
+          }}>
+            {state.kind === "agent" ? room.label : `${room.executives.length} executive${room.executives.length === 1 ? "" : "s"} · ${occ} on the floor`}
+          </div>
+        </div>
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          aria-label="Close inspector"
+          style={{
+            background: "rgba(255,255,255,0.04)", border: `1px solid ${GOLD}33`,
+            color: "rgba(255,248,220,0.7)", borderRadius: 4, width: 24, height: 24,
+            cursor: "pointer", fontSize: 13, lineHeight: 1, flexShrink: 0,
+          }}
+        >×</button>
+      </div>
+
+      <div style={{ height: 1, background: `${GOLD}22`, margin: "0 14px" }} />
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 16 }}>
+        {state.kind === "agent" ? (
+          <AgentInspectorBody exec={state.exec} activity={execActivityFor(state.exec.id, agentActivity)} />
+        ) : (
+          <RoomInspectorBody room={room} agentActivity={agentActivity} />
+        )}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 8, padding: 14, borderTop: `1px solid ${GOLD}22` }}>
+        <button
+          type="button"
+          onClick={() => onEnterRoom(room)}
+          style={{
+            flex: 1, background: `${GOLD}18`, border: `1px solid ${GOLD}66`, color: GOLD,
+            fontFamily: "Georgia,serif", fontSize: 10, letterSpacing: "0.1em",
+            padding: "8px 10px", borderRadius: 4, cursor: "pointer", textTransform: "uppercase",
+            boxShadow: `0 0 14px ${GOLD}18`,
+          }}
+        >Enter Floor</button>
+        {state.kind === "agent" && (
+          <button
+            type="button"
+            onClick={() => onAskEarn(state.exec)}
+            style={{
+              flex: 1, background: "rgba(255,255,255,0.04)", border: `1px solid ${GOLD}33`,
+              color: "rgba(255,248,220,0.8)", fontFamily: "Georgia,serif", fontSize: 10,
+              letterSpacing: "0.1em", padding: "8px 10px", borderRadius: 4, cursor: "pointer",
+              textTransform: "uppercase",
+            }}
+          >Ask Earn</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AgentInspectorBody({ exec, activity }: { exec: ExecData; activity?: AgentActivityInfo }) {
+  const owns = activity?.status === "working" && activity.taskTitle ? activity.taskTitle : exec.hint;
+  return (
+    <>
+      <div><StatusPill status={activity?.status} /></div>
+      <InspectorSection title="Owns right now">
+        <div style={{
+          fontFamily: "'Courier New',monospace", fontSize: 11, lineHeight: 1.5,
+          color: "rgba(255,248,220,0.82)",
+          background: "rgba(201,168,76,0.05)", border: `1px solid ${GOLD}22`,
+          borderRadius: 4, padding: "8px 10px",
+        }}>{owns}</div>
+      </InspectorSection>
+      <InspectorSection title="Why this agent?">
+        <div style={{
+          fontFamily: "'Courier New',monospace", fontSize: 10.5, lineHeight: 1.55,
+          color: "rgba(255,248,220,0.6)",
+        }}>{WHY_AGENT[exec.id] ?? "Owns a dedicated function on the execution floor."}</div>
+      </InspectorSection>
+    </>
+  );
+}
+
+function RoomInspectorBody({ room, agentActivity }: { room: RoomData; agentActivity: AgentActivityMap }) {
+  return (
+    <InspectorSection title="Active work">
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {room.executives.map(exec => {
+          const act = execActivityFor(exec.id, agentActivity);
+          const owns = act?.status === "working" && act.taskTitle ? act.taskTitle : exec.hint;
+          return (
+            <div key={exec.id} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              background: "rgba(255,255,255,0.02)", border: `1px solid ${exec.themeColor}22`,
+              borderRadius: 6, padding: "8px 10px",
+            }}>
+              <InspectorHeaderAvatar exec={exec} size={30} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "Georgia,serif", fontSize: 11, color: "rgba(255,248,220,0.9)",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>{exec.name}</div>
+                <div style={{
+                  fontFamily: "'Courier New',monospace", fontSize: 8.5, color: "rgba(255,248,220,0.5)",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1,
+                }}>{owns}</div>
+              </div>
+              <StatusPill status={act?.status} />
+            </div>
+          );
+        })}
+      </div>
+    </InspectorSection>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ExecutiveHQ({
@@ -699,6 +956,7 @@ export function ExecutiveHQ({
   const [debugGrid, setDebugGrid]         = useState(false);
   const [animPhase, setAnimPhase]         = useState<'idle'|'huddle'|'brief'|'dispatch'|'working'>('idle');
   const [delegateDetail, setDelegateDetail] = useState<{ planTitle?: string; steps?: {agent: string; title: string}[] } | null>(null);
+  const [inspect, setInspect]             = useState<InspectState>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const audioCtxRef  = useRef<AudioContext | null>(null);
 
@@ -741,17 +999,30 @@ export function ExecutiveHQ({
     if (id) playRoomTone(id);
   }, [playRoomTone]);
 
-  const handleRoomClick = useCallback((roomId: string, href: string) => {
+  // Actual navigation into a room (the office floor tab, or the room route).
+  const enterRoom = useCallback((room: RoomData) => {
+    setInspect(null);
     if (zoomingRoom) return;
-    if (onNavigateRoom) {
-      onNavigateRoom(roomId);
-      return;
-    }
-    setZoomingRoom(roomId);
-    setTimeout(() => { router.push(href); setZoomingRoom(null); }, 420);
+    if (onNavigateRoom) { onNavigateRoom(room.id); return; }
+    setZoomingRoom(room.id);
+    setTimeout(() => { router.push(room.href); setZoomingRoom(null); }, 420);
   }, [router, zoomingRoom, onNavigateRoom]);
 
-  const handleExecClick = useCallback((exec: ExecData) => {
+  // Clicking a room opens the room inspector (its live active work); the
+  // inspector's "Enter Floor" action performs the actual navigation.
+  const handleRoomClick = useCallback((roomId: string) => {
+    if (zoomingRoom) return;
+    const room = ROOMS.find(r => r.id === roomId);
+    if (room) setInspect({ kind: "room", room });
+  }, [zoomingRoom]);
+
+  // Clicking an executive opens the agent inspector (what they own / why).
+  const handleExecClick = useCallback((exec: ExecData, room: RoomData) => {
+    setInspect({ kind: "agent", exec, room });
+  }, []);
+
+  // Escalate a specific executive's context into the Earn copilot.
+  const askEarn = useCallback((exec: ExecData) => {
     setActiveBubble({ execId: exec.id, text: exec.hint });
     setTimeout(() => setActiveBubble(null), 3000);
     window.dispatchEvent(new CustomEvent("earn:open-with-context", {
@@ -796,10 +1067,10 @@ export function ExecutiveHQ({
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "n" || e.key === "N") { setNightMode(v => !v); return; }
     if (e.key === "d" || e.key === "D") { setDebugGrid(v => !v); return; }
-    if (e.key === "Escape") { setFocusedRoomIndex(null); return; }
+    if (e.key === "Escape") { if (inspect) setInspect(null); else setFocusedRoomIndex(null); return; }
     if (e.key === "Enter" && focusedRoomIndex !== null) {
       const room = ROOMS[focusedRoomIndex];
-      if (room) handleRoomClick(room.id, room.href);
+      if (room) handleRoomClick(room.id);
       return;
     }
     if (!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) return;
@@ -816,7 +1087,7 @@ export function ExecutiveHQ({
     if (e.key === "ArrowUp")    { const nr = (curRow-1+ROOM_ROWS.length)%ROOM_ROWS.length; next = ROOM_ROWS[nr][Math.min(curCol,ROOM_ROWS[nr].length-1)]; }
     if (e.key === "ArrowDown")  { const nr = (curRow+1)%ROOM_ROWS.length; next = ROOM_ROWS[nr][Math.min(curCol,ROOM_ROWS[nr].length-1)]; }
     setFocusedRoomIndex(next);
-  }, [focusedRoomIndex, handleRoomClick]);
+  }, [focusedRoomIndex, handleRoomClick, inspect]);
 
   if (booting) {
     return (
@@ -873,6 +1144,7 @@ export function ExecutiveHQ({
         @keyframes exec-typing    { 0%,80%,100%{transform:translateY(0);opacity:0.4} 40%{transform:translateY(-3px);opacity:1} }
         @keyframes exec-badge-pulse { 0%,100%{box-shadow:0 0 0 2px rgba(251,191,36,0.3),0 0 18px rgba(251,191,36,0.2)} 50%{box-shadow:0 0 0 3px rgba(251,191,36,0.6),0 0 28px rgba(251,191,36,0.45)} }
         @keyframes exec-dot-pulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
+        @keyframes inspect-in     { from{opacity:0;transform:translateX(14px)} to{opacity:1;transform:translateX(0)} }
         .hq-paused * { animation-play-state: paused !important; }
       `}</style>
 
@@ -1009,6 +1281,18 @@ export function ExecutiveHQ({
           animPhase={animPhase}
           delegateDetail={delegateDetail}
           reducedEffects={reducedEffects}
+        />
+      )}
+
+      {/* ── Agent / room inspector ── */}
+      {inspect && (
+        <InspectorPanel
+          state={inspect}
+          agentActivity={agentActivity}
+          occupancy={roomOccupancy}
+          onEnterRoom={enterRoom}
+          onAskEarn={askEarn}
+          onClose={() => setInspect(null)}
         />
       )}
     </div>
