@@ -201,9 +201,12 @@ export class ExecutiveAvatar {
     const bob = Math.sin(this.bobPhase * 1.6) * 0.4;
     this.body.setY(bob);
 
-    // Redraw-based work animations advance a discrete work step.
-    if (this.animState === "typing") {
-      this.workPhase += dt * 5.5; // brisk keystrokes
+    // Redraw-based work gestures advance a discrete step: brisk keystrokes for
+    // typing, a slower sway for presenting, a gentle page-bob for reviewing —
+    // so a working executive keeps moving instead of freezing in one pose.
+    const rate = this._gestureRate();
+    if (rate > 0) {
+      this.workPhase += dt * rate;
       const wstep = Math.floor(this.workPhase) % 2;
       const key = this._poseKey(-1, wstep);
       if (key !== this.lastPoseKey) this._redraw();
@@ -359,9 +362,19 @@ export class ExecutiveAvatar {
     return `${this.facing}:w${step}:k${workStep}:${this.animState}:${this.spec.kind}`;
   }
 
+  /** Redraw rate for the current gesture (0 = no redraw-based gesture). */
+  private _gestureRate(): number {
+    switch (this.animState) {
+      case "typing":         return 5.5; // brisk keystrokes
+      case "presenting":     return 1.8; // slow speaking sway
+      case "reviewing_docs": return 1.4; // gentle page bob
+      default:               return 0;
+    }
+  }
+
   private _redraw() {
     const step = this.walking ? Math.floor(this.walkPhase) % 4 : -1;
-    const workStep = this.animState === "typing" ? Math.floor(this.workPhase) % 2 : -1;
+    const workStep = this._gestureRate() > 0 ? Math.floor(this.workPhase) % 2 : -1;
     this.lastPoseKey = this._poseKey(step, workStep);
     const g = this.body;
     g.clear();
@@ -468,22 +481,24 @@ export class ExecutiveAvatar {
       return;
     }
     if (arm === "review") {
-      // Both hands raised in front, holding a document (drawn as prop).
+      // Both hands raised in front, holding a document; a gentle page bob.
+      const rb = workStep === 1 ? 0.8 : 0;
       g.fillStyle(sleeve, 1);
       g.fillRoundedRect(-7.4, -4.5, 3, 7, 1.5);
       g.fillRoundedRect(4.4, -4.5, 3, 7, 1.5);
       g.fillStyle(s.skin, 1);
-      g.fillCircle(-3.4, 1.5, 1.6);
-      g.fillCircle(3.4, 1.5, 1.6);
+      g.fillCircle(-3.4, 1.5 + rb, 1.6);
+      g.fillCircle(3.4, 1.5 + rb, 1.6);
       return;
     }
     if (arm === "present") {
-      // One arm raised outward in a presenting gesture.
+      // One arm raised outward, swaying with the point being made.
+      const ph = workStep === 1 ? -1.4 : 0; // hand lifts on the gesture beat
       g.fillStyle(sleeve, 1);
-      g.fillRoundedRect(-8.4, -6.5, 3, 8, 1.5); // raised
+      g.fillRoundedRect(-8.4, -6.5 + ph * 0.5, 3, 8, 1.5); // raised
       g.fillRoundedRect(4.8, -5, 3.2, 11, 1.6);
       g.fillStyle(s.skin, 1);
-      g.fillCircle(-8.6, -7, 1.7);
+      g.fillCircle(-8.6, -7 + ph, 1.7);
       g.fillCircle(6.4, 6, 1.7);
       return;
     }
@@ -699,7 +714,7 @@ export class ExecutiveAvatar {
     g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number, dir: number, arm: ArmMode, workStep: number,
   ) {
     if (arm === "type" || arm === "review") {
-      const kb = arm === "type" && workStep === 1 ? 0.8 : 0;
+      const kb = workStep === 1 ? 0.8 : 0; // keystroke / page bob
       g.fillStyle(s.suit, 1);
       g.fillRoundedRect(-1 + dir * 1.5, -5, 3, 9, 1.5);
       g.fillStyle(s.skin, 1);
@@ -707,10 +722,11 @@ export class ExecutiveAvatar {
       return;
     }
     if (arm === "present") {
+      const ph = workStep === 1 ? -1.4 : 0; // gesturing sway
       g.fillStyle(s.suit, 1);
-      g.fillRoundedRect(-1 + dir * 2, -7.5, 3, 8, 1.5);
+      g.fillRoundedRect(-1 + dir * 2, -7.5 + ph * 0.5, 3, 8, 1.5);
       g.fillStyle(s.skin, 1);
-      g.fillCircle(dir * 5.2, -8, 1.7);
+      g.fillCircle(dir * 5.2, -8 + ph, 1.7);
       return;
     }
     // Walk / idle — front arm swings across.
