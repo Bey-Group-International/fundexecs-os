@@ -24,17 +24,6 @@ export default async function CommandCenterPage() {
         </p>
       </header>
 
-      <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-300">
-          Scripted spatial preview
-        </p>
-        <p className="mt-1 text-sm leading-relaxed text-fg-secondary">
-          This spatial Command Center is an illustrative preview driven by scripted
-          demo data. Use the dashboard Command Center for live organization tasks,
-          approvals, and operational metrics.
-        </p>
-      </div>
-
       <CommandCenter />
     </div>
   );
