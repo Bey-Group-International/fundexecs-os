@@ -1,7 +1,8 @@
 // Pure, network-free tests for the Composio integration layer.
 //
-// Every Composio HTTP call is an injected fake (fetchImpl) and every SEC call in
-// the EDGAR fallback is an injected HttpFetch — no real network is touched.
+// The Composio SDK is never loaded: every ComposioConfig injects a fake
+// `executor`, and every SEC call in the EDGAR fallback injects an HttpFetch — no
+// real network and no @composio/core import.
 
 import {
   composioConfigured,
@@ -31,84 +32,77 @@ import {
 } from "./linkedin.server";
 import type { HttpFetch, HttpResponse } from "@/lib/earn/browser-operator/sources/http";
 
-// ── Fake Composio fetch (Response-like with .json) ───────────────────────────
+// ── Fake Composio SDK executor ───────────────────────────────────────────────
 
-type Captured = { url: string; body: unknown };
+type Captured = { slug: string; body: { userId: string; arguments: Record<string, unknown>; connectedAccountId?: string } };
 
-function fakeComposioFetch(
-  envelope: unknown,
-  opts: { ok?: boolean; status?: number; capture?: Captured[] } = {},
-): ComposioConfig["fetchImpl"] {
-  return (async (url: string, init?: RequestInit) => {
-    opts.capture?.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    return {
-      ok: opts.ok ?? true,
-      status: opts.status ?? 200,
-      json: async () => envelope,
-    };
-  }) as unknown as ComposioConfig["fetchImpl"];
+// A fixed-response executor (mimics @composio/core tools.execute's ToolResponse).
+function fakeComposioExecutor(
+  response: unknown,
+  cap?: Captured[],
+): ComposioConfig["executor"] {
+  return async (slug, body) => {
+    cap?.push({ slug, body });
+    return response as { data?: Record<string, unknown>; error?: string | null; successful?: boolean };
+  };
 }
 
-const cfg = (fetchImpl: ComposioConfig["fetchImpl"]): ComposioConfig => ({
+const cfg = (executor: ComposioConfig["executor"]): ComposioConfig => ({
   apiKey: "test-key",
   userId: "entity-1",
-  fetchImpl,
+  executor,
 });
 
-// Route Composio execute calls to different envelopes by tool slug in the URL.
+// Route execute calls to different responses by tool slug.
 function fakeComposioRouter(
   routes: Array<{ match: string; envelope: unknown }>,
   cap?: Captured[],
-): ComposioConfig["fetchImpl"] {
-  return (async (url: string, init?: RequestInit) => {
-    cap?.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    const hit = routes.find((r) => String(url).includes(r.match));
-    return {
-      ok: true,
-      status: 200,
-      json: async () => hit?.envelope ?? { successful: true, data: {} },
-    };
-  }) as unknown as ComposioConfig["fetchImpl"];
+): ComposioConfig["executor"] {
+  return async (slug, body) => {
+    cap?.push({ slug, body });
+    const hit = routes.find((r) => slug.includes(r.match));
+    return (hit?.envelope ?? { successful: true, data: {} }) as { data?: Record<string, unknown>; error?: string | null; successful?: boolean };
+  };
 }
 
 // ── client.server ────────────────────────────────────────────────────────────
 
 describe("executeComposioTool", () => {
-  test("unwraps the { data, successful } envelope on success", async () => {
+  test("returns the tool payload (response.data) on success", async () => {
     const cap: Captured[] = [];
     const res = await executeComposioTool(
-      cfg(fakeComposioFetch({ data: { hello: "world" }, successful: true }, { capture: cap })),
+      cfg(fakeComposioExecutor({ data: { hello: "world" }, successful: true }, cap)),
       "SOME_TOOL",
       { a: 1 },
       { connectedAccountId: "acc-9" },
     );
     expect(res).toEqual({ ok: true, data: { hello: "world" } });
-    // POSTs to the v3 execute endpoint with user_id + arguments + account.
-    expect(cap[0].url).toContain("/api/v3/tools/execute/SOME_TOOL");
+    // Executes the slug with the userId + arguments + connected account.
+    expect(cap[0].slug).toBe("SOME_TOOL");
     expect(cap[0].body).toMatchObject({
-      user_id: "entity-1",
+      userId: "entity-1",
       arguments: { a: 1 },
-      connected_account_id: "acc-9",
+      connectedAccountId: "acc-9",
     });
   });
 
   test("reports failure when successful:false", async () => {
     const res = await executeComposioTool(
-      cfg(fakeComposioFetch({ successful: false, error: "nope" })),
+      cfg(fakeComposioExecutor({ successful: false, error: "nope" })),
       "T",
       {},
     );
     expect(res).toEqual({ ok: false, error: "nope" });
   });
 
-  test("reports failure on non-OK HTTP", async () => {
+  test("reports failure when the executor throws", async () => {
     const res = await executeComposioTool(
-      cfg(fakeComposioFetch({}, { ok: false, status: 503 })),
+      cfg(async () => { throw new Error("network down"); }),
       "T",
       {},
     );
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain("503");
+    if (!res.ok) expect(res.error).toContain("network down");
   });
 
   test("composioConfigured reflects the env key", () => {
@@ -149,8 +143,8 @@ describe("fetchMarketstackCompanyViaComposio + mapMarketstackToDataPoints", () =
     // name already contains the acronym, so no redundant parenthetical is added.
     expect(company).toMatchObject({ name: "Apple Inc", symbol: "AAPL", exchange: "NASDAQ Stock Exchange", latestClose: 190.5, latestDate: "2024-11-01" });
     // Both hops executed via the Composio execute endpoint.
-    expect(cap.some((c) => c.url.includes(MARKETSTACK_TICKERS_TOOL))).toBe(true);
-    expect(cap.some((c) => c.url.includes(MARKETSTACK_EOD_TOOL))).toBe(true);
+    expect(cap.some((c) => c.slug === MARKETSTACK_TICKERS_TOOL)).toBe(true);
+    expect(cap.some((c) => c.slug === MARKETSTACK_EOD_TOOL)).toBe(true);
 
     const points = mapMarketstackToDataPoints(company as MarketstackCompany);
     const byField = Object.fromEntries(points.map((p) => [p.field_name, p]));
@@ -216,17 +210,17 @@ describe("searchEdgarFilingsViaGoogle", () => {
   test("executes the web-search tool with the scoped query and maps results", async () => {
     const cap: Captured[] = [];
     const points = await searchEdgarFilingsViaGoogle(
-      cfg(fakeComposioFetch({ data: { results: { citations: [{ url: "https://www.sec.gov/x/10q.htm", title: "10-Q" }] } }, successful: true }, { capture: cap })),
+      cfg(fakeComposioExecutor({ data: { results: { citations: [{ url: "https://www.sec.gov/x/10q.htm", title: "10-Q" }] } }, successful: true }, cap)),
       "Apple",
     );
     expect(points).toHaveLength(1);
-    expect(cap[0].url).toContain("/api/v3/tools/execute/COMPOSIO_SEARCH_WEB");
-    expect((cap[0].body as { arguments: { query: string } }).arguments.query).toContain("site:sec.gov");
+    expect(cap[0].slug).toBe("COMPOSIO_SEARCH_WEB");
+    expect(cap[0].body.arguments.query).toContain("site:sec.gov");
   });
 
   test("returns [] on a Composio miss", async () => {
     const points = await searchEdgarFilingsViaGoogle(
-      cfg(fakeComposioFetch({ successful: false, error: "throttled" })),
+      cfg(fakeComposioExecutor({ successful: false, error: "throttled" })),
       "Apple",
     );
     expect(points).toEqual([]);
