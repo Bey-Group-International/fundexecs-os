@@ -899,6 +899,51 @@ export type OutreachDraft = {
   updated_at: string;
 };
 
+// ── EPIC #2 — Earn Controlled Browser-Operator layer (20260705150000) ─────────
+
+export type EarnBrowserSession = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  task_id: string | null;
+  status: string;
+  requested_prompt: string;
+  approved_scope: Json | null;
+  requires_user_auth: boolean;
+  auth_handoff_completed: boolean;
+  current_url: string | null;
+  review_required: boolean;
+  save_approved: boolean;
+  external_action_approved: boolean;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type EarnBrowserAuditLog = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  user_id: string | null;
+  action: string;
+  url: string | null;
+  source_type: string | null;
+  summary: string | null;
+  created_at: string;
+};
+
+export type EarnReviewQueueItem = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  proposed_destination: string | null;
+  fields: Json;
+  status: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+};
+
 export type NetworkImportJob = {
   id: string;
   organization_id: string;
@@ -2421,6 +2466,9 @@ export type Database = {
       outreach_drafts: TableShape<OutreachDraft>;
       professional_network_sync_jobs: TableShape<ProfessionalNetworkSyncJob>;
       network_import_jobs: TableShape<NetworkImportJob>;
+      earn_browser_sessions: TableShape<EarnBrowserSession>;
+      earn_browser_audit_logs: TableShape<EarnBrowserAuditLog>;
+      earn_review_queue: TableShape<EarnReviewQueueItem>;
       intro_requests: TableShape<IntroRequest>;
       syndicate_circles: TableShape<SyndicateCircle>;
       circle_memberships: TableShape<CircleMembership>;
