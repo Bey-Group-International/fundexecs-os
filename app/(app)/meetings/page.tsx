@@ -40,10 +40,26 @@ interface LiveMeeting {
   related_contact_id: string | null;
   related_company_id: string | null;
   related_fund_id: string | null;
+  objective: string | null;
+  agenda: string | null;
+  preparation_requirements: string | null;
+  preparation_status: string | null;
+  followup_status: string | null;
+  assigned_copilot_agent: string | null;
+  related_record_type: string | null;
+  related_record_id: string | null;
+  calendar_visibility: string | null;
+  reminder_minutes: number | null;
+  external_calendar_provider: string | null;
+  external_calendar_sync_enabled: boolean | null;
+  external_calendar_sync_status: string | null;
+  is_draft: boolean | null;
+  locked_at: string | null;
+  updated_at: string | null;
 }
 
 const MEETING_SELECT =
-  "id, room_code, title, description, location, meeting_url, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, priority, tags, attendees, source, sync_status, source_event_id, source_calendar_id, deal_id, related_contact_id, related_company_id, related_fund_id";
+  "id, room_code, title, description, location, meeting_url, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, priority, tags, attendees, source, sync_status, source_event_id, source_calendar_id, deal_id, related_contact_id, related_company_id, related_fund_id, objective, agenda, preparation_requirements, preparation_status, followup_status, assigned_copilot_agent, related_record_type, related_record_id, calendar_visibility, reminder_minutes, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, is_draft, locked_at, updated_at";
 
 async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]> {
   const supabase = await createServerClient();
@@ -94,9 +110,9 @@ export default async function MeetingsPage() {
   const meetings = await getMeetings(ctx.orgId, userId);
   const now = Date.now();
   const upcoming = meetings
-    .filter((m) => m.scheduled_at && new Date(m.scheduled_at).getTime() >= now && m.status !== "ended")
+    .filter((m) => !m.is_draft && m.scheduled_at && new Date(m.scheduled_at).getTime() >= now && m.status !== "ended")
     .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
-  const past = meetings.filter((m) => !upcoming.some((u) => u.id === m.id));
+  const past = meetings.filter((m) => !m.is_draft && !upcoming.some((u) => u.id === m.id));
 
   return (
     <div className="flex flex-col gap-10">
