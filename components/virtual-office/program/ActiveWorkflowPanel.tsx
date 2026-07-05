@@ -3,9 +3,12 @@
 import {
   AGENT_BY_ID,
   RISK_TIERS,
+  ROLE_LABELS,
   ROOM_BY_KEY,
   STAGE_LABELS,
   STAGE_ORDER,
+  canRoleApprove,
+  rolesForTier,
   type WorkflowStage,
 } from "./officeProgram";
 import {
@@ -92,24 +95,39 @@ export function ActiveWorkflowPanel() {
             {pendingGate.title}
           </p>
           <p className="mt-1 text-[10px] leading-snug text-slate-400">{pendingGate.reason}</p>
-          <div className="mt-2 flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => resolveApprovalGate(pendingGate.id, "approved")}
-              className="flex-1 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white"
-              style={{ background: "#16a34a" }}
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              onClick={() => resolveApprovalGate(pendingGate.id, "rejected")}
-              className="flex-1 rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
-              style={{ borderColor: "#ef444488", color: "#ef4444" }}
-            >
-              Reject
-            </button>
-          </div>
+          {(() => {
+            const authorized = canRoleApprove(s.userRole, pendingGate.tier);
+            return (
+              <>
+                <div className="mt-2 flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={!authorized}
+                    title={authorized ? undefined : `Requires ${rolesForTier(pendingGate.tier)}`}
+                    onClick={() => resolveApprovalGate(pendingGate.id, "approved")}
+                    className="flex-1 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    style={{ background: "#16a34a" }}
+                  >
+                    {authorized ? "Approve" : "🔒 Approve"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resolveApprovalGate(pendingGate.id, "rejected")}
+                    className="flex-1 rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
+                    style={{ borderColor: "#ef444488", color: "#ef4444" }}
+                  >
+                    Reject
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[9px] leading-snug text-slate-500">
+                  Acting as <span style={{ color: "#c9a84c" }}>{ROLE_LABELS[s.userRole]}</span>.{" "}
+                  {authorized
+                    ? "You are authorized to clear this gate."
+                    : `Only ${rolesForTier(pendingGate.tier)} may approve — you can still reject.`}
+                </p>
+              </>
+            );
+          })()}
         </div>
       )}
 

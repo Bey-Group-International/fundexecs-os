@@ -21,8 +21,11 @@ import {
   MEETING_TYPES,
   PROGRAM_AGENTS,
   PROGRAM_ROOMS,
+  ROLE_LABELS,
   ROOM_BY_KEY,
   STAGE_ORDER,
+  canRoleApprove,
+  rolesForTier,
   routeTaskToAgents,
   type ActiveMeeting,
   type AgentAssignment,
@@ -33,6 +36,7 @@ import {
   type ChatKind,
   type ChatMessage,
   type MeetingType,
+  type OfficeRole,
   type OfficeWorkflow,
   type RiskTier,
   type RoomKey,
@@ -105,6 +109,8 @@ export type PendingPlan = {
 
 export type OfficeProgramState = {
   mode: WorkflowMode;
+  /** The signed-in user's role — gates which approval tiers they can clear. */
+  userRole: OfficeRole;
   officeStatus: "calm" | "planning" | "executing" | "awaiting_approval";
   agents: Record<AgentId, AgentRuntime>;
   rooms: Record<RoomKey, RoomRuntime>;
@@ -146,6 +152,7 @@ function initialRooms(): Record<RoomKey, RoomRuntime> {
 
 let state: OfficeProgramState = {
   mode: "copilot",
+  userRole: "managing_partner",
   officeStatus: "calm",
   agents: initialAgents(),
   rooms: initialRooms(),
@@ -291,6 +298,21 @@ function setStage(stage: WorkflowStage, currentStep: string, nextAction: string,
 export function setWorkflowMode(mode: WorkflowMode) {
   setState({ mode });
   addAuditEvent({ actor: "You", action: `Workflow mode set to ${mode}`, room: "Command Center", tier: null, status: "info" });
+}
+
+/**
+ * Set the signed-in user's role. Called from the React layer with the
+ * value from session metadata; determines which approval tiers the user
+ * can clear.
+ */
+export function setUserRole(role: OfficeRole) {
+  if (state.userRole === role) return;
+  setState({ userRole: role });
+}
+
+/** Whether the current user may clear the given (non-internal) tier. */
+export function canApproveTier(tier: Exclude<RiskTier, "internal">): boolean {
+  return canRoleApprove(state.userRole, tier);
 }
 
 // ─── Command intake ──────────────────────────────────────────────────────────
@@ -592,6 +614,24 @@ export function createApprovalGate(workflowId: string, title: string, tier: Excl
 export function resolveApprovalGate(gateId: string, decision: "approved" | "rejected") {
   const gate = state.approvals.find((g) => g.id === gateId);
   if (!gate || gate.status !== "pending") return;
+
+  // Role enforcement: capital-binding and external-facing approvals may only
+  // be granted by authorized roles. Anyone may reject (halt) a gate.
+  if (decision === "approved" && !canRoleApprove(state.userRole, gate.tier)) {
+    pushChat(
+      "approval",
+      "Risk & Compliance",
+      `Your role (${ROLE_LABELS[state.userRole]}) is not authorized to approve this ${gate.tier === "capital_binding" ? "capital-binding" : "external-facing"} gate. Requires ${rolesForTier(gate.tier)}.`
+    );
+    addAuditEvent({
+      actor: "You",
+      action: `Approval blocked — ${ROLE_LABELS[state.userRole]} not authorized for ${gate.title}`,
+      room: "Boardroom",
+      tier: gate.tier,
+      status: "rejected",
+    });
+    return;
+  }
 
   setState({ approvals: state.approvals.map((g) => (g.id === gateId ? { ...g, status: decision } : g)) });
   addAuditEvent({

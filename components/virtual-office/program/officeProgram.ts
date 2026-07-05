@@ -33,6 +33,48 @@ export const RISK_TIERS: Record<RiskTier, { label: string; short: string; color:
   capital_binding: { label: "Tier 3 — Capital-Binding", short: "T3", color: "#ef4444" },
 };
 
+/**
+ * The signed-in user's role on the floor. Determines which approval tiers
+ * they are authorized to clear.
+ * TODO(permissions): source this from the role-based permission system /
+ * Supabase RLS instead of session metadata, and enforce server-side.
+ */
+export type OfficeRole =
+  | "managing_partner"
+  | "compliance"
+  | "principal"
+  | "analyst"
+  | "observer";
+
+export const OFFICE_ROLES: OfficeRole[] = [
+  "managing_partner", "compliance", "principal", "analyst", "observer",
+];
+
+export const ROLE_LABELS: Record<OfficeRole, string> = {
+  managing_partner: "Managing Partner",
+  compliance: "Compliance",
+  principal: "Principal",
+  analyst: "Analyst",
+  observer: "Observer",
+};
+
+/** Whether a role may clear an approval gate of the given tier. */
+export function canRoleApprove(role: OfficeRole, tier: Exclude<RiskTier, "internal">): boolean {
+  switch (role) {
+    case "managing_partner": return true;               // full authority
+    case "compliance":       return true;               // controls function clears both
+    case "principal":        return tier === "external_facing"; // not capital-binding
+    default:                 return false;              // analyst, observer
+  }
+}
+
+/** Roles authorized to clear a given tier — for permission messaging. */
+export function rolesForTier(tier: Exclude<RiskTier, "internal">): string {
+  return tier === "capital_binding"
+    ? "Managing Partner or Compliance"
+    : "Managing Partner, Compliance, or Principal";
+}
+
 export type WorkflowStage =
   | "received"
   | "classified"
