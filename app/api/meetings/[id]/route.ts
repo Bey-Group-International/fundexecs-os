@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { deleteMeetingLocal, updateMeeting } from "@/lib/meetings/service";
+import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
+import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const supabase = await createServerClient();
+
+  // Snapshot attendees + room before the edit so we can invite only guests that
+  // are newly added (avoids re-emailing everyone on every edit).
+  const nextAttendees = Array.isArray(body.attendees) ? (body.attendees as MeetingAttendeeInput[]) : undefined;
+  let priorGuestEmails: Set<string> = new Set();
+  let roomCode = "";
+  let isDraft = false;
+  if (nextAttendees) {
+    const { data: prior } = await supabase
+      .from("live_meetings")
+      .select("attendees, room_code, is_draft")
+      .eq("id", id)
+      .eq("organization_id", auth.ctx.orgId)
+      .maybeSingle();
+    if (prior) {
+      priorGuestEmails = new Set(guestEmails((prior.attendees as MeetingAttendeeInput[] | null) ?? []));
+      roomCode = (prior.room_code as string | null) ?? "";
+      isDraft = (prior.is_draft as boolean | null) ?? false;
+    }
+  }
 
   try {
     const result = await updateMeeting(
@@ -55,7 +77,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         externalCalendarSyncEnabled: typeof body.externalCalendarSyncEnabled === "boolean" ? body.externalCalendarSyncEnabled : undefined,
       },
     );
-    return NextResponse.json(result);
+
+    // Invite guests that were just added to a real (non-draft) meeting.
+    let invited = 0;
+    if (nextAttendees && !isDraft && roomCode) {
+      const newEmails = guestEmails(nextAttendees).filter((e) => !priorGuestEmails.has(e));
+      if (newEmails.length > 0) {
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          const sendResult = await sendMeetingInvites({
+            origin: request.nextUrl.origin,
+            roomCode,
+            title: body.title ? String(body.title) : "Meeting",
+            senderName: userData.user?.email ?? "Someone",
+            emails: newEmails,
+          });
+          invited = sendResult.sent;
+        } catch (err) {
+          console.error("[/api/meetings/[id]] invite send failed", err);
+        }
+      }
+    }
+
+    return NextResponse.json({ ...result, invited });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update meeting" }, { status: 500 });
   }

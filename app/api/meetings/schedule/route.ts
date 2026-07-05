@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import {
   validateMeetingDraft,
   localToIso,
@@ -141,6 +142,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Email guest invites once the meeting is a real (non-draft) saved meeting.
+    // Non-fatal: a missing provider or send failure never blocks the meeting.
+    let invited = 0;
+    if (!saved.isDraft) {
+      const emails = guestEmails(attendees);
+      if (emails.length > 0) {
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          const result = await sendMeetingInvites({
+            origin: req.nextUrl.origin,
+            roomCode: saved.roomCode,
+            title: body.title ?? "Meeting",
+            senderName: userData.user?.email ?? "Someone",
+            emails,
+          });
+          invited = result.sent;
+        } catch (err) {
+          console.error("[/api/meetings/schedule] invite send failed", err);
+        }
+      }
+    }
+
     return NextResponse.json({
       id: saved.id,
       roomCode: saved.roomCode,
@@ -151,6 +174,7 @@ export async function POST(req: NextRequest) {
       internalCalendarEventId: saved.internalCalendarEventId,
       externalCalendarSyncStatus: saved.externalCalendarSyncStatus,
       externalSyncError,
+      invited,
       conflicts,
       roomUrl: buildMeetingRoomUrl(req.nextUrl.origin, saved.roomCode),
       inviteUrl: buildMeetingInviteUrl(req.nextUrl.origin, saved.roomCode),
