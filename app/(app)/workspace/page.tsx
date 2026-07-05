@@ -7,6 +7,7 @@ import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
 import { PromptChips } from "@/components/workspace/PromptChips";
+import { buildOperatingBrief, type OperatingBrief } from "@/lib/operating-brief";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,18 @@ export default async function SessionsPage({
 
   const supabase = await createServerClient();
 
-  const [connected, sessionsRes, groupsRes] = await Promise.all([
+  const [
+    connected,
+    sessionsRes,
+    groupsRes,
+    orgRes,
+    dealsCount,
+    investorsCount,
+    documentsCount,
+    activeWorkflowsCount,
+    pendingApprovalsCount,
+    blockedWorkflowsCount,
+  ] = await Promise.all([
     orgConnectedChannels(supabase, ctx.orgId),
     supabase
       .from("sessions")
@@ -57,6 +69,42 @@ export default async function SessionsPage({
       .select("id, name")
       .eq("organization_id", ctx.orgId)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("organizations")
+      .select("name, operator_role, primary_strategy")
+      .eq("id", ctx.orgId)
+      .maybeSingle(),
+    supabase
+      .from("deals")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId)
+      .not("stage", "in", '("closed","rejected")'),
+    supabase
+      .from("investors")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId),
+    supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null)
+      .in("status", ["pending", "in_progress", "awaiting_approval"]),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null)
+      .eq("status", "awaiting_approval"),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null)
+      .eq("status", "blocked"),
   ]);
 
   const sessions = (sessionsRes.data ?? []) as (Session & { updated_at: string | null })[];
@@ -67,6 +115,21 @@ export default async function SessionsPage({
   const recent = sessions.filter((s) => !s.pinned_at);
   const params = await searchParams;
   const queryPrompt = Array.isArray(params?.q) ? params.q[0] : params?.q;
+  const org = orgRes.data as { name?: string | null; operator_role?: string | null; primary_strategy?: string | null } | null;
+  const brief = buildOperatingBrief({
+    userRole: ctx.role,
+    organizationName: org?.name ?? "Your organization",
+    operatorRole: org?.operator_role ?? null,
+    strategy: org?.primary_strategy ?? null,
+    activeWorkflows: activeWorkflowsCount.count ?? 0,
+    pendingApprovals: pendingApprovalsCount.count ?? 0,
+    blockedWorkflows: blockedWorkflowsCount.count ?? 0,
+    openDeals: dealsCount.count ?? 0,
+    investors: investorsCount.count ?? 0,
+    documents: documentsCount.count ?? 0,
+    connectedChannels: connected.size,
+    recentSessions: sessions.length,
+  });
 
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
@@ -83,6 +146,8 @@ export default async function SessionsPage({
           </p>
         </div>
       </header>
+
+      <OperatingBriefCard brief={brief} />
 
       {sessions.length === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-14 text-center">
@@ -126,7 +191,7 @@ export default async function SessionsPage({
         </>
       )}
 
-      <div className="sticky bottom-0 z-10 mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
+      <div className="relative mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
         <p className="mb-2 px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
           Earn can · source LPs · draft memos · run diligence · build models · map capital networks
         </p>
@@ -138,6 +203,104 @@ export default async function SessionsPage({
           initialPrompt={queryPrompt ?? ""}
         />
       </div>
+    </div>
+  );
+}
+
+function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
+  return (
+    <section className="sticky top-0 z-20 mb-8 grid gap-4 bg-surface-0/95 py-3 backdrop-blur-xl lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="fx-card relative overflow-hidden p-5">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgb(var(--fx-accent-rgb)/0.14),transparent_36%)]"
+        />
+        <div className="relative">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+            AI Operating Brief
+          </p>
+          <h2 className="mt-2 font-display text-xl font-semibold tracking-tight text-fg-primary">
+            What Earn knows before you type
+          </h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <BriefBlock title="Needs attention" items={brief.needsAttention} tone="warn" />
+            <BriefBlock title="Approval gates" items={brief.readyForApproval} tone="gate" />
+            <BriefBlock title="Blocked" items={brief.blocked} tone="risk" />
+            <BriefBlock title="Can automate" items={brief.canAutomate} tone="auto" />
+          </div>
+        </div>
+      </div>
+
+      <div className="fx-card p-5">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fg-muted">
+          Active context
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {brief.context.map((line) => (
+            <span
+              key={line}
+              className="rounded-full border border-line bg-surface-0 px-2.5 py-1 text-[11px] text-fg-secondary"
+            >
+              {line}
+            </span>
+          ))}
+        </div>
+        <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.24em] text-fg-muted">
+          Suggested executive team
+        </p>
+        <div className="mt-3 flex flex-col gap-2">
+          {brief.suggestedRoles.map((role) => (
+            <div key={role.role} className="rounded-xl border border-line bg-surface-0 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-fg-primary">{role.label}</p>
+                <span className="rounded-full border border-gold-500/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                  {role.approvalBoundary.replace(/_/g, " ")}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-snug text-fg-muted">{role.rationale}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-xl border border-line bg-surface-0/70 p-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+            Recommended next actions
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-snug text-fg-secondary">
+            {brief.nextActions.map((action) => (
+              <li key={action}>{action}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BriefBlock({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: "warn" | "gate" | "risk" | "auto";
+}) {
+  const toneClass = {
+    warn: "border-amber-500/30 bg-amber-500/8 text-amber-300",
+    gate: "border-gold-500/30 bg-gold-500/8 text-gold-300",
+    risk: "border-status-danger/30 bg-status-danger/8 text-status-danger",
+    auto: "border-emerald-500/30 bg-emerald-500/8 text-emerald-300",
+  }[tone];
+  return (
+    <div className="rounded-xl border border-line bg-surface-0/80 p-3">
+      <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${toneClass}`}>
+        {title}
+      </span>
+      <ul className="mt-2 space-y-1 text-xs leading-snug text-fg-secondary">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }
