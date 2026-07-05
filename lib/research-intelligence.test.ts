@@ -24,6 +24,38 @@ describe("research intelligence standards", () => {
     expect(scoreSourceQuality([{ title: "10-K", url: "https://sec.test", sourceType: "filing", observedAt: now }])).toBe("verified");
   });
 
+  it("never scores more corroborating sources lower than fewer", () => {
+    const secondary = (url: string) => ({ title: "Blog", url, sourceType: "secondary" as const, observedAt: now });
+    expect(scoreSourceQuality([secondary("https://a.test")])).toBe("medium_confidence");
+    expect(scoreSourceQuality([secondary("https://a.test"), secondary("https://b.test")])).toBe("medium_confidence");
+    expect(scoreSourceQuality([])).toBe("unavailable");
+  });
+
+  it("sanitizes partially populated point-of-contact fields", () => {
+    const entity = normalizeResearchEntity({
+      entity: "Acme Logistics",
+      category: "acquisition_target",
+      pointOfContact: {
+        name: "Jane Doe",
+        role: "  ",
+        email: "",
+        phone: "Not publicly verified",
+        linkedin: "",
+        verification: "medium_confidence",
+        sourceUrl: "",
+      },
+      sources: [{ title: "Acme", url: "https://acme.test", sourceType: "news", observedAt: now }],
+    });
+    expect(entity.pointOfContact).toMatchObject({
+      name: "Jane Doe",
+      role: "Not publicly verified",
+      email: "Not publicly verified",
+      linkedin: "Not publicly verified",
+      verification: "medium_confidence",
+      sourceUrl: "https://acme.test",
+    });
+  });
+
   it("normalizes incomplete company research into an honest entity", () => {
     const entity = normalizeResearchEntity({
       entity: "Acme Logistics",
