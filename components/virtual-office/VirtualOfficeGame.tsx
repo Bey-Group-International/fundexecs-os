@@ -8,21 +8,28 @@ import { IFRAME_ZONES, ZONE_URL_CALENDLY, CALENDLY_DEFAULT_URL } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
 import { MediaPermissionBanner } from "./MediaPermissionBanner";
+import { OfficeHUD } from "./program/OfficeHUD";
+import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
+import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
+import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
+import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
+import { sceneBus, interactWithAgent, shutdownOfficeProgram } from "./program/officeProgramStore";
+import type { AgentId } from "./program/officeProgram";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
 
-// Room navigation config — matches ROOMS in types.ts
+// Room navigation config — matches ROOMS in types.ts / PROGRAM_ROOMS
 const ROOM_NAV = [
-  { key: "ceo",       label: "CEO Office",      icon: "◆" },
-  { key: "boardroom", label: "Boardroom",        icon: "◈" },
-  { key: "trading",   label: "Trading Floor",   icon: "▲" },
-  { key: "research",  label: "Research Hub",    icon: "◉" },
-  { key: "office",    label: "Main Office",     icon: "⬡" },
-  { key: "ops",       label: "Operations",      icon: "⚙" },
-  { key: "legal",     label: "Legal Corner",    icon: "§" },
-  { key: "marketing", label: "Marketing",       icon: "◬" },
-  { key: "reception", label: "Reception",       icon: "⬢" },
+  { key: "ceo",       label: "Command Center",    icon: "◆" },
+  { key: "boardroom", label: "Boardroom",          icon: "◈" },
+  { key: "trading",   label: "Deal Room",         icon: "▲" },
+  { key: "research",  label: "Diligence",         icon: "◉" },
+  { key: "office",    label: "Underwriting",      icon: "⬡" },
+  { key: "ops",       label: "Portfolio Ops",     icon: "⚙" },
+  { key: "legal",     label: "Compliance & Legal", icon: "§" },
+  { key: "marketing", label: "Treasury",          icon: "◬" },
+  { key: "reception", label: "IR Lounge",         icon: "⬢" },
 ];
 
 // Emote bar — mirrors keys 1-4 in the scene
@@ -144,6 +151,7 @@ export function VirtualOfficeGame({
 
     hasActivatedRef.current = true;
     let game: Phaser.Game | null = null;
+    let unsubscribeBus: (() => void) | null = null;
 
     import("phaser").then((PhaserModule) => {
       const PhaserLib = PhaserModule.default;
@@ -185,7 +193,11 @@ export function VirtualOfficeGame({
         });
 
         // NPC click bridge — opens Earn AI sidebar scoped to the clicked executive
+        // and records a role-specific interaction response in office chat.
         game.events.on("npc:click", (payload: NpcClickPayload) => {
+          if (payload.npcId.startsWith("agent:")) {
+            interactWithAgent(payload.npcId.slice("agent:".length) as AgentId);
+          }
           onNpcClickRef.current?.(payload);
         });
 
@@ -227,6 +239,26 @@ export function VirtualOfficeGame({
 
         gameRef.current = game;
 
+        // Office-program bridge: forward store scene-commands (agent moves,
+        // state changes, room activity, handoffs) into the Phaser scene.
+        unsubscribeBus = sceneBus.on((cmd) => {
+          if (!game) return;
+          switch (cmd.type) {
+            case "npc-goto":
+              game.events.emit("program:npc-goto", cmd.agentId, cmd.roomKey);
+              break;
+            case "npc-state":
+              game.events.emit("program:npc-state", cmd.agentId, cmd.state, cmd.label);
+              break;
+            case "room-activity":
+              game.events.emit("program:room-activity", cmd.roomKey, cmd.active, cmd.taskCount, cmd.tier);
+              break;
+            case "handoff":
+              game.events.emit("program:handoff", cmd.toAgentId);
+              break;
+          }
+        });
+
         // Send resolved zone config to the scene
         game.events.emit("office:zone-config", _resolveZones(zoneUrlOverridesRef.current));
 
@@ -239,6 +271,8 @@ export function VirtualOfficeGame({
     });
 
     return () => {
+      unsubscribeBus?.();
+      shutdownOfficeProgram();
       game?.destroy(true);
       gameRef.current = null;
       hasActivatedRef.current = false;
@@ -297,8 +331,18 @@ export function VirtualOfficeGame({
   };
 
   return (
-    <div className="flex flex-col bg-[#080604] rounded-xl overflow-hidden border border-[#c9a84c22]"
-      style={{ boxShadow: "0 0 40px rgba(201,168,76,0.06), inset 0 1px 0 rgba(201,168,76,0.08)" }}>
+    <div className="flex flex-col gap-3">
+      {/* Institutional HUD — mode, workflow, stage, approvals, audit status */}
+      <OfficeHUD currentRoom={currentRoom} />
+
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
+        {/* ── Execution floor column ── */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {/* Video presence for the active work session (mock until WebRTC) */}
+          <MeetingPresenceGrid />
+
+          <div className="flex flex-col bg-[#080604] rounded-xl overflow-hidden border border-[#c9a84c22]"
+            style={{ boxShadow: "0 0 40px rgba(201,168,76,0.06), inset 0 1px 0 rgba(201,168,76,0.08)" }}>
 
       {/* Media permission banner */}
       {mediaState === "prompt" && (
@@ -434,6 +478,20 @@ export function VirtualOfficeGame({
           onBlur={() => setCanvasFocused(false)}
           onFocus={() => setCanvasFocused(true)}
         />
+          </div>
+          </div>
+
+          {/* Audit-ready activity log */}
+          <OfficeAuditDrawer />
+        </div>
+
+        {/* ── Command & work-visibility column ── */}
+        <div className="flex w-full flex-col gap-3 xl:w-[340px] xl:shrink-0">
+          <div className="flex h-[430px] flex-col">
+            <OfficeCommandPanel />
+          </div>
+          <ActiveWorkflowPanel />
+        </div>
       </div>
     </div>
   );
