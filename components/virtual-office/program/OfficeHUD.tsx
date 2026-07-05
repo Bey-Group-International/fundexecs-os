@@ -1,6 +1,6 @@
 "use client";
 
-import { RISK_TIERS, ROOM_BY_KEY, STAGE_LABELS, type RoomKey } from "./officeProgram";
+import { RISK_TIERS, ROLE_LABELS, ROOM_BY_KEY, STAGE_LABELS, type RoomKey } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 
 const GOLD = "#c9a84c";
@@ -47,6 +47,7 @@ export function OfficeHUD({ currentRoom }: { currentRoom: string }) {
         valueColor={openApprovals > 0 ? "#f59e0b" : undefined}
       />
       <HudCell label="Your room" value={roomLabel} />
+      <HudCell label="Your role" value={ROLE_LABELS[s.userRole]} />
       <HudCell label="Audit" value={`${s.audit.length} events`} />
     </div>
   );

@@ -21,8 +21,11 @@ import {
   MEETING_TYPES,
   PROGRAM_AGENTS,
   PROGRAM_ROOMS,
+  ROLE_LABELS,
   ROOM_BY_KEY,
   STAGE_ORDER,
+  canRoleApprove,
+  rolesForTier,
   routeTaskToAgents,
   type ActiveMeeting,
   type AgentAssignment,
@@ -33,6 +36,7 @@ import {
   type ChatKind,
   type ChatMessage,
   type MeetingType,
+  type OfficeRole,
   type OfficeWorkflow,
   type RiskTier,
   type RoomKey,
@@ -105,6 +109,8 @@ export type PendingPlan = {
 
 export type OfficeProgramState = {
   mode: WorkflowMode;
+  /** The signed-in user's role — gates which approval tiers they can clear. */
+  userRole: OfficeRole;
   officeStatus: "calm" | "planning" | "executing" | "awaiting_approval";
   agents: Record<AgentId, AgentRuntime>;
   rooms: Record<RoomKey, RoomRuntime>;
@@ -146,6 +152,7 @@ function initialRooms(): Record<RoomKey, RoomRuntime> {
 
 let state: OfficeProgramState = {
   mode: "copilot",
+  userRole: "managing_partner",
   officeStatus: "calm",
   agents: initialAgents(),
   rooms: initialRooms(),
@@ -291,6 +298,49 @@ function setStage(stage: WorkflowStage, currentStep: string, nextAction: string,
 export function setWorkflowMode(mode: WorkflowMode) {
   setState({ mode });
   addAuditEvent({ actor: "You", action: `Workflow mode set to ${mode}`, room: "Command Center", tier: null, status: "info" });
+}
+
+/**
+ * Set the signed-in user's role. Called from the React layer with the
+ * value from session metadata; determines which approval tiers the user
+ * can clear.
+ */
+export function setUserRole(role: OfficeRole) {
+  if (state.userRole === role) return;
+  setState({ userRole: role });
+}
+
+/** Whether the current user may clear the given (non-internal) tier. */
+export function canApproveTier(tier: Exclude<RiskTier, "internal">): boolean {
+  return canRoleApprove(state.userRole, tier);
+}
+
+// ─── Server-side approval authority (dependency injection) ───────────────────
+// The store stays framework/IO-free. The React layer registers a decider that
+// calls the office_decide_approval RPC; when one is registered the SERVER is
+// the authoritative gate and the client role check is only a UX pre-filter.
+// With no decider (guest / no Supabase session) the office falls back to the
+// pure client simulation.
+
+export type ServerApprovalInput = {
+  gateKey: string;
+  tier: Exclude<RiskTier, "internal">;
+  title: string;
+  decision: "approved" | "rejected";
+};
+
+export type ServerApprovalDecider = (input: ServerApprovalInput) => Promise<{ ok: boolean; error?: string }>;
+
+let approvalDecider: ServerApprovalDecider | null = null;
+
+/** Register (or clear with null) the server-side approval decider. */
+export function setApprovalDecider(fn: ServerApprovalDecider | null) {
+  approvalDecider = fn;
+}
+
+/** Whether a server-side authority is currently governing approvals. */
+export function hasServerApprovalAuthority(): boolean {
+  return approvalDecider !== null;
 }
 
 // ─── Command intake ──────────────────────────────────────────────────────────
@@ -589,14 +639,75 @@ export function createApprovalGate(workflowId: string, title: string, tier: Excl
 }
 
 /** User decision on the open approval gate. */
-export function resolveApprovalGate(gateId: string, decision: "approved" | "rejected") {
+export async function resolveApprovalGate(gateId: string, decision: "approved" | "rejected") {
   const gate = state.approvals.find((g) => g.id === gateId);
   if (!gate || gate.status !== "pending") return;
+
+  // Authorization for an "approved" outcome. Two regimes:
+  //
+  //  1. Server-authoritative (a decider is registered): the office_decide_
+  //     approval RPC re-checks the caller's TRUSTED org role against the tier
+  //     under RLS. This is the real security control. A denial keeps the gate
+  //     pending. Rejections (halts) are recorded best-effort but never blocked.
+  //  2. Pure simulation (guest / no session): the client role check stands in
+  //     as a UX guard only — NOT a security control (see approvalAuthority.ts
+  //     and the office_approvals migration for the real boundary).
+  if (decision === "approved") {
+    if (approvalDecider) {
+      let res: { ok: boolean; error?: string };
+      try {
+        res = await approvalDecider({ gateKey: gate.id, tier: gate.tier, title: gate.title, decision: "approved" });
+      } catch (e) {
+        res = { ok: false, error: e instanceof Error ? e.message : "Server authorization failed" };
+      }
+      // The gate may have resolved while we awaited the server.
+      const current = state.approvals.find((g) => g.id === gateId);
+      if (!current || current.status !== "pending") return;
+      if (!res.ok) {
+        pushChat(
+          "approval",
+          "Risk & Compliance",
+          `Server authorization denied this ${gate.tier === "capital_binding" ? "capital-binding" : "external-facing"} approval${res.error ? `: ${res.error}` : "."} Requires ${rolesForTier(gate.tier)}.`
+        );
+        addAuditEvent({
+          actor: "You",
+          action: `Approval blocked by server — ${gate.title}`,
+          room: "Boardroom",
+          tier: gate.tier,
+          status: "rejected",
+        });
+        return;
+      }
+    } else if (!canRoleApprove(state.userRole, gate.tier)) {
+      pushChat(
+        "approval",
+        "Risk & Compliance",
+        `Your role (${ROLE_LABELS[state.userRole]}) is not authorized to approve this ${gate.tier === "capital_binding" ? "capital-binding" : "external-facing"} gate. Requires ${rolesForTier(gate.tier)}.`
+      );
+      addAuditEvent({
+        actor: "You",
+        action: `Approval blocked — ${ROLE_LABELS[state.userRole]} not authorized for ${gate.title}`,
+        room: "Boardroom",
+        tier: gate.tier,
+        status: "rejected",
+      });
+      return;
+    }
+  } else if (approvalDecider) {
+    // Record the rejection server-side, but a halt must never be blocked.
+    try {
+      await approvalDecider({ gateKey: gate.id, tier: gate.tier, title: gate.title, decision: "rejected" });
+    } catch {
+      /* halting always proceeds locally */
+    }
+  }
 
   setState({ approvals: state.approvals.map((g) => (g.id === gateId ? { ...g, status: decision } : g)) });
   addAuditEvent({
     actor: "You",
-    action: decision === "approved" ? `Approval granted — ${gate.title}` : `Approval rejected — ${gate.title}`,
+    action: decision === "approved"
+      ? `Approval granted — ${gate.title}${approvalDecider ? " (server-verified)" : ""}`
+      : `Approval rejected — ${gate.title}`,
     room: "Boardroom",
     tier: gate.tier,
     status: decision,

@@ -114,6 +114,10 @@ async function buildRelationshipGraph(supabase: Client): Promise<GraphData> {
     asset: { table: "assets", col: "name" },
     organization: { table: "organizations", col: "name" },
     principal: { table: "principals", col: "full_name" },
+    // Professional Network contacts (network_contacts) — imported/added
+    // through the professional-network pipeline; rendered as their own node
+    // type in the GraphExplorer legend.
+    contact: { table: "network_contacts", col: "full_name" },
   };
 
   const labels = new Map<string, string>();

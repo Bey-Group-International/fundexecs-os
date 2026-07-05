@@ -111,6 +111,53 @@ export function Connections({ connections }: { connections: IntegrationConnectio
         );
       })}
 
+      {/* Professional Network — a data-INPUT integration, not a dispatch
+          channel: sources feed the Capital Relationship Graph rather than
+          sending anything out. Backend connectors (Google Contacts, official
+          LinkedIn API) surface here as they become available; manual entry,
+          LinkedIn profile URLs, and the CSV fallback are always available at
+          /source/network. */}
+      <div className="rounded-xl border border-line bg-surface-1 p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-status-success" aria-label="import available" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-fg-primary">Professional Network</span>
+              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                Import available
+              </span>
+              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                Data input
+              </span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-snug text-fg-muted">
+              LinkedIn profile URLs, manual entry, and CSV export import are live today; Google
+              Contacts and official LinkedIn API sync activate when provider access is configured.
+              No scraping — every pathway is user-initiated and permission-first.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[
+                "Import professional profiles",
+                "Map relationship graph",
+                "Detect warm intro paths",
+                "Recommend capital contacts",
+                "Generate outreach drafts",
+              ].map((cap) => (
+                <span key={cap} className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[10px] text-fg-secondary">
+                  {cap}
+                </span>
+              ))}
+            </div>
+          </div>
+          <a
+            href="/source/network"
+            className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs text-fg-secondary transition-colors hover:border-accent/50 hover:text-accent"
+          >
+            Open Network
+          </a>
+        </div>
+      </div>
+
       {/* The prepared fallback is not a registered channel: any ActionKind that no
           adapter claims is prepared and queued rather than sent. */}
       <div className="rounded-xl border border-dashed border-line bg-surface-1 p-4">
