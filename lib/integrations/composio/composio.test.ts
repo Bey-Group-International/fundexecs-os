@@ -8,11 +8,17 @@ import {
   executeComposioTool,
   type ComposioConfig,
 } from "./client.server";
+import { extractEdgarPreferComposio } from "./edgar.server";
 import {
-  extractEdgarPreferComposio,
-  extractEdgarViaComposio,
-  mapComposioSecFilingsToDataPoints,
-} from "./edgar.server";
+  buildEdgarSearchQuery,
+  mapWebSearchToEdgarFilings,
+  searchEdgarFilingsViaGoogle,
+} from "./edgar-search.server";
+import {
+  fetchMarketstackCompany,
+  mapMarketstackToDataPoints,
+  type MarketstackCompany,
+} from "./marketstack.server";
 import {
   mapGmailMessagesToProfileInputs,
   parseEmailAddress,
@@ -98,67 +104,108 @@ describe("executeComposioTool", () => {
   });
 });
 
-// ── edgar.server ─────────────────────────────────────────────────────────────
+// ── marketstack.server ───────────────────────────────────────────────────────
 
-describe("mapComposioSecFilingsToDataPoints", () => {
-  const payload = {
-    ticker: "AAPL",
-    cik: 320193,
-    company_name: "Apple Inc.",
-    filings: [
-      { form_type: "10-K", filing_date: "2024-11-01", accession_number: "0000320193-24-000123", primary_document_url: "https://sec.gov/x/10k.htm" },
-      { form: "8-K", date: "2024-08-01", accession_no: "0000320193-24-000100", index_url: "https://sec.gov/x/idx" },
-    ],
-  };
+// A Marketstack REST fake: routes by URL substring to a JSON body.
+function fakeMarketstackFetch(routes: Array<{ match: string; body: unknown; ok?: boolean }>): typeof fetch {
+  return (async (url: string) => {
+    const hit = routes.find((r) => String(url).includes(r.match));
+    return { ok: hit?.ok ?? Boolean(hit), status: hit ? 200 : 404, json: async () => hit?.body ?? {} };
+  }) as unknown as typeof fetch;
+}
 
-  test("maps company facts + filings with authoritative confidence and no confirmation gate", () => {
-    const points = mapComposioSecFilingsToDataPoints(payload, { query: "AAPL" });
+describe("fetchMarketstackCompany + mapMarketstackToDataPoints", () => {
+  const msFetch = fakeMarketstackFetch([
+    { match: "/tickers", body: { data: [{ name: "Apple Inc", symbol: "aapl", stock_exchange: { name: "NASDAQ Stock Exchange", acronym: "NASDAQ" } }] } },
+    { match: "/eod/latest", body: { data: [{ symbol: "AAPL", close: 190.5, date: "2024-11-01T00:00:00+0000" }] } },
+  ]);
+
+  test("resolves ticker + latest close and maps to authoritative company points", async () => {
+    const company = await fetchMarketstackCompany("key", "Apple", { fetchImpl: msFetch });
+    // name already contains the acronym, so no redundant parenthetical is added.
+    expect(company).toMatchObject({ name: "Apple Inc", symbol: "AAPL", exchange: "NASDAQ Stock Exchange", latestClose: 190.5, latestDate: "2024-11-01" });
+
+    const points = mapMarketstackToDataPoints(company as MarketstackCompany);
     const byField = Object.fromEntries(points.map((p) => [p.field_name, p]));
-    expect(byField.company_name.extracted_value).toBe("Apple Inc.");
-    expect(byField.company_cik.extracted_value).toBe("0000320193");
-    expect(byField.filing_1.extracted_value).toContain("10-K");
-    expect(byField.filing_1.source_url).toBe("https://sec.gov/x/10k.htm");
-    expect(byField.filing_2.extracted_value).toContain("8-K");
-    // EDGAR is authoritative — every point is source_type edgar, no per-field confirm.
+    expect(byField.company_name.extracted_value).toBe("Apple Inc");
+    expect(byField.company_ticker.extracted_value).toBe("AAPL");
+    expect(byField.company_exchange.extracted_value).toContain("NASDAQ");
+    expect(byField.market_price.extracted_value).toContain("190.5");
+    // Market data is authoritative — no per-field confirmation, source_type edgar.
     for (const p of points) {
       expect(p.source_type).toBe("edgar");
       expect(p.requires_user_confirmation).toBe(false);
     }
   });
 
-  test("empty / not-found payload yields no filing points", () => {
-    const points = mapComposioSecFilingsToDataPoints({ filings: [] }, { query: "ZZZZ" });
-    expect(points.some((p) => p.field_name.startsWith("filing_"))).toBe(false);
+  test("returns null when the ticker search finds nothing", async () => {
+    const none = await fetchMarketstackCompany("key", "ZZZZ", { fetchImpl: fakeMarketstackFetch([{ match: "/tickers", body: { data: [] } }]) });
+    expect(none).toBeNull();
+  });
+
+  test("still returns identity when the EOD price call misses", async () => {
+    const company = await fetchMarketstackCompany("key", "Apple", {
+      fetchImpl: fakeMarketstackFetch([{ match: "/tickers", body: { data: [{ name: "Apple Inc", symbol: "AAPL" }] } }]),
+    });
+    expect(company).toMatchObject({ symbol: "AAPL", latestClose: null });
   });
 });
 
-describe("extractEdgarViaComposio", () => {
-  test("executes the SEC filings tool and returns mapped points", async () => {
-    const cap: Captured[] = [];
-    const res = await extractEdgarViaComposio(
-      cfg(fakeComposioFetch({ data: {
-        ticker: "MSFT", cik: 789019, company_name: "Microsoft Corp",
-        filings: [{ form_type: "10-Q", filing_date: "2025-01-01", accession_number: "x-1", primary_document_url: "https://sec.gov/q" }],
-      }, successful: true }, { capture: cap })),
-      { query: "MSFT", limit: 5, formTypes: ["10-Q"] },
-    );
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.company.title).toBe("Microsoft Corp");
-      expect(res.points.some((p) => p.field_name === "filing_1")).toBe(true);
+// ── edgar-search.server (Google web search via Composio) ─────────────────────
+
+describe("mapWebSearchToEdgarFilings", () => {
+  const payload = {
+    results: {
+      citations: [
+        { url: "https://www.sec.gov/Archives/edgar/data/320193/aapl-10k.htm", title: "Apple Inc. 10-K filed 2024-11-01" },
+        { url: "https://www.sec.gov/cgi-bin/browse-edgar?CIK=AAPL", title: "Apple 8-K current report" },
+        { url: "https://www.bloomberg.com/apple", title: "Apple news" }, // non-sec.gov, dropped
+        { url: "https://www.sec.gov/Archives/edgar/data/320193/aapl-10k.htm", title: "dup" }, // dup URL, dropped
+      ],
+    },
+  };
+
+  test("keeps only sec.gov results, dedupes, infers form + date, requires confirmation", () => {
+    const points = mapWebSearchToEdgarFilings(payload);
+    expect(points).toHaveLength(2);
+    expect(points[0].source_url).toContain("sec.gov");
+    expect(points[0].extracted_value).toContain("10-K");
+    expect(points[0].extracted_value).toContain("2024-11-01");
+    expect(points[1].extracted_value).toContain("8-K");
+    for (const p of points) {
+      expect(p.field_name).toMatch(/^filing_\d+$/);
+      expect(p.source_type).toBe("edgar");
+      expect(p.requires_user_confirmation).toBe(true);
     }
-    expect(cap[0].body).toMatchObject({ arguments: { ticker_or_cik: "MSFT", form_types: ["10-Q"] } });
   });
 
-  test("treats an empty result as not_found so callers can fall back", async () => {
-    const res = await extractEdgarViaComposio(
-      cfg(fakeComposioFetch({ data: { filings: [] }, successful: true })),
-      { query: "NOPE" },
-    );
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toBe("not_found");
+  test("buildEdgarSearchQuery scopes to sec.gov", () => {
+    expect(buildEdgarSearchQuery("Apple")).toContain("site:sec.gov");
   });
 });
+
+describe("searchEdgarFilingsViaGoogle", () => {
+  test("executes the web-search tool with the scoped query and maps results", async () => {
+    const cap: Captured[] = [];
+    const points = await searchEdgarFilingsViaGoogle(
+      cfg(fakeComposioFetch({ data: { results: { citations: [{ url: "https://www.sec.gov/x/10q.htm", title: "10-Q" }] } }, successful: true }, { capture: cap })),
+      "Apple",
+    );
+    expect(points).toHaveLength(1);
+    expect(cap[0].url).toContain("/api/v3/tools/execute/COMPOSIO_SEARCH_WEB");
+    expect((cap[0].body as { arguments: { query: string } }).arguments.query).toContain("site:sec.gov");
+  });
+
+  test("returns [] on a Composio miss", async () => {
+    const points = await searchEdgarFilingsViaGoogle(
+      cfg(fakeComposioFetch({ successful: false, error: "throttled" })),
+      "Apple",
+    );
+    expect(points).toEqual([]);
+  });
+});
+
+// ── extractEdgarPreferComposio (Marketstack + Google, SEC-direct fallback) ───
 
 describe("extractEdgarPreferComposio", () => {
   const TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
@@ -175,39 +222,46 @@ describe("extractEdgarPreferComposio", () => {
     const res: HttpResponse = { ok: body !== undefined, status: body ? 200 : 404, headers: { get: () => null }, text: async () => body ?? "" };
     return Promise.resolve(res);
   };
+  const msFetch = fakeMarketstackFetch([
+    { match: "/tickers", body: { data: [{ name: "Apple Inc", symbol: "AAPL", stock_exchange: { name: "NASDAQ", acronym: "NASDAQ" } }] } },
+    { match: "/eod/latest", body: { data: [{ symbol: "AAPL", close: 190.5, date: "2024-11-01" }] } },
+  ]);
+  const googleCfg = () => cfg(fakeComposioFetch({ data: { results: { citations: [{ url: "https://www.sec.gov/Archives/edgar/data/320193/10k.htm", title: "Apple 10-K 2024-11-01" }] } }, successful: true }));
 
-  test("falls back to the direct SEC path when Composio is unconfigured (composio:null)", async () => {
-    const res = await extractEdgarPreferComposio({ query: "AAPL", http: secFetch }, { composio: null });
+  test("merges Marketstack company facts + Google-searched filings (no SEC API)", async () => {
+    const res = await extractEdgarPreferComposio(
+      { query: "Apple", http: secFetch },
+      { composio: googleCfg(), marketstackKey: "key", marketstackFetch: msFetch },
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.company.title).toBe("Apple Inc");
+      expect(res.points.find((p) => p.field_name === "company_ticker")?.extracted_value).toBe("AAPL");
+      const filing = res.points.find((p) => p.field_name === "filing_1");
+      expect(filing?.source_url).toContain("sec.gov");
+      expect(filing?.requires_user_confirmation).toBe(true);
+    }
+  });
+
+  test("works with Google filings alone when Marketstack is unconfigured", async () => {
+    const res = await extractEdgarPreferComposio(
+      { query: "Apple", http: secFetch },
+      { composio: googleCfg(), marketstackKey: null },
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.points.some((p) => p.field_name === "filing_1")).toBe(true);
+  });
+
+  test("falls back to the direct SEC path only when nothing else is configured", async () => {
+    const res = await extractEdgarPreferComposio(
+      { query: "AAPL", http: secFetch },
+      { composio: null, marketstackKey: null },
+    );
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.company.cikPadded).toBe("0000320193");
       expect(res.points.some((p) => p.field_name === "filing_1")).toBe(true);
     }
-  });
-
-  test("uses Composio when a config is supplied", async () => {
-    const res = await extractEdgarPreferComposio(
-      { query: "AAPL", http: secFetch },
-      { composio: cfg(fakeComposioFetch({ data: {
-        ticker: "AAPL", cik: 320193, company_name: "Apple Inc.",
-        filings: [{ form_type: "10-K", filing_date: "2024-11-01", accession_number: "a-1", primary_document_url: "https://sec.gov/via-composio" }],
-      }, successful: true })) },
-    );
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      const filing = res.points.find((p) => p.field_name === "filing_1");
-      expect(filing?.source_url).toBe("https://sec.gov/via-composio");
-    }
-  });
-
-  test("falls back to direct SEC when the Composio lookup fails", async () => {
-    const res = await extractEdgarPreferComposio(
-      { query: "AAPL", http: secFetch },
-      { composio: cfg(fakeComposioFetch({ successful: false, error: "throttled" })) },
-    );
-    // Composio missed → direct SEC path produced the answer.
-    expect(res.ok).toBe(true);
-    if (res.ok) expect(res.company.cikPadded).toBe("0000320193");
   });
 });
 
