@@ -194,6 +194,7 @@ export type EarnBrowserAuditAction =
   | "user_auth_completed"
   | "extraction_started"
   | "extraction_completed"
+  | "data_extracted"
   | "normalized"
   | "review_requested"
   | "field_approved"
