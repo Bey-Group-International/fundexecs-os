@@ -1,26 +1,25 @@
-// Server-only Composio REST client.
+// Server-only Composio client, backed by the official @composio/core SDK.
 //
-// This is how the *deployed app* reaches Composio at runtime — distinct from the
-// Composio MCP tools used at authoring time. It executes a single Composio tool
-// (e.g. GMAIL_FETCH_EMAILS, LINKEDIN_GET_MY_INFO, COMPOSIO_SEARCH_SEC_FILINGS)
-// through Composio's public v3 execute endpoint, scoped to a Composio entity /
-// user whose app connections were authorized out-of-band.
+// This is how the *deployed app* reaches Composio at runtime. It executes a
+// single Composio tool by slug (e.g. GMAIL_FETCH_EMAILS, LINKEDIN_GET_MY_INFO,
+// COMPOSIO_SEARCH_WEB, the Marketstack tools) through the SDK's direct tool
+// execution — `composio.tools.execute(slug, { userId, arguments })` — NOT the
+// agentic tool-router loop. Earn's extraction stays deterministic and
+// review-gated; the SDK is just the transport.
 //
-// Honesty discipline (same as the rest of the integrations layer): with no
-// Composio API key configured, `composioConfigured()` is false and every caller
-// degrades to its non-Composio path or reports "unavailable" — never a fake
-// success. The key is resolved per-org (a tenant may bring its own Composio
-// account via the vault) falling back to a process-level env key.
+// Honesty discipline (unchanged): with no Composio API key configured,
+// `composioConfigured()` is false and every caller degrades to its non-Composio
+// path or reports "unavailable" — never a fake success. The key is resolved
+// per-org (a tenant may bring its own Composio account via the vault) falling
+// back to a process-level env key. The Composio entity/user id comes from
+// COMPOSIO_USER_ID.
 //
-// The fetch layer is injectable so the mappers and the execute path are unit
-// tested with sample payloads and zero network access.
+// The `executor` seam keeps the SDK out of unit tests: tests inject a fake
+// executor, so the real @composio/core import only happens at runtime.
 
 import { getOrgSecret } from "@/lib/org-secrets";
 
-const COMPOSIO_BASE_URL = "https://backend.composio.dev";
 const DEFAULT_TIMEOUT_MS = 20_000;
-
-type FetchLike = typeof fetch;
 
 /** Env var holding the process-level Composio API key. */
 export const COMPOSIO_API_KEY_ENV = "COMPOSIO_API_KEY";
@@ -29,25 +28,42 @@ export const COMPOSIO_USER_ID_ENV = "COMPOSIO_USER_ID";
 /** org_secrets.provider key for a per-org Composio API key (overrides env). */
 export const COMPOSIO_SECRET_KEY = "composio";
 
+/** The response shape @composio/core's tools.execute resolves to. */
+export interface ComposioToolResponse {
+  data?: Record<string, unknown>;
+  error?: string | null;
+  successful?: boolean;
+}
+
+/** Body accepted by tools.execute (the subset we send). */
+export interface ComposioExecuteBody {
+  userId: string;
+  arguments: Record<string, unknown>;
+  connectedAccountId?: string;
+}
+
+/**
+ * The pluggable transport: given a slug + body, run the tool and return the
+ * response. Defaults to the real @composio/core SDK; tests inject a fake.
+ */
+export type ComposioExecutor = (
+  slug: string,
+  body: ComposioExecuteBody,
+  options?: { signal?: AbortSignal },
+) => Promise<ComposioToolResponse>;
+
 export interface ComposioConfig {
   apiKey: string;
   /** The Composio entity / user id the connected accounts live under. */
   userId?: string;
-  baseUrl?: string;
-  fetchImpl?: FetchLike;
+  /** Test seam: override the transport. Defaults to the @composio/core SDK. */
+  executor?: ComposioExecutor;
   timeoutMs?: number;
 }
 
 export type ComposioExecuteResult<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; error: string };
-
-/** The envelope Composio's execute endpoint returns around a tool payload. */
-interface ComposioEnvelope<T> {
-  data?: T;
-  successful?: boolean;
-  error?: unknown;
-}
 
 /** True when a process-level Composio API key is configured. */
 export function composioConfigured(): boolean {
@@ -71,10 +87,28 @@ export async function resolveComposioApiKey(orgId?: string): Promise<string | nu
   return process.env[COMPOSIO_API_KEY_ENV] ?? null;
 }
 
+// One @composio/core client per API key — the SDK is imported lazily so it never
+// loads in unit tests (which always inject an executor) or on the client bundle.
+const clientCache = new Map<string, Promise<{ tools: { execute: ComposioExecutor } }>>();
+
+function sdkExecutor(apiKey: string): ComposioExecutor {
+  return async (slug, body, options) => {
+    let clientP = clientCache.get(apiKey);
+    if (!clientP) {
+      clientP = import("@composio/core").then(({ Composio }) => new Composio({ apiKey }) as unknown as {
+        tools: { execute: ComposioExecutor };
+      });
+      clientCache.set(apiKey, clientP);
+    }
+    const composio = await clientP;
+    return composio.tools.execute(slug, body, options);
+  };
+}
+
 function errText(error: unknown): string | null {
   if (!error) return null;
   if (typeof error === "string") return error;
-  if (typeof error === "object" && error !== null) {
+  if (typeof error === "object") {
     const m = (error as { message?: unknown }).message;
     if (typeof m === "string") return m;
     try {
@@ -88,9 +122,9 @@ function errText(error: unknown): string | null {
 
 /**
  * Execute one Composio tool by slug against a connected account. Never throws:
- * network, HTTP, and tool-reported failures all resolve to `{ ok:false }` so a
- * caller can fall back cleanly. On success the tool payload is returned unwrapped
- * from Composio's `{ data, successful }` envelope.
+ * SDK/network and tool-reported failures all resolve to `{ ok:false }` so a
+ * caller can fall back cleanly. On success the tool payload (`response.data`) is
+ * returned.
  */
 export async function executeComposioTool<T = unknown>(
   config: ComposioConfig,
@@ -98,57 +132,35 @@ export async function executeComposioTool<T = unknown>(
   args: Record<string, unknown>,
   opts: { connectedAccountId?: string; userId?: string } = {},
 ): Promise<ComposioExecuteResult<T>> {
-  const base = config.baseUrl ?? COMPOSIO_BASE_URL;
-  const fetchImpl = config.fetchImpl ?? fetch;
+  const executor = config.executor ?? sdkExecutor(config.apiKey);
   const userId =
     opts.userId ?? config.userId ?? process.env[COMPOSIO_USER_ID_ENV] ?? "default";
 
-  const body: Record<string, unknown> = { user_id: userId, arguments: args };
-  if (opts.connectedAccountId) body.connected_account_id = opts.connectedAccountId;
+  const body: ComposioExecuteBody = { userId, arguments: args };
+  if (opts.connectedAccountId) body.connectedAccountId = opts.connectedAccountId;
 
   let signal: AbortSignal | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  if (typeof AbortController === "function") {
-    const controller = new AbortController();
-    signal = controller.signal;
-    timer = setTimeout(() => controller.abort(), config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    signal = AbortSignal.timeout(config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   }
 
   try {
-    const res = await fetchImpl(`${base}/api/v3/tools/execute/${encodeURIComponent(toolSlug)}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": config.apiKey,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    if (!res.ok) {
-      return { ok: false, error: `Composio ${toolSlug} returned HTTP ${res.status}.` };
+    const res = await executor(toolSlug, body, signal ? { signal } : undefined);
+    if (res && res.successful === false) {
+      return { ok: false, error: errText(res.error) ?? `Composio ${toolSlug} reported failure.` };
     }
-
-    const json = (await res.json()) as ComposioEnvelope<T>;
-    if (json && json.successful === false) {
-      return { ok: false, error: errText(json.error) ?? `Composio ${toolSlug} reported failure.` };
-    }
-    // v3 wraps the tool payload under `data`; tolerate a bare payload as well.
-    const data = (json && typeof json === "object" && "data" in json ? json.data : json) as T;
-    return { ok: true, data };
+    return { ok: true, data: (res?.data ?? {}) as T };
   } catch (err) {
     return {
       ok: false,
       error: err instanceof Error ? err.message : `Composio ${toolSlug} request failed.`,
     };
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }
 
 /**
  * Build a ComposioConfig for an org, or null when Composio is unconfigured.
- * Convenience for connectors that only need the default entity + real fetch.
+ * Convenience for connectors that only need the default entity + SDK transport.
  */
 export async function composioConfigForOrg(
   orgId?: string,
