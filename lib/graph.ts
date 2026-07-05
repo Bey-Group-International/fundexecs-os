@@ -52,9 +52,14 @@ type Client = SupabaseClient<Database>;
 class NodeSet {
   private map = new Map<string, GraphNode>();
 
-  add(id: string, label: string, type: string): string {
+  // Labels and types are coerced to safe strings on the way in. A row with a
+  // missing/null name or type must never reach the renderer as null, or a
+  // single bad record blanks the whole graph (node.label.length /
+  // type.replace(...) throw on null). A blank type falls back to "unknown",
+  // which the color/legend paths already handle.
+  add(id: string, label: string | null | undefined, type: string | null | undefined): string {
     if (!this.map.has(id)) {
-      this.map.set(id, { id, label, type });
+      this.map.set(id, { id, label: label ?? "", type: type || "unknown" });
     }
     return id;
   }
@@ -226,7 +231,9 @@ async function buildCapitalGraph(supabase: Client): Promise<GraphData> {
     nodes.add(polyId("fund", f.id), f.name, "fund");
   }
   for (const inv of investors) {
-    nodes.add(polyId("investor", inv.id), inv.name, inv.investor_type);
+    // investor_type can be absent on partially-entered records — fall back to a
+    // generic "investor" node type so it still colors/renders instead of crashing.
+    nodes.add(polyId("investor", inv.id), inv.name, inv.investor_type || "investor");
   }
   for (const c of commitments) {
     const fund = polyId("fund", c.fund_id);
