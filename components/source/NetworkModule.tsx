@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { NetworkSearch } from "./NetworkSearch";
+import { AddContactPanel } from "./AddContactPanel";
 import { LinkedInImportModal } from "./LinkedInImportModal";
 import { WarmIntroPanel } from "./WarmIntroPanel";
 import { SyndicateCircle } from "./SyndicateCircle";
@@ -152,6 +153,27 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
 
         {tab === "import" && (
           <div className="flex flex-col gap-6">
+            {/* Primary path: per-contact add through the adapter pipeline */}
+            <AddContactPanel onAdded={() => setContactCount((prev) => prev + 1)} />
+
+            {/* Backend connector — available when OAuth is configured */}
+            <div className="rounded-xl border border-line bg-surface p-6 flex flex-col gap-3 opacity-60">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-fg-muted/10">
+                  <svg className="h-5 w-5 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M21.75 9v.906a2.25 2.25 0 0 1-1.183 1.981l-6.478 3.488M2.25 9v.906a2.25 2.25 0 0 0 1.183 1.981l6.478 3.488m8.839 2.51-4.66-2.51m0 0-1.023-.55a2.25 2.25 0 0 0-2.134 0l-1.022.55m0 0-4.661 2.51m16.5 1.615a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V8.844a2.25 2.25 0 0 1 1.183-1.981l7.5-4.039a2.25 2.25 0 0 1 2.134 0l7.5 4.039a2.25 2.25 0 0 1 1.183 1.98V19.5Z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-fg text-sm">Google Contacts · LinkedIn (official API)</p>
+                  <p className="text-xs text-fg-muted">
+                    Backend sync pending provider authorization — connect once configured in Settings → Integrations.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Fallback path: bulk CSV export upload */}
             <div className="rounded-xl border border-line bg-surface p-6 flex flex-col gap-4">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0A66C2]/10">
@@ -160,8 +182,8 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
                   </svg>
                 </div>
                 <div>
-                  <p className="font-semibold text-fg">LinkedIn Connections</p>
-                  <p className="text-sm text-fg-muted">Import your full LinkedIn network in one click</p>
+                  <p className="font-semibold text-fg">LinkedIn CSV export <span className="ml-1 rounded bg-fg-muted/15 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider text-fg-muted">Fallback</span></p>
+                  <p className="text-sm text-fg-muted">Bulk-import your LinkedIn data export when a backend connection isn&apos;t available</p>
                 </div>
               </div>
               <button
@@ -173,20 +195,6 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
               <p className="text-xs text-fg-muted">
                 We never access your LinkedIn account. Export is done directly from LinkedIn → Settings → Data Privacy → Get a copy of your data.
               </p>
-            </div>
-
-            <div className="rounded-xl border border-line bg-surface p-6 flex flex-col gap-3 opacity-60">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-fg-muted/10">
-                  <svg className="h-5 w-5 text-fg-muted" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path d="M21.75 9v.906a2.25 2.25 0 0 1-1.183 1.981l-6.478 3.488M2.25 9v.906a2.25 2.25 0 0 0 1.183 1.981l6.478 3.488m8.839 2.51-4.66-2.51m0 0-1.023-.55a2.25 2.25 0 0 0-2.134 0l-1.022.55m0 0-4.661 2.51m16.5 1.615a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V8.844a2.25 2.25 0 0 1 1.183-1.981l7.5-4.039a2.25 2.25 0 0 1 2.134 0l7.5 4.039a2.25 2.25 0 0 1 1.183 1.98V19.5Z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-medium text-fg text-sm">Google Contacts</p>
-                  <p className="text-xs text-fg-muted">Coming soon</p>
-                </div>
-              </div>
             </div>
           </div>
         )}

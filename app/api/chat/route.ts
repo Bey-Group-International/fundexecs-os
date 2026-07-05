@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { earnChatStream, earnChatFallback } from "@/lib/claude";
 import { EARN_MODELS, type EarnModelKey } from "@/lib/earn-conversation";
 import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-context";
+import { getRelationshipContext } from "@/lib/copilot/context/relationship-context-provider";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
@@ -127,6 +128,28 @@ export async function POST(request: Request) {
     if (contactsResult.status === "fulfilled") {
       const count = (contactsResult.value as { count: number | null }).count;
       if (count !== null) liveContext += `LP pipeline: ${count} contacts\n`;
+    }
+
+    // Relationship-aware context: when the ask is about people/network/intros,
+    // pull a SCOPED slice of the Capital Network (never the whole book) so
+    // Earn can recommend contacts with evidence — scores, source, confidence —
+    // and the standing Tier-2 outreach approval rule.
+    const isRelationshipAsk =
+      /\b(network|contact|intro|introduction|warm|outreach|lp|lps|investor|lender|broker|operator|advisor|relationship|who (should|can|in my))\b/i.test(
+        body,
+      );
+    if (isRelationshipAsk) {
+      try {
+        const keywords = body
+          .toLowerCase()
+          .split(/[^a-z0-9-]+/)
+          .filter((w) => w.length > 3)
+          .slice(0, 12);
+        const { promptBlock } = await getRelationshipContext(supabase, { keywords, limit: 8 });
+        if (promptBlock) liveContext += `\n${promptBlock}\n`;
+      } catch {
+        // Relationship context is an enhancement — never block the reply.
+      }
     }
 
     if (needsWebSearch) {
