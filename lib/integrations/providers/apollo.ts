@@ -230,6 +230,7 @@ export interface OrgSearchParams {
   industry?: string[];
   employee_ranges?: string[]; // e.g. ['1,10','11,50']
   keywords?: string[];
+  locations?: string[]; // e.g. ['Texas, US', 'New York']
   page?: number;
   per_page?: number;
 }
@@ -254,6 +255,7 @@ export async function searchOrganizations(
       if (params.employee_ranges?.length)
         body['organization_num_employees_ranges'] = params.employee_ranges;
       if (params.keywords?.length) body['q_organization_keyword_tags'] = params.keywords;
+      if (params.locations?.length) body['organization_locations'] = params.locations;
 
       const res = await apolloPost<{ organizations?: ApolloOrganization[] }>(
         '/mixed_companies/search',
