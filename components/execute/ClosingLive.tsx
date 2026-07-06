@@ -37,6 +37,7 @@ interface ContractRow {
   expiry_date: string | null;
   signed_at: string | null;
   effective_date: string | null;
+  file_url: string | null;
 }
 
 interface OnboardingSessionProp {
@@ -60,6 +61,7 @@ interface ContractProp {
   expiryDate?: string | null;
   signedAt?: string | null;
   effectiveDate?: string | null;
+  fileUrl?: string | null;
 }
 
 interface ClosingData {
@@ -88,7 +90,7 @@ async function loadClosingData(): Promise<ClosingData> {
       supabase
         .from("contracts")
         .select(
-          "id, title, document_type, status, investor_id, fund_id, expiry_date, signed_at, effective_date",
+          "id, title, document_type, status, investor_id, fund_id, expiry_date, signed_at, effective_date, file_url",
         )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false }),
@@ -127,6 +129,7 @@ async function loadClosingData(): Promise<ClosingData> {
       expiryDate: r.expiry_date,
       signedAt: r.signed_at,
       effectiveDate: r.effective_date,
+      fileUrl: r.file_url,
     }));
 
     return { sessions, contracts };
