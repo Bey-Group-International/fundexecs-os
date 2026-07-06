@@ -169,7 +169,9 @@ function optionalAllowed<T extends readonly string[]>(
 }
 
 function firstHubRedirect(firstHub: Hub | null): string {
-  if (!firstHub) return "/command-center";
+  // Falls back to the Sessions page (the app's default landing) when the
+  // operator skipped picking a first hub during onboarding.
+  if (!firstHub) return "/workspace";
   const moduleKey = HUB_BY_KEY[firstHub]?.modules[0]?.key;
-  return moduleKey ? `/${firstHub}/${moduleKey}` : "/command-center";
+  return moduleKey ? `/${firstHub}/${moduleKey}` : "/workspace";
 }

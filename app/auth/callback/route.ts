@@ -59,7 +59,7 @@ export async function GET(request: Request) {
 // slash, making it protocol-relative), so resolve against our origin and
 // require the result to stay there.
 function sanitizeNextPath(rawNext: string | null, origin: string): string {
-  const fallback = "/command-center";
+  const fallback = "/workspace";
   if (!rawNext || !rawNext.startsWith("/") || rawNext.startsWith("//") || rawNext.includes("\\")) {
     return fallback;
   }
