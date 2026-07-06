@@ -90,22 +90,26 @@ export async function listDocuSignTemplates(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// sendSubscriptionEnvelope
+// sendOne — shared envelope-creation + Supabase-persist core
 // ---------------------------------------------------------------------------
-export async function sendSubscriptionEnvelope(
-  formData: FormData
-): Promise<{ envelopeId: string } | { error: string }> {
-  const missing = missingConfig();
-  if (missing) return missing;
-
-  const template_id = String(formData.get("template_id") ?? "").trim();
-  const signer_name = String(formData.get("signer_name") ?? "").trim();
-  const signer_email = String(formData.get("signer_email") ?? "").trim();
-  const signer_role = String(formData.get("signer_role") ?? "signer").trim();
-  const subject = String(
-    formData.get("subject") ?? "Subscription Agreement — Please Sign"
-  ).trim();
-
+// Creates a single DocuSign envelope from a template and records it locally.
+// Both the single (sendSubscriptionEnvelope) and bulk
+// (sendSubscriptionEnvelopesBulk) actions delegate here so the send + persist
+// logic lives in exactly one place. Callers are responsible for the
+// missingConfig() gate before invoking this.
+async function sendOne({
+  template_id,
+  signer_name,
+  signer_email,
+  signer_role,
+  subject,
+}: {
+  template_id: string;
+  signer_name: string;
+  signer_email: string;
+  signer_role: string;
+  subject: string;
+}): Promise<{ envelopeId: string } | { error: string }> {
   if (!template_id || !signer_name || !signer_email) {
     return { error: "template_id, signer_name and signer_email are required." };
   }
@@ -163,6 +167,103 @@ export async function sendSubscriptionEnvelope(
   }
 
   return { envelopeId };
+}
+
+// ---------------------------------------------------------------------------
+// sendSubscriptionEnvelope
+// ---------------------------------------------------------------------------
+export async function sendSubscriptionEnvelope(
+  formData: FormData
+): Promise<{ envelopeId: string } | { error: string }> {
+  const missing = missingConfig();
+  if (missing) return missing;
+
+  const template_id = String(formData.get("template_id") ?? "").trim();
+  const signer_name = String(formData.get("signer_name") ?? "").trim();
+  const signer_email = String(formData.get("signer_email") ?? "").trim();
+  const signer_role = String(formData.get("signer_role") ?? "signer").trim();
+  const subject = String(
+    formData.get("subject") ?? "Subscription Agreement — Please Sign"
+  ).trim();
+
+  return sendOne({
+    template_id,
+    signer_name,
+    signer_email,
+    signer_role,
+    subject,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// sendSubscriptionEnvelopesBulk — send one envelope per recipient in one call
+// ---------------------------------------------------------------------------
+// Shares a single template, role and subject across every recipient. Recipients
+// are passed as a JSON string field `recipients` = [{ name, email }]. Each is
+// sent sequentially via the shared sendOne() core; the result partitions the
+// outcomes into sent (with envelope ids) and failed (with reasons) so the
+// client can prepend successes and surface a concise summary.
+export async function sendSubscriptionEnvelopesBulk(
+  formData: FormData
+): Promise<{
+  sent: Array<{ name: string; email: string; envelopeId: string }>;
+  failed: Array<{ name: string; email: string; error: string }>;
+}> {
+  const missing = missingConfig();
+  if (missing) {
+    return { sent: [], failed: [{ name: "", email: "", error: missing.error }] };
+  }
+
+  const template_id = String(formData.get("template_id") ?? "").trim();
+  const signer_role = String(formData.get("signer_role") ?? "signer").trim();
+  const subject = String(
+    formData.get("subject") ?? "Subscription Agreement — Please Sign"
+  ).trim();
+
+  let recipients: Array<{ name: string; email: string }> = [];
+  try {
+    const raw = JSON.parse(String(formData.get("recipients") ?? "[]"));
+    if (Array.isArray(raw)) {
+      recipients = raw.map((r) => ({
+        name: String(r?.name ?? "").trim(),
+        email: String(r?.email ?? "").trim(),
+      }));
+    }
+  } catch {
+    return {
+      sent: [],
+      failed: [{ name: "", email: "", error: "Invalid recipients payload." }],
+    };
+  }
+
+  if (recipients.length === 0) {
+    return {
+      sent: [],
+      failed: [{ name: "", email: "", error: "No recipients provided." }],
+    };
+  }
+
+  const sent: Array<{ name: string; email: string; envelopeId: string }> = [];
+  const failed: Array<{ name: string; email: string; error: string }> = [];
+
+  // Sequential so a slow/failed recipient never masks the others and DocuSign
+  // isn't hit with a burst of concurrent envelope creates.
+  for (const r of recipients) {
+    const result = await sendOne({
+      template_id,
+      signer_name: r.name,
+      signer_email: r.email,
+      signer_role,
+      subject,
+    });
+    if ("error" in result) {
+      failed.push({ name: r.name, email: r.email, error: result.error });
+    } else {
+      sent.push({ name: r.name, email: r.email, envelopeId: result.envelopeId });
+    }
+  }
+
+  return { sent, failed };
 }
 
 // Terminal DocuSign envelope states — no further status changes are possible,

@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { rollupOwnership } from "@/lib/entity-ownership";
+import { holdingsToCsv, parseHoldingsCsv, csvFilenameStem } from "@/lib/holdings-csv";
 import type { EquityHolding } from "@/lib/supabase/database.types";
 import {
   addStakeholder,
@@ -12,6 +13,7 @@ import {
   deleteHolding,
   updateHolding,
   draftOwnershipWithEarn,
+  importHoldingsCsv,
 } from "./ownership-actions";
 
 interface HoldingDraft {
@@ -60,6 +62,7 @@ export function EntityOwnership({
   // revalidated refresh. Cleared whenever fresh server data arrives.
   const [overrides, setOverrides] = useState<Record<string, Partial<EquityHolding>>>({});
   useEffect(() => setOverrides({}), [holdings]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const effectiveHoldings = useMemo(
     () =>
@@ -98,6 +101,57 @@ export function EntityOwnership({
         setNote(`Earn added ${res.created} holder${res.created === 1 ? "" : "s"} — review below.`);
       }
     });
+  }
+
+  // Download the selected entity's cap table as CSV, client-side.
+  function exportCsv() {
+    if (rollup.rows.length === 0) {
+      setNote("No holders to export yet.");
+      return;
+    }
+    const csv = holdingsToCsv(
+      rollup.rows.map((r) => ({
+        name: r.name,
+        kind: r.kind,
+        className: r.className,
+        units: r.units,
+        ownershipPct: r.ownershipPct,
+        investedAmount: r.investedAmount,
+      })),
+    );
+    const entityName = entities.find((e) => e.id === entityId)?.name ?? "entity";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${csvFilenameStem(entityName)}-cap-table.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Read a chosen CSV client-side, parse it, and import via the server action.
+  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-importing the same file
+    if (!file) return;
+    setNote(null);
+    const reader = new FileReader();
+    reader.onerror = () => setNote("Couldn't read that file.");
+    reader.onload = () => {
+      const rows = parseHoldingsCsv(String(reader.result ?? ""));
+      if (rows.length === 0) {
+        setNote("No rows found in that CSV.");
+        return;
+      }
+      startTransition(async () => {
+        const res = await importHoldingsCsv(entityId, rows);
+        if ("error" in res) setNote(res.error);
+        else setNote(`Imported ${res.created} holder${res.created === 1 ? "" : "s"} — review below.`);
+      });
+    };
+    reader.readAsText(file);
   }
 
   function startEdit(holdingId: string) {
@@ -200,13 +254,39 @@ export function EntityOwnership({
     <div className="mt-8">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">Ownership &amp; Cap Table</h3>
-        <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className={`${inputClass} ml-auto w-auto`}>
-          {entities.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name}
-            </option>
-          ))}
-        </select>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className={`${inputClass} w-auto`} aria-label="Select entity">
+            {entities.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="rounded-md border border-line px-3 py-2 text-sm text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={pending}
+            className="rounded-md border border-line px-3 py-2 text-sm text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-60"
+          >
+            {pending ? "Importing…" : "Import CSV"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={onImportFile}
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+        </div>
       </div>
 
       {/* Ownership chart */}

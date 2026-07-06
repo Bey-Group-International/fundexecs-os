@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   listDocuSignTemplates,
-  sendSubscriptionEnvelope,
+  sendSubscriptionEnvelopesBulk,
   getEnvelopeStatus,
   listSentEnvelopes,
   refreshPendingEnvelopes,
@@ -77,15 +77,28 @@ interface ModalProps {
   onSent: (envelope: SentEnvelope) => void;
 }
 
+interface Recipient {
+  name: string;
+  email: string;
+}
+
+// Outcome of a bulk send, kept around so the operator can read the summary.
+interface SendSummary {
+  sent: number;
+  failed: Array<{ name: string; email: string; error: string }>;
+}
+
 function SendModal({ onClose, onSent }: ModalProps) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [templateId, setTemplateId] = useState("");
-  const [signerName, setSignerName] = useState("");
-  const [signerEmail, setSignerEmail] = useState("");
+  const [recipients, setRecipients] = useState<Recipient[]>([
+    { name: "", email: "" },
+  ]);
   const [signerRole, setSignerRole] = useState("signer");
   const [subject, setSubject] = useState("Subscription Agreement — Please Sign");
   const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<SendSummary | null>(null);
   const [contacts, setContacts] = useState<SignerContact[]>([]);
   const [isPending, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -101,13 +114,33 @@ function SendModal({ onClose, onSent }: ModalProps) {
     listSignerContacts().then(setContacts).catch(() => setContacts([]));
   }, []);
 
+  function updateRecipient(index: number, patch: Partial<Recipient>) {
+    setRecipients((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, ...patch } : r)),
+    );
+  }
+
+  function addRecipient() {
+    setRecipients((prev) => [...prev, { name: "", email: "" }]);
+  }
+
+  function removeRecipient(index: number) {
+    setRecipients((prev) =>
+      prev.length > 1 ? prev.filter((_, i) => i !== index) : prev,
+    );
+  }
+
   // When the typed name matches a known investor contact, auto-fill their email.
-  function handleNameChange(value: string) {
-    setSignerName(value);
+  function handleNameChange(index: number, value: string) {
     const match = contacts.find(
       (c) => c.name && c.name.toLowerCase() === value.trim().toLowerCase(),
     );
-    if (match && match.email && !signerEmail) setSignerEmail(match.email);
+    updateRecipient(index, {
+      name: value,
+      ...(match && match.email && !recipients[index]?.email
+        ? { email: match.email }
+        : {}),
+    });
   }
 
   // Close on backdrop click
@@ -130,29 +163,45 @@ function SendModal({ onClose, onSent }: ModalProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSummary(null);
+
+    const cleaned = recipients
+      .map((r) => ({ name: r.name.trim(), email: r.email.trim() }))
+      .filter((r) => r.name || r.email);
+
+    if (cleaned.length === 0) {
+      setError("Add at least one recipient.");
+      return;
+    }
 
     const fd = new FormData();
     fd.set("template_id", templateId);
-    fd.set("signer_name", signerName);
-    fd.set("signer_email", signerEmail);
     fd.set("signer_role", signerRole);
     fd.set("subject", subject);
+    fd.set("recipients", JSON.stringify(cleaned));
 
     startTransition(async () => {
-      const result = await sendSubscriptionEnvelope(fd);
-      if ("error" in result) {
-        setError(result.error);
+      const result = await sendSubscriptionEnvelopesBulk(fd);
+
+      const created = new Date().toISOString();
+      for (const r of result.sent) {
+        onSent({
+          id: r.envelopeId,
+          subject,
+          status: "sent",
+          created,
+          signer_name: r.name,
+          signer_email: r.email,
+        });
+      }
+
+      // All delivered — nothing to review, so close. Otherwise keep the modal
+      // open showing which recipients failed and why.
+      if (result.failed.length === 0) {
+        onClose();
         return;
       }
-      onSent({
-        id: result.envelopeId,
-        subject,
-        status: "sent",
-        created: new Date().toISOString(),
-        signer_name: signerName,
-        signer_email: signerEmail,
-      });
-      onClose();
+      setSummary({ sent: result.sent.length, failed: result.failed });
     });
   }
 
@@ -224,21 +273,94 @@ function SendModal({ onClose, onSent }: ModalProps) {
             )}
           </div>
 
-          {/* LP Name */}
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              LP Name
-            </label>
-            <input
-              type="text"
-              value={signerName}
-              onChange={(e) => handleNameChange(e.target.value)}
-              required
-              placeholder="Jane Smith"
-              list="docusign-signer-contacts"
-              autoComplete="off"
-              className="mt-1 block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
-            />
+          {/* Recipients */}
+          <fieldset>
+            <div className="flex items-center justify-between">
+              <legend className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                LP Recipients
+              </legend>
+              <button
+                type="button"
+                onClick={addRecipient}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+                Add recipient
+              </button>
+            </div>
+            <div className="mt-2 space-y-2">
+              {recipients.map((r, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <label className="sr-only" htmlFor={`recipient-name-${i}`}>
+                      LP name for recipient {i + 1}
+                    </label>
+                    <input
+                      id={`recipient-name-${i}`}
+                      type="text"
+                      value={r.name}
+                      onChange={(e) => handleNameChange(i, e.target.value)}
+                      required
+                      placeholder="Jane Smith"
+                      list="docusign-signer-contacts"
+                      autoComplete="off"
+                      className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="sr-only" htmlFor={`recipient-email-${i}`}>
+                      LP email for recipient {i + 1}
+                    </label>
+                    <input
+                      id={`recipient-email-${i}`}
+                      type="email"
+                      value={r.email}
+                      onChange={(e) =>
+                        updateRecipient(i, { email: e.target.value })
+                      }
+                      required
+                      placeholder="lp@example.com"
+                      className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeRecipient(i)}
+                    disabled={recipients.length === 1}
+                    aria-label={`Remove recipient ${i + 1}`}
+                    className="mt-1.5 rounded-md p-1 text-neutral-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-red-400"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
             {contacts.length > 0 && (
               <datalist id="docusign-signer-contacts">
                 {contacts.map((c) => (
@@ -248,22 +370,7 @@ function SendModal({ onClose, onSent }: ModalProps) {
                 ))}
               </datalist>
             )}
-          </div>
-
-          {/* LP Email */}
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              LP Email
-            </label>
-            <input
-              type="email"
-              value={signerEmail}
-              onChange={(e) => setSignerEmail(e.target.value)}
-              required
-              placeholder="lp@example.com"
-              className="mt-1 block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
-            />
-          </div>
+          </fieldset>
 
           {/* Signer Role */}
           <div>
@@ -303,6 +410,31 @@ function SendModal({ onClose, onSent }: ModalProps) {
             </p>
           )}
 
+          {summary && (
+            <div
+              role="status"
+              className="rounded-md bg-neutral-50 px-3 py-2 text-sm dark:bg-neutral-800/60"
+            >
+              <p className="font-medium text-neutral-700 dark:text-neutral-200">
+                Sent {summary.sent}
+                {summary.failed.length > 0
+                  ? ` · ${summary.failed.length} failed`
+                  : ""}
+              </p>
+              {summary.failed.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-xs text-red-600 dark:text-red-400">
+                  {summary.failed.map((f, i) => (
+                    <li key={i}>
+                      {(f.name || f.email || "Recipient") +
+                        (f.email && f.name ? ` (${f.email})` : "")}
+                      : {f.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-1">
             <button
               type="button"
@@ -337,7 +469,11 @@ function SendModal({ onClose, onSent }: ModalProps) {
                   />
                 </svg>
               )}
-              {isPending ? "Sending…" : "Send Envelope"}
+              {isPending
+                ? "Sending…"
+                : recipients.length > 1
+                  ? `Send ${recipients.length} Envelopes`
+                  : "Send Envelope"}
             </button>
           </div>
         </form>
