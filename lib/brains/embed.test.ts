@@ -48,7 +48,7 @@ describe("HashingEmbedder", () => {
     expect(a).toHaveLength(EMBED_DIM);
     const norm = Math.sqrt(a.reduce((s, v) => s + v * v, 0));
     expect(norm).toBeCloseTo(1, 6);
-    expect(embedder.model).toBe("hash-v2");
+    expect(embedder.model).toBe("hash-v3");
   });
 
   it("never calls the network", async () => {
@@ -64,6 +64,17 @@ describe("HashingEmbedder", () => {
     const scrambled = await embedder.embed("multiple leveraged the exit drove buyout");
     const dot = (x: number[], y: number[]) => x.reduce((s, v, i) => s + v * y[i], 0);
     expect(dot(query, phrase)).toBeGreaterThan(dot(query, scrambled));
+  });
+
+  it("weights a rare KB term above a ubiquitous one (IDF)", async () => {
+    // "capital" is everywhere in the corpus (low IDF); "clawback" is rare (high
+    // IDF). A query touching both should match the rare-term passage more
+    // strongly — a uniform-weight (hash-v2) model would rank these two ties.
+    const query = await embedder.embed("capital clawback");
+    const common = await embedder.embed("capital");
+    const rare = await embedder.embed("clawback");
+    const dot = (x: number[], y: number[]) => x.reduce((s, v, i) => s + v * y[i], 0);
+    expect(dot(query, rare)).toBeGreaterThan(dot(query, common));
   });
 });
 
@@ -118,7 +129,7 @@ describe("VoyageEmbedder", () => {
 
 describe("getEmbedder", () => {
   it("is the keyless hash embedder without VOYAGE_API_KEY", () => {
-    expect(getEmbedder().model).toBe("hash-v2");
+    expect(getEmbedder().model).toBe("hash-v3");
   });
 
   it("is the Voyage embedder when the key is set, honoring the model override", () => {
