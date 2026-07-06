@@ -4,7 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { saveOrgProfile } from "./actions";
 import { STRATEGY_LABELS, AUM_LABELS, ROLE_LABELS, displayLabel, titleCase } from "@/lib/labels";
-import { LogoUpload } from "@/components/build/LogoUpload";
+import { ProfileForm } from "@/components/build/ProfileForm";
 
 export const dynamic = "force-dynamic";
 
@@ -12,51 +12,8 @@ export const dynamic = "force-dynamic";
 // match cards, the Capital Map, and the Ecosystem Discoverability feed.
 // The Earn Copilot reads this profile when drafting LP outreach, term sheets,
 // and deal memos — a complete profile meaningfully improves output quality.
-
-const ENTITY_TYPES: { value: string; label: string }[] = [
-  { value: "LLC", label: "LLC" },
-  { value: "LP", label: "LP" },
-  { value: "Corporation", label: "Corporation" },
-  { value: "Trust", label: "Trust" },
-  { value: "Ltd", label: "Ltd" },
-  { value: "GP", label: "GP" },
-  { value: "Other", label: "Other" },
-];
-
-// Options use DB enum keys as values so defaultValue matches what's stored.
-// Labels come from the shared label maps in lib/labels.ts.
-const STRATEGIES: { value: string; label: string }[] = [
-  { value: "private_equity", label: "Private Equity" },
-  { value: "venture_capital", label: "Venture Capital" },
-  { value: "real_estate", label: "Real Estate" },
-  { value: "credit_debt", label: "Credit / Debt" },
-  { value: "infrastructure", label: "Infrastructure" },
-  { value: "multi_strategy", label: "Multi-Strategy" },
-  { value: "fund_of_funds", label: "Fund of Funds" },
-  { value: "hedge_fund", label: "Hedge Fund" },
-  { value: "other", label: "Other" },
-];
-
-const OPERATOR_ROLES: { value: string; label: string }[] = [
-  { value: "gp", label: "GP" },
-  { value: "family_office", label: "Family Office" },
-  { value: "advisory", label: "Advisory" },
-  { value: "operator", label: "Operator" },
-  { value: "lp", label: "LP" },
-  { value: "sponsor", label: "Sponsor" },
-  { value: "placement_agent", label: "Placement Agent" },
-  { value: "fund_administrator", label: "Fund Administrator" },
-  { value: "ria", label: "RIA" },
-  { value: "other", label: "Other" },
-];
-
-const AUM_RANGES: { value: string; label: string }[] = [
-  { value: "sub_25m", label: "Under $25M" },
-  { value: "25m_100m", label: "$25M – $100M" },
-  { value: "100m_500m", label: "$100M – $500M" },
-  { value: "500m_1b", label: "$500M – $1B" },
-  { value: "over_1b", label: "Over $1B" },
-];
+// The editor itself is the shared ProfileForm; this page adds the framing and
+// the read-only "how counterparties see you" investor card.
 
 export default async function ProfilePage() {
   const ctx = await getSessionContext();
@@ -98,162 +55,40 @@ export default async function ProfilePage() {
         </p>
       </header>
 
-      {/* The server action returns { error?, ok? } but React form action expects
-          (fd: FormData) => void | Promise<void>. The double-cast satisfies
-          strict TypeScript without changing runtime behaviour. */}
-      <form
-        action={saveOrgProfile as unknown as (fd: FormData) => Promise<void>}
-        className="flex flex-col gap-10"
-      >
-        {/* ── Identity ─────────────────────────────────────────── */}
-        <Section
-          eyebrow="Who you are"
-          title="Identity"
-          description="The display name and legal entity that appear on match cards and outreach."
+      {/* Canonical profile editor — shared with the in-session ModuleView view.
+          Its own compact preview is disabled here in favor of the full investor
+          card below. */}
+      <ProfileForm
+        action={saveOrgProfile}
+        showPreview={false}
+        values={{
+          name: (o as Record<string, unknown>).name as string ?? "",
+          legal_name: (o as Record<string, unknown>).legal_name as string ?? "",
+          entity_type: (o as Record<string, unknown>).entity_type as string ?? "",
+          tagline: (o as Record<string, unknown>).tagline as string ?? "",
+          logo_url: (o as Record<string, unknown>).logo_url as string ?? "",
+          jurisdiction: (o as Record<string, unknown>).jurisdiction as string ?? "",
+          website: (o as Record<string, unknown>).website as string ?? "",
+          description: (o as Record<string, unknown>).description as string ?? "",
+          hq_location: (o as Record<string, unknown>).hq_location as string ?? "",
+          aum_range: (o as Record<string, unknown>).aum_range as string ?? "",
+          fund_count:
+            (o as Record<string, unknown>).fund_count != null
+              ? String((o as Record<string, unknown>).fund_count)
+              : "",
+          primary_strategy: (o as Record<string, unknown>).primary_strategy as string ?? "",
+          operator_role: (o as Record<string, unknown>).operator_role as string ?? "",
+          brand_voice: (o as Record<string, unknown>).brand_voice as string ?? "",
+        }}
+      />
+      <div className="mt-6">
+        <Link
+          href="/settings"
+          className="text-sm text-fg-muted transition hover:text-fg-secondary"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field
-              label="Display name"
-              name="name"
-              defaultValue={(o as Record<string, unknown>).name as string ?? ""}
-              placeholder="Bey Group International"
-              required
-            />
-            <Field
-              label="Legal entity name"
-              name="legal_name"
-              defaultValue={(o as Record<string, unknown>).legal_name as string ?? ""}
-              placeholder="e.g., Acme Capital Partners, LLC"
-            />
-            <SelectField
-              label="Entity type"
-              name="entity_type"
-              defaultValue={(o as Record<string, unknown>).entity_type as string ?? ""}
-              options={ENTITY_TYPES}
-            />
-            <Field
-              label="Tagline"
-              name="tagline"
-              defaultValue={(o as Record<string, unknown>).tagline as string ?? ""}
-              placeholder="e.g., Growth equity for the next generation of founders"
-            />
-            <div className="sm:col-span-2 flex flex-col gap-1">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                Logo
-              </label>
-              <LogoUpload
-                name="logo_url"
-                defaultValue={(o as Record<string, unknown>).logo_url as string ?? ""}
-              />
-            </div>
-          </div>
-        </Section>
-
-        {/* ── Strategy ─────────────────────────────────────────── */}
-        <Section
-          eyebrow="What you do"
-          title="Strategy & focus"
-          description="Earn uses these signals to qualify counterparties and auto-score deal thesis fit."
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <SelectField
-              label="Primary strategy"
-              name="primary_strategy"
-              defaultValue={(o as Record<string, unknown>).primary_strategy as string ?? ""}
-              options={STRATEGIES}
-            />
-            <SelectField
-              label="Your role"
-              name="operator_role"
-              defaultValue={(o as Record<string, unknown>).operator_role as string ?? ""}
-              options={OPERATOR_ROLES}
-            />
-            <SelectField
-              label="AUM range"
-              name="aum_range"
-              defaultValue={(o as Record<string, unknown>).aum_range as string ?? ""}
-              options={AUM_RANGES}
-            />
-            <Field
-              label="Active fund count"
-              name="fund_count"
-              type="number"
-              defaultValue={String((o as Record<string, unknown>).fund_count ?? "")}
-              placeholder="2"
-            />
-          </div>
-        </Section>
-
-        {/* ── Location & Reach ─────────────────────────────────── */}
-        <Section
-          eyebrow="Where you operate"
-          title="Location & reach"
-          description="Geographic signals refine match radius and regulatory fit checks."
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field
-              label="HQ location"
-              name="hq_location"
-              defaultValue={(o as Record<string, unknown>).hq_location as string ?? ""}
-              placeholder="New York, NY"
-            />
-            <Field
-              label="Jurisdiction"
-              name="jurisdiction"
-              defaultValue={(o as Record<string, unknown>).jurisdiction as string ?? ""}
-              placeholder="Delaware, USA"
-            />
-            <Field
-              label="Website"
-              name="website"
-              type="url"
-              defaultValue={(o as Record<string, unknown>).website as string ?? ""}
-              placeholder="https://beygroupintl.com"
-              className="sm:col-span-2"
-            />
-          </div>
-        </Section>
-
-        {/* ── Your Story ───────────────────────────────────────── */}
-        <Section
-          eyebrow="How you show up"
-          title="Positioning"
-          description="Earn uses your description and voice to calibrate tone in every LP memo, outreach email, and deal summary it drafts."
-        >
-          <div className="flex flex-col gap-3">
-            <TextareaField
-              label="Firm description"
-              name="description"
-              defaultValue={(o as Record<string, unknown>).description as string ?? ""}
-              placeholder="Bey Group International is a multi-strategy alternative investment platform focused on institutional-grade real assets and credit opportunities across North America and Europe..."
-              rows={4}
-            />
-            <TextareaField
-              label="Brand voice"
-              name="brand_voice"
-              defaultValue={(o as Record<string, unknown>).brand_voice as string ?? ""}
-              placeholder="Authoritative, direct, and precise. We speak to institutions — no jargon, no hype, just clear conviction backed by data."
-              rows={3}
-            />
-          </div>
-        </Section>
-
-        {/* ── Save ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-4 border-t border-line pt-6">
-          <button
-            type="submit"
-            className="rounded-lg border border-gold-500/50 bg-gold-500/10 px-5 py-2 text-sm font-medium text-gold-300 transition hover:bg-gold-500/20 hover:border-gold-400/70 active:scale-[0.98]"
-          >
-            Save profile
-          </button>
-          <Link
-            href="/settings"
-            className="text-sm text-fg-muted transition hover:text-fg-secondary"
-          >
-            Cancel
-          </Link>
-        </div>
-      </form>
+          ← Back to settings
+        </Link>
+      </div>
 
       {/* ── Investor Preview ─────────────────────────────────── */}
       <div className="mt-12 border-t border-line pt-10">
@@ -361,133 +196,6 @@ export default async function ProfilePage() {
 }
 
 // ── Sub-components ──────────────────────────────────────────────────────────
-
-function Section({
-  eyebrow,
-  title,
-  description,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <header className="mb-4">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400/80">
-          {eyebrow}
-        </span>
-        <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-fg-primary">
-          {title}
-        </h2>
-        {description && (
-          <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-fg-secondary">
-            {description}
-          </p>
-        )}
-      </header>
-      <div className="fx-card p-4">{children}</div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  name,
-  defaultValue,
-  placeholder,
-  type = "text",
-  required,
-  className,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  placeholder?: string;
-  type?: string;
-  required?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
-      <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-        {label}
-        {required && <span className="ml-0.5 text-gold-400">*</span>}
-      </label>
-      <input
-        type={type}
-        name={name}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        required={required}
-        className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none focus:ring-1 focus:ring-gold-500/40 transition"
-      />
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  name,
-  defaultValue,
-  options,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-        {label}
-      </label>
-      <select
-        name={name}
-        defaultValue={defaultValue ?? ""}
-        className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary focus:border-gold-500/60 focus:outline-none focus:ring-1 focus:ring-gold-500/40 transition appearance-none"
-      >
-        <option value="">Select…</option>
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function TextareaField({
-  label,
-  name,
-  defaultValue,
-  placeholder,
-  rows = 3,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  placeholder?: string;
-  rows?: number;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-        {label}
-      </label>
-      <textarea
-        name={name}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        rows={rows}
-        className="rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none focus:ring-1 focus:ring-gold-500/40 transition resize-y"
-      />
-    </div>
-  );
-}
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (

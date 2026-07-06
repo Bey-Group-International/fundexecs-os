@@ -12,58 +12,9 @@ import { DOCUMENT_TYPE_LABELS, CONTRACT_STATUS_META, type DocumentType, type Con
 import { gmailAdapter } from "@/lib/integrations/adapters/gmail";
 import type { DealStage } from "@/lib/supabase/database.types";
 
-// Update the active organization's Build › Profile fields. RLS restricts this
-// to org admins/owners.
-export async function updateProfile(formData: FormData) {
-  const auth = await requireOrgContext();
-  if (!auth.ok) return;
-
-  // Trim a field; empty string becomes null.
-  const t = (name: string): string | null => {
-    const v = String(formData.get(name) ?? "").trim();
-    return v === "" ? null : v;
-  };
-
-  // Website: trim, and prefix https:// when a scheme is missing.
-  const rawWebsite = String(formData.get("website") ?? "").trim();
-  const website =
-    rawWebsite === ""
-      ? null
-      : /^[a-z][a-z0-9+.-]*:\/\//i.test(rawWebsite)
-        ? rawWebsite
-        : `https://${rawWebsite}`;
-
-  // Fund count: parse to a number, or null when empty/invalid.
-  const rawFundCount = String(formData.get("fund_count") ?? "").trim();
-  let fund_count: number | null = null;
-  if (rawFundCount !== "") {
-    const n = Number(rawFundCount);
-    fund_count = Number.isFinite(n) ? n : null;
-  }
-
-  const supabase = await createServerClient();
-  const { error } = await supabase
-    .from("organizations")
-    .update({
-      name: String(formData.get("name") ?? "").trim(),
-      legal_name: t("legal_name"),
-      entity_type: t("entity_type"),
-      tagline: t("tagline"),
-      logo_url: t("logo_url"),
-      jurisdiction: t("jurisdiction"),
-      website,
-      description: t("description"),
-      hq_location: t("hq_location"),
-      aum_range: t("aum_range"),
-      fund_count,
-      primary_strategy: t("primary_strategy"),
-      operator_role: t("operator_role"),
-    })
-    .eq("id", auth.ctx.orgId);
-  if (error) { console.error("[updateProfile]", error.message); return; }
-
-  revalidatePath("/build/profile");
-}
+// Build › Profile edits are handled by `saveOrgProfile`
+// (app/(app)/build/profile/actions.ts), the single canonical profile action
+// shared by the standalone page and the in-session ModuleView editor.
 
 // --- Add-row support -------------------------------------------------------
 // Field configs live in lib/module-forms.ts so the AddRowForm client component
