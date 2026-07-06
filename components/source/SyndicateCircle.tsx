@@ -14,7 +14,10 @@ interface Circle {
 
 interface Props {
   circles: Circle[];
-  onCreateCircle: (name: string, description: string) => Promise<void>;
+  onCreateCircle: (
+    name: string,
+    description: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
 }
 
 export function SyndicateCircle({ circles, onCreateCircle }: Props) {
@@ -23,6 +26,7 @@ export function SyndicateCircle({ circles, onCreateCircle }: Props) {
   const [description, setDescription] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function copyInviteCode(code: string) {
     navigator.clipboard.writeText(`${window.location.origin}/join-circle?code=${code}`);
@@ -33,11 +37,16 @@ export function SyndicateCircle({ circles, onCreateCircle }: Props) {
   async function handleCreate() {
     if (!name.trim()) return;
     setIsSubmitting(true);
-    await onCreateCircle(name.trim(), description.trim());
+    setError(null);
+    const result = await onCreateCircle(name.trim(), description.trim());
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error ?? "Failed to create circle. Please try again.");
+      return;
+    }
     setName("");
     setDescription("");
     setCreating(false);
-    setIsSubmitting(false);
   }
 
   return (
@@ -82,9 +91,12 @@ export function SyndicateCircle({ circles, onCreateCircle }: Props) {
               className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-accent resize-none"
             />
           </div>
+          {error && (
+            <p className="text-xs text-status-danger">{error}</p>
+          )}
           <div className="flex gap-2">
             <button
-              onClick={() => { setCreating(false); setName(""); setDescription(""); }}
+              onClick={() => { setCreating(false); setName(""); setDescription(""); setError(null); }}
               className="flex-1 rounded-lg border border-line py-2 text-sm text-fg-muted hover:text-fg transition-colors"
             >
               Cancel

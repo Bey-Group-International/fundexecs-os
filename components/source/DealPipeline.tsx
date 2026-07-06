@@ -465,7 +465,11 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
     }
     startTransition(async () => {
       try {
-        await createModuleRow("source", "deal_pipeline", fd);
+        const result = await createModuleRow("source", "deal_pipeline", fd);
+        if (!result.ok) {
+          setError(result.error ?? "Failed to save deal. Please try again.");
+          return;
+        }
         onClose();
         router.refresh();
       } catch {
