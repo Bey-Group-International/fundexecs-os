@@ -3,6 +3,7 @@ import {
   buildWorkflowRouting,
   STAGE_TO_OFFICE_INTENT,
   workflowToRow,
+  rowToWorkflow,
   auditEventToRow,
   PROGRAM_AGENTS,
   PROGRAM_ROOMS,
@@ -13,6 +14,7 @@ import {
 import { LIFECYCLE_STAGES } from "@/lib/intelligence";
 import {
   getOfficeProgramState,
+  hydrateWorkflows,
   resolveApprovalGate,
   sceneBus,
   setApprovalDecider,
@@ -174,6 +176,130 @@ describe("office program — persistence row mappers", () => {
     expect(row.tier).toBe("external_facing");
     expect(row.status).toBe("info");
     expect(row.occurred_at).toBe(new Date(1_700_000_000_000).toISOString());
+  });
+});
+
+describe("office program — rowToWorkflow (read-hydrate mapper)", () => {
+  const workflow: OfficeWorkflow = {
+    id: "wf-123",
+    title: "Investor-Ready Data Room Build",
+    commandText: "Run diligence on the data room",
+    intent: "data_room_build",
+    mode: "workflow",
+    stage: "complete",
+    riskTier: "external_facing",
+    assignments: [
+      { agentId: "associate", roomKey: "trading", owns: "Data Room Index", status: "done", progress: 100, done: true },
+      { agentId: "legal", roomKey: "legal", owns: "Document Review", status: "done", progress: 100, done: true },
+    ],
+    activeRooms: ["ceo", "trading", "legal", "reception", "boardroom"],
+    progress: 100,
+    etaLabel: "All assigned agents complete",
+    currentStep: "Workflow complete and archived",
+    nextAction: "None",
+    approvalGate: null,
+    createdAt: 1_700_000_000_000,
+    completedAt: 1_700_000_050_000,
+  };
+
+  it("reconstructs a workflow from a persisted row", () => {
+    const row = workflowToRow("org-1", workflow, "complete");
+    const wf = rowToWorkflow(row);
+    expect(wf).not.toBeNull();
+    expect(wf!.id).toBe("wf-123");
+    expect(wf!.title).toBe(workflow.title);
+    expect(wf!.intent).toBe("data_room_build");
+    expect(wf!.riskTier).toBe("external_facing");
+    expect(wf!.stage).toBe("complete");
+    expect(wf!.assignments).toHaveLength(2); // rebuilt from assignment_count
+    expect(wf!.activeRooms).toEqual(workflow.activeRooms);
+    expect(wf!.completedAt).toBe(1_700_000_050_000);
+  });
+
+  it("round-trips through workflowToRow: row → workflow → row is stable", () => {
+    const row1 = workflowToRow("org-1", workflow, "complete");
+    const wf = rowToWorkflow(row1);
+    expect(wf).not.toBeNull();
+    const row2 = workflowToRow("org-1", wf!, "complete");
+    expect(row2).toEqual(row1);
+  });
+
+  it("preserves a null completion", () => {
+    const row = workflowToRow("org-1", { ...workflow, completedAt: null }, null);
+    const wf = rowToWorkflow(row);
+    expect(wf!.completedAt).toBeNull();
+  });
+
+  it("rejects malformed rows (null, non-object, missing key/title, bad enums)", () => {
+    expect(rowToWorkflow(null)).toBeNull();
+    expect(rowToWorkflow(undefined)).toBeNull();
+    expect(rowToWorkflow(42)).toBeNull();
+    expect(rowToWorkflow("nope")).toBeNull();
+    expect(rowToWorkflow({})).toBeNull();
+    // Missing title.
+    expect(rowToWorkflow({ workflow_key: "k", mode: "workflow", stage: "complete", risk_tier: "internal" })).toBeNull();
+    // Empty key.
+    expect(rowToWorkflow({ workflow_key: "", title: "T", mode: "workflow", stage: "complete", risk_tier: "internal" })).toBeNull();
+    // Out-of-range enums.
+    expect(rowToWorkflow({ workflow_key: "k", title: "T", mode: "bogus", stage: "complete", risk_tier: "internal" })).toBeNull();
+    expect(rowToWorkflow({ workflow_key: "k", title: "T", mode: "workflow", stage: "nope", risk_tier: "internal" })).toBeNull();
+    expect(rowToWorkflow({ workflow_key: "k", title: "T", mode: "workflow", stage: "complete", risk_tier: "nope" })).toBeNull();
+  });
+});
+
+describe("office program — hydrateWorkflows (archive merge)", () => {
+  const base: OfficeWorkflow = {
+    id: "seed",
+    title: "Seed Workflow",
+    commandText: "",
+    intent: "general_execution",
+    mode: "workflow",
+    stage: "complete",
+    riskTier: "internal",
+    assignments: [],
+    activeRooms: [],
+    progress: 100,
+    etaLabel: "",
+    currentStep: "",
+    nextAction: "",
+    approvalGate: null,
+    createdAt: 1_800_000_000_000,
+    completedAt: 1_800_000_000_000,
+  };
+
+  it("is a no-op on an empty array (no state churn)", () => {
+    const before = getOfficeProgramState().archive;
+    hydrateWorkflows([]);
+    expect(getOfficeProgramState().archive).toBe(before); // same reference — no setState
+  });
+
+  it("seeds a terminal workflow into the archive", () => {
+    hydrateWorkflows([{ ...base, id: "hydrate-seed", title: "Hydrated", stage: "blocked", completedAt: 1_800_000_100_000 }]);
+    const entry = getOfficeProgramState().archive.find((a) => a.id === "hydrate-seed");
+    expect(entry).toBeDefined();
+    expect(entry!.title).toBe("Hydrated");
+    expect(entry!.outcome).toBe("rejected"); // stage "blocked" → rejected
+  });
+
+  it("dedupes by workflow key — a repeated id is added once", () => {
+    const wf = { ...base, id: "hydrate-dupe", completedAt: 1_800_000_200_000 };
+    hydrateWorkflows([wf, wf]);
+    expect(getOfficeProgramState().archive.filter((a) => a.id === "hydrate-dupe")).toHaveLength(1);
+  });
+
+  it("never clobbers an already-known workflow (live/in-memory wins)", () => {
+    hydrateWorkflows([{ ...base, id: "keep", title: "Original", stage: "complete", completedAt: 1_800_000_300_000 }]);
+    // A later, stale persisted row for the same key must not overwrite it.
+    hydrateWorkflows([{ ...base, id: "keep", title: "Stale Overwrite", stage: "blocked", completedAt: 1_800_000_400_000 }]);
+    const entry = getOfficeProgramState().archive.find((a) => a.id === "keep");
+    expect(entry!.title).toBe("Original");
+    expect(entry!.outcome).toBe("complete");
+  });
+
+  it("ignores in-flight (non-terminal) rows — only terminal workflows seed the archive", () => {
+    const before = getOfficeProgramState().archive.length;
+    hydrateWorkflows([{ ...base, id: "inflight", completedAt: null }]);
+    expect(getOfficeProgramState().archive.length).toBe(before);
   });
 });
 

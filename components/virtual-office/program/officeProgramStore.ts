@@ -400,6 +400,52 @@ function persistWorkflowSnapshot(wf: OfficeWorkflow, phase: "created" | "archive
   void persistence.persistWorkflow(wf, phase).catch(() => {});
 }
 
+// ─── Read-hydrate from persisted workflows ───────────────────────────────────
+// Mirror of the write-through path: on mount the React layer loads the org's
+// persisted workflows (best-effort, RLS-scoped) and seeds them here. Hydration
+// is purely additive — it only fills the archive with terminal workflows that
+// aren't already known — so it can never disturb a live, in-flight session.
+
+/**
+ * Merge persisted workflows into state. Additive and non-destructive:
+ *  - No-op when passed an empty (or non-array) list — no state churn.
+ *  - Only terminal workflows (a completedAt) seed the archive; in-flight rows
+ *    from another session are ignored rather than resurrected without timers.
+ *  - Dedupe by workflow key: an id already in the archive, or matching the
+ *    live activeWorkflow, is skipped — live/in-memory state always wins over a
+ *    stale persisted row (no clobber).
+ * Safe to call repeatedly; it never touches activeWorkflow or agent runtime.
+ */
+export function hydrateWorkflows(workflows: OfficeWorkflow[]) {
+  if (!Array.isArray(workflows) || workflows.length === 0) return;
+
+  const activeId = state.activeWorkflow?.id ?? null;
+  const known = new Set(state.archive.map((a) => a.id));
+  const additions: ArchivedWorkflow[] = [];
+
+  for (const wf of workflows) {
+    if (!wf || typeof wf.id !== "string") continue;
+    if (wf.completedAt == null) continue; // only terminal workflows seed the archive
+    if (wf.id === activeId) continue; // never clobber the live in-flight workflow
+    if (known.has(wf.id)) continue; // existing (live) archive entry wins
+    known.add(wf.id);
+    additions.push({
+      id: wf.id,
+      title: wf.title,
+      riskTier: wf.riskTier,
+      outcome: wf.stage === "blocked" ? "rejected" : "complete",
+      completedAt: wf.completedAt,
+    });
+  }
+
+  if (additions.length === 0) return; // nothing new → leave state untouched
+
+  const merged = [...state.archive, ...additions]
+    .sort((a, b) => b.completedAt - a.completedAt)
+    .slice(0, 20);
+  setState({ archive: merged });
+}
+
 // ─── Command intake ──────────────────────────────────────────────────────────
 
 /**

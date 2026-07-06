@@ -604,3 +604,94 @@ export function auditEventToRow(organizationId: string, ev: AuditEvent): OfficeA
     occurred_at: new Date(ev.ts).toISOString(),
   };
 }
+
+// Membership sets for validating enum-typed columns when rehydrating from a
+// persisted row. A row whose mode/stage/risk_tier is outside the known set is
+// treated as malformed and rejected rather than coerced.
+const RISK_TIER_KEYS: ReadonlySet<string> = new Set(Object.keys(RISK_TIERS));
+const STAGE_KEYS: ReadonlySet<string> = new Set(Object.keys(STAGE_LABELS));
+const MODE_KEYS: ReadonlySet<string> = new Set(WORKFLOW_MODES.map((m) => m.id));
+
+function isRiskTier(x: unknown): x is RiskTier {
+  return typeof x === "string" && RISK_TIER_KEYS.has(x);
+}
+function isWorkflowStage(x: unknown): x is WorkflowStage {
+  return typeof x === "string" && STAGE_KEYS.has(x);
+}
+function isWorkflowMode(x: unknown): x is WorkflowMode {
+  return typeof x === "string" && MODE_KEYS.has(x);
+}
+
+/**
+ * Reconstruct an in-memory office workflow from a persisted row — the inverse
+ * of workflowToRow. The row is a lossy summary: individual assignments are not
+ * stored, only their count, so assignments are rebuilt as `assignment_count`
+ * inert placeholders purely so counts and progress read back consistently
+ * (row → workflow → row is stable). Fields that were never persisted
+ * (etaLabel, currentStep, nextAction, approvalGate) come back as neutral
+ * defaults.
+ *
+ * Null-safe and defensive: returns null for a null/undefined value, a
+ * non-object, or a row missing its key/title or carrying an out-of-range
+ * mode/stage/risk_tier — so callers can filter malformed data out without
+ * risk. It never throws.
+ */
+export function rowToWorkflow(row: unknown): OfficeWorkflow | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+
+  const id = r.workflow_key;
+  const title = r.title;
+  if (typeof id !== "string" || id.length === 0) return null;
+  if (typeof title !== "string" || title.length === 0) return null;
+
+  const { mode, stage, risk_tier: riskTier } = r;
+  if (!isWorkflowMode(mode) || !isWorkflowStage(stage) || !isRiskTier(riskTier)) return null;
+
+  const completedAt =
+    typeof r.completed_at === "string" && !Number.isNaN(Date.parse(r.completed_at))
+      ? Date.parse(r.completed_at)
+      : null;
+
+  const count =
+    typeof r.assignment_count === "number" && r.assignment_count > 0
+      ? Math.floor(r.assignment_count)
+      : 0;
+  // Placeholders: assignment detail is not persisted. These are inert seeds so
+  // assignment_count and progress round-trip; hydration only ever surfaces
+  // terminal workflows in the archive, which never inspects assignment content.
+  const assignments: AgentAssignment[] = Array.from({ length: count }, () => ({
+    agentId: "earn",
+    roomKey: "ceo",
+    owns: "",
+    status: "",
+    progress: 100,
+    done: true,
+  }));
+
+  const activeRooms: RoomKey[] = Array.isArray(r.active_rooms)
+    ? (r.active_rooms.filter((x) => typeof x === "string") as RoomKey[])
+    : [];
+
+  const progress =
+    typeof r.progress === "number" ? Math.max(0, Math.min(100, Math.round(r.progress))) : 0;
+
+  return {
+    id,
+    title,
+    commandText: typeof r.command_text === "string" ? r.command_text : "",
+    intent: (typeof r.intent === "string" ? r.intent : "general_execution") as WorkflowIntent,
+    mode,
+    stage,
+    riskTier,
+    assignments,
+    activeRooms,
+    progress,
+    etaLabel: "",
+    currentStep: "",
+    nextAction: "",
+    approvalGate: null,
+    createdAt: completedAt ?? Date.now(),
+    completedAt,
+  };
+}
