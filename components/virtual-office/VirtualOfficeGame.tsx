@@ -332,6 +332,8 @@ export function VirtualOfficeGame({
   }, []);
 
   const stopScreenShare = useCallback(() => {
+    // Restore the camera feed to the bubble before dropping the screen track.
+    gameRef.current?.events.emit("rtc:screen-share", null);
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current = null;
     setScreenStream(null);
@@ -346,6 +348,8 @@ export function VirtualOfficeGame({
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       screenStreamRef.current = stream;
       setScreenStream(stream);
+      // Broadcast the screen to the proximity bubble (swaps the camera feed).
+      gameRef.current?.events.emit("rtc:screen-share", stream.getVideoTracks()[0] ?? null);
       // Tear down when the user ends the share from the browser's own UI.
       stream.getVideoTracks()[0]?.addEventListener("ended", stopScreenShare);
     } catch {

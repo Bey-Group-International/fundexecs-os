@@ -400,6 +400,14 @@ export class OfficeScene extends Phaser.Scene {
       this.sfu?.setLocalStream(stream);
     });
 
+    // Screen-share broadcast: swap the outgoing camera video for the screen
+    // track (or null to restore) on whichever transport is active. The track
+    // replacement needs no renegotiation, so peers see the screen in-place.
+    this.game.events.on("rtc:screen-share", (track: MediaStreamTrack | null) => {
+      void this.mesh?.setScreenTrack(track);
+      void this.sfu?.setScreenTrack(track);
+    });
+
     // Mobile/touch D-pad → normalized movement vector. Consumed each frame in
     // _handleMovement; {0,0} on release. Keyboard still takes precedence.
     this.game.events.on("office:touch-move", (v: { dx: number; dy: number }) => {
@@ -451,6 +459,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:emote");
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
+    this.game.events.off("rtc:screen-share");
     this.game.events.off("program:npc-goto");
     this.game.events.off("program:npc-state");
     this.game.events.off("program:room-activity");
