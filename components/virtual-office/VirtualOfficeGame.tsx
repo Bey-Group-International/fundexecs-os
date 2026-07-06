@@ -19,6 +19,7 @@ import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
+import { FloorRoster, type RosterEntry } from "./FloorRoster";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -301,6 +302,7 @@ export function VirtualOfficeGame({
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -396,6 +398,11 @@ export function VirtualOfficeGame({
         // Proximity video bridge — per-peer opacity by avatar distance.
         game.events.on("rtc:video-proximity", (m: Record<string, number>) => {
           setVideoProximity(m);
+        });
+
+        // Floor presence roster bridge — who's on the floor + their room.
+        game.events.on("office:roster", (r: RosterEntry[]) => {
+          setRoster(r);
         });
 
         // Room enter bridge — updates room-specific action panel + current room state
@@ -625,6 +632,9 @@ export function VirtualOfficeGame({
 
       {/* Game canvas area */}
       <div className="relative">
+        {/* Live "who's on the floor" roster + invite */}
+        {token && roster.length > 0 && <FloorRoster roster={roster} />}
+
         {/* Proximity presence — the executive you're standing beside greets you */}
         {nearbyAgent && <ProximityCard agent={nearbyAgent} />}
 

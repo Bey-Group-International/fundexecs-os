@@ -166,6 +166,9 @@ export class OfficeScene extends Phaser.Scene {
   // Proximity video — throttle + dedupe the tile-opacity map sent to the DOM.
   private spatialVideoAccumMs = 0;
   private lastVideoProx = "";
+  // Floor presence roster — throttle + dedupe the who's-on-the-floor list.
+  private rosterAccumMs = 0;
+  private lastRoster = "";
   // M5 — character identity. The invisible physics sprite animates from a real
   // sprite sheet (myCharacterId); the visible figure is the operator's own
   // human avatar (myOfficeAvatar), distinct from the AI executive agents.
@@ -429,6 +432,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateNpcAvatars(delta);
     this._updateNpcProximity(delta);
     this._updateSpatialAudio(delta);
+    this._updateRoster(delta);
     this._updateMinimap();
 
     this._interpFrame = (this._interpFrame + 1) % 2;
@@ -2167,6 +2171,39 @@ export class OfficeScene extends Phaser.Scene {
     if (key === this.lastVideoProx) return;
     this.lastVideoProx = key;
     this.game.events.emit("rtc:video-proximity", prox);
+  }
+
+  /**
+   * Broadcast the floor presence roster to the DOM — who's on the floor
+   * (you + teammates), each with the room they're standing in — so the office
+   * can show a live "who's here" list. Throttled to ~1×/sec and deduped.
+   */
+  private _updateRoster(delta: number) {
+    this.rosterAccumMs += delta;
+    if (this.rosterAccumMs < 1000) return;
+    this.rosterAccumMs = 0;
+
+    const roster: Array<{ id: string; name: string; roomKey: string | null; self: boolean }> = [
+      {
+        id: "self",
+        name: this.myOfficeAvatar.displayName,
+        roomKey: this._roomKeyAt(this.player.x, this.player.y),
+        self: true,
+      },
+    ];
+    for (const [id, state] of this.remotePlayers) {
+      roster.push({
+        id,
+        name: state.label.text,
+        roomKey: this._roomKeyAt(state.sprite.x, state.sprite.y),
+        self: false,
+      });
+    }
+
+    const key = JSON.stringify(roster);
+    if (key === this.lastRoster) return;
+    this.lastRoster = key;
+    this.game.events.emit("office:roster", roster);
   }
 
   private _spawnRemotePlayer(remote: RemotePlayer) {
