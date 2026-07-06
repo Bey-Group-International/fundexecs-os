@@ -162,6 +162,10 @@ export class OfficeScene extends Phaser.Scene {
   private sfuMode = false;
   // M5 — character identity
   private myCharacterId = "player_default";
+  // The executive the player has chosen to appear as on the floor. Drives the
+  // visible vector avatar (incl. the gold coin for Earn); the invisible physics
+  // sprite still animates from a real sprite sheet (myCharacterId) for movement.
+  private myAgentId: AgentId = "earn";
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
@@ -260,7 +264,13 @@ export class OfficeScene extends Phaser.Scene {
   // ── init ────────────────────────────────────────────────────────────────────
 
   init(data: OfficeSceneInitData) {
-    if (data?.characterId) this.myCharacterId = data.characterId;
+    // The selection is a floor-executive agent id (e.g. "earn", "analyst"). The
+    // player appears as that executive's avatar; the invisible physics sprite
+    // animates from the agent's real sprite sheet. Unknown/legacy ids fall back
+    // to Earn.
+    const rawId = data?.characterId;
+    this.myAgentId = rawId && rawId in AGENT_BY_ID ? (rawId as AgentId) : "earn";
+    this.myCharacterId = AGENT_BY_ID[this.myAgentId].spriteKey;
     if (data?.token) {
       this.socket = new VirtualOfficeSocket();
       this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
@@ -585,7 +595,10 @@ export class OfficeScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.walls);
 
-    this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, USER_SPEC, 10);
+    // The player appears as their chosen executive (the coin for Earn).
+    const agent = AGENT_BY_ID[this.myAgentId];
+    const spec = agent ? agentAvatarSpec(this.myAgentId, agent.accent) : USER_SPEC;
+    this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, spec, 10);
   }
 
   /** Sync the humanized player avatar to the physics anchor and velocity. */

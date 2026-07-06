@@ -10,6 +10,7 @@ import { officeRoleFromMemberRole } from "@/lib/office/approvalAuthority";
 import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
+import { AGENT_BY_ID } from "@/components/virtual-office/program/officeProgram";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
 import {
   CharacterChip,
@@ -66,8 +67,13 @@ export function OfficeTabs() {
       const t = data.session?.access_token;
       if (t) setToken(t);
       const meta = data.session?.user?.user_metadata;
-      // Seed from account metadata only when the user hasn't picked locally.
-      if (meta?.character_id && !window.localStorage.getItem(CHARACTER_STORAGE_KEY)) {
+      // Seed from account metadata only when the user hasn't picked locally,
+      // and only when it's a valid floor-executive id (the selection roster).
+      if (
+        meta?.character_id &&
+        (meta.character_id as string) in AGENT_BY_ID &&
+        !window.localStorage.getItem(CHARACTER_STORAGE_KEY)
+      ) {
         setCharacterId(meta.character_id as string);
       }
       if (meta?.display_name) setDisplayName(meta.display_name as string);

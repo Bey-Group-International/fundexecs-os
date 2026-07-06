@@ -1,25 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { executiveCharacters } from "@/components/characters/characterConfig";
+import {
+  PROGRAM_AGENTS,
+  AGENT_BY_ID,
+  type AgentId,
+} from "@/components/virtual-office/program/officeProgram";
+import { agentAvatarSpec } from "@/components/virtual-office/avatar/avatarPalette";
+import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
 
 export const CHARACTER_STORAGE_KEY = "fx-office-character";
-const DEFAULT_CHARACTER_ID = "earnest-fundmaker";
+const DEFAULT_CHARACTER_ID: AgentId = "earn";
+
+/** The selectable roster is the floor's executive team (single source of truth). */
+function isAgentId(id: string): id is AgentId {
+  return id in AGENT_BY_ID;
+}
+
+/** The vector avatar spec for a floor executive (the coin for Earn). */
+function specFor(agentId: AgentId) {
+  return agentAvatarSpec(agentId, AGENT_BY_ID[agentId].accent);
+}
 
 /**
- * Frame dims + frames-per-row per sheet layout (row 0 frame 0 = idle-down).
- * earnest: 512px sheet / 32px frames = 16 cols; executive: 64px / 16px = 4.
- */
-const SHEET_LAYOUT: Record<"earnest" | "executive", { w: number; h: number; cols: number }> = {
-  earnest: { w: 32, h: 32, cols: 16 },
-  executive: { w: 16, h: 32, cols: 4 },
-};
-
-const SHEET_ROWS = 5;
-
-/**
- * Persisted character selection, stored under "fx-office-character".
- * Returns [characterId, setCharacterId]; defaults to "earnest-fundmaker".
+ * Persisted character selection, stored under "fx-office-character". The value
+ * is a floor-executive agent id (e.g. "earn", "analyst"); legacy/unknown values
+ * fall back to Earn. Returns [characterId, setCharacterId].
  */
 export function useCharacterSelection(): [string, (id: string) => void] {
   const [characterId, setCharacterIdState] = useState<string>(DEFAULT_CHARACTER_ID);
@@ -27,7 +33,7 @@ export function useCharacterSelection(): [string, (id: string) => void] {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(CHARACTER_STORAGE_KEY);
-      if (stored && executiveCharacters.some((c) => c.id === stored)) {
+      if (stored && isAgentId(stored)) {
         setCharacterIdState(stored);
       }
     } catch {
@@ -47,32 +53,10 @@ export function useCharacterSelection(): [string, (id: string) => void] {
   return [characterId, setCharacterId];
 }
 
-function SpriteThumb({
-  spriteSheet,
-  frameMapKind,
-  scale = 2,
-}: {
-  spriteSheet: string;
-  frameMapKind: "earnest" | "executive";
-  scale?: number;
-}) {
-  const { w, h, cols } = SHEET_LAYOUT[frameMapKind];
-  return (
-    <div
-      aria-hidden
-      style={{
-        width: w * scale,
-        height: h * scale,
-        backgroundImage: `url(${spriteSheet})`,
-        backgroundPosition: "0 0",
-        backgroundRepeat: "no-repeat",
-        backgroundSize: `${w * cols * scale}px ${h * SHEET_ROWS * scale}px`,
-        imageRendering: "pixelated",
-      }}
-    />
-  );
-}
-
+/**
+ * The full picker: choose which floor executive you appear as. Each option is a
+ * live vector preview that matches the on-floor avatar exactly.
+ */
 export function CharacterPicker({
   selectedId,
   onSelect,
@@ -80,8 +64,6 @@ export function CharacterPicker({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
-  const characters = executiveCharacters.filter((c) => c.spriteSheet);
-
   return (
     <div
       className="rounded-lg border p-3"
@@ -94,35 +76,32 @@ export function CharacterPicker({
         Choose your executive
       </p>
       <div className="flex flex-wrap gap-2">
-        {characters.map((character) => {
-          const selected = character.id === selectedId;
+        {PROGRAM_AGENTS.map((agent) => {
+          const selected = agent.id === selectedId;
           return (
             <button
-              key={character.id}
+              key={agent.id}
               type="button"
-              onClick={() => onSelect(character.id)}
+              onClick={() => onSelect(agent.id)}
               aria-pressed={selected}
-              title={character.name}
+              title={`${agent.name} — ${agent.role}`}
               className="flex w-[92px] flex-col items-center gap-1.5 rounded-md border px-2 pb-2 pt-2.5 transition-colors"
               style={{
                 background: selected ? "rgba(201, 168, 76, 0.08)" : "transparent",
-                borderColor: selected ? character.themeColor : "rgba(201, 168, 76, 0.2)",
+                borderColor: selected ? agent.accent : "rgba(201, 168, 76, 0.2)",
                 borderWidth: selected ? 2 : 1,
-                boxShadow: selected ? `0 0 0 1px ${character.themeColor}55` : "none",
+                boxShadow: selected ? `0 0 0 1px ${agent.accent}55` : "none",
               }}
             >
-              <SpriteThumb
-                spriteSheet={character.spriteSheet as string}
-                frameMapKind={character.frameMapKind}
-              />
+              <AvatarPreview spec={specFor(agent.id)} size={52} />
               <span
                 className="text-center text-[10px] leading-tight"
                 style={{
-                  color: selected ? character.themeColor : "#c9a84c",
+                  color: selected ? agent.accent : "#c9a84c",
                   fontFamily: "Georgia, 'Times New Roman', serif",
                 }}
               >
-                {character.name}
+                {agent.name}
               </span>
             </button>
           );
@@ -134,9 +113,8 @@ export function CharacterPicker({
 
 /**
  * Compact current-character control for the office header: shows the selected
- * executive's avatar + name as a chip, and opens the full CharacterPicker in a
- * dropdown popover. Designed to sit inline on one horizontal line beside the
- * office-data metrics.
+ * executive's vector avatar + name as a chip, and opens the full CharacterPicker
+ * in a dropdown popover. Sits inline on one line beside the office-data metrics.
  */
 export function CharacterChip({
   selectedId,
@@ -146,10 +124,8 @@ export function CharacterChip({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const character =
-    executiveCharacters.find((c) => c.id === selectedId && c.spriteSheet) ??
-    executiveCharacters.find((c) => c.spriteSheet);
-  if (!character) return null;
+  const agentId: AgentId = isAgentId(selectedId) ? selectedId : DEFAULT_CHARACTER_ID;
+  const agent = AGENT_BY_ID[agentId];
 
   return (
     <div className="relative">
@@ -157,23 +133,19 @@ export function CharacterChip({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label={`Current character: ${character.name}. Change character.`}
+        aria-label={`Current character: ${agent.name}. Change character.`}
         className="flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition-colors"
         style={{
           background: "rgba(10, 8, 6, 0.7)",
-          borderColor: open ? character.themeColor : "rgba(201, 168, 76, 0.35)",
+          borderColor: open ? agent.accent : "rgba(201, 168, 76, 0.35)",
         }}
       >
-        <span className="grid h-6 w-6 place-items-center overflow-hidden rounded-md" style={{ background: "#0a0806" }}>
-          <SpriteThumb
-            spriteSheet={character.spriteSheet as string}
-            frameMapKind={character.frameMapKind}
-            scale={0.85}
-          />
+        <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-md" style={{ background: "#0a0806" }}>
+          <AvatarPreview spec={specFor(agentId)} size={28} />
         </span>
         <span className="flex flex-col items-start leading-tight">
           <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted">Character</span>
-          <span className="text-sm font-semibold text-fg-primary">{character.name}</span>
+          <span className="text-sm font-semibold text-fg-primary">{agent.name}</span>
         </span>
         <span aria-hidden className="ml-0.5 text-[10px] text-fg-muted transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }}>
           ▾
@@ -183,7 +155,7 @@ export function CharacterChip({
         <>
           {/* Click-away backdrop */}
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-40 mt-2 w-max max-w-[320px]">
+          <div className="absolute right-0 z-40 mt-2 w-max max-w-[340px]">
             <CharacterPicker
               selectedId={selectedId}
               onSelect={(id) => {
