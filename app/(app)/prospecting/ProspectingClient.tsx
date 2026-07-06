@@ -10,6 +10,7 @@ type ScoredProspect = {
     company?: string | null;
     location?: string | null;
     email?: string | null;
+    warmIntro?: { name: string; title?: string };
   };
   fit: number;
   priority: number;
@@ -68,6 +69,12 @@ function ProspectRow({ p }: { p: ScoredProspect }) {
           {[c.title, c.company].filter(Boolean).join(" · ") || "—"}
           {c.location ? ` · ${c.location}` : ""}
         </div>
+        {c.warmIntro && (
+          <div className="mt-0.5 text-xs text-gold-300" title="Existing relationship at this firm">
+            🤝 Warm path via {c.warmIntro.name}
+            {c.warmIntro.title ? `, ${c.warmIntro.title}` : ""}
+          </div>
+        )}
       </div>
       <div className="w-16 text-center">
         <div className="text-xs text-ink-400">Fit</div>
