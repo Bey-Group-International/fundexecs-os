@@ -23,6 +23,7 @@ import { DealPipelineLive } from "@/components/source/DealPipelineLive";
 import { RunStrategyModule } from "@/components/run/RunStrategyModule";
 import { RunDiligenceModule } from "@/components/run/RunDiligenceModule";
 import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
+import { BrainsModule } from "@/components/run/BrainsModule";
 import { FundScoringModule } from "@/components/run/FundScoringModule";
 import { DiligenceRoomModule } from "@/components/run/DiligenceRoomModule";
 import { ContractReviewModule } from "@/components/run/ContractReviewModule";
@@ -209,6 +210,7 @@ export async function ModuleView({
           <ContractReviewModule />
         </>
       );
+    if (mod.key === "brains") return <BrainsModule />;
   }
 
   // --- Execute hub: bespoke operating modules ------------------------------
