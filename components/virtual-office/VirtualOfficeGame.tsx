@@ -297,6 +297,7 @@ export function VirtualOfficeGame({
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
+  const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -387,6 +388,11 @@ export function VirtualOfficeGame({
         // Proximity presence bridge — the executive you're standing beside.
         game.events.on("office:nearby-agent", (agent: NearbyAgent | null) => {
           setNearbyAgent(agent);
+        });
+
+        // Proximity video bridge — per-peer opacity by avatar distance.
+        game.events.on("rtc:video-proximity", (m: Record<string, number>) => {
+          setVideoProximity(m);
         });
 
         // Room enter bridge — updates room-specific action panel + current room state
@@ -548,6 +554,7 @@ export function VirtualOfficeGame({
         tiles={videoTiles}
         localStream={localStream}
         localLabel={displayName}
+        proximity={videoProximity}
       />
 
       {/* Iframe zone overlay */}

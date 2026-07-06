@@ -160,6 +160,9 @@ export class OfficeScene extends Phaser.Scene {
   // M4 — SFU
   private sfu: SfuManager | null = null;
   private sfuMode = false;
+  // Proximity video — throttle + dedupe the tile-opacity map sent to the DOM.
+  private spatialVideoAccumMs = 0;
+  private lastVideoProx = "";
   // M5 — character identity
   private myCharacterId = "player_default";
   // The executive the player has chosen to appear as on the floor. Drives the
@@ -426,7 +429,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateAmbient(delta);
     this._updateNpcAvatars(delta);
     this._updateNpcProximity(delta);
-    this._updateSpatialAudio();
+    this._updateSpatialAudio(delta);
     this._updateMinimap();
 
     this._interpFrame = (this._interpFrame + 1) % 2;
@@ -2134,7 +2137,14 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  private _updateSpatialAudio() {
+  // Proximity video: the tile fades as the teammate's avatar drifts away, on
+  // the same distance band as the spatial audio — Gather's "see who's near".
+  private static readonly VIDEO_NEAR_PX = 160;
+  private static readonly VIDEO_FAR_PX = 240;
+  private static readonly VIDEO_MIN = 0.12;
+
+  private _updateSpatialAudio(delta: number) {
+    const prox: Record<string, number> = {};
     for (const [id, state] of this.remotePlayers) {
       const dist = Phaser.Math.Distance.Between(
         this.player.x, this.player.y,
@@ -2145,7 +2155,21 @@ export class OfficeScene extends Phaser.Scene {
       } else {
         this.mesh?.updateSpatialGain(id, dist);
       }
+      const f = Math.max(
+        OfficeScene.VIDEO_MIN,
+        Math.min(1, (OfficeScene.VIDEO_FAR_PX - dist) / (OfficeScene.VIDEO_FAR_PX - OfficeScene.VIDEO_NEAR_PX)),
+      );
+      prox[id] = Math.round(f * 100) / 100;
     }
+
+    // Throttle the DOM update to ~8×/sec, and only emit when it actually changes.
+    this.spatialVideoAccumMs += delta;
+    if (this.spatialVideoAccumMs < 120) return;
+    this.spatialVideoAccumMs = 0;
+    const key = JSON.stringify(prox);
+    if (key === this.lastVideoProx) return;
+    this.lastVideoProx = key;
+    this.game.events.emit("rtc:video-proximity", prox);
   }
 
   private _spawnRemotePlayer(remote: RemotePlayer) {
