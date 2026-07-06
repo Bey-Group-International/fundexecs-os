@@ -41,9 +41,11 @@ const nextConfig = {
       // /deal_pipeline without hub prefix — sourcing automation used to generate
       // this URL; correct path is /source/deal_pipeline.
       { source: "/deal_pipeline", destination: "/source/deal_pipeline", permanent: true },
-      // LP Report — nav link points to /reports; redirect stale manual URLs.
-      { source: "/lp-report", destination: "/reports", permanent: true },
-      { source: "/lp_report", destination: "/reports", permanent: true },
+      // LP Report — Execute › Reporting is the single reporting surface; send
+      // legacy LP-report URLs straight there in one hop (/reports itself just
+      // re-redirects to /execute/reporting).
+      { source: "/lp-report", destination: "/execute/reporting", permanent: true },
+      { source: "/lp_report", destination: "/execute/reporting", permanent: true },
       // Graphs — nav link points to /graph (singular); redirect plural variant.
       { source: "/graphs", destination: "/graph", permanent: true },
       // Legacy match-inbox URL — canonical destination is /inbox.
