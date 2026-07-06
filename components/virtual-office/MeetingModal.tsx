@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { RichText } from "@/components/RichText";
+import { text } from "@/lib/richtext";
+
+// Adventure-style rich text: a gold gradient title, built as a component tree.
+const MEETING_TITLE = text("Start Meeting")
+  .gradient(["#fde68a", "#fbbf24", "#c9a84c"])
+  .build();
 
 export function MeetingModal() {
   const [open, setOpen] = useState(false);
@@ -37,9 +44,9 @@ export function MeetingModal() {
           ✕
         </button>
 
-        {/* Heading */}
-        <h2 className="mb-6 text-xl font-semibold text-amber-400 tracking-wide">
-          Start Meeting
+        {/* Heading — rendered from an Adventure-style rich-text component. */}
+        <h2 className="mb-6 text-xl font-semibold tracking-wide">
+          <RichText component={MEETING_TITLE} />
         </h2>
 
         {/* Actions */}
