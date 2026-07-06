@@ -6,9 +6,13 @@ import { resizeLogo } from "./logo-resize";
 export function LogoUpload({
   name = "logo_url",
   defaultValue = "",
+  onChange,
 }: {
   name?: string;
   defaultValue?: string;
+  /** Notified with the new logo value (data URL or "") so a parent can mirror
+   * it into form state and a live preview. */
+  onChange?: (value: string) => void;
 }) {
   const [preview, setPreview] = useState(defaultValue);
   const [error, setError] = useState("");
@@ -22,6 +26,7 @@ export function LogoUpload({
       // Bubble a change event so AutosaveForm's debounce picks it up.
       hiddenRef.current.dispatchEvent(new Event("change", { bubbles: true }));
     }
+    onChange?.(v);
   }
 
   async function onFile(file: File) {

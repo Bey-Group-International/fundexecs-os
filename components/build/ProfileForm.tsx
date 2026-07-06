@@ -230,7 +230,7 @@ export function ProfileForm({
             />
           </Field>
           <Field label="Logo">
-            <LogoUpload name="logo_url" defaultValue={form.logo_url} />
+            <LogoUpload name="logo_url" defaultValue={form.logo_url} onChange={set("logo_url")} />
           </Field>
           <Field label="Jurisdiction">
             <input
@@ -351,12 +351,21 @@ export function ProfileForm({
         <aside className="w-full shrink-0 lg:sticky lg:top-5 lg:w-72">
           <div className="rounded-2xl border border-line bg-surface-1 p-5">
             <div className="flex items-center gap-3">
-              <span
-                aria-hidden
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-gold-500/30 bg-gold-500/10 font-display text-lg font-semibold text-gold-300"
-              >
-                {initial}
-              </span>
+              {form.logo_url.trim() ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={form.logo_url}
+                  alt="Logo"
+                  className="h-11 w-11 shrink-0 rounded-xl border border-gold-500/30 bg-gold-500/10 object-contain p-1"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-gold-500/30 bg-gold-500/10 font-display text-lg font-semibold text-gold-300"
+                >
+                  {initial}
+                </span>
+              )}
               <div className="min-w-0">
                 <p className="truncate font-display text-base font-semibold text-fg-primary">
                   {form.name.trim() || "Your firm"}
