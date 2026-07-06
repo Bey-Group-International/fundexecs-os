@@ -3,19 +3,28 @@
 import { useState } from "react";
 import { ROOMS } from "./types";
 
-export type RosterEntry = { id: string; name: string; roomKey: string | null; self: boolean };
+export type RosterEntry = {
+  id: string;
+  name: string;
+  roomKey: string | null;
+  self: boolean;
+  onCall: boolean;
+};
 
 const ROOM_LABEL: Record<string, string> = Object.fromEntries(ROOMS.map((r) => [r.key, r.label]));
 
 /**
  * Live "who's on the floor" roster — you plus any teammates present, each with
- * the room they're standing in. Reuses the existing socket presence; the Invite
- * button copies the floor link so an org teammate (or guest) can join.
+ * the room they're standing in and whether they're on a call. Reuses the
+ * existing socket presence + proximity bubbles; the Invite popover shares the
+ * floor link so an org teammate (or guest) can join. No new backend.
  */
 export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
   const [copied, setCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const onCallCount = roster.filter((m) => m.onCall).length;
 
-  const invite = async () => {
+  const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
@@ -27,7 +36,7 @@ export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
 
   return (
     <div
-      className="pointer-events-auto absolute left-2 top-2 z-20 w-[176px] rounded-xl border p-2 backdrop-blur-sm"
+      className="pointer-events-auto absolute left-2 top-2 z-20 w-[188px] rounded-xl border p-2 backdrop-blur-sm"
       style={{
         background: "rgba(10,8,6,0.82)",
         borderColor: "rgba(201,168,76,0.3)",
@@ -40,13 +49,34 @@ export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
         </span>
         <button
           type="button"
-          onClick={invite}
+          onClick={() => setInviteOpen((v) => !v)}
+          aria-expanded={inviteOpen}
           className="rounded-md px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] transition-colors"
           style={{ color: "#c9a84c", border: "1px solid rgba(201,168,76,0.4)", background: "rgba(201,168,76,0.08)" }}
         >
-          {copied ? "Copied" : "Invite"}
+          Invite
         </button>
       </div>
+
+      {inviteOpen ? (
+        <div
+          className="mb-2 rounded-lg border p-2"
+          style={{ borderColor: "rgba(201,168,76,0.22)", background: "rgba(201,168,76,0.05)" }}
+        >
+          <p className="mb-1.5 text-[10px] leading-snug text-fg-muted">
+            Share this floor link. Teammates in your org join instantly; anyone else joins as a guest.
+          </p>
+          <button
+            type="button"
+            onClick={copyLink}
+            className="w-full rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors"
+            style={{ color: "#0a0806", background: "#c9a84c" }}
+          >
+            {copied ? "Link copied ✓" : "Copy floor link"}
+          </button>
+        </div>
+      ) : null}
+
       <ul className="flex flex-col gap-0.5">
         {roster.map((m) => (
           <li key={m.id} className="flex items-center gap-1.5 text-[11px]">
@@ -57,12 +87,28 @@ export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
             />
             <span className="truncate text-fg-primary">{m.name}</span>
             {m.self ? <span className="text-[8px] text-fg-muted">you</span> : null}
+            {m.onCall ? (
+              <span
+                aria-label="on a call"
+                title="On a call"
+                className="shrink-0 text-[9px]"
+                style={{ color: "#7dd3fc" }}
+              >
+                ●
+              </span>
+            ) : null}
             <span className="ml-auto shrink-0 text-[9px] text-fg-muted">
               {m.roomKey ? ROOM_LABEL[m.roomKey] ?? "" : ""}
             </span>
           </li>
         ))}
       </ul>
+
+      {onCallCount > 0 ? (
+        <p className="mt-1.5 font-mono text-[8px] uppercase tracking-[0.14em]" style={{ color: "#7dd3fc" }}>
+          {onCallCount} on a call
+        </p>
+      ) : null}
     </div>
   );
 }
