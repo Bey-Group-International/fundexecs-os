@@ -63,6 +63,7 @@ export const HUBS: HubDefinition[] = [
       { key: "comms", label: "Comms" },
       { key: "risk", label: "Risk" },
       { key: "documents", label: "Documents" },
+      { key: "brains", label: "Brains" },
     ],
   },
   {
