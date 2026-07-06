@@ -20,6 +20,7 @@ import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
 import { FloorRoster, type RosterEntry } from "./FloorRoster";
+import { ScreenShareDock } from "./ScreenShareDock";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -303,6 +304,8 @@ export function VirtualOfficeGame({
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -327,6 +330,28 @@ export function VirtualOfficeGame({
       setMediaState("dismissed");
     }
   }, []);
+
+  const stopScreenShare = useCallback(() => {
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current = null;
+    setScreenStream(null);
+  }, []);
+
+  const startScreenShare = useCallback(async () => {
+    if (screenStreamRef.current) {
+      stopScreenShare();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenStreamRef.current = stream;
+      setScreenStream(stream);
+      // Tear down when the user ends the share from the browser's own UI.
+      stream.getVideoTracks()[0]?.addEventListener("ended", stopScreenShare);
+    } catch {
+      // User cancelled the picker or capture is unavailable — no-op
+    }
+  }, [stopScreenShare]);
 
   // ── Phaser init — deferred until first activation ─────────────────────────
   useEffect(() => {
@@ -486,6 +511,9 @@ export function VirtualOfficeGame({
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
       setLocalStream(null);
+      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+      setScreenStream(null);
       setBubbleMembers([]);
       setVideoTiles([]);
       setMediaState("idle");
@@ -616,8 +644,25 @@ export function VirtualOfficeGame({
             {r.label}
           </button>
         ))}
+        {/* Share workspace — captures the screen into a floating PiP dock */}
+        <button
+          type="button"
+          onClick={startScreenShare}
+          title={screenStream ? "Stop sharing your workspace" : "Share your workspace"}
+          className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          style={{
+            fontFamily: "Georgia, serif",
+            letterSpacing: "0.06em",
+            color: screenStream ? "#c9a84c" : "#94a3b8",
+            background: screenStream ? "rgba(201,168,76,0.12)" : "transparent",
+            border: `1px solid ${screenStream ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.05)"}`,
+          }}
+        >
+          <span className="opacity-60 text-[8px]">▣</span>
+          {screenStream ? "Sharing" : "Share screen"}
+        </button>
         {/* Emote bar — mirrors keyboard shortcuts 1-4 */}
-        <div className="ml-auto flex items-center gap-0.5 shrink-0 pl-2 border-l border-[#c9a84c18]">
+        <div className="flex items-center gap-0.5 shrink-0 pl-2 border-l border-[#c9a84c18]">
           {EMOTE_BAR.map((e) => (
             <button
               key={e.emoji}
@@ -638,6 +683,9 @@ export function VirtualOfficeGame({
 
         {/* Proximity presence — the executive you're standing beside greets you */}
         {nearbyAgent && <ProximityCard agent={nearbyAgent} />}
+
+        {/* Workspace share — floating PiP dock for the screen you're sharing */}
+        {screenStream && <ScreenShareDock stream={screenStream} onStop={stopScreenShare} />}
 
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
