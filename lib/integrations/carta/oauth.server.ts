@@ -19,10 +19,14 @@
 //   CARTA_CLIENT_ID / CARTA_CLIENT_SECRET (Settings vault). The grants are
 //   standard OAuth 2.0.
 
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { getOrgSecret } from "@/lib/org-secrets";
 import { createServiceClient } from "@/lib/supabase/server";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
+// Reuse the app's single signed-state implementation rather than duplicating it:
+// createOAuthState/verifyOAuthState are generic {orgId,userId} HMAC-signed,
+// expiring state helpers (same CSRF protection, one source of truth).
+import { createOAuthState, verifyOAuthState, type OAuthState } from "@/lib/google-oauth";
 
 // ── Config keys ────────────────────────────────────────────────────────────────
 export const CARTA_TOKEN_URL_ENV = "CARTA_TOKEN_URL";
@@ -39,7 +43,6 @@ export const CARTA_CALLBACK_PATH = "/api/oauth/carta/callback";
 export const CARTA_PKCE_COOKIE = "carta_pkce";
 
 const EXPIRY_MARGIN_SEC = 60;
-const STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_FETCH_TIMEOUT_MS = 10_000;
 
 export interface CartaClientCreds {
@@ -84,71 +87,19 @@ export function createPkcePair(): PkcePair {
   return { verifier, challenge: pkceChallengeFromVerifier(verifier) };
 }
 
-// ── HMAC-signed state (OAuth CSRF) ──────────────────────────────────────────────
+// ── Signed state (OAuth CSRF) ───────────────────────────────────────────────────
+// Delegated to the app's single HMAC-signed, expiring state implementation
+// (lib/google-oauth.ts) — same {orgId,userId} binding, one source of truth, no
+// duplicated signing primitive. The state is opaque to Carta; only its integrity
+// (our signature) and freshness matter.
 
-const STATE_KDF_SALT = "carta-oauth-state-v1";
-let cachedSigningKey: { raw: string; key: Buffer } | null = null;
-
-/**
- * The HMAC signing key, derived from the vault secret via scrypt (a memory-hard
- * KDF, exactly as lib/vault.ts derives the encryption key). Deriving rather than
- * using the raw secret directly strengthens the construction against offline
- * attack and keeps the signing-secret handling consistent with the vault. The
- * derived key is cached per process so the KDF cost is paid once. Null (fail
- * closed) when no vault secret is configured — a missing secret can never yield
- * a forgeable state.
- */
-function signingKey(): Buffer | null {
-  const raw = process.env.FUNDEXECS_VAULT_KEY;
-  if (!raw) return null;
-  if (cachedSigningKey?.raw !== raw) {
-    cachedSigningKey = { raw, key: scryptSync(raw, STATE_KDF_SALT, 32) };
-  }
-  return cachedSigningKey.key;
-}
-
-function sign(payload: string): string {
-  const key = signingKey();
-  if (!key) return "";
-  return createHmac("sha256", key).update(payload).digest("base64url");
-}
-
-export interface CartaOAuthState {
-  orgId: string;
-  userId: string;
-}
+export type CartaOAuthState = OAuthState;
 
 /** Mint the signed state carried through Carta's redirect. */
-export function createCartaOAuthState(state: CartaOAuthState, nowMs: number = Date.now()): string {
-  const payload = [
-    state.orgId,
-    state.userId,
-    String(nowMs + STATE_TTL_MS),
-    randomBytes(8).toString("base64url"),
-  ].join(".");
-  return `${Buffer.from(payload).toString("base64url")}.${sign(payload)}`;
-}
+export const createCartaOAuthState = createOAuthState;
 
 /** Verify + unpack a callback's state; null on tamper, expiry, or bad shape. */
-export function verifyCartaOAuthState(raw: string, nowMs: number = Date.now()): CartaOAuthState | null {
-  if (!signingKey()) return null;
-  const dot = raw.lastIndexOf(".");
-  if (dot <= 0) return null;
-  let payload: string;
-  try {
-    payload = Buffer.from(raw.slice(0, dot), "base64url").toString("utf8");
-  } catch {
-    return null;
-  }
-  const expected = Buffer.from(sign(payload), "utf8");
-  const provided = Buffer.from(raw.slice(dot + 1), "utf8");
-  if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) return null;
-
-  const [orgId, userId, expiresAt] = payload.split(".");
-  if (!orgId || !userId || !expiresAt) return null;
-  if (!Number.isFinite(Number(expiresAt)) || Number(expiresAt) < nowMs) return null;
-  return { orgId, userId };
-}
+export const verifyCartaOAuthState = verifyOAuthState;
 
 // ── Authorization URL ───────────────────────────────────────────────────────────
 
