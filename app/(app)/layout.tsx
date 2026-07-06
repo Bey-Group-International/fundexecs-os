@@ -4,6 +4,7 @@ import { signOut } from "@/app/login/actions";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
 import type { Hub } from "@/lib/supabase/database.types";
+import type { StreakState } from "@/lib/gamification";
 import { GuidedTour } from "@/components/GuidedTour";
 import { CoachingToastProvider } from "@/components/shared/CoachingToast";
 import {
@@ -53,6 +54,7 @@ export default async function AppLayout({
     buildStatuses,
     { count: approvalsCount },
     { data: orgRow },
+    { data: streakRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
       supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
@@ -107,7 +109,27 @@ export default async function AppLayout({
         .select("setup_hidden")
         .eq("id", ctx.orgId)
         .maybeSingle(),
+      supabase
+        .from("execution_streaks")
+        .select("current_streak, longest_streak, last_activity_at, freeze_used_at")
+        .eq("organization_id", ctx.orgId)
+        .maybeSingle(),
     ]);
+
+  // Execution streak for the sidebar widget (best-effort; defaults to a fresh
+  // streak when no row exists yet).
+  const streakData = streakRow as {
+    current_streak: number;
+    longest_streak: number;
+    last_activity_at: string | null;
+    freeze_used_at: string | null;
+  } | null;
+  const streak: StreakState = {
+    current: streakData?.current_streak ?? 0,
+    longest: streakData?.longest_streak ?? 0,
+    lastActivityAt: streakData?.last_activity_at ?? null,
+    freezeUsedAt: streakData?.freeze_used_at ?? null,
+  };
 
   const matchRow = matchAlertRow as
     | { id: string; channel: string; subject: string; preview: string | null; ai_summary: string | null }
@@ -178,6 +200,7 @@ export default async function AppLayout({
         hubs={hubs}
         sessions={sessions}
         groups={groups}
+        streak={streak}
         inboxUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
