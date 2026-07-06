@@ -959,11 +959,13 @@ export class OfficeScene extends Phaser.Scene {
 
       // On arrival, take a seat: collaborators sit at the conference table,
       // idle executives sit at the nearest desk. The executive on an ambient
-      // coffee run manages its own sit, so it's excluded here.
+      // coffee run manages its own sit, so it's excluded here. Earn is the
+      // command operator — it stays on its feet in the Command Center, greeting
+      // the operator, so it's never auto-seated when idle.
       if (!walking && !state.seated && npcId !== this.ambientAgent) {
         if (state.programState === "collaborating") {
           if (this._sitAtTable(npcId, state)) continue;
-        } else if (state.programState === "idle") {
+        } else if (state.programState === "idle" && state.agentId !== "earn") {
           if (this._sitNpc(npcId, state)) continue;
         }
       }
@@ -1663,6 +1665,16 @@ export class OfficeScene extends Phaser.Scene {
    */
   private _spawnProgramAgents() {
     for (const agent of PROGRAM_AGENTS) {
+      // Earn greets the operator standing in the center of the Command Center
+      // room, right alongside the player, instead of seated at a desk — so the
+      // office opens onto the two of them together, ready to work.
+      if (agent.id === "earn") {
+        const room = ROOMS.find((r) => r.key === agent.homeRoom);
+        const cx = (room ? room.col * ROOM_W : 0) + ROOM_W / 2 + 34;
+        const cy = (room ? room.row * ROOM_H : 0) + ROOM_H / 2 + 4;
+        this._spawnNpc(`agent:${agent.id}`, cx, cy, "down", agent.spriteKey, agent.name, agent.id);
+        continue;
+      }
       const pos = this._claimRoomSlot(agent.id, agent.homeRoom);
       this._spawnNpc(`agent:${agent.id}`, pos.x, pos.y, "down", agent.spriteKey, agent.name, agent.id);
       // Idle executives start the day sitting at a desk in their home room.
