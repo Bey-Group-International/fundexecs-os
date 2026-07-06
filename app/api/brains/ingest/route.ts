@@ -5,14 +5,17 @@ import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { chunkText } from "@/lib/brains/vector";
 import { getEmbedder, toVectorLiteral } from "@/lib/brains/embed";
 import { BRAINS } from "@/lib/brains/catalog";
+import { referenceDocsForBrain } from "@/lib/brains/reference";
 import type { BrainKey } from "@/lib/brains/types";
 
 // POST /api/brains/ingest — seed the shared Brain knowledge-base corpus.
 //
-// Reads lib/brains/knowledge/<brain_key>.md, chunks + embeds each file with the
-// zero-cost local embedder, and upserts into brain_kb_chunks via the service-role
-// client (RLS-bypassing — the table has no write policy by design). Idempotent:
-// it deletes a brain's existing rows before inserting, so it is safe to run
+// For each Brain, reads its own lib/brains/knowledge/<brain_key>.md plus any
+// shared reference docs mapped to it (lib/brains/knowledge/reference/*, see
+// lib/brains/reference.ts), chunks + embeds them with the zero-cost local
+// embedder, and upserts into brain_kb_chunks via the service-role client
+// (RLS-bypassing — the table has no write policy by design). Idempotent: it
+// deletes a brain's existing rows before inserting, so it is safe to run
 // repeatedly.
 //
 // Guard mirrors the cron pattern: a shared secret OR an authenticated org writer.
@@ -24,6 +27,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const KNOWLEDGE_DIR = path.join(process.cwd(), "lib", "brains", "knowledge");
+const REFERENCE_DIR = path.join(KNOWLEDGE_DIR, "reference");
 
 async function isAuthorized(request: Request): Promise<boolean> {
   // 1) Shared-secret path (scripted/CI), mirrors CRON_SECRET in app/api/cron.
@@ -61,37 +65,57 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const results: { brainKey: string; source: string; chunks: number; status: string }[] = [];
+  const results: { brainKey: string; sources: string[]; chunks: number; status: string }[] = [];
 
   for (const brain of BRAINS) {
     const brainKey = brain.key as BrainKey;
-    const source = `${brainKey}.md`;
-    let content: string;
-    try {
-      content = await fs.readFile(path.join(KNOWLEDGE_DIR, source), "utf8");
-    } catch {
-      results.push({ brainKey, source, chunks: 0, status: "skipped: no KB file" });
-      continue;
+
+    // A Brain's corpus is its own KB file plus any shared reference docs mapped
+    // to it. Reference docs live under KNOWLEDGE_DIR/reference and are folded in
+    // under this brain_key so per-brain retrieval surfaces them unchanged.
+    const inputs: { source: string; dir: string; file: string }[] = [
+      { source: `${brainKey}.md`, dir: KNOWLEDGE_DIR, file: `${brainKey}.md` },
+      ...referenceDocsForBrain(brainKey).map((ref) => ({
+        source: `reference/${ref.file}`,
+        dir: REFERENCE_DIR,
+        file: ref.file,
+      })),
+    ];
+
+    // Read + chunk every input, keeping each chunk tagged with its source and a
+    // per-source chunk index. A missing file is skipped, not fatal.
+    const tagged: { source: string; chunkIndex: number; text: string }[] = [];
+    const read: string[] = [];
+    for (const input of inputs) {
+      let content: string;
+      try {
+        content = await fs.readFile(path.join(input.dir, input.file), "utf8");
+      } catch {
+        continue;
+      }
+      const chunks = chunkText(content);
+      if (chunks.length === 0) continue;
+      read.push(input.source);
+      chunks.forEach((text, i) => tagged.push({ source: input.source, chunkIndex: i, text }));
     }
 
-    const chunks = chunkText(content);
-    if (chunks.length === 0) {
-      results.push({ brainKey, source, chunks: 0, status: "skipped: empty" });
+    if (tagged.length === 0) {
+      results.push({ brainKey, sources: [], chunks: 0, status: "skipped: no KB content" });
       continue;
     }
 
     // Embed BEFORE the destructive delete below — an embedding failure (real
     // API down, bad key) must leave the brain's existing corpus intact. One
-    // batched call per file (the real embedder batches over the wire; the hash
+    // batched call per brain (the real embedder batches over the wire; the hash
     // embedder just maps). Rows carry the vector space they were embedded in
     // so retrieval never mixes spaces.
     const embedder = getEmbedder();
     let embeddings: number[][];
     try {
-      embeddings = await embedder.embedBatch(chunks, "document");
+      embeddings = await embedder.embedBatch(tagged.map((t) => t.text), "document");
     } catch (err) {
       const message = err instanceof Error ? err.message : "embedding failed";
-      results.push({ brainKey, source, chunks: 0, status: `failed: ${message}` });
+      results.push({ brainKey, sources: read, chunks: 0, status: `failed: ${message}` });
       continue;
     }
 
@@ -101,26 +125,26 @@ export async function POST(request: Request) {
       .delete()
       .eq("brain_key", brainKey);
     if (delError) {
-      results.push({ brainKey, source, chunks: 0, status: `failed: ${delError.message}` });
+      results.push({ brainKey, sources: read, chunks: 0, status: `failed: ${delError.message}` });
       continue;
     }
 
-    const rows = chunks.map((text, i) => ({
+    const rows = tagged.map((t, i) => ({
       brain_key: brainKey,
-      source,
-      chunk_index: i,
-      content: text,
+      source: t.source,
+      chunk_index: t.chunkIndex,
+      content: t.text,
       embedding: toVectorLiteral(embeddings[i]),
       embedding_model: embedder.model,
     }));
 
     const { error: insError } = await supabase.from("brain_kb_chunks").insert(rows);
     if (insError) {
-      results.push({ brainKey, source, chunks: 0, status: `failed: ${insError.message}` });
+      results.push({ brainKey, sources: read, chunks: 0, status: `failed: ${insError.message}` });
       continue;
     }
 
-    results.push({ brainKey, source, chunks: rows.length, status: "ok" });
+    results.push({ brainKey, sources: read, chunks: rows.length, status: "ok" });
   }
 
   const totalChunks = results.reduce((n, r) => n + r.chunks, 0);

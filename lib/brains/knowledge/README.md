@@ -19,6 +19,23 @@ as the retrieval corpus that Brain reasons over. Files are named by `BrainKey`:
 | `capital_raiser.md`     | Capital Raiser                            |
 | `investor_relations.md` | Investor Relations Strategist             |
 
+## Shared reference corpus (`reference/`)
+
+Some knowledge is cross-cutting field material several Brains should reason over,
+not a single Brain's corpus. Those docs live in [`reference/`](./reference/) and
+are mapped to the Brains they serve in [`../reference.ts`](../reference.ts):
+
+|              File               |                       Folded into                       |
+|---------------------------------|---------------------------------------------------------|
+| `private_equity_playbook.md`    | Executive Advisor, Deal Sourcer, Capital Connector, Capital Raiser, Investor Relations, Rainmaker |
+| `b2b_ai_agents_catalog.md`      | HTML Funnel / Lead Gen, SEO Disrupter, Marketing / PR, Automater / Scrubber, Earnest Fundmaker |
+
+Retrieval is keyed by `brain_key` (the `brain_kb_chunks` table + RPC filter on
+it), so on ingest each reference doc is embedded under **each** Brain it is
+mapped to (source `reference/<file>`). No schema change, and retrieval stays
+per-Brain and unchanged. To add a reference doc: drop the `.md` in `reference/`
+and add a `REFERENCE_DOCS` entry in [`../reference.ts`](../reference.ts).
+
 The OS orchestration / command-layer docs (not per-Brain corpora) live in
 [`../workflow/`](../workflow/): `master_workflow.md` and `workflow_instructor.md`.
 
@@ -29,7 +46,8 @@ passages are folded into a Brain's prompt only when activated.
 
 ## How it is wired (now live)
 
-1. **Corpus** — the `.md` files above are the per-Brain knowledge bases.
+1. **Corpus** — the `.md` files above are the per-Brain knowledge bases, plus the
+   shared `reference/` docs folded into each Brain they are mapped to.
 2. **Migration** — [`0024_brain_kb.sql`](../../../supabase/migrations/0024_brain_kb.sql)
    creates the shared `public.brain_kb_chunks` pgvector table (`vector(256)`),
    a permissive authenticated-read RLS policy (no write policy — seeded via the
@@ -39,9 +57,10 @@ passages are folded into a Brain's prompt only when activated.
    no API key. A real embedder (Voyage/OpenAI) plugs in behind the same
    `Embedder` interface; keep `EMBED_DIM` and the migration's `vector(N)` in sync.
 4. **Ingestion** — POST [`/api/brains/ingest`](../../../app/api/brains/ingest/route.ts)
-   reads these files, chunks ([`chunkText`](../vector.ts)), embeds, and upserts
-   into `brain_kb_chunks` via the service-role client. Idempotent (clears a
-   brain's rows before inserting), so it is safe to re-run.
+   reads each Brain's own file plus its mapped `reference/` docs, chunks
+   ([`chunkText`](../vector.ts)), embeds, and upserts into `brain_kb_chunks` via
+   the service-role client. Idempotent (clears a brain's rows before inserting),
+   so it is safe to re-run.
 5. **Retrieval** — [`../pgvector.ts`](../pgvector.ts) embeds the query and calls
    the RPC; [`../runtime.ts`](../runtime.ts) folds a couple of KB passages into
    every activation, in addition to the user's documents. If pgvector is
