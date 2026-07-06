@@ -6,20 +6,11 @@ import { copilotLive } from "@/lib/claude";
 import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import Copilot from "@/components/Copilot";
-import { PromptChips } from "@/components/workspace/PromptChips";
 import { StartEarnButton } from "@/components/workspace/StartEarnButton";
 import { buildOperatingBrief, type OperatingBrief } from "@/lib/operating-brief";
 import type { Session, SessionGroup } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
-
-const EARN_EXAMPLES = [
-  "Source family offices matching our mandate",
-  "Draft an LP update memo",
-  "Run IC diligence on a target",
-  "Build an LBO model",
-  "Map the capital network",
-];
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
@@ -132,6 +123,15 @@ export default async function SessionsPage({
     recentSessions: sessions.length,
   });
 
+  // Only surface the operating brief when it has something to say —
+  // real attention items, a blocker, a pending approval, or live automation.
+  // Otherwise it collapses to "No X / No Y" noise, so we hide it entirely.
+  const showBrief =
+    brief.needsAttention.length > 0 ||
+    (pendingApprovalsCount.count ?? 0) > 0 ||
+    (blockedWorkflowsCount.count ?? 0) > 0 ||
+    (activeWorkflowsCount.count ?? 0) > 0;
+
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-8 flex items-start justify-between gap-4">
@@ -148,54 +148,38 @@ export default async function SessionsPage({
         </div>
       </header>
 
-      <OperatingBriefCard brief={brief} />
+      {showBrief && <OperatingBriefCard brief={brief} />}
 
-      {sessions.length === 0 ? (
-        <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-14 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
-            No sessions yet
-          </span>
-          <p className="mt-2 max-w-sm text-sm text-fg-secondary">
-            Ask Earn to source LPs, draft an IC memo, run diligence, or build an LBO model.
-            Each conversation becomes a session you can return to.
-          </p>
-          <PromptChips examples={EARN_EXAMPLES} />
-          <p className="mt-3 text-[11px] text-fg-muted">
-            Pick one to open Earn with context, or type directly in the composer below ↓
-          </p>
-        </div>
-      ) : (
-        <>
-          {pinned.length > 0 && (
-            <section className="mb-8">
-              <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-                Pinned
-              </h2>
-              <div className="flex flex-col gap-1.5">
-                {pinned.map((s) => (
-                  <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
-                ))}
-              </div>
-            </section>
-          )}
+      {/* Session lists only when they exist. With no sessions, Earn's composer
+          hero below is the single, intentional entry point — no duplicate
+          empty-state card or prompt chips. */}
+      {pinned.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            Pinned
+          </h2>
+          <div className="flex flex-col gap-1.5">
+            {pinned.map((s) => (
+              <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
+            ))}
+          </div>
+        </section>
+      )}
 
-          <section>
-            <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
-              Recent
-            </h2>
-            <div className="flex flex-col gap-1.5">
-              {recent.map((s) => (
-                <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
-              ))}
-            </div>
-          </section>
-        </>
+      {recent.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            Recent
+          </h2>
+          <div className="flex flex-col gap-1.5">
+            {recent.map((s) => (
+              <SessionCard key={s.id} s={s} groupName={s.group_id ? groupById.get(s.group_id) ?? null : null} />
+            ))}
+          </div>
+        </section>
       )}
 
       <div id="earn-composer" className="relative mt-6 border-t border-line/60 bg-surface-0/95 pb-2 pt-3 backdrop-blur-xl">
-        <p className="mb-2 px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-          Earn can · source LPs · draft memos · run diligence · build models · map capital networks
-        </p>
         <Copilot
           orgId={ctx.orgId}
           live={copilotLive()}
@@ -209,9 +193,7 @@ export default async function SessionsPage({
 }
 
 function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
-  const primaryAttention = brief.needsAttention[0] ?? "No urgent attention items.";
-  const primaryApproval = brief.readyForApproval[0] ?? "No approval gates are currently waiting.";
-  const primaryBlocker = brief.blocked[0] ?? "No blocked workflows detected.";
+  const primaryAttention = brief.needsAttention[0] ?? "You're caught up — nothing needs attention.";
   const primaryNextAction = brief.nextActions[0] ?? "Ask Earn what to move forward next.";
 
   return (
@@ -231,7 +213,7 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
                 {primaryAttention}
               </h2>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-fg-secondary">
-                {primaryApproval} {primaryBlocker}
+                <span className="font-medium text-fg-primary">Next:</span> {primaryNextAction}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -240,13 +222,6 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
                 Focus composer
               </a>
             </div>
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-4">
-            <CompactSignal title="Approvals" value={brief.readyForApproval[0]} tone="gate" />
-            <CompactSignal title="Blocked" value={brief.blocked[0]} tone="risk" />
-            <CompactSignal title="Automation" value={brief.canAutomate[0]} tone="auto" />
-            <CompactSignal title="Next action" value={primaryNextAction} tone="warn" />
           </div>
 
           <details className="group rounded-xl border border-line/70 bg-surface-0/70 px-3 py-2">
@@ -304,33 +279,6 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
         </div>
       </div>
     </section>
-  );
-}
-
-function CompactSignal({
-  title,
-  value,
-  tone,
-}: {
-  title: string;
-  value: string | undefined;
-  tone: "warn" | "gate" | "risk" | "auto";
-}) {
-  const toneClass = {
-    warn: "border-amber-500/30 bg-amber-500/8 text-amber-300",
-    gate: "border-gold-500/30 bg-gold-500/8 text-gold-300",
-    risk: "border-status-danger/30 bg-status-danger/8 text-status-danger",
-    auto: "border-emerald-500/30 bg-emerald-500/8 text-emerald-300",
-  }[tone];
-  return (
-    <div className="rounded-xl border border-line bg-surface-0/80 p-3">
-      <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${toneClass}`}>
-        {title}
-      </span>
-      <p className="mt-2 line-clamp-2 text-xs leading-snug text-fg-secondary">
-        {value ?? "No signal."}
-      </p>
-    </div>
   );
 }
 
