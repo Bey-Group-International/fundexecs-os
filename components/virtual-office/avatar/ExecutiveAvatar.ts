@@ -390,6 +390,9 @@ export class ExecutiveAvatar {
     const g = this.body;
     g.clear();
 
+    // Earn renders as the gold-coin mascot — its own full pose set.
+    if (this.spec.coin) { this._redrawCoin(g, step); return; }
+
     if (this.seated) {
       if (this.facing === "up") this._drawSeatedBack(g, this.spec);
       else this._drawSeated(g, this.spec);
@@ -948,6 +951,225 @@ export class ExecutiveAvatar {
       default:
         break;
     }
+  }
+
+  // ── Earn — the gold-coin mascot ──────────────────────────────────────────────
+  //
+  // A round coin body with a friendly face, stubby dark arms tipped with white
+  // gloves, and little white shoes — inspired by a classic platformer-coin
+  // mascot. It reuses the same facing / walk-cycle / work-gesture vocabulary as
+  // the humanized figures so every office state (walking, seated, typing,
+  // talking) just works.
+
+  private static readonly COIN_LIMB = 0x15120b; // near-black arms/legs
+  private static readonly COIN_GLOVE = 0xf4f0e8; // white gloves/shoes
+  // Vivid coin palette — a bright saturated gold with a deep amber rim, layered
+  // so the disc reads with real top-lit volume (not a flat averaged gradient).
+  private static readonly COIN_RIM = 0xa96e12;
+  private static readonly COIN_BASE = 0xf2c12a;
+  private static readonly COIN_SHADE = 0xcf941c;
+  private static readonly COIN_HI = 0xf9d24e;
+  private static readonly COIN_SPEC = 0xfff0b4;
+  private static readonly COIN_RING = 0xc98a18;
+
+  /**
+   * The coin disc with real volume: deep-amber rim, a solid bright-gold base,
+   * a lower shadow band and an upper highlight, a specular glint, and (for
+   * head-on views) a milled inner ring. Works for circles (front/seated) and
+   * narrowed ellipses (3/4 profile).
+   */
+  private _coinBody(g: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, ry: number, ring: boolean) {
+    g.fillStyle(ExecutiveAvatar.COIN_RIM, 1);
+    g.fillEllipse(cx, cy, rx * 2 + 2.6, ry * 2 + 2.6);
+    g.fillStyle(ExecutiveAvatar.COIN_BASE, 1);
+    g.fillEllipse(cx, cy, rx * 2, ry * 2);
+    g.fillStyle(ExecutiveAvatar.COIN_SHADE, 0.55);
+    g.fillEllipse(cx, cy + ry * 0.52, rx * 1.5, ry * 0.9); // lower shadow band
+    g.fillStyle(ExecutiveAvatar.COIN_HI, 0.9);
+    g.fillEllipse(cx, cy - ry * 0.4, rx * 1.36, ry * 0.78); // upper highlight
+    g.fillStyle(ExecutiveAvatar.COIN_SPEC, 0.75);
+    g.fillEllipse(cx - rx * 0.42, cy - ry * 0.5, rx * 0.5, ry * 0.32); // glint
+    if (ring) {
+      g.lineStyle(1.2, ExecutiveAvatar.COIN_RING, 0.7);
+      g.strokeEllipse(cx, cy, rx * 2 - 4.6, ry * 2 - 4.6);
+    }
+  }
+
+  private _redrawCoin(g: Phaser.GameObjects.Graphics, step: number) {
+    if (this.seated) {
+      if (this.facing === "up") this._drawCoinSeatedBack(g);
+      else this._drawCoinSeated(g);
+      return;
+    }
+    const swing = step === -1 ? 0 : [3, 0, -3, 0][step];
+    const arm = this._armMode();
+    const workStep = this._gestureRate() > 0 ? Math.floor(this.workPhase) % 2 : -1;
+
+    if (this.facing === "up") this._drawCoinBack(g, swing);
+    else if (this.facing === "left") this._drawCoinProfile(g, swing, -1);
+    else if (this.facing === "right") this._drawCoinProfile(g, swing, 1);
+    else this._drawCoinFront(g, swing, arm, workStep);
+
+    // The command-signal prop still reads while Earn is actively working.
+    if (this._showProp() && this.facing !== "up") this._drawProp(g, this.spec);
+  }
+
+  /** Coin face — eyes (blink), a smile, or an open talking mouth. `dx` shifts for profiles. */
+  private _drawCoinFace(g: Phaser.GameObjects.Graphics, cx: number, cy: number, dx: number) {
+    const ex = 3.2;
+    const eyeY = cy - 1.4;
+    if (this.eyesClosed) {
+      g.fillStyle(0x2a2018, 0.9);
+      g.fillRect(cx - ex - 1.1 + dx, eyeY, 2.3, 0.8);
+      g.fillRect(cx + ex - 1.1 + dx, eyeY, 2.3, 0.8);
+    } else {
+      g.fillStyle(0x241a12, 1);
+      g.fillEllipse(cx - ex + dx, eyeY, 2.5, 3.2);
+      g.fillEllipse(cx + ex + dx, eyeY, 2.5, 3.2);
+      g.fillStyle(0xf7f3ea, 0.9);
+      g.fillCircle(cx - ex - 0.5 + dx, eyeY - 0.9, 0.7);
+      g.fillCircle(cx + ex - 0.5 + dx, eyeY - 0.9, 0.7);
+    }
+    // Talking: an open, happy mouth with a tongue. Otherwise a simple smile.
+    if (this.animState === "presenting" && !this.eyesClosed) {
+      g.fillStyle(0x3a220e, 1);
+      g.fillEllipse(cx + dx * 0.6, cy + 2.6, 4.4, 3);
+      g.fillStyle(0xe4573c, 1);
+      g.fillEllipse(cx + dx * 0.6, cy + 3.5, 2.6, 1.4);
+    } else {
+      g.lineStyle(1.5, 0x4a2f14, 1);
+      g.beginPath();
+      g.arc(cx + dx * 0.6, cy + 1.9, 3.4, 0.15 * Math.PI, 0.85 * Math.PI, false);
+      g.strokePath();
+    }
+  }
+
+  /** Two little legs + white shoes, with the walk-cycle lift. */
+  private _drawCoinLegs(g: Phaser.GameObjects.Graphics, swing: number) {
+    const lL = Math.max(0, swing) * 0.6;
+    const lR = Math.max(0, -swing) * 0.6;
+    g.fillStyle(ExecutiveAvatar.COIN_LIMB, 1);
+    g.fillRoundedRect(-4.6, 3 - lL, 3.1, 9, 1.4);
+    g.fillRoundedRect(1.5, 3 - lR, 3.1, 9, 1.4);
+    g.fillStyle(ExecutiveAvatar.COIN_GLOVE, 1);
+    g.fillEllipse(-3.0, 12.6 - lL, 4.6, 2.7);
+    g.fillEllipse(3.0, 12.6 - lR, 4.6, 2.7);
+    g.fillStyle(0xcbc6b8, 1);
+    g.fillEllipse(-3.0, 13.4 - lL, 3.4, 1.2);
+    g.fillEllipse(3.0, 13.4 - lR, 3.4, 1.2);
+  }
+
+  /** Front-facing arms/gloves, posed by the work mode. */
+  private _drawCoinArms(g: Phaser.GameObjects.Graphics, swing: number, arm: ArmMode, workStep: number) {
+    const A = ExecutiveAvatar.COIN_LIMB;
+    const W = ExecutiveAvatar.COIN_GLOVE;
+    if (arm === "type") {
+      const kb = workStep === 1 ? 0.9 : 0;
+      g.fillStyle(A, 1);
+      g.fillRoundedRect(-9.6, -3, 3, 7, 1.4);
+      g.fillRoundedRect(6.6, -3, 3, 7, 1.4);
+      g.fillStyle(W, 1);
+      g.fillCircle(-7.2, 4.6 + kb, 2.2);
+      g.fillCircle(7.2, 4.6 + (0.9 - kb), 2.2);
+      return;
+    }
+    if (arm === "present") {
+      const ph = workStep === 1 ? -1.6 : 0;
+      g.fillStyle(A, 1);
+      g.fillRoundedRect(-12.6, -10 + ph, 3, 7, 1.4);
+      g.fillRoundedRect(9.6, -5, 3, 7, 1.4);
+      g.fillStyle(W, 1);
+      g.fillCircle(-12.2, -11 + ph, 2.3);
+      g.fillCircle(11.4, 1.6, 2.2);
+      return;
+    }
+    if (arm === "review") {
+      const rb = workStep === 1 ? 0.8 : 0;
+      g.fillStyle(A, 1);
+      g.fillRoundedRect(-9, -4, 3, 6, 1.4);
+      g.fillRoundedRect(6, -4, 3, 6, 1.4);
+      g.fillStyle(W, 1);
+      g.fillCircle(-4.6, 1 + rb, 2.1);
+      g.fillCircle(4.6, 1 + rb, 2.1);
+      return;
+    }
+    // Walk / idle — gloves at the sides, swinging opposite the legs.
+    g.fillStyle(A, 1);
+    g.fillRoundedRect(-12, -7 + swing * 0.4, 3, 7, 1.4);
+    g.fillRoundedRect(9, -7 - swing * 0.4, 3, 7, 1.4);
+    g.fillStyle(W, 1);
+    g.fillCircle(-11.4, -0.4 + swing * 0.5, 2.3);
+    g.fillCircle(11.4, -0.4 - swing * 0.5, 2.3);
+  }
+
+  private _drawCoinFront(g: Phaser.GameObjects.Graphics, swing: number, arm: ArmMode, workStep: number) {
+    this._drawCoinLegs(g, swing);
+    this._coinBody(g, 0, -7, 11, 11, true);
+    this._drawCoinFace(g, 0, -8, 0);
+    this._drawCoinArms(g, swing, arm, workStep);
+  }
+
+  /** Back view (facing up) — a plain gold disc, no face. */
+  private _drawCoinBack(g: Phaser.GameObjects.Graphics, swing: number) {
+    this._drawCoinLegs(g, swing);
+    // Arms first so the gloves peek at the disc's sides.
+    this._drawCoinArms(g, swing, "idle", -1);
+    this._coinBody(g, 0, -7, 11, 11, true);
+    g.fillStyle(ExecutiveAvatar.COIN_SPEC, 0.28);
+    g.fillEllipse(-2.6, -7, 3.4, 15); // vertical shine band
+  }
+
+  /** Profile (facing left dir=-1 / right dir=+1) — coin at a 3/4 turn with a milled edge. */
+  private _drawCoinProfile(g: Phaser.GameObjects.Graphics, swing: number, dir: number) {
+    // Legs.
+    g.fillStyle(ExecutiveAvatar.COIN_LIMB, 1);
+    g.fillRoundedRect(-1.6 + dir * swing * 0.6, 3, 3, 9, 1.4);
+    g.fillRoundedRect(-1.6 - dir * swing * 0.6, 3, 3, 9, 1.4);
+    g.fillStyle(ExecutiveAvatar.COIN_GLOVE, 1);
+    g.fillEllipse(dir * (2.6 + swing * 0.4), 12.6, 5, 2.7);
+    g.fillEllipse(-dir * (1 + swing * 0.4), 12.6, 5, 2.7);
+
+    const cx = -dir * 1.2, cy = -7;
+    // Coin thickness (edge) behind, offset to the trailing side, with milled ridges.
+    g.fillStyle(this._shade(ExecutiveAvatar.COIN_RIM, 0.86), 1);
+    g.fillEllipse(cx - dir * 2.4, cy, 13, 22);
+    g.lineStyle(0.8, this._shade(ExecutiveAvatar.COIN_RIM, 1.15), 0.9);
+    for (let i = -3; i <= 3; i++) {
+      const yy = cy + i * 2.7;
+      g.beginPath();
+      g.moveTo(cx - dir * 5.5, yy);
+      g.lineTo(cx - dir * 8, yy);
+      g.strokePath();
+    }
+    // Coin face (angled ellipse), top-lit volume.
+    this._coinBody(g, cx, cy, 8, 11, false);
+    // 3/4 face, shifted toward the facing direction.
+    this._drawCoinFace(g, cx + dir * 1.4, cy - 1, dir * 0.8);
+    // Near arm + glove.
+    g.fillStyle(ExecutiveAvatar.COIN_LIMB, 1);
+    g.fillRoundedRect(cx + dir * 3.4 - 1.5, cy + 1 + swing * 0.3, 3, 6, 1.4);
+    g.fillStyle(ExecutiveAvatar.COIN_GLOVE, 1);
+    g.fillCircle(cx + dir * 5.2, cy + 6.5 + swing * 0.3, 2.2);
+  }
+
+  /** Seated (facing the viewer) — coin sits low, gloves resting toward the desk. */
+  private _drawCoinSeated(g: Phaser.GameObjects.Graphics) {
+    g.fillStyle(ExecutiveAvatar.COIN_LIMB, 1);
+    g.fillRoundedRect(-9.6, 1, 3, 6, 1.4);
+    g.fillRoundedRect(6.6, 1, 3, 6, 1.4);
+    g.fillStyle(ExecutiveAvatar.COIN_GLOVE, 1);
+    g.fillCircle(-6.6, 6.6, 2.1);
+    g.fillCircle(6.6, 6.6, 2.1);
+    this._coinBody(g, 0, -4, 10.5, 10.5, true);
+    this._drawCoinFace(g, 0, -5, 0);
+  }
+
+  /** Seated from behind (facing up) — a plain disc, arms at the sides. */
+  private _drawCoinSeatedBack(g: Phaser.GameObjects.Graphics) {
+    g.fillStyle(ExecutiveAvatar.COIN_LIMB, 1);
+    g.fillRoundedRect(-10, -2, 3, 7, 1.4);
+    g.fillRoundedRect(7, -2, 3, 7, 1.4);
+    this._coinBody(g, 0, -4, 10.5, 10.5, true);
   }
 
   /** Multiply an 0xRRGGBB color's brightness by f. */
