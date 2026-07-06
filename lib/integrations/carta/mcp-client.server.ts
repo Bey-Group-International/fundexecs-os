@@ -17,6 +17,7 @@
 // Everything else here is generic MCP plumbing.
 
 import { getOrgSecret } from "@/lib/org-secrets";
+import { getCartaAccessToken } from "./oauth.server";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -73,7 +74,13 @@ export async function cartaMcpConfigForOrg(
   const url = overrides.url ?? process.env[CARTA_MCP_URL_ENV];
   if (!url) return null;
 
+  // Token precedence: explicit override → durable OAuth client-credentials mint
+  // (the primary path for the autonomous sweep) → a manually-pasted MCP token
+  // (vault, then env) as a quick-demo fallback.
   let token = overrides.token;
+  if (!token) {
+    token = (await getCartaAccessToken(orgId)) ?? undefined;
+  }
   if (!token && orgId) {
     try {
       token = (await getOrgSecret(orgId, CARTA_MCP_TOKEN_SECRET)) ?? undefined;

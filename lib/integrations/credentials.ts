@@ -35,12 +35,16 @@ export const CHANNEL_SECRET_KEYS: Record<string, readonly string[]> = {
     "CALENDLY_WEBHOOK_SECRET",
   ],
   docusign: ["DOCUSIGN_ACCESS_TOKEN", "DOCUSIGN_INTEGRATION_KEY"],
-  // Carta (PMI intelligence source): a per-org access token for Carta's MCP
-  // endpoint. Presence of this token (plus the deploy-level CARTA_MCP_URL) flips
-  // the proactive layer's Carta source from its modeled track_record fallback to
-  // live fund-performance benchmarks. Registering it here makes the Settings →
-  // Integrations vault field render automatically and lets the writer store it.
-  carta: ["CARTA_MCP_TOKEN"],
+  // Carta (PMI intelligence source). The durable, autonomous-friendly path is
+  // the OAuth 2.0 client-credentials grant against the firm's own Carta account:
+  // store CARTA_CLIENT_ID + CARTA_CLIENT_SECRET here (plus deploy-level
+  // CARTA_TOKEN_URL + CARTA_MCP_URL) and the app mints access tokens on demand.
+  // CARTA_MCP_TOKEN is an optional manually-pasted token for a quick demo (it is
+  // short-lived, so it's not suitable for the background sweep). Any of these
+  // flips the Carta source from its modeled track_record fallback to live
+  // fund-performance benchmarks. Registering them here renders the Settings →
+  // Integrations vault fields automatically.
+  carta: ["CARTA_CLIENT_ID", "CARTA_CLIENT_SECRET", "CARTA_MCP_TOKEN"],
 };
 
 /** Every key any channel can resolve — the allow-list for the settings writer. */
