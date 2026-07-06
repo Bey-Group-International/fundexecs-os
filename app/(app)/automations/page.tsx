@@ -113,6 +113,13 @@ export default async function AutomationsPage() {
                       {a.last_run_status ? ` · ${a.last_run_status}` : ""}
                     </p>
 
+                    <Link
+                      href={`/automations/${a.id}`}
+                      className="mt-2 inline-flex font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+                    >
+                      Open canvas →
+                    </Link>
+
                     {/* Edit in place — name, instruction, and unattended autonomy. */}
                     <details className="group mt-2">
                       <summary className="inline-flex cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary">
