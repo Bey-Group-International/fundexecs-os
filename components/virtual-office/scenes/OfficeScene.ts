@@ -246,6 +246,11 @@ export class OfficeScene extends Phaser.Scene {
   private approvalGateMarker: Phaser.GameObjects.Container | null = null;
   /** Throttle counter for the task-handoff motion trail. */
   private _handoffTrailTick = 0;
+  // ── Collaboration links — a "shared-work web" drawn between executives that
+  // are collaborating in the same room, converging on the table they share.
+  private collabLinks!: Phaser.GameObjects.Graphics;
+  private collabAccumMs = 0;
+  private collabPulse = 0;
   // ── Desk seating ──
   /** All desk seats on the floor. */
   private seats: SeatAnchor[] = [];
@@ -366,6 +371,9 @@ export class OfficeScene extends Phaser.Scene {
     // invisible physics walls; furniture y-sorts with avatars for occlusion.
     this.envWalls = createWallVisuals(this);
     this.furniture = createFurniture(this);
+    // Collaboration links sit above the room overlays but below the avatar band,
+    // so the shared-work web reads as being on the floor between the figures.
+    this.collabLinks = this.add.graphics().setDepth(6);
     // Desk seats (must exist before agents spawn so they can take a seat).
     this.seats = officeSeats();
     this.freeSeats = new Set(this.seats);
@@ -476,6 +484,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateRemoteAvatars();
     this._updateAmbient(delta);
     this._updateNpcAvatars(delta);
+    this._updateCollaborationLinks(delta);
     this._updateNpcProximity(delta);
     this._updateSpatialAudio(delta);
     this._updateRoster(delta);
@@ -517,6 +526,7 @@ export class OfficeScene extends Phaser.Scene {
     for (const [, s] of this.npcAvatars) s.avatar.destroy();
     for (const [, s] of this.remotePlayers) s.avatar.destroy();
     // Tear down the 2.5D environment (walls + furniture graphics).
+    this.collabLinks?.destroy();
     this.envWalls?.destroy();
     for (const piece of this.furniture) piece.gfx.destroy();
     this.furniture = [];
@@ -1441,6 +1451,55 @@ export class OfficeScene extends Phaser.Scene {
       .setFillStyle(0xc9a84c, 0.06)
       .setDepth(5)
       .setVisible(false);
+  }
+
+  /**
+   * Draw the "shared-work web": when two or more executives are collaborating
+   * in the same room, soft gold links converge from each figure onto the table
+   * they share, with a gently pulsing hub. Reuses the program `collaborating`
+   * state (set by joinMeeting / workflow routing) — purely a scene visual, so
+   * a huddle reads at a glance as a group working together. Throttled + redrawn.
+   */
+  private _updateCollaborationLinks(delta: number) {
+    this.collabAccumMs += delta;
+    if (this.collabAccumMs < 120) return;
+    this.collabAccumMs = 0;
+
+    const g = this.collabLinks;
+    g.clear();
+
+    // Group collaborating executives by the room they're standing in.
+    const groups = new Map<string, Array<{ x: number; y: number }>>();
+    for (const [, s] of this.npcAvatars) {
+      if (s.programState !== "collaborating") continue;
+      const col = Math.floor(s.sprite.x / ROOM_W);
+      const row = Math.floor(s.sprite.y / ROOM_H);
+      const key = `${col}:${row}`;
+      const arr = groups.get(key) ?? [];
+      arr.push({ x: s.sprite.x, y: s.sprite.y });
+      groups.set(key, arr);
+    }
+    if (groups.size === 0) return;
+
+    this.collabPulse += delta * 0.004;
+    const wave = this.reducedMotion ? 1 : 0.7 + Math.sin(this.collabPulse) * 0.3;
+
+    for (const [key, pts] of groups) {
+      if (pts.length < 2) continue; // a lone agent isn't collaborating
+      const [col, row] = key.split(":").map(Number);
+      const cx = col * ROOM_W + ROOM_W / 2;
+      const cy = row * ROOM_H + ROOM_H / 2 + 8; // the conference table hub
+
+      g.lineStyle(1.2, 0xc9a84c, 0.26 * wave);
+      for (const p of pts) {
+        g.lineBetween(p.x, p.y - 6, cx, cy);
+      }
+      // Pulsing shared-work node at the hub.
+      g.fillStyle(0xc9a84c, 0.5 * wave);
+      g.fillCircle(cx, cy, 3 + (this.reducedMotion ? 0 : wave * 1.6));
+      g.lineStyle(1, 0xc9a84c, 0.35 * wave);
+      g.strokeCircle(cx, cy, 7 + (this.reducedMotion ? 0 : wave * 2));
+    }
   }
 
   /**
