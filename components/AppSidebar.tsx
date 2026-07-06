@@ -416,15 +416,16 @@ function SidebarPanel({
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-500/30 to-transparent"
         />
-        <Logo href="/workspace" variant="coin-wordmark" />
+        <Logo href="/command-center" variant="coin-wordmark" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
         {/* Top-level destinations */}
         <div className="flex flex-col gap-0.5">
-          {/* Command Center — direct rail access to the AI Executive Command
-              Floor (the spatial office world where Earn orchestrates the
-              executive team). Pinned first so it's a one-click destination. */}
+          {/* Command Center — the operator's hub and the app's home surface, so
+              it leads: direct rail access to the AI Executive Command Floor
+              (the spatial office world where Earn orchestrates the executive
+              team). Pinned first as a one-click destination. */}
           <Link
             href="/command-center"
             className={`${navHrefActive(pathname, "/command-center") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}

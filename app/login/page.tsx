@@ -11,7 +11,7 @@ export default async function LoginPage(
 ) {
   const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
-  if (ctx) redirect(ctx.orgId ? "/workspace" : "/onboarding");
+  if (ctx) redirect(ctx.orgId ? "/command-center" : "/onboarding");
 
   const isSignup = searchParams.mode === "signup";
 

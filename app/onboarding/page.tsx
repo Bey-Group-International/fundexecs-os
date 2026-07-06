@@ -11,7 +11,7 @@ export default async function OnboardingPage(
   const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
-  if (ctx.orgId) redirect("/workspace");
+  if (ctx.orgId) redirect("/command-center");
 
   // Fetch principal record to pre-fill the user profile step.
   const { createServerClient } = await import("@/lib/supabase/server");
