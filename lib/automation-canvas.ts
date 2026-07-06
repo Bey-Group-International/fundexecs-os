@@ -1,49 +1,22 @@
 import { createServerClient } from "@/lib/supabase/server";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Types and client-safe constants live in a separate, server-free module so
+// they can be imported by the client-side WorkflowCanvas component without
+// pulling next/headers (via createServerClient) into the browser bundle. We
+// re-export them here so existing server-side importers of this module are
+// unaffected.
+export type {
+  CanvasNode,
+  CanvasEdge,
+  CanvasLayout,
+  WorkflowTemplate,
+} from "@/lib/automation-canvas-types";
+export { DEFAULT_NODE_TYPES } from "@/lib/automation-canvas-types";
 
-export type CanvasNode = {
-  id: string;
-  type: "trigger" | "condition" | "action" | "wait";
-  position: { x: number; y: number };
-  data: { label: string; config: Record<string, unknown> };
-};
-
-export type CanvasEdge = {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-};
-
-export type CanvasLayout = {
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
-};
-
-export type WorkflowTemplate = {
-  id: string;
-  org_id: string;
-  name: string;
-  description?: string;
-  canvas_json: CanvasLayout;
-  is_global: boolean;
-  created_by?: string;
-  created_at: string;
-};
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_NODE_TYPES: Record<CanvasNode["type"], Record<string, unknown>> = {
-  trigger: { schedule: null, event: null, webhook: null },
-  condition: { field: "", operator: "eq", value: "" },
-  action: { action_type: "run_agent", config: {} },
-  wait: { delay_days: 1 },
-};
+import type {
+  CanvasLayout,
+  WorkflowTemplate,
+} from "@/lib/automation-canvas-types";
 
 // ---------------------------------------------------------------------------
 // Canvas persistence

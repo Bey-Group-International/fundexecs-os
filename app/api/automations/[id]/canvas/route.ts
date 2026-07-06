@@ -30,7 +30,16 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 
   let layout: CanvasLayout;
   try {
-    layout = (await req.json()) as CanvasLayout;
+    const body = (await req.json()) as unknown;
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !Array.isArray((body as { nodes?: unknown }).nodes) ||
+      !Array.isArray((body as { edges?: unknown }).edges)
+    ) {
+      return NextResponse.json({ error: "Invalid canvas layout" }, { status: 400 });
+    }
+    layout = body as CanvasLayout;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -38,10 +47,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   try {
     await saveAutomationCanvas(id, layout);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Save failed" },
-      { status: 500 },
-    );
+    // Log the underlying error server-side but return a generic message so we
+    // don't leak Supabase/internal details to the client.
+    console.error("Failed to save automation canvas", err);
+    return NextResponse.json({ error: "Save failed" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

@@ -6,7 +6,7 @@ import {
   CanvasLayout,
   CanvasNode,
   DEFAULT_NODE_TYPES,
-} from "@/lib/automation-canvas";
+} from "@/lib/automation-canvas-types";
 
 // ---------------------------------------------------------------------------
 // Types
