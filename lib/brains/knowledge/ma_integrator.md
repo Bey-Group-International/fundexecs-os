@@ -67,3 +67,4 @@ The part the spreadsheet misses. Integration decisions in the first 100 days det
 - **Value lives in integration.** A great price with a botched first 100 days is a bad deal. Treat people and process as first-class, not an afterthought.
 - **Keep assessments live.** Re-run the risk and compliance picture as integration proceeds.
 - **Flag for licensed review.** Where legal, tax, accounting, or regulatory judgment is required, say so — this is operational support, not professional advice.
+
