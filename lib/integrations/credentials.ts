@@ -44,7 +44,10 @@ export const CHANNEL_SECRET_KEYS: Record<string, readonly string[]> = {
   // flips the Carta source from its modeled track_record fallback to live
   // fund-performance benchmarks. Registering them here renders the Settings →
   // Integrations vault fields automatically.
-  carta: ["CARTA_CLIENT_ID", "CARTA_CLIENT_SECRET", "CARTA_MCP_TOKEN"],
+  // CARTA_REFRESH_TOKEN is written by the interactive OAuth callback (Connect
+  // Carta), not pasted; registering it lets the panel show connection status and
+  // an admin rotate/disconnect it.
+  carta: ["CARTA_CLIENT_ID", "CARTA_CLIENT_SECRET", "CARTA_MCP_TOKEN", "CARTA_REFRESH_TOKEN"],
 };
 
 /** Every key any channel can resolve — the allow-list for the settings writer. */

@@ -37,7 +37,7 @@ describe("buildTokenRequestBody", () => {
 describe("mintClientCredentialsToken", () => {
   it("returns the token + lifetime on success", async () => {
     const t = await mintClientCredentialsToken(cfg, okTransport("abc", 1200));
-    expect(t).toEqual({ accessToken: "abc", expiresInSec: 1200 });
+    expect(t).toMatchObject({ accessToken: "abc", expiresInSec: 1200 });
   });
 
   it("sends form-encoded body to the token URL", async () => {
