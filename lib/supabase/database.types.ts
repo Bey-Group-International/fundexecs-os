@@ -1697,6 +1697,15 @@ export type StripeCheckout = {
   fulfilled_at: string | null;
 };
 
+// Idempotency ledger for Stripe webhook events (migration 20260706130000): a row
+// keyed by the Stripe event id means that event was already applied, so a
+// redelivery is skipped. Service-role only.
+export type ProcessedStripeEvent = {
+  id: string;
+  type: string;
+  created_at: string;
+};
+
 // A payment-link invoice (migration 20260706120000): the merchant org drafts
 // line items and shares the public /pay/<token> link; anyone pays it via Stripe
 // Embedded Checkout and the row flips to `paid` on fulfillment. See lib/invoices
@@ -2508,6 +2517,7 @@ export type Database = {
       credit_gifts: TableShape<CreditGift>;
       stripe_checkouts: TableShape<StripeCheckout>;
       payment_invoices: TableShape<PaymentInvoice>;
+      processed_stripe_events: TableShape<ProcessedStripeEvent>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;
       webhook_endpoints: TableShape<WebhookEndpoint>;

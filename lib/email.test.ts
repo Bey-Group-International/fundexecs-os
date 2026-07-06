@@ -2,7 +2,7 @@
 // The unified sender's per-org credential preference: each provider credential
 // prefers the caller's value (resolved from the org vault by the dispatch
 // layer) over the deploy-wide env var, so orgs send under their own identity.
-import { sendEmail } from "./email";
+import { sendEmail, invoiceReceiptEmail } from "./email";
 
 const ORIGINAL_ENV = process.env;
 const fetchMock = jest.fn();
@@ -67,5 +67,36 @@ describe("sendEmail per-org credential preference", () => {
     expect(result.ok).toBe(true);
     expect(result.channel).toBe("resend");
     consoleWarn.mockRestore();
+  });
+});
+
+describe("invoiceReceiptEmail", () => {
+  const RECEIPT_ARGS = {
+    merchantName: "Acme Capital",
+    invoiceTitle: "Advisory retainer",
+    invoiceNumber: "INV-0007",
+    amountFormatted: "$25.00",
+    paidOn: "Jul 6, 2026",
+    lineItems: [
+      { description: "Strategy call", quantity: 1, unitFormatted: "$25.00", subtotalFormatted: "$25.00" },
+    ],
+  };
+
+  it("puts the invoice number and merchant name in the subject", () => {
+    const { subject } = invoiceReceiptEmail(RECEIPT_ARGS);
+    expect(subject).toContain("INV-0007");
+    expect(subject).toContain("Acme Capital");
+  });
+
+  it("renders the amount and line-item description in the html", () => {
+    const { html } = invoiceReceiptEmail(RECEIPT_ARGS);
+    expect(html).toContain("$25.00");
+    expect(html).toContain("Strategy call");
+  });
+
+  it("HTML-escapes dangerous interpolated values", () => {
+    const { html } = invoiceReceiptEmail({ ...RECEIPT_ARGS, merchantName: "<script>" });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });
