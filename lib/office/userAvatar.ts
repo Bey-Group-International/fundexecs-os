@@ -22,7 +22,7 @@
  * JSON `user_metadata` and HTML swatch inputs.
  */
 
-import type { AvatarSpec } from "@/components/virtual-office/avatar/avatarPalette";
+import type { AvatarSpec, AvatarBuild, AvatarHairStyle } from "@/components/virtual-office/avatar/avatarPalette";
 
 /**
  * A human user's chosen appearance. Small and JSON-serializable so it can live
@@ -39,6 +39,20 @@ export type UserAvatar = {
   accent: string;
   /** Private-market operator role, shown under the name. */
   roleLabel: string;
+  /**
+   * Optional explicit appearance overrides. When absent, skin/hair derive
+   * deterministically from the display name and hairStyle/build follow the
+   * {@link UserAvatar.genderStyle} preset — so avatars saved before these
+   * fields existed still render exactly as before.
+   */
+  /** Explicit skin tone (`#rrggbb`); falls back to a name-derived tone. */
+  skin?: string;
+  /** Explicit hair color (`#rrggbb`); falls back to a name-derived tone. */
+  hair?: string;
+  /** Explicit hair silhouette; falls back to the presentation preset. */
+  hairStyle?: AvatarHairStyle;
+  /** Explicit body build; falls back to the presentation preset. */
+  build?: AvatarBuild;
 };
 
 /** One executive wardrobe: a coordinated blazer / shirt / trouser palette. */
@@ -82,6 +96,31 @@ export const AVATAR_ACCENTS: string[] = [
   "#9aa4b2", // silver
 ];
 
+/**
+ * Selectable skin tones and hair colors, as `#rrggbb` strings so they
+ * round-trip through JSON `user_metadata`. These mirror the module-local
+ * SKIN / HAIR spreads (same values, same order) used for name-derived
+ * fallbacks, so a chosen swatch and the auto-assigned default look identical.
+ */
+export const SKIN_TONES: string[] = ["#f1c9a5", "#e0a878", "#c68642", "#8d5524", "#ffdbb0", "#d9a066"];
+export const HAIR_COLORS: string[] = ["#2b2320", "#4a3728", "#6b4a2f", "#1a1a1a", "#8a8a8a", "#3a2a1a"];
+
+/** Selectable hair silhouettes and body builds the renderer supports. */
+export const HAIR_STYLES: AvatarHairStyle[] = ["short", "textured", "tied", "bald"];
+export const BUILDS: AvatarBuild[] = ["slim", "regular", "broad"];
+
+/**
+ * The hair-style + build a presentation preset seeds. The picker applies these
+ * when the user switches Male/Female/Neutral, but the user can then override
+ * either independently, and the same values are the render-time fallback when a
+ * stored avatar has no explicit `hairStyle` / `build`.
+ */
+export function presentationDefaults(g: UserAvatar["genderStyle"]): { hairStyle: AvatarHairStyle; build: AvatarBuild } {
+  if (g === "female") return { hairStyle: "tied", build: "slim" };
+  if (g === "male") return { hairStyle: "short", build: "broad" };
+  return { hairStyle: "short", build: "regular" };
+}
+
 /** Private-market operator roles a user can present as. */
 export const ROLE_LABELS: string[] = [
   "Managing Partner",
@@ -124,6 +163,30 @@ function hexToInt(hex: string): number {
   return parseInt(hex.replace("#", ""), 16);
 }
 
+/** Format a 0xRRGGBB int as a `#rrggbb` string. */
+function intToHex(n: number): string {
+  return `#${(n & 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+/** True for a `#rrggbb` or `rrggbb` hex string. */
+function isHex(v: unknown): v is string {
+  return typeof v === "string" && /^#?[0-9a-fA-F]{6}$/.test(v);
+}
+
+/**
+ * The effective skin tone hex — the explicit override if set, else the
+ * deterministic name-derived tone. Lets the picker highlight the tone the
+ * figure is actually rendering, whether chosen or auto-assigned.
+ */
+export function effectiveSkin(a: UserAvatar): string {
+  return isHex(a.skin) ? intToHex(hexToInt(a.skin!)) : intToHex(pick(SKIN, a.displayName || "You", 3));
+}
+
+/** The effective hair color hex — explicit override if set, else name-derived. */
+export function effectiveHair(a: UserAvatar): string {
+  return isHex(a.hair) ? intToHex(hexToInt(a.hair!)) : intToHex(pick(HAIR, a.displayName || "You", 7));
+}
+
 /** Look up a wardrobe by id, falling back to the first entry. */
 function wardrobeFor(id: string): Wardrobe {
   return WARDROBES.find((w) => w.id === id) ?? WARDROBES[0];
@@ -149,13 +212,20 @@ export function userAvatarSpec(a: UserAvatar): AvatarSpec {
     ? a.accent
     : DEFAULT_USER_AVATAR.accent;
 
-  const build: AvatarSpec["build"] =
-    a.genderStyle === "female" ? "slim" : a.genderStyle === "male" ? "broad" : "regular";
-  const hairStyle: AvatarSpec["hairStyle"] = a.genderStyle === "female" ? "tied" : "short";
+  // Explicit appearance overrides win; otherwise fall back to the presentation
+  // preset (build / hair style) and the name-derived tones (skin / hair) — so
+  // avatars saved before these controls existed render exactly as before.
+  const preset = presentationDefaults(a.genderStyle);
+  const build: AvatarSpec["build"] = BUILDS.includes(a.build as AvatarBuild) ? a.build : preset.build;
+  const hairStyle: AvatarSpec["hairStyle"] = HAIR_STYLES.includes(a.hairStyle as AvatarHairStyle)
+    ? a.hairStyle
+    : preset.hairStyle;
+  const skin = isHex(a.skin) ? hexToInt(a.skin) : pick(SKIN, a.displayName || "You", 3);
+  const hair = isHex(a.hair) ? hexToInt(a.hair) : pick(HAIR, a.displayName || "You", 7);
 
   return {
-    skin: pick(SKIN, a.displayName || "You", 3),
-    hair: pick(HAIR, a.displayName || "You", 7),
+    skin,
+    hair,
     suit: w.suit,
     shirt: w.shirt,
     accent: hexToInt(accentHex),
@@ -208,5 +278,24 @@ export function parseUserAvatar(raw: unknown): UserAvatar | null {
       ? o.roleLabel
       : DEFAULT_USER_AVATAR.roleLabel;
 
-  return { displayName, genderStyle: o.genderStyle, wardrobe, accent, roleLabel };
+  // Optional appearance overrides — only kept when they name a valid swatch /
+  // enum. Anything unknown is dropped so the render-time fallback applies.
+  const skin = typeof o.skin === "string" && SKIN_TONES.includes(o.skin) ? o.skin : undefined;
+  const hair = typeof o.hair === "string" && HAIR_COLORS.includes(o.hair) ? o.hair : undefined;
+  const hairStyle = HAIR_STYLES.includes(o.hairStyle as AvatarHairStyle)
+    ? (o.hairStyle as AvatarHairStyle)
+    : undefined;
+  const build = BUILDS.includes(o.build as AvatarBuild) ? (o.build as AvatarBuild) : undefined;
+
+  return {
+    displayName,
+    genderStyle: o.genderStyle,
+    wardrobe,
+    accent,
+    roleLabel,
+    ...(skin ? { skin } : {}),
+    ...(hair ? { hair } : {}),
+    ...(hairStyle ? { hairStyle } : {}),
+    ...(build ? { build } : {}),
+  };
 }
