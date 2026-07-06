@@ -77,11 +77,13 @@ const SLASH_COMMANDS: { command: string; label: string; template: string }[] = [
 
 // Empty-state suggestion chips. The short label shows on the chip; clicking it
 // drops the fuller, ready-to-run prompt into the composer.
-const EMPTY_STATE_CHIPS: { label: string; prompt: string }[] = [
-  { label: "LBO model", prompt: "Run an LBO model on the attached CIM" },
-  { label: "LP update", prompt: "Run a quarterly LP update on our current portfolio" },
-  { label: "Source family offices", prompt: "Source family offices near me" },
-  { label: "Review mandate", prompt: "Review the attached materials" },
+// Empty-state suggestion chips. The chip shows the full, ready-to-run prompt
+// and drops that same text into the composer on click.
+const EMPTY_STATE_CHIPS: string[] = [
+  "Run an LBO model on the attached CIM",
+  "Run a quarterly LP update on our current portfolio",
+  "Source family offices near me",
+  "Review the attached materials",
 ];
 
 // An artifact carrying its optional tamper-evidence verdict. The seal is
@@ -1200,15 +1202,15 @@ export default function Copilot({
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {EMPTY_STATE_CHIPS.map((chip) => (
                       <button
-                        key={chip.label}
+                        key={chip}
                         type="button"
                         onClick={() => {
-                          setPrompt(chip.prompt);
+                          setPrompt(chip);
                           inputRef.current?.focus();
                         }}
                         className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary"
                       >
-                        {chip.label}
+                        {chip}
                       </button>
                     ))}
                   </div>
