@@ -527,9 +527,9 @@ export function EnvelopeWizard() {
       throw new Error(msg);
     }
 
-    const data = (await res.json()) as { id?: string };
-    if (!data.id) throw new Error("No envelope ID returned.");
-    router.push(`/envelopes/${data.id}`);
+    const data = (await res.json()) as { envelopeId?: string };
+    if (!data.envelopeId) throw new Error("No envelope ID returned.");
+    router.push(`/envelopes/${data.envelopeId}`);
   }
 
   function handleSaveDraft() {
