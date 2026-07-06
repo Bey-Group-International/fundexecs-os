@@ -35,6 +35,10 @@ export const REFERENCE_DOCS: ReferenceDoc[] = [
       "capital_raiser",
       "investor_relations",
       "rainmaker",
+      "disposition_desk",
+      "lender_network",
+      "deal_scout",
+      "ma_integrator",
     ],
   },
   {

@@ -21,7 +21,7 @@ export const AGENTS: AgentDefinition[] = [
     role: "Ingests deal data, financials, and market comps; produces pro formas and valuations.",
     color: "#22d3ee",
     motionStyle: "precise, analytical",
-    capabilities: ["pro_forma", "valuation", "sensitivity", "comps"],
+    capabilities: ["pro_forma", "valuation", "sensitivity", "comps", "acquisition_scoring"],
   },
   {
     key: "associate",
@@ -30,7 +30,7 @@ export const AGENTS: AgentDefinition[] = [
     role: "Coordinates workflows and task execution across all hubs.",
     color: "#6366f1",
     motionStyle: "coordinated, rhythmic",
-    capabilities: ["orchestration", "routing", "handoff", "task_management"],
+    capabilities: ["orchestration", "routing", "handoff", "task_management", "integration_planning"],
   },
   {
     key: "investor_relations",
@@ -48,7 +48,7 @@ export const AGENTS: AgentDefinition[] = [
     role: "Monitors asset KPIs, budgets, capex, and variance alerts.",
     color: "#22c55e",
     motionStyle: "grounded, operational",
-    capabilities: ["kpis", "budgets", "capex", "variance"],
+    capabilities: ["kpis", "budgets", "capex", "variance", "disposition", "buyer_matching"],
   },
   {
     key: "diligence",
@@ -57,7 +57,7 @@ export const AGENTS: AgentDefinition[] = [
     role: "Parses documents, flags risks, and produces diligence memos.",
     color: "#ef4444",
     motionStyle: "sharp, investigative",
-    capabilities: ["doc_parsing", "risk_flags", "diligence_memo"],
+    capabilities: ["doc_parsing", "risk_flags", "diligence_memo", "integration_risk"],
   },
   {
     key: "fund_admin",
@@ -93,7 +93,7 @@ export const AGENTS: AgentDefinition[] = [
     role: "Secures deal financing and structures the capital stack. Identifies the right lender, equity partner, or structured capital source for each transaction.",
     color: "#14b8a6",
     motionStyle: "strategic, deal-minded",
-    capabilities: ["deal_financing", "capital_stack", "lender_relations", "sponsor_finance"],
+    capabilities: ["deal_financing", "capital_stack", "lender_relations", "sponsor_finance", "lender_sourcing"],
   },
   {
     key: "deal_sourcer",
@@ -102,7 +102,7 @@ export const AGENTS: AgentDefinition[] = [
     role: "Identifies acquisition targets — underperforming, founder-owned, or transitioning businesses. Structures creative financing and positions BGI as the right buyer.",
     color: "#f97316",
     motionStyle: "sharp, acquisitive",
-    capabilities: ["deal_flow", "acquisition_strategy", "seller_outreach", "creative_financing"],
+    capabilities: ["deal_flow", "acquisition_strategy", "seller_outreach", "creative_financing", "deal_discovery"],
   },
   {
     key: "rainmaker",

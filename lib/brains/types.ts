@@ -28,7 +28,11 @@ export type BrainKey =
   | "legal_admin"
   | "event_curator"
   | "capital_raiser"
-  | "investor_relations";
+  | "investor_relations"
+  | "disposition_desk"
+  | "lender_network"
+  | "deal_scout"
+  | "ma_integrator";
 
 // A tool/module a Brain is allowed to reach for. Real adapters (search, CRM,
 // enrichment, vector retrieval) plug in behind this id later.
