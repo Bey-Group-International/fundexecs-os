@@ -17,8 +17,9 @@ const STATUS_COLOR: Record<string, string> = {
 /**
  * Audit-ready activity log. Every command, plan, assignment, room
  * activation, meeting, approval, and completion is recorded with
- * timestamp, actor, room, and risk tier.
- * TODO(supabase): back this with the append-only audit table.
+ * timestamp, actor, room, and risk tier. Mirrored best-effort into the
+ * append-only office_audit_log table via office-actions.ts when a persistence
+ * sink is registered.
  */
 export function OfficeAuditDrawer() {
   const s = useOfficeProgram();

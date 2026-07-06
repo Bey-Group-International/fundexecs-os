@@ -1,4 +1,16 @@
-import { routeTaskToAgents, PROGRAM_AGENTS, PROGRAM_ROOMS, canRoleApprove } from "./officeProgram";
+import {
+  routeTaskToAgents,
+  buildWorkflowRouting,
+  STAGE_TO_OFFICE_INTENT,
+  workflowToRow,
+  auditEventToRow,
+  PROGRAM_AGENTS,
+  PROGRAM_ROOMS,
+  canRoleApprove,
+  type AuditEvent,
+  type OfficeWorkflow,
+} from "./officeProgram";
+import { LIFECYCLE_STAGES } from "@/lib/intelligence";
 import {
   getOfficeProgramState,
   resolveApprovalGate,
@@ -14,7 +26,7 @@ import {
 
 describe("office program task router", () => {
   it("routes data room commands as Tier 2 external-facing across the full floor", () => {
-    const r = routeTaskToAgents("Build investor-ready data room");
+    const r = routeTaskToAgents("Run diligence on the data room");
     expect(r.intent).toBe("data_room_build");
     expect(r.riskTier).toBe("external_facing");
     const agents = r.assignments.map((a) => a.agentId);
@@ -69,6 +81,100 @@ describe("office program task router", () => {
       }
     }
   });
+
+  it("routes IC memo prep to the ic_review workflow", () => {
+    const r = routeTaskToAgents("Prepare the IC memo for the committee");
+    expect(r.intent).toBe("ic_review");
+    expect(r.riskTier).toBe("internal");
+    expect(r.title).toContain("IC Memo");
+  });
+
+  it("uses the shared intelligence taxonomy — every lifecycle stage maps to a buildable office workflow", () => {
+    const agentIds = new Set(PROGRAM_AGENTS.map((a) => a.id));
+    const roomKeys = new Set(PROGRAM_ROOMS.map((r) => r.key));
+    // STAGE_TO_OFFICE_INTENT must be total over the product's lifecycle stages,
+    // and each intent it maps to must build a valid, non-empty workflow.
+    for (const stage of LIFECYCLE_STAGES) {
+      const intent = STAGE_TO_OFFICE_INTENT[stage];
+      expect(intent).toBeDefined();
+      const wf = buildWorkflowRouting(intent);
+      expect(wf.intent).toBe(intent);
+      expect(wf.assignments.length).toBeGreaterThan(0);
+      for (const a of wf.assignments) {
+        expect(agentIds.has(a.agentId)).toBe(true);
+        expect(roomKeys.has(a.roomKey)).toBe(true);
+      }
+    }
+  });
+
+  it("is deterministic — the same command always routes the same way", () => {
+    const a = routeTaskToAgents("Run diligence on the data room");
+    const b = routeTaskToAgents("Run diligence on the data room");
+    expect(a.intent).toBe(b.intent);
+    expect(a.riskTier).toBe(b.riskTier);
+    expect(a.assignments.map((x) => x.agentId)).toEqual(b.assignments.map((x) => x.agentId));
+  });
+});
+
+describe("office program — persistence row mappers", () => {
+  const workflow: OfficeWorkflow = {
+    id: "wf-123",
+    title: "Investor-Ready Data Room Build",
+    commandText: "Run diligence on the data room",
+    intent: "data_room_build",
+    mode: "workflow",
+    stage: "complete",
+    riskTier: "external_facing",
+    assignments: [
+      { agentId: "associate", roomKey: "trading", owns: "Data Room Index", status: "done", progress: 100, done: true },
+      { agentId: "legal", roomKey: "legal", owns: "Document Review", status: "done", progress: 100, done: true },
+    ],
+    activeRooms: ["ceo", "trading", "legal", "reception", "boardroom"],
+    progress: 100,
+    etaLabel: "All assigned agents complete",
+    currentStep: "Workflow complete and archived",
+    nextAction: "None",
+    approvalGate: null,
+    createdAt: 1_700_000_000_000,
+    completedAt: 1_700_000_050_000,
+  };
+
+  it("maps a workflow to its org-scoped persisted row", () => {
+    const row = workflowToRow("org-1", workflow, "complete");
+    expect(row.organization_id).toBe("org-1");
+    expect(row.workflow_key).toBe("wf-123");
+    expect(row.intent).toBe("data_room_build");
+    expect(row.risk_tier).toBe("external_facing");
+    expect(row.assignment_count).toBe(2);
+    expect(row.outcome).toBe("complete");
+    expect(row.active_rooms).toEqual(["ceo", "trading", "legal", "reception", "boardroom"]);
+    expect(row.completed_at).toBe(new Date(1_700_000_050_000).toISOString());
+  });
+
+  it("passes a null outcome and a null completion through unchanged", () => {
+    const row = workflowToRow("org-1", { ...workflow, completedAt: null }, null);
+    expect(row.outcome).toBeNull();
+    expect(row.completed_at).toBeNull();
+  });
+
+  it("maps an audit event to its append-only row", () => {
+    const ev: AuditEvent = {
+      id: "aud-9",
+      ts: 1_700_000_000_000,
+      actor: "Earn",
+      action: "Task classified",
+      room: "Command Center",
+      tier: "external_facing",
+      status: "info",
+    };
+    const row = auditEventToRow("org-2", ev);
+    expect(row.organization_id).toBe("org-2");
+    expect(row.event_key).toBe("aud-9");
+    expect(row.actor).toBe("Earn");
+    expect(row.tier).toBe("external_facing");
+    expect(row.status).toBe("info");
+    expect(row.occurred_at).toBe(new Date(1_700_000_000_000).toISOString());
+  });
 });
 
 describe("office program workflow simulation", () => {
@@ -86,7 +192,7 @@ describe("office program workflow simulation", () => {
     const unsub = sceneBus.on((cmd) => sceneCommands.push(cmd));
 
     setWorkflowMode("workflow");
-    submitOfficeTask("Build investor-ready data room");
+    submitOfficeTask("Run diligence on the data room");
 
     // Earn classifies immediately — office leaves the calm state.
     let s = getOfficeProgramState();

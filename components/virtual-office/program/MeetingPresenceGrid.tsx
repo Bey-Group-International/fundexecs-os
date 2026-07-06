@@ -6,9 +6,15 @@ import { useOfficeProgram } from "./useOfficeProgram";
 const GOLD = "#c9a84c";
 
 /**
- * Institutional video presence grid for the active work session.
- * Cards are mock placeholders today; the layout, labels, and presence
- * states are final so real streams can drop in without redesign.
+ * Presence strip for the active work session.
+ *
+ * This is the AI floor's session roster, not a camera grid: the participants
+ * are the executive agents in the meeting, and each card reflects that agent's
+ * REAL runtime state from the office program store (its live status line and
+ * the room it is working from) plus the local user's own presence. There are no
+ * fabricated MediaStreams here — human peer video is carried separately by the
+ * real WebRTC layer (VideoTileBar, driven by rtc/net) rendered directly below
+ * this strip in the execution floor.
  */
 export function MeetingPresenceGrid() {
   const s = useOfficeProgram();
@@ -27,12 +33,24 @@ export function MeetingPresenceGrid() {
         <p className="text-[8px] text-slate-500">{ROOM_BY_KEY[meeting.roomKey].label} · live session</p>
       </div>
 
-      {/* Local user card */}
-      <PresenceCard name="You" role="Managing Partner" accent={GOLD} isUser />
+      {/* Local user presence */}
+      <PresenceCard name="You" role="Managing Partner" accent={GOLD} isUser status="In session" />
 
       {meeting.participants.map((agentId) => {
         const agent = AGENT_BY_ID[agentId];
-        return <PresenceCard key={agentId} name={agent.name} role={agent.role} accent={agent.accent} />;
+        const runtime = s.agents[agentId];
+        // Real status: whatever the agent is actually doing on the floor right
+        // now (its live status line), falling back to its role while idle.
+        const status = runtime && runtime.state !== "idle" ? runtime.statusLabel : agent.role;
+        return (
+          <PresenceCard
+            key={agentId}
+            name={agent.name}
+            role={agent.role}
+            accent={agent.accent}
+            status={status}
+          />
+        );
       })}
     </div>
   );
@@ -42,11 +60,13 @@ function PresenceCard({
   name,
   role,
   accent,
+  status,
   isUser,
 }: {
   name: string;
   role: string;
   accent: string;
+  status: string;
   isUser?: boolean;
 }) {
   return (
@@ -54,23 +74,21 @@ function PresenceCard({
       className="flex w-32 shrink-0 flex-col overflow-hidden rounded-md border"
       style={{ borderColor: `${accent}44`, background: "rgba(255,255,255,0.02)" }}
     >
-      {/*
-        Future WebRTC integration:
-        Attach the participant MediaStream here.
-          videoElement.srcObject = remoteStream;
-        The placeholder block below is replaced by a <video> element with
-        identical dimensions; name/role/mic chrome stays unchanged.
-      */}
+      {/* Identity block: monogram + live-status caption. Honest presence, not a
+          video feed — AI agents participate over the status channel. */}
       <div
-        className="flex h-14 items-center justify-center"
+        className="flex h-14 items-center gap-2 px-2"
         style={{ background: `linear-gradient(140deg, ${accent}18, rgba(10,8,6,0.9))` }}
       >
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-full border text-[10px] font-semibold"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold"
           style={{ borderColor: `${accent}66`, color: accent }}
         >
           {name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
         </div>
+        <p className="min-w-0 flex-1 truncate text-[8px] leading-tight text-slate-400" title={status}>
+          {status}
+        </p>
       </div>
       <div className="flex items-center justify-between px-1.5 py-1">
         <div className="min-w-0">
@@ -78,9 +96,12 @@ function PresenceCard({
           <p className="truncate text-[7px] text-slate-500">{role}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {/* Mic state: user unmuted, AI agents present via status channel */}
-          <span className="text-[8px]" style={{ color: isUser ? "#22c55e" : "#64748b" }} title={isUser ? "Mic on" : "AI agent — status channel"}>
-            {isUser ? "🎙" : "◉"}
+          <span
+            className="text-[8px]"
+            style={{ color: isUser ? "#22c55e" : "#64748b" }}
+            title={isUser ? "You are present in this session" : "AI agent — present on the status channel"}
+          >
+            {isUser ? "●" : "◉"}
           </span>
           <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#22c55e" }} title="Present" />
         </div>
