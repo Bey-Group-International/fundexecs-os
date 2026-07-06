@@ -169,7 +169,7 @@ function optionalAllowed<T extends readonly string[]>(
 }
 
 function firstHubRedirect(firstHub: Hub | null): string {
-  if (!firstHub) return "/workspace";
+  if (!firstHub) return "/command-center";
   const moduleKey = HUB_BY_KEY[firstHub]?.modules[0]?.key;
-  return moduleKey ? `/${firstHub}/${moduleKey}` : "/workspace";
+  return moduleKey ? `/${firstHub}/${moduleKey}` : "/command-center";
 }

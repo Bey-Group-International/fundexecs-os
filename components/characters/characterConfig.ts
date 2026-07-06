@@ -54,7 +54,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
       "Guide the user through FundExecs OS, summarize workspace status, and recommend one next-best action. Do not provide legal, tax, or investment advice.",
     approvedActions: allowedActions,
     auditBehavior: "Audit task creation, approval requests, and workspace-changing recommendations.",
-    workspaceHref: "/dashboard",
+    workspaceHref: "/command-center",
     spriteSheet: "/assets/fundexecs/characters/earnest-fundmaker/earnest-fundmaker.png",
     frameMapKind: "earnest",
     fallbackInitials: "EF",
