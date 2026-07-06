@@ -231,6 +231,8 @@ type VirtualOfficeGameProps = {
   displayName?: string;
   /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
   characterId?: string;
+  /** The operator's human Executive Floor avatar (from user_metadata). */
+  officeAvatar?: unknown;
   /**
    * Whether this panel is currently the active/visible tab.
    * Phaser init is deferred until the first time this becomes true,
@@ -255,6 +257,7 @@ export function VirtualOfficeGame({
   token,
   displayName = "You",
   characterId,
+  officeAvatar,
   active = true,
   teleportTarget,
   onOccupancyChange,
@@ -425,7 +428,7 @@ export function VirtualOfficeGame({
         });
 
         if (token) {
-          const initData: OfficeSceneInitData = { token, characterId };
+          const initData: OfficeSceneInitData = { token, characterId, officeAvatar };
           game.events.once("ready", () => {
             game?.scene.getScene("OfficeScene")?.scene.restart(initData);
           });
