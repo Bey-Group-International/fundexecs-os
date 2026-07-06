@@ -422,6 +422,18 @@ function SidebarPanel({
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
         {/* Top-level destinations */}
         <div className="flex flex-col gap-0.5">
+          {/* Command Center — direct rail access to the AI Executive Command
+              Floor (the spatial office world where Earn orchestrates the
+              executive team). Pinned first so it's a one-click destination. */}
+          <Link
+            href="/command-center"
+            className={`${navHrefActive(pathname, "/command-center") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="font-mono text-base leading-none text-neural-400">◈</span>
+              Command Center
+            </span>
+          </Link>
           <Link
             href="/workspace"
             className={navHrefActive(pathname, "/workspace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
