@@ -11,18 +11,26 @@ import {
   enrichEntities,
   extractEntities,
   extractEntitiesDeterministic,
+  detectSourcingIntent,
+  sourceFirmsWithContacts,
   buildContactAppendix,
   type EnrichedContacts,
 } from "./chat-enrichment";
-import type { VerifiedPerson, VerifiedResult } from "./source-hub-types";
-import { searchPeople, enrichOrganization } from "./integrations/providers/apollo";
+import type { VerifiedPerson, VerifiedCompany, VerifiedResult } from "./source-hub-types";
+import {
+  searchPeople,
+  searchOrganizations,
+  enrichOrganization,
+} from "./integrations/providers/apollo";
 
 jest.mock("./integrations/providers/apollo", () => ({
   searchPeople: jest.fn(),
+  searchOrganizations: jest.fn(),
   enrichOrganization: jest.fn(),
 }));
 
 const mockSearchPeople = searchPeople as jest.MockedFunction<typeof searchPeople>;
+const mockSearchOrgs = searchOrganizations as jest.MockedFunction<typeof searchOrganizations>;
 const mockEnrichOrg = enrichOrganization as jest.MockedFunction<typeof enrichOrganization>;
 
 function ok<T>(data: T): VerifiedResult<T> {
@@ -45,8 +53,18 @@ function person(overrides: Partial<VerifiedPerson>): VerifiedPerson {
   };
 }
 
+function company(overrides: Partial<VerifiedCompany>): VerifiedCompany {
+  return {
+    name: "Acme Family Office",
+    provenance: "apollo",
+    confidence: 0.8,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   mockSearchPeople.mockReset();
+  mockSearchOrgs.mockReset();
   mockEnrichOrg.mockReset();
   delete process.env.APOLLO_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
@@ -162,6 +180,70 @@ describe("extractEntities without a model key", () => {
   it("falls back to the deterministic extractor (no ANTHROPIC key)", async () => {
     const out = await extractEntities("", "Reach out to Blackstone Group about the deal.");
     expect(out.companies.map((c) => c.name)).toContain("Blackstone Group");
+  });
+});
+
+describe("detectSourcingIntent", () => {
+  it("fires on a sourcing verb + category and keeps 'near me' as no explicit location", () => {
+    const spec = detectSourcingIntent("source family offices near me");
+    expect(spec).not.toBeNull();
+    expect(spec!.keywords).toContain("family office");
+    expect(spec!.location).toBeUndefined();
+  });
+
+  it("captures an explicit location", () => {
+    const spec = detectSourcingIntent("find private credit lenders in Texas");
+    expect(spec).not.toBeNull();
+    expect(spec!.keywords).toEqual(expect.arrayContaining(["private credit", "lending"]));
+    expect(spec!.location).toBe("Texas");
+  });
+
+  it("does not fire on a definitional question", () => {
+    expect(detectSourcingIntent("what is a family office?")).toBeNull();
+  });
+
+  it("does not fire without a recognized category", () => {
+    expect(detectSourcingIntent("find me a good restaurant near me")).toBeNull();
+  });
+});
+
+describe("sourceFirmsWithContacts", () => {
+  it("searches by keyword + mandate geography and attaches a point of contact", async () => {
+    mockSearchOrgs.mockResolvedValue(ok([company({ name: "Cascade Family Office", website: "https://cascade.com" })]));
+    mockSearchPeople.mockResolvedValue(ok([person({ name: "Mia Reyes", title: "Managing Director", email: "mia@cascade.com" })]));
+
+    const firms = await sourceFirmsWithContacts({ keywords: ["family office"] }, ["Texas", "US"]);
+
+    expect(mockSearchOrgs).toHaveBeenCalledWith(
+      expect.objectContaining({ keywords: ["family office"], locations: ["Texas", "US"] }),
+    );
+    expect(firms).toHaveLength(1);
+    expect(firms[0].firm.name).toBe("Cascade Family Office");
+    expect(firms[0].contact?.email).toBe("mia@cascade.com");
+  });
+
+  it("returns [] when no firms match", async () => {
+    mockSearchOrgs.mockResolvedValue(ok([]));
+    const firms = await sourceFirmsWithContacts({ keywords: ["family office"] }, []);
+    expect(firms).toHaveLength(0);
+    expect(mockSearchPeople).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildContactAppendix — sourcing path", () => {
+  it("appends sourced firms with contacts for a discovery query", async () => {
+    process.env.APOLLO_API_KEY = "ak-test";
+    mockSearchOrgs.mockResolvedValue(ok([company({ name: "Cascade Family Office", website: "https://cascade.com", headquarters: "Austin, TX" })]));
+    mockSearchPeople.mockResolvedValue(ok([person({ name: "Mia Reyes", title: "Managing Director", phone: "+1 512-555-0100", email: "mia@cascade.com" })]));
+
+    const out = await buildContactAppendix("source family offices near me", "Here's the approach and fit.", { geographies: ["Texas"] });
+
+    expect(out).toContain("Sourced firms");
+    expect(out).toContain("**Cascade Family Office**");
+    expect(out).toContain("https://cascade.com");
+    expect(out).toContain("**Mia Reyes**, Managing Director");
+    expect(out).toContain("📞 +1 512-555-0100");
+    expect(out).toContain("✉️ mia@cascade.com");
   });
 });
 

@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient } from "@/lib/anthropic-client";
 import {
   searchPeople,
+  searchOrganizations,
   enrichOrganization,
 } from "@/lib/integrations/providers/apollo";
 import type { VerifiedPerson, VerifiedCompany } from "@/lib/source-hub-types";
@@ -344,18 +345,178 @@ export function formatContactAppendix(enriched: EnrichedContacts): string {
   return `\n\n---\n\n**Verified contacts** · source: Apollo.io\n\n${blocks.join("\n\n")}`;
 }
 
+// --- Sourcing / discovery intent -------------------------------------------
+// A query like "source family offices near me" or "find private credit lenders
+// in Texas" names a CATEGORY of firm, not a specific one — the reply model
+// won't (and shouldn't) invent real firms, so name-drop enrichment finds
+// nothing. This path instead runs an Apollo directory search for matching firms
+// and attaches a decision-maker contact to each, so the reply carries real
+// websites, phones, emails, and point-of-contact names.
+
+// How many firms a sourcing reply surfaces, each with one point of contact.
+const MAX_SOURCED_FIRMS = 10;
+
+// Senior titles we try to attach as a firm's point of contact, best-first.
+const POC_TITLES = [
+  "Managing Partner", "Managing Director", "Partner", "Principal",
+  "Chief Investment Officer", "Founder", "President", "Head of Investments",
+];
+
+// Category phrase in the query → the Apollo keyword tag to search on.
+const SOURCING_TARGETS: { re: RegExp; keyword: string }[] = [
+  { re: /\bfamily offices?\b/i, keyword: "family office" },
+  { re: /\bwealth (managers?|management)\b/i, keyword: "wealth management" },
+  { re: /\b(registered investment advis(?:o|e)rs?|RIAs?)\b/i, keyword: "registered investment advisor" },
+  { re: /\bendowments?\b/i, keyword: "endowment" },
+  { re: /\bfoundations?\b/i, keyword: "foundation" },
+  { re: /\bpensions?\b/i, keyword: "pension fund" },
+  { re: /\b(private equity|PE (firms?|funds?|shops?)|sponsors?)\b/i, keyword: "private equity" },
+  { re: /\b(venture capital|VC (firms?|funds?))\b/i, keyword: "venture capital" },
+  { re: /\bhedge funds?\b/i, keyword: "hedge fund" },
+  { re: /\bprivate credit\b|\bcredit (funds?|firms?|managers?|providers?)\b/i, keyword: "private credit" },
+  { re: /\blenders?\b/i, keyword: "lending" },
+  { re: /\bbanks?\b/i, keyword: "bank" },
+  { re: /\basset managers?\b/i, keyword: "asset management" },
+  { re: /\bfund of funds\b/i, keyword: "fund of funds" },
+  { re: /\bsovereign wealth funds?\b/i, keyword: "sovereign wealth fund" },
+  { re: /\b(insurers?|insurance (companies|firms))\b/i, keyword: "insurance" },
+  { re: /\b(limited partners?|LPs?|allocators?|institutional investors?)\b/i, keyword: "institutional investor" },
+  { re: /\b(m&a|investment) (advisors?|advisers?|bankers?)\b/i, keyword: "investment banking" },
+  { re: /\b(business )?brokers?\b/i, keyword: "business broker" },
+];
+
+// Verbs/framings that mark a discovery ask (vs. a definitional question).
+const SOURCING_VERB =
+  /\b(source|sourcing|find|identify|prospect|research|scout|discover|surface|build (me )?a? ?list|list|show me|get me|look for|who (are|runs)|which (firms|funds|offices|investors|lenders|lps))\b/i;
+
+const NEAR_ME = /\bnear me\b|\bnearby\b|\bin my (area|region|market)\b/i;
+
+export interface SourcingSpec {
+  keywords: string[];
+  location?: string;
+}
+
+// Pull an explicit place out of "in/near/around <Place>" — but not "near me"
+// (that resolves to the mandate geographies) or generic words.
+function parseLocation(query: string): string | undefined {
+  const m = query.match(
+    /\b(?:in|near|around|based in|located in|across)\s+([A-Za-z][\w.\-]+(?:\s+[A-Za-z][\w.\-]+){0,2})/,
+  );
+  if (!m) return undefined;
+  const loc = m[1].trim();
+  if (/^(me|my|the|us|our|your|this|that|a|an)\b/i.test(loc)) return undefined;
+  // Don't mistake a trailing category word ("...in private credit") for a place.
+  if (SOURCING_TARGETS.some((t) => t.re.test(loc))) return undefined;
+  return loc;
+}
+
+// Detect a sourcing/discovery intent. Returns the category keyword(s) + any
+// explicit location, or null when the query isn't asking to source firms.
+export function detectSourcingIntent(query: string): SourcingSpec | null {
+  const targets = SOURCING_TARGETS.filter((t) => t.re.test(query));
+  if (targets.length === 0) return null;
+  const location = parseLocation(query);
+  // Require an explicit sourcing verb or a location cue so "what is a family
+  // office?" doesn't trigger a directory search.
+  if (!SOURCING_VERB.test(query) && !location && !NEAR_ME.test(query)) return null;
+  return { keywords: Array.from(new Set(targets.map((t) => t.keyword))), location };
+}
+
+export interface SourcedFirm {
+  firm: VerifiedCompany;
+  contact?: VerifiedPerson;
+}
+
+// Search Apollo for firms matching the sourcing spec and attach a senior point
+// of contact to each. Location precedence: explicit query location → the org's
+// mandate geographies → nationwide. Bounded fan-out; never throws.
+export async function sourceFirmsWithContacts(
+  spec: SourcingSpec,
+  geographies: string[] = [],
+): Promise<SourcedFirm[]> {
+  const locations = spec.location ? [spec.location] : geographies.slice(0, 3);
+  const orgRes = await searchOrganizations({
+    keywords: spec.keywords,
+    locations: locations.length ? locations : undefined,
+    per_page: MAX_SOURCED_FIRMS,
+  });
+  const firms = (orgRes.data ?? []).slice(0, MAX_SOURCED_FIRMS);
+  if (firms.length === 0) return [];
+
+  const pocs = await Promise.allSettled(
+    firms.map((f) => searchPeople({ company: f.name, title: POC_TITLES, per_page: 1 })),
+  );
+  return firms.map((firm, i) => {
+    const r = pocs[i];
+    const contact = r.status === "fulfilled" ? r.value.data?.[0] : undefined;
+    return { firm, contact };
+  });
+}
+
+// Render one firm + its point of contact — only fields Apollo returned.
+function formatSourcedFirm(s: SourcedFirm): string {
+  const facts = [
+    s.firm.website || (s.firm.domain ? `https://${s.firm.domain}` : ""),
+    s.firm.headquarters,
+    s.firm.industry,
+  ].filter(Boolean);
+  const lines = [`**${s.firm.name}**${facts.length ? ` — ${facts.join(" · ")}` : ""}`];
+  const c = s.contact;
+  if (c?.name) {
+    const reach: string[] = [];
+    if (c.phone) reach.push(`📞 ${c.phone}`);
+    if (c.email) reach.push(`✉️ ${c.email}`);
+    if (c.linkedin_url) reach.push(`[LinkedIn](${c.linkedin_url})`);
+    lines.push(`↳ **${c.name}**${c.title ? `, ${c.title}` : ""}${reach.length ? ` · ${reach.join(" · ")}` : ""}`);
+  }
+  lines.push(`_Apollo · confidence ${pct(s.firm.confidence)}_`);
+  return lines.join("\n");
+}
+
+// The markdown block for a sourcing reply. "" when nothing verified surfaced.
+export function formatSourcedFirms(firms: SourcedFirm[]): string {
+  const blocks = firms.filter((s) => s.firm?.name).map(formatSourcedFirm);
+  if (blocks.length === 0) return "";
+  return `\n\n---\n\n**Sourced firms** · verified via Apollo.io\n\n${blocks.join("\n\n")}`;
+}
+
+export interface ChatEnrichmentContext {
+  // The org's mandate geographies, used to resolve "near me" for sourcing.
+  geographies?: string[];
+}
+
 // The orchestrator the chat route calls after a reply finishes streaming.
-// Query + answer in → a verified contact appendix (or "") out. Never throws,
-// never fabricates: without an Apollo key it returns "" immediately.
-export async function buildContactAppendix(query: string, answer: string): Promise<string> {
+// Handles two paths and appends whichever produced verified data:
+//   1. Sourcing/discovery intent → active Apollo directory search for firms.
+//   2. Name-drop enrichment → contacts for firms/people the answer referenced.
+// Never throws, never fabricates: without an Apollo key it returns "".
+export async function buildContactAppendix(
+  query: string,
+  answer: string,
+  context: ChatEnrichmentContext = {},
+): Promise<string> {
   if (!process.env.APOLLO_API_KEY) return "";
-  if (!mightMentionEntity(`${query}\n${answer}`)) return "";
+  const sourcing = detectSourcingIntent(query);
+  const nameDrop = mightMentionEntity(`${query}\n${answer}`);
+  if (!sourcing && !nameDrop) return "";
+
+  let out = "";
+  if (sourcing) {
+    try {
+      out += formatSourcedFirms(await sourceFirmsWithContacts(sourcing, context.geographies ?? []));
+    } catch {
+      // Additive — a sourcing failure never breaks the reply.
+    }
+  }
   try {
-    const entities = await extractEntities(query, answer);
-    if (entities.companies.length === 0 && entities.people.length === 0) return "";
-    const enriched = await enrichEntities(entities);
-    return formatContactAppendix(enriched);
+    if (nameDrop) {
+      const entities = await extractEntities(query, answer);
+      if (entities.companies.length || entities.people.length) {
+        out += formatContactAppendix(await enrichEntities(entities));
+      }
+    }
+    return out;
   } catch {
-    return "";
+    return out;
   }
 }
