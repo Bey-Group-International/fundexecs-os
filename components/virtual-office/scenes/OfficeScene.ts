@@ -245,6 +245,12 @@ export class OfficeScene extends Phaser.Scene {
   private playerSeat: SeatAnchor | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
   private sitPrompt!: Phaser.GameObjects.Text;
+  // Gather-style proximity: walk near an executive to get a "talk" affordance.
+  private keyT!: Phaser.Input.Keyboard.Key;
+  private talkPrompt!: Phaser.GameObjects.Text;
+  private talkRing!: Phaser.GameObjects.Arc;
+  private nearestNpcId: string | null = null;
+  private talkPulse = 0;
   /** Conference-table seats (for meetings) and their occupancy. */
   private tableSeats: SeatAnchor[] = [];
   private freeTableSeats = new Set<SeatAnchor>();
@@ -360,6 +366,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createInteractives();
     this._setupEmotes();
     this._setupFollowMode();
+    this._setupNpcProximity();
 
     // Ensure the canvas captures keyboard events immediately on scene start
     this.game.canvas.setAttribute("tabindex", "0");
@@ -411,6 +418,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateRemoteAvatars();
     this._updateAmbient(delta);
     this._updateNpcAvatars(delta);
+    this._updateNpcProximity(delta);
     this._updateSpatialAudio();
     this._updateMinimap();
 
@@ -1322,6 +1330,78 @@ export class OfficeScene extends Phaser.Scene {
     if (this.nearestInteractive && Phaser.Input.Keyboard.JustDown(this.keyX)) {
       this.game.events.emit("office:interact", this.nearestInteractive);
       this._showEmote(this.player.x, this.player.y, "✦");
+    }
+  }
+
+  // ── Gather-style NPC proximity — walk near an executive to talk ──────────────
+
+  private static readonly TALK_RADIUS_SQ = 62 * 62;
+
+  private _setupNpcProximity() {
+    this.keyT = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
+    this.talkPrompt = this.add.text(0, 0, "", {
+      fontFamily: "'Georgia','Times New Roman',serif",
+      fontSize: "10px",
+      color: "#c9a84c",
+      backgroundColor: "#0a0806e6",
+      padding: { x: 10, y: 5 },
+    }).setScrollFactor(0).setDepth(25).setVisible(false);
+    // Soft gold halo that highlights the executive you're standing beside.
+    this.talkRing = this.add.arc(0, 0, 15, 0, 360, false)
+      .setStrokeStyle(1.5, 0xc9a84c, 0.9)
+      .setFillStyle(0xc9a84c, 0.06)
+      .setDepth(5)
+      .setVisible(false);
+  }
+
+  /**
+   * Highlight the nearest executive and offer a press-T / click "talk", so the
+   * floor rewards walking up to someone — Gather-style proximity presence.
+   * Talking reuses the same npc:click path as tapping the figure.
+   */
+  private _updateNpcProximity(delta: number) {
+    let nearestId: string | null = null;
+    let nearest: NpcAvatarState | null = null;
+    let bd = OfficeScene.TALK_RADIUS_SQ;
+    for (const [npcId, state] of this.npcAvatars) {
+      if (!state.agentId) continue;
+      const dx = state.sprite.x - this.player.x;
+      const dy = state.sprite.y - this.player.y;
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; nearest = state; nearestId = npcId; }
+    }
+
+    if (nearestId !== this.nearestNpcId) {
+      this.nearestNpcId = nearestId;
+      if (nearest) {
+        this.talkPrompt.setText(`💬  Talk to ${nearest.label.text} — T`);
+        const cam = this.cameras.main;
+        this.talkPrompt.setPosition(cam.width / 2 - this.talkPrompt.width / 2, cam.height - 88);
+        this.talkPrompt.setVisible(true);
+        this.talkRing.setVisible(true);
+      } else {
+        this.talkPrompt.setVisible(false);
+        this.talkRing.setVisible(false);
+      }
+    }
+
+    if (!nearest) return;
+
+    // Ring sits at the executive's feet, just behind the figure, and breathes.
+    this.talkRing.setPosition(nearest.sprite.x, nearest.sprite.y + 12);
+    this.talkRing.setDepth(yDepth(nearest.sprite.y) - 0.1);
+    if (!this.reducedMotion) {
+      this.talkPulse += delta / 1000;
+      const p = (Math.sin(this.talkPulse * 3.2) + 1) / 2;
+      this.talkRing.setScale(0.92 + p * 0.16).setAlpha(0.6 + p * 0.4);
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keyT)) {
+      this.game.events.emit("npc:click", {
+        npcId: nearestId,
+        spriteKey: nearest.spriteKey,
+        name: nearest.label.text,
+      });
+      nearest.avatar.react();
     }
   }
 
