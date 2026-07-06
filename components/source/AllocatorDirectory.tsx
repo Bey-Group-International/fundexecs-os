@@ -92,6 +92,7 @@ function InviteLPModal({
   onClose: () => void;
 }) {
   const [fundId, setFundId] = useState<string>(funds[0]?.id ?? "");
+  const [email, setEmail] = useState(entry.contactEmail ?? "");
   const [amount, setAmount] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -100,10 +101,15 @@ function InviteLPModal({
 
   function handleSend() {
     setError(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError("An email address is required to send the invite.");
+      return;
+    }
     startTransition(async () => {
       const fd = new FormData();
       fd.set("lp_name", entry.name);
-      fd.set("lp_email", "");
+      fd.set("lp_email", trimmedEmail);
       fd.set("investor_id", entry.id);
       if (fundId) fd.set("fund_id", fundId);
       if (amount) fd.set("commitment_amount", amount);
@@ -160,6 +166,20 @@ function InviteLPModal({
               <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">{entry.name}</p>
             </div>
 
+            <div>
+              <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                LP Email
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="lp@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/40 focus:outline-none"
+              />
+            </div>
+
             {funds.length > 0 && (
               <div>
                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -195,7 +215,7 @@ function InviteLPModal({
 
             <button
               onClick={handleSend}
-              disabled={pending}
+              disabled={pending || !email.trim()}
               className="w-full rounded-lg border border-gold-500/40 bg-gold-500/10 py-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-40"
             >
               {pending ? "Creating invite…" : "Create onboarding link →"}
