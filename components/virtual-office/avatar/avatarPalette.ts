@@ -64,6 +64,12 @@ export type AvatarSpec = {
   build?: AvatarBuild;
   /** Hair silhouette. Defaults to "short". */
   hairStyle?: AvatarHairStyle;
+  /**
+   * When true the figure renders as the gold-coin mascot (Earn) instead of a
+   * humanized executive — a round coin body with a friendly face, stubby arms
+   * with white gloves, and little shoes. Uses `accent` as the coin's gold.
+   */
+  coin?: boolean;
 };
 
 // A small spread of natural skin tones for team diversity.
@@ -116,6 +122,8 @@ export function agentAvatarSpec(agentId: AgentId, accentHex: string): AvatarSpec
     prop: AGENT_PROP[agentId] ?? "none",
     build: pick(BUILDS, agentId, 11),
     hairStyle: pick(HAIR_STYLES, agentId, 13),
+    // Earn is the fund's gold-coin mascot — rendered as a coin, not a suit.
+    coin: agentId === "earn",
   };
 }
 
