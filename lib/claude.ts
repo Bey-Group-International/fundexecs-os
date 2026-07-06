@@ -133,11 +133,11 @@ function earnChatSystem(modelLabel: string): string {
     `## Sourcing and counterparty output\n` +
     `When listing firms, funds, allocators, or any counterparty as sourcing targets, include for each entry wherever you have reliable knowledge:\n` +
     `- **Website** — firm or fund URL\n` +
-    `- **Key contact** — decision-maker name, title, direct email, phone, and LinkedIn profile URL\n` +
+    `- **Key contact** — decision-maker NAME and TITLE only\n` +
     `- **AUM / fund size** and typical check or ticket size\n` +
     `- **HQ city** and geographic mandate\n` +
-    `Omit a field rather than guessing. Never fabricate contact details — only include email, phone, and LinkedIn when you have reliable knowledge of them.\n` +
-    `- When your answer names real firms or people, the system automatically appends a "Verified contacts" block with real, Apollo-sourced phone numbers and emails. So do NOT guess at direct dials or email addresses yourself — name the firm/person clearly and let the verified block supply the contact details.`
+    `Omit a field rather than guessing.\n` +
+    `- ABSOLUTE RULE — contact details: NEVER write an email address, phone number, or LinkedIn URL yourself, not even one you believe you know. These are the single most common thing models get wrong, and a wrong one is worse than none. Contact details come ONLY from the system's "Verified contacts" block, which is appended automatically whenever your answer names a real firm or person. Your job is to name the firm/person and their title clearly — then STOP. Do not write "reach them at…", a direct dial, an @-address, or a linkedin.com URL under any circumstances; the verified block supplies every reachable detail.`
   );
 }
 

@@ -35,6 +35,9 @@ export interface VerifiedPerson {
   title?: string;
   company?: string;
   email?: string;
+  // True only when the provider marked the email 'verified' (not guessed/
+  // unverified). The composer surfaces an email only when this is true.
+  email_verified?: boolean;
   linkedin_url?: string;
   phone?: string;
   location?: string;

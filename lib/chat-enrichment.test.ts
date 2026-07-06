@@ -91,7 +91,7 @@ describe("formatContactAppendix", () => {
   it("renders only the reach fields Apollo returned, attributed to Apollo", () => {
     const enriched: EnrichedContacts = {
       people: [
-        person({ name: "Jon Gray", title: "President", company: "Blackstone", email: "jg@bx.com", phone: "+1 212-555-0100", linkedin_url: "https://linkedin.com/in/jongray" }),
+        person({ name: "Jon Gray", title: "President", company: "Blackstone", email: "jg@bx.com", email_verified: true, phone: "+1 212-555-0100", linkedin_url: "https://linkedin.com/in/jongray" }),
       ],
       companies: [],
     };
@@ -103,6 +103,16 @@ describe("formatContactAppendix", () => {
     expect(out).toContain("✉️ jg@bx.com");
     expect(out).toContain("[LinkedIn](https://linkedin.com/in/jongray)");
     expect(out).toContain("confidence 82%");
+  });
+
+  it("hides an unverified email but still shows a phone", () => {
+    const out = formatContactAppendix({
+      people: [person({ name: "Guessed Lead", email: "guess@firm.com", phone: "+1 212-555-0199" })],
+      companies: [],
+    });
+    expect(out).toContain("**Guessed Lead**");
+    expect(out).toContain("📞 +1 212-555-0199");
+    expect(out).not.toContain("guess@firm.com");
   });
 
   it("omits a reach line entirely when there is no email/phone/linkedin", () => {
@@ -234,7 +244,7 @@ describe("buildContactAppendix — sourcing path", () => {
   it("appends sourced firms with contacts for a discovery query", async () => {
     process.env.APOLLO_API_KEY = "ak-test";
     mockSearchOrgs.mockResolvedValue(ok([company({ name: "Cascade Family Office", website: "https://cascade.com", headquarters: "Austin, TX" })]));
-    mockSearchPeople.mockResolvedValue(ok([person({ name: "Mia Reyes", title: "Managing Director", phone: "+1 512-555-0100", email: "mia@cascade.com" })]));
+    mockSearchPeople.mockResolvedValue(ok([person({ name: "Mia Reyes", title: "Managing Director", phone: "+1 512-555-0100", email: "mia@cascade.com", email_verified: true })]));
 
     const out = await buildContactAppendix("source family offices near me", "Here's the approach and fit.", { geographies: ["Texas"] });
 
