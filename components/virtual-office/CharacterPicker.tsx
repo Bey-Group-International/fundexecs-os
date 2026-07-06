@@ -50,12 +50,13 @@ export function useCharacterSelection(): [string, (id: string) => void] {
 function SpriteThumb({
   spriteSheet,
   frameMapKind,
+  scale = 2,
 }: {
   spriteSheet: string;
   frameMapKind: "earnest" | "executive";
+  scale?: number;
 }) {
   const { w, h, cols } = SHEET_LAYOUT[frameMapKind];
-  const scale = 2;
   return (
     <div
       aria-hidden
@@ -127,6 +128,72 @@ export function CharacterPicker({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Compact current-character control for the office header: shows the selected
+ * executive's avatar + name as a chip, and opens the full CharacterPicker in a
+ * dropdown popover. Designed to sit inline on one horizontal line beside the
+ * office-data metrics.
+ */
+export function CharacterChip({
+  selectedId,
+  onSelect,
+}: {
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const character =
+    executiveCharacters.find((c) => c.id === selectedId && c.spriteSheet) ??
+    executiveCharacters.find((c) => c.spriteSheet);
+  if (!character) return null;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`Current character: ${character.name}. Change character.`}
+        className="flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition-colors"
+        style={{
+          background: "rgba(10, 8, 6, 0.7)",
+          borderColor: open ? character.themeColor : "rgba(201, 168, 76, 0.35)",
+        }}
+      >
+        <span className="grid h-6 w-6 place-items-center overflow-hidden rounded-md" style={{ background: "#0a0806" }}>
+          <SpriteThumb
+            spriteSheet={character.spriteSheet as string}
+            frameMapKind={character.frameMapKind}
+            scale={0.85}
+          />
+        </span>
+        <span className="flex flex-col items-start leading-tight">
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted">Character</span>
+          <span className="text-sm font-semibold text-fg-primary">{character.name}</span>
+        </span>
+        <span aria-hidden className="ml-0.5 text-[10px] text-fg-muted transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }}>
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <>
+          {/* Click-away backdrop */}
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-40 mt-2 w-max max-w-[320px]">
+            <CharacterPicker
+              selectedId={selectedId}
+              onSelect={(id) => {
+                onSelect(id);
+                setOpen(false);
+              }}
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
