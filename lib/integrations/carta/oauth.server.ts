@@ -19,7 +19,7 @@
 //   CARTA_CLIENT_ID / CARTA_CLIENT_SECRET (Settings vault). The grants are
 //   standard OAuth 2.0.
 
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getOrgSecret } from "@/lib/org-secrets";
 import { createServiceClient } from "@/lib/supabase/server";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
@@ -86,14 +86,31 @@ export function createPkcePair(): PkcePair {
 
 // ── HMAC-signed state (OAuth CSRF) ──────────────────────────────────────────────
 
-function stateSecret(): string {
-  // Reuse the vault key (must exist to store the refresh token anyway). Fail
-  // closed when absent so a missing secret can never yield a forgeable state.
-  return process.env.FUNDEXECS_VAULT_KEY ?? "";
+const STATE_KDF_SALT = "carta-oauth-state-v1";
+let cachedSigningKey: { raw: string; key: Buffer } | null = null;
+
+/**
+ * The HMAC signing key, derived from the vault secret via scrypt (a memory-hard
+ * KDF, exactly as lib/vault.ts derives the encryption key). Deriving rather than
+ * using the raw secret directly strengthens the construction against offline
+ * attack and keeps the signing-secret handling consistent with the vault. The
+ * derived key is cached per process so the KDF cost is paid once. Null (fail
+ * closed) when no vault secret is configured — a missing secret can never yield
+ * a forgeable state.
+ */
+function signingKey(): Buffer | null {
+  const raw = process.env.FUNDEXECS_VAULT_KEY;
+  if (!raw) return null;
+  if (cachedSigningKey?.raw !== raw) {
+    cachedSigningKey = { raw, key: scryptSync(raw, STATE_KDF_SALT, 32) };
+  }
+  return cachedSigningKey.key;
 }
 
 function sign(payload: string): string {
-  return createHmac("sha256", stateSecret()).update(payload).digest("base64url");
+  const key = signingKey();
+  if (!key) return "";
+  return createHmac("sha256", key).update(payload).digest("base64url");
 }
 
 export interface CartaOAuthState {
@@ -114,7 +131,7 @@ export function createCartaOAuthState(state: CartaOAuthState, nowMs: number = Da
 
 /** Verify + unpack a callback's state; null on tamper, expiry, or bad shape. */
 export function verifyCartaOAuthState(raw: string, nowMs: number = Date.now()): CartaOAuthState | null {
-  if (!stateSecret()) return null;
+  if (!signingKey()) return null;
   const dot = raw.lastIndexOf(".");
   if (dot <= 0) return null;
   let payload: string;
