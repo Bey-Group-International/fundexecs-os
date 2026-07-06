@@ -100,6 +100,9 @@ export default function ProspectingClient() {
   const [lastGoal, setLastGoal] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<string | null>(null);
+  const [savedListId, setSavedListId] = useState<string | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollResult, setEnrollResult] = useState<string | null>(null);
 
   async function run(g: string) {
     const target = g.trim();
@@ -108,6 +111,8 @@ export default function ProspectingClient() {
     setError(null);
     setPlan(null);
     setSaveResult(null);
+    setSavedListId(null);
+    setEnrollResult(null);
     try {
       const res = await fetch("/api/relationship/prospecting", {
         method: "POST",
@@ -140,10 +145,35 @@ export default function ProspectingClient() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `Save failed (${res.status})`);
       setSaveResult(`Saved ${body.saved} contact${body.saved === 1 ? "" : "s"} to list "${body.listName}" (${body.created} new, ${body.existing} already in CRM).`);
+      setSavedListId(body.listId ?? null);
     } catch (e) {
       setSaveResult(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function enroll() {
+    if (!plan || !savedListId || enrolling) return;
+    setEnrolling(true);
+    setEnrollResult(null);
+    try {
+      const res = await fetch("/api/relationship/prospecting/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listId: savedListId, templateKey: plan.sequenceKey }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Enroll failed (${res.status})`);
+      setEnrollResult(
+        body.enrolled > 0
+          ? `Enrolled ${body.enrolled} contact${body.enrolled === 1 ? "" : "s"} into "${body.sequenceName}" (${body.held} held by the compliance/review gate).`
+          : `No contacts enrolled — all ${body.total} were held by the compliance/review gate.`,
+      );
+    } catch (e) {
+      setEnrollResult(e instanceof Error ? e.message : "Enroll failed");
+    } finally {
+      setEnrolling(false);
     }
   }
 
@@ -204,13 +234,24 @@ export default function ProspectingClient() {
                 <div className="text-xs uppercase tracking-wide text-ink-400">Target persona</div>
                 <div className="mt-1 text-surface-0">{plan.persona}</div>
               </div>
-              <button
-                onClick={save}
-                disabled={saving || plan.prospects.length === 0}
-                className="shrink-0 rounded-xl border border-gold-500/50 bg-gold-500/10 px-4 py-2 text-sm font-medium text-gold-300 hover:bg-gold-500/20 disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save to CRM"}
-              </button>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  onClick={save}
+                  disabled={saving || plan.prospects.length === 0}
+                  className="rounded-xl border border-gold-500/50 bg-gold-500/10 px-4 py-2 text-sm font-medium text-gold-300 hover:bg-gold-500/20 disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : "Save to CRM"}
+                </button>
+                {savedListId && (
+                  <button
+                    onClick={enroll}
+                    disabled={enrolling || plan.readyForOutreach.length === 0}
+                    className="rounded-xl bg-gold-500 px-4 py-2 text-sm font-medium text-surface-0 hover:bg-gold-400 disabled:opacity-50"
+                  >
+                    {enrolling ? "Enrolling…" : `Enroll ready (${plan.readyForOutreach.length})`}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2 py-1 text-gold-300">
@@ -221,6 +262,7 @@ export default function ProspectingClient() {
               </span>
             </div>
             {saveResult && <div className="mt-3 text-xs text-emerald-400">{saveResult}</div>}
+            {enrollResult && <div className="mt-1 text-xs text-emerald-400">{enrollResult}</div>}
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
