@@ -1,4 +1,33 @@
-import { normalizePlans, generatePlans, type AgentPlan } from "@/lib/claude";
+import { normalizePlans, generatePlans, effortConfig, type AgentPlan } from "@/lib/claude";
+
+// output_config.effort 400s on Haiku 4.5 / Sonnet 4.5 but output_config.format
+// (structured outputs) is supported on Haiku 4.5 — effortConfig must gate only
+// the effort field. This is the fix for the chat "Earn ran into an issue" error,
+// where the simple-query router selects Haiku.
+describe("effortConfig — Haiku-safe output_config", () => {
+  const SCHEMA = { type: "object", additionalProperties: false, properties: {}, required: [] };
+
+  it("omits effort entirely on Haiku (no output_config when no schema)", () => {
+    expect(effortConfig("claude-haiku-4-5-20251001", "low")).toEqual({});
+  });
+
+  it("keeps format but drops effort on Haiku", () => {
+    expect(effortConfig("claude-haiku-4-5-20251001", "low", SCHEMA)).toEqual({
+      output_config: { format: { type: "json_schema", schema: SCHEMA } },
+    });
+  });
+
+  it("includes effort on models that support it (Sonnet 4.6)", () => {
+    expect(effortConfig("claude-sonnet-4-6", "low")).toEqual({ output_config: { effort: "low" } });
+    expect(effortConfig("claude-sonnet-4-6", "medium", SCHEMA)).toEqual({
+      output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
+    });
+  });
+
+  it("includes effort on Opus 4.8", () => {
+    expect(effortConfig("claude-opus-4-8", "low")).toEqual({ output_config: { effort: "low" } });
+  });
+});
 
 // A valid planner workflow item (the shape the LLM returns per workflow).
 function wf(lifecycle_stage: string, agent = "analyst") {

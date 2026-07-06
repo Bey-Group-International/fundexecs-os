@@ -24,6 +24,30 @@ import {
 // Override with CLAUDE_MODEL env var (e.g. claude-opus-4-8 or claude-haiku-4-5-20251001).
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
+// `output_config.effort` is accepted only by Opus 4.5+, Sonnet 4.6, Sonnet 5,
+// and Fable/Mythos 5 — Haiku 4.5 and Sonnet 4.5 return a 400 on it (which the
+// stream/create catch swallows into a fallback). `output_config.format`
+// (structured outputs) IS supported on Haiku 4.5, so only the effort field is
+// gated. Mirrors lib/brains/llm.ts supportsEffort.
+function modelSupportsEffort(model: string): boolean {
+  return /claude-(opus-4-(5|6|7|8)|sonnet-4-6|sonnet-5|fable-5|mythos-5)/.test(model);
+}
+
+// Build an `output_config` for a request: include `effort` only when the model
+// supports it, and `format` whenever a schema is supplied. Returns {} (no
+// output_config key) when neither applies, so nothing invalid is ever sent.
+// Exported for testing the Haiku-safety behavior.
+export function effortConfig(
+  model: string,
+  effort: "low" | "medium",
+  schema?: object,
+): { output_config: Record<string, unknown> } | Record<string, never> {
+  const cfg: Record<string, unknown> = {};
+  if (modelSupportsEffort(model)) cfg.effort = effort;
+  if (schema) cfg.format = { type: "json_schema", schema };
+  return Object.keys(cfg).length ? { output_config: cfg } : {};
+}
+
 export interface PlanStep {
   agent: AgentKey;
   title: string;
@@ -156,14 +180,17 @@ export function earnChatStream(args: {
   if (args.priorArtifacts) {
     systemContent += `\n\n## Recent deliverables from prior workflows\n${args.priorArtifacts}`;
   }
+  const streamModel = args.model ?? MODEL;
   return anthropic.messages.stream({
-    model: args.model ?? MODEL,
+    model: streamModel,
     max_tokens: 2000,
     // Cache the static persona prompt — it's identical across turns, so this
     // trims latency and cost on every reply (the planning path caches the same way).
     system: [{ type: "text", text: systemContent, cache_control: { type: "ephemeral" } }],
-    // Chat is latency-sensitive and rarely needs deep reasoning — keep effort low.
-    output_config: { effort: "low" },
+    // Chat is latency-sensitive and rarely needs deep reasoning — keep effort low,
+    // but only on models that accept it (Haiku 4.5 400s on output_config.effort,
+    // which the simple-query router selects — that 400 surfaced as the chat error).
+    ...effortConfig(streamModel, "low"),
     messages: [...history, { role: "user", content: args.body }],
   });
 }
@@ -211,7 +238,7 @@ export async function earnFollowups(args: { body: string; reply: string }): Prom
           cache_control: { type: "ephemeral" },
         },
       ],
-      output_config: { effort: "low", format: { type: "json_schema", schema: FOLLOWUPS_SCHEMA } },
+      ...effortConfig(MODEL, "low", FOLLOWUPS_SCHEMA),
       messages: [{ role: "user", content: `Question: ${args.body}\n\nAnswer: ${args.reply}` }],
     });
     const json = textOf(message);
@@ -367,7 +394,7 @@ export async function generatePlan(
       model: MODEL,
       max_tokens: 2000,
       system: [{ type: "text", text: PLAN_SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
+      ...effortConfig(MODEL, "low", PLAN_SCHEMA),
       messages: [...history, { role: "user", content: prompt }],
     });
     const json = textOf(message);
@@ -417,7 +444,7 @@ export async function generatePlans(
       model: MODEL,
       max_tokens: 3000,
       system: [{ type: "text", text: PLANS_SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: PLANS_SCHEMA } },
+      ...effortConfig(MODEL, "low", PLANS_SCHEMA),
       messages: [...history, { role: "user", content: prompt }],
     });
     const json = textOf(message);
@@ -454,7 +481,7 @@ export async function generateClarifyingQuestions(prompt: string): Promise<strin
       model: MODEL,
       max_tokens: 600,
       system: [{ type: "text", text: CLARIFY_SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: QUESTIONS_SCHEMA } },
+      ...effortConfig(MODEL, "low", QUESTIONS_SCHEMA),
       messages: [{ role: "user", content: prompt }],
     });
     const json = textOf(message);
@@ -492,8 +519,8 @@ export async function executeStep(args: {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1400,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
+      ...(modelSupportsEffort(MODEL) ? { thinking: { type: "adaptive" as const } } : {}),
+      ...effortConfig(MODEL, "medium"),
       system: systemPrompt,
       messages: [
         {
@@ -587,7 +614,7 @@ export async function extractDealFields(args: {
       model: MODEL,
       max_tokens: 600,
       system: [{ type: "text", text: EXTRACT_SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: DEAL_FIELDS_SCHEMA } },
+      ...effortConfig(MODEL, "low", DEAL_FIELDS_SCHEMA),
       messages: [{ role: "user", content: extractContent(args) }],
     });
     const json = textOf(message);
@@ -618,7 +645,7 @@ export async function extractAssetFields(args: {
       model: MODEL,
       max_tokens: 600,
       system: [{ type: "text", text: EXTRACT_SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: ASSET_FIELDS_SCHEMA } },
+      ...effortConfig(MODEL, "low", ASSET_FIELDS_SCHEMA),
       messages: [{ role: "user", content: extractContent(args) }],
     });
     const json = textOf(message);
@@ -824,7 +851,7 @@ export async function extractOwnership(args: {
         `Extract the ownership/cap-table of the firm vehicle "${args.entityName}" from the description. ` +
         `Return rows of holders with ownership % and/or units and a share class where stated. ` +
         `Do not invent holders or numbers; omit what isn't stated.`,
-      output_config: { effort: "low", format: { type: "json_schema", schema: OWNERSHIP_SCHEMA } },
+      ...effortConfig(MODEL, "low", OWNERSHIP_SCHEMA),
       messages: [{ role: "user", content: args.description }],
     });
     const json = textOf(message);
@@ -890,7 +917,7 @@ export async function conversationalDraft(args: {
       model: MODEL,
       max_tokens: 3000,
       system,
-      output_config: { effort: "medium", format: { type: "json_schema", schema: DRAFT_SCHEMA } },
+      ...effortConfig(MODEL, "medium", DRAFT_SCHEMA),
       messages: args.messages.slice(-12).map((m) => ({ role: m.role, content: m.content })),
     });
     const json = textOf(message);
@@ -999,7 +1026,7 @@ export async function analyzeMeeting(args: {
       model: MODEL,
       max_tokens: 2000,
       system: [{ type: "text", text: MEETING_SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: "medium", format: { type: "json_schema", schema: MEETING_ANALYSIS_SCHEMA } },
+      ...effortConfig(MODEL, "medium", MEETING_ANALYSIS_SCHEMA),
       messages: [{ role: "user", content: userContent }],
     });
     const json = textOf(message);
