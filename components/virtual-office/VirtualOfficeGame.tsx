@@ -16,9 +16,44 @@ import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
 import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
 import { AgentFloorInspector } from "./program/AgentFloorInspector";
+import { RichText } from "@/components/RichText";
+import { text, join } from "@/lib/richtext";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
+
+/** The executive the player is standing next to (Gather-style proximity). */
+type NearbyAgent = { agentId: string; name: string; role: string; line: string; accent: string };
+
+// Proximity presence card: as you walk up to an executive, they greet you with
+// their line — built as an Adventure-style rich-text component (name in the
+// role accent, the line quoted beneath).
+function ProximityCard({ agent }: { agent: NearbyAgent }) {
+  const heading = join(
+    "  ",
+    text(agent.name).color(agent.accent).bold(),
+    text(agent.role).color("#8a8f98").italic(),
+  );
+  const line = text(`"${agent.line}"`).color("#d8dce3").build();
+  return (
+    <div
+      className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1 rounded-xl px-4 py-2.5 backdrop-blur-sm"
+      style={{
+        background: "rgba(10,8,6,0.9)",
+        border: `1px solid ${agent.accent}55`,
+        boxShadow: `0 0 24px ${agent.accent}22`,
+        maxWidth: "min(88%, 420px)",
+        fontFamily: "Georgia, 'Times New Roman', serif",
+      }}
+    >
+      <div className="flex items-center gap-2 text-sm">
+        <span aria-hidden style={{ color: agent.accent }}>💬</span>
+        <RichText component={heading} />
+      </div>
+      <RichText component={line} className="text-[13px] leading-snug" />
+    </div>
+  );
+}
 
 // Room navigation config — matches ROOMS in types.ts / PROGRAM_ROOMS
 const ROOM_NAV = [
@@ -221,6 +256,7 @@ export function VirtualOfficeGame({
   const [isTouch, setIsTouch] = useState(false);
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
+  const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -306,6 +342,11 @@ export function VirtualOfficeGame({
           } else {
             onNpcClickRef.current?.(payload);
           }
+        });
+
+        // Proximity presence bridge — the executive you're standing beside.
+        game.events.on("office:nearby-agent", (agent: NearbyAgent | null) => {
+          setNearbyAgent(agent);
         });
 
         // Room enter bridge — updates room-specific action panel + current room state
@@ -534,6 +575,9 @@ export function VirtualOfficeGame({
 
       {/* Game canvas area */}
       <div className="relative">
+        {/* Proximity presence — the executive you're standing beside greets you */}
+        {nearbyAgent && <ProximityCard agent={nearbyAgent} />}
+
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
           style={{ fontFamily: "Georgia, serif", letterSpacing: "0.08em" }}>
