@@ -18,6 +18,10 @@ as the retrieval corpus that Brain reasons over. Files are named by `BrainKey`:
 | `event_curator.md`      | Private Event Curator                     |
 | `capital_raiser.md`     | Capital Raiser                            |
 | `investor_relations.md` | Investor Relations Strategist             |
+| `disposition_desk.md`   | Disposition & Buyer-Match Desk            |
+| `lender_network.md`     | Debt Capital Markets / Lender Network     |
+| `deal_scout.md`         | Deal Scout / Discovery Engine             |
+| `ma_integrator.md`      | M&A & Integration Intelligence            |
 
 ## Shared reference corpus (`reference/`)
 
