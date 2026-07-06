@@ -22,6 +22,7 @@ import { AGENT_QUIPS } from "./program/agentQuips";
 import { FloorRoster, type RosterEntry } from "./FloorRoster";
 import { ScreenShareDock } from "./ScreenShareDock";
 import { ExecutiveDirectory } from "./ExecutiveDirectory";
+import { FloorCommandPalette } from "./FloorCommandPalette";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -308,6 +309,7 @@ export function VirtualOfficeGame({
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -328,6 +330,20 @@ export function VirtualOfficeGame({
     const open = () => setDirectoryOpen(true);
     window.addEventListener("office:open-directory", open);
     return () => window.removeEventListener("office:open-directory", open);
+  }, []);
+
+  // ⌘K / Ctrl-K opens the floor command palette from anywhere (document-level,
+  // so it works even while the Phaser canvas has keyboard focus).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   const requestMedia = useCallback(async () => {
@@ -659,12 +675,29 @@ export function VirtualOfficeGame({
             {r.label}
           </button>
         ))}
+        {/* Command palette — keyboard-first launcher (⌘K) for floor actions */}
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          title="Floor actions (⌘K)"
+          className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          style={{
+            fontFamily: "Georgia, serif",
+            letterSpacing: "0.06em",
+            color: "#94a3b8",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <span className="opacity-60 text-[8px]">⌘K</span>
+          Actions
+        </button>
         {/* Executive Directory — an in-floor tool to jump to any executive */}
         <button
           type="button"
           onClick={() => setDirectoryOpen(true)}
           title="Open the executive directory"
-          className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
           style={{
             fontFamily: "Georgia, serif",
             letterSpacing: "0.06em",
@@ -727,6 +760,14 @@ export function VirtualOfficeGame({
               setDirectoryOpen(false);
             }}
             onClose={() => setDirectoryOpen(false)}
+          />
+        )}
+
+        {/* Command palette — ⌘K launcher for rooms, meetings, and tools */}
+        {paletteOpen && (
+          <FloorCommandPalette
+            onRoom={(roomKey) => teleportTo(roomKey)}
+            onClose={() => setPaletteOpen(false)}
           />
         )}
 
