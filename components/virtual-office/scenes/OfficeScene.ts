@@ -157,6 +157,10 @@ export class OfficeScene extends Phaser.Scene {
   // M2 — bubble state
   private myBubbleId: string | null = null;
   private bubbleMemberNames: string[] = [];
+  // Raw member ids of my current call bubble (excludes self). Drives the "on a
+  // call" presence badge on the floor roster — reuses the existing proximity
+  // bubbles, no extra signalling.
+  private bubbleMemberIds = new Set<string>();
 
   // M3 — WebRTC mesh
   private mesh: MeshManager | null = null;
@@ -2183,12 +2187,15 @@ export class OfficeScene extends Phaser.Scene {
     if (this.rosterAccumMs < 1000) return;
     this.rosterAccumMs = 0;
 
-    const roster: Array<{ id: string; name: string; roomKey: string | null; self: boolean }> = [
+    // I'm "on a call" whenever my proximity bubble has anyone else in it.
+    const selfOnCall = this.bubbleMemberIds.size > 0;
+    const roster: Array<{ id: string; name: string; roomKey: string | null; self: boolean; onCall: boolean }> = [
       {
         id: "self",
         name: this.myOfficeAvatar.displayName,
         roomKey: this._roomKeyAt(this.player.x, this.player.y),
         self: true,
+        onCall: selfOnCall,
       },
     ];
     for (const [id, state] of this.remotePlayers) {
@@ -2197,6 +2204,7 @@ export class OfficeScene extends Phaser.Scene {
         name: state.label.text,
         roomKey: this._roomKeyAt(state.sprite.x, state.sprite.y),
         self: false,
+        onCall: this.bubbleMemberIds.has(id),
       });
     }
 
@@ -2329,6 +2337,7 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "bubble.join": {
         this.myBubbleId = msg.bubbleId;
+        this.bubbleMemberIds = new Set(msg.members.filter((id) => id !== this.myPlayerId));
         this.bubbleMemberNames = msg.members
           .filter((id) => id !== this.myPlayerId)
           .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
@@ -2341,6 +2350,7 @@ export class OfficeScene extends Phaser.Scene {
       }
       case "bubble.update": {
         if (msg.bubbleId !== this.myBubbleId) break;
+        this.bubbleMemberIds = new Set(msg.members.filter((id) => id !== this.myPlayerId));
         this.bubbleMemberNames = msg.members
           .filter((id) => id !== this.myPlayerId)
           .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
@@ -2356,6 +2366,7 @@ export class OfficeScene extends Phaser.Scene {
       case "bubble.leave": {
         if (msg.bubbleId !== this.myBubbleId) break;
         this.myBubbleId = null;
+        this.bubbleMemberIds.clear();
         this.bubbleMemberNames = [];
         this.game.events.emit("bubble:update", []);
         if (this.sfuMode) {
@@ -2386,6 +2397,7 @@ export class OfficeScene extends Phaser.Scene {
         // Tear down mesh connections
         this.mesh?.leaveBubble();
         // Update member list
+        this.bubbleMemberIds = new Set(msg.members.filter((id) => id !== this.myPlayerId));
         this.bubbleMemberNames = msg.members
           .filter((id) => id !== this.myPlayerId)
           .map((id) => this.remotePlayers.get(id)?.label.text ?? id);
