@@ -1,5 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
+import { RichText } from "@/components/RichText";
+import { text } from "@/lib/richtext";
 import { RISK_TIERS, ROLE_LABELS, ROOM_BY_KEY, STAGE_LABELS, type RoomKey } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 
@@ -32,7 +35,12 @@ export function OfficeHUD({ currentRoom }: { currentRoom: string }) {
     >
       <HudCell label="Mode" value={s.mode === "conversation" ? "Conversation" : s.mode === "copilot" ? "Copilot" : "Workflow"} />
       <HudCell label="Office" value={statusLabel} valueColor={statusColor} />
-      <HudCell label="Workflow" value={wf ? wf.title : "None active"} grow />
+      <HudCell
+        label="Workflow"
+        value={wf ? wf.title : "None active"}
+        node={wf ? <RichText component={text(wf.title).gradient(["#fde68a", GOLD]).build()} /> : undefined}
+        grow
+      />
       <HudCell label="Stage" value={wf ? STAGE_LABELS[wf.stage] : "—"} />
       <HudCell
         label="Risk tier"
@@ -59,18 +67,21 @@ function HudCell({
   valueColor,
   title,
   grow,
+  node,
 }: {
   label: string;
   value: string;
   valueColor?: string;
   title?: string;
   grow?: boolean;
+  /** Rich node rendered in place of the plain value (falls back to `value`). */
+  node?: ReactNode;
 }) {
   return (
     <div
       className={`flex min-w-[92px] flex-col justify-center px-3 py-1.5 ${grow ? "flex-1" : ""}`}
       style={{ background: "#0a0806" }}
-      title={title}
+      title={title ?? value}
     >
       <span className="text-[8px] uppercase tracking-[0.18em] text-slate-500" style={{ fontFamily: "Georgia, serif" }}>
         {label}
@@ -79,7 +90,7 @@ function HudCell({
         className="truncate text-[11px] font-medium"
         style={{ color: valueColor ?? "#e2e8f0", fontFamily: "Georgia, serif" }}
       >
-        {value}
+        {node ?? value}
       </span>
     </div>
   );

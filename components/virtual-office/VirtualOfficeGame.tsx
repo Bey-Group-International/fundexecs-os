@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent, type CSSProperties } from "react";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
 import type { InteractiveObject, RoomAction, ZoneDef } from "./types";
@@ -18,6 +18,7 @@ import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
 import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
+import { AGENT_QUIPS } from "./program/agentQuips";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -27,14 +28,45 @@ type NearbyAgent = { agentId: string; name: string; role: string; line: string; 
 
 // Proximity presence card: as you walk up to an executive, they greet you with
 // their line — built as an Adventure-style rich-text component (name in the
-// role accent, the line quoted beneath).
+// role accent, the line quoted beneath). Lingering cycles through more of their
+// lines, and an inline "Ask" action hands off to the Earn copilot.
 function ProximityCard({ agent }: { agent: NearbyAgent }) {
-  const heading = join(
-    "  ",
-    text(agent.name).color(agent.accent).bold(),
-    text(agent.role).color("#8a8f98").italic(),
+  const heading = useMemo(
+    () =>
+      join(
+        "  ",
+        text(agent.name).color(agent.accent).bold(),
+        text(agent.role).color("#8a8f98").italic(),
+      ),
+    [agent.name, agent.role, agent.accent],
   );
-  const line = text(`"${agent.line}"`).color("#d8dce3").build();
+  // The idle line, then any role-flavored quips — cycled while you linger.
+  const lines = useMemo(
+    () => [agent.line, ...(AGENT_QUIPS[agent.agentId as AgentId] ?? [])],
+    [agent.agentId, agent.line],
+  );
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    setIdx(0);
+    if (lines.length <= 1) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % lines.length), 4200);
+    return () => clearInterval(t);
+  }, [agent.agentId, lines.length]);
+  const line = useMemo(
+    () => text(`"${lines[idx] ?? agent.line}"`).color("#d8dce3").build(),
+    [lines, idx, agent.line],
+  );
+
+  const askEarn = () =>
+    window.dispatchEvent(
+      new CustomEvent("earn:open-with-context", {
+        detail: {
+          execName: agent.name,
+          prompt: `I'm talking to ${agent.name} (${agent.role}) in the virtual office. What can they help me with right now?`,
+        },
+      }),
+    );
+
   return (
     <div
       className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1 rounded-xl px-4 py-2.5 backdrop-blur-sm"
@@ -51,6 +83,14 @@ function ProximityCard({ agent }: { agent: NearbyAgent }) {
         <RichText component={heading} />
       </div>
       <RichText component={line} className="text-[13px] leading-snug" />
+      <button
+        type="button"
+        onClick={askEarn}
+        className="pointer-events-auto mt-1 self-start rounded-md px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] transition-colors"
+        style={{ color: agent.accent, border: `1px solid ${agent.accent}55`, background: `${agent.accent}14` }}
+      >
+        Ask {agent.name}
+      </button>
     </div>
   );
 }

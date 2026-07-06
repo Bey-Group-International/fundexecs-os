@@ -192,7 +192,7 @@ export class OfficeScene extends Phaser.Scene {
   private minimapPlayerDot!: Phaser.GameObjects.Arc;
 
   // Interactive objects (press-X hotspots)
-  private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number }> = [];
+  private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number; marker: Phaser.GameObjects.Text }> = [];
   private interactPrompt!: Phaser.GameObjects.Text;
   private nearestInteractive: InteractiveObject | null = null;
   private keyX!: Phaser.Input.Keyboard.Key;
@@ -1284,7 +1284,6 @@ export class OfficeScene extends Phaser.Scene {
       if (!room) continue;
       const wx = room.col * ROOM_W + obj.x;
       const wy = room.row * ROOM_H + obj.y;
-      this.interactives.push({ obj, wx, wy });
 
       // Subtle pulsing gold diamond marks the hotspot
       const marker = this.add.text(wx, wy - 20, obj.icon, {
@@ -1292,6 +1291,7 @@ export class OfficeScene extends Phaser.Scene {
         fontSize: "10px",
         color: "#c9a84c",
       }).setOrigin(0.5, 0.5).setDepth(DEPTH_LABEL - 0.2).setAlpha(0.7);
+      this.interactives.push({ obj, wx, wy, marker });
       // Bob the hotspot marker unless reduced motion — then it sits static.
       if (!this.reducedMotion) {
         this.tweens.add({
@@ -1346,6 +1346,16 @@ export class OfficeScene extends Phaser.Scene {
     const cam = this.cameras.main;
     this.interactPrompt.setPosition(cam.width / 2 - this.interactPrompt.width / 2, cam.height - 44);
     this.interactPrompt.setVisible(true);
+
+    // On-entry glow: the zone's marker pops larger so stepping into a zone feels
+    // alive (Gather-style). Scale-only, so it rides alongside the looping bob
+    // tween (which animates y + alpha) without killing it. Skipped under
+    // reduced motion — where the marker sits static anyway.
+    const entry = this.interactives.find((i) => i.obj === nearest);
+    if (entry && !this.reducedMotion) {
+      entry.marker.setScale(1.6);
+      this.tweens.add({ targets: entry.marker, scale: 1, duration: 420, ease: "Back.easeOut" });
+    }
 
     // Gather-style: stepping into a NON-navigating zone activates it on entry
     // (with a cooldown). Navigating (href) zones still require a press to X —
