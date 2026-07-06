@@ -17,6 +17,12 @@ import {
 } from "@/lib/billing";
 import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
 import { compoundingProfile, type ReputationTier } from "@/lib/compounding";
+import {
+  walletRunway,
+  formatRunway,
+  recommendPlan,
+  recommendTopUpPack,
+} from "@/lib/wallet-insights";
 import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
@@ -27,13 +33,6 @@ import { BillingPortalButton } from "./BillingPortalButton";
 import { CREDIT_GRACE_BUFFER } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
-
-function recommendPlan(spend30d: number): string {
-  if (spend30d <= 0) return "pro";
-  const need = spend30d * 1.2;
-  const fit = PLANS.find((p) => p.creditsPerMonth >= need);
-  return fit?.key ?? PLANS[PLANS.length - 1].key;
-}
 
 const TIER_META: Record<ReputationTier, { label: string; blurb: string }> = {
   unranked: {
@@ -75,7 +74,12 @@ export default async function WalletPage(
 
   const balance = wallet?.credits ?? 0;
   const currentPlan = wallet?.plan ?? null;
-  const recommendedKey = recommendPlan(spend30d);
+
+  // Runway + grounded recommendations, derived from balance and 30-day burn.
+  const runway = walletRunway(balance, spend30d, 30, CREDIT_GRACE_BUFFER);
+  const recommendation = recommendPlan(spend30d, currentPlan);
+  const recommendedKey = recommendation.key;
+  const topUpPack = recommendTopUpPack(balance, spend30d);
 
   const months = currentPlan ? tenureMonths(wallet?.plan_started_at) : 0;
   const loyalty = loyaltyBonus(months);
@@ -111,14 +115,36 @@ export default async function WalletPage(
 
       <CheckoutBanner status={searchParams.checkout} />
 
-      {balance <= CREDIT_GRACE_BUFFER && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-400/40 bg-amber-400/[0.07] px-4 py-3 text-sm">
-          <span className="mt-0.5 shrink-0 text-amber-400">⚠</span>
+      {runway.health !== "healthy" && (
+        <div
+          className={`mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
+            runway.health === "critical"
+              ? "border-status-danger/40 bg-status-danger/[0.07]"
+              : "border-amber-400/40 bg-amber-400/[0.07]"
+          }`}
+        >
+          <span
+            className={`mt-0.5 shrink-0 ${
+              runway.health === "critical" ? "text-status-danger" : "text-amber-400"
+            }`}
+          >
+            ⚠
+          </span>
           <div>
-            <span className="font-medium text-amber-300">Credits running low.</span>{" "}
+            <span
+              className={`font-medium ${
+                runway.health === "critical" ? "text-status-danger" : "text-amber-300"
+              }`}
+            >
+              {runway.health === "critical" ? "Credits critically low." : "Credits running low."}
+            </span>{" "}
             <span className="text-fg-secondary">
-              You have {balance} credit{balance === 1 ? "" : "s"} remaining. AI actions may be
-              blocked when the balance is exhausted. Top up with a credit pack or upgrade your plan.
+              You have {formatCredits(balance)} credit{balance === 1 ? "" : "s"} remaining
+              {runway.runwayDays !== null ? ` — about ${formatRunway(runway.runwayDays)} of runway at your recent pace` : ""}.
+              {topUpPack
+                ? ` Top up with the ${formatCredits(topUpPack.credits)}-credit pack (${formatUsd(topUpPack.price)})`
+                : " Top up with a credit pack"}
+              {recommendation.isUpgrade ? ` or upgrade to ${recommendedPlan?.name}` : ""} to keep agents funded.
             </span>
           </div>
         </div>
@@ -140,6 +166,20 @@ export default async function WalletPage(
                 </p>
                 <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
                   live compute credits
+                </p>
+                <p
+                  className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] ${
+                    runway.health === "critical"
+                      ? "border-status-danger/40 bg-status-danger/[0.08] text-status-danger"
+                      : runway.health === "low"
+                        ? "border-amber-400/40 bg-amber-400/[0.08] text-amber-300"
+                        : "border-neural-400/30 bg-neural-400/[0.06] text-neural-300"
+                  }`}
+                >
+                  <span aria-hidden>◷</span>
+                  {runway.runwayDays !== null
+                    ? `${formatRunway(runway.runwayDays)} runway`
+                    : "no recent burn"}
                 </p>
               </div>
               <div className="rounded-xl border border-gold-400/25 bg-gold-400/[0.07] px-3 py-2 text-right">
@@ -217,8 +257,7 @@ export default async function WalletPage(
                 {spend30d > 0 ? (
                   <>
                     Based on {formatCredits(spend30d)} credits used in the last 30 days,{" "}
-                    <span className="text-fg-primary">{recommendedPlan?.name}</span> fits
-                    current operating load.
+                    <span className="text-fg-primary">{recommendedPlan?.name}</span> {recommendation.reason}
                   </>
                 ) : (
                   <>
@@ -226,6 +265,14 @@ export default async function WalletPage(
                     for balanced monthly capacity.
                   </>
                 )}
+                {topUpPack ? (
+                  <>
+                    {" "}
+                    Need credits now? The{" "}
+                    <span className="text-fg-primary">{formatCredits(topUpPack.credits)}-credit pack</span>{" "}
+                    ({formatUsd(topUpPack.price)}) bridges you to next cycle.
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
