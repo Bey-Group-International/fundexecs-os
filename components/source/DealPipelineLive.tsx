@@ -10,6 +10,8 @@ import type { DealEntry } from "@/components/source/DealPipeline";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { enrichCompanyFit } from "@/lib/integrations/providers/ai-enrichment";
+import { getPipelineStages } from "@/lib/pipeline-stages";
+import type { PipelineStage } from "@/lib/pipeline-stages-types";
 import type { VerifiedCompany, FitAnalysis } from "@/lib/source-hub-types";
 import type { DealStage } from "@/lib/supabase/database.types";
 
@@ -218,8 +220,22 @@ async function loadDeals(): Promise<DealEntry[]> {
   });
 }
 
+// Configured pipeline stages are org-scoped and opt-in — most orgs have none.
+// Load them so the client can surface a stage's required artifacts / auto-actions
+// as a confirmation step when a deal is moved into a matching stage.
+async function loadPipelineStages(): Promise<PipelineStage[]> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return [];
+  try {
+    return await getPipelineStages(auth.ctx.orgId);
+  } catch (e) {
+    console.error("[DealPipelineLive] pipeline stages fetch error:", e);
+    return [];
+  }
+}
+
 export async function DealPipelineLive() {
-  const deals = await loadDeals();
+  const [deals, pipelineStages] = await Promise.all([loadDeals(), loadPipelineStages()]);
   const verifiedCount = deals.filter((d) => d.verified).length;
 
   return (
@@ -237,7 +253,7 @@ export async function DealPipelineLive() {
           {deals.length > 0 && <ClearDealsBtn />}
         </div>
       </div>
-      <DealPipeline deals={deals} enrichCap={DEAL_ENRICH_CAP} />
+      <DealPipeline deals={deals} enrichCap={DEAL_ENRICH_CAP} pipelineStages={pipelineStages} />
     </section>
   );
 }

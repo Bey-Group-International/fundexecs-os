@@ -483,6 +483,7 @@ const STAGE_DOC_SUGGESTIONS: Partial<Record<DealStage, string>> = {
 export async function advanceDealStageAction(
   dealId: string,
   newStage: string,
+  pipelineStageId?: string,
 ): Promise<{ ok?: boolean; error?: string; suggestDocType?: string }> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
@@ -491,9 +492,27 @@ export async function advanceDealStageAction(
 
   try {
     const supabase = await createServerClient();
+
+    // When the move was confirmed against a configured pipeline stage, record
+    // the link too. Verify the stage belongs to this org first (the FK alone
+    // does not enforce org scoping) so a client can't attach another org's stage.
+    const update: { stage: DealStage; pipeline_stage_id?: string } = {
+      stage: newStage as DealStage,
+    };
+    if (pipelineStageId) {
+      const { data: stage } = await supabase
+        .from("pipeline_stages")
+        .select("id")
+        .eq("id", pipelineStageId)
+        .eq("org_id", auth.ctx.orgId)
+        .maybeSingle();
+      if (!stage) return { error: "Invalid pipeline stage" };
+      update.pipeline_stage_id = pipelineStageId;
+    }
+
     const { count, error } = await supabase
       .from("deals")
-      .update({ stage: newStage as DealStage }, { count: "exact" })
+      .update(update, { count: "exact" })
       .eq("id", dealId)
       .eq("organization_id", auth.ctx.orgId);
     if (error) throw error;

@@ -1,6 +1,6 @@
 "use client";
 
-import { PipelineStage } from "@/lib/pipeline-stages";
+import type { PipelineStage } from "@/lib/pipeline-stages-types";
 
 interface PipelineStageOverlayProps {
   stage: PipelineStage;

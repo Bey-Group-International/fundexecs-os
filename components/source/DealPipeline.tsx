@@ -10,7 +10,9 @@ import { DeleteDealBtn } from "@/components/source/SourceDeleteControls";
 import { InlineContactEdit } from "@/components/source/InlineContactEdit";
 import type { ContactFields } from "@/app/(app)/[hub]/[module]/actions";
 import { VerificationPill } from "@/components/source/VerificationBadge";
+import PipelineStageOverlay from "@/components/source/PipelineStageOverlay";
 import type { FitAnalysis } from "@/lib/source-hub-types";
+import type { PipelineStage } from "@/lib/pipeline-stages-types";
 import type { DealStage } from "@/lib/supabase/database.types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -90,16 +92,31 @@ function stageLabel(stage: string): string {
 
 // ── Stage dropdown ─────────────────────────────────────────────────────────
 
+// A configured pipeline stage is "worth confirming" only when it carries
+// metadata the mover should see first — required artifacts, auto-actions, or
+// entry conditions. Otherwise we advance instantly (no added friction).
+function stageHasMetadata(s: PipelineStage): boolean {
+  return (
+    s.required_artifacts.length > 0 ||
+    s.auto_actions.length > 0 ||
+    Object.keys(s.entry_conditions).length > 0
+  );
+}
+
 function StageDropdown({
   deal,
   onAdvanced,
+  pipelineStages = [],
 }: {
   deal: DealEntry;
   onAdvanced: (dealId: string, newStage: DealStage, suggestDocType?: string) => void;
+  pipelineStages?: PipelineStage[];
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [advanceError, setAdvanceError] = useState<string | null>(null);
+  // When set, a configured-stage move is awaiting confirmation in the overlay.
+  const [confirmMove, setConfirmMove] = useState<{ target: DealStage; stage: PipelineStage } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -111,12 +128,24 @@ function StageDropdown({
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
-  function advance(newStage: DealStage) {
-    setOpen(false);
+  // Link a target DealStage to a configured pipeline stage by name. There is no
+  // explicit mapping column, so we match the stage label (or enum value)
+  // case-insensitively against pipeline_stages.name.
+  function matchConfiguredStage(target: DealStage): PipelineStage | null {
+    const label = stageLabel(target).toLowerCase();
+    return (
+      pipelineStages.find((s) => {
+        const name = s.name.trim().toLowerCase();
+        return name === label || name === target;
+      }) ?? null
+    );
+  }
+
+  function runAdvance(newStage: DealStage, pipelineStageId?: string) {
     setAdvanceError(null);
     startTransition(async () => {
       try {
-        const result = await advanceDealStageAction(deal.id, newStage);
+        const result = await advanceDealStageAction(deal.id, newStage, pipelineStageId);
         if (result.error) {
           setAdvanceError(result.error);
         } else if (result.ok) {
@@ -126,6 +155,17 @@ function StageDropdown({
         setAdvanceError("Failed to update stage. Please try again.");
       }
     });
+  }
+
+  function advance(newStage: DealStage) {
+    setOpen(false);
+    const configured = matchConfiguredStage(newStage);
+    if (configured && stageHasMetadata(configured)) {
+      // Preview the stage's requirements/automations before committing.
+      setConfirmMove({ target: newStage, stage: configured });
+      return;
+    }
+    runAdvance(newStage);
   }
 
   const badgeClass = STAGE_BADGE[deal.stage] ?? "bg-neutral-100 text-neutral-500 ring-1 ring-neutral-200";
@@ -160,6 +200,18 @@ function StageDropdown({
           ))}
         </div>
       )}
+      {confirmMove && (
+        <PipelineStageOverlay
+          stage={confirmMove.stage}
+          open
+          onCancel={() => setConfirmMove(null)}
+          onConfirm={() => {
+            const { target, stage } = confirmMove;
+            setConfirmMove(null);
+            runAdvance(target, stage.id);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -170,10 +222,12 @@ function DealSlideOver({
   deal,
   onClose,
   onStageAdvanced,
+  pipelineStages,
 }: {
   deal: DealEntry | null;
   onClose: () => void;
   onStageAdvanced: (dealId: string, newStage: DealStage, suggestDocType?: string) => void;
+  pipelineStages?: PipelineStage[];
 }) {
   const [suggestDoc, setSuggestDoc] = useState<string | undefined>();
   const [editingContact, setEditingContact] = useState(false);
@@ -245,7 +299,7 @@ function DealSlideOver({
           {/* Stage */}
           <div>
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Stage</p>
-            <StageDropdown deal={deal} onAdvanced={handleStageAdvanced} />
+            <StageDropdown deal={deal} onAdvanced={handleStageAdvanced} pipelineStages={pipelineStages} />
           </div>
 
           {suggestDoc && (
@@ -567,9 +621,10 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
 interface Props {
   deals: DealEntry[];
   enrichCap: number;
+  pipelineStages?: PipelineStage[];
 }
 
-export function DealPipeline({ deals, enrichCap }: Props) {
+export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
   const [assetFilter, setAssetFilter] = useState("all");
@@ -764,7 +819,7 @@ export function DealPipeline({ deals, enrichCap }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <StageDropdown deal={d} onAdvanced={handleStageAdvanced} />
+                    <StageDropdown deal={d} onAdvanced={handleStageAdvanced} pipelineStages={pipelineStages} />
                   </td>
                   <td className="px-4 py-3 text-fg-muted">
                     {d.assetClass ?? d.industry ?? "—"}
@@ -815,6 +870,7 @@ export function DealPipeline({ deals, enrichCap }: Props) {
         deal={selectedDeal}
         onClose={() => setSelectedDeal(null)}
         onStageAdvanced={handleStageAdvanced}
+        pipelineStages={pipelineStages}
       />
 
       {/* Add deal modal */}

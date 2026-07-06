@@ -1,17 +1,10 @@
 import { createServiceClient } from "@/lib/supabase/server";
 
-export interface PipelineStage {
-  id: string;
-  org_id: string;
-  hub: string;
-  name: string;
-  entry_conditions: Record<string, unknown>;
-  exit_criteria: Record<string, unknown>;
-  required_artifacts: string[];
-  auto_actions: Array<{ action_type: string; config: Record<string, unknown> }>;
-  order_index: number;
-  created_at: string;
-}
+// The PipelineStage shape lives in a server-free module so client components
+// (PipelineStageOverlay, DealPipeline) can import the type without pulling this
+// server-only module into the browser bundle. Re-exported here for callers.
+export type { PipelineStage } from "@/lib/pipeline-stages-types";
+import type { PipelineStage } from "@/lib/pipeline-stages-types";
 
 export async function getPipelineStages(
   orgId: string,
