@@ -23,6 +23,7 @@ import { createHash, randomBytes } from "crypto";
 import { getOrgSecret } from "@/lib/org-secrets";
 import { createServiceClient } from "@/lib/supabase/server";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
+import { discoverCartaEndpoints, type CartaOAuthEndpoints } from "./discovery.server";
 // Reuse the app's single signed-state implementation rather than duplicating it:
 // createOAuthState/verifyOAuthState are generic {orgId,userId} HMAC-signed,
 // expiring state helpers (same CSRF protection, one source of truth).
@@ -33,7 +34,11 @@ export const CARTA_TOKEN_URL_ENV = "CARTA_TOKEN_URL";
 export const CARTA_AUTHORIZE_URL_ENV = "CARTA_AUTHORIZE_URL";
 export const CARTA_OAUTH_SCOPES_ENV = "CARTA_OAUTH_SCOPES";
 /** org_secrets.provider keys for the per-org Carta OAuth material. */
+export const CARTA_MCP_URL_ENV = "CARTA_MCP_URL";
 export const CARTA_CLIENT_ID_SECRET = "CARTA_CLIENT_ID";
+/** Vault keys for a dynamically-registered (RFC 7591) client, if used. */
+export const CARTA_DCR_CLIENT_ID_SECRET = "CARTA_DCR_CLIENT_ID";
+export const CARTA_DCR_CLIENT_SECRET_SECRET = "CARTA_DCR_CLIENT_SECRET";
 export const CARTA_CLIENT_SECRET_SECRET = "CARTA_CLIENT_SECRET";
 export const CARTA_REFRESH_TOKEN_SECRET = "CARTA_REFRESH_TOKEN";
 
@@ -47,7 +52,9 @@ const TOKEN_FETCH_TIMEOUT_MS = 10_000;
 
 export interface CartaClientCreds {
   clientId: string;
-  clientSecret: string;
+  // Optional: a dynamically-registered (RFC 7591) public client has no secret
+  // and relies on PKCE instead. Confidential clients (manual creds) carry one.
+  clientSecret?: string;
 }
 
 export interface CartaOAuthConfig extends CartaClientCreds {
@@ -103,13 +110,35 @@ export const verifyCartaOAuthState = verifyOAuthState;
 
 // ── Authorization URL ───────────────────────────────────────────────────────────
 
-/** True when the interactive auth-code flow can start (endpoints + vault). */
+/**
+ * True when the interactive auth-code flow can start: the vault is configured
+ * AND we can obtain endpoints — either manual (CARTA_AUTHORIZE_URL +
+ * CARTA_TOKEN_URL) or via discovery from CARTA_MCP_URL (the no-credentials DCR
+ * path).
+ */
 export function cartaAuthConfigured(): boolean {
-  return Boolean(
-    process.env[CARTA_AUTHORIZE_URL_ENV] &&
-      process.env[CARTA_TOKEN_URL_ENV] &&
-      vaultConfigured(),
-  );
+  const manual = Boolean(process.env[CARTA_AUTHORIZE_URL_ENV] && process.env[CARTA_TOKEN_URL_ENV]);
+  const discoverable = Boolean(process.env[CARTA_MCP_URL_ENV]);
+  return (manual || discoverable) && vaultConfigured();
+}
+
+/**
+ * Resolve Carta's OAuth endpoints: manual env first (CARTA_TOKEN_URL /
+ * CARTA_AUTHORIZE_URL), else discovered from CARTA_MCP_URL (RFC 8414/9728).
+ * Returns null when neither is available. authorizationEndpoint may be empty for
+ * a token-only (client_credentials) manual setup.
+ */
+export async function resolveCartaEndpoints(
+  transport?: Parameters<typeof discoverCartaEndpoints>[1],
+): Promise<CartaOAuthEndpoints | null> {
+  const token = process.env[CARTA_TOKEN_URL_ENV];
+  const authz = process.env[CARTA_AUTHORIZE_URL_ENV];
+  if (token) {
+    return { authorizationEndpoint: authz ?? "", tokenEndpoint: token };
+  }
+  const mcpUrl = process.env[CARTA_MCP_URL_ENV];
+  if (mcpUrl) return discoverCartaEndpoints(mcpUrl, transport);
+  return null;
 }
 
 /** Build the Carta consent URL with PKCE. Pure (reads only the authorize URL). */
@@ -195,7 +224,7 @@ export async function mintClientCredentialsToken(
 ): Promise<MintedToken> {
   const { status, json } = await transport(
     config.tokenUrl,
-    buildTokenRequestBody(config.clientId, config.clientSecret, config.scope),
+    buildTokenRequestBody(config.clientId, config.clientSecret ?? "", config.scope),
     FORM_HEADERS,
   );
   if (status < 200 || status >= 300) throw new Error(`Carta token endpoint HTTP ${status}`);
@@ -213,15 +242,16 @@ export async function exchangeCartaCode(
   },
   transport: TokenTransport = defaultTransport,
 ): Promise<MintedToken> {
-  const body = new URLSearchParams({
+  const params = new URLSearchParams({
     grant_type: "authorization_code",
     code: args.code,
     redirect_uri: args.redirectUri,
     client_id: args.creds.clientId,
-    client_secret: args.creds.clientSecret,
     code_verifier: args.codeVerifier,
-  }).toString();
-  const { status, json } = await transport(args.tokenUrl, body, FORM_HEADERS);
+  });
+  // Confidential clients send a secret; a DCR public client relies on PKCE only.
+  if (args.creds.clientSecret) params.set("client_secret", args.creds.clientSecret);
+  const { status, json } = await transport(args.tokenUrl, params.toString(), FORM_HEADERS);
   if (status < 200 || status >= 300) throw new Error(`Carta code exchange HTTP ${status}`);
   return readTokenBody(json);
 }
@@ -235,8 +265,8 @@ export async function refreshCartaAccessToken(
     grant_type: "refresh_token",
     refresh_token: args.refreshToken,
     client_id: args.creds.clientId,
-    client_secret: args.creds.clientSecret,
   });
+  if (args.creds.clientSecret) params.set("client_secret", args.creds.clientSecret);
   if (args.scope) params.set("scope", args.scope);
   const { status, json } = await transport(args.tokenUrl, params.toString(), FORM_HEADERS);
   if (status < 200 || status >= 300) throw new Error(`Carta token refresh HTTP ${status}`);
@@ -245,7 +275,12 @@ export async function refreshCartaAccessToken(
 
 // ── Credential resolution ───────────────────────────────────────────────────────
 
-/** Resolve per-org client creds (vault → env). Null when either half is absent. */
+/**
+ * Resolve per-org client creds. Precedence: manual confidential creds (vault →
+ * env: CARTA_CLIENT_ID/SECRET) → a dynamically-registered client stored in the
+ * vault (CARTA_DCR_CLIENT_ID/SECRET, secret optional for a public client). Null
+ * when none is available.
+ */
 export async function resolveClientCreds(orgId?: string): Promise<CartaClientCreds | null> {
   let clientId: string | null | undefined;
   let clientSecret: string | null | undefined;
@@ -254,13 +289,26 @@ export async function resolveClientCreds(orgId?: string): Promise<CartaClientCre
       clientId = await getOrgSecret(orgId, CARTA_CLIENT_ID_SECRET);
       clientSecret = await getOrgSecret(orgId, CARTA_CLIENT_SECRET_SECRET);
     } catch {
-      // vault miss → env fallback
+      // vault miss → env / DCR fallback
     }
   }
   clientId = clientId ?? process.env.CARTA_CLIENT_ID;
   clientSecret = clientSecret ?? process.env.CARTA_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
-  return { clientId, clientSecret };
+  if (clientId && clientSecret) return { clientId, clientSecret };
+
+  // DCR-registered client (may be public — secret optional).
+  if (orgId) {
+    try {
+      const dcrId = await getOrgSecret(orgId, CARTA_DCR_CLIENT_ID_SECRET);
+      if (dcrId) {
+        const dcrSecret = await getOrgSecret(orgId, CARTA_DCR_CLIENT_SECRET_SECRET);
+        return { clientId: dcrId, clientSecret: dcrSecret ?? undefined };
+      }
+    } catch {
+      // vault miss → no creds
+    }
+  }
+  return null;
 }
 
 // ── Runtime resolver ────────────────────────────────────────────────────────────
@@ -340,7 +388,9 @@ export async function getCartaAccessToken(
       return store(await mintClientCredentialsToken(opts.config, opts.transport));
     }
 
-    const tokenUrl = process.env[CARTA_TOKEN_URL_ENV];
+    // Token endpoint: manual (CARTA_TOKEN_URL) or discovered from CARTA_MCP_URL.
+    const endpoints = await resolveCartaEndpoints();
+    const tokenUrl = endpoints?.tokenEndpoint;
     if (!tokenUrl) return null;
     const creds = await resolveClientCreds(orgId);
     if (!creds) return null;
