@@ -39,6 +39,7 @@ import { ExecuteOwnershipModule } from "@/components/execute/OwnershipModule";
 import { ExecuteValuationsModule } from "@/components/execute/ValuationsModule";
 import { ExecuteWaterfallModule } from "@/components/execute/WaterfallModule";
 import { SigningModule } from "@/components/execute/SigningModule";
+import { InvoicesModule } from "@/components/execute/InvoicesModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -226,6 +227,7 @@ export async function ModuleView({
     if (mod.key === "reporting") return <ExecuteReportingModule orgId={ctx.orgId} />;
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
     if (mod.key === "signing") return <SigningModule />;
+    if (mod.key === "billing") return <InvoicesModule />;
 
     // Modules with defined roadmap scope — structured Coming Soon states so
     // the operator knows what's shipping and can use Earn in the interim.

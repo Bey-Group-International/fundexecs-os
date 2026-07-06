@@ -93,10 +93,9 @@ export async function listDocuSignTemplates(): Promise<
 // sendOne — shared envelope-creation + Supabase-persist core
 // ---------------------------------------------------------------------------
 // Creates a single DocuSign envelope from a template and records it locally.
-// Both the single (sendSubscriptionEnvelope) and bulk
-// (sendSubscriptionEnvelopesBulk) actions delegate here so the send + persist
-// logic lives in exactly one place. Callers are responsible for the
-// missingConfig() gate before invoking this.
+// The bulk action (sendSubscriptionEnvelopesBulk) delegates here per recipient
+// so the send + persist logic lives in exactly one place. Callers are
+// responsible for the missingConfig() gate before invoking this.
 async function sendOne({
   template_id,
   signer_name,
@@ -167,32 +166,6 @@ async function sendOne({
   }
 
   return { envelopeId };
-}
-
-// ---------------------------------------------------------------------------
-// sendSubscriptionEnvelope
-// ---------------------------------------------------------------------------
-export async function sendSubscriptionEnvelope(
-  formData: FormData
-): Promise<{ envelopeId: string } | { error: string }> {
-  const missing = missingConfig();
-  if (missing) return missing;
-
-  const template_id = String(formData.get("template_id") ?? "").trim();
-  const signer_name = String(formData.get("signer_name") ?? "").trim();
-  const signer_email = String(formData.get("signer_email") ?? "").trim();
-  const signer_role = String(formData.get("signer_role") ?? "signer").trim();
-  const subject = String(
-    formData.get("subject") ?? "Subscription Agreement — Please Sign"
-  ).trim();
-
-  return sendOne({
-    template_id,
-    signer_name,
-    signer_email,
-    signer_role,
-    subject,
-  });
 }
 
 // ---------------------------------------------------------------------------
