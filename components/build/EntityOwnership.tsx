@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { rollupOwnership } from "@/lib/entity-ownership";
 import type { EquityHolding } from "@/lib/supabase/database.types";
@@ -56,8 +56,20 @@ export function EntityOwnership({
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [savingId, startSaveTransition] = useTransition();
+  // Optimistic overlay applied on top of server holdings between a save and the
+  // revalidated refresh. Cleared whenever fresh server data arrives.
+  const [overrides, setOverrides] = useState<Record<string, Partial<EquityHolding>>>({});
+  useEffect(() => setOverrides({}), [holdings]);
 
-  const entityHoldings = useMemo(() => holdings.filter((h) => h.entity_id === entityId), [holdings, entityId]);
+  const effectiveHoldings = useMemo(
+    () =>
+      Object.keys(overrides).length === 0
+        ? holdings
+        : holdings.map((h) => (overrides[h.id] ? { ...h, ...overrides[h.id] } : h)),
+    [holdings, overrides],
+  );
+
+  const entityHoldings = useMemo(() => effectiveHoldings.filter((h) => h.entity_id === entityId), [effectiveHoldings, entityId]);
   const entityClasses = useMemo(() => shareClasses.filter((c) => c.entity_id === entityId), [shareClasses, entityId]);
   const holdingById = useMemo(
     () => new Map(entityHoldings.map((h) => [h.id, h])),
@@ -125,6 +137,15 @@ export function EntityOwnership({
     return null;
   }
 
+  // Match the server's num() coercion so the optimistic value equals what the
+  // revalidated read will return.
+  function parseNum(raw: string): number | null {
+    const v = raw.trim();
+    if (v === "") return null;
+    const n = Number(v.replace(/[, ]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+
   function saveEdit() {
     if (!editingId) return;
     const err = validateDraft(editDraft);
@@ -140,13 +161,28 @@ export function EntityOwnership({
     fd.set("ownership_pct", editDraft.ownership_pct);
     fd.set("invested_amount", editDraft.invested_amount);
     fd.set("share_class_id", editDraft.share_class_id);
+
+    // Reflect the change instantly, then confirm (or roll back) with the server.
+    const optimistic: Partial<EquityHolding> = {
+      units: parseNum(editDraft.units),
+      ownership_pct: parseNum(editDraft.ownership_pct),
+      invested_amount: parseNum(editDraft.invested_amount),
+      share_class_id: editDraft.share_class_id || null,
+    };
+    setOverrides((o) => ({ ...o, [id]: optimistic }));
+    setEditingId(null);
+
     startSaveTransition(async () => {
       const res = await updateHolding(fd);
       if (res && "error" in res) {
+        setOverrides((o) => {
+          const next = { ...o };
+          delete next[id];
+          return next;
+        });
         setEditError(res.error);
-        return;
+        setEditingId(id);
       }
-      setEditingId(null);
     });
   }
 
@@ -314,7 +350,12 @@ export function EntityOwnership({
                             >
                               Edit
                             </button>
-                            <form action={deleteHolding}>
+                            <form
+                              action={deleteHolding}
+                              onSubmit={(event) => {
+                                if (!confirm(`Remove ${r.name} from the cap table?`)) event.preventDefault();
+                              }}
+                            >
                               <input type="hidden" name="id" value={r.holdingId} />
                               <button className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400" aria-label={`Delete ${r.name}`}>✕</button>
                             </form>
