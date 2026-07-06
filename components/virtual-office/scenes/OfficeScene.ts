@@ -37,6 +37,8 @@ import {
   createWallVisuals,
   createFurniture,
   officeSeats,
+  boardroomTableSeats,
+  coffeePoints,
   yDepth,
   DEPTH_LABEL,
   type FurniturePiece,
@@ -239,6 +241,17 @@ export class OfficeScene extends Phaser.Scene {
   private playerSeat: SeatAnchor | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
   private sitPrompt!: Phaser.GameObjects.Text;
+  /** Conference-table seats (for meetings) and their occupancy. */
+  private tableSeats: SeatAnchor[] = [];
+  private freeTableSeats = new Set<SeatAnchor>();
+  private npcTableSeat = new Map<string, SeatAnchor>();
+  // ── Ambient floor life (coffee runs) ──
+  private coffeeSpots: Array<{ x: number; y: number }> = [];
+  private ambientTimer = 12000 + Math.random() * 12000;
+  /** npcId of the one executive currently on a coffee run (one at a time). */
+  private ambientAgent: string | null = null;
+  private ambientPhase: "to_coffee" | "pause" | "return" | null = null;
+  private ambientPauseMs = 0;
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -319,6 +332,9 @@ export class OfficeScene extends Phaser.Scene {
     // Desk seats (must exist before agents spawn so they can take a seat).
     this.seats = officeSeats();
     this.freeSeats = new Set(this.seats);
+    this.tableSeats = boardroomTableSeats();
+    this.freeTableSeats = new Set(this.tableSeats);
+    this.coffeeSpots = coffeePoints();
     this._createPlayer();
     this._createAnimations();
     this._createRoomZones();
@@ -383,6 +399,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateRoomLabel();
     this._updateIframeZones();
     this._updateRemoteAvatars();
+    this._updateAmbient(delta);
     this._updateNpcAvatars(delta);
     this._updateSpatialAudio();
     this._updateMinimap();
@@ -909,7 +926,7 @@ export class OfficeScene extends Phaser.Scene {
     const step = (OfficeScene.NPC_SPEED * delta) / 1000;
     const view = this.cameras.main.worldView;
     const M = OfficeScene.CULL_MARGIN;
-    for (const [, state] of this.npcAvatars) {
+    for (const [npcId, state] of this.npcAvatars) {
       if (state.seated) { this._updateSeatedNpc(state, delta); continue; }
       let walking = false;
       // Facing update is deferred so it (and its redraw) is skipped when culled.
@@ -938,6 +955,17 @@ export class OfficeScene extends Phaser.Scene {
         // Legacy lerp target (kept for future server-driven agents).
         state.sprite.x = Phaser.Math.Linear(state.sprite.x, state.targetX, 0.24);
         state.sprite.y = Phaser.Math.Linear(state.sprite.y, state.targetY, 0.24);
+      }
+
+      // On arrival, take a seat: collaborators sit at the conference table,
+      // idle executives sit at the nearest desk. The executive on an ambient
+      // coffee run manages its own sit, so it's excluded here.
+      if (!walking && !state.seated && npcId !== this.ambientAgent) {
+        if (state.programState === "collaborating") {
+          if (this._sitAtTable(npcId, state)) continue;
+        } else if (state.programState === "idle") {
+          if (this._sitNpc(npcId, state)) continue;
+        }
       }
 
       // Off-screen culling: movement math above still ran, but skip the
@@ -1694,10 +1722,32 @@ export class OfficeScene extends Phaser.Scene {
     return true;
   }
 
-  /** Stand an NPC up, releasing its seat. */
+  /** Seat an NPC at the nearest free conference-table seat (for meetings). */
+  private _sitAtTable(npcId: string, state: NpcAvatarState): boolean {
+    let best: SeatAnchor | null = null;
+    let bd = Infinity;
+    for (const s of this.freeTableSeats) {
+      const d = (s.x - state.sprite.x) ** 2 + (s.y - state.sprite.y) ** 2;
+      if (d < bd) { bd = d; best = s; }
+    }
+    if (!best) return false;
+    this.freeTableSeats.delete(best);
+    this.npcTableSeat.set(npcId, best);
+    state.seated = true;
+    state.path = [];
+    state.sprite.setPosition(best.x, best.y);
+    state.avatar.setSeated(true);
+    state.avatar.setFacing(best.facing);
+    state.avatar.setPosition(best.x, best.y);
+    return true;
+  }
+
+  /** Stand an NPC up, releasing whichever seat (desk or table) it holds. */
   private _standNpc(npcId: string, state: NpcAvatarState) {
     const seat = this.npcSeat.get(npcId);
     if (seat) { this.freeSeats.add(seat); this.npcSeat.delete(npcId); }
+    const tseat = this.npcTableSeat.get(npcId);
+    if (tseat) { this.freeTableSeats.add(tseat); this.npcTableSeat.delete(npcId); }
     if (state.seated) { state.seated = false; state.avatar.setSeated(false); }
   }
 
@@ -1769,6 +1819,109 @@ export class OfficeScene extends Phaser.Scene {
     this.freeSeats.add(this.playerSeat);
     this.playerSeat = null;
     this.playerAvatar.setSeated(false);
+  }
+
+  // ── Ambient floor life — occasional coffee runs ───────────────────────────
+  //
+  // To make the floor feel alive between tasks, one idle executive at a time
+  // gets up, strolls to the nearest coffee station, pauses, and returns to a
+  // desk. It's a low-frequency background motion: never more than one runner,
+  // always yields the moment the office program hands that agent real work,
+  // and fully disabled under reduced-motion.
+
+  /** Pick a random idle, seated executive to send on a coffee run (never Earn). */
+  private _pickAmbientCandidate(): string | null {
+    const candidates: string[] = [];
+    for (const [npcId, state] of this.npcAvatars) {
+      if (
+        state.seated &&
+        state.programState === "idle" &&
+        state.agentId &&
+        state.agentId !== "earn"
+      ) {
+        candidates.push(npcId);
+      }
+    }
+    if (candidates.length === 0) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  /** Nearest coffee station to a point. */
+  private _nearestCoffee(x: number, y: number): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bd = Infinity;
+    for (const c of this.coffeeSpots) {
+      const d = (c.x - x) ** 2 + (c.y - y) ** 2;
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+
+  private _updateAmbient(delta: number) {
+    if (this.reducedMotion || this.coffeeSpots.length === 0) return;
+
+    // A run is in progress — advance its little state machine.
+    if (this.ambientAgent) {
+      const state = this.npcAvatars.get(this.ambientAgent);
+      // Agent vanished or the program handed it real work — abandon the run
+      // and let the program drive (goto/state handlers own the seat + path now).
+      if (!state || state.programState !== "idle") {
+        this.ambientAgent = null;
+        this.ambientPhase = null;
+        return;
+      }
+
+      if (this.ambientPhase === "to_coffee") {
+        if (state.path.length === 0) {
+          this.ambientPhase = "pause";
+          this.ambientPauseMs = 1400 + Math.random() * 1600;
+          state.avatar.setFacing("up"); // face the machine
+        }
+      } else if (this.ambientPhase === "pause") {
+        this.ambientPauseMs -= delta;
+        if (this.ambientPauseMs <= 0) {
+          const home = state.agentId ? AGENT_BY_ID[state.agentId].homeRoom : null;
+          const seat = home
+            ? this._nearestFreeSeat(home, state.sprite.x, state.sprite.y)
+            : null;
+          const dest = seat ?? this._roomCenter(home);
+          state.path = this._findPath(state.sprite.x, state.sprite.y, dest.x, dest.y);
+          this.ambientPhase = "return";
+        }
+      } else if (this.ambientPhase === "return") {
+        if (state.path.length === 0) {
+          this.ambientAgent = null;
+          this.ambientPhase = null;
+          this._sitNpc(`agent:${state.agentId}`, state); // settle back at a desk
+        }
+      }
+      return;
+    }
+
+    // No run active — count down, then occasionally start one.
+    this.ambientTimer -= delta;
+    if (this.ambientTimer > 0) return;
+    this.ambientTimer = 16000 + Math.random() * 14000;
+
+    const npcId = this._pickAmbientCandidate();
+    if (!npcId) return;
+    const state = this.npcAvatars.get(npcId);
+    if (!state) return;
+    const coffee = this._nearestCoffee(state.sprite.x, state.sprite.y);
+    if (!coffee) return;
+
+    this._standNpc(npcId, state);
+    state.path = this._findPath(state.sprite.x, state.sprite.y, coffee.x, coffee.y);
+    // Already at the station (no path) — skip straight to the pause phase.
+    this.ambientAgent = npcId;
+    this.ambientPhase = "to_coffee";
+  }
+
+  /** Center point of a room (fallback ambient destination). */
+  private _roomCenter(roomKey: RoomKey | null): { x: number; y: number } {
+    const room = ROOMS.find((r) => r.key === roomKey);
+    if (!room) return { x: this.player.x, y: this.player.y };
+    return { x: room.col * ROOM_W + ROOM_W / 2, y: room.row * ROOM_H + ROOM_H / 2 };
   }
 
   private _spawnNpc(
