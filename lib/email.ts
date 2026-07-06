@@ -104,6 +104,61 @@ async function sendViaResend(args: SendEmailArgs): Promise<SendEmailResult> {
   return { ok: true, channel: "resend", detail: "sent" };
 }
 
+export interface EmailConfigStatus {
+  gmailConfigured: boolean;
+  resendConfigured: boolean;
+  fromEmail: string;
+  fromDomain: string | null;
+  usingDefaultFrom: boolean;
+  primaryProvider: "gmail" | "resend" | "none";
+  willAttemptSend: boolean;
+  notes: string[];
+}
+
+/**
+ * Report how outbound email is configured, WITHOUT exposing any secret values
+ * (only booleans and the non-secret sender address). Powers the email
+ * self-check endpoint so operators can confirm invites will deliver.
+ */
+export function getEmailConfigStatus(): EmailConfigStatus {
+  const gmailConfigured = !!process.env.GMAIL_ACCESS_TOKEN;
+  const resendConfigured = !!process.env.RESEND_API_KEY;
+  const fromEmail = process.env.RESEND_FROM_EMAIL ?? "noreply@fundexecs.com";
+  const usingDefaultFrom = !process.env.RESEND_FROM_EMAIL;
+  const fromDomain = fromEmail.includes("@") ? fromEmail.split("@")[1] : null;
+
+  const primaryProvider: EmailConfigStatus["primaryProvider"] = gmailConfigured
+    ? "gmail"
+    : resendConfigured
+      ? "resend"
+      : "none";
+
+  const notes: string[] = [];
+  if (!gmailConfigured && !resendConfigured) {
+    notes.push("No email provider configured — invites will be saved but not emailed. Set RESEND_API_KEY (recommended) or GMAIL_ACCESS_TOKEN.");
+  }
+  if (gmailConfigured) {
+    notes.push("Gmail is tried first but a static GMAIL_ACCESS_TOKEN expires (~1h); Resend is the durable fallback.");
+  }
+  if (resendConfigured && usingDefaultFrom) {
+    notes.push("RESEND_FROM_EMAIL is unset, so sends use the default noreply@fundexecs.com — that domain must be verified in Resend or sends will fail.");
+  }
+  if (resendConfigured && fromDomain) {
+    notes.push(`Resend will send from "${fromEmail}". Confirm the domain "${fromDomain}" shows as Verified in the Resend dashboard.`);
+  }
+
+  return {
+    gmailConfigured,
+    resendConfigured,
+    fromEmail,
+    fromDomain,
+    usingDefaultFrom,
+    primaryProvider,
+    willAttemptSend: gmailConfigured || resendConfigured,
+    notes,
+  };
+}
+
 export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   if (args.credentials?.gmailAccessToken ?? process.env.GMAIL_ACCESS_TOKEN) {
     const result = await sendViaGmail(args);
