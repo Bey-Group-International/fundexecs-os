@@ -11,6 +11,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import {
+  needsReview,
+  bulkOutboundEligibility,
+  type BulkEligibility,
+} from "@/lib/relationship/prospect-scoring";
 
 export type CommunicationStatus =
   | "allowed"
@@ -179,5 +184,40 @@ export async function recordUnsubscribe(
     email: input.email,
     reason: eventType,
     source: eventType,
+  });
+}
+
+// Bulk-outbound eligibility for a single contact: the compliance gate AND the
+// low-confidence review gate together. Use this before enrolling a contact in a
+// BULK campaign — a contact who is contactable but low-confidence/unverified is
+// held for review rather than silently messaged. Pass allowUnreviewed once a
+// human has reviewed the batch.
+export async function checkBulkContactable(
+  db: SupabaseClient<Database>,
+  orgId: string,
+  contactId: string,
+  opts: { allowUnreviewed?: boolean } = {},
+): Promise<BulkEligibility> {
+  const { data } = await loose(db)
+    .from("network_contacts")
+    .select("communication_status, compliance_flags, email, company_domain, confidence, verified")
+    .eq("id", contactId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  const email = data?.email ? String(data.email).toLowerCase() : undefined;
+  const domain = data?.company_domain ? String(data.company_domain).toLowerCase() : undefined;
+  const suppressed = await isSuppressed(db, orgId, { contactId, email, domain });
+  const gate = evaluateContactability(
+    data ? { communication_status: data.communication_status, compliance_flags: data.compliance_flags } : null,
+    { suppressed },
+  );
+  const review = needsReview({ confidence: data?.confidence, verified: data?.verified, email: data?.email });
+
+  return bulkOutboundEligibility({
+    contactable: gate.contactable,
+    contactableReason: gate.reason,
+    needsReview: review,
+    allowUnreviewed: opts.allowUnreviewed,
   });
 }
