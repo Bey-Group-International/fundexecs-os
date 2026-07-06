@@ -47,6 +47,9 @@ export class SfuManager {
   private consumers = new Map<string, AnyObj>(); // consumerId → consumer
   private peerStreams = new Map<string, PeerStreams>(); // peerId → streams
   private localStream: MediaStream | null = null;
+  // Active screen-share track, if the operator is currently presenting. Used so
+  // a fresh SFU join mid-share produces the screen rather than the camera.
+  private screenTrack: MediaStreamTrack | null = null;
   private audioCtx: AudioContext | null = null;
   private gainNodes = new Map<string, GainNode>(); // peerId → gainNode
 
@@ -65,6 +68,27 @@ export class SfuManager {
 
   setLocalStream(stream: MediaStream): void {
     this.localStream = stream;
+  }
+
+  /**
+   * Start/stop broadcasting a screen-share through the SFU. We swap the camera
+   * video producer's track for the screen track in place via replaceTrack — no
+   * renegotiation; every consumer's existing tile just shows the screen.
+   * Passing null restores the camera feed. If there's no video producer yet
+   * (camera never granted), we produce the screen track as a new one.
+   */
+  async setScreenTrack(track: MediaStreamTrack | null): Promise<void> {
+    this.screenTrack = track;
+    const replacement = track ?? this.localStream?.getVideoTracks()[0] ?? null;
+    if (this.videoProducer && replacement) {
+      try {
+        await this.videoProducer.replaceTrack({ track: replacement });
+      } catch {
+        // Track ended between capture and replace — ignore
+      }
+    } else if (!this.videoProducer && track && this.sendTransport) {
+      this.videoProducer = await this.sendTransport.produce({ track, encodings: [{ maxBitrate: 300_000 }] });
+    }
   }
 
   // ── Handle inbound SFU server messages ───────────────────────────────────────
@@ -223,7 +247,8 @@ export class SfuManager {
     this.sendTransport = transport;
 
     const audioTrack = this.localStream.getAudioTracks()[0];
-    const videoTrack = this.localStream.getVideoTracks()[0];
+    // If presenting when this transport is set up, produce the screen instead.
+    const videoTrack = this.screenTrack ?? this.localStream.getVideoTracks()[0];
 
     if (audioTrack) this.audioProducer = await transport.produce({ track: audioTrack });
     if (videoTrack) this.videoProducer = await transport.produce({ track: videoTrack, encodings: [{ maxBitrate: 300_000 }] });

@@ -38,6 +38,9 @@ export class MeshManager {
   private myId = "";
   private peers = new Map<string, PeerState>();
   private localStream: MediaStream | null = null;
+  // Active screen-share track, if the operator is currently presenting. Peers
+  // that join the bubble mid-share pick this up in _createPeer.
+  private screenTrack: MediaStreamTrack | null = null;
   private audioCtx: AudioContext | null = null;
   private send: SendFn;
   private onVideoChange: VideoChangeHandler;
@@ -56,6 +59,32 @@ export class MeshManager {
         if (!senders.find((s) => s.track === track)) {
           state.pc.addTrack(track, stream);
         }
+      }
+    }
+  }
+
+  /**
+   * Start/stop broadcasting a screen-share to every peer. We swap the outgoing
+   * camera video track for the screen track in place via replaceTrack — no
+   * renegotiation, no glare, and the peer's existing video tile just shows the
+   * screen. Passing null restores the camera feed. If a peer has no video
+   * sender yet (camera never granted), we add the track and renegotiate.
+   */
+  async setScreenTrack(track: MediaStreamTrack | null): Promise<void> {
+    this.screenTrack = track;
+    const replacement = track ?? this.localStream?.getVideoTracks()[0] ?? null;
+    for (const [peerId, state] of this.peers) {
+      const sender = state.pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        try {
+          await sender.replaceTrack(replacement);
+        } catch {
+          // Track ended between capture and replace — ignore
+        }
+      } else if (track) {
+        // No camera video to swap — add the screen track and renegotiate once.
+        state.pc.addTrack(track);
+        await this._makeOffer(peerId);
       }
     }
   }
@@ -157,6 +186,14 @@ export class MeshManager {
       for (const track of this.localStream.getTracks()) {
         pc.addTrack(track, this.localStream);
       }
+    }
+
+    // If already presenting, this new peer should see the screen, not the
+    // camera — swap the video sender in place (or add it if there's no camera).
+    if (this.screenTrack) {
+      const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (videoSender) void videoSender.replaceTrack(this.screenTrack);
+      else pc.addTrack(this.screenTrack);
     }
 
     pc.onicecandidate = (ev) => {
