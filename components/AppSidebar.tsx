@@ -442,7 +442,7 @@ function SidebarPanel({
           >
             Automations
           </Link>
-          {/* Command Center — direct rail access to the AI Executive Command
+          {/* Virtual Office — direct rail access to the AI Executive Command
               Floor (the spatial office world where Earn orchestrates the
               executive team). Sits between Automations and Inbox. */}
           <Link
@@ -451,7 +451,7 @@ function SidebarPanel({
           >
             <span className="flex items-center gap-2">
               <span aria-hidden className="font-mono text-base leading-none text-neural-400">◈</span>
-              Command Center
+              Virtual Office
             </span>
           </Link>
           <Link

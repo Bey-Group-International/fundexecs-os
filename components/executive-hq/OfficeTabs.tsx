@@ -301,7 +301,6 @@ export function OfficeTabs() {
             {/* Character selection now lives in the header chip (one line with
                 the office metrics), so the game mounts directly here. */}
             <VirtualOfficeGame
-              key={JSON.stringify(officeAvatar)}
               token={token}
               officeAvatar={officeAvatar}
               displayName={displayName}

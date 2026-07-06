@@ -585,6 +585,12 @@ export function VirtualOfficeGame({
     }
   }, [localStream]);
 
+  // Live-apply character customization to the running floor — when the operator
+  // saves a new look, rebuild the figure in place instead of reloading the game.
+  useEffect(() => {
+    gameRef.current?.events.emit("office:avatar-update", officeAvatar);
+  }, [officeAvatar]);
+
   // Teleport when target changes — buffer if game not yet loaded
   useEffect(() => {
     if (!teleportTarget) return;
