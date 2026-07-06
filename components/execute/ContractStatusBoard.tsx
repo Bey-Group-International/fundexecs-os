@@ -3,6 +3,7 @@
 // components/execute/ContractStatusBoard.tsx
 // Contract lifecycle status board — Contract Monkey clone.
 // Shows all contracts grouped by status with renewal alerts.
+import { useState } from "react";
 import {
   daysUntilExpiry,
   renewalUrgency,
@@ -10,6 +11,17 @@ import {
   DOCUMENT_TYPE_LABELS,
 } from "@/lib/contracts";
 import type { ContractStatus, DocumentType } from "@/lib/contracts";
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+}
 
 interface Contract {
   id: string;
@@ -66,35 +78,78 @@ function RenewalBadge({ expiryDate }: { expiryDate: string | null | undefined })
   );
 }
 
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</dt>
+      <dd className="mt-0.5 text-xs text-fg-secondary">{value}</dd>
+    </div>
+  );
+}
+
+function ContractDetail({ contract }: { contract: Contract }) {
+  const days = daysUntilExpiry(contract.expiryDate ?? null);
+  const expiryValue =
+    contract.expiryDate == null
+      ? "—"
+      : days == null
+        ? formatDate(contract.expiryDate)
+        : `${formatDate(contract.expiryDate)} · ${
+            days < 0 ? `${Math.abs(days)}d ago` : `${days}d left`
+          }`;
+
+  return (
+    <div className="border-t border-line bg-surface-2/20 px-4 py-3">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+        <DetailField label="Document Type" value={DOCUMENT_TYPE_LABELS[contract.documentType]} />
+        <DetailField label="Status" value={CONTRACT_STATUS_META[contract.status].label} />
+        <DetailField label="Investor" value={contract.investorName ?? "—"} />
+        <DetailField label="Fund" value={contract.fundName ?? "—"} />
+        <DetailField label="Effective" value={formatDate(contract.effectiveDate)} />
+        <DetailField label="Signed" value={formatDate(contract.signedAt)} />
+        <DetailField label="Expiry" value={expiryValue} />
+      </dl>
+    </div>
+  );
+}
+
 function ContractRow({ contract }: { contract: Contract }) {
+  const [open, setOpen] = useState(false);
   const meta = CONTRACT_STATUS_META[contract.status];
   const colorClass = COLOR_CLASSES[meta.color];
 
   return (
-    <div className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 transition hover:bg-surface-2/50">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-fg-primary">{contract.title}</p>
-        <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
-          {DOCUMENT_TYPE_LABELS[contract.documentType]}
-          {contract.investorName && ` · ${contract.investorName}`}
-          {contract.fundName && ` · ${contract.fundName}`}
-        </p>
+    <div className="border-b border-line last:border-0">
+      <div className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2/50">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-fg-primary">{contract.title}</p>
+          <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+            {DOCUMENT_TYPE_LABELS[contract.documentType]}
+            {contract.investorName && ` · ${contract.investorName}`}
+            {contract.fundName && ` · ${contract.fundName}`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <RenewalBadge expiryDate={contract.expiryDate} />
+          <span
+            className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${colorClass}`}
+          >
+            {meta.label}
+          </span>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-label={open ? "Hide contract details" : "View contract"}
+            className="font-mono text-[10px] text-fg-muted transition hover:text-gold-400"
+          >
+            <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>
+              →
+            </span>
+          </button>
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <RenewalBadge expiryDate={contract.expiryDate} />
-        <span
-          className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${colorClass}`}
-        >
-          {meta.label}
-        </span>
-        <button
-          type="button"
-          className="font-mono text-[10px] text-fg-muted transition hover:text-gold-400"
-          aria-label="View contract"
-        >
-          →
-        </button>
-      </div>
+      {open && <ContractDetail contract={contract} />}
     </div>
   );
 }
