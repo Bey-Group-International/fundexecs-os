@@ -53,19 +53,29 @@ passages are folded into a Brain's prompt only when activated.
    a permissive authenticated-read RLS policy (no write policy — seeded via the
    service role), and the `match_brain_kb_chunks` cosine-search RPC.
 3. **Embedder** — [`../embed.ts`](../embed.ts) ships a DETERMINISTIC LOCAL
-   embedder (feature-hashing bag-of-words, L2-normalized, dim 256). Zero cost,
-   no API key. A real embedder (Voyage/OpenAI) plugs in behind the same
-   `Embedder` interface; keep `EMBED_DIM` and the migration's `vector(N)` in sync.
+   embedder (`hash-v3`: feature-hashing over unigrams + bigrams, TF-IDF
+   weighted, L2-normalized, dim 256). Zero cost, no API key. The IDF weights are
+   precomputed over this corpus into [`../idf-table.json`](../idf-table.json)
+   (built by [`../idf.ts`](../idf.ts)); regenerate after changing the corpus or
+   tokenizer with `UPDATE_IDF=1 npx jest lib/brains/idf-table.test.ts`, which
+   also fails CI if the committed table drifts from the code. A real embedder
+   (Voyage/OpenAI) plugs in behind the same `Embedder` interface; keep
+   `EMBED_DIM` and the migration's `vector(N)` in sync. Bumping the embedder
+   `model` is a new vector space — re-run ingest/reembed so stored rows move to
+   it (retrieval filters on `embedding_model`).
 4. **Ingestion** — POST [`/api/brains/ingest`](../../../app/api/brains/ingest/route.ts)
    reads each Brain's own file plus its mapped `reference/` docs, chunks
    ([`chunkText`](../vector.ts)), embeds, and upserts into `brain_kb_chunks` via
    the service-role client. Idempotent (clears a brain's rows before inserting),
    so it is safe to re-run.
 5. **Retrieval** — [`../pgvector.ts`](../pgvector.ts) embeds the query and calls
-   the RPC; [`../runtime.ts`](../runtime.ts) folds a couple of KB passages into
-   every activation, in addition to the user's documents. If pgvector is
-   unreachable or empty, it returns nothing and the keyword
-   [`vectorStore`](../vector.ts) fallback keeps the demo working.
+   the HYBRID RPC `match_brain_kb_chunks_hybrid` (migration `20260706120000`),
+   which fuses the vector cosine ranking with a Postgres full-text ranking via
+   Reciprocal Rank Fusion; it falls back to the pure-vector `match_brain_kb_chunks`
+   RPC when the hybrid one is absent. [`../runtime.ts`](../runtime.ts) folds a
+   couple of KB passages into every activation, in addition to the user's
+   documents. If pgvector is unreachable or empty, it returns nothing and the
+   keyword [`vectorStore`](../vector.ts) fallback keeps the demo working.
 
 ## Running ingestion
 

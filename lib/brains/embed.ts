@@ -18,8 +18,19 @@
 // model. Rows in a stale space are re-embedded by the backfill route
 // (app/api/brains/reembed) rather than silently mis-ranked.
 
+import idfTable from "@/lib/brains/idf-table.json";
+
 // Embedding dimension. MUST match `vector(256)` in 0024_brain_kb.sql.
 export const EMBED_DIM = 256;
+
+// Precomputed IDF weights over the Brain KB corpus (see idf.ts / idf-table.json).
+// A feature absent from the table (rare or a novel query term) uses IDF_DEFAULT,
+// the df=1 value, so it keeps full discriminating weight. If the table were ever
+// empty, every feature would share IDF_DEFAULT — a uniform scale that cancels
+// under L2 normalization, so the embedder degrades exactly to hash-v2's
+// direction rather than breaking.
+const IDF_WEIGHTS: Record<string, number> = idfTable.idf;
+const IDF_DEFAULT: number = idfTable.default;
 
 /** What the text is for — real retrieval models embed queries and documents differently. */
 export type EmbedKind = "query" | "document";
@@ -75,7 +86,7 @@ function l2Normalize(vec: number[]): number[] {
 // the model phrase-level signal ("leveraged_buyout", "exit_multiple",
 // "cold_outreach", "lead_scoring") that a bag-of-unigrams cannot distinguish
 // from the same words scattered apart — which matters a lot in this domain's KB.
-function features(text: string): string[] {
+export function features(text: string): string[] {
   const toks = tokens(text);
   const feats: string[] = [...toks];
   for (let i = 0; i + 1 < toks.length; i++) {
@@ -87,29 +98,33 @@ function features(text: string): string[] {
 // Deterministic local feature-hashing embedder. Zero cost, no key, no network —
 // the native retrieval model, no third-party embedding service required.
 //
-// hash-v2 over hash-v1: unigrams + bigrams (phrase signal) and sublinear
-// term-frequency weighting (1 + ln·count) so a term repeated many times damps
-// instead of swamping the vector. The bump in `model` is a new vector space, so
-// stale hash-v1 rows are re-embedded via the ingest/reembed path rather than
-// mis-ranked (retrieval filters on embedding_model).
+// hash-v3 over hash-v2: TF-IDF feature weighting. hash-v2 added unigrams +
+// bigrams and sublinear TF (1 + ln·count); hash-v3 additionally scales each
+// feature by its inverse document frequency over the KB corpus (idf.ts), so
+// domain-ubiquitous terms ("capital", "fund", "management") stop dominating the
+// vector and discriminating terms drive similarity. The bump in `model` is a new
+// vector space, so stale hash-v2 rows are re-embedded via the ingest/reembed
+// path rather than mis-ranked (retrieval filters on embedding_model).
 export class HashingEmbedder implements Embedder {
   readonly dim: number;
-  readonly model = "hash-v2";
+  readonly model = "hash-v3";
   constructor(dim: number = EMBED_DIM) {
     this.dim = dim;
   }
 
   embedSync(text: string): number[] {
     const vec = new Array<number>(this.dim).fill(0);
-    // Count each feature once, then weight by sublinear TF so repetition adds
-    // signal with diminishing returns (the standard 1 + ln tf damping).
+    // Count each feature once, then weight by sublinear TF (repetition adds
+    // signal with diminishing returns) times IDF (common terms down-weighted).
     const counts = new Map<string, number>();
     for (const feat of features(text)) counts.set(feat, (counts.get(feat) ?? 0) + 1);
     for (const [feat, count] of counts) {
       const h = fnv1a(feat);
       const bucket = h % this.dim;
       const sign = (h & 1) === 0 ? 1 : -1;
-      vec[bucket] += sign * (1 + Math.log(count));
+      const tf = 1 + Math.log(count);
+      const idf = IDF_WEIGHTS[feat] ?? IDF_DEFAULT;
+      vec[bucket] += sign * tf * idf;
     }
     // L2-normalize so dot product == cosine similarity (matches pgvector <=>).
     return l2Normalize(vec);
