@@ -10,8 +10,16 @@ import {
   addHolding,
   deleteStakeholder,
   deleteHolding,
+  updateHolding,
   draftOwnershipWithEarn,
 } from "./ownership-actions";
+
+interface HoldingDraft {
+  units: string;
+  ownership_pct: string;
+  invested_amount: string;
+  share_class_id: string;
+}
 
 export interface EntityLite { id: string; name: string; entity_type: string }
 export interface StakeLite { id: string; name: string; kind: string }
@@ -39,9 +47,21 @@ export function EntityOwnership({
   const [desc, setDesc] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<HoldingDraft>({
+    units: "",
+    ownership_pct: "",
+    invested_amount: "",
+    share_class_id: "",
+  });
+  const [savingId, startSaveTransition] = useTransition();
 
   const entityHoldings = useMemo(() => holdings.filter((h) => h.entity_id === entityId), [holdings, entityId]);
   const entityClasses = useMemo(() => shareClasses.filter((c) => c.entity_id === entityId), [shareClasses, entityId]);
+  const holdingById = useMemo(
+    () => new Map(entityHoldings.map((h) => [h.id, h])),
+    [entityHoldings],
+  );
   const rollup = useMemo(
     () => rollupOwnership(entityHoldings, stakeholders, shareClasses),
     [entityHoldings, stakeholders, shareClasses],
@@ -64,6 +84,36 @@ export function EntityOwnership({
         setDesc("");
         setNote(`Earn added ${res.created} holder${res.created === 1 ? "" : "s"} — review below.`);
       }
+    });
+  }
+
+  function startEdit(holdingId: string) {
+    const h = holdingById.get(holdingId);
+    setEditDraft({
+      units: h?.units != null ? String(h.units) : "",
+      ownership_pct: h?.ownership_pct != null ? String(h.ownership_pct) : "",
+      invested_amount: h?.invested_amount != null ? String(h.invested_amount) : "",
+      share_class_id: h?.share_class_id ?? "",
+    });
+    setEditingId(holdingId);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  function saveEdit() {
+    if (!editingId) return;
+    const id = editingId;
+    const fd = new FormData();
+    fd.set("id", id);
+    fd.set("units", editDraft.units);
+    fd.set("ownership_pct", editDraft.ownership_pct);
+    fd.set("invested_amount", editDraft.invested_amount);
+    fd.set("share_class_id", editDraft.share_class_id);
+    startSaveTransition(async () => {
+      await updateHolding(fd);
+      setEditingId(null);
     });
   }
 
@@ -123,27 +173,111 @@ export function EntityOwnership({
                 </td>
               </tr>
             ) : (
-              rollup.rows.map((r, i) => (
-                <tr key={r.holdingId} className="border-b border-line/60 bg-surface-1">
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }} />
-                      <span className="text-fg-primary">{r.name}</span>
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{r.kind}</span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-fg-secondary">{r.className ?? "—"}</td>
-                  <td className="px-3 py-2 text-fg-secondary">{r.units ?? "—"}</td>
-                  <td className="px-3 py-2 font-medium text-fg-primary">{r.ownershipPct}%</td>
-                  <td className="px-3 py-2 text-fg-secondary">{usd(r.investedAmount)}</td>
-                  <td className="px-3 py-2 text-right">
-                    <form action={deleteHolding}>
-                      <input type="hidden" name="id" value={r.holdingId} />
-                      <button className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400">✕</button>
-                    </form>
-                  </td>
-                </tr>
-              ))
+              rollup.rows.map((r, i) => {
+                const editing = editingId === r.holdingId;
+                return (
+                  <tr key={r.holdingId} className="border-b border-line/60 bg-surface-1">
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }} />
+                        <span className="text-fg-primary">{r.name}</span>
+                        <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{r.kind}</span>
+                      </span>
+                    </td>
+                    {editing ? (
+                      <>
+                        <td className="px-3 py-2">
+                          <select
+                            value={editDraft.share_class_id}
+                            onChange={(e) => setEditDraft((d) => ({ ...d, share_class_id: e.target.value }))}
+                            className={`${inputClass} w-full`}
+                          >
+                            <option value="">Class…</option>
+                            {entityClasses.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            step="any"
+                            value={editDraft.units}
+                            onChange={(e) => setEditDraft((d) => ({ ...d, units: e.target.value }))}
+                            placeholder="Units"
+                            className={`${inputClass} w-24`}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            step="any"
+                            value={editDraft.ownership_pct}
+                            onChange={(e) => setEditDraft((d) => ({ ...d, ownership_pct: e.target.value }))}
+                            placeholder="Own %"
+                            className={`${inputClass} w-20`}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            step="any"
+                            value={editDraft.invested_amount}
+                            onChange={(e) => setEditDraft((d) => ({ ...d, invested_amount: e.target.value }))}
+                            placeholder="Invested"
+                            className={`${inputClass} w-28`}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={saveEdit}
+                              disabled={savingId}
+                              className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-xs text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-60"
+                              aria-label="Save holding"
+                            >
+                              {savingId ? "…" : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEdit}
+                              disabled={savingId}
+                              className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-60"
+                              aria-label="Cancel edit"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2 text-fg-secondary">{r.className ?? "—"}</td>
+                        <td className="px-3 py-2 text-fg-secondary">{r.units ?? "—"}</td>
+                        <td className="px-3 py-2 font-medium text-fg-primary">{r.ownershipPct}%</td>
+                        <td className="px-3 py-2 text-fg-secondary">{usd(r.investedAmount)}</td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => startEdit(r.holdingId)}
+                              className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+                              aria-label={`Edit ${r.name}`}
+                            >
+                              Edit
+                            </button>
+                            <form action={deleteHolding}>
+                              <input type="hidden" name="id" value={r.holdingId} />
+                              <button className="rounded border border-line px-1.5 py-0.5 text-xs text-fg-muted transition hover:border-red-500/40 hover:text-red-400" aria-label={`Delete ${r.name}`}>✕</button>
+                            </form>
+                          </div>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

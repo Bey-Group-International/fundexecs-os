@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { DocuSignPanel } from "@/components/build/DocuSignPanel";
 
 type EnvelopeStatus = "draft" | "sent" | "partially_signed" | "completed" | "voided";
 
@@ -114,6 +115,15 @@ export async function SigningModule() {
           New Envelope
         </Link>
       </div>
+
+      {/* Live DocuSign — send & track LP subscription agreements directly */}
+      <div className="mb-8">
+        <DocuSignPanel />
+      </div>
+
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        Envelope Tracker
+      </p>
 
       {envelopes.length === 0 ? (
         <EmptyState />
