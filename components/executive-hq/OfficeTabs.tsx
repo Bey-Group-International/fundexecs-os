@@ -12,7 +12,7 @@ import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
 import {
-  CharacterPicker,
+  CharacterChip,
   CHARACTER_STORAGE_KEY,
   useCharacterSelection,
 } from "@/components/virtual-office/CharacterPicker";
@@ -40,7 +40,6 @@ export function OfficeTabs() {
   const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true });
   const [token, setToken] = useState<string | undefined>(undefined);
   const [characterId, setCharacterId] = useCharacterSelection();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [displayName, setDisplayName] = useState<string>("You");
   const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
   const [occupancy, setOccupancy] = useState<Record<string, number>>({});
@@ -193,10 +192,18 @@ export function OfficeTabs() {
               rooms, agents, approval gates, and an audit-ready trail — live on the floor.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
-            <OfficeMetric label="Mode" value={tab === "virtual" ? "Execution" : "Overview"} />
-            <OfficeMetric label="Rooms live" value={`${activeRoomCount}/9`} />
-            <OfficeMetric label="Presence" value={token ? `${Math.max(totalOccupancy, 1)} online` : "Offline"} />
+          {/* Character + office data, unified on one horizontal line: the
+              current-character chip (opens the picker) sits alongside the live
+              office metrics. */}
+          <div className="flex flex-wrap items-stretch gap-2">
+            {token && !guestPrompt ? (
+              <CharacterChip selectedId={characterId} onSelect={setCharacterId} />
+            ) : null}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <OfficeMetric label="Mode" value={tab === "virtual" ? "Execution" : "Overview"} />
+              <OfficeMetric label="Rooms live" value={`${activeRoomCount}/9`} />
+              <OfficeMetric label="Presence" value={token ? `${Math.max(totalOccupancy, 1)} online` : "Offline"} />
+            </div>
           </div>
         </div>
       </div>
@@ -260,25 +267,8 @@ export function OfficeTabs() {
           </div>
         ) : (
           <>
-            {/* Character selection — collapsible header row above the game */}
-            <div className="mb-3">
-              <button
-                type="button"
-                onClick={() => setPickerOpen((open) => !open)}
-                className="mb-2 rounded border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] transition-colors"
-                style={{
-                  color: "#c9a84c",
-                  borderColor: "rgba(201, 168, 76, 0.35)",
-                  background: "#0a0806",
-                  fontFamily: "Georgia, 'Times New Roman', serif",
-                }}
-              >
-                {pickerOpen ? "Hide characters" : "Change character"}
-              </button>
-              {pickerOpen && (
-                <CharacterPicker selectedId={characterId} onSelect={setCharacterId} />
-              )}
-            </div>
+            {/* Character selection now lives in the header chip (one line with
+                the office metrics), so the game mounts directly here. */}
             <VirtualOfficeGame
               key={characterId}
               token={token}
