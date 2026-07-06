@@ -4,6 +4,8 @@ import { ModuleView } from "@/components/ModuleView";
 import { sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { copilotLive } from "@/lib/claude";
 import { getSessionContext } from "@/lib/auth";
+import { stripeConfigured } from "@/lib/stripe";
+import { listInvoices } from "@/lib/invoices.server";
 import { createServerClient } from "@/lib/supabase/server";
 import { NetworkModule } from "@/components/source/NetworkModule";
 import { buildCapitalMap } from "@/lib/capital-map";
@@ -49,6 +51,9 @@ const RunSearch = nextDynamic(() =>
 );
 const ExecuteSearch = nextDynamic(() =>
   import("@/components/execute/ExecuteSearch").then((m) => m.ExecuteSearch),
+);
+const ExecuteBilling = nextDynamic(() =>
+  import("@/components/execute/ExecuteBilling").then((m) => m.ExecuteBilling),
 );
 
 // Hub-specific feature components (lazy-loaded for code splitting).
@@ -155,6 +160,17 @@ export default async function ModulePage(
         <div className="mt-8 border-t border-line pt-8">
           <ModuleView hub={params.hub} module={params.module} />
         </div>
+      </div>
+    );
+  }
+
+  // Execute › Invoices — payment-link invoices (create + list + copy pay link).
+  if (params.hub === "execute" && params.module === "billing") {
+    const ctx = await getSessionContext();
+    const invoices = ctx?.orgId ? await listInvoices(ctx.orgId) : [];
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-6">
+        <ExecuteBilling initialInvoices={invoices} live={stripeConfigured()} />
       </div>
     );
   }

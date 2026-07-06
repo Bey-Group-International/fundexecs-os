@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
     // trigger fulfillment of another org's checkout session id.
     const ctx = await getSessionContext();
     const res = await fulfillCheckout(sessionId, ctx?.orgId ?? undefined);
+    // An invoice payer (often anonymous) belongs back on the public pay page.
+    if (res.kind === "invoice" && res.token) {
+      const status = res.ok ? "paid" : "error";
+      return NextResponse.redirect(new URL(`/pay/${res.token}?checkout=${status}`, origin));
+    }
     const dest = res.kind === "gift" ? "/gift" : "/wallet";
     const status = res.ok ? "success" : "error";
     return NextResponse.redirect(new URL(`${dest}?checkout=${status}`, origin));
