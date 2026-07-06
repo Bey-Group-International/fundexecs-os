@@ -21,6 +21,7 @@ import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
 import { FloorRoster, type RosterEntry } from "./FloorRoster";
 import { ScreenShareDock } from "./ScreenShareDock";
+import { ExecutiveDirectory } from "./ExecutiveDirectory";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -306,6 +307,7 @@ export function VirtualOfficeGame({
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -317,6 +319,15 @@ export function VirtualOfficeGame({
   // Emit the normalized D-pad vector to the Phaser scene's movement handler.
   const emitTouchMove = useCallback((dx: number, dy: number) => {
     gameRef.current?.events.emit("office:touch-move", { dx, dy });
+  }, []);
+
+  // Let an on-floor workflow object (a hotspot with event "office:open-directory")
+  // open the Executive Directory, same as the nav-bar tool button.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const open = () => setDirectoryOpen(true);
+    window.addEventListener("office:open-directory", open);
+    return () => window.removeEventListener("office:open-directory", open);
   }, []);
 
   const requestMedia = useCallback(async () => {
@@ -648,12 +659,29 @@ export function VirtualOfficeGame({
             {r.label}
           </button>
         ))}
+        {/* Executive Directory — an in-floor tool to jump to any executive */}
+        <button
+          type="button"
+          onClick={() => setDirectoryOpen(true)}
+          title="Open the executive directory"
+          className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          style={{
+            fontFamily: "Georgia, serif",
+            letterSpacing: "0.06em",
+            color: "#94a3b8",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <span className="opacity-60 text-[8px]">☰</span>
+          Directory
+        </button>
         {/* Share workspace — captures the screen into a floating PiP dock */}
         <button
           type="button"
           onClick={startScreenShare}
           title={screenStream ? "Stop sharing your workspace" : "Share your workspace"}
-          className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
           style={{
             fontFamily: "Georgia, serif",
             letterSpacing: "0.06em",
@@ -690,6 +718,17 @@ export function VirtualOfficeGame({
 
         {/* Workspace share — floating PiP dock for the screen you're sharing */}
         {screenStream && <ScreenShareDock stream={screenStream} onStop={stopScreenShare} />}
+
+        {/* Executive Directory — jump to any executive's room */}
+        {directoryOpen && (
+          <ExecutiveDirectory
+            onTeleport={(roomKey) => {
+              teleportTo(roomKey);
+              setDirectoryOpen(false);
+            }}
+            onClose={() => setDirectoryOpen(false)}
+          />
+        )}
 
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
