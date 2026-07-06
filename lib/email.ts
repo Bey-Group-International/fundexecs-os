@@ -279,6 +279,71 @@ export function documentReadyEmail(
 }
 
 
+export function invoiceReceiptEmail(args: {
+  merchantName: string;
+  invoiceTitle: string;
+  invoiceNumber: string | null;
+  amountFormatted: string; // e.g. "$25.00"
+  paidOn: string; // human date, e.g. "Jul 6, 2026"
+  lineItems: { description: string; quantity: number; unitFormatted: string; subtotalFormatted: string }[];
+}): EmailTemplate {
+  const merchant = escapeHtml(args.merchantName);
+  const title = escapeHtml(args.invoiceTitle);
+  const number = args.invoiceNumber ? escapeHtml(args.invoiceNumber) : null;
+  const amount = escapeHtml(args.amountFormatted);
+  const paidOn = escapeHtml(args.paidOn);
+  const heading = number ? `${number} — ${title}` : title;
+  const rows = args.lineItems
+    .map(
+      (li) =>
+        `<tr><td style="padding: 6px 0; font-size: 14px; color: #AAAAAA;">${escapeHtml(li.description)} · ${escapeHtml(String(li.quantity))} × ${escapeHtml(li.unitFormatted)}</td><td style="padding: 6px 0; font-size: 14px; color: #F5F5F5; text-align: right; white-space: nowrap;">${escapeHtml(li.subtotalFormatted)}</td></tr>`,
+    )
+    .join("");
+  const body = `
+    <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">Payment received</h1>
+    <p style="margin: 0 0 4px; font-size: 15px; color: #AAAAAA;">Thanks — your payment to <strong style="color: #F5F5F5;">${merchant}</strong> has been received.</p>
+    <p style="margin: 0 0 20px; font-size: 14px; color: #888888;">${escapeHtml(heading)}</p>
+    <table style="width: 100%; border-collapse: collapse; border-top: 1px solid #222222;">
+      ${rows}
+      <tr><td style="padding: 12px 0 0; border-top: 1px solid #222222; font-size: 15px; color: #F5F5F5; font-weight: 700;">Total</td><td style="padding: 12px 0 0; border-top: 1px solid #222222; font-size: 15px; color: #F59E0B; font-weight: 700; text-align: right;">${amount}</td></tr>
+    </table>
+    <p style="margin: 20px 0 0; font-size: 13px; color: #888888;">Paid on ${paidOn}.</p>`;
+  return {
+    subject: `Receipt: ${args.invoiceNumber ?? args.invoiceTitle} — ${args.merchantName}`,
+    html: lpBaseHtml(body),
+  };
+}
+
+export function invoiceCreatedEmail(args: {
+  merchantName: string;
+  invoiceTitle: string;
+  invoiceNumber: string | null;
+  amountFormatted: string;
+  payUrl: string;
+}): EmailTemplate {
+  const merchant = escapeHtml(args.merchantName);
+  const title = escapeHtml(args.invoiceTitle);
+  const number = args.invoiceNumber ? escapeHtml(args.invoiceNumber) : null;
+  const amount = escapeHtml(args.amountFormatted);
+  const heading = number ? `${number} — ${title}` : title;
+  // payUrl must be a valid https URL; only surface the button/link when it is.
+  const isHttps = /^https:\/\//i.test(args.payUrl);
+  const button = isHttps ? goldButton(args.payUrl, "Pay invoice") : "";
+  const linkLine = isHttps
+    ? `<p style="margin: 20px 0 0; font-size: 12px; color: #555555;">Or copy this link: <a href="${escapeHtml(args.payUrl)}" style="color: #F59E0B;">${escapeHtml(args.payUrl)}</a></p>`
+    : "";
+  const body = `
+    <h1 style="margin: 0 0 8px; font-size: 22px; color: #F5F5F5; font-weight: 700;">You have an invoice from ${merchant}</h1>
+    <p style="margin: 0; font-size: 15px; color: #AAAAAA;"><strong style="color: #F5F5F5;">${escapeHtml(heading)}</strong> for <strong style="color: #F5F5F5;">${amount}</strong>.</p>
+    ${button}
+    ${linkLine}`;
+  return {
+    subject: `Invoice ${args.invoiceNumber ?? args.invoiceTitle} — ${args.merchantName}`,
+    html: lpBaseHtml(body),
+  };
+}
+
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
