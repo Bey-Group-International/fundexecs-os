@@ -36,15 +36,25 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
   const [circleList, setCircleList] = useState<Circle[]>(circles);
   const [importSuccess, setImportSuccess] = useState<number | null>(null);
 
-  async function handleCreateCircle(name: string, description: string) {
-    const res = await fetch("/api/network/circles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
-    });
-    if (res.ok) {
+  async function handleCreateCircle(
+    name: string,
+    description: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await fetch("/api/network/circles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        return { ok: false, error: body?.error ?? "Failed to create circle. Please try again." };
+      }
       const circle = await res.json();
       setCircleList((prev) => [circle, ...prev]);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Failed to create circle. Please try again." };
     }
   }
 
