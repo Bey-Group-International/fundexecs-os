@@ -535,7 +535,8 @@ export function VirtualOfficeGame({
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
         {/* ── Execution floor column ── */}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {/* Video presence for the active work session (mock until WebRTC) */}
+          {/* Live agent presence for the active work session (real runtime
+              status; human peer video is the VideoTileBar below). */}
           <MeetingPresenceGrid />
 
           <div className="flex flex-col bg-[#080604] rounded-xl overflow-hidden border border-[#c9a84c22]"

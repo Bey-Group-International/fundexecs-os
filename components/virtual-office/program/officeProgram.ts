@@ -13,6 +13,8 @@
  *  - the role-based permission system (approval tiers)
  */
 
+import { deriveRouting, type LifecycleStage } from "@/lib/intelligence";
+
 // ─── Modes, tiers, stages ────────────────────────────────────────────────────
 
 /** Operating mode for Earn. Displayed in the HUD at all times. */
@@ -34,10 +36,11 @@ export const RISK_TIERS: Record<RiskTier, { label: string; short: string; color:
 };
 
 /**
- * The signed-in user's role on the floor. Determines which approval tiers
- * they are authorized to clear.
- * TODO(permissions): source this from the role-based permission system /
- * Supabase RLS instead of session metadata, and enforce server-side.
+ * The signed-in user's role on the floor. Presentational only — it drives the
+ * UX pre-check. The authoritative approval decision is enforced server-side
+ * against the TRUSTED org membership role (office_decide_approval RPC / RLS,
+ * migration 20260705000000); officeRoleFromMemberRole derives this from that
+ * trusted role.
  */
 export type OfficeRole =
   | "managing_partner"
@@ -346,131 +349,127 @@ export type RoutingResult = {
 };
 
 /**
- * Map raw user intent to agents, rooms, and risk tier.
- *
- * TODO(backend): replace keyword matching with the Earn command backend's
- * intent classifier. The RoutingResult contract stays the same.
+ * The office's execution templates — one per WorkflowIntent. Each is the fixed
+ * "shape" of a workflow (which agents own what, in which rooms, at which risk
+ * tier). Classification selects the intent; the template supplies the plan.
+ * Builders return fresh arrays so the store can own the returned objects.
  */
-export function routeTaskToAgents(taskText: string): RoutingResult {
-  const t = taskText.toLowerCase();
-  const has = (...words: string[]) => words.some((w) => t.includes(w));
+const WORKFLOW_TEMPLATES: Record<WorkflowIntent, () => RoutingResult> = {
+  data_room_build: () => ({
+    intent: "data_room_build",
+    title: "Investor-Ready Data Room Build",
+    riskTier: "external_facing",
+    assignments: [
+      { agentId: "associate",          roomKey: "trading",   owns: "Data Room Index",    status: "Structuring the data room index" },
+      { agentId: "analyst",            roomKey: "office",    owns: "Financial Summary",  status: "Reviewing underwriting assumptions" },
+      { agentId: "risk",               roomKey: "legal",     owns: "Approval Review",    status: "Checking external-facing risk" },
+      { agentId: "legal",              roomKey: "legal",     owns: "Document Review",    status: "Confirming disclosures and NDAs" },
+      { agentId: "investor_relations", roomKey: "reception", owns: "LP Positioning",     status: "Preparing investor-ready framing" },
+    ],
+    activeRooms: ["ceo", "trading", "research", "office", "legal", "reception", "boardroom"],
+    earnPlan:
+      "I will route this through the Deal Room, Diligence, Underwriting, Compliance, and the IR Lounge, with Boardroom review at the end. Tier 2 approval is required before investor-facing materials are finalized.",
+  }),
 
-  if (has("data room", "dataroom")) {
-    return {
-      intent: "data_room_build",
-      title: "Investor-Ready Data Room Build",
-      riskTier: "external_facing",
-      assignments: [
-        { agentId: "associate",          roomKey: "trading",   owns: "Data Room Index",    status: "Structuring the data room index" },
-        { agentId: "analyst",            roomKey: "office",    owns: "Financial Summary",  status: "Reviewing underwriting assumptions" },
-        { agentId: "risk",               roomKey: "legal",     owns: "Approval Review",    status: "Checking external-facing risk" },
-        { agentId: "legal",              roomKey: "legal",     owns: "Document Review",    status: "Confirming disclosures and NDAs" },
-        { agentId: "investor_relations", roomKey: "reception", owns: "LP Positioning",     status: "Preparing investor-ready framing" },
-      ],
-      activeRooms: ["ceo", "trading", "research", "office", "legal", "reception", "boardroom"],
-      earnPlan:
-        "I will route this through the Deal Room, Diligence, Underwriting, Compliance, and the IR Lounge, with Boardroom review at the end. Tier 2 approval is required before investor-facing materials are finalized.",
-    };
-  }
+  underwriting: () => ({
+    intent: "underwriting",
+    title: "Underwriting Model Run",
+    riskTier: "internal",
+    assignments: [
+      { agentId: "analyst",   roomKey: "office",    owns: "Model & Scenarios",  status: "Running assumptions and sensitivities" },
+      { agentId: "principal", roomKey: "boardroom", owns: "IC Assumptions",     status: "Reviewing deal logic for IC" },
+      { agentId: "risk",      roomKey: "legal",     owns: "Assumption Controls", status: "Monitoring model assumptions" },
+    ],
+    activeRooms: ["ceo", "office", "boardroom", "legal"],
+    earnPlan:
+      "Routing to the Underwriting Desk with Principal oversight in the Boardroom. This is Tier 1 internal analysis — no approval gate required.",
+  }),
 
-  if (has("model", "underwrit", "valuation", "lbo", "ic memo", "scenario")) {
-    return {
-      intent: t.includes("ic memo") ? "ic_review" : "underwriting",
-      title: t.includes("ic memo") ? "IC Memo Preparation" : "Underwriting Model Run",
-      riskTier: "internal",
-      assignments: [
-        { agentId: "analyst",   roomKey: "office",    owns: "Model & Scenarios",  status: "Running assumptions and sensitivities" },
-        { agentId: "principal", roomKey: "boardroom", owns: "IC Assumptions",     status: "Reviewing deal logic for IC" },
-        { agentId: "risk",      roomKey: "legal",     owns: "Assumption Controls", status: "Monitoring model assumptions" },
-      ],
-      activeRooms: ["ceo", "office", "boardroom", "legal"],
-      earnPlan:
-        "Routing to the Underwriting Desk with Principal oversight in the Boardroom. This is Tier 1 internal analysis — no approval gate required.",
-    };
-  }
+  ic_review: () => ({
+    intent: "ic_review",
+    title: "IC Memo Preparation",
+    riskTier: "internal",
+    assignments: [
+      { agentId: "analyst",   roomKey: "office",    owns: "Model & Scenarios",  status: "Running assumptions and sensitivities" },
+      { agentId: "principal", roomKey: "boardroom", owns: "IC Assumptions",     status: "Reviewing deal logic for IC" },
+      { agentId: "risk",      roomKey: "legal",     owns: "Assumption Controls", status: "Monitoring model assumptions" },
+    ],
+    activeRooms: ["ceo", "office", "boardroom", "legal"],
+    earnPlan:
+      "Preparing the IC memo at the Underwriting Desk with Principal review in the Boardroom. Tier 1 internal analysis — no approval gate required.",
+  }),
 
-  if (has("investor", "lp ", "lp update", "fundrais", "update")) {
-    return {
-      intent: "investor_relations",
-      title: "LP Update & Investor Communications",
-      riskTier: "external_facing",
-      assignments: [
-        { agentId: "investor_relations", roomKey: "reception", owns: "LP Update Draft",       status: "Drafting the LP update" },
-        { agentId: "legal",              roomKey: "legal",     owns: "Language Review",       status: "Reviewing external-facing language" },
-        { agentId: "risk",               roomKey: "legal",     owns: "Distribution Controls", status: "Verifying communication controls" },
-      ],
-      activeRooms: ["ceo", "reception", "legal", "boardroom"],
-      earnPlan:
-        "Routing through the IR Lounge and Compliance & Legal, then the Boardroom approval queue. Tier 2 approval is required before anything reaches investors.",
-    };
-  }
+  investor_relations: () => ({
+    intent: "investor_relations",
+    title: "LP Update & Investor Communications",
+    riskTier: "external_facing",
+    assignments: [
+      { agentId: "investor_relations", roomKey: "reception", owns: "LP Update Draft",       status: "Drafting the LP update" },
+      { agentId: "legal",              roomKey: "legal",     owns: "Language Review",       status: "Reviewing external-facing language" },
+      { agentId: "risk",               roomKey: "legal",     owns: "Distribution Controls", status: "Verifying communication controls" },
+    ],
+    activeRooms: ["ceo", "reception", "legal", "boardroom"],
+    earnPlan:
+      "Routing through the IR Lounge and Compliance & Legal, then the Boardroom approval queue. Tier 2 approval is required before anything reaches investors.",
+  }),
 
-  if (has("wire", "capital call", "settlement", "closing", "subscription")) {
-    return {
-      intent: "capital_movement",
-      title: "Capital Movement & Closing Mechanics",
-      riskTier: "capital_binding",
-      assignments: [
-        { agentId: "treasury",  roomKey: "marketing", owns: "Settlement Checklist", status: "Preparing settlement mechanics" },
-        { agentId: "legal",     roomKey: "legal",     owns: "Closing Documents",    status: "Reviewing closing documents" },
-        { agentId: "risk",      roomKey: "legal",     owns: "Capital Controls",     status: "Enforcing capital-binding controls" },
-        { agentId: "ops_admin", roomKey: "ops",       owns: "Fund Records",         status: "Reconciling fund records" },
-      ],
-      activeRooms: ["ceo", "marketing", "legal", "ops", "boardroom"],
-      earnPlan:
-        "This is Tier 3 capital-binding work. Treasury, Legal, and Risk will prepare everything, but nothing moves without your explicit approval at the Boardroom gate.",
-    };
-  }
+  capital_movement: () => ({
+    intent: "capital_movement",
+    title: "Capital Movement & Closing Mechanics",
+    riskTier: "capital_binding",
+    assignments: [
+      { agentId: "treasury",  roomKey: "marketing", owns: "Settlement Checklist", status: "Preparing settlement mechanics" },
+      { agentId: "legal",     roomKey: "legal",     owns: "Closing Documents",    status: "Reviewing closing documents" },
+      { agentId: "risk",      roomKey: "legal",     owns: "Capital Controls",     status: "Enforcing capital-binding controls" },
+      { agentId: "ops_admin", roomKey: "ops",       owns: "Fund Records",         status: "Reconciling fund records" },
+    ],
+    activeRooms: ["ceo", "marketing", "legal", "ops", "boardroom"],
+    earnPlan:
+      "This is Tier 3 capital-binding work. Treasury, Legal, and Risk will prepare everything, but nothing moves without your explicit approval at the Boardroom gate.",
+  }),
 
-  if (has("compliance", "nda", "regulatory", "legal review")) {
-    return {
-      intent: "compliance_review",
-      title: "Compliance Queue Review",
-      riskTier: "internal",
-      assignments: [
-        { agentId: "risk",      roomKey: "legal", owns: "Compliance Queue", status: "Reviewing open compliance items" },
-        { agentId: "legal",     roomKey: "legal", owns: "Document Queue",   status: "Clearing pending document reviews" },
-        { agentId: "ops_admin", roomKey: "ops",   owns: "Compliance Calendar", status: "Updating the compliance calendar" },
-      ],
-      activeRooms: ["ceo", "legal", "ops"],
-      earnPlan:
-        "Risk & Compliance and Legal will clear the queue in the Compliance & Legal office. Tier 1 internal review.",
-    };
-  }
+  compliance_review: () => ({
+    intent: "compliance_review",
+    title: "Compliance Queue Review",
+    riskTier: "internal",
+    assignments: [
+      { agentId: "risk",      roomKey: "legal", owns: "Compliance Queue", status: "Reviewing open compliance items" },
+      { agentId: "legal",     roomKey: "legal", owns: "Document Queue",   status: "Clearing pending document reviews" },
+      { agentId: "ops_admin", roomKey: "ops",   owns: "Compliance Calendar", status: "Updating the compliance calendar" },
+    ],
+    activeRooms: ["ceo", "legal", "ops"],
+    earnPlan:
+      "Risk & Compliance and Legal will clear the queue in the Compliance & Legal office. Tier 1 internal review.",
+  }),
 
-  if (has("screen", "target", "acquisition", "pipeline", "source", "deal")) {
-    return {
-      intent: "deal_screening",
-      title: "Acquisition Target Screening",
-      riskTier: "internal",
-      assignments: [
-        { agentId: "associate",    roomKey: "trading",  owns: "Screening Checklist", status: "Screening the target profile" },
-        { agentId: "business_dev", roomKey: "trading",  owns: "Sourcing Context",    status: "Mapping sourcing relationships" },
-        { agentId: "analyst",      roomKey: "research", owns: "Market Validation",   status: "Validating market assumptions" },
-      ],
-      activeRooms: ["ceo", "trading", "research"],
-      earnPlan:
-        "The Associate and Business Development will screen the target in the Deal Room while the Analyst validates the market in Diligence. Tier 1 internal analysis.",
-    };
-  }
+  deal_screening: () => ({
+    intent: "deal_screening",
+    title: "Acquisition Target Screening",
+    riskTier: "internal",
+    assignments: [
+      { agentId: "associate",    roomKey: "trading",  owns: "Screening Checklist", status: "Screening the target profile" },
+      { agentId: "business_dev", roomKey: "trading",  owns: "Sourcing Context",    status: "Mapping sourcing relationships" },
+      { agentId: "analyst",      roomKey: "research", owns: "Market Validation",   status: "Validating market assumptions" },
+    ],
+    activeRooms: ["ceo", "trading", "research"],
+    earnPlan:
+      "The Associate and Business Development will screen the target in the Deal Room while the Analyst validates the market in Diligence. Tier 1 internal analysis.",
+  }),
 
-  if (has("kpi", "portfolio", "post-close", "vendor", "operating plan")) {
-    return {
-      intent: "portfolio_ops",
-      title: "Portfolio Operations Review",
-      riskTier: "internal",
-      assignments: [
-        { agentId: "portfolio_ops", roomKey: "ops", owns: "KPI Board",       status: "Refreshing KPI dashboards" },
-        { agentId: "ops_admin",     roomKey: "ops", owns: "Reporting Pack",  status: "Assembling the reporting pack" },
-      ],
-      activeRooms: ["ceo", "ops"],
-      earnPlan:
-        "Portfolio Ops will refresh KPIs and the reporting pack on the Ops floor. Tier 1 internal work.",
-    };
-  }
+  portfolio_ops: () => ({
+    intent: "portfolio_ops",
+    title: "Portfolio Operations Review",
+    riskTier: "internal",
+    assignments: [
+      { agentId: "portfolio_ops", roomKey: "ops", owns: "KPI Board",       status: "Refreshing KPI dashboards" },
+      { agentId: "ops_admin",     roomKey: "ops", owns: "Reporting Pack",  status: "Assembling the reporting pack" },
+    ],
+    activeRooms: ["ceo", "ops"],
+    earnPlan:
+      "Portfolio Ops will refresh KPIs and the reporting pack on the Ops floor. Tier 1 internal work.",
+  }),
 
-  // No silent tasks: unclassified input still routes visibly.
-  return {
+  general_execution: () => ({
     intent: "general_execution",
     title: "General Execution Task",
     riskTier: "internal",
@@ -480,5 +479,128 @@ export function routeTaskToAgents(taskText: string): RoutingResult {
     activeRooms: ["ceo", "trading"],
     earnPlan:
       "Received. I'll treat this as a general execution task and route it to the Associate for first-pass handling.",
+  }),
+};
+
+/**
+ * Map the product's lifecycle taxonomy (lib/intelligence) onto the office's
+ * execution intents. This is the seam that keeps the AI floor in step with the
+ * rest of FundExecs OS: the SAME classifier that routes work everywhere else
+ * decides which office workflow runs. Total over LifecycleStage so routing is
+ * never left undefined.
+ */
+export const STAGE_TO_OFFICE_INTENT: Record<LifecycleStage, WorkflowIntent> = {
+  "Fund Strategy": "general_execution",
+  "Mandate Definition": "general_execution",
+  "Market Mapping": "deal_screening",
+  "Capital Stack Design": "underwriting",
+  "Fundraising & LP Engagement": "investor_relations",
+  "Compliance & Documentation": "compliance_review",
+  "Portfolio Construction": "portfolio_ops",
+  "Reporting & Communications": "investor_relations",
+  Sourcing: "deal_screening",
+  Screening: "deal_screening",
+  Diligence: "data_room_build",
+  Underwriting: "underwriting",
+  "IC Preparation": "ic_review",
+  Structuring: "underwriting",
+  Closing: "capital_movement",
+  "Portfolio Monitoring": "portfolio_ops",
+  "Exit Planning": "portfolio_ops",
+  "Workflow Automation": "general_execution",
+};
+
+/** Assemble the office workflow plan for a resolved intent. */
+export function buildWorkflowRouting(intent: WorkflowIntent): RoutingResult {
+  return WORKFLOW_TEMPLATES[intent]();
+}
+
+/**
+ * Classify a raw command into an office workflow using the product's native
+ * intelligence layer (deriveRouting). deriveRouting is deterministic and needs
+ * no ANTHROPIC_API_KEY, so it doubles as the deterministic fallback: the same
+ * input always routes the same way on the server and in the browser, matching
+ * how work is routed everywhere else in FundExecs OS.
+ *
+ * A positively classified stage (confidence "high") selects the specialized
+ * office workflow for that stage; an unclassified command falls back to general
+ * execution. No task is ever routed silently.
+ */
+export function routeTaskToAgents(taskText: string): RoutingResult {
+  const routing = deriveRouting({ prompt: taskText, hub: "run", agents: [] });
+  const intent: WorkflowIntent =
+    routing.confidence === "high"
+      ? STAGE_TO_OFFICE_INTENT[routing.lifecycle_stage]
+      : "general_execution";
+  return buildWorkflowRouting(intent);
+}
+
+// ─── Persistence row mappers (pure) ──────────────────────────────────────────
+// Pure, framework-free translations from the in-memory office model to the
+// column shapes persisted by office-actions.ts (migration
+// 20260707130000_office_program.sql). Kept here — beside the model they map —
+// so both the server action and its tests share one definition.
+
+export type OfficeWorkflowRow = {
+  organization_id: string;
+  workflow_key: string;
+  title: string;
+  command_text: string;
+  intent: WorkflowIntent;
+  mode: WorkflowMode;
+  stage: WorkflowStage;
+  risk_tier: RiskTier;
+  progress: number;
+  active_rooms: RoomKey[];
+  assignment_count: number;
+  outcome: "complete" | "rejected" | null;
+  completed_at: string | null;
+};
+
+export type OfficeAuditRow = {
+  organization_id: string;
+  event_key: string;
+  actor: string;
+  action: string;
+  room: string;
+  tier: RiskTier | null;
+  status: AuditEvent["status"];
+  occurred_at: string;
+};
+
+/** Map an in-memory workflow to its persisted row. */
+export function workflowToRow(
+  organizationId: string,
+  wf: OfficeWorkflow,
+  outcome: "complete" | "rejected" | null,
+): OfficeWorkflowRow {
+  return {
+    organization_id: organizationId,
+    workflow_key: wf.id,
+    title: wf.title,
+    command_text: wf.commandText,
+    intent: wf.intent,
+    mode: wf.mode,
+    stage: wf.stage,
+    risk_tier: wf.riskTier,
+    progress: Math.round(wf.progress),
+    active_rooms: wf.activeRooms,
+    assignment_count: wf.assignments.length,
+    outcome,
+    completed_at: wf.completedAt ? new Date(wf.completedAt).toISOString() : null,
+  };
+}
+
+/** Map an in-memory audit event to its append-only row. */
+export function auditEventToRow(organizationId: string, ev: AuditEvent): OfficeAuditRow {
+  return {
+    organization_id: organizationId,
+    event_key: ev.id,
+    actor: ev.actor,
+    action: ev.action,
+    room: ev.room,
+    tier: ev.tier,
+    status: ev.status,
+    occurred_at: new Date(ev.ts).toISOString(),
   };
 }

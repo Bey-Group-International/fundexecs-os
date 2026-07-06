@@ -7,13 +7,16 @@
  * useSyncExternalStore; the Phaser scene subscribes to `sceneBus` for
  * visual commands (agent movement, room activity, handoffs).
  *
- * Everything here is a visual workflow simulation with clean seams for
- * real backend integration:
- *  - TODO(supabase): persist workflows / audit events per fund workspace.
- *  - TODO(websocket): drive stage transitions from the workflow engine
- *    instead of local timers (VirtualOfficeSocket already carries NPC state).
- *  - TODO(earn-backend): swap routeTaskToAgents for the real classifier.
- *  - TODO(permissions): approval actions must check the caller's role.
+ * The floor choreography (stage timers, avatar movement) is a local visual
+ * runtime, but its decisions are wired to real product infrastructure:
+ *  - Routing uses the product's native intelligence layer (deriveRouting) via
+ *    routeTaskToAgents — the same classifier used elsewhere in FundExecs OS.
+ *  - Approvals are governed server-side when a ServerApprovalDecider is
+ *    registered (office_decide_approval RPC / RLS); see setApprovalDecider.
+ *  - Workflows and audit events persist best-effort through an injected
+ *    OfficePersistenceSink (office-actions.ts, org-scoped + RLS). With no sink
+ *    registered (guest / no Supabase session) the store keeps working entirely
+ *    in memory, so /command-center never depends on the backend being present.
  */
 
 import {
@@ -234,12 +237,13 @@ function pushChat(kind: ChatKind, author: string, text: string) {
 
 /**
  * Append an audit event. This log is the institutional record of every
- * command, assignment, gate, and completion.
- * TODO(supabase): mirror into the audit database (append-only table).
+ * command, assignment, gate, and completion. Mirrored best-effort into the
+ * append-only office_audit_log table when a persistence sink is registered.
  */
 export function addAuditEvent(ev: Omit<AuditEvent, "id" | "ts">) {
   const event: AuditEvent = { ...ev, id: nextId("aud"), ts: Date.now() };
   setState({ audit: [...state.audit, event].slice(-MAX_LOG) });
+  persistAuditEvent(event);
 }
 
 function patchAgent(agentId: AgentId, patch: Partial<AgentRuntime>) {
@@ -342,6 +346,58 @@ export function setApprovalDecider(fn: ServerApprovalDecider | null) {
 /** Whether a server-side authority is currently governing approvals. */
 export function hasServerApprovalAuthority(): boolean {
   return approvalDecider !== null;
+}
+
+// ─── Best-effort persistence (dependency injection) ──────────────────────────
+// The store stays framework/IO-free. The React layer registers a sink that
+// persists workflows and appends audit events through office-actions.ts
+// (org-scoped, RLS-enforced). Persistence is ALWAYS best-effort: calls are
+// fire-and-forget and swallow errors, so if no sink is registered — or the
+// tables/API are unavailable — the office keeps running purely in memory.
+
+export type OfficePersistenceSink = {
+  persistWorkflow: (wf: OfficeWorkflow, phase: "created" | "archived") => Promise<void>;
+  appendAudit: (events: AuditEvent[]) => Promise<void>;
+};
+
+let persistence: OfficePersistenceSink | null = null;
+let auditBuffer: AuditEvent[] = [];
+let auditFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Register (or clear with null) the best-effort persistence sink. */
+export function setOfficePersistence(sink: OfficePersistenceSink | null) {
+  persistence = sink;
+}
+
+/** Whether workflows/audit are being mirrored to a backend. */
+export function hasOfficePersistence(): boolean {
+  return persistence !== null;
+}
+
+function flushAuditBuffer() {
+  auditFlushTimer = null;
+  if (!persistence || auditBuffer.length === 0) {
+    auditBuffer = [];
+    return;
+  }
+  const batch = auditBuffer;
+  auditBuffer = [];
+  // Fire-and-forget: a failed flush must never disturb the in-memory office.
+  void persistence.appendAudit(batch).catch(() => {});
+}
+
+/** Queue an audit event for a debounced best-effort flush. No-op with no sink. */
+function persistAuditEvent(ev: AuditEvent) {
+  if (!persistence) return;
+  auditBuffer.push(ev);
+  if (auditFlushTimer) return;
+  auditFlushTimer = setTimeout(flushAuditBuffer, 1200);
+}
+
+/** Persist a workflow snapshot best-effort. No-op with no sink. */
+function persistWorkflowSnapshot(wf: OfficeWorkflow, phase: "created" | "archived") {
+  if (!persistence) return;
+  void persistence.persistWorkflow(wf, phase).catch(() => {});
 }
 
 // ─── Command intake ──────────────────────────────────────────────────────────
@@ -465,6 +521,7 @@ function startExecution(commandText: string, routing: RoutingResult) {
   });
   updateNPCState("earn", "assigned", "Routing work to agents");
 
+  persistWorkflowSnapshot(workflow, "created");
   assignTaskToNPCs(workflow);
 }
 
@@ -617,8 +674,9 @@ function surfaceApprovalGate() {
 }
 
 /**
- * Create a pending approval gate for the active workflow.
- * TODO(permissions): the backend must verify the approver's role here.
+ * Create a pending approval gate for the active workflow. The gate is only
+ * cleared through resolveApprovalGate, where a registered ServerApprovalDecider
+ * re-verifies the caller's trusted org role against the tier server-side.
  */
 export function createApprovalGate(workflowId: string, title: string, tier: Exclude<RiskTier, "internal">): ApprovalGate {
   const gate: ApprovalGate = {
@@ -743,6 +801,11 @@ export function completeOfficeTask(outcome: "approved" | "rejected") {
     etaLabel: rejected ? "Blocked: approval was rejected" : "All assigned agents complete",
   });
 
+  // Persist the terminal workflow snapshot best-effort (final stage/outcome).
+  if (state.activeWorkflow) {
+    persistWorkflowSnapshot(state.activeWorkflow, "archived");
+  }
+
   pushChat(
     "earn",
     "Earn",
@@ -806,9 +869,10 @@ export function completeOfficeTask(outcome: "approved" | "rejected") {
 // ─── Meetings ────────────────────────────────────────────────────────────────
 
 /**
- * Join a structured work session. Participants gather in the meeting room,
- * chat records the event, and mock video presence cards appear.
- * TODO(webrtc): attach real MediaStreams to the presence grid on join.
+ * Join a structured work session. Participants gather in the meeting room, the
+ * event is recorded to chat and the audit trail, and the presence strip shows
+ * each agent's live status. Human peer video, when present, is carried by the
+ * real WebRTC layer (rtc/net → VideoTileBar), not fabricated here.
  */
 export function joinMeeting(type: MeetingType) {
   const def = MEETING_TYPES[type];
@@ -946,4 +1010,10 @@ export function reassignAgentTask(fromAgentId: AgentId, toAgentId: AgentId) {
 /** Reset transient timers (e.g. on hot reload). State itself is preserved. */
 export function shutdownOfficeProgram() {
   clearWorkflowTimers();
+  if (auditFlushTimer) {
+    clearTimeout(auditFlushTimer);
+    auditFlushTimer = null;
+  }
+  // Flush any buffered audit before tearing down (best-effort).
+  flushAuditBuffer();
 }

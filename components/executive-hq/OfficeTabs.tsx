@@ -5,9 +5,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
-import { setApprovalDecider, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
+import { setApprovalDecider, setOfficePersistence, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
 import { officeRoleFromMemberRole } from "@/lib/office/approvalAuthority";
 import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
+import { appendOfficeAuditEvents, persistOfficeWorkflow } from "@/components/virtual-office/program/office-actions";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
 import { AGENT_BY_ID } from "@/components/virtual-office/program/officeProgram";
@@ -101,13 +102,29 @@ export function OfficeTabs() {
             const m = membership as { organization_id: string; role: MemberRole };
             setUserRole(officeRoleFromMemberRole(m.role));
             setApprovalDecider(makeServerApprovalDecider(supabase, m.organization_id));
+            // Mirror routed workflows + the audit trail best-effort through the
+            // org-scoped server actions (RLS-enforced). Failures are swallowed
+            // by the store, so the floor keeps working purely in memory.
+            setOfficePersistence({
+              persistWorkflow: async (wf, phase) => {
+                const outcome =
+                  phase === "archived" ? (wf.stage === "blocked" ? "rejected" : "complete") : null;
+                await persistOfficeWorkflow(wf, outcome);
+              },
+              appendAudit: async (events) => {
+                await appendOfficeAuditEvents(events);
+              },
+            });
           });
       }
       setSessionChecked(true);
     });
 
-    // On unmount, stop routing approvals to a stale client/org.
-    return () => setApprovalDecider(null);
+    // On unmount, stop routing approvals/persistence to a stale client/org.
+    return () => {
+      setApprovalDecider(null);
+      setOfficePersistence(null);
+    };
   }, [setCharacterId]);
 
   // Auto-teleport when ?room= param is present (guest join links)
