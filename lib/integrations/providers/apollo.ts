@@ -4,6 +4,7 @@
 
 import { verifiedFetch, scoreConfidence, failedResult } from '../../verification-engine';
 import type { VerifiedResult, VerifiedPerson, VerifiedCompany } from '../../source-hub-types';
+import { isValidEmail, normalizePhone, isValidLinkedIn } from '../../contact-sanitize';
 
 const APOLLO_BASE = 'https://api.apollo.io/v1';
 
@@ -62,8 +63,13 @@ interface ApolloOrganization {
 function mapPerson(p: ApolloPerson): VerifiedPerson {
   const name = p.name ?? [p.first_name, p.last_name].filter(Boolean).join(' ') ?? 'Unknown';
   const location = [p.city, p.state, p.country].filter(Boolean).join(', ') || undefined;
-  const email = p.email && p.email_status !== 'invalid' ? p.email : undefined;
-  const phone = p.phone_numbers?.[0]?.raw_number;
+  // Only surface well-formed, non-placeholder contact fields — never a
+  // guessed/masked value. email_verified is true only when Apollo says
+  // 'verified', gating whether the composer may show the email at all.
+  const email = isValidEmail(p.email) ? p.email : undefined;
+  const email_verified = Boolean(email) && p.email_status === 'verified';
+  const phone = normalizePhone(p.phone_numbers?.[0]?.raw_number) ?? undefined;
+  const linkedin_url = isValidLinkedIn(p.linkedin_url) ? p.linkedin_url : undefined;
 
   return {
     id: p.id,
@@ -71,7 +77,8 @@ function mapPerson(p: ApolloPerson): VerifiedPerson {
     title: p.title,
     company: p.organization?.name,
     email,
-    linkedin_url: p.linkedin_url,
+    email_verified,
+    linkedin_url,
     phone,
     location,
     seniority: p.seniority,
@@ -80,7 +87,7 @@ function mapPerson(p: ApolloPerson): VerifiedPerson {
     confidence: scoreConfidence({
       hasName: !!name,
       hasEmail: !!email,
-      hasLinkedIn: !!p.linkedin_url,
+      hasLinkedIn: !!linkedin_url,
       hasPhone: !!phone,
     }),
   };

@@ -7,6 +7,7 @@ import { getRelationshipContext } from "@/lib/copilot/context/relationship-conte
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { buildContactAppendix, detectSourcingIntent } from "@/lib/chat-enrichment";
+import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -273,9 +274,10 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, sessionSummary, priorArtifacts, model });
 
-  // No API key — stream the deterministic fallback as a single chunk.
+  // No API key — stream the deterministic fallback as a single chunk (still
+  // redacted, so no contact-like text can ever slip through).
   if (!stream) {
-    return new Response(encoder.encode(earnChatFallback(body)), {
+    return new Response(encoder.encode(redactContacts(earnChatFallback(body))), {
       headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
     });
   }
@@ -283,12 +285,24 @@ export async function POST(request: Request) {
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
       let reply = "";
+      // Redact any email/phone/LinkedIn the MODEL writes in its prose — the
+      // verified block below is the ONLY sanctioned source of contact details.
+      // Streaming-safe: only complete, clause-bounded text is emitted.
+      const redactor = new StreamingContactRedactor();
       try {
         stream.on("text", (delta: string) => {
-          reply += delta;
-          controller.enqueue(encoder.encode(delta));
+          const safe = redactor.push(delta);
+          if (safe) {
+            reply += safe;
+            controller.enqueue(encoder.encode(safe));
+          }
         });
         await stream.finalMessage();
+        const tail = redactor.flush();
+        if (tail) {
+          reply += tail;
+          controller.enqueue(encoder.encode(tail));
+        }
         // Verified contacts: if the reply named a real company/person, look up
         // real, Apollo-sourced phone/email and stream a contact block into the
         // SAME response. Never fabricated (Apollo-only) and never fatal — a

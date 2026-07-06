@@ -253,7 +253,9 @@ export interface EnrichedContacts {
 // A person is only worth surfacing as a "contact" if we have a real way to
 // reach them — an email or a phone number. Everything else is noise.
 function isContactable(p: VerifiedPerson): boolean {
-  return Boolean(p.email || p.phone);
+  // A verified email OR a phone. A guessed/unverified email does not count —
+  // the composer never surfaces one.
+  return Boolean((p.email && p.email_verified) || p.phone);
 }
 
 // Look up real contacts for the extracted entities via Apollo. Bounded fan-out;
@@ -319,7 +321,7 @@ function formatPerson(p: VerifiedPerson): string {
   const lines: string[] = [`**${p.name}**${heading ? ` — ${heading}` : ""}`];
   const reach: string[] = [];
   if (p.phone) reach.push(`📞 ${p.phone}`);
-  if (p.email) reach.push(`✉️ ${p.email}`);
+  if (p.email && p.email_verified) reach.push(`✉️ ${p.email}`);
   if (p.linkedin_url) reach.push(`[LinkedIn](${p.linkedin_url})`);
   if (reach.length) lines.push(reach.join(" · "));
   lines.push(`_Apollo · confidence ${pct(p.confidence)}_`);
@@ -465,7 +467,7 @@ function formatSourcedFirm(s: SourcedFirm): string {
   if (c?.name) {
     const reach: string[] = [];
     if (c.phone) reach.push(`📞 ${c.phone}`);
-    if (c.email) reach.push(`✉️ ${c.email}`);
+    if (c.email && c.email_verified) reach.push(`✉️ ${c.email}`);
     if (c.linkedin_url) reach.push(`[LinkedIn](${c.linkedin_url})`);
     lines.push(`↳ **${c.name}**${c.title ? `, ${c.title}` : ""}${reach.length ? ` · ${reach.join(" · ")}` : ""}`);
   }
