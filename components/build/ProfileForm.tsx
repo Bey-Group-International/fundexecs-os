@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { inputClass } from "@/components/build/DraftWithEarn";
 import { ROLE_LABELS, STRATEGY_LABELS } from "@/lib/labels";
 import { LogoUpload } from "@/components/build/LogoUpload";
@@ -140,16 +140,25 @@ export function ProfileForm({
   values,
   action,
   showPreview = true,
+  onValuesChange,
 }: {
   values: ProfileValues;
   action: ProfileSaveAction;
   showPreview?: boolean;
+  /** Notified with the live form values on every edit, so a parent can drive
+   * its own preview (e.g. the standalone page's investor card). */
+  onValuesChange?: (values: ProfileValues) => void;
 }) {
   const [form, setForm] = useState<ProfileValues>(values);
   const [state, formAction, pending] = useActionState<ProfileSaveState, FormData>(
     action,
     {},
   );
+
+  // Mirror live edits up to any parent that renders its own preview.
+  useEffect(() => {
+    onValuesChange?.(form);
+  }, [form, onValuesChange]);
 
   const set = (key: keyof ProfileValues) => (value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
