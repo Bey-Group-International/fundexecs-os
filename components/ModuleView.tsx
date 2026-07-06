@@ -4,7 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
-import { updateProfile } from "@/app/(app)/[hub]/[module]/actions";
+import { saveOrgProfile } from "@/app/(app)/build/profile/actions";
 import { ThesisModule } from "@/components/build/ThesisModule";
 import { BrandModule } from "@/components/build/BrandModule";
 import { EntityModule } from "@/components/build/EntityModule";
@@ -264,7 +264,7 @@ export async function ModuleView({
           module="profile"
         />
         <ProfileForm
-          action={updateProfile}
+          action={saveOrgProfile}
           values={{
             name: org?.name ?? "",
             legal_name: org?.legal_name ?? "",
@@ -279,6 +279,7 @@ export async function ModuleView({
             fund_count: org?.fund_count != null ? String(org.fund_count) : "",
             primary_strategy: org?.primary_strategy ?? "",
             operator_role: org?.operator_role ?? "",
+            brand_voice: org?.brand_voice ?? "",
           }}
         />
       </div>

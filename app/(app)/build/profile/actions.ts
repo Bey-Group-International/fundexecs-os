@@ -4,12 +4,18 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 
+export type ProfileSaveState = { error?: string; ok?: true };
+
 // Persist edits to the organization profile. All fields are optional — an
 // empty string is coerced to null so the DB never stores stale placeholder
 // text. fund_count is parsed as an integer; non-numeric input becomes null.
+//
+// Signature is (prevState, formData) so the form can drive it through
+// useActionState and surface success/error inline.
 export async function saveOrgProfile(
+  _prevState: ProfileSaveState,
   formData: FormData,
-): Promise<{ error?: string; ok?: true }> {
+): Promise<ProfileSaveState> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { error: "Not authenticated" };
 
