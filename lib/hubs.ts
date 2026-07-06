@@ -83,6 +83,7 @@ export const HUBS: HubDefinition[] = [
       { key: "waterfall", label: "Waterfall" },
       { key: "billing", label: "Invoices" },
       { key: "reporting", label: "Reporting" },
+      { key: "comms", label: "Shareholder Comms" },
       { key: "exit", label: "Exit" },
     ],
   },

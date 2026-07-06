@@ -42,6 +42,7 @@ import { ExecuteWaterfallModule } from "@/components/execute/WaterfallModule";
 import { SigningModule } from "@/components/execute/SigningModule";
 import { InvoicesModule } from "@/components/execute/InvoicesModule";
 import { IssuanceModule } from "@/components/execute/IssuanceModule";
+import { ShareholderCommsModule } from "@/components/execute/ShareholderCommsModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -232,6 +233,7 @@ export async function ModuleView({
     if (mod.key === "signing") return <SigningModule />;
     if (mod.key === "billing") return <InvoicesModule />;
     if (mod.key === "issuance") return <IssuanceModule />;
+    if (mod.key === "comms") return <ShareholderCommsModule />;
   }
 
   // --- Build hub: dedicated editable modules -------------------------------
