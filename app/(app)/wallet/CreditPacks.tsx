@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CREDIT_PACKS, formatCredits, formatUsd } from "@/lib/billing";
+import { CREDIT_PACKS, formatCredits, formatUsd, type PurchaseSummary } from "@/lib/billing";
 import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
+import { NativeCheckoutModal } from "./NativeCheckoutModal";
 import { purchasePackAction } from "./actions";
 
 // One-off credit packs (no subscription). With Stripe configured, buying opens
-// an in-app embedded Checkout; otherwise the action reports that billing needs
-// configuration for this organization.
+// an in-app embedded Stripe Checkout; otherwise a native in-app checkout grants
+// the credits directly and records the transaction.
 export function CreditPacks({
   live = false,
   publishableKey = "",
@@ -18,6 +19,7 @@ export function CreditPacks({
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [native, setNative] = useState<PurchaseSummary | null>(null);
   const [pending, startTransition] = useTransition();
 
   function buy(packKey: string) {
@@ -28,7 +30,9 @@ export function CreditPacks({
     startTransition(async () => {
       const res = await purchasePackAction(fd);
       if (res?.clientSecret) {
-        setClientSecret(res.clientSecret); // open in-app embedded checkout
+        setClientSecret(res.clientSecret); // open in-app embedded (Stripe) checkout
+      } else if (res?.native) {
+        setNative(res.native); // open native in-app checkout (no Stripe configured)
       } else if (res?.error) {
         setError(res.error);
       }
@@ -44,6 +48,9 @@ export function CreditPacks({
           publishableKey={publishableKey}
           onClose={() => setClientSecret(null)}
         />
+      ) : null}
+      {native ? (
+        <NativeCheckoutModal summary={native} onClose={() => setNative(null)} />
       ) : null}
       <div className="grid gap-3 sm:grid-cols-3">
         {CREDIT_PACKS.map((pack) => {
@@ -76,7 +83,7 @@ export function CreditPacks({
       <p className="mt-3 text-xs text-fg-muted">
         {live
           ? "Secure one-time checkout by Stripe. Credits land in your wallet as soon as payment completes."
-          : "Billing is being configured for this organization. Contact support to add credits before live checkout is enabled."}
+          : "Stripe isn’t configured here — no card is charged. Buying a pack adds its credits in-app instantly and records the purchase to your credit history."}
       </p>
     </div>
   );

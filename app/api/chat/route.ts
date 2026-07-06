@@ -6,7 +6,7 @@ import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-cont
 import { getRelationshipContext } from "@/lib/copilot/context/relationship-context-provider";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-import { buildContactAppendix } from "@/lib/chat-enrichment";
+import { buildContactAppendix, detectSourcingIntent } from "@/lib/chat-enrichment";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -184,6 +184,27 @@ export async function POST(request: Request) {
     // skip — best effort
   }
 
+  // For sourcing/discovery asks ("source family offices near me"), load the
+  // org's active mandate geographies so "near me" resolves to the regions the
+  // firm actually invests in. Only runs for sourcing queries — no DB hit on
+  // ordinary chat.
+  let mandateGeographies: string[] = [];
+  if (detectSourcingIntent(body)) {
+    try {
+      const supabase = await createServerClient();
+      const { data: theses } = await supabase
+        .from("investment_theses")
+        .select("geographies, is_active")
+        .eq("organization_id", orgId);
+      if (theses?.length) {
+        const active = theses.find((t) => t.is_active) ?? theses[0];
+        mandateGeographies = Array.isArray(active?.geographies) ? active.geographies : [];
+      }
+    } catch {
+      // Best effort — sourcing still works nationwide without geographies.
+    }
+  }
+
   const modelKey = (requestedModel as EarnModelKey) ?? undefined;
   const modelLabel = EARN_MODELS.find((m) => m.key === modelKey)?.label ?? "Earn";
   const priorContext = Array.isArray(prior)
@@ -273,7 +294,7 @@ export async function POST(request: Request) {
         // SAME response. Never fabricated (Apollo-only) and never fatal — a
         // failure or no-hit simply appends nothing.
         try {
-          const appendix = await buildContactAppendix(body, reply);
+          const appendix = await buildContactAppendix(body, reply, { geographies: mandateGeographies });
           if (appendix) {
             reply += appendix;
             controller.enqueue(encoder.encode(appendix));

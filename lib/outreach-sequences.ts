@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { checkContactable } from "@/lib/compliance/contact-compliance";
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -74,14 +75,25 @@ export async function enrollTarget(
 ): Promise<SequenceEnrollment> {
   const db = createServiceClient();
 
-  // Resolve first step delay to set next_step_at
+  // Resolve first step delay to set next_step_at (and the org for compliance).
   const { data: seq, error: seqErr } = await db
     .from("outreach_sequences")
-    .select("steps")
+    .select("steps, org_id")
     .eq("id", sequenceId)
     .single();
 
   if (seqErr) throw new Error(`enrollTarget: sequence lookup: ${seqErr.message}`);
+
+  // Compliance gate: never enroll a contact who has unsubscribed, is on the
+  // do-not-contact list, or carries a blocking compliance flag. This is the
+  // hard guardrail behind every outbound sequence.
+  const orgId = (seq as { org_id?: string } | null)?.org_id;
+  if (targetType === "contact" && orgId) {
+    const gate = await checkContactable(db, orgId, { contactId: targetId });
+    if (!gate.contactable) {
+      throw new Error(`enrollTarget: blocked by compliance — ${gate.reason ?? gate.status}`);
+    }
+  }
 
   const steps: OutreachStep[] = ((seq?.steps as unknown) as OutreachStep[]) ?? [];
   const firstStep = steps.find((s) => s.step_index === 0) ?? steps[0];

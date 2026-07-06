@@ -7,12 +7,25 @@ import { stripeConfigured, createCheckout, createPortalSession } from "@/lib/str
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
+  planPurchaseSummary,
+  packPurchaseSummary,
   type PlanInterval,
   type PlanKey,
+  type PurchaseSummary,
 } from "@/lib/billing";
+import { completeNativePurchase } from "@/lib/purchase";
 import { redeemCoupon } from "@/lib/coupons";
 
-type ActionResult = { error?: string; ok?: boolean; clientSecret?: string };
+// A purchase action returns ONE of: a Stripe embedded-checkout client secret
+// (when Stripe is configured), or a `native` summary telling the client to open
+// the in-app confirm flow (when Stripe isn't configured), or an error.
+type ActionResult = {
+  error?: string;
+  ok?: boolean;
+  clientSecret?: string;
+  native?: PurchaseSummary;
+  credits?: number;
+};
 
 // Subscribe to a plan. With Stripe configured this opens an in-app embedded
 // Checkout (subscription) and returns its client_secret; the plan is activated
@@ -39,7 +52,12 @@ export async function selectPlanAction(formData: FormData): Promise<ActionResult
       });
     }
 
-    return { error: "Billing is not enabled for this organization yet. Contact support to activate checkout." };
+    // No external processor configured — offer the native in-app checkout. The
+    // client opens a confirm step, then calls confirmNativePurchaseAction.
+    const native = planPurchaseSummary(planKey, interval);
+    return native
+      ? { native }
+      : { error: "Unknown plan" };
   } catch (err) {
     console.error("[wallet] selectPlanAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };
@@ -61,10 +79,63 @@ export async function purchasePackAction(formData: FormData): Promise<ActionResu
       return await createCheckout({ kind: "pack", orgId: ctx.orgId, createdBy: ctx.userId, packKey });
     }
 
-    return { error: "Billing is not enabled for this organization yet. Contact support to add credits." };
+    // No external processor configured — offer the native in-app checkout.
+    const native = packPurchaseSummary(packKey);
+    return native ? { native } : { error: "Unknown credit pack" };
   } catch (err) {
     console.error("[wallet] purchasePackAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };
+  }
+}
+
+// Complete a native (Stripe-free) purchase after the user confirms it in-app.
+// Gated to ONLY run when Stripe is not configured, so it can never grant paid
+// value while a real processor is active. Applies the plan/pack effect and
+// records the transaction, then revalidates the Wallet page.
+export async function confirmNativePurchaseAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
+
+    // Defense-in-depth: never hand out value natively when Stripe is live.
+    if (stripeConfigured()) {
+      return { error: "Please complete checkout with the secure payment form." };
+    }
+
+    const kind = String(formData.get("kind") ?? "");
+    if (kind === "plan") {
+      const planKey = String(formData.get("plan_key") ?? "") as PlanKey;
+      const interval: PlanInterval =
+        String(formData.get("interval") ?? "monthly") === "annual" ? "annual" : "monthly";
+      if (!PLAN_BY_KEY[planKey]) return { error: "Unknown plan" };
+      const res = await completeNativePurchase({
+        orgId: ctx.orgId,
+        createdBy: ctx.userId,
+        kind: "plan",
+        planKey,
+        interval,
+      });
+      if (res.ok) revalidatePath("/wallet");
+      return res.ok ? { ok: true, credits: res.credits } : { error: res.error };
+    }
+
+    if (kind === "pack") {
+      const packKey = String(formData.get("pack_key") ?? "");
+      if (!CREDIT_PACKS.some((p) => p.key === packKey)) return { error: "Unknown credit pack" };
+      const res = await completeNativePurchase({
+        orgId: ctx.orgId,
+        createdBy: ctx.userId,
+        kind: "pack",
+        packKey,
+      });
+      if (res.ok) revalidatePath("/wallet");
+      return res.ok ? { ok: true, credits: res.credits } : { error: res.error };
+    }
+
+    return { error: "Unknown purchase." };
+  } catch (err) {
+    console.error("[wallet] confirmNativePurchaseAction failed:", err);
+    return { error: "Something went wrong completing your purchase. Please try again." };
   }
 }
 

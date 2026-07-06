@@ -11,13 +11,13 @@ import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
 import { appendOfficeAuditEvents, persistOfficeWorkflow } from "@/components/virtual-office/program/office-actions";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
-import { AGENT_BY_ID } from "@/components/virtual-office/program/officeProgram";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
+import { OfficeAvatarChip } from "@/components/virtual-office/avatar/OfficeAvatarChip";
 import {
-  CharacterChip,
-  CHARACTER_STORAGE_KEY,
-  useCharacterSelection,
-} from "@/components/virtual-office/CharacterPicker";
+  parseUserAvatar,
+  DEFAULT_USER_AVATAR,
+  type UserAvatar,
+} from "@/lib/office/userAvatar";
 
 // Load Phaser only in the browser
 const VirtualOfficeGame = dynamic(
@@ -41,7 +41,7 @@ export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
   const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true });
   const [token, setToken] = useState<string | undefined>(undefined);
-  const [characterId, setCharacterId] = useCharacterSelection();
+  const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
   const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
   const [occupancy, setOccupancy] = useState<Record<string, number>>({});
@@ -68,15 +68,9 @@ export function OfficeTabs() {
       const t = data.session?.access_token;
       if (t) setToken(t);
       const meta = data.session?.user?.user_metadata;
-      // Seed from account metadata only when the user hasn't picked locally,
-      // and only when it's a valid floor-executive id (the selection roster).
-      if (
-        meta?.character_id &&
-        (meta.character_id as string) in AGENT_BY_ID &&
-        !window.localStorage.getItem(CHARACTER_STORAGE_KEY)
-      ) {
-        setCharacterId(meta.character_id as string);
-      }
+      // Seed the operator's own floor avatar from account metadata.
+      const savedAvatar = parseUserAvatar(meta?.office_avatar);
+      if (savedAvatar) setOfficeAvatar(savedAvatar);
       if (meta?.display_name) setDisplayName(meta.display_name as string);
       // Populate dynamic zone URLs from integration metadata
       const overrides: Record<string, string> = {};
@@ -125,7 +119,7 @@ export function OfficeTabs() {
       setApprovalDecider(null);
       setOfficePersistence(null);
     };
-  }, [setCharacterId]);
+  }, []);
 
   // Auto-teleport when ?room= param is present (guest join links)
   useEffect(() => {
@@ -215,12 +209,12 @@ export function OfficeTabs() {
               rooms, agents, approval gates, and an audit-ready trail — live on the floor.
             </p>
           </div>
-          {/* Character + office data, unified on one horizontal line: the
-              current-character chip (opens the picker) sits alongside the live
-              office metrics. */}
+          {/* Your character + office data, unified on one horizontal line: the
+              operator's own avatar chip (opens the character selector) sits
+              alongside the live office metrics. */}
           <div className="flex flex-wrap items-stretch gap-2">
             {token && !guestPrompt ? (
-              <CharacterChip selectedId={characterId} onSelect={setCharacterId} />
+              <OfficeAvatarChip avatar={officeAvatar} onSaved={setOfficeAvatar} />
             ) : null}
             <div className="grid grid-cols-3 gap-2 text-center">
               <OfficeMetric label="Mode" value={tab === "virtual" ? "Execution" : "Overview"} />
@@ -293,9 +287,9 @@ export function OfficeTabs() {
             {/* Character selection now lives in the header chip (one line with
                 the office metrics), so the game mounts directly here. */}
             <VirtualOfficeGame
-              key={characterId}
+              key={JSON.stringify(officeAvatar)}
               token={token}
-              characterId={characterId}
+              officeAvatar={officeAvatar}
               displayName={displayName}
               active={tab === "virtual"}
               teleportTarget={teleportTarget}

@@ -162,3 +162,45 @@ export function formatUsd(n: number): string {
 export function formatCredits(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
+
+// A concise description of what a purchase grants — the native in-app checkout
+// shows this to the buyer before they confirm. Pure (no DB) so it's testable and
+// reusable, and it keeps price/credit derivation in one place shared with the
+// Stripe path. Returns null for an unknown plan/pack.
+export interface PurchaseSummary {
+  kind: "plan" | "pack";
+  label: string;
+  priceUsd: number;
+  credits: number;
+  planKey?: PlanKey;
+  interval?: PlanInterval;
+  packKey?: string;
+}
+
+export function planPurchaseSummary(
+  planKey: PlanKey,
+  interval: PlanInterval,
+): PurchaseSummary | null {
+  const plan = PLAN_BY_KEY[planKey];
+  if (!plan) return null;
+  return {
+    kind: "plan",
+    planKey,
+    interval,
+    label: `${plan.name} plan · ${interval === "annual" ? "annual" : "monthly"}`,
+    priceUsd: planPrice(plan, interval),
+    credits: planGrantCredits(plan, interval),
+  };
+}
+
+export function packPurchaseSummary(packKey: string): PurchaseSummary | null {
+  const pack = CREDIT_PACKS.find((p) => p.key === packKey);
+  if (!pack) return null;
+  return {
+    kind: "pack",
+    packKey,
+    label: `${formatCredits(pack.credits)} credit pack`,
+    priceUsd: pack.price,
+    credits: pack.credits,
+  };
+}

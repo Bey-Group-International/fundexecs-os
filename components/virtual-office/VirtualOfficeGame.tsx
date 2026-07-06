@@ -19,6 +19,7 @@ import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
+import { FloorRoster, type RosterEntry } from "./FloorRoster";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -231,6 +232,8 @@ type VirtualOfficeGameProps = {
   displayName?: string;
   /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
   characterId?: string;
+  /** The operator's human Executive Floor avatar (from user_metadata). */
+  officeAvatar?: unknown;
   /**
    * Whether this panel is currently the active/visible tab.
    * Phaser init is deferred until the first time this becomes true,
@@ -255,6 +258,7 @@ export function VirtualOfficeGame({
   token,
   displayName = "You",
   characterId,
+  officeAvatar,
   active = true,
   teleportTarget,
   onOccupancyChange,
@@ -298,6 +302,7 @@ export function VirtualOfficeGame({
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -395,6 +400,11 @@ export function VirtualOfficeGame({
           setVideoProximity(m);
         });
 
+        // Floor presence roster bridge — who's on the floor + their room.
+        game.events.on("office:roster", (r: RosterEntry[]) => {
+          setRoster(r);
+        });
+
         // Room enter bridge — updates room-specific action panel + current room state
         game.events.on("office:room-enter", (key: string, actions: RoomAction[]) => {
           setRoomActions(actions);
@@ -425,7 +435,7 @@ export function VirtualOfficeGame({
         });
 
         if (token) {
-          const initData: OfficeSceneInitData = { token, characterId };
+          const initData: OfficeSceneInitData = { token, characterId, officeAvatar };
           game.events.once("ready", () => {
             game?.scene.getScene("OfficeScene")?.scene.restart(initData);
           });
@@ -623,6 +633,9 @@ export function VirtualOfficeGame({
 
       {/* Game canvas area */}
       <div className="relative">
+        {/* Live "who's on the floor" roster + invite */}
+        {token && roster.length > 0 && <FloorRoster roster={roster} />}
+
         {/* Proximity presence — the executive you're standing beside greets you */}
         {nearbyAgent && <ProximityCard agent={nearbyAgent} />}
 

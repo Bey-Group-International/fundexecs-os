@@ -32,7 +32,8 @@ import {
   type RoomKey,
 } from "../program/officeProgram";
 import { ExecutiveAvatar, type AvatarFacing } from "../avatar/ExecutiveAvatar";
-import { agentAvatarSpec, remoteAvatarSpec, USER_SPEC } from "../avatar/avatarPalette";
+import { agentAvatarSpec, remoteAvatarSpec } from "../avatar/avatarPalette";
+import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
 import {
   createWallVisuals,
   createFurniture,
@@ -93,6 +94,8 @@ type RoomOverlay = {
 export type OfficeSceneInitData = {
   token?: string;
   characterId?: string;
+  /** The operator's human Executive Floor avatar (from user_metadata). */
+  officeAvatar?: unknown;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -163,12 +166,14 @@ export class OfficeScene extends Phaser.Scene {
   // Proximity video — throttle + dedupe the tile-opacity map sent to the DOM.
   private spatialVideoAccumMs = 0;
   private lastVideoProx = "";
-  // M5 — character identity
-  private myCharacterId = "player_default";
-  // The executive the player has chosen to appear as on the floor. Drives the
-  // visible vector avatar (incl. the gold coin for Earn); the invisible physics
-  // sprite still animates from a real sprite sheet (myCharacterId) for movement.
-  private myAgentId: AgentId = "earn";
+  // Floor presence roster — throttle + dedupe the who's-on-the-floor list.
+  private rosterAccumMs = 0;
+  private lastRoster = "";
+  // M5 — character identity. The invisible physics sprite animates from a real
+  // sprite sheet (myCharacterId); the visible figure is the operator's own
+  // human avatar (myOfficeAvatar), distinct from the AI executive agents.
+  private myCharacterId = "earnest-fundmaker";
+  private myOfficeAvatar: UserAvatar = DEFAULT_USER_AVATAR;
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
@@ -280,13 +285,10 @@ export class OfficeScene extends Phaser.Scene {
   // ── init ────────────────────────────────────────────────────────────────────
 
   init(data: OfficeSceneInitData) {
-    // The selection is a floor-executive agent id (e.g. "earn", "analyst"). The
-    // player appears as that executive's avatar; the invisible physics sprite
-    // animates from the agent's real sprite sheet. Unknown/legacy ids fall back
-    // to Earn.
-    const rawId = data?.characterId;
-    this.myAgentId = rawId && rawId in AGENT_BY_ID ? (rawId as AgentId) : "earn";
-    this.myCharacterId = AGENT_BY_ID[this.myAgentId].spriteKey;
+    // The operator appears as their own human avatar (distinct from the AI
+    // executives). The invisible physics sprite keeps a real sprite sheet for
+    // movement/animation; the visible figure is built from the office avatar.
+    this.myOfficeAvatar = parseUserAvatar(data?.officeAvatar) ?? DEFAULT_USER_AVATAR;
     if (data?.token) {
       this.socket = new VirtualOfficeSocket();
       this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
@@ -430,6 +432,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateNpcAvatars(delta);
     this._updateNpcProximity(delta);
     this._updateSpatialAudio(delta);
+    this._updateRoster(delta);
     this._updateMinimap();
 
     this._interpFrame = (this._interpFrame + 1) % 2;
@@ -613,10 +616,8 @@ export class OfficeScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.walls);
 
-    // The player appears as their chosen executive (the coin for Earn).
-    const agent = AGENT_BY_ID[this.myAgentId];
-    const spec = agent ? agentAvatarSpec(this.myAgentId, agent.accent) : USER_SPEC;
-    this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, spec, 10);
+    // The player appears as their own human avatar (gender + wardrobe + accent).
+    this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, userAvatarSpec(this.myOfficeAvatar), 10);
   }
 
   /** Sync the humanized player avatar to the physics anchor and velocity. */
@@ -2170,6 +2171,39 @@ export class OfficeScene extends Phaser.Scene {
     if (key === this.lastVideoProx) return;
     this.lastVideoProx = key;
     this.game.events.emit("rtc:video-proximity", prox);
+  }
+
+  /**
+   * Broadcast the floor presence roster to the DOM — who's on the floor
+   * (you + teammates), each with the room they're standing in — so the office
+   * can show a live "who's here" list. Throttled to ~1×/sec and deduped.
+   */
+  private _updateRoster(delta: number) {
+    this.rosterAccumMs += delta;
+    if (this.rosterAccumMs < 1000) return;
+    this.rosterAccumMs = 0;
+
+    const roster: Array<{ id: string; name: string; roomKey: string | null; self: boolean }> = [
+      {
+        id: "self",
+        name: this.myOfficeAvatar.displayName,
+        roomKey: this._roomKeyAt(this.player.x, this.player.y),
+        self: true,
+      },
+    ];
+    for (const [id, state] of this.remotePlayers) {
+      roster.push({
+        id,
+        name: state.label.text,
+        roomKey: this._roomKeyAt(state.sprite.x, state.sprite.y),
+        self: false,
+      });
+    }
+
+    const key = JSON.stringify(roster);
+    if (key === this.lastRoster) return;
+    this.lastRoster = key;
+    this.game.events.emit("office:roster", roster);
   }
 
   private _spawnRemotePlayer(remote: RemotePlayer) {
