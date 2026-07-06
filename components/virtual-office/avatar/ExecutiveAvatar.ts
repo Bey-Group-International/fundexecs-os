@@ -390,7 +390,11 @@ export class ExecutiveAvatar {
     const g = this.body;
     g.clear();
 
-    if (this.seated) { this._drawSeated(g, this.spec); return; }
+    if (this.seated) {
+      if (this.facing === "up") this._drawSeatedBack(g, this.spec);
+      else this._drawSeated(g, this.spec);
+      return;
+    }
 
     // Walk-cycle limb offsets (discrete 4-frame swing). step -1 = idle.
     const swing = step === -1 ? 0 : [3, 0, -3, 0][step];
@@ -457,6 +461,52 @@ export class ExecutiveAvatar {
     g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
 
     this._drawHead(g, s, 0, 0);
+  }
+
+  /**
+   * Seated stance seen from behind (facing "up"). Used for the near side of a
+   * conference table, where the table sits behind the occupant — so we draw
+   * short seated hips, the blazer back, and the back of the head.
+   */
+  private _drawSeatedBack(g: Phaser.GameObjects.Graphics, s: AvatarSpec) {
+    const sw = this._shoulder(s);
+
+    // Seated hips / upper thighs.
+    g.fillStyle(this._shade(s.trouser, 0.9), 1);
+    g.fillRoundedRect(-4.4, 4, 3.8, 9, 1.6);
+    g.fillRoundedRect(0.6, 4, 3.8, 9, 1.6);
+
+    // Arms at the sides.
+    g.fillStyle(this._shade(s.suit, 0.9), 1);
+    g.fillRoundedRect(-7.2, -4, 3, 10, 1.5);
+    g.fillRoundedRect(4.2, -4, 3, 10, 1.5);
+
+    // Blazer back — vertical gradient with a center seam and collar.
+    const bHi = this._shade(s.suit, 1.24);
+    const bLo = this._shade(s.suit, 0.74);
+    g.fillGradientStyle(bHi, bHi, bLo, bLo, 1);
+    g.fillPoints([
+      new Phaser.Geom.Point(-sw, -6), new Phaser.Geom.Point(sw, -6),
+      new Phaser.Geom.Point(5.5, 7), new Phaser.Geom.Point(-5.5, 7),
+    ], true);
+    g.lineStyle(0.6, this._shade(s.suit, 0.8), 0.8);
+    g.beginPath(); g.moveTo(0, -6); g.lineTo(0, 7); g.strokePath();
+    g.fillStyle(this._shade(s.suit, 0.85), 1);
+    g.fillRect(-3.5, -6.5, 7, 1.6); // collar
+
+    // Neck + back of the head (no face).
+    g.fillStyle(this._shade(s.skin, 0.9), 1);
+    g.fillRect(-1.7, -9, 3.4, 3.2);
+    if (s.hairStyle === "bald") {
+      g.fillStyle(s.skin, 1);
+      g.fillEllipse(0, -13, 9.5, 11);
+    } else {
+      g.fillStyle(s.hair, 1);
+      g.fillEllipse(0, -13, 9.5, 11);
+      if (s.hairStyle === "tied") g.fillCircle(0, -18.4, 2.1);
+      g.fillStyle(this._shade(s.hair, 1.2), 0.4);
+      g.fillEllipse(-2, -15.5, 3.4, 2);
+    }
   }
 
   /** Front view (facing down / toward the viewer). */

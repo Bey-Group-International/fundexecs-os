@@ -62,7 +62,7 @@ const ROOM_ACCENT: Record<string, number> = {
   reception: 0xf59e0b,
 };
 
-type PieceType = "desk" | "screens" | "shelf" | "sofa" | "table" | "plant" | "safe" | "console" | "reception";
+type PieceType = "desk" | "screens" | "shelf" | "sofa" | "table" | "plant" | "safe" | "console" | "reception" | "coffee";
 type Piece = { type: PieceType; rx: number; ry: number };
 
 /**
@@ -101,6 +101,7 @@ const LAYOUT: Record<string, Piece[]> = {
   ops: [
     { type: "screens", rx: 100, ry: 48 },
     { type: "desk", rx: 300, ry: 60 },
+    { type: "coffee", rx: 344, ry: 150 },
     { type: "plant", rx: 40, ry: 232 },
   ],
   legal: [
@@ -115,6 +116,7 @@ const LAYOUT: Record<string, Piece[]> = {
   ],
   reception: [
     { type: "reception", rx: 96, ry: 54 },
+    { type: "coffee", rx: 344, ry: 150 },
     { type: "plant", rx: 40, ry: 232 },
   ],
 };
@@ -125,7 +127,7 @@ const LAYOUT: Record<string, Piece[]> = {
  * so the desk occludes the lap and the face stays visible. A chair is drawn
  * just behind the seat; the desk + computer just in front.
  */
-export type SeatAnchor = { roomKey: string; x: number; y: number; facing: "down" };
+export type SeatAnchor = { roomKey: string; x: number; y: number; facing: "down" | "up" };
 
 /** Offsets from a seat to its chair (behind) and desk (in front). */
 const CHAIR_DY = -1;
@@ -157,6 +159,35 @@ export function officeSeats(): SeatAnchor[] {
     for (const w of WORKSTATIONS[room.key] ?? []) {
       out.push({ roomKey: room.key, x: ox + w.sx, y: oy + w.sy, facing: "down" });
     }
+  }
+  return out;
+}
+
+/**
+ * Seats around the Boardroom conference table (for meetings). Far-side seats
+ * face down (front view, table occludes the lap); near-side seats face up
+ * (back view, table sits behind them). Aligns with the table drawn at
+ * boardroom rx 192, ry 236.
+ */
+export function boardroomTableSeats(): SeatAnchor[] {
+  const room = ROOMS.find((r) => r.key === "boardroom");
+  if (!room) return [];
+  const cx = room.col * ROOM_W + 192;
+  const oy = room.row * ROOM_H;
+  const out: SeatAnchor[] = [];
+  for (let i = -2; i <= 2; i++) {
+    out.push({ roomKey: "boardroom", x: cx + i * 20, y: oy + 214, facing: "down" });
+    out.push({ roomKey: "boardroom", x: cx + i * 20, y: oy + 248, facing: "up" });
+  }
+  return out;
+}
+
+/** Break-area coffee points on the floor — destinations for ambient runs. */
+export function coffeePoints(): Array<{ x: number; y: number }> {
+  const out: Array<{ x: number; y: number }> = [];
+  for (const room of ROOMS) {
+    if (room.key !== "ops" && room.key !== "reception") continue;
+    out.push({ x: room.col * ROOM_W + 344, y: room.row * ROOM_H + 150 });
   }
   return out;
 }
@@ -482,6 +513,25 @@ function drawPiece(g: Phaser.GameObjects.Graphics, type: PieceType, x: number, f
       g.fillRect(x - 32, footY - 8, 64, 2);
       g.fillStyle(accent, 0.85);
       g.fillRoundedRect(x - 12, footY - 15 - 8 - 4, 24, 4, 1);
+      break;
+    }
+    case "coffee": {
+      // Break-area counter with an espresso machine and a couple of mugs.
+      box(g, x, footY, 34, 7, 12, C.deskTop, C.deskFront);
+      const sy = footY - 12 - 7;
+      g.fillStyle(0x11151f, 1);
+      g.fillRoundedRect(x - 8, sy - 12, 16, 12, 1.5);   // machine body
+      g.fillStyle(shade(0x11151f, 1.6), 1);
+      g.fillRect(x - 8, sy - 12, 16, 1.4);              // lit top
+      g.fillStyle(shade(accent, 1.2), 0.9);
+      g.fillRect(x - 6, sy - 8, 12, 1.4);               // control panel light
+      g.fillStyle(0x2a2620, 1);
+      g.fillRect(x - 1.4, sy - 3, 2.8, 3);              // spout
+      // Mugs on the counter.
+      g.fillStyle(0xe8eef5, 1);
+      g.fillCircle(x - 12, sy + 1.5, 1.6);
+      g.fillStyle(shade(accent, 1.1), 1);
+      g.fillCircle(x + 12, sy + 1.5, 1.6);
       break;
     }
     case "plant": {
