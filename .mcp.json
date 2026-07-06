@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "apollo-io": {
+      "args": [ "tools/apollo-io-mcp/dist/index.js" ],
+      "command": "node",
+      "env": {
+        "APOLLO_API_KEY": "${APOLLO_API_KEY}"
+      }
+    }
+  }
+}

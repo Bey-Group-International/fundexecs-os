@@ -43,3 +43,8 @@ yarn-error.log*
 
 # Claude Code agent worktrees / local scratch
 .claude/
+
+# AI-stack tooling materialized by scripts/setup-ai-stack.sh (third-party code:
+# apollo-io-mcp build, cloned skills source, reference SDKs/cookbooks). Config
+# and docs are committed; the external code they pull is not.
+/tools/
