@@ -15,13 +15,12 @@
 import Stripe from "stripe";
 import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
-import { grantCredits } from "@/lib/credits";
-import { purchaseGift, awardReferralOnSubscription } from "@/lib/gift-earn";
+import { purchaseGift } from "@/lib/gift-earn";
 import { markInvoicePaid } from "@/lib/invoices.server";
+import { activatePlan, addPack } from "@/lib/purchase";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
-  planGrantCredits,
   type PlanInterval,
   type PlanKey,
 } from "@/lib/billing";
@@ -378,46 +377,19 @@ export async function fulfillCheckout(
     const plan = PLAN_BY_KEY[planKey];
     const interval: PlanInterval = meta.interval === "annual" ? "annual" : "monthly";
     if (plan) {
-      // Only set plan_started_at on the first activation; preserve it across
-      // renewals so tenure accumulates from the original subscription date.
-      const { data: existing } = await service
-        .from("wallets")
-        .select("plan_started_at")
-        .eq("organization_id", orgId)
-        .maybeSingle();
-      const planStartedAt = existing?.plan_started_at ?? new Date().toISOString();
       const stripeCustomerId =
         typeof session.customer === "string"
           ? session.customer
           : (session.customer as { id?: string } | null)?.id ?? null;
-      await service
-        .from("wallets")
-        .upsert(
-          {
-            organization_id: orgId,
-            plan: plan.key,
-            plan_interval: interval,
-            plan_started_at: planStartedAt,
-            ...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {}),
-          },
-          { onConflict: "organization_id" },
-        );
-      await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {
+      await activatePlan(service, orgId, planKey, interval, {
+        stripeCustomerId,
         note: `${plan.name} plan (${interval}) — Stripe`,
       });
-      // Pay any pending referral chain now that this org has a paid plan.
-      try {
-        await awardReferralOnSubscription(orgId, service);
-      } catch (err) {
-        console.error("[referral] awardReferralOnSubscription failed:", err);
-      }
     }
   } else if (kind === "pack") {
     const pack = CREDIT_PACKS.find((p) => p.key === meta.pack_key);
     if (pack) {
-      await grantCredits(service, orgId, pack.credits, "pack_purchase", {
-        note: `${pack.credits} credit pack — Stripe`,
-      });
+      await addPack(service, orgId, pack.key, { note: `${pack.credits} credit pack — Stripe` });
     }
   } else if (kind === "gift") {
     // The gift only exists once paid: create it now so it's redeemable.

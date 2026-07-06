@@ -1,8 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { formatCredits, formatUsd, type Plan, type PlanInterval } from "@/lib/billing";
+import {
+  formatCredits,
+  formatUsd,
+  type Plan,
+  type PlanInterval,
+  type PurchaseSummary,
+} from "@/lib/billing";
 import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
+import { NativeCheckoutModal } from "./NativeCheckoutModal";
 import { selectPlanAction } from "./actions";
 
 export interface PlanView extends Plan {
@@ -79,6 +86,7 @@ export function PlanSelector({
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [native, setNative] = useState<PurchaseSummary | null>(null);
   const [pending, startTransition] = useTransition();
 
   function choose(planKey: string) {
@@ -90,7 +98,9 @@ export function PlanSelector({
     startTransition(async () => {
       const res = await selectPlanAction(fd);
       if (res?.clientSecret) {
-        setClientSecret(res.clientSecret); // open in-app embedded checkout
+        setClientSecret(res.clientSecret); // open in-app embedded (Stripe) checkout
+      } else if (res?.native) {
+        setNative(res.native); // open native in-app checkout (no Stripe configured)
       } else if (res?.error) {
         setError(res.error);
       }
@@ -106,6 +116,9 @@ export function PlanSelector({
           publishableKey={publishableKey}
           onClose={() => setClientSecret(null)}
         />
+      ) : null}
+      {native ? (
+        <NativeCheckoutModal summary={native} onClose={() => setNative(null)} />
       ) : null}
       {/* Billing interval toggle */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
