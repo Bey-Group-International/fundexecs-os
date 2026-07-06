@@ -25,6 +25,7 @@ export function ProfilePreviewCard({
 }) {
   const name = values.name.trim();
   const initial = (name || "?")[0]?.toUpperCase() ?? "?";
+  const logo = values.logo_url.trim();
 
   const metaLine = [
     values.operator_role ? displayLabel(values.operator_role, ROLE_LABELS) : null,
@@ -46,9 +47,18 @@ export function ProfilePreviewCard({
     <div className="fx-glass overflow-hidden rounded-2xl border border-gold-500/20 p-6">
       {/* Header row */}
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gold-500/30 bg-gold-500/10 font-display text-lg font-bold text-gold-300">
-          {initial}
-        </div>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logo}
+            alt="Logo"
+            className="h-12 w-12 shrink-0 rounded-xl border border-gold-500/30 bg-gold-500/10 object-contain p-1"
+          />
+        ) : (
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gold-500/30 bg-gold-500/10 font-display text-lg font-bold text-gold-300">
+            {initial}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-display text-base font-semibold text-fg-primary">
