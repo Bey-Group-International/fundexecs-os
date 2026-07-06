@@ -61,6 +61,7 @@ const HUB_IDENTITY: Record<string, { icon: string; color: string }> = {
 // / dashboard surface; and "Capital Map" overlaps Graphs + Source › LP Pipeline.
 const MORE_ITEMS: NavItem[] = [
   { href: "/prospecting", label: "Prospecting" },
+  { href: "/campaigns", label: "Campaigns" },
   { href: "/grid", label: "Execution Grid" },
   { href: "/grid/review", label: "Routing Review" },
   { href: "/activity", label: "Activity" },
