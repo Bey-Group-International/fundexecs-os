@@ -23,6 +23,10 @@ import { DealPipelineLive } from "@/components/source/DealPipelineLive";
 import { RunStrategyModule } from "@/components/run/RunStrategyModule";
 import { RunDiligenceModule } from "@/components/run/RunDiligenceModule";
 import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
+import { FundScoringModule } from "@/components/run/FundScoringModule";
+import { DiligenceRoomModule } from "@/components/run/DiligenceRoomModule";
+import { ContractReviewModule } from "@/components/run/ContractReviewModule";
+import { MarketIntelModule } from "@/components/source/MarketIntelModule";
 import {
   ExecuteReportingModule,
   ExecuteExitModule,
@@ -182,9 +186,27 @@ export async function ModuleView({
     if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
     if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
     if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
-    if (mod.key === "diligence") return <RunDiligenceModule orgId={ctx.orgId} />;
-    if (mod.key === "underwriting") return <RunUnderwritingModule orgId={ctx.orgId} />;
-    if (mod.key === "documents") return <DocumentsModuleLive />;
+    if (mod.key === "diligence")
+      return (
+        <>
+          <RunDiligenceModule orgId={ctx.orgId} />
+          <DiligenceRoomModule />
+        </>
+      );
+    if (mod.key === "underwriting")
+      return (
+        <>
+          <RunUnderwritingModule orgId={ctx.orgId} />
+          <FundScoringModule />
+        </>
+      );
+    if (mod.key === "documents")
+      return (
+        <>
+          <DocumentsModuleLive />
+          <ContractReviewModule />
+        </>
+      );
   }
 
   // --- Execute hub: bespoke operating modules ------------------------------
@@ -287,6 +309,17 @@ export async function ModuleView({
   }
 
   // --- Source hub: enriched directory views ---------------------------------
+  // Network renders the unified deal/investor intelligence directory (a native,
+  // open take on a PitchBook-style market view) synthesized from live records.
+  if (hub.key === "source" && mod.key === "network") {
+    return (
+      <div>
+        {mandateStrip}
+        <MarketIntelModule />
+      </div>
+    );
+  }
+
   // LP pipeline and Providers render bespoke relationship-aware directories
   // instead of the generic table, while retaining AI sourcing and add-row forms.
   if (hub.key === "source" && mod.key === "lp_pipeline") {
