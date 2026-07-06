@@ -40,6 +40,7 @@ import { ExecuteValuationsModule } from "@/components/execute/ValuationsModule";
 import { ExecuteWaterfallModule } from "@/components/execute/WaterfallModule";
 import { SigningModule } from "@/components/execute/SigningModule";
 import { InvoicesModule } from "@/components/execute/InvoicesModule";
+import { IssuanceModule } from "@/components/execute/IssuanceModule";
 import { ModuleStatBar } from "@/components/ModuleStatBar";
 import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
@@ -228,38 +229,7 @@ export async function ModuleView({
     if (mod.key === "exit") return <ExecuteExitModule orgId={ctx.orgId} />;
     if (mod.key === "signing") return <SigningModule />;
     if (mod.key === "billing") return <InvoicesModule />;
-
-    // Modules with defined roadmap scope — structured Coming Soon states so
-    // the operator knows what's shipping and can use Earn in the interim.
-    const EXECUTE_COMING_SOON: Record<string, { blurb: string; earnPrompt: string }> = {
-      issuance: {
-        blurb:
-          "Equity and unit issuance ledger: issue securities, record cap-table entries, generate certificates, and push events to LP notices.",
-        earnPrompt: "Help me record a new equity issuance for a portfolio company",
-      },
-    };
-    const comingSoon = EXECUTE_COMING_SOON[mod.key];
-    if (comingSoon) {
-      return (
-        <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-1 px-8 py-14 text-center">
-          <span className="mb-1 font-mono text-[10px] uppercase tracking-[0.3em] text-fg-muted">
-            Coming soon
-          </span>
-          <h3 className="mt-2 font-display text-xl font-semibold text-fg-primary">
-            {mod.label}
-          </h3>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-fg-secondary">
-            {comingSoon.blurb}
-          </p>
-          <Link
-            href={`/workspace?q=${encodeURIComponent(comingSoon.earnPrompt)}`}
-            className="mt-6 inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
-          >
-            ✶ Handle with Earn now
-          </Link>
-        </div>
-      );
-    }
+    if (mod.key === "issuance") return <IssuanceModule />;
   }
 
   // --- Build hub: dedicated editable modules -------------------------------

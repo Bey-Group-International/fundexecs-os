@@ -5,10 +5,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
-import { setApprovalDecider, setOfficePersistence, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
+import { hydrateWorkflows, setApprovalDecider, setOfficePersistence, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
+import { rowToWorkflow, type OfficeWorkflow } from "@/components/virtual-office/program/officeProgram";
 import { officeRoleFromMemberRole } from "@/lib/office/approvalAuthority";
 import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
-import { appendOfficeAuditEvents, persistOfficeWorkflow } from "@/components/virtual-office/program/office-actions";
+import { appendOfficeAuditEvents, loadOfficeWorkflows, persistOfficeWorkflow } from "@/components/virtual-office/program/office-actions";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
 import { MeetingModal } from "@/components/virtual-office/MeetingModal";
@@ -109,6 +110,19 @@ export function OfficeTabs() {
                 await appendOfficeAuditEvents(events);
               },
             });
+            // Best-effort read-hydrate: seed the archive with this org's
+            // persisted workflows. Swallow everything — guest / no-Supabase /
+            // empty-table paths return nothing and behave exactly as before,
+            // so /command-center renders identically without a backend.
+            loadOfficeWorkflows()
+              .then((rows) => {
+                if (!rows || rows.length === 0) return;
+                const workflows = rows
+                  .map((row) => rowToWorkflow(row))
+                  .filter((w): w is OfficeWorkflow => w !== null);
+                if (workflows.length > 0) hydrateWorkflows(workflows);
+              })
+              .catch(() => {});
           });
       }
       setSessionChecked(true);
