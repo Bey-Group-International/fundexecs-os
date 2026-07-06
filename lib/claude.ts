@@ -112,7 +112,8 @@ function earnChatSystem(modelLabel: string): string {
     `- **Key contact** — decision-maker name, title, direct email, phone, and LinkedIn profile URL\n` +
     `- **AUM / fund size** and typical check or ticket size\n` +
     `- **HQ city** and geographic mandate\n` +
-    `Omit a field rather than guessing. Never fabricate contact details — only include email, phone, and LinkedIn when you have reliable knowledge of them.`
+    `Omit a field rather than guessing. Never fabricate contact details — only include email, phone, and LinkedIn when you have reliable knowledge of them.\n` +
+    `- When your answer names real firms or people, the system automatically appends a "Verified contacts" block with real, Apollo-sourced phone numbers and emails. So do NOT guess at direct dials or email addresses yourself — name the firm/person clearly and let the verified block supply the contact details.`
   );
 }
 
