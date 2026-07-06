@@ -85,23 +85,33 @@ export async function addHolding(formData: FormData): Promise<void> {
   revalidatePath(ENTITY);
 }
 
-export async function updateHolding(formData: FormData): Promise<void> {
+export async function updateHolding(
+  formData: FormData,
+): Promise<{ ok: true } | { error: string }> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { error: "Not authenticated" };
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return { error: "Missing holding id" };
+
+  const ownership_pct = num(formData.get("ownership_pct"));
+  if (ownership_pct != null && (ownership_pct < 0 || ownership_pct > 100)) {
+    return { error: "Ownership % must be between 0 and 100." };
+  }
+
   const supabase = await createServerClient();
-  await supabase
+  const { error } = await supabase
     .from("equity_holdings")
     .update({
       units: num(formData.get("units")),
-      ownership_pct: num(formData.get("ownership_pct")),
+      ownership_pct,
       invested_amount: num(formData.get("invested_amount")),
       share_class_id: text(formData.get("share_class_id")),
     })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
+  if (error) return { error: error.message };
   revalidatePath(ENTITY);
+  return { ok: true };
 }
 
 export async function deleteHolding(formData: FormData): Promise<void> {

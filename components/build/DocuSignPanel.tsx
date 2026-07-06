@@ -6,7 +6,19 @@ import {
   sendSubscriptionEnvelope,
   getEnvelopeStatus,
   listSentEnvelopes,
+  refreshPendingEnvelopes,
+  listSignerContacts,
 } from "./docusign-actions";
+
+// Terminal states no longer change — excluded from polling and per-row refresh.
+const TERMINAL_STATUSES = new Set(["completed", "declined", "voided"]);
+const isTerminal = (status: string) =>
+  TERMINAL_STATUSES.has(status.toLowerCase());
+
+interface SignerContact {
+  name: string;
+  email: string;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,10 +84,11 @@ function SendModal({ onClose, onSent }: ModalProps) {
   const [signerRole, setSignerRole] = useState("signer");
   const [subject, setSubject] = useState("Subscription Agreement — Please Sign");
   const [error, setError] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<SignerContact[]>([]);
   const [isPending, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Fetch templates on mount
+  // Fetch templates + known signer contacts on mount
   useEffect(() => {
     listDocuSignTemplates()
       .then((t) => {
@@ -83,7 +96,17 @@ function SendModal({ onClose, onSent }: ModalProps) {
         if (t.length > 0) setTemplateId(t[0].id);
       })
       .finally(() => setLoadingTemplates(false));
+    listSignerContacts().then(setContacts).catch(() => setContacts([]));
   }, []);
+
+  // When the typed name matches a known investor contact, auto-fill their email.
+  function handleNameChange(value: string) {
+    setSignerName(value);
+    const match = contacts.find(
+      (c) => c.name && c.name.toLowerCase() === value.trim().toLowerCase(),
+    );
+    if (match && match.email && !signerEmail) setSignerEmail(match.email);
+  }
 
   // Close on backdrop click
   const handleBackdrop = useCallback(
@@ -207,11 +230,22 @@ function SendModal({ onClose, onSent }: ModalProps) {
             <input
               type="text"
               value={signerName}
-              onChange={(e) => setSignerName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               required
               placeholder="Jane Smith"
+              list="docusign-signer-contacts"
+              autoComplete="off"
               className="mt-1 block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
             />
+            {contacts.length > 0 && (
+              <datalist id="docusign-signer-contacts">
+                {contacts.map((c) => (
+                  <option key={c.email} value={c.name}>
+                    {c.email}
+                  </option>
+                ))}
+              </datalist>
+            )}
           </div>
 
           {/* LP Email */}
@@ -357,27 +391,31 @@ function EnvelopeRow({
         <StatusBadge status={envelope.status} />
       </td>
       <td className="py-3">
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          title="Refresh status from DocuSign"
-          className="rounded p-1 text-neutral-400 hover:text-blue-600 disabled:opacity-50 dark:hover:text-blue-400"
-        >
-          <svg
-            className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+        {isTerminal(envelope.status) ? (
+          <span className="sr-only">Final status</span>
+        ) : (
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh status from DocuSign"
+            className="rounded p-1 text-neutral-400 hover:text-blue-600 disabled:opacity-50 dark:hover:text-blue-400"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4 4v5h.582M20 20v-5h-.581M5.635 19A9 9 0 1 0 4.582 9"
-            />
-          </svg>
-        </button>
+            <svg
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 4v5h.582M20 20v-5h-.581M5.635 19A9 9 0 1 0 4.582 9"
+              />
+            </svg>
+          </button>
+        )}
       </td>
     </tr>
   );
@@ -391,6 +429,7 @@ export function DocuSignPanel() {
   const [open, setOpen] = useState(false);
   const [envelopes, setEnvelopes] = useState<SentEnvelope[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   // Load existing envelopes on mount
   useEffect(() => {
@@ -408,6 +447,37 @@ export function DocuSignPanel() {
       prev.map((e) => (e.id === id ? { ...e, status } : e))
     );
   }
+
+  const applyUpdates = useCallback((updates: Array<{ id: string; status: string }>) => {
+    if (updates.length === 0) return;
+    const byId = new Map(updates.map((u) => [u.id, u.status]));
+    setEnvelopes((prev) =>
+      prev.map((e) => (byId.has(e.id) ? { ...e, status: byId.get(e.id)! } : e))
+    );
+  }, []);
+
+  const pendingCount = envelopes.filter((e) => !isTerminal(e.status)).length;
+
+  async function syncAll() {
+    setSyncing(true);
+    try {
+      applyUpdates(await refreshPendingEnvelopes());
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // Auto-poll pending envelopes every 30s while any remain in flight. The sweep
+  // is a single server round-trip; it stops once everything is terminal.
+  useEffect(() => {
+    if (pendingCount === 0) return;
+    const id = setInterval(() => {
+      refreshPendingEnvelopes()
+        .then(applyUpdates)
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [pendingCount, applyUpdates]);
 
   return (
     <section className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
@@ -433,26 +503,52 @@ export function DocuSignPanel() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={syncAll}
+              disabled={syncing}
+              title="Refresh every pending envelope from DocuSign"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            >
+              <svg
+                className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582M20 20v-5h-.581M5.635 19A9 9 0 1 0 4.582 9"
+                />
+              </svg>
+              {syncing ? "Syncing…" : `Refresh all (${pendingCount})`}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          Send Subscription Docs
-        </button>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            Send Subscription Docs
+          </button>
+        </div>
       </div>
 
       {/* Envelope list */}
