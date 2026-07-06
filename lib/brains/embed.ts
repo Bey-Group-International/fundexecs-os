@@ -71,21 +71,45 @@ function l2Normalize(vec: number[]): number[] {
   return vec;
 }
 
-// Deterministic local feature-hashing embedder. Zero cost, no key, no network.
+// Features hashed into the vector: unigrams PLUS adjacent bigrams. Bigrams give
+// the model phrase-level signal ("leveraged_buyout", "exit_multiple",
+// "cold_outreach", "lead_scoring") that a bag-of-unigrams cannot distinguish
+// from the same words scattered apart — which matters a lot in this domain's KB.
+function features(text: string): string[] {
+  const toks = tokens(text);
+  const feats: string[] = [...toks];
+  for (let i = 0; i + 1 < toks.length; i++) {
+    feats.push(`${toks[i]}_${toks[i + 1]}`);
+  }
+  return feats;
+}
+
+// Deterministic local feature-hashing embedder. Zero cost, no key, no network —
+// the native retrieval model, no third-party embedding service required.
+//
+// hash-v2 over hash-v1: unigrams + bigrams (phrase signal) and sublinear
+// term-frequency weighting (1 + ln·count) so a term repeated many times damps
+// instead of swamping the vector. The bump in `model` is a new vector space, so
+// stale hash-v1 rows are re-embedded via the ingest/reembed path rather than
+// mis-ranked (retrieval filters on embedding_model).
 export class HashingEmbedder implements Embedder {
   readonly dim: number;
-  readonly model = "hash-v1";
+  readonly model = "hash-v2";
   constructor(dim: number = EMBED_DIM) {
     this.dim = dim;
   }
 
   embedSync(text: string): number[] {
     const vec = new Array<number>(this.dim).fill(0);
-    for (const tok of tokens(text)) {
-      const h = fnv1a(tok);
+    // Count each feature once, then weight by sublinear TF so repetition adds
+    // signal with diminishing returns (the standard 1 + ln tf damping).
+    const counts = new Map<string, number>();
+    for (const feat of features(text)) counts.set(feat, (counts.get(feat) ?? 0) + 1);
+    for (const [feat, count] of counts) {
+      const h = fnv1a(feat);
       const bucket = h % this.dim;
       const sign = (h & 1) === 0 ? 1 : -1;
-      vec[bucket] += sign;
+      vec[bucket] += sign * (1 + Math.log(count));
     }
     // L2-normalize so dot product == cosine similarity (matches pgvector <=>).
     return l2Normalize(vec);
