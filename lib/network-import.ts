@@ -5,6 +5,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { enrichPerson } from "@/lib/integrations/providers/apollo";
+import { isValidEmail, normalizePhone, isValidLinkedIn } from "@/lib/contact-sanitize";
 
 export type ImportMode = "person" | "firm" | "auto";
 
@@ -204,10 +205,64 @@ function parseCsvRow(line: string): string[] {
 
 const anyDb = (supabase: Awaited<ReturnType<typeof createServerClient>>) => supabase as any;
 
+// ── Import fortification: validation + compliance + confidence ────────────────
+
+// Consent basis for a bulk import. LinkedIn connections are an existing
+// relationship; other user-uploaded lists are recorded as a user import so the
+// compliance gate has a lawful, auditable basis.
+export function consentBasisForSource(source: ParsedContact["source"]): string {
+  return source === "linkedin_csv" ? "existing_relationship" : "user_import";
+}
+
+// First-party import confidence: user-owned data starts trusted, with bonuses
+// for identifying fields. 0–100.
+export function scoreImportConfidence(f: {
+  email: string | null;
+  linkedin_url: string | null;
+  phone: string | null;
+  title: string | null;
+  company: string | null;
+}): number {
+  let s = 45;
+  if (f.email) s += 20;
+  if (f.linkedin_url) s += 15;
+  if (f.phone) s += 10;
+  if (f.title && f.company) s += 10;
+  return Math.min(100, s);
+}
+
+export interface ImportFields {
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  confidence: number;
+  consent_basis: string;
+  consent_source: string;
+  communication_status: string;
+}
+
+// Validate + normalize a parsed row into the fields we store, dropping any
+// malformed/placeholder email, phone, or LinkedIn (so a CSV can't inject
+// invalid contact data) and stamping a consent basis.
+export function toImportFields(c: ParsedContact): ImportFields {
+  const email = isValidEmail(c.email) ? c.email!.trim().toLowerCase() : null;
+  const phone = normalizePhone(c.phone);
+  const linkedin_url = isValidLinkedIn(c.linkedinUrl) ? c.linkedinUrl : null;
+  return {
+    email,
+    phone,
+    linkedin_url,
+    confidence: scoreImportConfidence({ email, linkedin_url, phone, title: c.title, company: c.company }),
+    consent_basis: consentBasisForSource(c.source),
+    consent_source: c.source,
+    communication_status: "allowed",
+  };
+}
+
 export async function importContacts(
   contacts: ParsedContact[],
   pooled = true,
-): Promise<{ jobId: string; total: number }> {
+): Promise<{ jobId: string; total: number; skipped: number }> {
   const auth = await requireOrgContext();
   if (!auth.ok) throw new Error(auth.error);
   const { ctx } = auth;
@@ -233,24 +288,54 @@ export async function importContacts(
 
   if (!job) throw new Error("Failed to create import job");
 
+  // Dedupe by email: skip rows whose (valid) email already exists in the org's
+  // CRM or repeats within this file. Emailless rows can't be deduped, so keep.
+  const fieldsByContact = contacts.map((c) => ({ c, f: toImportFields(c) }));
+  const fileEmails = Array.from(
+    new Set(fieldsByContact.map(({ f }) => f.email).filter((e): e is string => Boolean(e))),
+  );
+  const existing = new Set<string>();
+  if (fileEmails.length) {
+    const { data: rows } = await db
+      .from("network_contacts")
+      .select("email")
+      .eq("organization_id", ctx.orgId)
+      .in("email", fileEmails);
+    for (const r of (rows ?? []) as { email: string | null }[]) {
+      if (r.email) existing.add(String(r.email).toLowerCase());
+    }
+  }
+  const seen = new Set<string>();
+  const toImport = fieldsByContact.filter(({ f }) => {
+    if (!f.email) return true;
+    if (existing.has(f.email) || seen.has(f.email)) return false;
+    seen.add(f.email);
+    return true;
+  });
+  const skipped = contacts.length - toImport.length;
+
   const BATCH = 50;
   let imported = 0;
 
-  for (let i = 0; i < contacts.length; i += BATCH) {
-    const batch = contacts.slice(i, i + BATCH);
-    const records = batch.map((c) => ({
+  for (let i = 0; i < toImport.length; i += BATCH) {
+    const batch = toImport.slice(i, i + BATCH);
+    const records = batch.map(({ c, f }) => ({
       organization_id: ctx.orgId,
       imported_by: ctx.userId,
       first_name: c.firstName,
       last_name: c.lastName || "",
-      email: c.email,
-      linkedin_url: c.linkedinUrl,
-      phone: c.phone,
+      email: f.email,
+      linkedin_url: f.linkedin_url,
+      phone: f.phone,
       title: c.title,
       company: c.company,
       location: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
       connected_on: c.connectedOn,
       source: c.source,
+      confidence: f.confidence,
+      communication_status: f.communication_status,
+      consent_basis: f.consent_basis,
+      consent_source: f.consent_source,
       pooled,
     }));
 
@@ -260,10 +345,15 @@ export async function importContacts(
 
   await db
     .from("network_import_jobs")
-    .update({ status: "done", imported_rows: imported, completed_at: new Date().toISOString() })
+    .update({
+      status: "done",
+      imported_rows: imported,
+      failed_rows: skipped,
+      completed_at: new Date().toISOString(),
+    })
     .eq("id", job.id);
 
-  return { jobId: job.id, total: imported };
+  return { jobId: job.id, total: imported, skipped };
 }
 
 // Legacy shim for any callers using the old CSV-only API.

@@ -1,4 +1,64 @@
-import { parseLinkedInCsv, parseNetworkCsv } from "./network-import";
+import {
+  parseLinkedInCsv,
+  parseNetworkCsv,
+  toImportFields,
+  scoreImportConfidence,
+  consentBasisForSource,
+  type ParsedContact,
+} from "./network-import";
+
+function parsed(overrides: Partial<ParsedContact>): ParsedContact {
+  return {
+    firstName: "Ada",
+    lastName: "Lovelace",
+    email: null,
+    company: null,
+    title: null,
+    linkedinUrl: null,
+    phone: null,
+    city: null,
+    state: null,
+    country: null,
+    connectedOn: null,
+    source: "csv_person_list",
+    ...overrides,
+  };
+}
+
+describe("toImportFields", () => {
+  it("drops a malformed/placeholder email, phone, and LinkedIn", () => {
+    const f = toImportFields(parsed({ email: "email_not_unlocked@domain.com", phone: "call me", linkedinUrl: "https://twitter.com/x" }));
+    expect(f.email).toBeNull();
+    expect(f.phone).toBeNull();
+    expect(f.linkedin_url).toBeNull();
+  });
+
+  it("keeps valid fields and stamps a consent basis", () => {
+    const f = toImportFields(parsed({ email: "Ada@Analytical.com", phone: "+1 212-555-0100", linkedinUrl: "https://www.linkedin.com/in/ada", source: "linkedin_csv" }));
+    expect(f.email).toBe("ada@analytical.com");
+    expect(f.phone).toBe("+1 212-555-0100");
+    expect(f.linkedin_url).toBe("https://www.linkedin.com/in/ada");
+    expect(f.communication_status).toBe("allowed");
+    expect(f.consent_basis).toBe("existing_relationship");
+    expect(f.consent_source).toBe("linkedin_csv");
+  });
+});
+
+describe("scoreImportConfidence", () => {
+  it("rewards more identifying fields", () => {
+    const rich = scoreImportConfidence({ email: "a@b.com", linkedin_url: "x", phone: "y", title: "CIO", company: "Acme" });
+    const sparse = scoreImportConfidence({ email: null, linkedin_url: null, phone: null, title: null, company: null });
+    expect(rich).toBeGreaterThan(sparse);
+    expect(rich).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("consentBasisForSource", () => {
+  it("maps LinkedIn to existing relationship, else user import", () => {
+    expect(consentBasisForSource("linkedin_csv")).toBe("existing_relationship");
+    expect(consentBasisForSource("csv_firm_list")).toBe("user_import");
+  });
+});
 
 describe("network import CSV parsing", () => {
   it("parses LinkedIn connection exports", () => {
