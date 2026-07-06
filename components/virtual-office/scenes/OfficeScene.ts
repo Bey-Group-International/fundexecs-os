@@ -251,6 +251,13 @@ export class OfficeScene extends Phaser.Scene {
   private talkRing!: Phaser.GameObjects.Arc;
   private nearestNpcId: string | null = null;
   private talkPulse = 0;
+  // Proximity/interactive distance scans are throttled off the per-frame path;
+  // keypress + the highlight ring still update every frame for responsiveness.
+  private scanAccumInteract = 0;
+  private scanAccumNpc = 0;
+  private clockMs = 0;
+  /** Per-zone last auto-activation time (ms on the scene clock), for cooldown. */
+  private lastZoneFireAt: Record<string, number> = {};
   /** Conference-table seats (for meetings) and their occupancy. */
   private tableSeats: SeatAnchor[] = [];
   private freeTableSeats = new Set<SeatAnchor>();
@@ -411,7 +418,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateSitting();
     this._handleMovement();
     this._updatePlayerAvatar(delta);
-    this._updateInteractives();
+    this._updateInteractives(delta);
     this._updateEmotes(delta);
     this._updateRoomLabel();
     this._updateIframeZones();
@@ -1306,30 +1313,49 @@ export class OfficeScene extends Phaser.Scene {
     this.keyX = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X);
   }
 
-  private _updateInteractives() {
+  private static readonly SCAN_INTERVAL_MS = 90;
+  private static readonly ZONE_COOLDOWN_MS = 6000;
+
+  private _updateInteractives(delta: number) {
+    this.clockMs += delta;
+
+    // Per-frame: act on the cached nearest hotspot so the keypress stays crisp.
+    if (this.nearestInteractive && Phaser.Input.Keyboard.JustDown(this.keyX)) {
+      this.game.events.emit("office:interact", this.nearestInteractive);
+      this._showEmote(this.player.x, this.player.y, "✦");
+    }
+
+    // Throttled: the distance scan runs ~10×/sec, not every frame.
+    this.scanAccumInteract += delta;
+    if (this.scanAccumInteract < OfficeScene.SCAN_INTERVAL_MS) return;
+    this.scanAccumInteract = 0;
+
     let nearest: InteractiveObject | null = null;
     let bestDist = OfficeScene.INTERACT_RADIUS;
     for (const { obj, wx, wy } of this.interactives) {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, wx, wy);
       if (d < bestDist) { bestDist = d; nearest = obj; }
     }
-    if (nearest !== this.nearestInteractive) {
-      this.nearestInteractive = nearest;
-      if (nearest) {
-        this.interactPrompt.setText(`${nearest.icon}  Press X — ${nearest.label}`);
-        const cam = this.cameras.main;
-        this.interactPrompt.setPosition(
-          cam.width / 2 - this.interactPrompt.width / 2,
-          cam.height - 44,
-        );
-        this.interactPrompt.setVisible(true);
-      } else {
-        this.interactPrompt.setVisible(false);
-      }
+    if (nearest === this.nearestInteractive) return;
+    this.nearestInteractive = nearest;
+    if (!nearest) {
+      this.interactPrompt.setVisible(false);
+      return;
     }
-    if (this.nearestInteractive && Phaser.Input.Keyboard.JustDown(this.keyX)) {
-      this.game.events.emit("office:interact", this.nearestInteractive);
-      this._showEmote(this.player.x, this.player.y, "✦");
+    this.interactPrompt.setText(`${nearest.icon}  Press X — ${nearest.label}`);
+    const cam = this.cameras.main;
+    this.interactPrompt.setPosition(cam.width / 2 - this.interactPrompt.width / 2, cam.height - 44);
+    this.interactPrompt.setVisible(true);
+
+    // Gather-style: stepping into a NON-navigating zone activates it on entry
+    // (with a cooldown). Navigating (href) zones still require a press to X —
+    // auto-navigating on mere entry would yank the operator off the floor.
+    if (nearest.event && !nearest.href) {
+      const last = this.lastZoneFireAt[nearest.id] ?? -Infinity;
+      if (this.clockMs - last > OfficeScene.ZONE_COOLDOWN_MS) {
+        this.lastZoneFireAt[nearest.id] = this.clockMs;
+        this.game.events.emit("office:interact", nearest);
+      }
     }
   }
 
@@ -1360,48 +1386,63 @@ export class OfficeScene extends Phaser.Scene {
    * Talking reuses the same npc:click path as tapping the figure.
    */
   private _updateNpcProximity(delta: number) {
+    // Per-frame: follow + breathe the ring and handle press-T on the cached
+    // nearest executive, so the highlight and talk stay responsive.
+    const nearest = this.nearestNpcId ? this.npcAvatars.get(this.nearestNpcId) : undefined;
+    if (nearest && nearest.agentId) {
+      this.talkRing.setPosition(nearest.sprite.x, nearest.sprite.y + 12);
+      this.talkRing.setDepth(yDepth(nearest.sprite.y) - 0.1);
+      if (!this.reducedMotion) {
+        this.talkPulse += delta / 1000;
+        const p = (Math.sin(this.talkPulse * 3.2) + 1) / 2;
+        this.talkRing.setScale(0.92 + p * 0.16).setAlpha(0.6 + p * 0.4);
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyT)) {
+        this.game.events.emit("npc:click", {
+          npcId: this.nearestNpcId,
+          spriteKey: nearest.spriteKey,
+          name: nearest.label.text,
+        });
+        nearest.avatar.react();
+      }
+    }
+
+    // Throttled: re-scan for the nearest executive ~10×/sec.
+    this.scanAccumNpc += delta;
+    if (this.scanAccumNpc < OfficeScene.SCAN_INTERVAL_MS) return;
+    this.scanAccumNpc = 0;
+
     let nearestId: string | null = null;
-    let nearest: NpcAvatarState | null = null;
+    let best: NpcAvatarState | null = null;
     let bd = OfficeScene.TALK_RADIUS_SQ;
     for (const [npcId, state] of this.npcAvatars) {
       if (!state.agentId) continue;
       const dx = state.sprite.x - this.player.x;
       const dy = state.sprite.y - this.player.y;
       const d = dx * dx + dy * dy;
-      if (d < bd) { bd = d; nearest = state; nearestId = npcId; }
+      if (d < bd) { bd = d; best = state; nearestId = npcId; }
     }
-
-    if (nearestId !== this.nearestNpcId) {
-      this.nearestNpcId = nearestId;
-      if (nearest) {
-        this.talkPrompt.setText(`💬  Talk to ${nearest.label.text} — T`);
-        const cam = this.cameras.main;
-        this.talkPrompt.setPosition(cam.width / 2 - this.talkPrompt.width / 2, cam.height - 88);
-        this.talkPrompt.setVisible(true);
-        this.talkRing.setVisible(true);
-      } else {
-        this.talkPrompt.setVisible(false);
-        this.talkRing.setVisible(false);
-      }
-    }
-
-    if (!nearest) return;
-
-    // Ring sits at the executive's feet, just behind the figure, and breathes.
-    this.talkRing.setPosition(nearest.sprite.x, nearest.sprite.y + 12);
-    this.talkRing.setDepth(yDepth(nearest.sprite.y) - 0.1);
-    if (!this.reducedMotion) {
-      this.talkPulse += delta / 1000;
-      const p = (Math.sin(this.talkPulse * 3.2) + 1) / 2;
-      this.talkRing.setScale(0.92 + p * 0.16).setAlpha(0.6 + p * 0.4);
-    }
-    if (Phaser.Input.Keyboard.JustDown(this.keyT)) {
-      this.game.events.emit("npc:click", {
-        npcId: nearestId,
-        spriteKey: nearest.spriteKey,
-        name: nearest.label.text,
+    if (nearestId === this.nearestNpcId) return;
+    this.nearestNpcId = nearestId;
+    if (best && best.agentId) {
+      this.talkPrompt.setText(`💬  Talk to ${best.label.text} — T`);
+      const cam = this.cameras.main;
+      this.talkPrompt.setPosition(cam.width / 2 - this.talkPrompt.width / 2, cam.height - 88);
+      this.talkPrompt.setVisible(true);
+      this.talkRing.setVisible(true);
+      // Surface the executive's presence as live dialogue in the DOM overlay.
+      const agent = AGENT_BY_ID[best.agentId];
+      this.game.events.emit("office:nearby-agent", {
+        agentId: best.agentId,
+        name: agent.name,
+        role: agent.role,
+        line: agent.idleLine,
+        accent: agent.accent,
       });
-      nearest.avatar.react();
+    } else {
+      this.talkPrompt.setVisible(false);
+      this.talkRing.setVisible(false);
+      this.game.events.emit("office:nearby-agent", null);
     }
   }
 
