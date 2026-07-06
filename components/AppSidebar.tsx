@@ -60,6 +60,7 @@ const HUB_IDENTITY: Record<string, { icon: string; color: string }> = {
 // lives under Execute › Asset Management; "Command Center" is the /command-center
 // / dashboard surface; and "Capital Map" overlaps Graphs + Source › LP Pipeline.
 const MORE_ITEMS: NavItem[] = [
+  { href: "/relationship", label: "Relationship Center" },
   { href: "/prospecting", label: "Prospecting" },
   { href: "/signals", label: "Intent Signals" },
   { href: "/campaigns", label: "Campaigns" },
