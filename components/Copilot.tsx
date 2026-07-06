@@ -131,6 +131,7 @@ export default function Copilot({
   integrations = [],
   initialChat = [],
   initialPrompt = "",
+  embedded = false,
 }: {
   orgId: string;
   live: boolean;
@@ -145,6 +146,12 @@ export default function Copilot({
   // reload. Seeds the chat transcript on mount.
   initialChat?: ChatTurn[];
   initialPrompt?: string;
+  // Embedded in a scrolling page (the Sessions/workspace composer) rather than
+  // owning the viewport. Sizes to its content so the page's single scroll
+  // handles it — no fixed viewport height or internal transcript scroll that
+  // would produce a second scrollbar. The session view leaves this false and
+  // keeps the fixed-height shell with its own scrolling transcript.
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -347,7 +354,10 @@ export default function Copilot({
   }, [paletteOpen, openMenu]);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
+  // Skip when there's nothing to follow (empty composer): otherwise the
+  // embedded workspace composer would scroll the page to the bottom on mount.
   useEffect(() => {
+    if (bundles.length === 0 && chatTurns.length === 0 && !planning) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [bundles.length, planning, chatTurns]);
 
@@ -1112,15 +1122,15 @@ export default function Copilot({
   return (
     <div
       data-owns-cmdk
-      className="fx-neural-ambient mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl flex-col"
+      className={`fx-neural-ambient mx-auto flex max-w-5xl flex-col ${embedded ? "" : "h-[calc(100dvh-8rem)]"}`}
     >
-      <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)]">
+      <section className={`relative flex flex-col overflow-hidden rounded-[1.75rem] border border-line/80 bg-surface-0/88 shadow-[0_24px_90px_-58px_rgb(var(--fx-accent-rgb)/0.9)] ${embedded ? "" : "min-h-0 flex-1"}`}>
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(var(--fx-accent-rgb)/0.16),transparent_36%),linear-gradient(rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--fx-accent-rgb)/0.045)_1px,transparent_1px)] bg-[length:auto,32px_32px,32px_32px]"
         />
 
-        <div ref={splitRef} className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={splitRef} className={`relative flex flex-col ${embedded ? "" : "min-h-0 flex-1"}`}>
           {/* Terminal stats bar — session telemetry in a command-center ticker. */}
           {!empty ? (() => {
             const lastEarnTurn = [...chatTurns].reverse().find((t) => t.role === "earn" && t.metrics);
@@ -1165,9 +1175,9 @@ export default function Copilot({
           <div
             role="region"
             aria-label="Conversation"
-            className="relative flex min-h-0 flex-col flex-1"
+            className={`relative flex flex-col ${embedded ? "" : "min-h-0 flex-1"}`}
           >
-          <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6">
+          <div className={`px-3 py-5 sm:px-6 ${embedded ? "" : "flex-1 overflow-y-auto"}`}>
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {empty ? (
                 <div className="flex min-h-[360px] flex-col items-center justify-center px-4 py-14 text-center">

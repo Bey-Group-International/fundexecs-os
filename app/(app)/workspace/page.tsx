@@ -186,6 +186,7 @@ export default async function SessionsPage({
           bundles={[]}
           integrations={getActiveIntegrations(connected)}
           initialPrompt={queryPrompt ?? ""}
+          embedded
         />
       </div>
     </div>
