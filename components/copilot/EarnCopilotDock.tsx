@@ -22,6 +22,8 @@ import {
 import { ReviewFeed } from "@/components/copilot/ReviewFeed";
 import { TeamTasksFeed } from "@/components/copilot/TeamTasksFeed";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
+import { Markdown } from "@/components/Markdown";
+import { classifyIntent } from "@/lib/intent";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -47,6 +49,10 @@ type Turn =
       planTitle?: string;
       steps?: { agent: AgentKey; title: string }[];
       sessionId?: string;
+      // Conversational (ungated) answer path: streamed markdown text. When
+      // `answer` is defined the turn is a chat reply, not a routed plan.
+      answer?: string;
+      streaming?: boolean;
     };
 
 /**
@@ -86,6 +92,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const [briefing, setBriefing] = useState<CopilotBriefing | null>(null);
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [pending, start] = useTransition();
+  // True while a conversational answer is streaming in (separate from `pending`,
+  // which covers the server-action plan path).
+  const [chatting, setChatting] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   // Gates the persist effect until the initial hydrate has run, so the empty
@@ -100,7 +109,12 @@ export function EarnCopilotDock({ name }: { name: string }) {
       if (raw) {
         const saved = JSON.parse(raw) as { sessionId: string | null; thread: Turn[] };
         setSessionId(saved.sessionId ?? null);
-        setThread(saved.thread ?? []);
+        // Clear any streaming flag left over from a reload mid-answer.
+        setThread(
+          (saved.thread ?? []).map((t) =>
+            t.role === "earn" && t.streaming ? { ...t, streaming: false } : t,
+          ),
+        );
       }
     } catch {
       /* ignore malformed storage */
@@ -116,13 +130,79 @@ export function EarnCopilotDock({ name }: { name: string }) {
     }
   }, [sessionId, thread]);
 
-  // Run any prompt through Earn, continuing the current session so the
-  // conversation is multi-turn and maintained in the dock.
+  // Update the most recent Earn turn in place (used while streaming a chat answer).
+  function patchLastEarn(prev: Turn[], patch: Partial<Extract<Turn, { role: "earn" }>>): Turn[] {
+    const next = [...prev];
+    for (let i = next.length - 1; i >= 0; i--) {
+      const turn = next[i];
+      if (turn.role === "earn") {
+        next[i] = { ...turn, ...patch };
+        break;
+      }
+    }
+    return next;
+  }
+
+  // Prior conversation as {role, content} pairs so the chat reply is multi-turn.
+  function buildPrior(): { role: string; content: string }[] {
+    return thread
+      .map((turn) =>
+        turn.role === "user"
+          ? { role: "user", content: turn.text }
+          : turn.answer
+            ? { role: "assistant", content: turn.answer }
+            : turn.planTitle
+              ? { role: "assistant", content: turn.planTitle }
+              : null,
+      )
+      .filter((t): t is { role: string; content: string } => t !== null)
+      .slice(-30);
+  }
+
+  // Conversational (ungated) answer: stream tokens from /api/chat straight into
+  // the dock — the same seamless chat the workspace composer gets, on every
+  // page. Verified Apollo contacts arrive appended in the same stream.
+  async function askChat(t: string) {
+    const prior = buildPrior();
+    setThread((prev) => [...prev, { role: "user", text: t }, { role: "earn", answer: "", streaming: true }]);
+    setBody("");
+    setChatting(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: t, session_id: sessionId ?? undefined, prior }),
+      });
+      if (!res.ok || !res.body) throw new Error("chat failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setThread((prev) => patchLastEarn(prev, { answer: acc, streaming: true }));
+      }
+      setThread((prev) => patchLastEarn(prev, { answer: acc || "…", streaming: false }));
+    } catch {
+      setThread((prev) => patchLastEarn(prev, { answer: "Earn couldn't answer that just now — please try again.", streaming: false }));
+    } finally {
+      setChatting(false);
+    }
+  }
+
+  // Run any prompt through Earn. Informational questions stream back a
+  // conversational answer (ungated); work requests are planned into a gated
+  // workflow. The intent classifier decides, so the same box does both.
   function ask(text: string) {
     const t = text.trim();
-    if (!t || pending) return;
+    if (!t || pending || chatting) return;
     setError(null);
     setLastAsk(t);
+    if (classifyIntent(t) === "chat") {
+      void askChat(t);
+      return;
+    }
     setThread((prev) => [...prev, { role: "user", text: t }]);
     start(async () => {
       const r = await askEarn({ body: t, pathname, sessionId: sessionId ?? undefined });
@@ -416,6 +496,17 @@ export function EarnCopilotDock({ name }: { name: string }) {
                     <div key={i} className="ml-6 break-words rounded-lg rounded-br-sm border border-white/10 bg-surface-2/80 px-3 py-2 text-sm text-fg-primary">
                       {turn.text}
                     </div>
+                  ) : turn.answer !== undefined ? (
+                    // Conversational answer (streamed markdown), incl. any
+                    // appended verified-contact block.
+                    <div key={i} className="mr-6">
+                      <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 text-sm text-fg-primary shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
+                        <Markdown>{turn.answer || "…"}</Markdown>
+                        {turn.streaming ? (
+                          <span className="ml-0.5 inline-block h-3 w-1.5 animate-glow bg-neural-400 align-middle" aria-hidden />
+                        ) : null}
+                      </div>
+                    </div>
                   ) : (
                     <div key={i} className="mr-6 space-y-2">
                       <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
@@ -539,11 +630,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
             <span className="font-mono text-[10px] text-fg-muted">⌘↵ to send</span>
             <button
               onClick={submitAsk}
-              disabled={pending || !body.trim()}
-              title={!body.trim() && !pending ? "Type a message to ask Earn" : undefined}
+              disabled={pending || chatting || !body.trim()}
+              title={!body.trim() && !pending && !chatting ? "Type a message to ask Earn" : undefined}
               className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-medium text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {pending ? "Routing…" : "Ask Earn"}
+              {chatting ? "Answering…" : pending ? "Routing…" : "Ask Earn"}
             </button>
           </div>
           <div className="mt-2 text-center">

@@ -6,6 +6,7 @@ import { parseStoredEdgeContext, edgeContextToPromptLine } from "@/lib/edge-cont
 import { getRelationshipContext } from "@/lib/copilot/context/relationship-context-provider";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { buildContactAppendix } from "@/lib/chat-enrichment";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -267,6 +268,19 @@ export async function POST(request: Request) {
           controller.enqueue(encoder.encode(delta));
         });
         await stream.finalMessage();
+        // Verified contacts: if the reply named a real company/person, look up
+        // real, Apollo-sourced phone/email and stream a contact block into the
+        // SAME response. Never fabricated (Apollo-only) and never fatal — a
+        // failure or no-hit simply appends nothing.
+        try {
+          const appendix = await buildContactAppendix(body, reply);
+          if (appendix) {
+            reply += appendix;
+            controller.enqueue(encoder.encode(appendix));
+          }
+        } catch {
+          // Enrichment is additive — never let it break the reply.
+        }
       } catch {
         controller.enqueue(
           encoder.encode(
