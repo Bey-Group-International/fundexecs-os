@@ -533,6 +533,7 @@ export function ArtifactInline({
   content,
   artifactType,
   title,
+  orgId,
   sources,
   verificationStatus,
   groundingScore,
@@ -542,6 +543,8 @@ export function ArtifactInline({
   content: string;
   artifactType?: ArtifactType;
   title?: string;
+  // When both id and orgId are present, the expanded modal becomes annotatable.
+  orgId?: string;
   // Trust layer: grounding citations + verification badge for this deliverable.
   sources?: Json | null;
   verificationStatus?: string | null;
@@ -594,6 +597,7 @@ export function ArtifactInline({
           label={label}
           content={content}
           onClose={() => setModalOpen(false)}
+          annotation={id && orgId ? { entityId: id, orgId } : undefined}
           toolbar={
             <ArtifactActions content={content} title={fileTitle} artifactType={artifactType} />
           }

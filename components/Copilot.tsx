@@ -999,6 +999,7 @@ export default function Copilot({
           <div className="min-w-0 flex-1">
             <WorkflowCard
               bundle={b}
+              orgId={orgId}
               busy={busy}
               decide={decide}
               liveSteps={liveSteps}
@@ -1674,9 +1675,11 @@ function StepDeliverable({ text }: { text: string }) {
 
 function WorkflowSteps({
   bundle,
+  orgId,
   liveSteps = {},
 }: {
   bundle: WorkflowBundle;
+  orgId: string;
   // Live step states streamed during an "approved" run, keyed by step id. Used
   // only to advance a step's display ahead of the debounce refresh — it never
   // regresses a persisted status or overrides a terminal one.
@@ -1734,6 +1737,7 @@ function WorkflowSteps({
                     content={output}
                     artifactType={artifact.artifact_type}
                     title={step.title}
+                    orgId={orgId}
                     sources={artifact.sources}
                     verificationStatus={artifact.verification_status}
                     groundingScore={artifact.grounding_score}
@@ -1754,6 +1758,7 @@ function WorkflowSteps({
 
 function WorkflowCard({
   bundle,
+  orgId,
   busy,
   decide,
   liveSteps,
@@ -1766,6 +1771,7 @@ function WorkflowCard({
   onCancelClarify,
 }: {
   bundle: WorkflowBundle;
+  orgId: string;
   busy: boolean;
   decide: (id: string, d: "approved" | "rejected" | "regenerate" | "accepted", note?: string, desk?: Executive) => void;
   // Live step states streamed during this workflow's "approved" run.
@@ -1850,6 +1856,7 @@ function WorkflowCard({
               content={primaryArtifact.content}
               artifactType={primaryArtifact.artifact_type}
               title={primaryArtifact.title}
+              orgId={orgId}
               sources={primaryArtifact.sources}
               verificationStatus={primaryArtifact.verification_status}
               groundingScore={primaryArtifact.grounding_score}
@@ -1895,7 +1902,7 @@ function WorkflowCard({
             <div>
               <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
               <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
-                <WorkflowSteps bundle={bundle} liveSteps={liveSteps} />
+                <WorkflowSteps bundle={bundle} orgId={orgId} liveSteps={liveSteps} />
               </div>
             </div>
           </div>

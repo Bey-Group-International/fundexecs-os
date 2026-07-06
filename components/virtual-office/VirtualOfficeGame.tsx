@@ -23,6 +23,7 @@ import { FloorRoster, type RosterEntry } from "./FloorRoster";
 import { ScreenShareDock } from "./ScreenShareDock";
 import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
+import { FloorShortcuts } from "./FloorShortcuts";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -310,6 +311,7 @@ export function VirtualOfficeGame({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -340,6 +342,15 @@ export function VirtualOfficeGame({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+        return;
+      }
+      // "?" opens the controls cheat sheet — but not while typing in a field.
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+        const el = document.activeElement;
+        const typing = el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+        if (typing) return;
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
       }
     };
     document.addEventListener("keydown", onKey);
@@ -771,6 +782,9 @@ export function VirtualOfficeGame({
           />
         )}
 
+        {/* Controls cheat sheet — "?" */}
+        {shortcutsOpen && <FloorShortcuts onClose={() => setShortcutsOpen(false)} />}
+
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
           style={{ fontFamily: "Georgia, serif", letterSpacing: "0.08em" }}>
@@ -785,6 +799,16 @@ export function VirtualOfficeGame({
             </span>
           )}
           {token && <span className="text-emerald-500/50 bg-[#0a0806aa] rounded px-2 py-1">● live</span>}
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            title="Floor controls (?)"
+            aria-label="Show floor controls"
+            className="pointer-events-auto grid h-[22px] w-[22px] place-items-center rounded-full text-[10px] transition-colors"
+            style={{ color: "#c9a84c", background: "#0a0806aa", border: "1px solid rgba(201,168,76,0.44)" }}
+          >
+            ?
+          </button>
         </div>
 
         {/* Proximity bubble overlay */}
