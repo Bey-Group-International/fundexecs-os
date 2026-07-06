@@ -25,8 +25,8 @@ Code so it picks up `.mcp.json` and the skills.
 
 ## MCP servers (`.mcp.json`)
 
-| Server | Source | What it adds |
-|--------|--------|--------------|
+|   Server    |                                    Source                                     |                                                                            What it adds                                                                             |
+|-------------|-------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `apollo-io` | [Inferensys/apollo-io-mcp](https://github.com/Inferensys/apollo-io-mcp) (MIT) | 45 Apollo.io tools — people/company search, contact enrichment (verified email/phone), CRM (contacts/accounts/deals/tasks/notes), email sequences, pipeline stages. |
 
 `.mcp.json` launches it as `node tools/apollo-io-mcp/dist/index.js` and passes
@@ -47,14 +47,14 @@ Reusable Claude skills from [anthropics/skills](https://github.com/anthropics/sk
 The setup script installs this Apache-2.0 subset by default, chosen for a
 private-markets / fund-ops codebase:
 
-| Skill | Why it's here |
-|-------|---------------|
-| `claude-api` | Building Claude features — the app *is* Claude-native (`lib/claude.ts`, `lib/brains/`). |
-| `mcp-builder` | Authoring/extending MCP servers (we just added one). |
-| `skill-creator` | Scaffolding new project-specific skills. |
-| `doc-coauthoring` | Drafting IC memos, LP updates, and other deliverables. |
-| `brand-guidelines` | Consistent investor-facing materials (decks, one-pagers). |
-| `webapp-testing` | Driving the Next.js app end-to-end. |
+|       Skill        |                                      Why it's here                                      |
+|--------------------|-----------------------------------------------------------------------------------------|
+| `claude-api`       | Building Claude features — the app *is* Claude-native (`lib/claude.ts`, `lib/brains/`). |
+| `mcp-builder`      | Authoring/extending MCP servers (we just added one).                                    |
+| `skill-creator`    | Scaffolding new project-specific skills.                                                |
+| `doc-coauthoring`  | Drafting IC memos, LP updates, and other deliverables.                                  |
+| `brand-guidelines` | Consistent investor-facing materials (decks, one-pagers).                               |
+| `webapp-testing`   | Driving the Next.js app end-to-end.                                                     |
 
 ### Document skills (opt-in)
 
@@ -76,10 +76,10 @@ scripts/setup-ai-stack.sh --with-doc-skills
 Cloned into `/tools/reference/` as reference material — not wired into the app,
 which is Claude-native:
 
-| Reference | Source | Use |
-|-----------|--------|-----|
-| OpenAI Agents SDK | [openai/openai-agents-python](https://github.com/openai/openai-agents-python) | Alternative agent framework; installed into `tools/reference/.venv`. |
-| OpenAI cookbook | [openai/openai-cookbook](https://github.com/openai/openai-cookbook) | Example patterns. |
+|     Reference      |                                      Source                                       |                                    Use                                    |
+|--------------------|-----------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| OpenAI Agents SDK  | [openai/openai-agents-python](https://github.com/openai/openai-agents-python)     | Alternative agent framework; installed into `tools/reference/.venv`.      |
+| OpenAI cookbook    | [openai/openai-cookbook](https://github.com/openai/openai-cookbook)               | Example patterns.                                                         |
 | Anthropic cookbook | [anthropics/anthropic-cookbook](https://github.com/anthropics/anthropic-cookbook) | Claude example patterns (the app already depends on `@anthropic-ai/sdk`). |
 
 Adding OpenAI as a *runtime* provider would be a separate, larger decision (a
@@ -97,3 +97,4 @@ for reference.
   scraping pattern risks Apollo.io ToS violations and doesn't fit a production
   financial app. The app already does verified, per-record Apollo enrichment
   through the official API.
+
