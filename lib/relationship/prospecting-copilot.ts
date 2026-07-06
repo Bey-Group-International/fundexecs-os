@@ -29,6 +29,7 @@ import {
   sourceFirmsWithContacts,
   type SourcedFirm,
 } from "@/lib/chat-enrichment";
+import { findWarmBridges } from "@/lib/relationship/warm-intro";
 
 // A prospecting goal → the persona, search terms, executive agent, and default
 // outreach sequence used to pursue it. Agent keys are Brain keys
@@ -140,6 +141,8 @@ export interface ProspectCandidate {
   email?: string | null;
   contactable?: boolean; // from the compliance gate; defaults true
   contactableReason?: string;
+  // A warm path: the org already knows someone at this firm.
+  warmIntro?: { name: string; title?: string };
 }
 
 export interface ScoredProspect {
@@ -295,6 +298,28 @@ export async function buildProspectingPlanForOrg(
     candidates = firms.map(candidateFromFirm);
   } catch {
     candidates = [];
+  }
+
+  // Warm-intro mapping: if the org already knows someone at a sourced firm,
+  // annotate the prospect with that warm path and let the existing relationship
+  // strength raise its priority.
+  try {
+    const bridges = await findWarmBridges(
+      db,
+      orgId,
+      candidates.map((c) => c.company ?? "").filter(Boolean),
+    );
+    if (bridges.size) {
+      for (const c of candidates) {
+        const bridge = c.company ? bridges.get(c.company.toLowerCase()) : undefined;
+        if (bridge) {
+          c.warmIntro = { name: bridge.name, title: bridge.title };
+          c.strength = Math.max(c.strength ?? 0, bridge.strength);
+        }
+      }
+    }
+  } catch {
+    // Warm-intro mapping is additive — never block the plan.
   }
 
   return planProspects({ goal, mandate, candidates });
