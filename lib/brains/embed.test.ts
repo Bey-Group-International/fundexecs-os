@@ -48,12 +48,22 @@ describe("HashingEmbedder", () => {
     expect(a).toHaveLength(EMBED_DIM);
     const norm = Math.sqrt(a.reduce((s, v) => s + v * v, 0));
     expect(norm).toBeCloseTo(1, 6);
-    expect(embedder.model).toBe("hash-v1");
+    expect(embedder.model).toBe("hash-v2");
   });
 
   it("never calls the network", async () => {
     await embedder.embedBatch(["one", "two"]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("gives phrase order weight via bigrams", async () => {
+    // Same word bag, different order — a pure unigram model would rank these
+    // identical. Bigrams make the phrase-faithful text the closer match.
+    const query = await embedder.embed("leveraged buyout exit multiple");
+    const phrase = await embedder.embed("the leveraged buyout drove the exit multiple");
+    const scrambled = await embedder.embed("multiple leveraged the exit drove buyout");
+    const dot = (x: number[], y: number[]) => x.reduce((s, v, i) => s + v * y[i], 0);
+    expect(dot(query, phrase)).toBeGreaterThan(dot(query, scrambled));
   });
 });
 
@@ -108,7 +118,7 @@ describe("VoyageEmbedder", () => {
 
 describe("getEmbedder", () => {
   it("is the keyless hash embedder without VOYAGE_API_KEY", () => {
-    expect(getEmbedder().model).toBe("hash-v1");
+    expect(getEmbedder().model).toBe("hash-v2");
   });
 
   it("is the Voyage embedder when the key is set, honoring the model override", () => {
