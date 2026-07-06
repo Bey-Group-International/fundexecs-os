@@ -8,6 +8,8 @@ import {
   listSentEnvelopes,
   refreshPendingEnvelopes,
   listSignerContacts,
+  voidEnvelope,
+  resendEnvelope,
 } from "./docusign-actions";
 
 // Terminal states no longer change — excluded from polling and per-row refresh.
@@ -356,6 +358,8 @@ function EnvelopeRow({
   onRefresh: (id: string, status: string) => void;
 }) {
   const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState<null | "resend" | "void">(null);
+  const [note, setNote] = useState<string | null>(null);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -365,6 +369,29 @@ function EnvelopeRow({
     } finally {
       setRefreshing(false);
     }
+  }
+
+  async function handleResend() {
+    setBusy("resend");
+    setNote(null);
+    const res = await resendEnvelope(envelope.id);
+    setBusy(null);
+    setNote("error" in res ? res.error : "Reminder sent");
+  }
+
+  async function handleVoid() {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm("Void this envelope? Signers will no longer be able to sign.")
+    ) {
+      return;
+    }
+    setBusy("void");
+    setNote(null);
+    const res = await voidEnvelope(envelope.id);
+    setBusy(null);
+    if ("ok" in res) onRefresh(envelope.id, "voided");
+    else setNote(res.error);
   }
 
   const date = new Date(envelope.created).toLocaleDateString(undefined, {
@@ -394,27 +421,50 @@ function EnvelopeRow({
         {isTerminal(envelope.status) ? (
           <span className="sr-only">Final status</span>
         ) : (
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            title="Refresh status from DocuSign"
-            className="rounded p-1 text-neutral-400 hover:text-blue-600 disabled:opacity-50 dark:hover:text-blue-400"
-          >
-            <svg
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+          <div className="flex items-center justify-end gap-1">
+            {note && (
+              <span className="mr-1 text-xs text-neutral-400" title={note}>
+                {note}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={busy !== null}
+              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-blue-600 disabled:opacity-50 dark:text-neutral-400 dark:hover:text-blue-400"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 4v5h.582M20 20v-5h-.581M5.635 19A9 9 0 1 0 4.582 9"
-              />
-            </svg>
-          </button>
+              {busy === "resend" ? "Sending…" : "Resend"}
+            </button>
+            <button
+              type="button"
+              onClick={handleVoid}
+              disabled={busy !== null}
+              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-red-600 disabled:opacity-50 dark:text-neutral-400 dark:hover:text-red-400"
+            >
+              {busy === "void" ? "Voiding…" : "Void"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing || busy !== null}
+              title="Refresh status from DocuSign"
+              className="rounded p-1 text-neutral-400 hover:text-blue-600 disabled:opacity-50 dark:hover:text-blue-400"
+            >
+              <svg
+                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582M20 20v-5h-.581M5.635 19A9 9 0 1 0 4.582 9"
+                />
+              </svg>
+            </button>
+          </div>
         )}
       </td>
     </tr>

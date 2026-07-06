@@ -30,6 +30,43 @@ async function dsGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function dsPut(path: string, body: unknown): Promise<Response> {
+  return fetch(`${BASE_URL}${path}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+}
+
+// Keep the locally-tracked envelope row in sync with an authoritative status.
+// Best-effort: never throws — a DB hiccup shouldn't fail the DocuSign action.
+async function persistEnvelopeStatus(
+  envelopeId: string,
+  status: string,
+): Promise<void> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return;
+    const supabase = await createServerClient();
+    await supabase
+      .from("docusign_envelopes" as never)
+      .update({
+        status,
+        ...(status.toLowerCase() === "completed"
+          ? { completed_at: new Date().toISOString() }
+          : {}),
+      } as never)
+      .eq("envelope_id", envelopeId)
+      .eq("organization_id", ctx.orgId);
+  } catch {
+    // Non-fatal.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // listDocuSignTemplates
 // ---------------------------------------------------------------------------
@@ -161,16 +198,30 @@ export async function refreshPendingEnvelopes(): Promise<
   );
   if (pending.length === 0) return [];
 
-  const results = await Promise.all(
-    pending.map(async (r) => {
-      try {
-        const d = await dsGet<{ status: string }>(`/envelopes/${r.envelope_id}`);
-        return { id: r.envelope_id, status: d.status, prev: r.status };
-      } catch {
-        return { id: r.envelope_id, status: r.status, prev: r.status };
-      }
-    }),
-  );
+  const prevById = new Map(pending.map((r) => [r.envelope_id, r.status]));
+
+  // One bulk call for every pending envelope instead of N per-envelope GETs.
+  // `envelope_ids=request_body` tells DocuSign to read the id list from the body.
+  let statuses: Array<{ envelopeId: string; status: string }> = [];
+  try {
+    const res = await dsPut(
+      "/envelopes/status?envelope_ids=request_body",
+      { envelopeIds: [...prevById.keys()] },
+    );
+    if (res.ok) {
+      const body = (await res.json()) as {
+        envelopes?: Array<{ envelopeId: string; status: string }>;
+      };
+      statuses = body.envelopes ?? [];
+    }
+  } catch {
+    // Best-effort — a failed sweep leaves statuses untouched.
+  }
+
+  const results = [...prevById.entries()].map(([id, prev]) => {
+    const fresh = statuses.find((s) => s.envelopeId === id);
+    return { id, status: fresh?.status ?? prev, prev };
+  });
 
   // Persist only the envelopes whose status actually changed.
   await Promise.all(
@@ -191,6 +242,62 @@ export async function refreshPendingEnvelopes(): Promise<
   );
 
   return results.map((r) => ({ id: r.id, status: r.status }));
+}
+
+// ---------------------------------------------------------------------------
+// voidEnvelope — cancel an in-flight envelope so it can no longer be signed
+// ---------------------------------------------------------------------------
+export async function voidEnvelope(
+  envelopeId: string,
+  reason?: string,
+): Promise<{ ok: true } | { error: string }> {
+  const missing = missingConfig();
+  if (missing) return missing;
+  if (!envelopeId) return { error: "Missing envelope id" };
+
+  try {
+    const res = await dsPut(`/envelopes/${envelopeId}`, {
+      status: "voided",
+      voidedReason: (reason && reason.trim()) || "Voided from FundExecs",
+    });
+    if (!res.ok) {
+      return { error: `DocuSign error ${res.status}: ${await res.text()}` };
+    }
+  } catch (err) {
+    return { error: String(err) };
+  }
+
+  await persistEnvelopeStatus(envelopeId, "voided");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// resendEnvelope — re-deliver the signing request to current recipients
+// (DocuSign's resend is the on-demand reminder mechanism in the REST API)
+// ---------------------------------------------------------------------------
+export async function resendEnvelope(
+  envelopeId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const missing = missingConfig();
+  if (missing) return missing;
+  if (!envelopeId) return { error: "Missing envelope id" };
+
+  try {
+    const recipients = await dsGet<Record<string, unknown>>(
+      `/envelopes/${envelopeId}/recipients`,
+    );
+    const res = await dsPut(
+      `/envelopes/${envelopeId}/recipients?resend_envelope=true`,
+      recipients,
+    );
+    if (!res.ok) {
+      return { error: `DocuSign error ${res.status}: ${await res.text()}` };
+    }
+  } catch (err) {
+    return { error: String(err) };
+  }
+
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

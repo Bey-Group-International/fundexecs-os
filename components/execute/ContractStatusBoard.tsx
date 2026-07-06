@@ -3,7 +3,7 @@
 // components/execute/ContractStatusBoard.tsx
 // Contract lifecycle status board — Contract Monkey clone.
 // Shows all contracts grouped by status with renewal alerts.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   daysUntilExpiry,
   renewalUrgency,
@@ -11,6 +11,14 @@ import {
   DOCUMENT_TYPE_LABELS,
 } from "@/lib/contracts";
 import type { ContractStatus, DocumentType } from "@/lib/contracts";
+
+type Urgency = ReturnType<typeof renewalUrgency>;
+// Renewal metrics computed once per contract and reused by the badge, the
+// detail drawer, and the alert list — instead of recomputing in each.
+interface Metric {
+  days: number | null;
+  urgency: Urgency;
+}
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -54,10 +62,7 @@ const COLOR_CLASSES: Record<string, string> = {
   slate: "border-slate-500/40 bg-slate-500/10 text-slate-300",
 };
 
-function RenewalBadge({ expiryDate }: { expiryDate: string | null | undefined }) {
-  if (!expiryDate) return null;
-  const days = daysUntilExpiry(expiryDate);
-  const urgency = renewalUrgency(days);
+function RenewalBadge({ days, urgency }: Metric) {
   if (!urgency || urgency === "ok") return null;
 
   const label =
@@ -87,8 +92,7 @@ function DetailField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ContractDetail({ contract }: { contract: Contract }) {
-  const days = daysUntilExpiry(contract.expiryDate ?? null);
+function ContractDetail({ contract, days }: { contract: Contract; days: number | null }) {
   const expiryValue =
     contract.expiryDate == null
       ? "—"
@@ -115,10 +119,12 @@ function ContractDetail({ contract }: { contract: Contract }) {
 
 function ContractRow({
   contract,
+  metric,
   open,
   onToggle,
 }: {
   contract: Contract;
+  metric: Metric;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -150,7 +156,7 @@ function ContractRow({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <RenewalBadge expiryDate={contract.expiryDate} />
+          <RenewalBadge days={metric.days} urgency={metric.urgency} />
           <span
             className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${colorClass}`}
           >
@@ -173,7 +179,7 @@ function ContractRow({
         }`}
       >
         <div className="overflow-hidden">
-          <ContractDetail contract={contract} />
+          <ContractDetail contract={contract} days={metric.days} />
         </div>
       </div>
     </div>
@@ -182,19 +188,27 @@ function ContractRow({
 
 export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const grouped = STATUS_ORDER.reduce<Record<ContractStatus, Contract[]>>(
-    (acc, status) => {
-      acc[status] = contracts.filter((c) => c.status === status);
-      return acc;
-    },
-    {} as Record<ContractStatus, Contract[]>,
-  );
 
-  const renewalAlerts = contracts.filter((c) => {
-    const days = daysUntilExpiry(c.expiryDate ?? null);
-    const u = renewalUrgency(days);
-    return u === "critical" || u === "soon" || u === "expired";
-  });
+  // One pass over contracts: group by status, compute renewal metrics, and
+  // collect alerts — instead of re-filtering per status and recomputing
+  // daysUntilExpiry in several places.
+  const { grouped, renewalAlerts, metrics } = useMemo(() => {
+    const grouped = {} as Record<ContractStatus, Contract[]>;
+    for (const s of STATUS_ORDER) grouped[s] = [];
+    const metrics = new Map<string, Metric>();
+    const renewalAlerts: Array<{ contract: Contract; days: number | null }> = [];
+
+    for (const c of contracts) {
+      if (grouped[c.status]) grouped[c.status].push(c);
+      const days = daysUntilExpiry(c.expiryDate ?? null);
+      const urgency = renewalUrgency(days);
+      metrics.set(c.id, { days, urgency });
+      if (urgency === "critical" || urgency === "soon" || urgency === "expired") {
+        renewalAlerts.push({ contract: c, days });
+      }
+    }
+    return { grouped, renewalAlerts, metrics };
+  }, [contracts]);
 
   if (contracts.length === 0) {
     return (
@@ -218,9 +232,9 @@ export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
             {renewalAlerts.length !== 1 ? "s" : ""} expiring
           </p>
           <div className="mt-2 flex flex-col gap-1">
-            {renewalAlerts.map((c) => (
+            {renewalAlerts.map(({ contract: c, days }) => (
               <p key={c.id} className="text-xs text-fg-secondary">
-                {c.title} — {daysUntilExpiry(c.expiryDate ?? null) ?? 0} days remaining
+                {c.title} — {days ?? 0} days remaining
               </p>
             ))}
           </div>
@@ -239,6 +253,7 @@ export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
               <ContractRow
                 key={c.id}
                 contract={c}
+                metric={metrics.get(c.id) ?? { days: null, urgency: null }}
                 open={openId === c.id}
                 onToggle={() => setOpenId((id) => (id === c.id ? null : c.id))}
               />
