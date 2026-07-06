@@ -1,4 +1,4 @@
--- 20260706120000_payment_invoices.sql
+-- 20260706120001_payment_invoices.sql
 -- Payment-link invoices — a native, Stripe-backed take on link2pay's shareable
 -- invoice. A firm (the merchant org) drafts an invoice with line items and gets
 -- an unguessable public link (/pay/<token>). Anyone with the link pays through
