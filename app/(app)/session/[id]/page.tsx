@@ -7,6 +7,8 @@ import { getActiveIntegrations } from "@/lib/integrations/active";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { loadSessionMessages, toChatTurns } from "@/lib/session-messages";
 import Copilot from "@/components/Copilot";
+import BrainFeed from "@/components/session/BrainFeed";
+import type { BrainRun } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +25,27 @@ export default async function SessionHome(props: { params: Promise<{ id: string 
   const connected = await orgConnectedChannels(supabase, ctx.orgId);
   const chat = toChatTurns(await loadSessionMessages(supabase, params.id));
 
+  // The session theater — every Brain activation logged for this session.
+  // Best-effort: any read failure degrades to an empty feed.
+  const { data: brainRuns } = await supabase
+    .from("brain_runs")
+    .select("*")
+    .eq("organization_id", ctx.orgId)
+    .eq("session_id", params.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
   return (
-    <Copilot
-      orgId={ctx.orgId}
-      live={copilotLive()}
-      bundles={bundles}
-      sessionId={params.id}
-      integrations={getActiveIntegrations(connected)}
-      initialChat={chat}
-    />
+    <>
+      <Copilot
+        orgId={ctx.orgId}
+        live={copilotLive()}
+        bundles={bundles}
+        sessionId={params.id}
+        integrations={getActiveIntegrations(connected)}
+        initialChat={chat}
+      />
+      <BrainFeed runs={(brainRuns ?? []) as BrainRun[]} />
+    </>
   );
 }
