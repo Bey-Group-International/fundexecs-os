@@ -89,14 +89,22 @@ function textOf(message: Anthropic.Message): string {
     .join("");
 }
 
-// Extract the real, named companies/people an answer refers to. Returns empty
-// arrays with no key, on any API error, or when nothing lookupable is named.
+// Extract the real, named companies/people an answer refers to.
+//
+// Two-tier and fully native at the floor:
+//   - With no ANTHROPIC_API_KEY (or on any API failure) it degrades to a
+//     deterministic, keyless regex extractor rather than returning nothing — so
+//     verified contacts still surface without a model call.
+//   - With a key it uses the model, then MERGES in the deterministic org-suffix
+//     hits (high precision) the model may have missed. Apollo still verifies
+//     everything downstream, so a spurious extraction just yields no contact.
 export async function extractEntities(
   query: string,
   answer: string,
 ): Promise<ExtractedEntities> {
+  const deterministic = extractEntitiesDeterministic(query, answer);
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { companies: [], people: [] };
+  if (!apiKey) return deterministic;
 
   try {
     const anthropic = anthropicClient(apiKey);
@@ -108,12 +116,117 @@ export async function extractEntities(
       messages: [{ role: "user", content: `Question:\n${query}\n\nAnswer:\n${answer}` }],
     });
     const raw = textOf(message);
-    if (!raw) return { companies: [], people: [] };
+    if (!raw) return deterministic;
     const parsed = JSON.parse(raw) as Partial<ExtractedEntities>;
-    return normalizeEntities(parsed);
+    // Model result is primary; graft on deterministic companies it missed.
+    return mergeEntities(normalizeEntities(parsed), {
+      companies: deterministic.companies,
+      people: [],
+    });
   } catch {
-    return { companies: [], people: [] };
+    return deterministic;
   }
+}
+
+// Org-name tail words. A capitalized run ending in one of these is almost
+// always a real firm — the basis of the keyless extractor's high precision.
+const ORG_SUFFIX_WORDS =
+  "Capital|Partners|Group|Fund|Funds|Ventures|Holdings|Holding|Advisors|Advisers|Management|Securities|Equities|Equity|Credit|Bancorp|Bank|Realty|Trust|Associates|Global|Financial|LLC|LLP|Inc|Incorporated|Corp|Corporation|Company";
+const COMPANY_RE = new RegExp(
+  `\\b((?:[A-Z][A-Za-z0-9&.'\\-]+ ){1,4}(?:${ORG_SUFFIX_WORDS}))\\b`,
+  "g",
+);
+// Titlecase first+last (optional middle) — a person candidate. Verified by
+// Apollo downstream, so precision here only needs to be reasonable.
+const PERSON_RE =
+  /\b([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)\b/g;
+// Capitalized words that only lead a name because they start a sentence/clause
+// (verbs, articles, pronouns). Stripped from the front of a matched run so
+// "Consider Carlyle Group" becomes "Carlyle Group".
+const LEADING_STOPWORDS = new Set([
+  "the", "a", "an", "this", "that", "these", "those", "and", "but", "or",
+  "our", "their", "his", "her", "its", "we", "they", "you", "he", "she", "it",
+  "if", "when", "while", "also", "both", "consider", "contact", "reach", "with",
+  "about", "for", "to", "from", "at", "in", "on", "of", "recommend", "try",
+  "see", "call", "email", "introduce", "connect", "meet", "check", "ask",
+]);
+
+function trimLeadingStopwords(name: string): string {
+  const toks = name.split(/\s+/);
+  while (toks.length > 1 && LEADING_STOPWORDS.has(toks[0].toLowerCase())) toks.shift();
+  return toks.join(" ");
+}
+
+// Common Titlecase phrases that look like names/firms but aren't lookupable.
+const NAME_STOPWORDS = new Set(
+  [
+    "Private Equity", "Venture Capital", "Asset Management", "Family Office",
+    "Real Estate", "Wealth Management", "Hedge Fund", "Due Diligence",
+    "New York", "United States", "San Francisco", "Los Angeles", "Hong Kong",
+    "United Kingdom", "Middle East", "North America", "Managing Director",
+    "Limited Partner", "General Partner", "Chief Executive", "Executive Officer",
+    "Board Member", "Investment Committee", "Cash Flow", "Balance Sheet",
+  ].map((s) => s.toLowerCase()),
+);
+
+// Deterministic, keyless entity extraction. Pulls capitalized org-suffix names
+// and Titlecase person names out of the text, minus a stopword list. Never
+// throws; over-extraction is harmless because Apollo verifies every hit.
+export function extractEntitiesDeterministic(
+  query: string,
+  answer: string,
+): ExtractedEntities {
+  const text = `${query}\n${answer}`;
+
+  const companyNames: string[] = [];
+  for (const m of text.matchAll(COMPANY_RE)) {
+    companyNames.push(trimLeadingStopwords(m[1].trim()));
+  }
+  // Drop names wholly contained in a longer matched name (e.g. keep
+  // "Apollo Global Management", drop a nested "Global Management").
+  const companies = dedupeContained(companyNames)
+    .slice(0, MAX_COMPANIES * 2)
+    .map((name) => ({ name, domain: "" }));
+
+  const companyText = companyNames.join(" | ").toLowerCase();
+  const people: { name: string; company: string }[] = [];
+  const seenP = new Set<string>();
+  for (const m of text.matchAll(PERSON_RE)) {
+    const name = m[1].trim();
+    const key = name.toLowerCase();
+    if (seenP.has(key)) continue;
+    if (NAME_STOPWORDS.has(key)) continue;
+    // Skip sentence-leading verbs/articles masquerading as a first name.
+    if (LEADING_STOPWORDS.has(name.split(/\s+/)[0].toLowerCase())) continue;
+    // Skip fragments of a company name we already captured.
+    if (companyText.includes(key)) continue;
+    seenP.add(key);
+    people.push({ name, company: "" });
+    if (people.length >= MAX_PEOPLE * 2) break;
+  }
+
+  return normalizeEntities({ companies, people });
+}
+
+// Remove names that are a substring of another matched name (case-insensitive),
+// keeping the longest form.
+function dedupeContained(names: string[]): string[] {
+  const uniq = Array.from(new Set(names));
+  return uniq.filter(
+    (n) =>
+      !uniq.some(
+        (other) =>
+          other !== n && other.toLowerCase().includes(n.toLowerCase()),
+      ),
+  );
+}
+
+// Union two extractions, de-duplicating by lowercased name. `a` wins ties.
+function mergeEntities(a: ExtractedEntities, b: ExtractedEntities): ExtractedEntities {
+  return normalizeEntities({
+    companies: [...a.companies, ...b.companies],
+    people: [...a.people, ...b.people],
+  });
 }
 
 // Defensive normalization + de-duplication of the model's extraction.

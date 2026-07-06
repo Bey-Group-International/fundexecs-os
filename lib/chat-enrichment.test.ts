@@ -9,6 +9,8 @@ import {
   mightMentionEntity,
   formatContactAppendix,
   enrichEntities,
+  extractEntities,
+  extractEntitiesDeterministic,
   buildContactAppendix,
   type EnrichedContacts,
 } from "./chat-enrichment";
@@ -117,6 +119,49 @@ describe("enrichEntities", () => {
 
     const enriched = await enrichEntities({ companies: [], people: [{ name: "Nobody Reachable", company: "" }] });
     expect(enriched.people).toHaveLength(0);
+  });
+});
+
+describe("extractEntitiesDeterministic", () => {
+  it("pulls org-suffix company names out of the text", () => {
+    const out = extractEntitiesDeterministic(
+      "who should I talk to?",
+      "Consider Carlyle Group and Apollo Global Management for this mandate.",
+    );
+    const names = out.companies.map((c) => c.name);
+    expect(names).toContain("Carlyle Group");
+    expect(names).toContain("Apollo Global Management");
+  });
+
+  it("keeps the longest form and drops nested fragments", () => {
+    const out = extractEntitiesDeterministic("", "Apollo Global Management is hiring.");
+    const names = out.companies.map((c) => c.name);
+    expect(names).toContain("Apollo Global Management");
+    expect(names).not.toContain("Global Management");
+  });
+
+  it("extracts person names but skips Titlecase non-name phrases", () => {
+    const out = extractEntitiesDeterministic(
+      "who runs it?",
+      "Jonathan Gray leads the Private Equity effort in New York.",
+    );
+    const people = out.people.map((p) => p.name);
+    expect(people).toContain("Jonathan Gray");
+    expect(people).not.toContain("Private Equity");
+    expect(people).not.toContain("New York");
+  });
+
+  it("returns empty arrays for casual text with no entities", () => {
+    const out = extractEntitiesDeterministic("hi", "you have three tasks today.");
+    expect(out.companies).toHaveLength(0);
+    expect(out.people).toHaveLength(0);
+  });
+});
+
+describe("extractEntities without a model key", () => {
+  it("falls back to the deterministic extractor (no ANTHROPIC key)", async () => {
+    const out = await extractEntities("", "Reach out to Blackstone Group about the deal.");
+    expect(out.companies.map((c) => c.name)).toContain("Blackstone Group");
   });
 });
 
