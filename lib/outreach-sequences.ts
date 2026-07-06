@@ -50,7 +50,12 @@ export async function createSequence(
   const { data, error } = await db
     .from("outreach_sequences")
     .insert({
+      // The table carries BOTH org_id (backfilled cadence schema) and a
+      // NOT NULL organization_id (migration 0060). They are the same org, so
+      // set both — omitting organization_id violates its NOT NULL constraint
+      // and fails the insert.
       org_id: args.org_id,
+      organization_id: args.org_id,
       name: args.name,
       steps: (args.steps as unknown) as import("@/lib/supabase/database.types").Json,
       stop_on_reply: args.stop_on_reply,
