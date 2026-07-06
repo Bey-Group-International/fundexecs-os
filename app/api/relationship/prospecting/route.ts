@@ -2,6 +2,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { buildProspectingPlanForOrg } from "@/lib/relationship/prospecting-copilot";
+import { savePlan } from "@/lib/relationship/plan-history";
 
 // POST /api/relationship/prospecting — Earn's prospecting copilot.
 //
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
     });
   }
-  const { orgId } = auth.ctx;
+  const { orgId, userId } = auth.ctx;
 
   const rateLimit = checkRateLimit({ key: `org:${orgId}:prospecting`, limit: 20, windowMs: 60_000 });
   if (!rateLimit.ok) {
@@ -42,7 +43,10 @@ export async function POST(request: Request) {
   const supabase = await createServerClient();
   const plan = await buildProspectingPlanForOrg(supabase, orgId, goal);
 
-  return new Response(JSON.stringify(plan), {
+  // Persist the run for history (best-effort — never blocks the response).
+  const planId = await savePlan(supabase, orgId, userId, plan, goal);
+
+  return new Response(JSON.stringify({ ...plan, planId }), {
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }

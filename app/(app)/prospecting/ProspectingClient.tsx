@@ -1,6 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+type HistoryEntry = {
+  id: string;
+  goalText: string;
+  routedAgent: string | null;
+  prospectCount: number;
+  readyCount: number;
+  heldCount: number;
+  createdAt: string;
+};
 
 // Mirrors the ProspectingPlan shape from lib/relationship/prospecting-copilot.
 type ScoredProspect = {
@@ -110,6 +120,40 @@ export default function ProspectingClient() {
   const [savedListId, setSavedListId] = useState<string | null>(null);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollResult, setEnrollResult] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/relationship/prospecting/history");
+      if (!res.ok) return;
+      const body = await res.json();
+      setHistory(Array.isArray(body.entries) ? body.entries : []);
+    } catch {
+      // History is a convenience — ignore load errors.
+    }
+  }
+
+  useEffect(() => {
+    void loadHistory();
+  }, []);
+
+  async function loadPast(id: string) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/relationship/prospecting/history?id=${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const body = await res.json();
+      if (body.plan) {
+        setPlan(body.plan as Plan);
+        setLastGoal((body.plan as Plan).goal?.goal ?? "");
+        setSaveResult(null);
+        setSavedListId(null);
+        setEnrollResult(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load that plan");
+    }
+  }
 
   async function run(g: string) {
     const target = g.trim();
@@ -132,6 +176,7 @@ export default function ProspectingClient() {
       }
       setPlan((await res.json()) as Plan);
       setLastGoal(target);
+      void loadHistory();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -226,6 +271,25 @@ export default function ProspectingClient() {
           ))}
         </div>
       </div>
+
+      {history.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1">
+          <div className="border-b border-line/60 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-ink-400">
+            Recent runs
+          </div>
+          {history.map((h) => (
+            <button
+              key={h.id}
+              onClick={() => loadPast(h.id)}
+              className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/40 px-4 py-2.5 text-left text-sm hover:bg-surface-2"
+            >
+              <span className="min-w-[12rem] flex-1 truncate text-surface-0">{h.goalText}</span>
+              <span className="text-xs text-ink-400">{h.prospectCount} prospects · {h.readyCount} ready</span>
+              <span className="w-24 text-right text-xs text-ink-400">{h.createdAt.slice(0, 10)}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
