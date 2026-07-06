@@ -44,17 +44,17 @@
 
 ## 4. Key Terms
 
-| Term | Meaning |
-|------|---------|
+|  Term  |                           Meaning                            |
+|--------|--------------------------------------------------------------|
 | EBITDA | Earnings Before Interest, Taxes, Depreciation & Amortization |
-| EV | Enterprise Value |
-| IRR | Internal Rate of Return |
-| MOIC | Multiple on Invested Capital |
-| LBO | Leveraged Buyout |
-| ROI | Return on Investment |
-| TVPI | Total Value to Paid-In |
-| DPI | Distributions to Paid-In |
-| FCF | Free Cash Flow |
+| EV     | Enterprise Value                                             |
+| IRR    | Internal Rate of Return                                      |
+| MOIC   | Multiple on Invested Capital                                 |
+| LBO    | Leveraged Buyout                                             |
+| ROI    | Return on Investment                                         |
+| TVPI   | Total Value to Paid-In                                       |
+| DPI    | Distributions to Paid-In                                     |
+| FCF    | Free Cash Flow                                               |
 
 ---
 
@@ -96,15 +96,15 @@ From lowest risk / lowest return to highest risk / highest return:
 
 ## 7. Common PE Metrics
 
-| Metric | Formula |
-|--------|---------|
-| EBITDA Margin | EBITDA / Revenue |
-| Net Debt | Total Debt − Cash |
-| Debt / EBITDA | Total Debt / EBITDA |
-| ROIC | NOPAT / Invested Capital |
-| Free Cash Flow | CFO − Capex |
-| Exit Value | EBITDA × Exit Multiple |
-| Equity Value | Exit Value − Net Debt |
+|     Metric     |         Formula          |
+|----------------|--------------------------|
+| EBITDA Margin  | EBITDA / Revenue         |
+| Net Debt       | Total Debt − Cash        |
+| Debt / EBITDA  | Total Debt / EBITDA      |
+| ROIC           | NOPAT / Invested Capital |
+| Free Cash Flow | CFO − Capex              |
+| Exit Value     | EBITDA × Exit Multiple   |
+| Equity Value   | Exit Value − Net Debt    |
 
 ---
 

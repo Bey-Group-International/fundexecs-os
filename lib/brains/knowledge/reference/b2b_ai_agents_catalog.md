@@ -11,6 +11,7 @@
 > that the same agent pattern shows up in more than one part of the funnel.
 
 ## Lead generation, research & enrichment
+
 - Lead Research Agent Setup
 - Lead Scraper Agent
 - Lead Hunter Agent
@@ -26,6 +27,7 @@
 - Website Analysis Agent
 
 ## Outreach, sales & communication
+
 - Outreach Management Agent
 - Cold Outreach Crafter Agent
 - Personalised Outreach Agent
@@ -40,6 +42,7 @@
 - Briefing Agent
 
 ## Content & copywriting
+
 - Marketing Copywriter Agent
 - Expert Copy-writing Agent
 - Hook Writer Agent
@@ -57,6 +60,7 @@
 - The Use Case Builder
 
 ## Social & prospecting
+
 - Social Media Agent
 - Social Media Lead Gen Agent
 - Social Listening Agent
@@ -74,6 +78,7 @@
 - Page Growth Strategist
 
 ## SEO
+
 - The SEO Strategist
 - SEO Content Strategy Agent
 - The Keyword Hunter Agent
@@ -97,17 +102,20 @@
 - Crawl Optimiser Agent
 
 ## Conversion & optimization
+
 - CTA Optimiser Agent
 - The CTA Optimizer
 - Conversion Optimisation Agent
 - CRO Analysis Agent
 
 ## Qualification & conversation
+
 - The Chatbot Qualifier Agent
 - The DM Analyser Agent
 - AI Conversation Agent
 
 ## Client, feedback & monitoring
+
 - Client On-boarding Agent
 - Customer Feedback Agent
 - Review Agent
@@ -221,3 +229,4 @@
 98. AI-Powered Cold Email Writer + Enricher
 99. Tiktok lead hunter
 100. Instagram Lead Generator
+

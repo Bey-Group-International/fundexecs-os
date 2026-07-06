@@ -25,10 +25,10 @@ Some knowledge is cross-cutting field material several Brains should reason over
 not a single Brain's corpus. Those docs live in [`reference/`](./reference/) and
 are mapped to the Brains they serve in [`../reference.ts`](../reference.ts):
 
-|              File               |                       Folded into                       |
-|---------------------------------|---------------------------------------------------------|
-| `private_equity_playbook.md`    | Executive Advisor, Deal Sourcer, Capital Connector, Capital Raiser, Investor Relations, Rainmaker |
-| `b2b_ai_agents_catalog.md`      | HTML Funnel / Lead Gen, SEO Disrupter, Marketing / PR, Automater / Scrubber, Earnest Fundmaker |
+|             File             |                                            Folded into                                            |
+|------------------------------|---------------------------------------------------------------------------------------------------|
+| `private_equity_playbook.md` | Executive Advisor, Deal Sourcer, Capital Connector, Capital Raiser, Investor Relations, Rainmaker |
+| `b2b_ai_agents_catalog.md`   | HTML Funnel / Lead Gen, SEO Disrupter, Marketing / PR, Automater / Scrubber, Earnest Fundmaker    |
 
 Retrieval is keyed by `brain_key` (the `brain_kb_chunks` table + RPC filter on
 it), so on ingest each reference doc is embedded under **each** Brain it is
