@@ -17,6 +17,7 @@ import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
 import { purchaseGift, awardReferralOnSubscription } from "@/lib/gift-earn";
+import { markInvoicePaid } from "@/lib/invoices.server";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
@@ -83,6 +84,21 @@ export type CheckoutIntent =
       packKey: string;
       recipientEmail: string;
       message?: string;
+    }
+  // A payment-link invoice. `orgId` is the MERCHANT (whose Stripe account
+  // collects); the payer is anyone with the link, so amount/title/currency are
+  // derived server-side from the stored invoice by the caller (lib/invoices.server
+  // + the public pay action) — never trusted from the browser.
+  | {
+      kind: "invoice";
+      orgId: string;
+      createdBy: string | null;
+      invoiceId: string;
+      token: string;
+      title: string;
+      amountCents: number;
+      currency: string;
+      customerEmail?: string | null;
     };
 
 // Build an EMBEDDED Checkout Session for an intent and record it pending.
@@ -171,7 +187,7 @@ export async function createCheckout(
         },
       ],
     };
-  } else {
+  } else if (intent.kind === "gift") {
     const pack = CREDIT_PACKS.find((p) => p.key === intent.packKey);
     if (!pack) return { error: "Pick a credit pack to gift." };
     const email = intent.recipientEmail.trim();
@@ -191,6 +207,30 @@ export async function createCheckout(
             currency: "usd",
             unit_amount: Math.round(pack.price * 100),
             product_data: { name: `Gift: ${pack.credits.toLocaleString()} FundExecs credits` },
+          },
+        },
+      ],
+    };
+  } else {
+    // Invoice. One-off payment for a server-derived amount; token + invoice_id
+    // travel in metadata so fulfillment can flip the row and the return route can
+    // bounce back to the public pay page.
+    if (!Number.isFinite(intent.amountCents) || intent.amountCents <= 0) {
+      return { error: "This invoice has no payable amount." };
+    }
+    amountUsd = intent.amountCents / 100;
+    metadata.invoice_id = intent.invoiceId;
+    metadata.token = intent.token;
+    params = {
+      mode: "payment",
+      ...(intent.customerEmail ? { customer_email: intent.customerEmail } : {}),
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: (intent.currency || "usd").toLowerCase(),
+            unit_amount: Math.round(intent.amountCents),
+            product_data: { name: intent.title.slice(0, 250) || "Invoice" },
           },
         },
       ],
@@ -287,6 +327,8 @@ export interface FulfillResult {
   kind?: string;
   error?: string;
   alreadyFulfilled?: boolean;
+  /** Invoice public token, so the return route can redirect back to /pay/<token>. */
+  token?: string;
 }
 
 // Verify a completed Checkout Session and apply its effect exactly once. Safe to
@@ -309,7 +351,10 @@ export async function fulfillCheckout(
     .select("*")
     .eq("session_id", sessionId)
     .maybeSingle();
-  if (row?.status === "fulfilled") return { ok: true, kind: row.kind, alreadyFulfilled: true };
+  if (row?.status === "fulfilled") {
+    const token = (row.metadata as { token?: string } | null)?.token;
+    return { ok: true, kind: row.kind, alreadyFulfilled: true, token };
+  }
 
   const session = await getStripe().checkout.sessions.retrieve(sessionId);
   const paid = session.payment_status === "paid" || session.status === "complete";
@@ -319,7 +364,11 @@ export async function fulfillCheckout(
   const orgId = meta.org_id || row?.organization_id;
   const kind = meta.kind || row?.kind;
   if (!orgId || !kind) return { ok: false, error: "Checkout is missing fulfillment metadata" };
-  if (expectedOrgId && orgId !== expectedOrgId) {
+  // Invoices are public-payable BY DESIGN (any signed-in user, from any org, or
+  // an anonymous payer), so the org-binding defense doesn't apply to them. For
+  // plan/pack/gift it still stops a user triggering fulfillment of another org's
+  // session id.
+  if (expectedOrgId && kind !== "invoice" && orgId !== expectedOrgId) {
     return { ok: false, error: "Checkout session does not belong to this organization" };
   }
   const createdBy = meta.created_by || null;
@@ -379,6 +428,15 @@ export async function fulfillCheckout(
       packKey: meta.pack_key ?? "",
       message: meta.message,
     });
+  } else if (kind === "invoice") {
+    // Flip the merchant's invoice to paid (idempotent) and record the linkage.
+    if (meta.invoice_id) {
+      const paymentIntent =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent as { id?: string } | null)?.id ?? null;
+      await markInvoicePaid(meta.invoice_id, { sessionId: session.id, paymentIntent });
+    }
   }
 
   await service
@@ -386,5 +444,5 @@ export async function fulfillCheckout(
     .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
     .eq("session_id", sessionId);
 
-  return { ok: true, kind };
+  return { ok: true, kind, token: meta.token };
 }

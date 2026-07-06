@@ -1688,13 +1688,47 @@ export type StripeCheckout = {
   id: string;
   organization_id: string;
   session_id: string;
-  kind: "plan" | "pack" | "gift";
+  kind: "plan" | "pack" | "gift" | "invoice";
   status: "pending" | "fulfilled" | "cancelled";
   amount_usd: number | null;
   metadata: Json;
   created_by: string | null;
   created_at: string;
   fulfilled_at: string | null;
+};
+
+// A payment-link invoice (migration 20260706120000): the merchant org drafts
+// line items and shares the public /pay/<token> link; anyone pays it via Stripe
+// Embedded Checkout and the row flips to `paid` on fulfillment. See lib/invoices
+// (pure core) and lib/invoices.server (persistence + fulfillment).
+export type InvoiceStatus = "draft" | "open" | "paid" | "void";
+
+export interface PaymentInvoiceLineItem {
+  description: string;
+  quantity: number;
+  unitAmountCents: number;
+}
+
+export type PaymentInvoice = Timestamps & {
+  id: string;
+  organization_id: string;
+  token: string;
+  number: string | null;
+  title: string;
+  description: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  currency: string;
+  line_items: PaymentInvoiceLineItem[];
+  amount_cents: number;
+  status: InvoiceStatus;
+  // Optional WICG facilitated-payment method URI (upi:, bitcoin:, wallet:…).
+  facilitated_payment_url: string | null;
+  due_date: string | null;
+  stripe_session_id: string | null;
+  stripe_payment_intent: string | null;
+  paid_at: string | null;
+  created_by: string | null;
 };
 
 // A shareable teaser of a deal (migration 0046): the public token + Earn's
@@ -2473,6 +2507,7 @@ export type Database = {
       credit_ledger: TableShape<CreditLedgerEntry>;
       credit_gifts: TableShape<CreditGift>;
       stripe_checkouts: TableShape<StripeCheckout>;
+      payment_invoices: TableShape<PaymentInvoice>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;
       webhook_endpoints: TableShape<WebhookEndpoint>;
