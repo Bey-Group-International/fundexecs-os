@@ -113,14 +113,34 @@ function ContractDetail({ contract }: { contract: Contract }) {
   );
 }
 
-function ContractRow({ contract }: { contract: Contract }) {
-  const [open, setOpen] = useState(false);
+function ContractRow({
+  contract,
+  open,
+  onToggle,
+}: {
+  contract: Contract;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const meta = CONTRACT_STATUS_META[contract.status];
   const colorClass = COLOR_CLASSES[meta.color];
 
   return (
     <div className="border-b border-line last:border-0">
-      <div className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2/50">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        aria-label={`${contract.title} — ${open ? "hide" : "view"} details`}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-surface-2/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
+      >
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-fg-primary">{contract.title}</p>
           <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
@@ -136,25 +156,32 @@ function ContractRow({ contract }: { contract: Contract }) {
           >
             {meta.label}
           </span>
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-expanded={open}
-            aria-label={open ? "Hide contract details" : "View contract"}
-            className="font-mono text-[10px] text-fg-muted transition hover:text-gold-400"
+          <span
+            aria-hidden
+            className={`inline-block font-mono text-[10px] text-fg-muted transition-transform ${
+              open ? "rotate-90 text-gold-400" : ""
+            }`}
           >
-            <span className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>
-              →
-            </span>
-          </button>
+            →
+          </span>
         </div>
       </div>
-      {open && <ContractDetail contract={contract} />}
+      {/* Animated accordion: collapses height via a 0fr→1fr grid track. */}
+      <div
+        className={`grid transition-all duration-200 ease-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <ContractDetail contract={contract} />
+        </div>
+      </div>
     </div>
   );
 }
 
 export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
   const grouped = STATUS_ORDER.reduce<Record<ContractStatus, Contract[]>>(
     (acc, status) => {
       acc[status] = contracts.filter((c) => c.status === status);
@@ -209,7 +236,12 @@ export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
               </span>
             </div>
             {grouped[status].map((c) => (
-              <ContractRow key={c.id} contract={c} />
+              <ContractRow
+                key={c.id}
+                contract={c}
+                open={openId === c.id}
+                onToggle={() => setOpenId((id) => (id === c.id ? null : c.id))}
+              />
             ))}
           </div>
         ))}

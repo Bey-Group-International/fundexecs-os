@@ -128,6 +128,105 @@ export async function sendSubscriptionEnvelope(
   return { envelopeId };
 }
 
+// Terminal DocuSign envelope states — no further status changes are possible,
+// so they are excluded from polling and refresh sweeps.
+const TERMINAL_STATUSES = new Set(["completed", "declined", "voided"]);
+
+// ---------------------------------------------------------------------------
+// refreshPendingEnvelopes — sync every non-terminal envelope in one sweep
+// ---------------------------------------------------------------------------
+// Fetches the current DocuSign status for every locally-tracked envelope that
+// hasn't reached a terminal state, persists any changes, and returns the fresh
+// statuses so the client can reconcile in a single round-trip. Best-effort per
+// envelope: a failed lookup keeps the last known status rather than erroring.
+export async function refreshPendingEnvelopes(): Promise<
+  Array<{ id: string; status: string }>
+> {
+  const missing = missingConfig();
+  if (missing) return [];
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return [];
+  const orgId = ctx.orgId;
+
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("docusign_envelopes" as never)
+    .select("envelope_id, status")
+    .eq("organization_id", orgId)
+    .limit(50);
+
+  type Row = { envelope_id: string; status: string };
+  const pending = ((data ?? []) as Row[]).filter(
+    (r) => !TERMINAL_STATUSES.has((r.status ?? "").toLowerCase()),
+  );
+  if (pending.length === 0) return [];
+
+  const results = await Promise.all(
+    pending.map(async (r) => {
+      try {
+        const d = await dsGet<{ status: string }>(`/envelopes/${r.envelope_id}`);
+        return { id: r.envelope_id, status: d.status, prev: r.status };
+      } catch {
+        return { id: r.envelope_id, status: r.status, prev: r.status };
+      }
+    }),
+  );
+
+  // Persist only the envelopes whose status actually changed.
+  await Promise.all(
+    results
+      .filter((res) => res.status !== res.prev)
+      .map((res) =>
+        supabase
+          .from("docusign_envelopes" as never)
+          .update({
+            status: res.status,
+            ...(res.status.toLowerCase() === "completed"
+              ? { completed_at: new Date().toISOString() }
+              : {}),
+          } as never)
+          .eq("envelope_id", res.id)
+          .eq("organization_id", orgId),
+      ),
+  );
+
+  return results.map((r) => ({ id: r.id, status: r.status }));
+}
+
+// ---------------------------------------------------------------------------
+// listSignerContacts — investors with an email, for send-modal autofill
+// ---------------------------------------------------------------------------
+export async function listSignerContacts(): Promise<
+  Array<{ name: string; email: string }>
+> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return [];
+
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("investors")
+    .select("name, contact_name, contact_email")
+    .eq("organization_id", ctx.orgId)
+    .limit(200);
+
+  type Row = {
+    name: string;
+    contact_name: string | null;
+    contact_email: string | null;
+  };
+  const out: Array<{ name: string; email: string }> = [];
+  const seen = new Set<string>();
+  for (const r of (data ?? []) as Row[]) {
+    const email = (r.contact_email ?? "").trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: (r.contact_name ?? r.name ?? "").trim(), email });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // getEnvelopeStatus
 // ---------------------------------------------------------------------------

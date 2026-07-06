@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { rollupOwnership } from "@/lib/entity-ownership";
 import type { EquityHolding } from "@/lib/supabase/database.types";
@@ -54,6 +54,7 @@ export function EntityOwnership({
     invested_amount: "",
     share_class_id: "",
   });
+  const [editError, setEditError] = useState<string | null>(null);
   const [savingId, startSaveTransition] = useTransition();
 
   const entityHoldings = useMemo(() => holdings.filter((h) => h.entity_id === entityId), [holdings, entityId]);
@@ -89,6 +90,7 @@ export function EntityOwnership({
 
   function startEdit(holdingId: string) {
     const h = holdingById.get(holdingId);
+    setEditError(null);
     setEditDraft({
       units: h?.units != null ? String(h.units) : "",
       ownership_pct: h?.ownership_pct != null ? String(h.ownership_pct) : "",
@@ -99,11 +101,38 @@ export function EntityOwnership({
   }
 
   function cancelEdit() {
+    setEditError(null);
     setEditingId(null);
+  }
+
+  // Mirror the server's number parsing (commas/spaces stripped) for validation.
+  function validateDraft(d: HoldingDraft): string | null {
+    const pct = d.ownership_pct.trim();
+    if (pct !== "") {
+      const n = Number(pct.replace(/[, ]/g, ""));
+      if (!Number.isFinite(n)) return "Ownership % must be a number.";
+      if (n < 0 || n > 100) return "Ownership % must be between 0 and 100.";
+    }
+    for (const [label, raw] of [
+      ["Units", d.units],
+      ["Invested", d.invested_amount],
+    ] as const) {
+      const v = raw.trim();
+      if (v !== "" && !Number.isFinite(Number(v.replace(/[, ]/g, "")))) {
+        return `${label} must be a number.`;
+      }
+    }
+    return null;
   }
 
   function saveEdit() {
     if (!editingId) return;
+    const err = validateDraft(editDraft);
+    if (err) {
+      setEditError(err);
+      return;
+    }
+    setEditError(null);
     const id = editingId;
     const fd = new FormData();
     fd.set("id", id);
@@ -112,9 +141,23 @@ export function EntityOwnership({
     fd.set("invested_amount", editDraft.invested_amount);
     fd.set("share_class_id", editDraft.share_class_id);
     startSaveTransition(async () => {
-      await updateHolding(fd);
+      const res = await updateHolding(fd);
+      if (res && "error" in res) {
+        setEditError(res.error);
+        return;
+      }
       setEditingId(null);
     });
+  }
+
+  function onEditKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!savingId) saveEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelEdit();
+    }
   }
 
   return (
@@ -176,7 +219,11 @@ export function EntityOwnership({
               rollup.rows.map((r, i) => {
                 const editing = editingId === r.holdingId;
                 return (
-                  <tr key={r.holdingId} className="border-b border-line/60 bg-surface-1">
+                  <Fragment key={r.holdingId}>
+                  <tr
+                    className="border-b border-line/60 bg-surface-1"
+                    onKeyDown={editing ? onEditKeyDown : undefined}
+                  >
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }} />
@@ -276,6 +323,14 @@ export function EntityOwnership({
                       </>
                     )}
                   </tr>
+                  {editing && editError && (
+                    <tr className="bg-surface-1">
+                      <td colSpan={6} className="px-3 pb-2 pt-0">
+                        <p className="text-xs text-red-400">{editError}</p>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })
             )}
