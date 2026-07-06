@@ -4,25 +4,28 @@
 // Carta powers fund performance vs peer cohort (Net IRR / TVPI / DPI percentile),
 // NAV, cap tables, co-investors, 409a/FMV. For the proactive layer's first
 // slice we implement `benchmark` (fund DPI/TVPI vs cohort — the LP-credibility
-// claim) and `enrich` (an LP's comparable-fund activity).
+// claim) and `enrich` (an LP's comparable-fund activity, scaffolded).
 //
-// Runtime reality (reported honestly): the deployed Next.js app reaches external
-// tools through Composio, not this session's MCP server. A live Carta pull needs
-// a Composio Carta toolkit slug (config: CARTA_BENCHMARK_TOOL) or a per-org Carta
-// connection. Until that lands, benchmark() degrades to a value DERIVED FROM THE
-// ORG'S OWN track_records — real internal data — with the percentile modeled
-// against a static cohort curve, and provenance marked `verified:false` and
-// sourced as "carta·modeled" so a modeled estimate NEVER masquerades as a live
-// Carta fact. The gate then forces any draft carrying it to investor-facing, so
-// a human signs off before it leaves the building. This is the scaffolded seam;
-// swapping in the live tool is a config change, not a rewrite.
+// LIVE PATH: the deployed app reaches Carta through Carta's MCP endpoint
+// (lib/integrations/carta/mcp-client.server.ts) — JSON-RPC over HTTP, no SDK.
+// It is active when CARTA_MCP_URL is set AND the org has a CARTA_MCP_TOKEN in
+// the vault. Then benchmark() calls Carta's read tool and maps a STRUCTURED
+// result into PmiBenchmark with verified:true.
+//
+// FALLBACK: with no Carta connection, benchmark() derives the value from the
+// org's own track_records — real internal data — with the percentile modeled
+// against a static curve, and provenance marked verified:false / "carta·modeled"
+// so a modeled estimate NEVER masquerades as a live Carta fact. The gate then
+// forces any draft carrying it to investor-facing. Swapping from modeled to live
+// is a config + token change, not a rewrite.
 
 import { createServiceClient } from "@/lib/supabase/server";
 import type { VerifiedResult } from "@/lib/source-hub-types";
 import {
-  composioConfigForOrg,
-  executeComposioTool,
-} from "@/lib/integrations/composio/client.server";
+  cartaMcpConfigForOrg,
+  callCartaTool,
+  CARTA_MCP_TOOL,
+} from "@/lib/integrations/carta/mcp-client.server";
 import type {
   PmiSource,
   PmiBenchmark,
@@ -32,11 +35,16 @@ import type {
 } from "./types";
 
 const PROVIDER = "carta";
-const LIVE_ENDPOINT = "carta:dwh:execute:question";
+const LIVE_ENDPOINT = "carta:mcp";
 const MODELED_ENDPOINT = "carta·modeled:track_records";
 
-/** Config slug for a Composio Carta toolkit action; absent → modeled fallback. */
-const CARTA_BENCHMARK_TOOL = process.env.CARTA_BENCHMARK_TOOL;
+/**
+ * The Carta command the benchmark read runs. Carta's data-warehouse question
+ * tool (`dwh:execute:question`) answers fund-performance questions in NL; a firm
+ * that prefers a structured command can override this. The exact command is the
+ * one integration-specific value a human confirms against their Carta account.
+ */
+const CARTA_BENCHMARK_COMMAND = process.env.CARTA_BENCHMARK_COMMAND ?? "dwh:execute:question";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -54,18 +62,54 @@ function failed<T>(error: string): VerifiedResult<T> {
   };
 }
 
+/** The natural-language question posed to Carta's warehouse for a metric. */
+export function questionForMetric(metric: string, cohort?: Record<string, string | number>): string {
+  const scope = cohort && Object.keys(cohort).length
+    ? ` for the ${Object.values(cohort).join(", ")} cohort`
+    : "";
+  const label = metric.toUpperCase();
+  return `What is our fund's ${label} and its percentile versus comparable funds${scope}? Return the value, unit, percentile, cohort label, and as-of date.`;
+}
+
+/** Coerce a possibly-stringy numeric field to a number, or null. Pure. */
+function num(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v.replace(/[^0-9.\-]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 /**
- * Modeled cohort curve — maps a DPI/TVPI multiple to an approximate percentile
- * within a peer vintage. Deterministic and clearly a MODEL (not Carta cohort
- * data), so the claim it produces is labeled as an estimate. Replaced wholesale
- * once the live Carta cohort endpoint is connected.
+ * Map a structured Carta tool result into PmiBenchmark. Tolerant of shape
+ * (nested `data`, string numbers, snake/camel keys). Returns null when there is
+ * no usable numeric value — the caller then falls back to modeled rather than
+ * emitting an empty live claim. Pure + tested.
  */
-export function modeledPercentile(metric: string, value: number): number {
-  const curve = metric === "dpi"
-    ? [[1.5, 85], [1.0, 70], [0.6, 55], [0.3, 40], [0, 25]]
-    : [[2.2, 85], [1.6, 70], [1.2, 55], [1.0, 40], [0, 25]]; // tvpi/moic
-  for (const [floor, pct] of curve) if (value >= floor) return pct;
-  return 20;
+export function mapCartaBenchmark(raw: unknown, metric: string): PmiBenchmark | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const body = (o.data && typeof o.data === "object" ? (o.data as Record<string, unknown>) : o);
+
+  const value = num(body.value ?? body.metric_value ?? body[metric]);
+  if (value == null) return null;
+
+  const percentile = num(body.percentile ?? body.percentile_rank ?? body.rank);
+  const unitRaw = String(body.unit ?? "").toLowerCase();
+  const unit: PmiBenchmark["unit"] =
+    unitRaw === "pct" || unitRaw === "%" || metric === "net_irr" ? "pct"
+    : unitRaw === "usd" || unitRaw === "$" ? "usd"
+    : "x";
+
+  return {
+    metric,
+    value,
+    unit,
+    percentile,
+    cohort: String(body.cohort ?? body.cohort_label ?? "Carta peer cohort"),
+    asOf: String(body.as_of ?? body.asOf ?? body.as_of_date ?? nowIso()),
+  };
 }
 
 /** Compute fund-level DPI/TVPI from the org's track records. Real internal data. */
@@ -112,33 +156,46 @@ async function deriveFromTrackRecord(
   };
 }
 
+/**
+ * Modeled cohort curve — maps a DPI/TVPI multiple to an approximate percentile
+ * within a peer vintage. Deterministic and clearly a MODEL (not Carta cohort
+ * data). Replaced wholesale once the live Carta cohort endpoint is connected.
+ */
+export function modeledPercentile(metric: string, value: number): number {
+  const curve = metric === "dpi"
+    ? [[1.5, 85], [1.0, 70], [0.6, 55], [0.3, 40], [0, 25]]
+    : [[2.2, 85], [1.6, 70], [1.2, 55], [1.0, 40], [0, 25]]; // tvpi/moic
+  for (const [floor, pct] of curve) if (value >= floor) return pct;
+  return 20;
+}
+
 export const cartaSource: PmiSource = {
   key: PROVIDER,
   label: "Carta",
 
   async available(orgId: string): Promise<boolean> {
-    // Live only when a Composio Carta tool is configured AND the org can reach
-    // Composio. Otherwise the source still produces modeled benchmarks, but
-    // reports NOT-live so callers can label provenance correctly.
-    if (!CARTA_BENCHMARK_TOOL) return false;
-    const cfg = await composioConfigForOrg(orgId);
-    return Boolean(cfg);
+    // Live only when the Carta MCP endpoint + a per-org token both resolve.
+    // Otherwise the source still produces modeled benchmarks, but reports
+    // NOT-live so callers can label provenance correctly.
+    return Boolean(await cartaMcpConfigForOrg(orgId));
   },
 
   async benchmark(orgId: string, spec: BenchmarkSpec): Promise<VerifiedResult<PmiBenchmark>> {
     const metric = (spec.metric || "dpi").toLowerCase();
     const t0 = Date.now();
 
-    // 1) Live path (scaffolded): a Composio Carta toolkit action.
-    if (CARTA_BENCHMARK_TOOL) {
-      const cfg = await composioConfigForOrg(orgId);
-      if (cfg) {
-        const res = await executeComposioTool<Record<string, unknown>>(cfg, CARTA_BENCHMARK_TOOL, {
-          metric,
-          cohort: spec.cohort ?? {},
-        });
-        if (res.ok && res.data && typeof res.data.value === "number") {
-          const d = res.data;
+    // 1) Live path — Carta MCP. Active when the endpoint + token are configured.
+    const cfg = await cartaMcpConfigForOrg(orgId);
+    if (cfg) {
+      const res = await callCartaTool<unknown>(cfg, CARTA_MCP_TOOL, {
+        command: CARTA_BENCHMARK_COMMAND,
+        question: questionForMetric(metric, spec.cohort),
+        metric,
+        cohort: spec.cohort ?? {},
+      });
+      if (res.ok) {
+        const mapped = mapCartaBenchmark(res.data, metric);
+        if (mapped) {
           return {
             status: "success",
             verified: true,
@@ -151,18 +208,11 @@ export const cartaSource: PmiSource = {
               verified: true,
               retrieved_at: nowIso(),
             }],
-            data: {
-              metric,
-              value: Number(d.value),
-              unit: (d.unit as PmiBenchmark["unit"]) ?? (metric === "dpi" || metric === "tvpi" ? "x" : "pct"),
-              percentile: d.percentile != null ? Number(d.percentile) : null,
-              cohort: String(d.cohort ?? "Carta peer cohort"),
-              asOf: String(d.as_of ?? nowIso()),
-            },
+            data: mapped,
           };
         }
-        // Live attempt failed → fall through to modeled, don't fabricate.
       }
+      // Live attempt failed or unmappable → fall through to modeled, never fabricate.
     }
 
     // 2) Modeled fallback — grounded in the org's real track record, percentile
@@ -195,15 +245,12 @@ export const cartaSource: PmiSource = {
   async enrich(orgId: string, spec: EnrichSpec): Promise<VerifiedResult<PmiEnrichment>> {
     // LP comparable-fund activity / co-investor overlap is a genuinely EXTERNAL
     // fact — we do not fabricate it. Live only via a connected Carta co-investor
-    // endpoint; until then we return `failed` so the draft simply omits the
-    // "committed to a comparable fund" claim rather than inventing it.
+    // read; until that command is wired we return `failed` so the draft simply
+    // omits the "committed to a comparable fund" claim rather than inventing it.
     void orgId;
-    if (!CARTA_BENCHMARK_TOOL) {
-      return failed<PmiEnrichment>(
-        `Carta enrichment for ${spec.subjectName} requires a live Carta connection (co-investor endpoint not connected).`,
-      );
-    }
-    // Live enrichment would map a co-investor/portfolio query here.
-    return failed<PmiEnrichment>("Carta co-investor enrichment not yet implemented.");
+    void spec;
+    return failed<PmiEnrichment>(
+      "Carta co-investor enrichment requires a live Carta connection (endpoint not yet wired).",
+    );
   },
 };
