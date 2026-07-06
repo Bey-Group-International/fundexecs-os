@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { Markdown } from "@/components/Markdown";
+import { AnnotationLayer } from "@/components/shared/AnnotationLayer";
 
 // Full-screen overlay for an artifact's deliverable. Reuses the same Markdown
 // rendering as the rest of Earn's output so the expanded read matches the inline
@@ -13,12 +14,17 @@ export function ArtifactModal({
   content,
   toolbar,
   onClose,
+  annotation,
 }: {
   title: string;
   label?: string;
   content: string;
   toolbar?: ReactNode;
   onClose: () => void;
+  // When set, the deliverable becomes annotatable — collaborators can drop
+  // pinned comment threads on it (backed by /api/annotations). Omitted when the
+  // artifact has no persistent id / org context to key annotations on.
+  annotation?: { entityId: string; orgId: string };
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -65,7 +71,17 @@ export function ArtifactModal({
           </div>
         </header>
         <div className="overflow-y-auto px-5 py-4">
-          <Markdown>{content}</Markdown>
+          {annotation ? (
+            <AnnotationLayer
+              entityType="artifact"
+              entityId={annotation.entityId}
+              orgId={annotation.orgId}
+            >
+              <Markdown>{content}</Markdown>
+            </AnnotationLayer>
+          ) : (
+            <Markdown>{content}</Markdown>
+          )}
         </div>
       </div>
     </div>
