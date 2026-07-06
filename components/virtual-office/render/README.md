@@ -12,13 +12,13 @@ The virtual office is deliberately separated into five layers. Only the
 **Rendering** layer changes across phases; the other four are engine-agnostic
 and stay put.
 
-| Layer | Owns | Where it lives |
-| --- | --- | --- |
-| **Office Intelligence** | Agents, rooms, risk tiers, task routing — *what should happen* | `program/officeProgram.ts` |
-| **NPC Behavior** | Path following, seating, facing, program→animation resolution — *how an actor moves* | `scenes/OfficeScene.ts` (pathing/seating), `avatar/ExecutiveAvatar.ts` (pose) |
-| **Workflow State** | Stages, approval gates, meetings, audit log | `program/officeProgram.ts` + React state |
-| **Rendering** | Pixels: floor, walls, furniture, avatars, camera | **this directory** (`render/`) |
-| **Interaction** | Pointer/keyboard events surfaced back to the layers above | `onActorClick` / `onFloorClick` on the renderer |
+|          Layer          |                                         Owns                                         |                                Where it lives                                 |
+|-------------------------|--------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| **Office Intelligence** | Agents, rooms, risk tiers, task routing — *what should happen*                       | `program/officeProgram.ts`                                                    |
+| **NPC Behavior**        | Path following, seating, facing, program→animation resolution — *how an actor moves* | `scenes/OfficeScene.ts` (pathing/seating), `avatar/ExecutiveAvatar.ts` (pose) |
+| **Workflow State**      | Stages, approval gates, meetings, audit log                                          | `program/officeProgram.ts` + React state                                      |
+| **Rendering**           | Pixels: floor, walls, furniture, avatars, camera                                     | **this directory** (`render/`)                                                |
+| **Interaction**         | Pointer/keyboard events surfaced back to the layers above                            | `onActorClick` / `onFloorClick` on the renderer                               |
 
 The Intelligence, Behavior, Workflow, and Interaction layers speak to the
 renderer **only** through the `OfficeRenderer` interface. They never import
@@ -47,18 +47,18 @@ The contract uses only plain data plus the domain enums (`AgentState`,
 interface, but it already conforms to it conceptually — the mapping is
 one-to-one:
 
-| `OfficeRenderer` method | Phaser `OfficeScene` equivalent |
-| --- | --- |
-| `buildFloor()` | `_createTilemap()` + `createWallVisuals()` + `createFurniture()` |
-| `addActor(spec)` | `_spawnNpc()` / `_spawnProgramAgents()` |
-| `moveActor(id, x, y)` | path-follow position writes in `_updateNpcAvatars()` |
-| `setActorFacing()` | `ExecutiveAvatar.setFacing()` |
-| `setActorState()` | the `program:npc-state` handler → `ExecutiveAvatar.setState()` |
-| `setActorSeated()` | `_sitNpc()` / `_standNpc()` |
-| `focusRoom()` / `follow()` | `office:teleport` + `cameras.main.startFollow()` |
-| `onActorClick()` | the `npc:click` pointer wiring |
-| `onFloorClick()` | click-to-walk in `_setupPointerTeleport()` |
-| `update(deltaMs)` | the scene `update()` loop |
+|  `OfficeRenderer` method   |                 Phaser `OfficeScene` equivalent                  |
+|----------------------------|------------------------------------------------------------------|
+| `buildFloor()`             | `_createTilemap()` + `createWallVisuals()` + `createFurniture()` |
+| `addActor(spec)`           | `_spawnNpc()` / `_spawnProgramAgents()`                          |
+| `moveActor(id, x, y)`      | path-follow position writes in `_updateNpcAvatars()`             |
+| `setActorFacing()`         | `ExecutiveAvatar.setFacing()`                                    |
+| `setActorState()`          | the `program:npc-state` handler → `ExecutiveAvatar.setState()`   |
+| `setActorSeated()`         | `_sitNpc()` / `_standNpc()`                                      |
+| `focusRoom()` / `follow()` | `office:teleport` + `cameras.main.startFollow()`                 |
+| `onActorClick()`           | the `npc:click` pointer wiring                                   |
+| `onFloorClick()`           | click-to-walk in `_setupPointerTeleport()`                       |
+| `update(deltaMs)`          | the scene `update()` loop                                        |
 
 Extracting a thin `PhaserOfficeRenderer implements OfficeRenderer` adapter that
 delegates to the existing scene is the natural next step; the scene logic does
@@ -150,3 +150,4 @@ animation, and presence.
    first real 3D path, validated against the same `ROOMS` data.
 3. Evaluate Unity / Unreal / Omniverse only where the extra fidelity justifies
    the payload, latency, or cloud-GPU cost — each behind the same interface.
+
