@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { RichText } from "@/components/RichText";
+import { text } from "@/lib/richtext";
 import { AGENT_BY_ID, ROOM_BY_KEY, type AgentId, type AgentState } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 import {
@@ -54,6 +56,12 @@ export function AgentFloorInspector({
   const [picking, setPicking] = useState(false);
   const rt = s.agents[agentId];
   const meta = AGENT_BY_ID[agentId];
+  // The executive's name as an Adventure-style rich-text sheen (accent → cream).
+  // Computed before any early return so the hook order stays stable.
+  const nameComponent = useMemo(
+    () => text(meta?.name ?? "").gradient([meta?.accent ?? "#c9a84c", "#f4f0e8"]).bold().build(),
+    [meta?.name, meta?.accent],
+  );
   if (!rt || !meta) return null;
 
   const sm = STATE_META[rt.state] ?? STATE_META.idle;
@@ -86,7 +94,9 @@ export function AgentFloorInspector({
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 10px 8px" }}>
         <span style={{ width: 9, height: 9, borderRadius: "50%", marginTop: 4, flexShrink: 0, background: meta.accent, boxShadow: `0 0 8px ${meta.accent}aa` }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "Georgia,serif", fontSize: 13, color: "rgba(255,248,220,0.96)", lineHeight: 1.2 }}>{meta.name}</div>
+          <div style={{ fontFamily: "Georgia,serif", fontSize: 13, lineHeight: 1.2 }}>
+            <RichText component={nameComponent} />
+          </div>
           <div style={{ fontSize: 8.5, color: "rgba(255,248,220,0.5)", letterSpacing: "0.06em", marginTop: 2 }}>
             {meta.role} · {ROOM_BY_KEY[rt.roomKey].label}
           </div>
