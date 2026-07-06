@@ -41,6 +41,7 @@ interface Contract {
   expiryDate?: string | null;
   signedAt?: string | null;
   effectiveDate?: string | null;
+  fileUrl?: string | null;
 }
 
 const STATUS_ORDER: ContractStatus[] = [
@@ -113,6 +114,23 @@ function ContractDetail({ contract, days }: { contract: Contract; days: number |
         <DetailField label="Signed" value={formatDate(contract.signedAt)} />
         <DetailField label="Expiry" value={expiryValue} />
       </dl>
+      <div className="mt-3 border-t border-line pt-3">
+        {contract.fileUrl ? (
+          <a
+            href={contract.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
+          >
+            Open document <span aria-hidden>↗</span>
+          </a>
+        ) : (
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            No document attached
+          </p>
+        )}
+      </div>
     </div>
   );
 }

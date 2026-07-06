@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { extractOwnership } from "@/lib/claude";
 import type { Entity } from "@/lib/supabase/database.types";
+import type { ParsedHoldingRow } from "@/lib/holdings-csv";
 
 const ENTITY = "/build/entity";
 
@@ -180,6 +181,87 @@ export async function draftOwnershipWithEarn(
       stakeholder_id: stakeholderId,
       ownership_pct: typeof r.ownership_pct === "number" ? r.ownership_pct : null,
       units: typeof r.units === "number" ? r.units : null,
+      created_by: ctx.userId,
+    });
+    created += 1;
+  }
+
+  revalidatePath(ENTITY);
+  return { created };
+}
+
+// Import cap-table holdings parsed from a CSV. Mirrors draftOwnershipWithEarn:
+// resolves/creates stakeholders by name (case-insensitive within the org),
+// resolves each row's share class by name within the entity (left null when the
+// class is blank or unmatched — we don't create classes on import), and inserts
+// equity_holdings. Rows come pre-parsed from the client (see lib/holdings-csv).
+export async function importHoldingsCsv(
+  entityId: string,
+  rows: ParsedHoldingRow[],
+): Promise<{ created: number } | { error: string }> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+  if (!Array.isArray(rows) || rows.length === 0) return { error: "No rows to import." };
+
+  const supabase = await createServerClient();
+  const { data: ent } = await supabase
+    .from("entities")
+    .select("*")
+    .eq("id", entityId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const entity = ent as Entity | null;
+  if (!entity) return { error: "Entity not found" };
+
+  // Resolve/insert stakeholders by name (case-insensitive within the org).
+  const { data: existingStake } = await supabase
+    .from("stakeholders")
+    .select("id,name")
+    .eq("organization_id", ctx.orgId);
+  const stakeByName = new Map((existingStake ?? []).map((s) => [s.name.toLowerCase(), s.id]));
+
+  // Resolve share classes by name within this entity (case-insensitive).
+  const { data: existingClasses } = await supabase
+    .from("share_classes")
+    .select("id,name")
+    .eq("organization_id", ctx.orgId)
+    .eq("entity_id", entityId);
+  const classByName = new Map((existingClasses ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+
+  let created = 0;
+  for (const r of rows) {
+    const name = (r.holder ?? "").trim();
+    const key = name.toLowerCase();
+    if (!key) continue;
+
+    let stakeholderId = stakeByName.get(key);
+    if (!stakeholderId) {
+      const { data: ins } = await supabase
+        .from("stakeholders")
+        .insert({
+          organization_id: ctx.orgId,
+          name,
+          kind: "person",
+          created_by: ctx.userId,
+        })
+        .select("id")
+        .maybeSingle();
+      stakeholderId = ins?.id;
+      if (stakeholderId) stakeByName.set(key, stakeholderId);
+    }
+    if (!stakeholderId) continue;
+
+    const className = (r.className ?? "").trim();
+    const shareClassId = className ? classByName.get(className.toLowerCase()) ?? null : null;
+
+    await supabase.from("equity_holdings").insert({
+      organization_id: ctx.orgId,
+      entity_id: entityId,
+      stakeholder_id: stakeholderId,
+      share_class_id: shareClassId,
+      units: typeof r.units === "number" ? r.units : null,
+      ownership_pct: typeof r.ownershipPct === "number" ? r.ownershipPct : null,
+      invested_amount: typeof r.invested === "number" ? r.invested : null,
       created_by: ctx.userId,
     });
     created += 1;
