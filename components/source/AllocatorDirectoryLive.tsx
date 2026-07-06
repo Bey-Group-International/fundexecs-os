@@ -52,6 +52,8 @@ interface InvestorRow {
   role: string | null;
   url_source: string | null;
   provenance: string | null;
+  accreditation_status: string | null;
+  kyc_status: string | null;
 }
 
 interface EnrichedData {
@@ -141,7 +143,7 @@ async function loadAllocatorEntries() {
     const { data: investorRows } = await supabase
       .from("investors")
       .select(
-        "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source, provenance",
+        "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source, provenance, accreditation_status, kyc_status",
       )
       .eq("organization_id", auth.ctx.orgId)
       .is("archived_at", null)
@@ -183,9 +185,13 @@ async function loadAllocatorEntries() {
         ticketMax: inv.typical_check_max ?? null,
         primaryStrategies: enr.primaryStrategies,
         geographicFocus: inv.jurisdiction ? [inv.jurisdiction] : [],
-        // TODO: map from investors.accreditation_status / kyc_status once columns exist.
-        accreditationStatus: "unknown" as AccreditationStatus,
-        kycStatus: "not_started" as const,
+        accreditationStatus: (inv.accreditation_status ??
+          "unknown") as AccreditationStatus,
+        kycStatus: (inv.kyc_status ?? "not_started") as
+          | "not_started"
+          | "in_progress"
+          | "verified"
+          | "expired",
         hqCity: enr.hqCity,
         // jurisdiction is legal domicile (e.g. "Delaware"), not HQ country — omit as fallback
         hqCountry: enr.hqCountry,

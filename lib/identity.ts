@@ -4,18 +4,11 @@
 // The compounding loop (lib/engine.ts verifyArtifact) couples earned
 // reputation to a verified identity: an operator approval only MINTS standing
 // when the verifying principal is itself identity-verified. This module is the
-// read side of that gate (isPrincipalIdentityVerified) plus the write side — an
-// owner/admin internal attestation (attestPrincipalIdentity).
+// read side of that gate (isPrincipalIdentityVerified).
 //
-// "Internal attestation now, external-KYC provider hook later": today an
-// owner/admin attests a teammate's identity. When an external KYC/identity
-// provider is integrated, its verified result replaces the internal attestation
-// at the PROVIDER HOOK below — it sets the SAME columns, so nothing downstream
-// changes. The coupling is SOFT: verification is never blocked on identity; only
-// the reputation grant is withheld until someone is marked verified.
-import { revalidatePath } from "next/cache";
+// The coupling is SOFT: verification is never blocked on identity; only the
+// reputation grant is withheld until someone is marked verified.
 import { createServerClient } from "@/lib/supabase/server";
-import { getSessionContext } from "@/lib/auth";
 import type { Principal } from "@/lib/supabase/database.types";
 
 type Client = Awaited<ReturnType<typeof createServerClient>>;
@@ -52,42 +45,4 @@ export async function isPrincipalIdentityVerified(
   } catch {
     return false;
   }
-}
-
-/**
- * Owner/admin internal attestation: mark a principal identity-verified, stamping
- * who attested and when. Mirrors the settings server-action auth/guard pattern
- * (getSessionContext → org + role check; RLS is the backstop). Non-admins get a
- * typed error; the gate is intentionally simple because this is internal-only.
- */
-export async function attestPrincipalIdentity(
-  principalId: string,
-): Promise<{ error?: string }> {
-  "use server";
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return { error: "Not authenticated" };
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only an owner or admin can attest identity" };
-  }
-  if (!principalId) return { error: "principalId is required" };
-
-  const supabase = await createServerClient();
-
-  // PROVIDER HOOK: today this is a trusted internal attestation by an owner/admin.
-  // When an external KYC/identity provider is wired up, replace the assignment
-  // below with the provider's verified result — set identity_verified_at from the
-  // provider's verification timestamp and record the provider/reference in
-  // identity_verified_by (or a future provider-ref column). The read gate
-  // (isPrincipalIdentityVerified) and the reputation coupling stay unchanged.
-  const { error } = await supabase
-    .from("principals")
-    .update({
-      identity_verified_at: new Date().toISOString(),
-      identity_verified_by: ctx.userId,
-    })
-    .eq("id", principalId);
-
-  if (error) return { error: error.message };
-  revalidatePath("/settings");
-  return {};
 }
