@@ -8,9 +8,9 @@ import {
   CARTA_CALLBACK_PATH,
   CARTA_PKCE_COOKIE,
   CARTA_REFRESH_TOKEN_SECRET,
-  CARTA_TOKEN_URL_ENV,
   cartaAuthConfigured,
   exchangeCartaCode,
+  resolveCartaEndpoints,
   resolveClientCreds,
   verifyCartaOAuthState,
   invalidateCartaTokenCache,
@@ -56,13 +56,17 @@ export async function GET(req: NextRequest) {
   const creds = await resolveClientCreds(ctx.orgId);
   if (!creds) return settingsRedirect("missing_client_credentials");
 
+  // Token endpoint: manual (CARTA_TOKEN_URL) or discovered from CARTA_MCP_URL.
+  const endpoints = await resolveCartaEndpoints();
+  if (!endpoints?.tokenEndpoint) return settingsRedirect("discovery_failed");
+
   let tokens;
   try {
     tokens = await exchangeCartaCode({
       code,
       codeVerifier: verifier,
       redirectUri: `${getAppUrl()}${CARTA_CALLBACK_PATH}`,
-      tokenUrl: process.env[CARTA_TOKEN_URL_ENV] ?? "",
+      tokenUrl: endpoints.tokenEndpoint,
       creds,
     });
   } catch {
