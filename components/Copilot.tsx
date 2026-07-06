@@ -75,6 +75,15 @@ const SLASH_COMMANDS: { command: string; label: string; template: string }[] = [
   { command: "/memo", label: "Draft an IC memo", template: "Draft an investment committee memo for " },
 ];
 
+// Empty-state suggestion chips. The short label shows on the chip; clicking it
+// drops the fuller, ready-to-run prompt into the composer.
+const EMPTY_STATE_CHIPS: { label: string; prompt: string }[] = [
+  { label: "LBO model", prompt: "Run an LBO model on the attached CIM" },
+  { label: "LP update", prompt: "Run a quarterly LP update on our current portfolio" },
+  { label: "Source family offices", prompt: "Source family offices near me" },
+  { label: "Review mandate", prompt: "Review the attached materials" },
+];
+
 // An artifact carrying its optional tamper-evidence verdict. The seal is
 // recomputed server-side on load (lib/artifact-seal.ts); undefined means
 // "unsealed / not checked" and renders nothing.
@@ -1189,12 +1198,7 @@ export default function Copilot({
                     Ask for diligence, sourcing, LP work, or fund operations. Earn drafts the plan, shows the agent lanes, and waits at the gate before automation.
                   </p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    {[
-                      { label: "LBO model", prompt: "Run an LBO model on the attached CIM" },
-                      { label: "LP update", prompt: "Run a quarterly LP update on our current portfolio" },
-                      { label: "Source family offices", prompt: "Source family offices near me" },
-                      { label: "Review mandate", prompt: "Review the attached materials" },
-                    ].map((chip) => (
+                    {EMPTY_STATE_CHIPS.map((chip) => (
                       <button
                         key={chip.label}
                         type="button"
