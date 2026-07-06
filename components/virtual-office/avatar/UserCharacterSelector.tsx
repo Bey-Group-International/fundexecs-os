@@ -2,12 +2,27 @@
 
 import {
   AVATAR_ACCENTS,
+  BUILDS,
+  HAIR_COLORS,
+  HAIR_STYLES,
   ROLE_LABELS,
+  SKIN_TONES,
   WARDROBES,
+  effectiveHair,
+  effectiveSkin,
+  presentationDefaults,
   userAvatarSpec,
   type UserAvatar,
 } from "@/lib/office/userAvatar";
 import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
+
+const BUILD_LABELS: Record<string, string> = { slim: "Slim", regular: "Regular", broad: "Broad" };
+const HAIR_STYLE_LABELS: Record<string, string> = {
+  short: "Short",
+  textured: "Textured",
+  tied: "Tied",
+  bald: "Bald",
+};
 
 /** Format a 0xRRGGBB int as a CSS `#rrggbb` string for swatch fills. */
 function cssHex(color: number): string {
@@ -38,6 +53,88 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
+/** A labelled segmented control — one selectable option per value. */
+function Segmented<T extends string>({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: { id: T; label: string }[];
+  selected: T;
+  onSelect: (id: T) => void;
+}) {
+  return (
+    <div>
+      <SectionLabel>{label}</SectionLabel>
+      <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label={label} style={{ borderColor: BORDER_DIM }}>
+        {options.map((opt) => {
+          const isSel = selected === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              aria-pressed={isSel}
+              onClick={() => onSelect(opt.id)}
+              className="px-3 py-1.5 text-[12px] transition-colors"
+              style={{
+                background: isSel ? "rgba(201, 168, 76, 0.14)" : "transparent",
+                color: isSel ? GOLD : "#9aa4b2",
+                fontFamily: SERIF,
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** A labelled row of round color swatches with a highlighted active tone. */
+function ColorSwatches({
+  label,
+  colors,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  colors: string[];
+  selected: string;
+  onSelect: (hex: string) => void;
+}) {
+  return (
+    <div>
+      <SectionLabel>{label}</SectionLabel>
+      <div className="flex flex-wrap gap-2">
+        {colors.map((c) => {
+          const isSel = selected.toLowerCase() === c.toLowerCase();
+          return (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={isSel}
+              aria-label={c}
+              title={c}
+              onClick={() => onSelect(c)}
+              className="h-7 w-7 rounded-full border transition-transform"
+              style={{
+                background: c,
+                borderColor: isSel ? "#f2ede2" : BORDER_DIM,
+                borderWidth: isSel ? 2 : 1,
+                boxShadow: isSel ? `0 0 0 2px ${c}66` : "none",
+                transform: isSel ? "scale(1.1)" : "none",
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Controlled editor for a human {@link UserAvatar}. Renders a live preview of
  * the exact on-floor figure atop a compact set of controls — gender
@@ -60,6 +157,11 @@ export function UserCharacterSelector({
   saving?: boolean;
 }) {
   const selectedAccent = value.accent;
+  const preset = presentationDefaults(value.genderStyle);
+  const curBuild = value.build ?? preset.build;
+  const curHairStyle = value.hairStyle ?? preset.hairStyle;
+  const curSkin = effectiveSkin(value);
+  const curHair = effectiveHair(value);
 
   return (
     <div
@@ -84,35 +186,34 @@ export function UserCharacterSelector({
         </div>
       </div>
 
-      {/* Gender segmented control */}
-      <div>
-        <SectionLabel>Presentation</SectionLabel>
-        <div
-          className="inline-flex overflow-hidden rounded-md border"
-          role="group"
-          aria-label="Presentation"
-          style={{ borderColor: BORDER_DIM }}
-        >
-          {GENDER_OPTIONS.map((opt) => {
-            const selected = value.genderStyle === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => onChange({ ...value, genderStyle: opt.id })}
-                className="px-3.5 py-1.5 text-[12px] transition-colors"
-                style={{
-                  background: selected ? "rgba(201, 168, 76, 0.14)" : "transparent",
-                  color: selected ? GOLD : "#9aa4b2",
-                  fontFamily: SERIF,
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
+      {/* Presentation preset — seeds hair-style + build, each overridable below. */}
+      <Segmented
+        label="Presentation"
+        options={GENDER_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+        selected={value.genderStyle}
+        onSelect={(id) => onChange({ ...value, genderStyle: id, ...presentationDefaults(id) })}
+      />
+
+      {/* Body + hair silhouette — independent overrides of the preset. */}
+      <div className="flex flex-wrap gap-4">
+        <Segmented
+          label="Build"
+          options={BUILDS.map((b) => ({ id: b, label: BUILD_LABELS[b] }))}
+          selected={curBuild}
+          onSelect={(b) => onChange({ ...value, build: b })}
+        />
+        <Segmented
+          label="Hair style"
+          options={HAIR_STYLES.map((h) => ({ id: h, label: HAIR_STYLE_LABELS[h] }))}
+          selected={curHairStyle}
+          onSelect={(h) => onChange({ ...value, hairStyle: h })}
+        />
+      </div>
+
+      {/* Skin tone + hair color */}
+      <div className="flex flex-wrap gap-4">
+        <ColorSwatches label="Skin tone" colors={SKIN_TONES} selected={curSkin} onSelect={(c) => onChange({ ...value, skin: c })} />
+        <ColorSwatches label="Hair color" colors={HAIR_COLORS} selected={curHair} onSelect={(c) => onChange({ ...value, hair: c })} />
       </div>
 
       {/* Wardrobe swatches */}

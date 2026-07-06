@@ -257,6 +257,11 @@ export class OfficeScene extends Phaser.Scene {
   private playerSeat: SeatAnchor | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
   private sitPrompt!: Phaser.GameObjects.Text;
+  // While a DOM text field / select is focused, the floor yields the keyboard so
+  // typing (incl. shortcut letters like W/E/X) reaches the field instead of
+  // moving or sitting the player. Stored so we can detach on shutdown.
+  private _onDomFocusIn?: (e: FocusEvent) => void;
+  private _onDomFocusOut?: (e: FocusEvent) => void;
   // Gather-style proximity: walk near an executive to get a "talk" affordance.
   private keyT!: Phaser.Input.Keyboard.Key;
   private talkPrompt!: Phaser.GameObjects.Text;
@@ -388,6 +393,35 @@ export class OfficeScene extends Phaser.Scene {
     this.game.canvas.setAttribute("tabindex", "0");
     this.game.canvas.focus();
 
+    // Yield the keyboard to DOM inputs. Phaser globally captures (preventDefault)
+    // the movement/action keys — W/A/S/D/E/X/F/T — so without this, typing one
+    // of those letters into a field (e.g. a display name containing "E") is
+    // swallowed by the floor and instead triggers the shortcut (E = sit). While
+    // any text field / select / contenteditable is focused we disable the
+    // keyboard plugin and its global capture, restoring both on blur.
+    const kb = this.input.keyboard!;
+    const isTextEntry = (t: EventTarget | null): boolean =>
+      t instanceof HTMLElement &&
+      (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+    this._onDomFocusIn = (e: FocusEvent) => {
+      if (!isTextEntry(e.target)) return;
+      kb.enabled = false;
+      kb.disableGlobalCapture();
+    };
+    this._onDomFocusOut = (e: FocusEvent) => {
+      if (!isTextEntry(e.target)) return;
+      // Defer: after a blur (or the field unmounting, e.g. a palette closing on
+      // Esc) focus may land elsewhere. Re-enable only once the active element is
+      // no longer a text field, so moving between two fields stays suppressed.
+      window.setTimeout(() => {
+        if (isTextEntry(document.activeElement)) return;
+        kb.enabled = true;
+        kb.enableGlobalCapture();
+      }, 0);
+    };
+    window.addEventListener("focusin", this._onDomFocusIn);
+    window.addEventListener("focusout", this._onDomFocusOut);
+
     // Receive resolved zone definitions from the React wrapper
     this.game.events.on("office:zone-config", (zones: ZoneDef[]) => {
       this.iframeZoneDefs = zones;
@@ -465,6 +499,8 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("program:room-activity");
     this.game.events.off("program:handoff");
     this.game.events.off("program:approval-gate");
+    if (this._onDomFocusIn) window.removeEventListener("focusin", this._onDomFocusIn);
+    if (this._onDomFocusOut) window.removeEventListener("focusout", this._onDomFocusOut);
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
