@@ -1189,17 +1189,22 @@ export default function Copilot({
                     Ask for diligence, sourcing, LP work, or fund operations. Earn drafts the plan, shows the agent lanes, and waits at the gate before automation.
                   </p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    {["LBO model", "LP update", "Source family offices", "Review mandate"].map((chip) => (
+                    {[
+                      { label: "LBO model", prompt: "Run an LBO model on the attached CIM" },
+                      { label: "LP update", prompt: "Run a quarterly LP update on our current portfolio" },
+                      { label: "Source family offices", prompt: "Source family offices near me" },
+                      { label: "Review mandate", prompt: "Review the attached materials" },
+                    ].map((chip) => (
                       <button
-                        key={chip}
+                        key={chip.label}
                         type="button"
                         onClick={() => {
-                          setPrompt(chip);
+                          setPrompt(chip.prompt);
                           inputRef.current?.focus();
                         }}
                         className="rounded-full border border-line/80 bg-surface-1/75 px-3 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary"
                       >
-                        {chip}
+                        {chip.label}
                       </button>
                     ))}
                   </div>
