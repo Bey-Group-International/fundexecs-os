@@ -24,7 +24,7 @@ const GOLD = "#c9a84c";
  * Commands route through Earn; office chat records meetings, agent
  * status, approval gates, and system notices in one auditable feed.
  */
-export function OfficeCommandPanel() {
+export function OfficeCommandPanel({ onDismiss }: { onDismiss?: () => void }) {
   const s = useOfficeProgram();
   const [input, setInput] = useState("");
   const feedRef = useRef<HTMLDivElement>(null);
@@ -53,9 +53,23 @@ export function OfficeCommandPanel() {
           <span className="text-[10px] uppercase tracking-[0.22em]" style={{ color: GOLD, fontFamily: "Georgia, serif" }}>
             Earn Command Center
           </span>
-          <span className="flex items-center gap-1 text-[9px] text-emerald-500/80">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-            Earn online
+          <span className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-[9px] text-emerald-500/80">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              Earn online
+            </span>
+            {onDismiss ? (
+              <button
+                type="button"
+                onClick={onDismiss}
+                aria-label="Hide Earn Command Center"
+                title="Hide Earn Command Center"
+                className="grid h-5 w-5 place-items-center rounded text-[11px] leading-none transition-colors hover:text-fg-primary"
+                style={{ color: "#9aa4b2", border: "1px solid rgba(201,168,76,0.3)" }}
+              >
+                ✕
+              </button>
+            ) : null}
           </span>
         </div>
         <div className="mt-2 flex gap-1">
