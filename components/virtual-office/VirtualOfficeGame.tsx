@@ -15,6 +15,7 @@ import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
 import { MarketplacePanel, type PublicListing } from "./program/MarketplacePanel";
 import { MarketplaceListingDetail } from "./program/MarketplaceListingDetail";
 import { MarketplaceCreateListing } from "./program/MarketplaceCreateListing";
+import { AgentDelegateComposer } from "./program/AgentDelegateComposer";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
@@ -41,7 +42,7 @@ type NearbyAgent = { agentId: string; name: string; role: string; line: string; 
 // their line — built as an Adventure-style rich-text component (name in the
 // role accent, the line quoted beneath). Lingering cycles through more of their
 // lines, and an inline "Ask" action hands off to the Earn copilot.
-function ProximityCard({ agent }: { agent: NearbyAgent }) {
+function ProximityCard({ agent, onDelegate }: { agent: NearbyAgent; onDelegate: () => void }) {
   const heading = useMemo(
     () =>
       join(
@@ -94,14 +95,24 @@ function ProximityCard({ agent }: { agent: NearbyAgent }) {
         <RichText component={heading} />
       </div>
       <RichText component={line} className="text-[13px] leading-snug" />
-      <button
-        type="button"
-        onClick={askEarn}
-        className="pointer-events-auto mt-1 self-start rounded-md px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] transition-colors"
-        style={{ color: agent.accent, border: `1px solid ${agent.accent}55`, background: `${agent.accent}14` }}
-      >
-        Ask {agent.name}
-      </button>
+      <div className="pointer-events-auto mt-1 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={askEarn}
+          className="rounded-md px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] transition-colors"
+          style={{ color: agent.accent, border: `1px solid ${agent.accent}55`, background: `${agent.accent}14` }}
+        >
+          Ask {agent.name}
+        </button>
+        <button
+          type="button"
+          onClick={onDelegate}
+          className="rounded-md px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] font-semibold transition-colors"
+          style={{ color: "#0a0806", background: agent.accent }}
+        >
+          Give a task →
+        </button>
+      </div>
     </div>
   );
 }
@@ -320,6 +331,8 @@ export function VirtualOfficeGame({
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
+  // The executive the operator is composing a delegated task for (null = none).
+  const [delegateAgent, setDelegateAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   // Side-panel visibility (Earn Command Center + Active Work). Persisted so the
@@ -988,7 +1001,9 @@ export function VirtualOfficeGame({
         {token && roster.length > 0 && <FloorRoster roster={roster} />}
 
         {/* Proximity presence — the executive you're standing beside greets you */}
-        {nearbyAgent && <ProximityCard agent={nearbyAgent} />}
+        {nearbyAgent && (
+          <ProximityCard agent={nearbyAgent} onDelegate={() => setDelegateAgent(nearbyAgent)} />
+        )}
 
         {/* In-office meeting — floating real-time video dock over the canvas */}
         {meetingActive && (
@@ -1137,6 +1152,12 @@ export function VirtualOfficeGame({
             onClose={() => setShowCreateListing(false)}
             onCreated={() => void refreshMarketplaceListings()}
           />
+        )}
+
+        {/* Delegate a task to the executive the operator is standing next to —
+            composes an instruction and routes it into Earn's gated pipeline. */}
+        {delegateAgent && (
+          <AgentDelegateComposer agent={delegateAgent} onClose={() => setDelegateAgent(null)} />
         )}
 
         {/* Phaser canvas mount point — fills the floor column (Phaser FIT-scales

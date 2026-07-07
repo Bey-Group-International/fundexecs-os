@@ -225,6 +225,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
     });
   }
 
+  // Always points at the latest `ask` closure so event handlers registered once
+  // (below) can trigger a send without capturing a stale `ask` (which closes over
+  // pending/chatting/sessionId/thread). Updated after every render.
+  const askRef = useRef(ask);
+  useEffect(() => {
+    askRef.current = ask;
+  });
+
   /** Start a fresh conversation: drop the current thread and session. */
   function newConversation() {
     setThread([]);
@@ -247,13 +255,21 @@ export function EarnCopilotDock({ name }: { name: string }) {
       }
     }
     function onExecContext(e: Event) {
-      const detail = (e as CustomEvent<{ execName?: string; prompt?: string }>).detail;
+      const detail = (e as CustomEvent<{ execName?: string; prompt?: string; autoSend?: boolean }>).detail;
       setOpen(true);
       // Some senders open Earn with no pre-filled prompt (e.g. the in-office
       // "Ask Earn" whiteboard dispatches an empty detail). Never store a
       // non-string body — `body.trim()` in render would otherwise crash.
-      setBody(detail?.prompt ?? "");
-      setTimeout(() => inputRef.current?.focus(), 60);
+      const prompt = detail?.prompt ?? "";
+      setBody(prompt);
+      // Delegation from the office floor asks Earn to route the task straight
+      // away (autoSend). Fire it through the latest `ask` via the ref so there's
+      // no stale-closure risk; the small delay lets the dock finish opening.
+      if (detail?.autoSend && prompt.trim()) {
+        setTimeout(() => askRef.current(prompt), 80);
+      } else {
+        setTimeout(() => inputRef.current?.focus(), 60);
+      }
     }
     window.addEventListener("keydown", onKey);
     window.addEventListener("earn:open-with-context", onExecContext);
