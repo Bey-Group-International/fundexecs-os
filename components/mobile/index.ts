@@ -9,6 +9,7 @@ export { MobileSheet } from "./MobileSheet";
 export { MobileInstallPrompt } from "./MobileInstallPrompt";
 export { ServiceWorkerRegister } from "./ServiceWorkerRegister";
 export { MobileCommandCenter, type CommandCenterData } from "./MobileCommandCenter";
+export { MobileEarnHome } from "./MobileEarnHome";
 export { MobileEarnPanel } from "./MobileEarnPanel";
 export { MobileSectionHeader } from "./MobileSectionHeader";
 export { MobileDealCard, type MobileDeal } from "./MobileDealCard";
