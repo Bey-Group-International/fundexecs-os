@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TABS, type TabItem } from "./nav-config";
 import { haptic } from "./haptics";
+import { useTabReselect } from "./useTabReselect";
 
 function isActive(pathname: string, tab: TabItem): boolean {
   if (tab.key === "more") return false;
@@ -27,6 +28,8 @@ export function MobileBottomNav({
   hidden?: boolean;
 }) {
   const pathname = usePathname() || "/";
+  // Native re-tap-to-top: tapping the tab you're already on scrolls to the top.
+  const reselect = useTabReselect();
 
   function Item({ tab, active, badge }: { tab: TabItem; active: boolean; badge?: number }) {
     const Icon = tab.icon;
@@ -81,7 +84,10 @@ export function MobileBottomNav({
               aria-label={tab.label}
               aria-current={active ? "page" : undefined}
               tabIndex={hidden ? -1 : 0}
-              onClick={() => haptic("tap")}
+              onClick={() => {
+                haptic("tap");
+                reselect(tab.href);
+              }}
               className="fx-tap flex h-full items-center justify-center"
             >
               <Item tab={tab} active={active} />

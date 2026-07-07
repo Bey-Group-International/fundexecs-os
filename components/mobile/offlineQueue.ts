@@ -29,11 +29,24 @@ type Executor = (payload: unknown) => Promise<boolean>;
 // Persistence key. Namespaced so it never collides with other app state.
 const STORAGE_KEY = "fx:offline-queue";
 
+// Hard cap on buffered actions. On a device offline for a long stretch we would
+// rather drop the oldest intents than let the queue (and its localStorage
+// mirror) grow without bound.
+const MAX_ITEMS = 100;
+
+// Actions older than this are considered stale and are dropped rather than
+// fired. Replaying a day-old "approve" the moment connectivity returns would be
+// surprising and potentially harmful, so expiry beats blind retry.
+const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 // Module-level state. A single shared queue is intentional: the whole app
 // funnels through one durable pipe, and the count is reflected everywhere.
 let queue: QueueItem[] = load();
 const executors = new Map<string, Executor>();
 const subscribers = new Set<(pending: number) => void>();
+
+// Optional per-type labelers producing a human-friendly line for the UI.
+const labelers = new Map<string, (payload: unknown) => string>();
 
 // Guards against overlapping flushes (e.g. an `online` event firing mid-drain).
 let flushing = false;
@@ -45,11 +58,23 @@ function load(): QueueItem[] {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as QueueItem[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    // Drop anything that already expired while the app was closed.
+    return prune(parsed as QueueItem[]);
   } catch {
     /* ignore */
     return [];
   }
+}
+
+/**
+ * Remove expired items (older than `MAX_AGE_MS`). Operates on a given list and
+ * returns the survivors, so it can prune both freshly parsed data and the live
+ * queue in place (via `queue = prune(queue)`).
+ */
+function prune(items: QueueItem[]): QueueItem[] {
+  const cutoff = Date.now() - MAX_AGE_MS;
+  return items.filter((i) => i.createdAt >= cutoff);
 }
 
 /** Mirror the in-memory queue to localStorage so it survives reloads and cold starts. */
@@ -98,6 +123,22 @@ export function registerExecutor(type: string, run: Executor): void {
  * callers can correlate later. Never throws on network conditions.
  */
 export function enqueue(type: string, payload: unknown): string {
+  // Drop stale actions before doing anything else.
+  queue = prune(queue);
+
+  // Dedupe: if an identical pending action (same type + same payload) is already
+  // buffered, keep it rather than double-submitting. Guards against a user
+  // tapping twice on a flaky connection.
+  const serialized = JSON.stringify(payload);
+  const existing = queue.find(
+    (i) => i.type === type && JSON.stringify(i.payload) === serialized,
+  );
+  if (existing) {
+    // Still worth attempting a drain in case connectivity just returned.
+    if (isOnline()) void flush();
+    return existing.id;
+  }
+
   const item: QueueItem = {
     id: makeId(),
     type,
@@ -105,6 +146,12 @@ export function enqueue(type: string, payload: unknown): string {
     createdAt: Date.now(),
   };
   queue.push(item);
+
+  // Enforce the cap by dropping the oldest items from the front.
+  if (queue.length > MAX_ITEMS) {
+    queue = queue.slice(queue.length - MAX_ITEMS);
+  }
+
   persist();
   notify();
   if (isOnline()) void flush();
@@ -120,6 +167,9 @@ export function enqueue(type: string, payload: unknown): string {
 export async function flush(): Promise<void> {
   if (flushing) return;
   if (!isOnline()) return;
+
+  // Never fire actions that have aged out.
+  queue = prune(queue);
 
   flushing = true;
   try {
@@ -162,6 +212,50 @@ export function getPending(): number {
   return queue.length;
 }
 
+/** Snapshot of the current pending items (a copy — callers must not mutate the queue). */
+export function getItems(): QueueItem[] {
+  return [...queue];
+}
+
+/** Remove a single queued item by id, then persist and notify. Safe if the id is unknown. */
+export function remove(id: string): void {
+  queue = queue.filter((i) => i.id !== id);
+  persist();
+  notify();
+}
+
+/**
+ * Register a human-friendly labeler for a given item type. The UI uses this to
+ * describe a pending action (e.g. "Approve Series B — Acme"). Optional; types
+ * without a labeler fall back to a humanized version of the type string.
+ */
+export function registerLabeler(
+  type: string,
+  fn: (payload: unknown) => string,
+): void {
+  labelers.set(type, fn);
+}
+
+/**
+ * Produce a display label for a queued item. Uses the registered labeler when
+ * present (guarded so a throwing labeler can never break rendering) and
+ * otherwise humanizes the type string, e.g. "approval-decision" → "Approval
+ * decision".
+ */
+export function labelFor(item: QueueItem): string {
+  const fn = labelers.get(item.type);
+  if (fn) {
+    try {
+      return fn(item.payload);
+    } catch {
+      /* ignore */
+    }
+  }
+  const words = item.type.replace(/[-_]+/g, " ").trim();
+  if (!words) return "Pending action";
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /**
  * Subscribe to pending-count changes. Returns an unsubscribe function. Handy for
  * badges and banners that show how much work is still buffered.
@@ -197,6 +291,37 @@ export function usePendingSync(): { pending: number; flush: () => void } {
 
   return {
     pending,
+    flush: () => {
+      void flush();
+    },
+  };
+}
+
+/**
+ * React hook exposing the live list of pending items plus `remove` and `flush`.
+ * Powers the "pending sync" review UI. Subscribes on mount and re-reads
+ * `getItems()` on every notification so the list stays in sync with the queue.
+ */
+export function useQueueItems(): {
+  items: QueueItem[];
+  remove: (id: string) => void;
+  flush: () => void;
+} {
+  const [items, setItems] = useState<QueueItem[]>(getItems());
+
+  useEffect(() => {
+    // Re-sync on mount in case the queue changed between render and effect.
+    setItems(getItems());
+    // The subscriber fires with the pending count; we ignore it and re-read the
+    // full item list instead.
+    return subscribe(() => {
+      setItems(getItems());
+    });
+  }, []);
+
+  return {
+    items,
+    remove,
     flush: () => {
       void flush();
     },

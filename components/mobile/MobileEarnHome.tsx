@@ -10,6 +10,8 @@ import { MobileWorkflowCard } from "./MobileWorkflowCard";
 import { PullToRefresh } from "./PullToRefresh";
 import { EarnIcon, SparkIcon, DealsIcon, ShieldIcon, TaskIcon, BellIcon } from "./icons";
 import { haptic } from "./haptics";
+import { MicButton } from "./MicButton";
+import { useKeyboardInset } from "./useKeyboardInset";
 
 // Earn's coin avatar for the conversation.
 function EarnAvatar({ size = 30 }: { size?: number }) {
@@ -117,6 +119,10 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
   const router = useRouter();
   const [value, setValue] = useState("");
   const first = data.name.split(" ")[0];
+  // Lift the fixed composer above the soft keyboard while typing on the go, so
+  // the operator can always see what they're sending to Earn. 0 when there's no
+  // keyboard / the API is unsupported — i.e. no change from before.
+  const keyboardInset = useKeyboardInset();
 
   function send(text?: string) {
     const q = (text ?? value).trim();
@@ -222,7 +228,8 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
           e.preventDefault();
           send();
         }}
-        className="fx-appnav fixed inset-x-0 z-40 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] flex items-center gap-2 border-t border-line/60 px-3 py-2.5 md:hidden print:hidden"
+        style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
+        className="fx-appnav fixed inset-x-0 z-40 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] flex items-center gap-2 border-t border-line/60 px-3 py-2.5 transition-transform duration-200 md:hidden print:hidden"
       >
         <div className="relative flex-1">
           <input
@@ -234,6 +241,12 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
             className="w-full rounded-full border border-line bg-surface-0/80 py-2.5 pl-4 pr-4 text-[15px] text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-400/25"
           />
         </div>
+        {/* Hands-free path: dictate an ask to Earn while on the move. Renders
+            nothing on browsers without the Web Speech API. Final transcripts are
+            appended to whatever is already typed. */}
+        <MicButton
+          onFinal={(text) => setValue((v) => (v ? `${v.trimEnd()} ${text}` : text))}
+        />
         <button
           type="submit"
           aria-label="Send to Earn"

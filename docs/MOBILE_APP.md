@@ -418,3 +418,98 @@ Accessibility section), built in parallel across disjoint files:
 Verified at a 390px viewport: the ARIA roles/live regions render, and with
 Playwright `reducedMotion: "reduce"` the nav/FAB transition durations resolve to
 `0s`. `tsc`/`eslint`/`build` clean; no console errors. Desktop untouched.
+
+## 16. Perf split + reviewable offline queue
+
+Two more fortifications, built in parallel across disjoint files, then
+integrated:
+
+- **Lighter initial bundle** (`AppShellMobile.tsx`): the two slide-up drawers —
+  the quick-action FAB sheet (`MobileQuickAction`) and the More menu
+  (`MobileMoreMenu`) — are now `next/dynamic({ ssr: false })` imports rendered
+  only once opened (`{quickOpen && …}` / `{moreOpen && …}`). Their code is split
+  out of the initial mobile JS and fetched on first tap. Props and behavior are
+  identical; `ssr: false` is safe because both return `null` while closed.
+- **Hardened offline queue** (`offlineQueue.ts`): `enqueue` now **dedupes** by
+  `type` + serialized payload (a double-tap on a flaky connection can't
+  double-submit), **caps** the buffer at `MAX_ITEMS = 100` (drops oldest), and
+  **expires** actions older than `MAX_AGE_MS = 24h` on load, enqueue, and flush —
+  replaying a day-old "approve" on reconnect would be surprising, so expiry beats
+  blind retry. New API: `getItems()`, `remove(id)`, `useQueueItems()`,
+  `registerLabeler(type, fn)`, `labelFor(item)`. All prior exports preserved.
+- **Reviewable pending sync** (`MobilePendingSheet.tsx`): a `MobileSheet` listing
+  every queued action with a human label, a "Retry all now" button, and per-item
+  dismiss. Empty state: "You're all synced." Labels come from `labelFor`; the
+  approvals executor registers a labeler in `MobileSyncRegistrar` so a queued
+  decision reads as "Approve: Series B — Acme" rather than a raw type string.
+- **Tappable banner** (`OfflineBanner.tsx`): when there is queued work the banner
+  becomes a button (with a "Review" affordance) that opens the pending-sync
+  sheet; with nothing queued it stays a plain `role="status"` notice. Offline vs.
+  syncing copy is unchanged.
+
+Verified at a 390px viewport with Playwright under `context.setOffline(true)`:
+seeding two unique decisions plus one duplicate yields a "2 changes" banner
+(dedupe held), tapping opens the sheet with the humanized "Approve: …" /
+"Reject: …" labels, and per-item dismiss drops a row. `tsc`/`eslint`/`build`
+clean. All new surfaces are `md:hidden`; desktop/web untouched.
+
+## 17. Hands-free voice + resilient screens
+
+Two more on-the-go fortifications, built in parallel across disjoint new files
+and then integrated:
+
+- **Voice dictation to Earn** (`useSpeechInput.ts`, `MicButton.tsx`): the
+  "Message Earn" composer on the home screen now has a mic. An exec walking
+  between meetings can tap it, speak an ask, and have the transcript land in the
+  composer without typing. `useSpeechInput` is a thin, SSR-safe wrapper over the
+  Web Speech API's `SpeechRecognition` (`interimResults`, single-shot,
+  `en-US`), exposing `{ supported, listening, start, stop, error }` and mapping
+  error codes to human copy ("Microphone permission denied", "Didn't catch
+  that"). `MicButton` renders **nothing** when the API is unavailable — SSR,
+  headless, Firefox, many in-app webviews — so unsupported browsers just see no
+  mic rather than a dead control; while listening it shows a pulsing
+  `status-danger` affordance and `aria-pressed`. Final transcripts are appended
+  to whatever is already typed (`MobileEarnHome`); interim results stream via an
+  optional callback.
+- **Mobile error boundary** (`MobileErrorBoundary.tsx`): a compact, recoverable
+  React error boundary. When a client component in a mobile subtree throws during
+  render, the operator sees an inline `role="alert"` card — "This screen hit a
+  snag" + a "Try again" button that bumps a key to remount the subtree — instead
+  of the heavy full-page route fallback in `app/(app)/error.tsx`. The app shell
+  (tab bar, nav) stays intact so a single misbehaving screen can be retried
+  without a full reload. The home screen wraps `MobileEarnHome` in it
+  (`<MobileErrorBoundary label="home">`). It's safe on desktop: rendering only
+  changes when an error is actually thrown, and the styling is neutral/tokenized.
+
+Verified at a 390px viewport with Playwright: with the Speech API stubbed out the
+mic is absent; forcing a child render throw shows the "This screen hit a snag"
+card and "Try again" recovers the subtree; with the Speech API stubbed in, the
+mic renders and a simulated final result lands the dictated text in the composer.
+`tsc`/`eslint`/`build` clean. Desktop/web untouched.
+
+## 18. Native gestures — keyboard-aware composer & re-tap-to-top
+
+Two more native-feel touches, built in parallel across disjoint new hook files
+and then integrated:
+
+- **Keyboard-aware composer** (`useKeyboardInset.ts`): a small SSR-safe hook that
+  reports how many pixels at the bottom of the layout are currently covered by
+  the on-screen keyboard, computed from the `visualViewport` (layout height −
+  visual height − offset, with sub-24px jitter treated as 0). `MobileEarnHome`
+  translates the fixed "Message Earn" composer up by that amount
+  (`translateY(-inset)`, `transition-transform`) so on-the-go typing is never
+  hidden behind the keys. Returns 0 when the API is unavailable or on the
+  server — no lift, i.e. no change from before.
+- **Re-tap active tab → scroll to top** (`useTabReselect.ts`): the native iOS/
+  Android affordance. `MobileBottomNav` calls the returned handler on every tab
+  tap; when the tapped destination is the route you're already on and the page
+  is actually scrolled, it smooth-scrolls to the top (instant under
+  `prefers-reduced-motion`) with a light haptic. Any other tab is a no-op so
+  normal `Link` navigation proceeds untouched.
+
+Verified at a 390px viewport with Playwright: with a stubbed `visualViewport`,
+opening a 300px "keyboard" sets the inset to 300 and lifts the composer by
+exactly `translateY(-300px)`, resetting to 0 on close; re-tapping the current
+route scrolls a scrolled page back to the top while re-tapping a different route
+leaves the scroll position untouched. `tsc`/`eslint`/`build` clean. Both hooks
+are mobile-only in use; desktop/web untouched.

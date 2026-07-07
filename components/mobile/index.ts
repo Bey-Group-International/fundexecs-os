@@ -23,11 +23,29 @@ export { PullToRefresh } from "./PullToRefresh";
 export { MobileDealActionBar } from "./MobileDealActionBar";
 export { MobileContactActionBar } from "./MobileContactActionBar";
 export { useHideOnScroll } from "./useHideOnScroll";
+export { useKeyboardInset } from "./useKeyboardInset";
+export { useTabReselect } from "./useTabReselect";
 export { useOnline } from "./useOnline";
 export { OfflineBanner } from "./OfflineBanner";
+export { MobilePendingSheet } from "./MobilePendingSheet";
+export { MobileErrorBoundary } from "./MobileErrorBoundary";
+export { MicButton } from "./MicButton";
+export { useSpeechInput } from "./useSpeechInput";
 export { MobileToastProvider, useMobileToast } from "./MobileToast";
 export { SessionGuard } from "./SessionGuard";
 export { MobileSyncRegistrar, APPROVAL_DECISION_TYPE, type ApprovalDecisionPayload } from "./MobileSyncRegistrar";
-export { enqueue, registerExecutor, flush, getPending, usePendingSync, type QueueItem } from "./offlineQueue";
+export {
+  enqueue,
+  registerExecutor,
+  registerLabeler,
+  labelFor,
+  flush,
+  getPending,
+  getItems,
+  remove,
+  usePendingSync,
+  useQueueItems,
+  type QueueItem,
+} from "./offlineQueue";
 export { haptic } from "./haptics";
 export * from "./nav-config";
