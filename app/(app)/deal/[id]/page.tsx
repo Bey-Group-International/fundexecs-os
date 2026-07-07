@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { getDealWarRoom } from "@/lib/run-war-room";
 import { DealWarRoom } from "@/components/run/DealWarRoom";
 import { ShareDealBar } from "@/components/run/ShareDealBar";
+import { MobileDealActionBar } from "@/components/mobile/MobileDealActionBar";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,10 @@ export default async function DealPage(props: { params: Promise<{ id: string }> 
     <>
       <ShareDealBar dealId={params.id} />
       <DealWarRoom data={data} />
+      {/* Thumb-reachable deal actions on mobile; the spacer keeps the last of
+          the war room clear of the fixed bar. Desktop is unaffected. */}
+      <div className="h-16 md:hidden" aria-hidden />
+      <MobileDealActionBar dealId={params.id} dealName={data.conviction.deal.name} />
     </>
   );
 }

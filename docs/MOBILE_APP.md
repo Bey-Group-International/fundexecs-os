@@ -250,3 +250,18 @@ mobile-first executive surface:
 Verified at a 390px touch viewport: the hero + digest render, a real CDP
 downward drag reveals the refresh spinner (`translateY`), no horizontal
 overflow, no console errors.
+
+---
+
+## 10. Deal detail — thumb-reachable actions
+
+The per-deal war room (`/deal/[id]`) is already single-column and responsive
+(`max-w-4xl`, `grid-cols-1 lg:grid-cols-2`), so it reads well on a phone. What
+it lacked was **one-handed** access to the deal's common moves. Added a
+`md:hidden` sticky action bar (`MobileDealActionBar`) pinned just above the
+bottom tab bar with **Ask Earn** (next-step prompt, deal-named), **Data Room**
+(`/deal/[id]/room`), and **Diligence** — so those actions are reachable by
+thumb without scrolling. The deal page renders a matching `md:hidden` spacer so
+no war-room content hides behind the bar; desktop keeps the war room's own
+controls untouched. Verified at a 390px viewport (renders, no horizontal
+overflow, no errors).
