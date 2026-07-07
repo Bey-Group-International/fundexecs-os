@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import {
   ACCEPTED_UPLOAD_ATTR,
+  decodeText,
   parseCSV,
   readFileHead,
   validateFileType,
@@ -39,7 +40,7 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
   async function handleFile(file: File) {
     const head = await readFileHead(file);
     const check = validateFileType(
-      { name: file.name, mime: file.type, head },
+      { name: file.name, mime: file.type, head, size: file.size },
       { accept: ["csv", "xlsx"] },
     );
     if (!check.ok) {
@@ -50,12 +51,12 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
 
     let parsed: string[][];
     try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
       if (check.kind === "xlsx") {
-        const bytes = new Uint8Array(await file.arrayBuffer());
         parsed = (await xlsxToRows(bytes)).filter((r) => r.some((c) => c.trim() !== ""));
       } else {
-        const text = await file.text();
-        parsed = parseCSV(text);
+        // BOM-aware decode so UTF-16 Excel CSV exports parse correctly.
+        parsed = parseCSV(decodeText(bytes));
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Couldn't read that file.");

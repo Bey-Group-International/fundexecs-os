@@ -3,7 +3,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { importContacts, parseNetworkCsv } from "@/lib/network-import";
 import type { ImportMode } from "@/lib/network-import";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-import { validateFileType } from "@/lib/file-validation";
+import { validateFileType, decodeText } from "@/lib/file-validation";
 import { xlsxToRows, rowsToCsv } from "@/lib/xlsx";
 
 export const dynamic = "force-dynamic";
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
       // so a mislabeled or unsupported file is rejected with a clear message.
       const bytes = new Uint8Array(await file.arrayBuffer());
       const check = validateFileType(
-        { name: file.name, mime: file.type, head: bytes.subarray(0, 512) },
-        { accept: ["csv", "xlsx"] },
+        { name: file.name, mime: file.type, head: bytes.subarray(0, 512), size: file.size },
+        { accept: ["csv", "xlsx"], maxBytes: MAX_IMPORT_BYTES },
       );
       if (!check.ok) {
         return NextResponse.json({ error: check.error }, { status: 400 });
@@ -63,7 +63,8 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: msg }, { status: 400 });
         }
       } else {
-        csvText = new TextDecoder("utf-8").decode(bytes);
+        // BOM-aware: Excel's "CSV UTF-8"/"Unicode Text" exports are UTF-16.
+        csvText = decodeText(bytes);
       }
       if (!csvText.trim()) return NextResponse.json({ error: "Empty file" }, { status: 400 });
       const contacts = parseNetworkCsv(csvText, modeHint);

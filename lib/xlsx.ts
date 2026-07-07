@@ -12,16 +12,56 @@
 // and most exporters — STORE (method 0) and DEFLATE (method 8) entries, shared
 // strings, inline strings, and numeric cells. It is deliberately tolerant, not
 // a full OOXML implementation.
+//
+// Hardening: a hostile or corrupt workbook must not be able to exhaust memory.
+// We only ever inflate the two parts we need, cap the total inflated bytes
+// (decompression-bomb guard), bound the row/column counts, bounds-check every
+// ZIP offset against the buffer, and refuse ZIP64 rather than misreading it.
 
-// ─── Inflate (Web Streams) ─────────────────────────────────────────────────────
+// ─── Resource limits ───────────────────────────────────────────────────────────
 
-async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+/** Hard ceiling on bytes we will inflate across all parts of one workbook. */
+export const MAX_INFLATED_BYTES = 64 * 1024 * 1024; // 64 MB
+/** Excel's own maximums — anything beyond this is malformed, not legitimate. */
+const MAX_ROWS = 1_048_576;
+const MAX_COLS = 16_384; // column XFD
+/** ZIP32 uses 0xFFFFFFFF as the "see ZIP64 record" sentinel, which we don't support. */
+const ZIP64_SENTINEL = 0xffffffff;
+
+// ─── Inflate (Web Streams, byte-budgeted) ──────────────────────────────────────
+
+// Inflate raw DEFLATE, aborting as soon as the running total would exceed the
+// remaining budget so a small compressed part can't expand without bound.
+async function inflateRaw(bytes: Uint8Array, budget: { remaining: number }): Promise<Uint8Array> {
   if (typeof DecompressionStream === "undefined") {
     throw new Error("This runtime cannot read compressed Excel workbooks. Please export as CSV.");
   }
   const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > budget.remaining) {
+        await reader.cancel().catch(() => {});
+        throw new Error("This Excel workbook expands too large to process safely. Please export a smaller CSV.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  budget.remaining -= total;
+  const out = new Uint8Array(total);
+  let p = 0;
+  for (const c of chunks) {
+    out.set(c, p);
+    p += c.length;
+  }
+  return out;
 }
 
 // ─── ZIP central-directory reader ──────────────────────────────────────────────
@@ -63,6 +103,7 @@ function readZipEntries(view: DataView): ZipEntry[] {
     const commentLen = view.getUint16(ptr + 32, true);
     const offset = view.getUint32(ptr + 42, true);
 
+    if (ptr + 46 + nameLen > len) break; // truncated central directory
     const nameBytes = new Uint8Array(view.buffer, view.byteOffset + ptr + 46, nameLen);
     const name = new TextDecoder("utf-8").decode(nameBytes);
     entries.push({ name, method, offset, compressedSize });
@@ -72,18 +113,34 @@ function readZipEntries(view: DataView): ZipEntry[] {
   return entries;
 }
 
-async function readEntry(view: DataView, entry: ZipEntry): Promise<Uint8Array> {
+async function readEntry(view: DataView, entry: ZipEntry, budget: { remaining: number }): Promise<Uint8Array> {
+  const len = view.byteLength;
+
+  if (entry.compressedSize === ZIP64_SENTINEL || entry.offset === ZIP64_SENTINEL) {
+    throw new Error("This Excel workbook uses ZIP64, which isn't supported. Please export as CSV.");
+  }
   // Local file header: name/extra lengths can differ from the central header,
-  // so read them here to find the true data offset.
+  // so read them here to find the true data offset. Bounds-check everything
+  // against the buffer so a corrupt header can't read out of range.
   const lh = entry.offset;
+  if (lh < 0 || lh + 30 > len) throw new Error("Corrupt Excel workbook (bad local header offset).");
   if (view.getUint32(lh, true) !== 0x04034b50) throw new Error("Corrupt Excel workbook (bad local header).");
   const nameLen = view.getUint16(lh + 26, true);
   const extraLen = view.getUint16(lh + 28, true);
   const dataStart = lh + 30 + nameLen + extraLen;
+  if (dataStart + entry.compressedSize > len) throw new Error("Corrupt Excel workbook (entry runs past end of file).");
+
   const compressed = new Uint8Array(view.buffer, view.byteOffset + dataStart, entry.compressedSize);
 
-  if (entry.method === 0) return compressed.slice(); // stored
-  if (entry.method === 8) return inflateRaw(compressed);
+  if (entry.method === 0) {
+    // Stored: no inflation, but it still counts against the byte budget.
+    if (entry.compressedSize > budget.remaining) {
+      throw new Error("This Excel workbook is too large to process safely. Please export a smaller CSV.");
+    }
+    budget.remaining -= entry.compressedSize;
+    return compressed.slice();
+  }
+  if (entry.method === 8) return inflateRaw(compressed, budget);
   throw new Error(`Unsupported compression in Excel workbook (method ${entry.method}).`);
 }
 
@@ -117,12 +174,16 @@ function parseSharedStrings(xml: string): string[] {
   return out;
 }
 
-// Convert an A1-style column reference to a 0-based column index.
+// Convert an A1-style column reference to a 0-based column index. Returns -1 for
+// references beyond Excel's real maximum (which are malformed, not legitimate)
+// so the caller can skip them without allocating a giant sparse row.
 function colToIndex(ref: string): number {
   const letters = ref.replace(/[0-9]/g, "");
+  if (letters.length === 0 || letters.length > 3) return -1;
   let n = 0;
   for (let i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
-  return n - 1;
+  const idx = n - 1;
+  return idx >= 0 && idx < MAX_COLS ? idx : -1;
 }
 
 function parseSheet(xml: string, shared: string[]): string[][] {
@@ -131,6 +192,9 @@ function parseSheet(xml: string, shared: string[]): string[][] {
   let rm: RegExpExecArray | null;
 
   while ((rm = rowRe.exec(xml)) !== null) {
+    if (rows.length >= MAX_ROWS) {
+      throw new Error("This worksheet has more rows than can be processed. Please split it into smaller files.");
+    }
     const body = rm[1] ?? "";
     const cells: string[] = [];
     const cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g;
@@ -150,15 +214,15 @@ function parseSheet(xml: string, shared: string[]): string[][] {
         value = Number.isFinite(idx) ? shared[idx] ?? "" : "";
       } else if (type === "inlineStr") {
         value = textOf(inner);
-      } else if (type === "str") {
-        const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
-        value = v ? decodeXmlEntities(v[1]) : "";
       } else {
         const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
         value = v ? decodeXmlEntities(v[1]) : "";
       }
 
+      // Explicit column ref places the cell; a malformed/oversized ref is
+      // skipped rather than allowed to allocate an enormous gap.
       const col = rMatch ? colToIndex(rMatch[1]) : cells.length;
+      if (col < 0 || col >= MAX_COLS) continue;
       while (cells.length < col) cells.push("");
       cells[col] = value;
     }
@@ -175,18 +239,25 @@ function parseSheet(xml: string, shared: string[]): string[][] {
 /**
  * Parse the bytes of an .xlsx workbook into a matrix of string cells from the
  * first worksheet. Numeric cells are returned as their raw string form.
- * Throws a human-readable Error if the file is not a readable workbook.
+ * Throws a human-readable Error if the file is not a readable workbook or would
+ * consume unsafe amounts of memory.
  */
-export async function xlsxToRows(bytes: Uint8Array): Promise<string[][]> {
+export async function xlsxToRows(
+  bytes: Uint8Array,
+  opts: { maxInflatedBytes?: number } = {},
+): Promise<string[][]> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const entries = readZipEntries(view);
   const byName = new Map(entries.map((e) => [e.name, e]));
+
+  // Shared byte budget across every part we inflate (decompression-bomb guard).
+  const budget = { remaining: opts.maxInflatedBytes ?? MAX_INFLATED_BYTES };
 
   const dec = new TextDecoder("utf-8");
   const readXml = async (name: string): Promise<string | null> => {
     const e = byName.get(name);
     if (!e) return null;
-    return dec.decode(await readEntry(view, e));
+    return dec.decode(await readEntry(view, e, budget));
   };
 
   // Shared strings are optional (inline-string workbooks omit them).

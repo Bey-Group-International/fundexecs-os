@@ -2,10 +2,12 @@ import {
   detectSignature,
   detectFileType,
   validateFileType,
+  decodeText,
   parseCSV,
   normalizeInstitutionalFormat,
   returnUserFacingErrors,
   UNSUPPORTED_FILE_MESSAGE,
+  MAX_UPLOAD_BYTES,
   type SchemaField,
 } from "./file-validation";
 
@@ -152,6 +154,80 @@ describe("normalizeInstitutionalFormat", () => {
       schema,
     );
     expect(out.warnings.some((w) => /Zodiac/.test(w))).toBe(true);
+  });
+});
+
+// UTF-16LE-with-BOM bytes for the given string (how Excel exports "CSV UTF-8").
+function utf16le(s: string): Uint8Array {
+  const out = new Uint8Array(2 + s.length * 2);
+  out[0] = 0xff;
+  out[1] = 0xfe;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    out[2 + i * 2] = c & 0xff;
+    out[2 + i * 2 + 1] = (c >> 8) & 0xff;
+  }
+  return out;
+}
+function utf16be(s: string): Uint8Array {
+  const le = utf16le(s);
+  le[0] = 0xfe;
+  le[1] = 0xff;
+  for (let i = 2; i < le.length; i += 2) {
+    const a = le[i];
+    le[i] = le[i + 1];
+    le[i + 1] = a;
+  }
+  return le;
+}
+const UTF8_BOM = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("a,b\n1,2")]);
+
+describe("BOM / encoding handling", () => {
+  it("treats UTF-16 and UTF-8 BOM heads as text, not binary", () => {
+    expect(detectSignature(utf16le("First,Last"))).toBe("text");
+    expect(detectSignature(utf16be("First,Last"))).toBe("text");
+    expect(detectSignature(UTF8_BOM)).toBe("text");
+  });
+
+  it("accepts a UTF-16 .csv that would otherwise sniff as binary", () => {
+    const bytes = utf16le("a,b\n1,2");
+    const r = validateFileType({ name: "excel.csv", mime: "application/vnd.ms-excel", head: bytes });
+    expect(r.ok).toBe(true);
+    expect(r.kind).toBe("csv");
+  });
+
+  it("decodeText decodes and strips UTF-16LE/BE and UTF-8 BOMs", () => {
+    expect(decodeText(utf16le("a,b\n1,2"))).toBe("a,b\n1,2");
+    expect(decodeText(utf16be("a,b\n1,2"))).toBe("a,b\n1,2");
+    expect(decodeText(UTF8_BOM)).toBe("a,b\n1,2");
+    expect(decodeText(new TextEncoder().encode("plain,utf8"))).toBe("plain,utf8");
+  });
+
+  it("round-trips a UTF-16 CSV through decodeText + parseCSV", () => {
+    const rows = parseCSV(decodeText(utf16le("Name,Email\nAda,ada@x.com")));
+    expect(rows).toEqual([
+      ["Name", "Email"],
+      ["Ada", "ada@x.com"],
+    ]);
+  });
+});
+
+describe("size guard", () => {
+  it("rejects a file over the default limit before parsing", () => {
+    const r = validateFileType({ name: "big.csv", mime: "text/csv", head: TEXT_HEAD, size: MAX_UPLOAD_BYTES + 1 });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/over the .* limit/i);
+  });
+
+  it("honours a custom maxBytes", () => {
+    const r = validateFileType({ name: "x.csv", mime: "text/csv", head: TEXT_HEAD, size: 2000 }, { maxBytes: 1000 });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/limit/i);
+  });
+
+  it("accepts a file within the limit", () => {
+    const r = validateFileType({ name: "x.csv", mime: "text/csv", head: TEXT_HEAD, size: 1234 });
+    expect(r.ok).toBe(true);
   });
 });
 

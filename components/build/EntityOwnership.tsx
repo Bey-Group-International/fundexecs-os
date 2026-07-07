@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "r
 import { inputClass } from "./DraftWithEarn";
 import { rollupOwnership } from "@/lib/entity-ownership";
 import { holdingsToCsv, parseHoldingsCsv, csvFilenameStem } from "@/lib/holdings-csv";
-import { ACCEPTED_UPLOAD_ATTR, readFileHead, validateFileType } from "@/lib/file-validation";
+import { ACCEPTED_UPLOAD_ATTR, decodeText, readFileHead, validateFileType } from "@/lib/file-validation";
 import { xlsxToRows, rowsToCsv } from "@/lib/xlsx";
 import type { EquityHolding } from "@/lib/supabase/database.types";
 import {
@@ -141,7 +141,7 @@ export function EntityOwnership({
     setNote(null);
 
     const head = await readFileHead(file);
-    const check = validateFileType({ name: file.name, mime: file.type, head }, { accept: ["csv", "xlsx"] });
+    const check = validateFileType({ name: file.name, mime: file.type, head, size: file.size }, { accept: ["csv", "xlsx"] });
     if (!check.ok) {
       setNote(check.error);
       return;
@@ -149,11 +149,12 @@ export function EntityOwnership({
 
     let csvText: string;
     try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
       if (check.kind === "xlsx") {
-        const bytes = new Uint8Array(await file.arrayBuffer());
         csvText = rowsToCsv(await xlsxToRows(bytes));
       } else {
-        csvText = await file.text();
+        // BOM-aware decode so UTF-16 Excel CSV exports parse correctly.
+        csvText = decodeText(bytes);
       }
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Couldn't read that file.");
