@@ -37,11 +37,11 @@ import {
   roomCenterWorld,
   roomFloors,
   wallSegments,
-  workstations3D,
   worldOf,
   yawOf,
   type Box3D,
 } from "./officeGeometry3D";
+import { officeFurniture3D, roomFloorImage, type FurnitureBox } from "./officeFurniture3D";
 import { resolveClip, type AvatarClip } from "./avatarAnimation3D";
 
 /** Per-actor scene handles + interpolation state. */
@@ -98,7 +98,6 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
   /** Static-world instanced pools + the pickable floor plane. */
   private wallMesh: THREE.InstancedMesh | null = null;
-  private deskMesh: THREE.InstancedMesh | null = null;
   private floorPlane: THREE.Mesh | null = null;
   private readonly disposables: Array<{ dispose(): void }> = [];
 
@@ -179,7 +178,6 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
     this.wallMesh = null;
-    this.deskMesh = null;
     this.floorPlane = null;
 
     if (this.renderer) {
@@ -344,14 +342,26 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.floorPlane = floor;
     this.disposables.push(floorGeo, floorMat);
 
-    // Per-room accent tint quads, just above the floor.
+    // Per-room floor art: map each room's (empty) background PNG onto its floor
+    // tile — the same "empty room bg + furniture layer" the 2D office uses.
+    // Falls back to a faint accent wash if the image is missing.
+    const loader = new THREE.TextureLoader();
     for (const { roomKey, box } of roomFloors()) {
-      const geo = new THREE.PlaneGeometry(box.width * 0.82, box.depth * 0.72);
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(roomAccentHex(roomKey)),
-        transparent: true,
-        opacity: 0.06,
-      });
+      const img = roomFloorImage(roomKey);
+      const geo = new THREE.PlaneGeometry(box.width, box.depth);
+      let mat: THREE.MeshBasicMaterial;
+      if (img) {
+        const tex = loader.load(img);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.92 });
+        this.disposables.push(tex);
+      } else {
+        mat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(roomAccentHex(roomKey)),
+          transparent: true,
+          opacity: 0.08,
+        });
+      }
       const tile = new THREE.Mesh(geo, mat);
       tile.rotation.x = -Math.PI / 2;
       tile.position.set(box.cx, 0.01, box.cz);
@@ -359,13 +369,42 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       this.disposables.push(geo, mat);
     }
 
-    // Walls + desks as instanced boxes (one draw call each).
+    // Walls (one instanced draw call) + the full per-room furniture set.
     this.wallMesh = this.buildInstancedBoxes(wallSegments(), 0x2b3242, 0.85);
-    this.deskMesh = this.buildInstancedBoxes(
-      workstations3D().map((w) => w.desk),
-      0x39414f,
-      0.7,
-    );
+    this.buildFurniture(officeFurniture3D());
+  }
+
+  /**
+   * Build the office furniture: group the colored boxes by color and draw each
+   * group as one `InstancedMesh`, so the whole floor's furniture is a handful of
+   * draw calls regardless of piece count.
+   */
+  private buildFurniture(boxes: FurnitureBox[]): void {
+    if (!this.scene) return;
+    const byColor = new Map<string, FurnitureBox[]>();
+    for (const b of boxes) {
+      const group = byColor.get(b.color) ?? [];
+      group.push(b);
+      byColor.set(b.color, group);
+    }
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+    for (const [color, group] of byColor) {
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.7, metalness: 0.05 });
+      const mesh = new THREE.InstancedMesh(geo, mat, group.length);
+      group.forEach((b, i) => {
+        pos.set(b.cx, b.height / 2, b.cz);
+        scale.set(b.width, b.height || 0.01, b.depth);
+        m.compose(pos, q, scale);
+        mesh.setMatrixAt(i, m);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      this.scene.add(mesh);
+      this.disposables.push(geo, mat);
+    }
   }
 
   private buildInstancedBoxes(boxes: Box3D[], color: number, roughness: number): THREE.InstancedMesh | null {
