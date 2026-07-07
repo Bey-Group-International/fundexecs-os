@@ -344,6 +344,7 @@ export function VirtualOfficeGame({
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -842,28 +843,76 @@ export function VirtualOfficeGame({
         </div>
       )}
 
-      {/* ── Navigation bar ── */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-[#c9a84c18] bg-[#0a0806] overflow-x-auto"
-        style={{ scrollbarWidth: "none" }}>
+      {/* ── Navigation bar ── (wraps rather than scroll-clipping, so the room
+          dropdown can overlay the floor below it) */}
+      <div className="relative z-10 flex flex-wrap items-center gap-1 px-3 py-2 border-b border-[#c9a84c18] bg-[#0a0806]">
         <span className="text-[9px] text-[#c9a84c55] uppercase tracking-widest mr-2 shrink-0"
           style={{ fontFamily: "Georgia, serif" }}>Rooms</span>
-        {ROOM_NAV.map((r) => (
-          <button
-            key={r.key}
-            onClick={() => teleportTo(r.key)}
-            className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
-            style={{
-              fontFamily: "Georgia, serif",
-              letterSpacing: "0.06em",
-              color: currentRoom === r.key ? "#c9a84c" : "#94a3b8",
-              background: currentRoom === r.key ? "rgba(201,168,76,0.12)" : "transparent",
-              border: `1px solid ${currentRoom === r.key ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.05)"}`,
-            }}
-          >
-            <span className="opacity-60 text-[8px]">{r.icon}</span>
-            {r.label}
-          </button>
-        ))}
+        {/* Room selector — a compact dropdown so every room is one click away,
+            rather than a wide tab strip that overflows and hides rooms. */}
+        {(() => {
+          const active = ROOM_NAV.find((r) => r.key === currentRoom);
+          return (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setRoomMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={roomMenuOpen}
+                title="Jump to a room"
+                className="flex items-center gap-1.5 rounded px-2.5 py-1 text-[10px] transition-all duration-150"
+                style={{
+                  fontFamily: "Georgia, serif",
+                  letterSpacing: "0.06em",
+                  color: "#c9a84c",
+                  background: "rgba(201,168,76,0.12)",
+                  border: "1px solid rgba(201,168,76,0.35)",
+                }}
+              >
+                <span className="opacity-60 text-[8px]">{active?.icon ?? "◇"}</span>
+                {active?.label ?? "Select room"}
+                <span className="opacity-70 text-[8px]">{roomMenuOpen ? "▴" : "▾"}</span>
+              </button>
+              {roomMenuOpen && (
+                <>
+                  {/* click-away backdrop */}
+                  <div className="fixed inset-0 z-30" onClick={() => setRoomMenuOpen(false)} />
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full z-40 mt-1 max-h-[280px] w-[190px] overflow-y-auto rounded-lg border py-1 shadow-2xl backdrop-blur-sm"
+                    style={{ background: "rgba(10,8,6,0.97)", borderColor: "rgba(201,168,76,0.3)" }}
+                  >
+                    {ROOM_NAV.map((r) => {
+                      const isActive = currentRoom === r.key;
+                      return (
+                        <button
+                          key={r.key}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            teleportTo(r.key);
+                            setRoomMenuOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[#c9a84c1f]"
+                          style={{
+                            fontFamily: "Georgia, serif",
+                            letterSpacing: "0.04em",
+                            color: isActive ? "#c9a84c" : "#cbd2dc",
+                            background: isActive ? "rgba(201,168,76,0.1)" : "transparent",
+                          }}
+                        >
+                          <span className="w-3 text-center text-[9px] opacity-70">{r.icon}</span>
+                          {r.label}
+                          {isActive && <span className="ml-auto text-[8px] text-[#c9a84c]">●</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
         {/* Command palette — keyboard-first launcher (⌘K) for floor actions */}
         <button
           type="button"
