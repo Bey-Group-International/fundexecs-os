@@ -10,6 +10,12 @@ export type FloorLinkOptions = {
   room?: string | null;
   /** When true, the office auto-opens the meeting video dock on arrival. */
   meet?: boolean;
+  /**
+   * Marketplace listing id this link convenes a deal room around. When present,
+   * the Deal Room shows that listing's context on arrival, so a counterparty who
+   * opens the link lands in the same deal room with the same context.
+   */
+  deal?: string | null;
 };
 
 /** The path + query for an office invite (no origin). */
@@ -17,6 +23,7 @@ export function officeInvitePath(opts: FloorLinkOptions = {}): string {
   const params = new URLSearchParams();
   if (opts.room) params.set("room", opts.room);
   if (opts.meet) params.set("meet", "1");
+  if (opts.deal) params.set("deal", opts.deal);
   const qs = params.toString();
   return `/command-center${qs ? `?${qs}` : ""}`;
 }

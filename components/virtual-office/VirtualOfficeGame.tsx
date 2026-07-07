@@ -16,6 +16,7 @@ import { MarketplacePanel, type PublicListing } from "./program/MarketplacePanel
 import { MarketplaceListingDetail } from "./program/MarketplaceListingDetail";
 import { MarketplaceCreateListing } from "./program/MarketplaceCreateListing";
 import { AgentDelegateComposer } from "./program/AgentDelegateComposer";
+import { DealRoomBanner } from "./program/DealRoomBanner";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./program/officeProgramStore";
@@ -288,6 +289,12 @@ type VirtualOfficeGameProps = {
   active?: boolean;
   /** If set, teleports the player to this virtual room key on mount / change. */
   teleportTarget?: string | null;
+  /**
+   * Marketplace listing id to convene a deal room around (from a `?deal=` invite
+   * link). Shows the deal-room context banner once the operator is in the Deal
+   * Room, so a counterparty who opens the link sees the same convening.
+   */
+  dealRoomListingId?: string | null;
   /** Called whenever room occupancy counts update. */
   onOccupancyChange?: (counts: Record<string, number>) => void;
   /** Called when the user clicks an NPC sprite. */
@@ -307,6 +314,7 @@ export function VirtualOfficeGame({
   officeAvatar,
   active = true,
   teleportTarget,
+  dealRoomListingId = null,
   onOccupancyChange,
   onNpcClick,
   zoneUrlOverrides = {},
@@ -351,6 +359,13 @@ export function VirtualOfficeGame({
   const [activeListingId, setActiveListingId] = useState<string | null>(null);
   // Whether the in-world "list something" create overlay is open.
   const [showCreateListing, setShowCreateListing] = useState(false);
+  // The marketplace listing convened as a deal room (null = none). Seeded from
+  // the dealRoomListingId prop (arriving via a ?deal= link) and set locally when
+  // the operator opens a deal room from a listing.
+  const [dealListingId, setDealListingId] = useState<string | null>(dealRoomListingId);
+  useEffect(() => {
+    if (dealRoomListingId) setDealListingId(dealRoomListingId);
+  }, [dealRoomListingId]);
   const [isTouch, setIsTouch] = useState(false);
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
@@ -1226,9 +1241,27 @@ export function VirtualOfficeGame({
           </div>
         )}
 
+        {/* Deal-room context banner — shown at the top of the Deal Room while a
+            listing is convened there (opened from a listing, or via a ?deal= link). */}
+        {currentRoom === "trading" && dealListingId && (
+          <div className="pointer-events-none absolute left-1/2 top-2 z-20 w-[min(92%,460px)] -translate-x-1/2">
+            <DealRoomBanner listingId={dealListingId} onClose={() => setDealListingId(null)} />
+          </div>
+        )}
+
         {/* In-world listing detail — opened from a stall press-X or a panel row. */}
         {activeListingId && (
-          <MarketplaceListingDetail listingId={activeListingId} onClose={() => setActiveListingId(null)} />
+          <MarketplaceListingDetail
+            listingId={activeListingId}
+            onClose={() => setActiveListingId(null)}
+            onOpenDealRoom={(id) => {
+              setDealListingId(id);
+              setActiveListingId(null);
+              teleportTo("trading");
+              // Convene as a live session: open the video dock once we've arrived.
+              setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 700);
+            }}
+          />
         )}
 
         {/* In-world "list something" — publish to the exchange floor in place. */}
