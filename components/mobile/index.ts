@@ -26,5 +26,8 @@ export { useHideOnScroll } from "./useHideOnScroll";
 export { useOnline } from "./useOnline";
 export { OfflineBanner } from "./OfflineBanner";
 export { MobileToastProvider, useMobileToast } from "./MobileToast";
+export { SessionGuard } from "./SessionGuard";
+export { MobileSyncRegistrar, APPROVAL_DECISION_TYPE, type ApprovalDecisionPayload } from "./MobileSyncRegistrar";
+export { enqueue, registerExecutor, flush, getPending, usePendingSync, type QueueItem } from "./offlineQueue";
 export { haptic } from "./haptics";
 export * from "./nav-config";

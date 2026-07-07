@@ -359,3 +359,31 @@ Verified at a 390px viewport with Playwright offline emulation: the banner shows
 on `offline` and hides on `online`; approving while offline is blocked (the card
 does not advance) and raises the error toast; no horizontal overflow, no console
 errors. Desktop/tablet mount none of it.
+
+---
+
+## 14. Deeper resilience — retry-on-reconnect queue & session guard
+
+Two further fortifications for on-the-go reliability, built in parallel:
+
+- **Durable offline queue** (`offlineQueue.ts`, `MobileSyncRegistrar`): a small
+  action queue persisted to `localStorage` so nothing is lost across dead zones
+  or reloads. The approvals flow now routes **every** decision through it — the
+  queue runs it immediately when online, holds it and **auto-flushes on
+  `reconnect`** when offline, and **retries on failure**. The card advances
+  instantly either way (no more hard block), and the connectivity banner
+  doubles as a **sync indicator**: "… N changes will sync when you reconnect"
+  offline, "Syncing N changes…" online. Executors are registered app-wide
+  (`MobileSyncRegistrar` in the app shell) so queued work flushes on reconnect
+  regardless of the current screen — even after a reload.
+- **Session guard** (`SessionGuard` + `GET /api/session/check`): mobile users
+  resume the app from the background constantly. The guard re-checks the session
+  (cookie-based) on mount, on `visibilitychange`→visible, and on `online`
+  (debounced, skipped while offline); if the session has expired it shows a
+  blocking **"Session expired · Sign back in"** overlay instead of letting
+  actions fail silently. `md:hidden`; the desktop app is unaffected.
+
+Verified at a 390px viewport with Playwright offline emulation: deciding while
+offline advances the stack and shows the "will sync" banner, which flips to
+"Syncing…" on reconnect; the session-check route returns 401 unauthenticated and
+the guard overlay renders. `tsc`/`eslint`/`build` clean; no console errors.
