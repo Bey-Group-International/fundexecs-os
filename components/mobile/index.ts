@@ -16,4 +16,7 @@ export { MobileContactCard, type MobileContact } from "./MobileContactCard";
 export { MobileWorkflowCard, type MobileWorkflow } from "./MobileWorkflowCard";
 export { MobileApprovalCard, type MobileApproval } from "./MobileApprovalCard";
 export { MobileStatTile, MobileNextAction, type CommandStat } from "./MobileCommandCard";
+export { SwipeableCard, type SwipeAction } from "./SwipeableCard";
+export { useHideOnScroll } from "./useHideOnScroll";
+export { haptic } from "./haptics";
 export * from "./nav-config";

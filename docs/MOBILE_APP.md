@@ -191,3 +191,35 @@ and Execute hubs phone-usable at once, rather than converting each page.
 Per-record hero pages (deal detail, contact detail) could adopt the dedicated
 `MobileDealCard` / `MobileContactCard` layouts for an even richer one-record
 view; the current pass makes every list surface usable one-handed.
+
+---
+
+## 8. App-native gestures & feedback
+
+A layer of one-handed, native-feel interactions — all mobile-only, all
+progressive enhancements over the accessible base:
+
+- **Auto-hiding chrome** (`useHideOnScroll`): the bottom nav and quick-action
+  FAB slide out of the way while the user scrolls down to read and return the
+  instant they scroll up (and are always shown near the top). Maximizes content
+  on a small screen; a sheet being open pins the chrome so it never vanishes
+  mid-interaction. Listens to the `<main>` scroll container (which is
+  `overflow-y-auto`, so window scroll never fires) via a rAF-throttled,
+  passive listener. Hidden chrome is also removed from the tab order.
+- **Swipeable deal cards** (`SwipeableCard`): swiping a `MobileDealCard` left
+  reveals one-tap **Task · Docs · Ask Earn** actions. Horizontal drags are
+  captured by the component while vertical scrolling stays native via
+  `touch-action: pan-y` — the gesture never fights the page scroll, and no
+  `preventDefault` is needed. Tap still opens the deal when closed; a tap
+  dismisses the actions when open. The underlying `<Link>` remains the full
+  keyboard / screen-reader target, so the gesture is purely additive.
+- **Haptic feedback** (`haptic`): a light tick on FAB open, tab taps, quick
+  actions, and swipe commit, via the Vibration API where supported (Android /
+  Chromium; a silent no-op on iOS). Suppressed under `prefers-reduced-motion`.
+- **Instant skeleton** (`app/(app)/home/loading.tsx`): the command center
+  paints a layout-matched skeleton immediately while its server queries resolve,
+  instead of blocking on data — app-native perceived speed with no layout shift.
+
+All four are verified at a 390px touch viewport (auto-hide toggles on
+scroll direction; a real CDP swipe reveals the action strip; no horizontal
+overflow; no console errors). Desktop / tablet never mount any of it.
