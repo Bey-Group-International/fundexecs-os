@@ -147,7 +147,7 @@ export default async function MobileHomePage() {
     agentLabel: AGENT_BY_KEY[t.assigned_agent]?.name ?? "Earn",
     risk: riskForAgent(t.hub),
     requestedAt: t.created_at,
-    href: "/inbox",
+    href: "/approvals",
   }));
 
   const workflows = ((workflowRows ?? []) as {
@@ -200,8 +200,8 @@ export default async function MobileHomePage() {
     nextAction = {
       eyebrow: "Needs your sign-off",
       title: `${counts.approvals} approval${counts.approvals === 1 ? "" : "s"} waiting on you`,
-      body: "Earn has work ready — review the context and decide.",
-      href: "/inbox",
+      body: "Earn has work ready — swipe to approve, reject, or ask for a revision.",
+      href: "/approvals",
       cta: "Review approvals",
     };
   } else if (counts.workflows > 0) {

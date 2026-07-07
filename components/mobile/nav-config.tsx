@@ -88,6 +88,7 @@ export const MORE_GROUPS: MoreGroup[] = [
   {
     heading: "Workspace",
     items: [
+      { key: "approvals", label: "Approvals", href: "/approvals", icon: ShieldIcon, desc: "Swipe to decide sign-offs" },
       { key: "command-center", label: "Command Center", href: "/command-center", icon: HomeIcon, desc: "The AI executive floor" },
       { key: "workflows", label: "Workflows", href: "/automations", icon: TaskIcon, desc: "Active & automated work" },
       { key: "activity", label: "Activity", href: "/activity", icon: SparkIcon, desc: "What agents have been doing" },

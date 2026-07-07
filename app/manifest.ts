@@ -45,7 +45,7 @@ export default function manifest(): MetadataRoute.Manifest {
         name: "Approvals",
         short_name: "Approvals",
         description: "Review pending approvals",
-        url: "/inbox?source=pwa-shortcut",
+        url: "/approvals?source=pwa-shortcut",
       },
     ],
   };

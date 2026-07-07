@@ -302,3 +302,32 @@ spacer; desktop keeps the war room's own controls. This satisfies the Network
 spec's "email / call / link actions where appropriate." Verified at a 390px
 viewport (the Email + Call variant renders `mailto:` / `tel:` actions, no
 horizontal overflow).
+
+---
+
+## 12. Approvals — a swipe-to-decide flow
+
+A dedicated on-the-go surface for the "decide & approve" job: **`/approvals`**
+(`MobileApprovalsFlow`). Instead of the desktop inbox's list, it's a
+one-at-a-time **decision card stack** built for clearing sign-offs between
+meetings:
+
+- **Swipe right to approve, left to reject** (with buttons mirroring both for
+  accessibility, plus a "request revision" note that sends work back to Earn).
+- Each card shows the owning agent, a **risk badge**, what the item does, and a
+  preview of **what Earn produced**, with a segmented progress bar (`2 / 5`).
+- **High-sensitivity items** (outward-facing / capital-moving — the Execute
+  hub) require an explicit **confirm sheet** before approving; a swipe alone
+  never clears them.
+- **Optimistic**: the decision is captured server-side (via `decideApproval`,
+  the same engine entrypoint as the desktop inbox and `/api/approve`) while the
+  UI advances, so a stack clears instantly even though approved work executes
+  async. Ends on a "Cleared." summary.
+
+Wired in everywhere it belongs: the Earn home's Live Pulse "Approvals" tile,
+the home approval cards' "Review & decide", the More menu, and the PWA
+"Approvals" app-shortcut all deep-link to `/approvals`. The desktop inbox and
+its approval controls are untouched. Verified at a 390px viewport: the card
+renders, a full pointer-drag past threshold and the button path both decide and
+advance, the high-sensitivity confirm gate fires, no horizontal overflow, no
+console errors.

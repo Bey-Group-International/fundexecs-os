@@ -47,7 +47,7 @@ function Bubble({ children }: { children: React.ReactNode }) {
 function Pulse({ c }: { c: CommandCenterData["counts"] }) {
   const items = [
     { label: "Pipeline", value: `${c.deals}`, sub: "active", href: "/deals/feed", icon: DealsIcon, tone: "text-gold-400" },
-    { label: "Approvals", value: `${c.approvals}`, sub: "waiting", href: "/inbox", icon: ShieldIcon, tone: c.approvals > 0 ? "text-status-danger" : "text-neural-300" },
+    { label: "Approvals", value: `${c.approvals}`, sub: "waiting", href: "/approvals", icon: ShieldIcon, tone: c.approvals > 0 ? "text-status-danger" : "text-neural-300" },
     { label: "Workflows", value: `${c.workflows}`, sub: "running", href: "/automations", icon: TaskIcon, tone: "text-neural-300" },
     { label: "Inbox", value: `${c.unread}`, sub: "unread", href: "/inbox", icon: BellIcon, tone: "text-status-success" },
   ];
