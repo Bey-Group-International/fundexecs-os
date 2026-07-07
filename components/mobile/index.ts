@@ -23,6 +23,8 @@ export { PullToRefresh } from "./PullToRefresh";
 export { MobileDealActionBar } from "./MobileDealActionBar";
 export { MobileContactActionBar } from "./MobileContactActionBar";
 export { useHideOnScroll } from "./useHideOnScroll";
+export { useKeyboardInset } from "./useKeyboardInset";
+export { useTabReselect } from "./useTabReselect";
 export { useOnline } from "./useOnline";
 export { OfflineBanner } from "./OfflineBanner";
 export { MobilePendingSheet } from "./MobilePendingSheet";

@@ -486,3 +486,30 @@ mic is absent; forcing a child render throw shows the "This screen hit a snag"
 card and "Try again" recovers the subtree; with the Speech API stubbed in, the
 mic renders and a simulated final result lands the dictated text in the composer.
 `tsc`/`eslint`/`build` clean. Desktop/web untouched.
+
+## 18. Native gestures — keyboard-aware composer & re-tap-to-top
+
+Two more native-feel touches, built in parallel across disjoint new hook files
+and then integrated:
+
+- **Keyboard-aware composer** (`useKeyboardInset.ts`): a small SSR-safe hook that
+  reports how many pixels at the bottom of the layout are currently covered by
+  the on-screen keyboard, computed from the `visualViewport` (layout height −
+  visual height − offset, with sub-24px jitter treated as 0). `MobileEarnHome`
+  translates the fixed "Message Earn" composer up by that amount
+  (`translateY(-inset)`, `transition-transform`) so on-the-go typing is never
+  hidden behind the keys. Returns 0 when the API is unavailable or on the
+  server — no lift, i.e. no change from before.
+- **Re-tap active tab → scroll to top** (`useTabReselect.ts`): the native iOS/
+  Android affordance. `MobileBottomNav` calls the returned handler on every tab
+  tap; when the tapped destination is the route you're already on and the page
+  is actually scrolled, it smooth-scrolls to the top (instant under
+  `prefers-reduced-motion`) with a light haptic. Any other tab is a no-op so
+  normal `Link` navigation proceeds untouched.
+
+Verified at a 390px viewport with Playwright: with a stubbed `visualViewport`,
+opening a 300px "keyboard" sets the inset to 300 and lifts the composer by
+exactly `translateY(-300px)`, resetting to 0 on close; re-tapping the current
+route scrolls a scrolled page back to the top while re-tapping a different route
+leaves the scroll position untouched. `tsc`/`eslint`/`build` clean. Both hooks
+are mobile-only in use; desktop/web untouched.
