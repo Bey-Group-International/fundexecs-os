@@ -45,9 +45,32 @@ type Tab = "hq" | "virtual";
 // HQ room ids that differ from virtual office room keys
 const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
 
+type RenderMode = "2d" | "3d";
+const RENDER_MODE_KEY = "fx-office-renderer";
+
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
   const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true });
+  // Which office renderer to show. Defaults to the Phaser 2D office (or the
+  // env default), then hydrates the user's saved choice on the client so the
+  // first server render stays deterministic (no hydration mismatch).
+  const [renderMode, setRenderMode] = useState<RenderMode>(RENDERER_3D ? "3d" : "2d");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RENDER_MODE_KEY);
+      if (saved === "2d" || saved === "3d") setRenderMode(saved);
+    } catch {
+      /* localStorage unavailable (private mode / SSR) — keep the default */
+    }
+  }, []);
+  const chooseRenderMode = useCallback((mode: RenderMode) => {
+    setRenderMode(mode);
+    try {
+      localStorage.setItem(RENDER_MODE_KEY, mode);
+    } catch {
+      /* ignore persistence failure */
+    }
+  }, []);
   const [token, setToken] = useState<string | undefined>(undefined);
   const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
@@ -256,13 +279,18 @@ export function OfficeTabs() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-line/60 bg-surface-1/80 px-4 pt-1.5">
-        <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
-          Execution Floor
-        </TabButton>
-        <TabButton active={tab === "hq"} onClick={() => activateTab("hq")}>
-          Overview
-        </TabButton>
+      <div className="flex items-center justify-between gap-1 border-b border-line/60 bg-surface-1/80 px-4 pt-1.5">
+        <div className="flex gap-1">
+          <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
+            Execution Floor
+          </TabButton>
+          <TabButton active={tab === "hq"} onClick={() => activateTab("hq")}>
+            Overview
+          </TabButton>
+        </div>
+        {tab === "virtual" && !guestPrompt ? (
+          <RenderModeToggle mode={renderMode} onChange={chooseRenderMode} />
+        ) : null}
       </div>
 
       {/* Overview is secondary and mounts only when requested. */}
@@ -318,9 +346,12 @@ export function OfficeTabs() {
                 the office metrics), so the game mounts directly here. The 3D
                 renderer is an opt-in preview (NEXT_PUBLIC_OFFICE_RENDERER=3d);
                 the Phaser office remains the default. */}
-            {RENDERER_3D ? (
-              <div className="h-[640px] w-full overflow-hidden rounded-2xl border border-line/60 bg-surface-0">
+            {renderMode === "3d" ? (
+              <div className="relative h-[640px] w-full overflow-hidden rounded-2xl border border-line/60 bg-surface-0">
                 <Office3DView active={tab === "virtual"} onNpcClick={handleNpcClick} />
+                <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-300">
+                  3D · Beta
+                </span>
               </div>
             ) : (
               <VirtualOfficeGame
@@ -340,6 +371,39 @@ export function OfficeTabs() {
         )}
       </div>
       ) : null}
+    </div>
+  );
+}
+
+// A slim segmented 2D/3D switch for the office renderer. 2D is the Phaser
+// office (default); 3D is the native Three.js office (marked Beta while its
+// in-scene chrome is still catching up to the 2D floor).
+function RenderModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: RenderMode;
+  onChange: (mode: RenderMode) => void;
+}) {
+  const opt = (value: RenderMode, label: string) => (
+    <button
+      type="button"
+      onClick={() => onChange(value)}
+      aria-pressed={mode === value}
+      title={value === "3d" ? "Native 3D office (Beta)" : "Classic 2D office"}
+      className={[
+        "rounded px-2 py-0.5 text-[11px] font-semibold transition-colors",
+        mode === value ? "bg-amber-400 text-slate-900" : "text-slate-400 hover:text-slate-200",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="mb-1 flex items-center gap-0.5 rounded-md border border-line/60 bg-surface-0/80 p-0.5">
+      {opt("2d", "2D")}
+      {opt("3d", "3D")}
+      <span className="pr-1 text-[9px] font-medium uppercase tracking-wider text-gold-400/70">Beta</span>
     </div>
   );
 }
