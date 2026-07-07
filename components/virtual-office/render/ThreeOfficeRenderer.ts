@@ -42,6 +42,7 @@ import {
   yawOf,
   type Box3D,
 } from "./officeGeometry3D";
+import { resolveClip, type AvatarClip } from "./avatarAnimation3D";
 
 /** Per-actor scene handles + interpolation state. */
 interface ActorHandle {
@@ -53,6 +54,12 @@ interface ActorHandle {
   facing: ActorFacing;
   state: AgentState;
   seated: boolean;
+  /**
+   * Current animation clip resolved from state+seated. With today's procedural
+   * capsule avatar it is metadata; once a rigged glTF is loaded, the render
+   * loop cross-fades an `AnimationMixer` to this clip (see avatarAnimation3D).
+   */
+  clip: AvatarClip;
   /** Target floor position (world units); the group lerps toward it. */
   target: { x: number; z: number };
   /** Idle-bob phase so figures don't all bob in lockstep. */
@@ -266,6 +273,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       facing: spec.facing,
       state: spec.state ?? "idle",
       seated: spec.seated ?? false,
+      clip: resolveClip(spec.state ?? "idle", { seated: spec.seated ?? false }),
       target: { x: w.x, z: w.z },
       bob: Math.abs((spec.x * 13 + spec.y * 7) % 6.28),
     };
@@ -297,6 +305,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     if (!handle) return;
     handle.state = state;
     handle.bodyMat.emissive.setHex(STATE_EMISSIVE[state] ?? 0x000000);
+    handle.clip = resolveClip(state, { seated: handle.seated });
   }
 
   setActorSeated(id: string, seated: boolean): void {
@@ -304,6 +313,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     if (!handle) return;
     handle.seated = seated;
     this.applySeated(handle);
+    handle.clip = resolveClip(handle.state, { seated });
   }
 
   // ── Interaction ───────────────────────────────────────────────────────────
