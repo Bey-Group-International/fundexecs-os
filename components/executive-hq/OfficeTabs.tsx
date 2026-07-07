@@ -227,9 +227,6 @@ export function OfficeTabs() {
     setTimeout(() => setTeleportTarget(null), 100);
   };
 
-  const activeRoomCount = Object.values(occupancy).filter((n) => n > 0).length;
-  const totalOccupancy = Object.values(occupancy).reduce((sum, n) => sum + n, 0);
-
   return (
     <div className="bg-surface-0">
       {/* Slim single-row header — keeps the floor fitting the viewport without
@@ -244,18 +241,12 @@ export function OfficeTabs() {
               FundExecs OS · Office Program
             </p>
           </div>
-          {/* Operator avatar chip (opens the character selector) alongside the
-              live office metrics. */}
-          <div className="flex flex-wrap items-stretch gap-2">
-            {token && !guestPrompt ? (
-              <OfficeAvatarChip avatar={officeAvatar} onSaved={setOfficeAvatar} />
-            ) : null}
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <OfficeMetric label="Mode" value={tab === "virtual" ? "Execution" : "Overview"} />
-              <OfficeMetric label="Rooms live" value={`${activeRoomCount}/9`} />
-              <OfficeMetric label="Presence" value={token ? `${Math.max(totalOccupancy, 1)} online` : "Offline"} />
-            </div>
-          </div>
+          {/* Operator avatar chip (opens the character selector). The live
+              office metrics now live in the unified status strip on the floor,
+              not here — no duplication. */}
+          {token && !guestPrompt ? (
+            <OfficeAvatarChip avatar={officeAvatar} onSaved={setOfficeAvatar} />
+          ) : null}
         </div>
       </div>
 
@@ -335,15 +326,6 @@ export function OfficeTabs() {
         )}
       </div>
       ) : null}
-    </div>
-  );
-}
-
-function OfficeMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-line/70 bg-surface-0/70 px-3 py-2">
-      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-fg-primary">{value}</p>
     </div>
   );
 }

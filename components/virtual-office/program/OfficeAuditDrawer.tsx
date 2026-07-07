@@ -24,7 +24,6 @@ const STATUS_COLOR: Record<string, string> = {
 export function OfficeAuditDrawer() {
   const s = useOfficeProgram();
   const [open, setOpen] = useState(false);
-  const events = [...s.audit].reverse();
 
   return (
     <div
@@ -45,47 +44,64 @@ export function OfficeAuditDrawer() {
       </button>
 
       {open && (
-        <div className="max-h-56 overflow-y-auto border-t px-3 py-2" style={{ borderColor: "rgba(201,168,76,0.12)" }}>
-          {events.length === 0 ? (
-            <p className="py-2 text-[10px] text-slate-600">No audit events yet. Every command and approval will be recorded here.</p>
-          ) : (
-            <table className="w-full text-left text-[9px]">
-              <thead>
-                <tr className="text-[8px] uppercase tracking-wider text-slate-600">
-                  <th className="pb-1 pr-2 font-normal">Time</th>
-                  <th className="pb-1 pr-2 font-normal">Actor</th>
-                  <th className="pb-1 pr-2 font-normal">Action</th>
-                  <th className="pb-1 pr-2 font-normal">Room</th>
-                  <th className="pb-1 pr-2 font-normal">Tier</th>
-                  <th className="pb-1 font-normal">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((ev) => (
-                  <tr key={ev.id} className="border-t align-top" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                    <td className="whitespace-nowrap py-1 pr-2 text-slate-600">
-                      {new Date(ev.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                    </td>
-                    <td className="whitespace-nowrap py-1 pr-2" style={{ color: GOLD }}>{ev.actor}</td>
-                    <td className="py-1 pr-2 text-slate-300">{ev.action}</td>
-                    <td className="whitespace-nowrap py-1 pr-2 text-slate-500">{ev.room}</td>
-                    <td className="whitespace-nowrap py-1 pr-2">
-                      {ev.tier ? (
-                        <span style={{ color: RISK_TIERS[ev.tier].color }}>{RISK_TIERS[ev.tier].short}</span>
-                      ) : (
-                        <span className="text-slate-700">—</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap py-1 uppercase" style={{ color: STATUS_COLOR[ev.status] }}>
-                      {ev.status}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <div className="max-h-56 overflow-y-auto border-t" style={{ borderColor: "rgba(201,168,76,0.12)" }}>
+          <AuditTable />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The audit events table — the append-only institutional record, newest first.
+ * Presentational; reads live audit state. Reused by the status strip's audit
+ * dropdown and the standalone drawer.
+ */
+export function AuditTable() {
+  const s = useOfficeProgram();
+  const events = [...s.audit].reverse();
+
+  if (events.length === 0) {
+    return (
+      <p className="px-3 py-3 text-[10px] text-slate-600">
+        No audit events yet. Every command and approval will be recorded here.
+      </p>
+    );
+  }
+  return (
+    <table className="w-full text-left text-[9px]">
+      <thead>
+        <tr className="text-[8px] uppercase tracking-wider text-slate-600">
+          <th className="px-3 pb-1 pt-2 font-normal">Time</th>
+          <th className="pb-1 pr-2 pt-2 font-normal">Actor</th>
+          <th className="pb-1 pr-2 pt-2 font-normal">Action</th>
+          <th className="pb-1 pr-2 pt-2 font-normal">Room</th>
+          <th className="pb-1 pr-2 pt-2 font-normal">Tier</th>
+          <th className="pb-1 pr-3 pt-2 font-normal">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {events.map((ev) => (
+          <tr key={ev.id} className="border-t align-top" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+            <td className="whitespace-nowrap py-1 pl-3 pr-2 text-slate-600">
+              {new Date(ev.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </td>
+            <td className="whitespace-nowrap py-1 pr-2" style={{ color: GOLD }}>{ev.actor}</td>
+            <td className="py-1 pr-2 text-slate-300">{ev.action}</td>
+            <td className="whitespace-nowrap py-1 pr-2 text-slate-500">{ev.room}</td>
+            <td className="whitespace-nowrap py-1 pr-2">
+              {ev.tier ? (
+                <span style={{ color: RISK_TIERS[ev.tier].color }}>{RISK_TIERS[ev.tier].short}</span>
+              ) : (
+                <span className="text-slate-700">—</span>
+              )}
+            </td>
+            <td className="whitespace-nowrap py-1 pr-3 uppercase" style={{ color: STATUS_COLOR[ev.status] }}>
+              {ev.status}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
