@@ -31,6 +31,15 @@ const VirtualOfficeGame = dynamic(
   }
 );
 
+// Opt-in native 3D office (Three.js). Off by default: only when
+// NEXT_PUBLIC_OFFICE_RENDERER=3d does the floor render in 3D instead of Phaser.
+// Same seam, same program store — see components/virtual-office/render/README.md.
+const RENDERER_3D = process.env.NEXT_PUBLIC_OFFICE_RENDERER === "3d";
+const Office3DView = dynamic(
+  () => import("@/components/virtual-office/Office3DView").then((m) => m.Office3DView),
+  { ssr: false }
+);
+
 type Tab = "hq" | "virtual";
 
 // HQ room ids that differ from virtual office room keys
@@ -306,19 +315,27 @@ export function OfficeTabs() {
         ) : (
           <>
             {/* Character selection now lives in the header chip (one line with
-                the office metrics), so the game mounts directly here. */}
-            <VirtualOfficeGame
-              token={token}
-              officeAvatar={officeAvatar}
-              onAvatarSaved={setOfficeAvatar}
-              displayName={displayName}
-              active={tab === "virtual"}
-              teleportTarget={teleportTarget}
-              dealRoomListingId={dealRoomListingId}
-              onOccupancyChange={setOccupancy}
-              onNpcClick={handleNpcClick}
-              zoneUrlOverrides={zoneUrlOverrides}
-            />
+                the office metrics), so the game mounts directly here. The 3D
+                renderer is an opt-in preview (NEXT_PUBLIC_OFFICE_RENDERER=3d);
+                the Phaser office remains the default. */}
+            {RENDERER_3D ? (
+              <div className="h-[640px] w-full overflow-hidden rounded-2xl border border-line/60 bg-surface-0">
+                <Office3DView active={tab === "virtual"} onNpcClick={handleNpcClick} />
+              </div>
+            ) : (
+              <VirtualOfficeGame
+                token={token}
+                officeAvatar={officeAvatar}
+                onAvatarSaved={setOfficeAvatar}
+                displayName={displayName}
+                active={tab === "virtual"}
+                teleportTarget={teleportTarget}
+                dealRoomListingId={dealRoomListingId}
+                onOccupancyChange={setOccupancy}
+                onNpcClick={handleNpcClick}
+                zoneUrlOverrides={zoneUrlOverrides}
+              />
+            )}
           </>
         )}
       </div>
