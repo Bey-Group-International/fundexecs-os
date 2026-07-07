@@ -362,6 +362,10 @@ export function VirtualOfficeGame({
   const [roomActions, setRoomActions] = useState<RoomAction[]>([]);
   const [activeZone, setActiveZone] = useState<ZoneDef | null>(null);
   const [canvasFocused, setCanvasFocused] = useState(false);
+  // On desktop, cap the floor's height to the space left in the viewport so the
+  // whole office fits without vertical scrolling (Phaser FIT scales the 3:2 game
+  // down into it). null = uncapped (mobile keeps its scrollable stack).
+  const [canvasCap, setCanvasCap] = useState<number | null>(null);
   const [currentRoom, setCurrentRoom] = useState<string>("");
   // Public marketplace listings — fetched once the operator first steps into the
   // Marketplace hall; shared by the in-world stall signboards and the panel.
@@ -435,6 +439,34 @@ export function VirtualOfficeGame({
     if (typeof window === "undefined") return;
     setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
   }, []);
+
+  // Fit-to-viewport: on desktop, size the floor to the height left below it so
+  // the whole office is visible without scrolling. Re-measures on resize and
+  // whenever the chrome above the canvas changes height (media banner, the
+  // ambient video strip when a meeting starts, tab activation). Below the
+  // desktop breakpoint we leave the canvas uncapped so mobile keeps its stack.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const DESKTOP_MIN = 1024;
+    const RESERVE = 96; // footer toggles + breathing room below the floor
+    const measure = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      if (window.innerWidth < DESKTOP_MIN) {
+        setCanvasCap(null);
+        return;
+      }
+      const top = el.getBoundingClientRect().top;
+      const avail = window.innerHeight - top - RESERVE;
+      setCanvasCap(Math.max(340, Math.min(GAME_HEIGHT * 1.25, Math.round(avail))));
+    };
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+    };
+  }, [active, meetingActive, mediaState]);
 
   // Emit the normalized D-pad vector to the Phaser scene's movement handler.
   const emitTouchMove = useCallback((dx: number, dy: number) => {
@@ -1446,7 +1478,14 @@ export function VirtualOfficeGame({
             reclaimed space. Aspect ratio matches the game; height is capped. */}
         <div
           ref={containerRef}
-          style={{ width: "100%", aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}`, maxWidth: GAME_WIDTH * 1.5, maxHeight: GAME_HEIGHT * 1.25 }}
+          style={{
+            width: "100%",
+            aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}`,
+            // When capped (desktop), track a true 3:2 box to the available height
+            // so the floor scales down and stays centered with side margins.
+            maxWidth: canvasCap ? canvasCap * (GAME_WIDTH / GAME_HEIGHT) : GAME_WIDTH * 1.5,
+            maxHeight: canvasCap ?? GAME_HEIGHT * 1.25,
+          }}
           className="mx-auto cursor-pointer"
           onClick={() => {
             const canvas = containerRef.current?.querySelector("canvas");
