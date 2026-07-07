@@ -1,4 +1,4 @@
-import { officeFurniture3D, roomFloorImage, type FurnitureBox } from "./officeFurniture3D";
+import { officeFurniture3D, type FurnitureBox } from "./officeFurniture3D";
 import { PX_TO_WORLD } from "./officeGeometry3D";
 import { ROOMS, WORLD_W, WORLD_H } from "../types";
 
@@ -35,17 +35,5 @@ describe("officeFurniture3D", () => {
     const rowZmin = marketplace.row * 288 * PX_TO_WORLD; // ROOM_H = 288
     const stallish = boxes.filter((b: FurnitureBox) => b.cz >= rowZmin);
     expect(stallish.length).toBeGreaterThanOrEqual(6);
-  });
-});
-
-describe("roomFloorImage", () => {
-  it("returns each room's background art path", () => {
-    for (const room of ROOMS) {
-      expect(roomFloorImage(room.key)).toBe(room.imagePath);
-    }
-  });
-
-  it("returns null for an unknown room", () => {
-    expect(roomFloorImage("nope")).toBeNull();
   });
 });

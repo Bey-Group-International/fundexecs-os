@@ -160,8 +160,3 @@ export function officeFurniture3D(): FurnitureBox[] {
   }
   return out;
 }
-
-/** The background art image for a room's floor, or `null` if none. */
-export function roomFloorImage(roomKey: string): string | null {
-  return ROOMS.find((r) => r.key === roomKey)?.imagePath ?? null;
-}
