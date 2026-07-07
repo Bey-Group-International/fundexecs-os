@@ -17,6 +17,8 @@ import { MarketplaceListingDetail } from "./program/MarketplaceListingDetail";
 import { MarketplaceCreateListing } from "./program/MarketplaceCreateListing";
 import { AgentDelegateComposer } from "./program/AgentDelegateComposer";
 import { DealRoomBanner } from "./program/DealRoomBanner";
+import { FloorActivityFeed } from "./program/FloorActivityFeed";
+import { emitFloorActivity, FLOOR_ACTIVITY_EVENT, type FloorEvent, type FloorActivityKind } from "@/lib/office/floor-activity";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./program/officeProgramStore";
@@ -374,6 +376,13 @@ export function VirtualOfficeGame({
   const [delegateAgent, setDelegateAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  // Rolling in-world activity feed — real floor moments announced via
+  // emitFloorActivity (Earn routing work, meetings, deal rooms, listings, joins).
+  const [floorActivity, setFloorActivity] = useState<FloorEvent[]>([]);
+  const floorActivityIdRef = useRef(0);
+  // Previous roster ids, to announce joins to the feed. null until the first
+  // snapshot, so the initial population doesn't spam "joined" for everyone.
+  const prevRosterIdsRef = useRef<Set<string> | null>(null);
   // Side-panel visibility (Earn Command Center + Active Work). Persisted so the
   // operator's choice sticks; when both are hidden the side column is removed
   // and the floor widens to fill the reclaimed space.
@@ -464,7 +473,10 @@ export function VirtualOfficeGame({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const open = () => {
-      setMeetingActive(true);
+      setMeetingActive((wasActive) => {
+        if (!wasActive) emitFloorActivity("meeting", "A meeting started on the floor");
+        return true;
+      });
       if (!localStreamRef.current) void requestMedia();
     };
     window.addEventListener("office:start-meeting", open);
@@ -502,9 +514,6 @@ export function VirtualOfficeGame({
       const detail = (e as CustomEvent<{ agentKeys?: string[]; planTitle?: string }>).detail;
       const game = gameRef.current;
       if (!game) return;
-      // Don't fight the in-scene program engine's own live choreography.
-      const st = getOfficeProgramState();
-      if (st.activeWorkflow || st.officeStatus !== "calm") return;
 
       const ids = Array.from(
         new Set((detail?.agentKeys ?? []).map((k) => KEY_TO_OFFICE[k] ?? "earn")),
@@ -512,6 +521,13 @@ export function VirtualOfficeGame({
       if (ids.length === 0) ids.push("earn");
       const raw = (detail?.planTitle ?? "On a task").trim();
       const label = raw.length > 32 ? `${raw.slice(0, 31)}…` : raw;
+
+      // Log to the activity feed even if the visual reflection is skipped below.
+      emitFloorActivity("work", `Earn routed “${label}” to ${ids.length} exec${ids.length === 1 ? "" : "s"}`);
+
+      // Don't fight the in-scene program engine's own live choreography.
+      const st = getOfficeProgramState();
+      if (st.activeWorkflow || st.officeStatus !== "calm") return;
 
       if (ref.timer) clearTimeout(ref.timer);
       for (const id of ids) {
@@ -530,6 +546,26 @@ export function VirtualOfficeGame({
       window.removeEventListener("earn:exec-activity", onExecActivity);
       if (ref.timer) clearTimeout(ref.timer);
     };
+  }, []);
+
+  // Collect floor-activity announcements into the rolling feed (newest first,
+  // capped). Every notable floor moment posts here via emitFloorActivity.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onActivity = (e: Event) => {
+      const detail = (e as CustomEvent<{ kind?: FloorActivityKind; text?: string }>).detail;
+      if (!detail?.kind || !detail?.text) return;
+      floorActivityIdRef.current += 1;
+      const entry: FloorEvent = {
+        id: `fa-${floorActivityIdRef.current}`,
+        ts: Date.now(),
+        kind: detail.kind,
+        text: detail.text,
+      };
+      setFloorActivity((prev) => [entry, ...prev].slice(0, 20));
+    };
+    window.addEventListener(FLOOR_ACTIVITY_EVENT, onActivity);
+    return () => window.removeEventListener(FLOOR_ACTIVITY_EVENT, onActivity);
   }, []);
 
   // Pull live public listings and push them to both the scene (live stall
@@ -745,6 +781,16 @@ export function VirtualOfficeGame({
         // Floor presence roster bridge — who's on the floor + their room.
         game.events.on("office:roster", (r: RosterEntry[]) => {
           setRoster(r);
+          // Announce anyone who just appeared (skip yourself and the first snapshot).
+          const prev = prevRosterIdsRef.current;
+          if (prev) {
+            for (const entry of r) {
+              if (!entry.self && !prev.has(entry.id)) {
+                emitFloorActivity("presence", `${entry.name} joined the floor`);
+              }
+            }
+          }
+          prevRosterIdsRef.current = new Set(r.map((e) => e.id));
         });
 
         // Room enter bridge — updates room-specific action panel + current room state
@@ -1100,6 +1146,14 @@ export function VirtualOfficeGame({
         {/* Live "who's on the floor" roster + invite */}
         {token && roster.length > 0 && <FloorRoster roster={roster} />}
 
+        {/* In-world activity ticker + presence (bottom-left) */}
+        {token && (
+          <FloorActivityFeed
+            events={floorActivity}
+            presenceCount={Math.max(roster.length, 1)}
+          />
+        )}
+
         {/* Proximity presence — the executive you're standing beside greets you */}
         {nearbyAgent && (
           <ProximityCard agent={nearbyAgent} onDelegate={() => setDelegateAgent(nearbyAgent)} />
@@ -1258,6 +1312,7 @@ export function VirtualOfficeGame({
               setDealListingId(id);
               setActiveListingId(null);
               teleportTo("trading");
+              emitFloorActivity("deal", "A deal room opened in the Deal Room");
               // Convene as a live session: open the video dock once we've arrived.
               setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 700);
             }}
@@ -1268,7 +1323,10 @@ export function VirtualOfficeGame({
         {showCreateListing && (
           <MarketplaceCreateListing
             onClose={() => setShowCreateListing(false)}
-            onCreated={() => void refreshMarketplaceListings()}
+            onCreated={() => {
+              emitFloorActivity("listing", "A new listing was published to the Marketplace");
+              void refreshMarketplaceListings();
+            }}
           />
         )}
 
