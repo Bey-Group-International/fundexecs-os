@@ -26,6 +26,7 @@ import { ScreenShareDock } from "./ScreenShareDock";
 import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
 import { FloorShortcuts } from "./FloorShortcuts";
+import { officeInviteUrl } from "@/lib/office/floor-link";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -477,12 +478,14 @@ export function VirtualOfficeGame({
     }
   }, [micOn, camOn]);
 
+  // Meeting invites carry the host's current room + meet=1, so the recipient
+  // lands in the same room and the video dock auto-opens (they join the call).
   const sendFloorInvite = useCallback(async (emails: string[]): Promise<{ ok: boolean; sent: number }> => {
     try {
       const res = await fetch("/api/office/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails }),
+        body: JSON.stringify({ emails, room: currentRoom || null, meet: true }),
       });
       if (!res.ok) return { ok: false, sent: 0 };
       const data = (await res.json()) as { sent: number };
@@ -490,7 +493,7 @@ export function VirtualOfficeGame({
     } catch {
       return { ok: false, sent: 0 };
     }
-  }, []);
+  }, [currentRoom]);
 
   const stopScreenShare = useCallback(() => {
     // Restore the camera feed to the bubble before dropping the screen track.
@@ -911,7 +914,7 @@ export function VirtualOfficeGame({
             onToggleMic={toggleMic}
             onToggleCam={toggleCam}
             onEnd={endMeeting}
-            inviteUrl={typeof window !== "undefined" ? window.location.href : ""}
+            inviteUrl={typeof window !== "undefined" ? officeInviteUrl(window.location.origin, { room: currentRoom || null, meet: true }) : ""}
             devices={devices}
             selectedMic={selectedMic}
             selectedCam={selectedCam}

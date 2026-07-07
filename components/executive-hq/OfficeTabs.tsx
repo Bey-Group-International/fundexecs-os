@@ -149,6 +149,10 @@ export function OfficeTabs() {
       activateTab("virtual");
       setTeleportTarget(room);
       setTimeout(() => setTeleportTarget(null), 100);
+      // A meeting link (?meet=1) auto-opens the video dock once we're in the room.
+      if (searchParams.get("meet") === "1") {
+        setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 900);
+      }
     } else {
       // No session — show guest name prompt, remember the target room
       setGuestPrompt(true);
@@ -179,6 +183,10 @@ export function OfficeTabs() {
       if (room) {
         setTeleportTarget(room);
         setTimeout(() => setTeleportTarget(null), 100);
+        // A meeting link (?meet=1) auto-opens the video dock once we're in the room.
+        if (searchParams.get("meet") === "1") {
+          setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 900);
+        }
       }
     } catch (err) {
       setGuestError(err instanceof Error ? err.message : "Sign in failed");

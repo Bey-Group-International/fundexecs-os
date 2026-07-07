@@ -4,18 +4,27 @@
 // dependency (no mailto). The link opens the spatial office floor so the guest
 // joins the operator in the in-office meeting.
 import { sendEmail, escapeHtml } from "@/lib/email";
-
-const FLOOR_PATH = "/command-center";
+import { officeInviteUrl } from "@/lib/office/floor-link";
 
 export function buildFloorInviteHtml({
   floorUrl,
   senderName,
+  meet = false,
 }: {
   floorUrl: string;
   senderName: string;
+  /** Meeting invite copy (drops the guest straight into the live video) vs a room invite. */
+  meet?: boolean;
 }): string {
   const safeSender = escapeHtml(senderName);
   const safeUrl = floorUrl.startsWith("https://") || floorUrl.startsWith("http://") ? floorUrl : "#";
+  const heading = meet
+    ? `${safeSender} invited you to a video meeting`
+    : `${safeSender} invited you to the Executive Floor`;
+  const blurb = meet
+    ? "This link drops you straight into the live meeting on the spatial floor — camera and mic ready."
+    : "Join the Executive Floor — you'll land right in the room, walk over, and you're in.";
+  const cta = meet ? "Join the meeting →" : "Enter the floor →";
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" /></head>
@@ -23,11 +32,11 @@ export function buildFloorInviteHtml({
   <div style="margin-bottom:24px">
     <span style="font-family:monospace;font-size:13px;color:#c9a84c;letter-spacing:0.1em;text-transform:uppercase">FundExecs OS</span>
   </div>
-  <h1 style="font-size:20px;font-weight:600;margin:0 0 8px;color:#f4f0e8">${safeSender} invited you to the Executive Floor</h1>
-  <p style="color:#b6bcc6;font-size:14px;margin:0 0 24px">Join the live in-office meeting on the spatial floor — walk over and you're in the video.</p>
+  <h1 style="font-size:20px;font-weight:600;margin:0 0 8px;color:#f4f0e8">${heading}</h1>
+  <p style="color:#b6bcc6;font-size:14px;margin:0 0 24px">${blurb}</p>
   <a href="${safeUrl}"
      style="display:inline-block;background:#c9a84c;color:#0d0d10;font-weight:600;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
-    Enter the floor →
+    ${cta}
   </a>
   <p style="color:#8b93a0;font-size:12px;margin:24px 0 0">
     You can join as a guest or sign in for full access.
@@ -37,26 +46,34 @@ export function buildFloorInviteHtml({
 }
 
 /**
- * Email a floor invite to a set of addresses. Never throws — a missing provider
- * or a per-recipient failure just lowers the `sent` count.
+ * Email a floor invite to a set of addresses. The link targets a specific room
+ * (so guests land where the sender is) and, for a meeting invite, carries
+ * `meet=1` so the office auto-opens the video dock on arrival. Never throws — a
+ * missing provider or a per-recipient failure just lowers the `sent` count.
  */
 export async function sendFloorInvites(args: {
   origin: string;
   senderName: string;
   emails: string[];
+  /** Room key to drop the invitee into (omit for the default floor entry). */
+  room?: string | null;
+  /** When true, send a video-meeting invite (auto-opens the dock on arrival). */
+  meet?: boolean;
 }): Promise<{ sent: number; total: number }> {
   const emails = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (emails.length === 0) return { sent: 0, total: 0 };
 
-  const origin = (args.origin || "").replace(/\/$/, "");
-  const floorUrl = `${origin}${FLOOR_PATH}`;
-  const html = buildFloorInviteHtml({ floorUrl, senderName: args.senderName });
+  const floorUrl = officeInviteUrl(args.origin, { room: args.room, meet: args.meet });
+  const html = buildFloorInviteHtml({ floorUrl, senderName: args.senderName, meet: args.meet });
+  const subject = args.meet
+    ? `${args.senderName} invited you to a video meeting on FundExecs`
+    : `${args.senderName} invited you to the FundExecs Executive Floor`;
 
   const results = await Promise.allSettled(
     emails.map((email) =>
       sendEmail({
         to: { name: email.split("@")[0] ?? email, email },
-        subject: `${args.senderName} invited you to the FundExecs Executive Floor`,
+        subject,
         htmlBody: html,
       }),
     ),
