@@ -78,6 +78,11 @@ export const ACCEPTED_FORMATS_HELP: { label: string; hint: string }[] = [
 export const UNSUPPORTED_FILE_MESSAGE =
   "This file type is not supported. Please upload a CSV or XLSX file.";
 
+// Default per-file upload ceiling for the client surfaces (the server route may
+// enforce a stricter limit of its own). Guards against a browser trying to
+// parse a multi-hundred-MB spreadsheet in memory.
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+
 // ─── Magic-byte signatures ─────────────────────────────────────────────────────
 
 // ZIP (also the container for .xlsx/.docx/.pptx): "PK\x03\x04" or the
@@ -97,6 +102,34 @@ function startsWith(bytes: Uint8Array, sig: number[]): boolean {
   return true;
 }
 
+// UTF-8 (EF BB BF), UTF-16LE (FF FE), and UTF-16BE (FE FF) byte-order marks.
+function hasBom(bytes: Uint8Array): boolean {
+  return (
+    (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) ||
+    (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) ||
+    (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff)
+  );
+}
+
+/**
+ * Decode file bytes to text, honouring a UTF-8 or UTF-16 (LE/BE) byte-order
+ * mark and stripping it. Excel's default "CSV UTF-8" and "Unicode Text" exports
+ * are UTF-16LE with a BOM; decoding those as plain UTF-8 corrupts every row, so
+ * upload surfaces should decode through this instead of `File.text()`.
+ */
+export function decodeText(bytes: Uint8Array): string {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(bytes.subarray(2));
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(bytes.subarray(2));
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(bytes.subarray(3));
+  }
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
 /**
  * Classify the leading bytes of a file into a coarse content family. CSV has no
  * magic number, so anything that isn't a known binary container and decodes as
@@ -104,6 +137,10 @@ function startsWith(bytes: Uint8Array, sig: number[]): boolean {
  */
 export function detectSignature(bytes: Uint8Array): SignatureKind {
   if (bytes.length === 0) return "unknown";
+  // A byte-order mark unambiguously denotes text. Excel exports CSV as UTF-16
+  // (LE/BE) with a BOM, whose embedded NUL bytes would otherwise trip the
+  // binary heuristic below, so check for BOMs first.
+  if (hasBom(bytes)) return "text";
   if (ZIP_SIGS.some((s) => startsWith(bytes, s))) return "zip";
   if (startsWith(bytes, OLE_SIG)) return "ole";
 
@@ -128,6 +165,8 @@ export interface FileDescriptor {
   mime?: string;
   /** Leading bytes of the file, if available, for signature sniffing. */
   head?: Uint8Array;
+  /** Total file size in bytes, if known — enables the size-limit guard. */
+  size?: number;
 }
 
 export interface DetectionResult {
@@ -206,6 +245,8 @@ export interface ValidationResult {
 export interface ValidateOptions {
   /** Restrict the allowlist to a subset of the supported kinds. */
   accept?: FileKind[];
+  /** Max allowed file size in bytes (default `MAX_UPLOAD_BYTES`). */
+  maxBytes?: number;
 }
 
 /**
@@ -215,10 +256,17 @@ export interface ValidateOptions {
  */
 export function validateFileType(file: FileDescriptor, opts: ValidateOptions = {}): ValidationResult {
   const accept = opts.accept ?? SUPPORTED_FORMATS.map((f) => f.kind);
+  const maxBytes = opts.maxBytes ?? MAX_UPLOAD_BYTES;
   const detection = detectFileType(file);
   const { ext, byExtension, signature } = detection;
 
   const reject = (error: string): ValidationResult => ({ ok: false, error, detection });
+
+  // 0. Size guard — fail fast before any parsing work.
+  if (file.size != null && file.size > maxBytes) {
+    const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(n >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+    return reject(`This file is ${mb(file.size)}, over the ${mb(maxBytes)} limit. Split it or export a smaller file.`);
+  }
 
   // 1. Extension must be one we support at all.
   if (byExtension === null) {

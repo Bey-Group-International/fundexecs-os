@@ -180,6 +180,68 @@ describe("xlsxToRows", () => {
   });
 });
 
+// Walk to the Nth central-directory header and overwrite a 32-bit field
+// (relative to the header start) so we can simulate corrupt/hostile archives.
+function patchCentral(zip: Uint8Array, fileIndex: number, fieldOffset: number, value: number) {
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  let eocd = -1;
+  for (let i = zip.length - 22; i >= 0; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  let ptr = view.getUint32(eocd + 16, true);
+  for (let i = 0; i < fileIndex; i++) {
+    const nameLen = view.getUint16(ptr + 28, true);
+    const extraLen = view.getUint16(ptr + 30, true);
+    const commentLen = view.getUint16(ptr + 32, true);
+    ptr += 46 + nameLen + extraLen + commentLen;
+  }
+  view.setUint32(ptr + fieldOffset, value, true);
+}
+
+describe("xlsxToRows hardening", () => {
+  it("enforces the inflated-bytes budget (decompression-bomb guard)", async () => {
+    const zip = makeZip([
+      { name: "xl/sharedStrings.xml", data: SHARED_STRINGS },
+      { name: "xl/worksheets/sheet1.xml", data: SHEET },
+    ]);
+    await expect(xlsxToRows(zip, { maxInflatedBytes: 5 })).rejects.toThrow(/too large/i);
+  });
+
+  it("rejects a ZIP64 sentinel size instead of misreading it", async () => {
+    const zip = makeZip([
+      { name: "xl/sharedStrings.xml", data: SHARED_STRINGS },
+      { name: "xl/worksheets/sheet1.xml", data: SHEET },
+    ]);
+    patchCentral(zip, 0, 20, 0xffffffff); // compressedSize of first entry
+    await expect(xlsxToRows(zip)).rejects.toThrow(/ZIP64/i);
+  });
+
+  it("rejects an entry whose declared size runs past the end of the file", async () => {
+    const zip = makeZip([
+      { name: "xl/sharedStrings.xml", data: SHARED_STRINGS },
+      { name: "xl/worksheets/sheet1.xml", data: SHEET },
+    ]);
+    patchCentral(zip, 0, 20, 0x7ffffff0); // absurd compressedSize
+    await expect(xlsxToRows(zip)).rejects.toThrow(/past end of file/i);
+  });
+
+  it("skips cells with out-of-range or malformed column references", async () => {
+    const sheet = `<?xml version="1.0"?><worksheet><sheetData>
+      <row r="1">
+        <c r="A1" t="inlineStr"><is><t>keep</t></is></c>
+        <c r="XFE1" t="inlineStr"><is><t>beyond-max</t></is></c>
+        <c r="AAAA1" t="inlineStr"><is><t>too-many-letters</t></is></c>
+      </row>
+    </sheetData></worksheet>`;
+    const zip = makeZip([{ name: "xl/worksheets/sheet1.xml", data: sheet }]);
+    const rows = await xlsxToRows(zip);
+    expect(rows[0]).toEqual(["keep"]);
+  });
+});
+
 describe("rowsToCsv", () => {
   it("round-trips values and quotes cells that need it", () => {
     const csv = rowsToCsv([

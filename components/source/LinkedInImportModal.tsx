@@ -35,7 +35,7 @@ export function LinkedInImportModal({ onClose, onImported }: Props) {
   async function handleFile(f: File) {
     const head = await readFileHead(f);
     const check = validateFileType(
-      { name: f.name, mime: f.type, head },
+      { name: f.name, mime: f.type, head, size: f.size },
       { accept: ["csv", "xlsx"] },
     );
     if (!check.ok) {
