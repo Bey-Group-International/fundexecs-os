@@ -7,7 +7,8 @@
 // Client component so filter pills can run without a round-trip to the server.
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   groupByDay,
@@ -20,6 +21,7 @@ import {
 import { AGENT_BY_KEY } from "@/lib/agents";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub, TaskStatus } from "@/lib/supabase/database.types";
+import { deleteActivityEntry, clearActivity } from "@/app/(app)/activity/actions";
 
 const TONE_CLASS: Record<StatusTone, string> = {
   active: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300",
@@ -65,7 +67,32 @@ function HubChip({ entry }: { entry: ActivityEntry }) {
   );
 }
 
-function EntryRow({ entry }: { entry: ActivityEntry }) {
+function DeleteEntryButton({ entry, onDeleted }: { entry: ActivityEntry; onDeleted: () => void }) {
+  const [pending, startTransition] = useTransition();
+
+  function handleClick() {
+    if (pending) return;
+    startTransition(async () => {
+      const res = await deleteActivityEntry(entry.id);
+      if (res.ok) onDeleted();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={pending}
+      aria-label="Delete entry"
+      title="Delete"
+      className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+    >
+      {pending ? "…" : "Delete"}
+    </button>
+  );
+}
+
+function EntryRow({ entry, onDeleted }: { entry: ActivityEntry; onDeleted: () => void }) {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-1 p-4">
       <span
@@ -84,6 +111,8 @@ function EntryRow({ entry }: { entry: ActivityEntry }) {
             </span>
           ) : null}
           <StatusPill entry={entry} />
+          <span className="ml-auto" />
+          <DeleteEntryButton entry={entry} onDeleted={onDeleted} />
         </div>
 
         {entry.summary ? (
@@ -131,8 +160,22 @@ const HUB_FILTERS: { label: string; value: HubFilter }[] = [
 ];
 
 export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [hubFilter, setHubFilter] = useState<HubFilter>("all");
+  const [clearing, startClear] = useTransition();
+
+  function handleClearAll() {
+    if (clearing) return;
+    const ok = window.confirm(
+      "Clear all activity? This permanently deletes every workflow and its produced artifacts across all hubs. This cannot be undone.",
+    );
+    if (!ok) return;
+    startClear(async () => {
+      const res = await clearActivity();
+      if (res.ok) router.refresh();
+    });
+  }
 
   const filtered = entries.filter((e) => {
     if (statusFilter !== "all" && e.status !== statusFilter) return false;
@@ -188,6 +231,20 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
             {filtered.length} result{filtered.length !== 1 ? "s" : ""}
           </span>
         )}
+
+        {/* Clear all — permanently deletes every workflow + its artifacts. */}
+        {entries.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClearAll}
+            disabled={clearing}
+            className={`rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50 ${
+              statusFilter !== "all" || hubFilter !== "all" ? "" : "ml-auto"
+            }`}
+          >
+            {clearing ? "Clearing…" : "Clear all"}
+          </button>
+        )}
       </div>
 
       {/* Timeline */}
@@ -206,7 +263,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
               </h2>
               <div className="flex flex-col gap-2">
                 {group.entries.map((entry) => (
-                  <EntryRow key={entry.id} entry={entry} />
+                  <EntryRow key={entry.id} entry={entry} onDeleted={() => router.refresh()} />
                 ))}
               </div>
             </section>

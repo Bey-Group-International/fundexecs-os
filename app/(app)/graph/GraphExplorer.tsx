@@ -1,9 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { GraphData } from "@/lib/graph";
 import type { GraphKind } from "@/lib/supabase/database.types";
+import { deleteGraphNode, clearGraph } from "./actions";
+
+// Node id prefix ("<entity_type>:<uuid>") — entity types that map to a concrete
+// deletable table (mirrors ENTITY_TABLE in actions.ts). Organization nodes are
+// the tenant and are never deletable, so the delete affordance is hidden there.
+const DELETABLE_TYPES = new Set([
+  "investor",
+  "deal",
+  "fund",
+  "asset",
+  "principal",
+  "contact",
+]);
+
+function nodeEntityType(nodeId: string): string {
+  const sep = nodeId.indexOf(":");
+  return sep > 0 ? nodeId.slice(0, sep) : "";
+}
 
 // Dependency-free graph visualization. Nodes are laid out on a circle (radial)
 // and edges drawn as straight SVG lines between them. No external SDKs — pure
@@ -121,12 +140,15 @@ function shortestPath(from: string, to: string, neighbors: Map<string, Set<strin
 }
 
 export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData> }) {
+  const router = useRouter();
   const [active, setActive] = useState<GraphKind>("relationship");
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [traceFrom, setTraceFrom] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
+  const [deleting, startDelete] = useTransition();
+  const [clearing, startClear] = useTransition();
 
   const fullData = graphs[active];
   const tab = TABS.find((t) => t.key === active)!;
@@ -199,6 +221,46 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
     setTraceFrom(null);
   }
 
+  function handleDeleteNode(nodeId: string) {
+    if (deleting) return;
+    const node = fullData.nodes.find((n) => n.id === nodeId);
+    const name = node?.label || "this node";
+    const ok = window.confirm(
+      `Delete "${name}"? This permanently deletes the underlying record and every connection to it. This cannot be undone.`,
+    );
+    if (!ok) return;
+    startDelete(async () => {
+      const res = await deleteGraphNode(nodeId);
+      if (res.ok) {
+        clearSelection();
+        router.refresh();
+      } else if (res.error) {
+        window.alert(res.error);
+      }
+    });
+  }
+
+  function handleClearAll() {
+    if (clearing) return;
+    const ids = fullData.nodes.map((n) => n.id);
+    if (ids.length === 0) return;
+    const ok = window.confirm(
+      `Clear the ${tab.label} graph? This permanently deletes every underlying record shown here (organization nodes are kept). ` +
+        "Records shared with other graphs will disappear there too. This cannot be undone.",
+    );
+    if (!ok) return;
+    startClear(async () => {
+      const res = await clearGraph(ids);
+      if (res.ok) {
+        clearSelection();
+        setHiddenTypes(new Set());
+        router.refresh();
+      } else if (res.error) {
+        window.alert(res.error);
+      }
+    });
+  }
+
   return (
     <div>
       <div className="fx-segment mb-4 inline-flex">
@@ -235,6 +297,16 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
         <span className="ml-auto font-mono text-[10px] text-fg-muted">
           {data.nodes.length} nodes · {data.edges.length} edges
         </span>
+        {fullData.nodes.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClearAll}
+            disabled={clearing}
+            className="shrink-0 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {clearing ? "Clearing…" : "Clear all"}
+          </button>
+        )}
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {presentTypes.map((t) => {
@@ -352,6 +424,16 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
                   </button>
                 ) : null}
               </div>
+
+              {DELETABLE_TYPES.has(nodeEntityType(selectedNode.id)) ? (
+                <button
+                  onClick={() => handleDeleteNode(selectedNode.id)}
+                  disabled={deleting}
+                  className="mt-1.5 w-full rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Delete node"}
+                </button>
+              ) : null}
             </div>
           ) : null}
 

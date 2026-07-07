@@ -3,6 +3,8 @@ import type { TargetEngine } from "@/lib/intelligence";
 import type { GridWorkflow } from "@/lib/execution-grid";
 import { isStuck, stuckHours, stuckCount } from "@/lib/engine-sla";
 import { EscalateButton } from "./EscalateButton";
+import { DeleteWorkflowButton } from "./DeleteWorkflowButton";
+import { ClearEngineButton } from "./ClearEngineButton";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -61,6 +63,7 @@ function WorkflowRow({ wf, stuck, hours }: { wf: GridWorkflow; stuck: boolean; h
       <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
         {STATUS_LABEL[wf.status] ?? wf.status}
       </span>
+      <DeleteWorkflowButton workflowId={wf.id} />
     </span>
   );
   // Stuck rows get an amber accent border (replacing the gold hover) to draw the eye.
@@ -116,6 +119,8 @@ export function EnginePaneView({ engine, workflows, now }: { engine: TargetEngin
               ⚠ {stuck} stuck
             </span>
           )}
+          <span className="ml-auto" />
+          <ClearEngineButton engine={engine} count={total} />
         </div>
         <p className="mt-1 text-sm text-fg-secondary">
           {ENGINE_BLURB[engine]}
