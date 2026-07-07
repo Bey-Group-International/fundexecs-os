@@ -39,7 +39,8 @@ describe("roomLabel — safe room labels (never crash the floor)", () => {
     // A raw ROOM_BY_KEY[key].label access throws for an unknown key — this is
     // the crash that took the whole floor to the error boundary when an agent
     // or workflow referenced a spatial-only / stale room. roomLabel must not.
-    expect(() => ROOM_BY_KEY["marketplace" as never].label).toThrow();
+    const raw = ROOM_BY_KEY as Record<string, { label: string }>;
+    expect(() => raw["marketplace"].label).toThrow();
     expect(roomLabel("marketplace")).toBe("Marketplace");
     expect(roomLabel("some_stale_key")).toBe("Some Stale Key");
     expect(() => roomLabel("marketplace")).not.toThrow();
