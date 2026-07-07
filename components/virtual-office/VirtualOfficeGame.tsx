@@ -7,6 +7,7 @@ import type { InteractiveObject, RoomAction, ZoneDef } from "./types";
 import { IFRAME_ZONES, ZONE_URL_CALENDLY, CALENDLY_DEFAULT_URL } from "./types";
 import { BubbleOverlay } from "./BubbleOverlay";
 import { VideoTileBar } from "./VideoTileBar";
+import { MeetingDock } from "./MeetingDock";
 import { MediaPermissionBanner } from "./MediaPermissionBanner";
 import { OfficeHUD } from "./program/OfficeHUD";
 import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
@@ -307,6 +308,11 @@ export function VirtualOfficeGame({
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  // In-office meeting: an explicit real-time video session, rendered as a
+  // floating dock over the canvas (reuses the floor's WebRTC video).
+  const [meetingActive, setMeetingActive] = useState(false);
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [directoryOpen, setDirectoryOpen] = useState(false);
@@ -363,10 +369,46 @@ export function VirtualOfficeGame({
       localStreamRef.current = stream;
       setLocalStream(stream);
       setMediaState("active");
+      setMicOn(true);
+      setCamOn(true);
       gameRef.current?.events.emit("rtc:localStream", stream);
     } catch {
       setMediaState("dismissed");
     }
+  }, []);
+
+  // Start Meeting opens a real-time video session in the office (no navigating
+  // away): a floating dock over the canvas, camera on. Reuses the floor RTC.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const open = () => {
+      setMeetingActive(true);
+      if (!localStreamRef.current) void requestMedia();
+    };
+    window.addEventListener("office:start-meeting", open);
+    return () => window.removeEventListener("office:start-meeting", open);
+  }, [requestMedia]);
+
+  const toggleMic = useCallback(() => {
+    const track = localStreamRef.current?.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setMicOn(track.enabled);
+  }, []);
+
+  const toggleCam = useCallback(() => {
+    const track = localStreamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setCamOn(track.enabled);
+  }, []);
+
+  const endMeeting = useCallback(() => {
+    setMeetingActive(false);
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    setLocalStream(null);
+    setMediaState("idle");
   }, []);
 
   const stopScreenShare = useCallback(() => {
@@ -636,13 +678,16 @@ export function VirtualOfficeGame({
         />
       )}
 
-      {/* Video tile bar */}
-      <VideoTileBar
-        tiles={videoTiles}
-        localStream={localStream}
-        localLabel={displayName}
-        proximity={videoProximity}
-      />
+      {/* Ambient proximity video strip — hidden while an explicit in-office
+          meeting is running (the floating MeetingDock takes over the video). */}
+      {!meetingActive && (
+        <VideoTileBar
+          tiles={videoTiles}
+          localStream={localStream}
+          localLabel={displayName}
+          proximity={videoProximity}
+        />
+      )}
 
       {/* Iframe zone overlay */}
       {activeZone && (
@@ -765,6 +810,21 @@ export function VirtualOfficeGame({
 
         {/* Proximity presence — the executive you're standing beside greets you */}
         {nearbyAgent && <ProximityCard agent={nearbyAgent} />}
+
+        {/* In-office meeting — floating real-time video dock over the canvas */}
+        {meetingActive && (
+          <MeetingDock
+            localStream={localStream}
+            tiles={videoTiles}
+            localLabel={displayName}
+            micOn={micOn}
+            camOn={camOn}
+            onToggleMic={toggleMic}
+            onToggleCam={toggleCam}
+            onEnd={endMeeting}
+            inviteUrl={typeof window !== "undefined" ? window.location.href : ""}
+          />
+        )}
 
         {/* Workspace share — floating PiP dock for the screen you're sharing */}
         {screenStream && <ScreenShareDock stream={screenStream} onStop={stopScreenShare} />}
