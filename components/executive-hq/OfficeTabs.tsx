@@ -12,7 +12,6 @@ import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
 import { appendOfficeAuditEvents, loadOfficeWorkflows, persistOfficeWorkflow } from "@/components/virtual-office/program/office-actions";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
-import { MeetingModal } from "@/components/virtual-office/MeetingModal";
 import { OfficeAvatarChip } from "@/components/virtual-office/avatar/OfficeAvatarChip";
 import {
   parseUserAvatar,
@@ -314,9 +313,6 @@ export function OfficeTabs() {
         )}
       </div>
       ) : null}
-
-      {/* Meeting modal — listens for office:start-meeting window event */}
-      <MeetingModal />
     </div>
   );
 }
