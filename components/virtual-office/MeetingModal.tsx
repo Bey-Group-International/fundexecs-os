@@ -13,6 +13,17 @@ const MEETING_TITLE = text("Start Meeting")
 export function MeetingModal() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard unavailable — no-op
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -63,21 +74,22 @@ export function MeetingModal() {
           </button>
 
           <button
-            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-medium text-slate-400 transition-colors cursor-not-allowed opacity-60"
-            disabled
+            onClick={() => {
+              window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer");
+              setOpen(false);
+            }}
+            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-medium text-slate-200 hover:border-amber-400/50 hover:bg-slate-700 transition-colors"
           >
             <span className="text-base">🎥</span>
             Google Meet
-            <span className="ml-auto text-xs text-slate-600">soon</span>
           </button>
 
           <button
-            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-medium text-slate-400 transition-colors cursor-not-allowed opacity-60"
-            disabled
+            onClick={copyLink}
+            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-medium text-slate-200 hover:border-amber-400/50 hover:bg-slate-700 transition-colors"
           >
             <span className="text-base">🔗</span>
-            Copy Link
-            <span className="ml-auto text-xs text-slate-600">soon</span>
+            {copied ? "Link copied ✓" : "Copy floor link"}
           </button>
         </div>
       </div>

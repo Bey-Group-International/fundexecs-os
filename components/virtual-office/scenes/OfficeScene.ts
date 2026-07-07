@@ -450,6 +450,14 @@ export class OfficeScene extends Phaser.Scene {
       void this.sfu?.setScreenTrack(track);
     });
 
+    // Live character customization: when the operator saves a new look, rebuild
+    // the on-floor figure in place — no full game reload — so skin / hair /
+    // build / wardrobe / accent changes are reflected immediately.
+    this.game.events.on("office:avatar-update", (raw: unknown) => {
+      const next = parseUserAvatar(raw);
+      if (next) this._applyOfficeAvatar(next);
+    });
+
     // Mobile/touch D-pad → normalized movement vector. Consumed each frame in
     // _handleMovement; {0,0} on release. Keyboard still takes precedence.
     this.game.events.on("office:touch-move", (v: { dx: number; dy: number }) => {
@@ -503,6 +511,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
     this.game.events.off("rtc:screen-share");
+    this.game.events.off("office:avatar-update");
     this.game.events.off("program:npc-goto");
     this.game.events.off("program:npc-state");
     this.game.events.off("program:room-activity");
@@ -677,6 +686,21 @@ export class OfficeScene extends Phaser.Scene {
 
     // The player appears as their own human avatar (gender + wardrobe + accent).
     this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, userAvatarSpec(this.myOfficeAvatar), 10);
+  }
+
+  /**
+   * Rebuild the visible player figure from a freshly customized avatar, in
+   * place, at the current position — so saving a new look updates the floor
+   * immediately without reloading the whole scene. The invisible physics anchor
+   * (this.player) is untouched, so movement and collisions are unaffected.
+   */
+  private _applyOfficeAvatar(next: UserAvatar) {
+    this.myOfficeAvatar = next;
+    if (!this.playerAvatar || !this.player) return;
+    const x = this.player.x;
+    const y = this.player.y;
+    this.playerAvatar.destroy();
+    this.playerAvatar = new ExecutiveAvatar(this, x, y, userAvatarSpec(next), 10);
   }
 
   /** Sync the humanized player avatar to the physics anchor and velocity. */
