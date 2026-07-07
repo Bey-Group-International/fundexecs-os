@@ -247,9 +247,12 @@ export function EarnCopilotDock({ name }: { name: string }) {
       }
     }
     function onExecContext(e: Event) {
-      const detail = (e as CustomEvent<{ execName: string; prompt: string }>).detail;
+      const detail = (e as CustomEvent<{ execName?: string; prompt?: string }>).detail;
       setOpen(true);
-      setBody(detail.prompt);
+      // Some senders open Earn with no pre-filled prompt (e.g. the in-office
+      // "Ask Earn" whiteboard dispatches an empty detail). Never store a
+      // non-string body — `body.trim()` in render would otherwise crash.
+      setBody(detail?.prompt ?? "");
       setTimeout(() => inputRef.current?.focus(), 60);
     }
     window.addEventListener("keydown", onKey);
