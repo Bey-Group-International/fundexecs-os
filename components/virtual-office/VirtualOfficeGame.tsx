@@ -14,6 +14,7 @@ import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
 import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
 import { MarketplacePanel, type PublicListing } from "./program/MarketplacePanel";
 import { MarketplaceListingDetail } from "./program/MarketplaceListingDetail";
+import { MarketplaceCreateListing } from "./program/MarketplaceCreateListing";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
@@ -313,6 +314,8 @@ export function VirtualOfficeGame({
   const marketplaceFetchedRef = useRef(false);
   // Which listing's in-world detail overlay is open (null = none).
   const [activeListingId, setActiveListingId] = useState<string | null>(null);
+  // Whether the in-world "list something" create overlay is open.
+  const [showCreateListing, setShowCreateListing] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
@@ -416,29 +419,29 @@ export function VirtualOfficeGame({
     return () => window.removeEventListener("office:start-meeting", open);
   }, [requestMedia]);
 
+  // Pull live public listings and push them to both the scene (live stall
+  // signboards) and the panel. Reused on first entry to the hall and again after
+  // the operator publishes a new listing in-world.
+  const refreshMarketplaceListings = useCallback(async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("marketplace_listings")
+      .select("id, title, listing_type, summary, amount, status")
+      .eq("is_public", true)
+      .order("created_at", { ascending: false })
+      .limit(12);
+    const listings = (data as PublicListing[] | null) ?? [];
+    setMarketplaceListings(listings);
+    gameRef.current?.events.emit("office:marketplace-listings", listings);
+  }, []);
+
   // Fetch public listings the first time the operator enters the Marketplace
   // hall, then push them to the scene (live stall signboards) and the panel.
   useEffect(() => {
     if (currentRoom !== "marketplace" || marketplaceFetchedRef.current) return;
     marketplaceFetchedRef.current = true;
-    let cancelled = false;
-    (async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("marketplace_listings")
-        .select("id, title, listing_type, summary, amount, status")
-        .eq("is_public", true)
-        .order("created_at", { ascending: false })
-        .limit(12);
-      if (cancelled) return;
-      const listings = (data as PublicListing[] | null) ?? [];
-      setMarketplaceListings(listings);
-      gameRef.current?.events.emit("office:marketplace-listings", listings);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentRoom]);
+    void refreshMarketplaceListings();
+  }, [currentRoom, refreshMarketplaceListings]);
 
   const toggleMic = useCallback(() => {
     const track = localStreamRef.current?.getAudioTracks()[0];
@@ -1115,13 +1118,25 @@ export function VirtualOfficeGame({
             full /marketplace surfaces. */}
         {currentRoom === "marketplace" && (
           <div className="pointer-events-auto absolute right-2 top-10 z-10 w-[290px]">
-            <MarketplacePanel listings={marketplaceListings} onOpenListing={setActiveListingId} />
+            <MarketplacePanel
+              listings={marketplaceListings}
+              onOpenListing={setActiveListingId}
+              onCreate={() => setShowCreateListing(true)}
+            />
           </div>
         )}
 
         {/* In-world listing detail — opened from a stall press-X or a panel row. */}
         {activeListingId && (
           <MarketplaceListingDetail listingId={activeListingId} onClose={() => setActiveListingId(null)} />
+        )}
+
+        {/* In-world "list something" — publish to the exchange floor in place. */}
+        {showCreateListing && (
+          <MarketplaceCreateListing
+            onClose={() => setShowCreateListing(false)}
+            onCreated={() => void refreshMarketplaceListings()}
+          />
         )}
 
         {/* Phaser canvas mount point — fills the floor column (Phaser FIT-scales

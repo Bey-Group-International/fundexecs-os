@@ -47,10 +47,13 @@ function formatAmount(a: number | null): string | null {
 export function MarketplacePanel({
   listings: provided,
   onOpenListing,
+  onCreate,
 }: {
   listings?: PublicListing[] | null;
   /** Open a listing's in-world detail overlay instead of navigating away. */
   onOpenListing?: (id: string) => void;
+  /** Open the in-world "list something" overlay instead of navigating away. */
+  onCreate?: () => void;
 }) {
   const [fetched, setFetched] = useState<PublicListing[] | null>(null);
   // The parent (VirtualOfficeGame) usually supplies listings so the same data
@@ -144,13 +147,24 @@ export function MarketplacePanel({
         >
           Browse all
         </a>
-        <a
-          href="/marketplace"
-          className="rounded border px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-200"
-          style={{ borderColor: "rgba(255,255,255,0.15)" }}
-        >
-          + New
-        </a>
+        {onCreate ? (
+          <button
+            type="button"
+            onClick={onCreate}
+            className="rounded border px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-200"
+            style={{ borderColor: "rgba(255,255,255,0.15)" }}
+          >
+            + New
+          </button>
+        ) : (
+          <a
+            href="/marketplace"
+            className="rounded border px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-200"
+            style={{ borderColor: "rgba(255,255,255,0.15)" }}
+          >
+            + New
+          </a>
+        )}
       </div>
     </div>
   );
