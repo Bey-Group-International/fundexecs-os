@@ -48,3 +48,6 @@ yarn-error.log*
 # apollo-io-mcp build, cloned skills source, reference SDKs/cookbooks). Config
 # and docs are committed; the external code they pull is not.
 /tools/
+
+# Self-hosted MediaPipe assets (copied from node_modules at build; never committed)
+/public/mediapipe/

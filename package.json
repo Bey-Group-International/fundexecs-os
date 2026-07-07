@@ -2,6 +2,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.0",
     "@composio/core": "^0.13.1",
+    "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.12.0",
@@ -36,6 +37,8 @@
   "private": true,
   "scripts": {
     "build": "next build --webpack",
+    "prebuild": "node scripts/copy-mediapipe.mjs",
+    "predev": "node scripts/copy-mediapipe.mjs",
     "db:diff": "supabase db diff",
     "db:reset": "supabase db reset",
     "db:start": "supabase start",
@@ -47,5 +50,8 @@
     "typecheck": "tsc --noEmit"
   },
   "version": "0.0.1",
-  "workspaces": [ "shared", "server" ]
+  "workspaces": [
+    "shared",
+    "server"
+  ]
 }
