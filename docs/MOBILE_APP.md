@@ -387,3 +387,34 @@ Verified at a 390px viewport with Playwright offline emulation: deciding while
 offline advances the stack and shows the "will sync" banner, which flips to
 "Syncing…" on reconnect; the session-check route returns 401 unauthenticated and
 the guard overlay renders. `tsc`/`eslint`/`build` clean; no console errors.
+
+---
+
+## 15. Accessibility & motion hardening
+
+A focused pass on the interactive mobile surfaces (the original spec's
+Accessibility section), built in parallel across disjoint files:
+
+- **Screen-reader announcements**: the approvals flow now has an `sr-only`
+  `aria-live="polite"` region that announces each decision + remaining count
+  ("Approved. 2 of 5 remaining." / "…Cleared."); the current card is a labeled
+  `role="group"` with `aria-roledescription="approval card"`; the segmented
+  progress is a `role="progressbar"` with `aria-valuenow/min/max`; the
+  swipe-intent overlays are `aria-hidden`.
+- **Toasts**: the host is `aria-live="polite"`; error toasts escalate to
+  `role="alert"` / `aria-live="assertive"` so failures are announced promptly.
+- **Landmarks**: the Earn home thread is a labeled `role="region"`
+  ("Conversation with Earn").
+- **Reduced motion** (`app/globals.css`): under `prefers-reduced-motion: reduce`
+  the mobile chrome is quieted — the bottom nav, FAB, and sheet/scrim entrances
+  drop their animations/transitions — scoped strictly to the app-shell classes
+  so desktop/web motion is unchanged.
+- **Touch targets**: a `.fx-min-tap` (44×44px) utility is available for icon
+  controls; audit confirmed the existing icon-only buttons already carry
+  `aria-label`s, sheets are `role="dialog"`/`aria-modal` with labeled close
+  buttons, swipe action strips toggle `tabIndex`, and decorative glyphs are
+  `aria-hidden` — so only three components needed changes.
+
+Verified at a 390px viewport: the ARIA roles/live regions render, and with
+Playwright `reducedMotion: "reduce"` the nav/FAB transition durations resolve to
+`0s`. `tsc`/`eslint`/`build` clean; no console errors. Desktop untouched.

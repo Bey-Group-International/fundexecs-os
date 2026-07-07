@@ -530,9 +530,32 @@ body {
   touch-action: manipulation;
 }
 
+/* Opt-in minimum touch target — enforces a 44x44px WCAG hit area on mobile
+   controls (icon buttons, nav items). Not applied globally; callers add it. */
+.fx-min-tap {
+  min-height: 44px;
+  min-width: 44px;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  /* Quiet motion for the mobile app shell only. Scoped strictly to the app-shell
+     classes so desktop/web animations are untouched — no global `* {}` reset here
+     (the non-mobile section above owns that for the web surfaces). */
   .fx-sheet-enter,
   .fx-scrim-enter {
     animation: none;
+  }
+  /* FAB + bottom tab bar: kill any pulse/glow animation and slide/scale
+     transitions on the chrome and anything animated inside the nav. */
+  .fx-fab,
+  .fx-appnav,
+  .fx-appnav *,
+  .fx-appnav *::before,
+  .fx-appnav *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .pb-appnav {
+    scroll-behavior: auto !important;
   }
 }
