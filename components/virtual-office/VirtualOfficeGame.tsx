@@ -308,6 +308,17 @@ export function VirtualOfficeGame({
   const [nearbyAgent, setNearbyAgent] = useState<NearbyAgent | null>(null);
   const [videoProximity, setVideoProximity] = useState<Record<string, number>>({});
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  // Side-panel visibility (Earn Command Center + Active Work). Persisted so the
+  // operator's choice sticks; when both are hidden the side column is removed
+  // and the floor widens to fill the reclaimed space.
+  const readPanel = (key: string) => {
+    if (typeof window === "undefined") return true;
+    try { return window.localStorage.getItem(key) !== "0"; } catch { return true; }
+  };
+  const [showCommandPanel, setShowCommandPanel] = useState(() => readPanel("office:panel:earn"));
+  const [showActiveWork, setShowActiveWork] = useState(() => readPanel("office:panel:work"));
+  useEffect(() => { try { window.localStorage.setItem("office:panel:earn", showCommandPanel ? "1" : "0"); } catch { /* no-op */ } }, [showCommandPanel]);
+  useEffect(() => { try { window.localStorage.setItem("office:panel:work", showActiveWork ? "1" : "0"); } catch { /* no-op */ } }, [showActiveWork]);
   // In-office meeting: an explicit real-time video session, rendered as a
   // floating dock over the canvas (reuses the floor's WebRTC video).
   const [meetingActive, setMeetingActive] = useState(false);
@@ -688,6 +699,14 @@ export function VirtualOfficeGame({
     return () => clearTimeout(id);
   }, [active]);
 
+  // Hiding/showing the side panels resizes the floor column without a window
+  // resize event, so re-measure Phaser's canvas to fill the new width.
+  useEffect(() => {
+    if (!gameRef.current) return;
+    const id = setTimeout(() => gameRef.current?.scale.refresh(), 60);
+    return () => clearTimeout(id);
+  }, [showCommandPanel, showActiveWork]);
+
   // Push local stream into MeshManager when it becomes available
   useEffect(() => {
     if (localStream && gameRef.current) {
@@ -956,33 +975,58 @@ export function VirtualOfficeGame({
         {/* Proximity bubble overlay */}
         <BubbleOverlay members={bubbleMembers} />
 
-        {/* Room-specific action panel */}
-        {roomActions.length > 0 && (
-          <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
-            {roomActions.map((action) => (
-              <button
-                key={action.id}
-                onClick={() => handleRoomAction(action)}
-                className="flex items-center gap-2 px-3 py-1.5 text-[11px] rounded-lg transition-colors backdrop-blur-sm"
-                style={{
-                  fontFamily: "Georgia, serif",
-                  letterSpacing: "0.06em",
-                  color: "#c9a84c",
-                  background: "rgba(10,8,6,0.88)",
-                  border: "1px solid rgba(201,168,76,0.3)",
-                }}
-              >
-                <span className="opacity-70 font-mono">{action.icon}</span>
-                {action.label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Room actions + persistent panel toggles — one inline horizontal row.
+            The Earn Command Center / Active Work toggles sit next to the room's
+            Ask Earn / Dashboard actions; hiding both side panels widens the floor. */}
+        <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-1.5">
+          {roomActions.map((action) => (
+            <button
+              key={action.id}
+              onClick={() => handleRoomAction(action)}
+              className="flex items-center gap-2 px-3 py-1.5 text-[11px] rounded-lg transition-colors backdrop-blur-sm"
+              style={{
+                fontFamily: "Georgia, serif",
+                letterSpacing: "0.06em",
+                color: "#c9a84c",
+                background: "rgba(10,8,6,0.88)",
+                border: "1px solid rgba(201,168,76,0.3)",
+              }}
+            >
+              <span className="opacity-70 font-mono">{action.icon}</span>
+              {action.label}
+            </button>
+          ))}
+          {[
+            { on: showCommandPanel, toggle: () => setShowCommandPanel((v) => !v), label: "Earn Center" },
+            { on: showActiveWork, toggle: () => setShowActiveWork((v) => !v), label: "Active Work" },
+          ].map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={p.toggle}
+              aria-pressed={p.on}
+              title={`${p.on ? "Hide" : "Show"} ${p.label}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg transition-colors backdrop-blur-sm"
+              style={{
+                fontFamily: "Georgia, serif",
+                letterSpacing: "0.06em",
+                color: p.on ? "#c9a84c" : "#7c8697",
+                background: "rgba(10,8,6,0.88)",
+                border: `1px solid ${p.on ? "rgba(201,168,76,0.3)" : "rgba(255,255,255,0.08)"}`,
+              }}
+            >
+              <span className="font-mono text-[10px] opacity-80">{p.on ? "⊟" : "⊞"}</span>
+              {p.label}
+            </button>
+          ))}
+        </div>
 
-        {/* Phaser canvas mount point */}
+        {/* Phaser canvas mount point — fills the floor column (Phaser FIT-scales
+            to it), so hiding the side panels lets the office widen into the
+            reclaimed space. Aspect ratio matches the game; height is capped. */}
         <div
           ref={containerRef}
-          style={{ width: GAME_WIDTH, height: GAME_HEIGHT, maxWidth: "100%" }}
+          style={{ width: "100%", aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}`, maxWidth: GAME_WIDTH * 1.5, maxHeight: GAME_HEIGHT * 1.25 }}
           className="mx-auto cursor-pointer"
           onClick={() => {
             const canvas = containerRef.current?.querySelector("canvas");
@@ -1013,13 +1057,18 @@ export function VirtualOfficeGame({
           <OfficeAuditDrawer />
         </div>
 
-        {/* ── Command & work-visibility column ── */}
-        <div className="flex w-full flex-col gap-3 xl:w-[340px] xl:shrink-0">
-          <div className="flex h-[430px] flex-col">
-            <OfficeCommandPanel />
+        {/* ── Command & work-visibility column ── (removed when both hidden, so
+            the floor column, which is flex-1, widens to reclaim the space) */}
+        {(showCommandPanel || showActiveWork) && (
+          <div className="flex w-full flex-col gap-3 xl:w-[340px] xl:shrink-0">
+            {showCommandPanel && (
+              <div className="flex h-[430px] flex-col">
+                <OfficeCommandPanel />
+              </div>
+            )}
+            {showActiveWork && <ActiveWorkflowPanel />}
           </div>
-          <ActiveWorkflowPanel />
-        </div>
+        )}
       </div>
     </div>
   );
