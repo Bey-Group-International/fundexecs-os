@@ -28,13 +28,22 @@ import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
-import { FloorRoster, type RosterEntry } from "./FloorRoster";
+import { FloorInviteButton } from "./FloorInviteButton";
 import { ScreenShareDock } from "./ScreenShareDock";
 import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
 import { FloorShortcuts } from "./FloorShortcuts";
 import { officeInviteUrl } from "@/lib/office/floor-link";
 import { createClient } from "@/lib/supabase/client";
+
+/** A teammate present on the floor (from the scene's presence bridge). */
+export type RosterEntry = {
+  id: string;
+  name: string;
+  roomKey: string | null;
+  self: boolean;
+  onCall: boolean;
+};
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -1157,6 +1166,14 @@ export function VirtualOfficeGame({
             </div>
           );
         })()}
+        {/* Presence chip + activity dropdown, then Invite — in the rail's left
+            gap (they sit before the ml-auto tool group, so they stay left). */}
+        {token && (
+          <>
+            <FloorActivityFeed events={floorActivity} presenceCount={Math.max(roster.length, 1)} />
+            <FloorInviteButton currentRoom={currentRoom} />
+          </>
+        )}
         {/* Command palette — keyboard-first launcher (⌘K) for floor actions */}
         <button
           type="button"
@@ -1225,17 +1242,6 @@ export function VirtualOfficeGame({
 
       {/* Game canvas area */}
       <div className="relative">
-        {/* Live "who's on the floor" roster + invite */}
-        {token && roster.length > 0 && <FloorRoster roster={roster} />}
-
-        {/* In-world activity ticker + presence (bottom-left) */}
-        {token && (
-          <FloorActivityFeed
-            events={floorActivity}
-            presenceCount={Math.max(roster.length, 1)}
-          />
-        )}
-
         {/* Proximity presence — the executive you're standing beside greets you */}
         {nearbyAgent && (
           <ProximityCard agent={nearbyAgent} onDelegate={() => setDelegateAgent(nearbyAgent)} />
