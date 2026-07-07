@@ -36,6 +36,7 @@ import {
   roomAccentHex,
   roomCenterWorld,
   roomFloors,
+  roomLabelAnchors,
   wallSegments,
   worldOf,
   yawOf,
@@ -164,6 +165,10 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     const key = new THREE.DirectionalLight(0xffe6b0, 1.1);
     key.position.set(6, 20, 8);
     scene.add(key);
+    // Cool fill from the opposite side softens the shadows the key casts.
+    const fill = new THREE.DirectionalLight(0x9fb4d6, 0.35);
+    fill.position.set(-8, 12, -6);
+    scene.add(fill);
     scene.add(new THREE.AmbientLight(0x404a5c, 0.6));
 
     this.buildStaticIfReady();
@@ -427,6 +432,47 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     // Walls (one instanced draw call) + the full per-room furniture set.
     this.wallMesh = this.buildInstancedBoxes(wallSegments(), 0x2b3242, 0.85);
     this.buildFurniture(officeFurniture3D());
+
+    // Per-room polish: a floating department sign + a warm accent point light,
+    // so each room reads as its department at a glance.
+    for (const anchor of roomLabelAnchors()) {
+      const accentHex = roomAccentHex(anchor.roomKey);
+      const glow = new THREE.PointLight(new THREE.Color(accentHex), 0.28, 9, 2);
+      glow.position.set(anchor.x, 3, anchor.z);
+      scene.add(glow);
+      const sign = this.makeRoomSign(anchor.label, accentHex);
+      if (sign) {
+        sign.position.set(anchor.x, 4.4, anchor.z);
+        scene.add(sign);
+      }
+    }
+  }
+
+  /** A floating department sign — a billboarded canvas label tinted by accent. */
+  private makeRoomSign(label: string, accentHex: string): THREE.Sprite | null {
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    canvas.width = 512;
+    canvas.height = 96;
+    ctx.font = "700 44px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const w = Math.min(500, ctx.measureText(label).width + 48);
+    ctx.fillStyle = "rgba(9,12,20,0.78)";
+    ctx.fillRect((512 - w) / 2, 18, w, 60);
+    ctx.fillStyle = accentHex;
+    ctx.fillRect((512 - w) / 2, 72, w, 4); // accent underline
+    ctx.fillStyle = "#f4f7fb";
+    ctx.fillText(label, 256, 46);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(5.2, 0.98, 1);
+    this.disposables.push(tex, mat);
+    return sprite;
   }
 
   /**

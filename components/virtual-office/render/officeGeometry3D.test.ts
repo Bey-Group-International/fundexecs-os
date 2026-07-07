@@ -6,6 +6,7 @@ import {
   roomCenterWorld,
   roomFloor,
   roomFloors,
+  roomLabelAnchors,
   wallSegments,
   workstations3D,
   worldOf,
@@ -126,5 +127,18 @@ describe("accents", () => {
 
   it("falls back to gold for unknown rooms", () => {
     expect(roomAccentHex("mystery")).toBe("#c9a84c");
+  });
+});
+
+describe("room label anchors", () => {
+  const anchors = roomLabelAnchors();
+
+  it("gives one labeled anchor per room, at the room center", () => {
+    expect(anchors).toHaveLength(ROOMS.length);
+    for (const a of anchors) {
+      const room = ROOMS.find((r) => r.key === a.roomKey)!;
+      expect(a.label).toBe(room.label);
+      expect(roomCenterWorld(a.roomKey)).toEqual({ x: a.x, z: a.z });
+    }
   });
 });
