@@ -16,6 +16,7 @@ export { MobileDealCard, type MobileDeal } from "./MobileDealCard";
 export { MobileContactCard, type MobileContact } from "./MobileContactCard";
 export { MobileWorkflowCard, type MobileWorkflow } from "./MobileWorkflowCard";
 export { MobileApprovalCard, type MobileApproval } from "./MobileApprovalCard";
+export { MobileApprovalsFlow, type ApprovalItem } from "./MobileApprovalsFlow";
 export { MobileStatTile, MobileNextAction, type CommandStat } from "./MobileCommandCard";
 export { SwipeableCard, type SwipeAction } from "./SwipeableCard";
 export { PullToRefresh } from "./PullToRefresh";
