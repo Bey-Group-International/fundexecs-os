@@ -82,6 +82,13 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  // Installed (Add to Home Screen) behavior on iOS — full-screen standalone
+  // launch with a translucent status bar that matches the executive theme.
+  appleWebApp: {
+    capable: true,
+    title: SITE_NAME,
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport = {
@@ -90,6 +97,11 @@ export const viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#050912" },
   ],
   colorScheme: "dark light" as const,
+  // Extend content beneath the notch / home indicator so the app shell can
+  // draw its own safe-area padding for an edge-to-edge installed experience.
+  viewportFit: "cover" as const,
+  width: "device-width",
+  initialScale: 1,
 };
 
 const themeBootstrap = `

@@ -456,3 +456,83 @@ body {
   background: rgb(var(--fx-line));
   border-radius: 4px;
 }
+
+/* ==========================================================================
+   Mobile app shell — isolated to the phone/app experience (< md / 768px).
+   Desktop and web layouts never render these; the utilities below only take
+   effect where the mobile app shell (components/mobile/*) mounts them.
+   ========================================================================== */
+
+/* Safe-area insets for notches / home indicators on installed (PWA) usage. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.h-safe-bottom {
+  height: env(safe-area-inset-bottom, 0px);
+}
+/* Reserve room at the foot of scrollable app screens so content clears the
+   fixed bottom tab bar + home indicator. */
+.pb-appnav {
+  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Bottom tab bar — floating glass dock. */
+.fx-appnav {
+  background: linear-gradient(
+    180deg,
+    rgb(var(--fx-surface-1) / 0.86),
+    rgb(var(--fx-surface-0) / 0.94)
+  );
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 -1px 0 rgb(var(--fx-line) / 0.6),
+    0 -18px 48px -28px rgb(0 0 0 / 0.7);
+}
+
+/* Slide-up action sheet / drawer entrance. */
+@keyframes fxSheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.fx-sheet-enter {
+  animation: fxSheetUp 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes fxScrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fx-scrim-enter {
+  animation: fxScrimIn 0.2s ease-out both;
+}
+
+/* Quick-action FAB pulse aura. */
+.fx-fab {
+  box-shadow:
+    0 10px 30px -10px rgb(var(--fx-gold-rgb) / 0.65),
+    0 2px 8px rgb(0 0 0 / 0.4);
+}
+
+/* Larger, thumb-friendly hit areas inside the app shell. */
+.fx-tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-sheet-enter,
+  .fx-scrim-enter {
+    animation: none;
+  }
+}

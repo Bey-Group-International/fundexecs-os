@@ -28,6 +28,9 @@ import { DownloadBanner } from "@/components/DownloadBanner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { AppShellMobile } from "@/components/mobile/AppShellMobile";
+import { MobileInstallPrompt } from "@/components/mobile/MobileInstallPrompt";
+import { ServiceWorkerRegister } from "@/components/mobile/ServiceWorkerRegister";
 
 const HUB_ORDER: Hub[] = ["build", "source", "run", "execute"];
 
@@ -224,9 +227,12 @@ export default async function AppLayout({
               dealsUnread={dealsUnread ?? 0}
             />
             <MatchToast alert={matchAlert} />
-            <DownloadBanner />
+            {/* Desktop-only download nudge; mobile gets the PWA install prompt. */}
+            <div className="hidden md:block">
+              <DownloadBanner />
+            </div>
           </div>
-          <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
+          <main className="flex-1 overflow-y-auto px-4 py-5 pb-appnav sm:px-6 sm:py-6 md:pb-8 lg:px-8 lg:py-8 print:overflow-visible print:p-0">
             {children}
           </main>
         </div>
@@ -235,10 +241,26 @@ export default async function AppLayout({
 
       <div className="print:hidden">
         <GuidedTour orgId={ctx.orgId} initialHidden={orgRow?.setup_hidden ?? false} />
-        <EarnCopilotDock name={name} />
+        {/* The floating Earn dock is a desktop affordance; on mobile Earn is a
+            primary tab + the quick-action FAB, so the dock is suppressed to
+            keep the app shell uncluttered. */}
+        <div className="hidden md:contents">
+          <EarnCopilotDock name={name} />
+        </div>
         {/* THE app-wide ⌘K palette — one instance, one catalog, every route. */}
         <GlobalCommandPalette />
       </div>
+
+      {/* Mobile app shell — bottom tab bar, quick-action FAB, and drawers.
+          Every element is md:hidden; desktop/web is untouched. */}
+      <AppShellMobile
+        name={name}
+        planName={planName}
+        approvalsCount={approvalsCount ?? 0}
+        signOutAction={signOut}
+      />
+      <MobileInstallPrompt />
+      <ServiceWorkerRegister />
       </MobileNavProvider>
     </div>
   );
