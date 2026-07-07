@@ -205,6 +205,23 @@ export const ROOM_BY_KEY: Record<RoomKey, ProgramRoom> = Object.fromEntries(
   PROGRAM_ROOMS.map((r) => [r.key, r])
 ) as Record<RoomKey, ProgramRoom>;
 
+/**
+ * Safe room label for any key. ROOM_BY_KEY only holds the nine office-grid
+ * rooms, so a key from outside that set — a spatial-only room (e.g. the
+ * Marketplace hall) or a stale key from persisted/hydrated workflow data —
+ * would make a raw `ROOM_BY_KEY[key].label` access throw and crash the whole
+ * floor to the error boundary. This never throws: it falls back to a
+ * prettified version of the key.
+ */
+export function roomLabel(key: string): string {
+  const room = ROOM_BY_KEY[key as RoomKey];
+  if (room) return room.label;
+  return key
+    .split(/[_\s]+/)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
 // ─── Tasks & workflows ───────────────────────────────────────────────────────
 
 export type WorkflowIntent =

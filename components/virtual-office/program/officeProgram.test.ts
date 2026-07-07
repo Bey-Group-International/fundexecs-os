@@ -7,6 +7,8 @@ import {
   auditEventToRow,
   PROGRAM_AGENTS,
   PROGRAM_ROOMS,
+  ROOM_BY_KEY,
+  roomLabel,
   canRoleApprove,
   type AuditEvent,
   type OfficeWorkflow,
@@ -25,6 +27,24 @@ import {
   type ServerApprovalDecider,
   type SceneCommand,
 } from "./officeProgramStore";
+
+describe("roomLabel — safe room labels (never crash the floor)", () => {
+  it("returns the program label for every office-grid room", () => {
+    for (const r of PROGRAM_ROOMS) {
+      expect(roomLabel(r.key)).toBe(r.label);
+    }
+  });
+
+  it("falls back to a prettified label for a key outside ROOM_BY_KEY", () => {
+    // A raw ROOM_BY_KEY[key].label access throws for an unknown key — this is
+    // the crash that took the whole floor to the error boundary when an agent
+    // or workflow referenced a spatial-only / stale room. roomLabel must not.
+    expect(() => ROOM_BY_KEY["marketplace" as never].label).toThrow();
+    expect(roomLabel("marketplace")).toBe("Marketplace");
+    expect(roomLabel("some_stale_key")).toBe("Some Stale Key");
+    expect(() => roomLabel("marketplace")).not.toThrow();
+  });
+});
 
 describe("office program task router", () => {
   it("routes data room commands as Tier 2 external-facing across the full floor", () => {

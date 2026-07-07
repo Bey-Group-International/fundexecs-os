@@ -25,7 +25,7 @@ import {
   PROGRAM_AGENTS,
   PROGRAM_ROOMS,
   ROLE_LABELS,
-  ROOM_BY_KEY,
+  roomLabel,
   STAGE_ORDER,
   canRoleApprove,
   rolesForTier,
@@ -585,7 +585,7 @@ function assignTaskToNPCs(workflow: OfficeWorkflow) {
       addAuditEvent({
         actor: "Earn",
         action: `${agent.name} assigned — ${a.owns}`,
-        room: ROOM_BY_KEY[a.roomKey].label,
+        room: roomLabel(a.roomKey),
         tier: workflow.riskTier,
         status: "info",
       });
@@ -596,7 +596,7 @@ function assignTaskToNPCs(workflow: OfficeWorkflow) {
   after(300 + workflow.assignments.length * 260 + 500, () => {
     setStage("in_progress", "Agents are moving to their rooms and starting first-pass outputs", "None — the team is executing");
     for (const a of workflow.assignments) {
-      updateNPCState(a.agentId, "moving", `Heading to ${ROOM_BY_KEY[a.roomKey].label}`);
+      updateNPCState(a.agentId, "moving", `Heading to ${roomLabel(a.roomKey)}`);
       moveNPCToRoom(a.agentId, a.roomKey);
     }
     pushChat("earn", "Earn", `The team is on the floor: ${workflow.assignments.map((a) => AGENT_BY_ID[a.agentId].name).join(", ")}. I'll report as outputs land.`);
@@ -630,7 +630,7 @@ function startProgressTicker() {
         const agent = AGENT_BY_ID[a.agentId];
         updateNPCState(a.agentId, "complete", `${a.owns} ready for review`);
         pushChat("agent_update", agent.name, `${a.owns} is ready for review.`);
-        addAuditEvent({ actor: agent.name, action: `Output completed — ${a.owns}`, room: ROOM_BY_KEY[a.roomKey].label, tier: wf.riskTier, status: "complete" });
+        addAuditEvent({ actor: agent.name, action: `Output completed — ${a.owns}`, room: roomLabel(a.roomKey), tier: wf.riskTier, status: "complete" });
       }
       return { ...a, progress: Math.round(progress), done };
     });
@@ -937,8 +937,8 @@ export function joinMeeting(type: MeetingType) {
     }
   }
   triggerRoomActivity(def.roomKey, true, Math.max(state.rooms[def.roomKey].taskCount, 1), state.activeWorkflow?.riskTier ?? null, def.participants);
-  pushChat("meeting", "Office", `You joined ${def.label} in the ${ROOM_BY_KEY[def.roomKey].label}. Participants: ${def.participants.map((p) => AGENT_BY_ID[p].name).join(", ")}.`);
-  addAuditEvent({ actor: "You", action: `Meeting joined — ${def.label}`, room: ROOM_BY_KEY[def.roomKey].label, tier: null, status: "info" });
+  pushChat("meeting", "Office", `You joined ${def.label} in the ${roomLabel(def.roomKey)}. Participants: ${def.participants.map((p) => AGENT_BY_ID[p].name).join(", ")}.`);
+  addAuditEvent({ actor: "You", action: `Meeting joined — ${def.label}`, room: roomLabel(def.roomKey), tier: null, status: "info" });
 }
 
 export function leaveMeeting() {
@@ -955,7 +955,7 @@ export function leaveMeeting() {
     triggerRoomActivity(meeting.roomKey, false, 0, null, []);
   }
   pushChat("meeting", "Office", `You left ${meeting.label}.`);
-  addAuditEvent({ actor: "You", action: `Meeting left — ${meeting.label}`, room: ROOM_BY_KEY[meeting.roomKey].label, tier: null, status: "info" });
+  addAuditEvent({ actor: "You", action: `Meeting left — ${meeting.label}`, room: roomLabel(meeting.roomKey), tier: null, status: "info" });
 }
 
 // ─── Direct agent interaction ────────────────────────────────────────────────
@@ -992,7 +992,7 @@ export function requestAgentReview(agentId: AgentId) {
   addAuditEvent({
     actor: "You",
     action: `Output review requested — ${rt.owns}`,
-    room: ROOM_BY_KEY[rt.roomKey].label,
+    room: roomLabel(rt.roomKey),
     tier: state.activeWorkflow?.riskTier ?? null,
     status: "info",
   });
@@ -1046,7 +1046,7 @@ export function reassignAgentTask(fromAgentId: AgentId, toAgentId: AgentId) {
   addAuditEvent({
     actor: "You",
     action: `Reassigned ${a.owns}: ${from.name} → ${to.name}`,
-    room: ROOM_BY_KEY[a.roomKey].label,
+    room: roomLabel(a.roomKey),
     tier: wf.riskTier,
     status: "info",
   });
