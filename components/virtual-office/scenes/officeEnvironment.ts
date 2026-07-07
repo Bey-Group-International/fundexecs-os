@@ -364,6 +364,36 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
   return pieces;
 }
 
+/** Back-wall X offsets for the six market stalls — dodge the three entry lanes
+ *  (door centers at 192 / 576 / 960, ±32). Shared by the hall painter and the
+ *  anchor exporter so live signboards/hotspots line up exactly with the props. */
+const MARKETPLACE_STALL_X = [96, 300, 468, 684, 852, 1056];
+const MARKETPLACE_STALL_FY = 66; // stall foot Y, room-relative
+
+/** Awning color per stall (marketplace accent slotted at index 1). */
+function marketplaceAwnings(): number[] {
+  const accent = ROOM_ACCENT.marketplace ?? C.gold;
+  return [0xef4444, accent, 0xf59e0b, 0x38bdf8, 0xa855f7, 0x22c55e];
+}
+
+/**
+ * World-space anchors for the marketplace stalls, so the scene can hang a live
+ * listing signboard and a press-X hotspot on each one. Returns [] if the
+ * marketplace room isn't present.
+ */
+export function marketplaceStallAnchors(): Array<{ x: number; y: number; awning: number }> {
+  const room = ROOMS.find((r) => r.key === "marketplace");
+  if (!room) return [];
+  const ox = room.col * ROOM_W;
+  const oy = room.row * ROOM_H;
+  const awnings = marketplaceAwnings();
+  return MARKETPLACE_STALL_X.map((sx, i) => ({
+    x: ox + sx,
+    y: oy + MARKETPLACE_STALL_FY,
+    awning: awnings[i % awnings.length],
+  }));
+}
+
 /**
  * The Marketplace hall — a wide bazaar of awninged market stalls along the back
  * wall, a central runner rug, corner plants, and lamps for warmth. Draws across
@@ -384,13 +414,11 @@ function createMarketplaceHall(
   rug.strokeRoundedRect(ox + 60, cy - 24, w - 120, 48, 10);
   pieces.push({ gfx: rug, footY: -1 });
 
-  // Awninged stalls along the back wall. X positions dodge the three entry
-  // lanes (door centers at 192 / 576 / 960, ±32).
-  const awnings = [0xef4444, accent, 0xf59e0b, 0x38bdf8, 0xa855f7, 0x22c55e];
-  const stallX = [96, 300, 468, 684, 852, 1056];
-  stallX.forEach((sx, i) => {
+  // Awninged stalls along the back wall (see MARKETPLACE_STALL_X).
+  const awnings = marketplaceAwnings();
+  MARKETPLACE_STALL_X.forEach((sx, i) => {
     const x = ox + sx;
-    const fy = oy + 66;
+    const fy = oy + MARKETPLACE_STALL_FY;
     const awning = awnings[i % awnings.length];
     const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
     glow.fillStyle(awning, 0.04);

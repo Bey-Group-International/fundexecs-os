@@ -39,6 +39,7 @@ import {
   createWallVisuals,
   createFurniture,
   roomAccentColor,
+  marketplaceStallAnchors,
   officeSeats,
   boardroomTableSeats,
   coffeePoints,
@@ -210,6 +211,8 @@ export class OfficeScene extends Phaser.Scene {
   private interactPrompt!: Phaser.GameObjects.Text;
   private nearestInteractive: InteractiveObject | null = null;
   private keyX!: Phaser.Input.Keyboard.Key;
+  // Live marketplace-stall signboards (rebuilt whenever fresh listings arrive).
+  private marketplaceStallGfx: Phaser.GameObjects.GameObject[] = [];
 
   // Follow-mode (press F near a remote player to follow them)
   private followTargetId: string | null = null;
@@ -398,6 +401,9 @@ export class OfficeScene extends Phaser.Scene {
     this._setupPointerTeleport();
     this._createMinimap();
     this._createInteractives();
+    // Live marketplace stalls — React pushes public listings; each becomes a
+    // signboard + press-X hotspot on a stall in the Marketplace hall.
+    this.game.events.on("office:marketplace-listings", this._setMarketplaceStalls, this);
     this._setupEmotes();
     this._setupFollowMode();
     this._setupNpcProximity();
@@ -517,6 +523,9 @@ export class OfficeScene extends Phaser.Scene {
   shutdown() {
     this.game.events.off("office:teleport");
     this.game.events.off("office:teleport-room");
+    this.game.events.off("office:marketplace-listings", this._setMarketplaceStalls, this);
+    for (const g of this.marketplaceStallGfx) g.destroy();
+    this.marketplaceStallGfx = [];
     this.game.events.off("office:touch-move");
     this.game.events.off("office:emote");
     this.game.events.off("office:zone-config");
@@ -1589,6 +1598,108 @@ export class OfficeScene extends Phaser.Scene {
         this.lastZoneFireAt[nearest.id] = this.clockMs;
         this.game.events.emit("office:interact", nearest);
       }
+    }
+  }
+
+  // ── Live marketplace stalls — a real public listing on each stall ────────────
+
+  /**
+   * Hang a live listing signboard + a press-X hotspot on each market stall.
+   * Rebuilt whenever React pushes fresh listings; extra stalls stay decorative.
+   */
+  private _setMarketplaceStalls(
+    listings: Array<{ id: string; title: string; listing_type: string; amount: number | null }>,
+  ) {
+    // Tear down any previous signboards + their hotspots.
+    for (const g of this.marketplaceStallGfx) g.destroy();
+    this.marketplaceStallGfx = [];
+    this.interactives = this.interactives.filter((it) => {
+      if (it.obj.id.startsWith("mkt-")) {
+        this.tweens.killTweensOf(it.marker);
+        it.marker.destroy();
+        return false;
+      }
+      return true;
+    });
+    this.nearestInteractive = null;
+    if (this.interactPrompt) this.interactPrompt.setVisible(false);
+
+    const anchors = marketplaceStallAnchors();
+    const count = Math.min(anchors.length, listings.length);
+    for (let i = 0; i < count; i++) this._drawStallSign(anchors[i], listings[i]);
+  }
+
+  private _drawStallSign(
+    a: { x: number; y: number; awning: number },
+    listing: { id: string; title: string; listing_type: string; amount: number | null },
+  ) {
+    const title = listing.title.length > 16 ? `${listing.title.slice(0, 15)}…` : listing.title;
+    const typeLabel = this._prettyListingType(listing.listing_type);
+    const amount = this._formatListingAmount(listing.amount);
+    const sub = amount ? `${typeLabel} · ${amount}` : typeLabel;
+
+    // Hanging signboard above the awning — dark plate, accent header, legible.
+    const boardY = a.y - 78;
+    const board = this.add.graphics().setDepth(DEPTH_LABEL - 0.4);
+    // Hang-lines from the board down to the awning so it reads as a shop sign.
+    board.lineStyle(1, 0x2a323f, 0.85);
+    board.lineBetween(a.x - 30, boardY + 24, a.x - 30, boardY + 34);
+    board.lineBetween(a.x + 30, boardY + 24, a.x + 30, boardY + 34);
+    board.fillStyle(0x0a0806, 0.92);
+    board.fillRoundedRect(a.x - 44, boardY, 88, 24, 3);
+    board.lineStyle(1, a.awning, 0.7);
+    board.strokeRoundedRect(a.x - 44, boardY, 88, 24, 3);
+    board.fillStyle(a.awning, 0.9);
+    board.fillRect(a.x - 43, boardY + 1, 86, 2);
+    this.marketplaceStallGfx.push(board);
+
+    const titleTxt = this.add
+      .text(a.x, boardY + 6, title, { fontFamily: "'Georgia','Times New Roman',serif", fontSize: "8px", color: "#f1ece1" })
+      .setOrigin(0.5, 0)
+      .setDepth(DEPTH_LABEL - 0.3);
+    const subTxt = this.add
+      .text(a.x, boardY + 16, sub, { fontFamily: "monospace", fontSize: "6.5px", color: "#cbd2dc" })
+      .setOrigin(0.5, 0)
+      .setDepth(DEPTH_LABEL - 0.3);
+    this.marketplaceStallGfx.push(titleTxt, subTxt);
+
+    // Press-X hotspot marker, bobbing just above the counter.
+    const marker = this.add
+      .text(a.x, a.y - 2, "◈", { fontFamily: "monospace", fontSize: "10px", color: "#2dd4bf" })
+      .setOrigin(0.5, 0.5)
+      .setDepth(DEPTH_LABEL - 0.2)
+      .setAlpha(0.75);
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: marker, y: a.y - 6, alpha: 0.4, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+
+    const obj: InteractiveObject = {
+      id: `mkt-${listing.id}`,
+      roomKey: "marketplace",
+      x: 0,
+      y: 0,
+      label: listing.title.length > 28 ? `${listing.title.slice(0, 27)}…` : listing.title,
+      icon: "◈",
+      href: `/marketplace/${listing.id}`,
+    };
+    // Hotspot sits just in front of the counter so it's reachable from the walkway.
+    this.interactives.push({ obj, wx: a.x, wy: a.y + 20, marker });
+  }
+
+  private _prettyListingType(t: string): string {
+    const map: Record<string, string> = {
+      deal: "Deal", fund: "Fund", co_invest: "Co-invest",
+      secondary: "Secondary", service: "Service", lp_seeking: "LP Seeking",
+    };
+    return map[t] ?? t.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  private _formatListingAmount(amount: number | null): string {
+    if (amount == null) return "";
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0, notation: "compact" }).format(amount);
+    } catch {
+      return `$${amount}`;
     }
   }
 
