@@ -12,7 +12,6 @@ import { makeServerApprovalDecider } from "@/lib/office/officeApprovalClient";
 import { appendOfficeAuditEvents, loadOfficeWorkflows, persistOfficeWorkflow } from "@/components/virtual-office/program/office-actions";
 import type { MemberRole } from "@/lib/supabase/database.types";
 import { executiveCharacters } from "@/components/characters/characterConfig";
-import { OfficeAvatarChip } from "@/components/virtual-office/avatar/OfficeAvatarChip";
 import {
   parseUserAvatar,
   DEFAULT_USER_AVATAR,
@@ -231,8 +230,8 @@ export function OfficeTabs() {
     <div className="bg-surface-0">
       {/* Slim single-row header — keeps the floor fitting the viewport without
           vertical scrolling. The full description now lives in the docs, not here. */}
-      <div className="border-b border-line/60 bg-gradient-to-r from-surface-1 via-surface-0 to-surface-1 px-4 py-2.5">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="border-b border-line/60 bg-gradient-to-r from-surface-1 via-surface-0 to-surface-1 px-4 py-1.5">
+        <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-baseline gap-2.5">
             <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
               AI Execution Floor
@@ -241,17 +240,14 @@ export function OfficeTabs() {
               FundExecs OS · Office Program
             </p>
           </div>
-          {/* Operator avatar chip (opens the character selector). The live
-              office metrics now live in the unified status strip on the floor,
-              not here — no duplication. */}
-          {token && !guestPrompt ? (
-            <OfficeAvatarChip avatar={officeAvatar} onSaved={setOfficeAvatar} />
-          ) : null}
+          {/* The operator's character chip now lives inline on the floor's top
+              rail beside Invite (sleek with the other chips) — not here, so the
+              header stays a single tight title row. */}
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-line/60 bg-surface-1/80 px-4 pt-3">
+      <div className="flex gap-1 border-b border-line/60 bg-surface-1/80 px-4 pt-1.5">
         <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
           Execution Floor
         </TabButton>
@@ -270,7 +266,7 @@ export function OfficeTabs() {
       {/* Virtual panel stays mounted after first activation so Phaser does not
           reinitialise on tab switch, but is not mounted before it is needed. */}
       {opened.virtual ? (
-      <div className={tab === "virtual" ? "block p-4" : "invisible h-0 overflow-hidden"}>
+      <div className={tab === "virtual" ? "block px-4 py-2" : "invisible h-0 overflow-hidden"}>
         {/* Guest join prompt — shown when no session and virtual tab is active */}
         {guestPrompt ? (
           <div className="flex h-[600px] items-center justify-center">
@@ -314,6 +310,7 @@ export function OfficeTabs() {
             <VirtualOfficeGame
               token={token}
               officeAvatar={officeAvatar}
+              onAvatarSaved={setOfficeAvatar}
               displayName={displayName}
               active={tab === "virtual"}
               teleportTarget={teleportTarget}
@@ -343,7 +340,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={[
-        "flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors",
+        "flex items-center gap-1 px-4 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors",
         active
           ? "border-amber-400 text-amber-400 bg-amber-400/5"
           : "border-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5",

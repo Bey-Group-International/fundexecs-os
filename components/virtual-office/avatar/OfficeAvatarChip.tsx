@@ -15,9 +15,12 @@ import { saveOfficeAvatar } from "@/app/(app)/settings/actions";
 export function OfficeAvatarChip({
   avatar,
   onSaved,
+  compact = false,
 }: {
   avatar: UserAvatar;
   onSaved: (a: UserAvatar) => void;
+  /** Slim inline variant for the office top rail (sits beside the other chips). */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<UserAvatar>(avatar);
@@ -35,6 +38,43 @@ export function OfficeAvatarChip({
       setOpen(false);
     }
   };
+
+  const selector = open ? (
+    <>
+      <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+      <div className={`absolute z-40 w-max max-w-[340px] ${compact ? "left-0 top-full mt-1" : "right-0 mt-2"}`}>
+        <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} />
+      </div>
+    </>
+  ) : null;
+
+  if (compact) {
+    return (
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`Your character: ${avatar.displayName}. Edit character.`}
+          title="Edit your character"
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] transition-colors"
+          style={{
+            fontFamily: "Georgia, serif",
+            color: "#cbd2dc",
+            background: open ? "rgba(201,168,76,0.12)" : "transparent",
+            border: `1px solid ${open ? "rgba(201,168,76,0.4)" : "rgba(255,255,255,0.05)"}`,
+          }}
+        >
+          <span className="grid h-4 w-4 place-items-center overflow-hidden rounded-sm" style={{ background: "#0a0806" }}>
+            <AvatarPreview spec={userAvatarSpec(avatar)} size={16} />
+          </span>
+          <span className="max-w-[96px] truncate">{avatar.displayName}</span>
+          <span aria-hidden className="text-[8px] opacity-70">{open ? "▴" : "▾"}</span>
+        </button>
+        {selector}
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -57,14 +97,7 @@ export function OfficeAvatarChip({
           ▾
         </span>
       </button>
-      {open ? (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-40 mt-2 w-max max-w-[340px]">
-            <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} />
-          </div>
-        </>
-      ) : null}
+      {selector}
     </div>
   );
 }

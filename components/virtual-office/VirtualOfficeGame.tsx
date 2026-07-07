@@ -28,6 +28,8 @@ import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
 import { FloorInviteButton } from "./FloorInviteButton";
+import { OfficeAvatarChip } from "./avatar/OfficeAvatarChip";
+import type { UserAvatar } from "@/lib/office/userAvatar";
 import { ScreenShareDock } from "./ScreenShareDock";
 import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
@@ -291,7 +293,9 @@ type VirtualOfficeGameProps = {
   /** Executive character id from characterConfig (e.g. "earnest-fundmaker"). */
   characterId?: string;
   /** The operator's human Executive Floor avatar (from user_metadata). */
-  officeAvatar?: unknown;
+  officeAvatar?: UserAvatar;
+  /** Called when the operator saves a new character from the top-rail chip. */
+  onAvatarSaved?: (a: UserAvatar) => void;
   /**
    * Whether this panel is currently the active/visible tab.
    * Phaser init is deferred until the first time this becomes true,
@@ -323,6 +327,7 @@ export function VirtualOfficeGame({
   displayName = "You",
   characterId,
   officeAvatar,
+  onAvatarSaved,
   active = true,
   teleportTarget,
   dealRoomListingId = null,
@@ -457,7 +462,10 @@ export function VirtualOfficeGame({
       }
       const top = el.getBoundingClientRect().top;
       const avail = window.innerHeight - top - RESERVE;
-      setCanvasCap(Math.max(340, Math.min(GAME_HEIGHT * 1.25, Math.round(avail))));
+      // Fill the viewport height that's left below the floor. RESIZE lets the
+      // office grow into it (taller floor, more world visible) rather than
+      // scaling a fixed frame — so allow a generous ceiling, not the old 3:2 cap.
+      setCanvasCap(Math.max(360, Math.min(1000, Math.round(avail))));
     };
     const raf = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
@@ -867,7 +875,11 @@ export function VirtualOfficeGame({
           },
           scene: [OfficeScene],
           scale: {
-            mode: PhaserLib.Scale.FIT,
+            // RESIZE (not FIT): the canvas tracks the parent box 1:1 and the
+            // camera shows more of the world as the box widens/heightens, so the
+            // office fills the space instead of scaling a fixed 3:2 frame with
+            // side margins. The scene reflows its fixed HUD on the resize event.
+            mode: PhaserLib.Scale.RESIZE,
             autoCenter: PhaserLib.Scale.CENTER_BOTH,
           },
           banner: false,
@@ -1215,6 +1227,9 @@ export function VirtualOfficeGame({
           <>
             <FloorActivityFeed events={floorActivity} presenceCount={Math.max(roster.length, 1)} />
             <FloorInviteButton currentRoom={currentRoom} />
+            {officeAvatar && onAvatarSaved && (
+              <OfficeAvatarChip compact avatar={officeAvatar} onSaved={onAvatarSaved} />
+            )}
           </>
         )}
         {/* Command palette — keyboard-first launcher (⌘K) for floor actions */}
@@ -1484,19 +1499,19 @@ export function VirtualOfficeGame({
           <AgentDelegateComposer agent={delegateAgent} onClose={() => setDelegateAgent(null)} />
         )}
 
-        {/* Phaser canvas mount point — fills the floor column (Phaser FIT-scales
-            to it), so hiding the side panels lets the office widen into the
-            reclaimed space. Aspect ratio matches the game; height is capped. */}
+        {/* Phaser canvas mount point. Phaser runs in RESIZE mode: the canvas
+            matches this box exactly and the camera reveals more office as the box
+            grows (rather than just zooming a fixed 3:2 frame). On desktop the box
+            fills the floor column's full width and the viewport-capped height, so
+            the office spans edge-to-edge and stands taller. Mobile keeps a 3:2
+            aspect box in the scrollable stack. */}
         <div
           ref={containerRef}
-          style={{
-            width: "100%",
-            aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}`,
-            // When capped (desktop), track a true 3:2 box to the available height
-            // so the floor scales down and stays centered with side margins.
-            maxWidth: canvasCap ? canvasCap * (GAME_WIDTH / GAME_HEIGHT) : GAME_WIDTH * 1.5,
-            maxHeight: canvasCap ?? GAME_HEIGHT * 1.25,
-          }}
+          style={
+            canvasCap
+              ? { width: "100%", height: canvasCap }
+              : { width: "100%", aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}`, maxWidth: GAME_WIDTH * 1.5 }
+          }
           className="mx-auto cursor-pointer"
           onClick={() => {
             const canvas = containerRef.current?.querySelector("canvas");
