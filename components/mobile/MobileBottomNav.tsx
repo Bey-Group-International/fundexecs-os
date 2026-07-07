@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TABS, type TabItem } from "./nav-config";
+import { haptic } from "./haptics";
 
 function isActive(pathname: string, tab: TabItem): boolean {
   if (tab.key === "more") return false;
@@ -18,10 +19,12 @@ export function MobileBottomNav({
   approvalsCount = 0,
   onMore,
   moreOpen,
+  hidden = false,
 }: {
   approvalsCount?: number;
   onMore: () => void;
   moreOpen: boolean;
+  hidden?: boolean;
 }) {
   const pathname = usePathname() || "/";
 
@@ -46,7 +49,13 @@ export function MobileBottomNav({
   }
 
   return (
-    <nav aria-label="Primary" className="fx-appnav fixed inset-x-0 bottom-0 z-50 pb-safe md:hidden">
+    <nav
+      aria-label="Primary"
+      aria-hidden={hidden}
+      className={`fx-appnav fixed inset-x-0 bottom-0 z-50 pb-safe transition-transform duration-300 md:hidden ${
+        hidden ? "translate-y-full" : "translate-y-0"
+      }`}
+    >
       <div className="mx-auto grid h-[60px] max-w-lg grid-cols-5 items-center px-1">
         {TABS.map((tab) => {
           if (tab.key === "more") {
@@ -57,6 +66,7 @@ export function MobileBottomNav({
                 onClick={onMore}
                 aria-label="More"
                 aria-expanded={moreOpen}
+                tabIndex={hidden ? -1 : 0}
                 className="fx-tap flex h-full items-center justify-center"
               >
                 <Item tab={tab} active={moreOpen} badge={approvalsCount} />
@@ -70,6 +80,8 @@ export function MobileBottomNav({
               href={tab.href}
               aria-label={tab.label}
               aria-current={active ? "page" : undefined}
+              tabIndex={hidden ? -1 : 0}
+              onClick={() => haptic("tap")}
               className="fx-tap flex h-full items-center justify-center"
             >
               <Item tab={tab} active={active} />

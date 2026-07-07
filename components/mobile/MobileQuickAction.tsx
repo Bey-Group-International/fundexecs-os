@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { MobileSheet } from "./MobileSheet";
 import { QUICK_ACTIONS } from "./nav-config";
+import { haptic } from "./haptics";
 
 // The slide-up "quick action" drawer opened from the center FAB. The fastest
 // way to get work moving inside the app — one tap from anywhere.
@@ -22,7 +23,10 @@ export function MobileQuickAction({ open, onClose }: { open: boolean; onClose: (
             <li key={a.key}>
               <Link
                 href={a.href}
-                onClick={onClose}
+                onClick={() => {
+                  haptic("tap");
+                  onClose();
+                }}
                 className="fx-tap group flex items-center gap-3.5 rounded-2xl border border-line/60 bg-surface-0/60 px-3.5 py-3 transition active:scale-[0.99] active:bg-surface-2"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gold-500/25 bg-gold-500/[0.08] text-gold-400 transition group-hover:border-gold-500/45">
