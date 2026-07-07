@@ -43,6 +43,7 @@ describe("roomLabel — safe room labels (never crash the floor)", () => {
     expect(() => raw["marketplace"].label).toThrow();
     expect(roomLabel("marketplace")).toBe("Marketplace");
     expect(roomLabel("some_stale_key")).toBe("Some Stale Key");
+    expect(roomLabel("executive-advisor")).toBe("Executive Advisor");
     expect(() => roomLabel("marketplace")).not.toThrow();
   });
 });

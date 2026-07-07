@@ -217,7 +217,7 @@ export function roomLabel(key: string): string {
   const room = ROOM_BY_KEY[key as RoomKey];
   if (room) return room.label;
   return key
-    .split(/[_\s]+/)
+    .split(/[-_\s]+/)
     .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
     .join(" ");
 }
