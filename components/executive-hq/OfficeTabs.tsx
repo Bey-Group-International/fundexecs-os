@@ -232,23 +232,20 @@ export function OfficeTabs() {
 
   return (
     <div className="bg-surface-0">
-      <div className="border-b border-line/60 bg-gradient-to-r from-surface-1 via-surface-0 to-surface-1 px-4 py-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">
-              FundExecs OS · Office Program
-            </p>
-            <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+      {/* Slim single-row header — keeps the floor fitting the viewport without
+          vertical scrolling. The full description now lives in the docs, not here. */}
+      <div className="border-b border-line/60 bg-gradient-to-r from-surface-1 via-surface-0 to-surface-1 px-4 py-2.5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-baseline gap-2.5">
+            <h1 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
               AI Execution Floor
             </h1>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-fg-secondary">
-              Command Earn, and the executive AI team routes private-market work through
-              rooms, agents, approval gates, and an audit-ready trail — live on the floor.
+            <p className="hidden font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400 sm:block">
+              FundExecs OS · Office Program
             </p>
           </div>
-          {/* Your character + office data, unified on one horizontal line: the
-              operator's own avatar chip (opens the character selector) sits
-              alongside the live office metrics. */}
+          {/* Operator avatar chip (opens the character selector) alongside the
+              live office metrics. */}
           <div className="flex flex-wrap items-stretch gap-2">
             {token && !guestPrompt ? (
               <OfficeAvatarChip avatar={officeAvatar} onSaved={setOfficeAvatar} />
