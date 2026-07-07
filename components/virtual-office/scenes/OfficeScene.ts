@@ -1174,12 +1174,15 @@ export class OfficeScene extends Phaser.Scene {
       }
     );
 
-    // Visible work handoff — a task card travels from Earn to the agent.
-    this.game.events.on("program:handoff", (toAgentId: AgentId) => {
-      const from = this.npcAvatars.get("agent:earn");
+    // Visible work handoff — a task card travels from the source to the target
+    // station. Delegations originate at Earn (no source given); a reassignment
+    // passes the outgoing agent as the source so the card travels agent-to-agent.
+    this.game.events.on("program:handoff", (toAgentId: AgentId, fromAgentId?: AgentId) => {
+      const from = this.npcAvatars.get(fromAgentId ? `agent:${fromAgentId}` : "agent:earn");
       const to = this.npcAvatars.get(`agent:${toAgentId}`);
       if (!from || !to) return;
-      this._animateTaskHandoff(from.sprite.x, from.sprite.y - 12, to.sprite.x, to.sprite.y - 12);
+      const peer = Boolean(fromAgentId) && fromAgentId !== "earn";
+      this._animateTaskHandoff(from.sprite.x, from.sprite.y - 12, to.sprite.x, to.sprite.y - 12, peer);
     });
 
     // On-floor approval gate — a pulsing banner in the room where the
@@ -1300,9 +1303,11 @@ export class OfficeScene extends Phaser.Scene {
     overlay.badgeBg.fillRoundedRect(bx, by, overlay.badge.width + 10, 15, 3);
   }
 
-  /** Gold task card tween with a fading motion trail — the visible delegation
-   *  from Earn to an agent. The trail is suppressed under reduced motion. */
-  private _animateTaskHandoff(fromX: number, fromY: number, toX: number, toY: number) {
+  /** Gold task card with a fading motion trail — the visible work handoff.
+   *  Earn delegations travel in a straight line; a `peer` (agent-to-agent)
+   *  reassignment arcs the card upward so the pass between executives reads as
+   *  a hand-off, not a delegation. The trail is suppressed under reduced motion. */
+  private _animateTaskHandoff(fromX: number, fromY: number, toX: number, toY: number, peer = false) {
     const card = this.add.graphics().setDepth(14);
     card.fillStyle(0xc9a84c, 0.95);
     card.fillRoundedRect(-5, -3.5, 10, 7, 1.5);
@@ -1311,24 +1316,42 @@ export class OfficeScene extends Phaser.Scene {
     card.setPosition(fromX, fromY);
     const trail = !this.reducedMotion;
     this._handoffTrailTick = 0;
+
+    // Quadratic-bezier path: the control point is offset perpendicular to the
+    // from→to line (biased upward) so the arc is visible at any orientation.
+    // With arc = 0 the control sits on the midpoint, which is exactly the
+    // straight line — so Earn delegations look unchanged.
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const dist = Math.hypot(dx, dy) || 1;
+    const arc = peer ? Math.min(48, dist * 0.28) : 0;
+    let px = -dy / dist;
+    let py = dx / dist;
+    if (py > 0) { px = -px; py = -py; } // prefer the upward-bulging side
+    const cx = (fromX + toX) / 2 + px * arc;
+    const cy = (fromY + toY) / 2 + py * arc;
+    const proxy = { t: 0 };
+
     this.tweens.add({
-      targets: card,
-      x: toX,
-      y: toY,
-      duration: 620,
+      targets: proxy,
+      t: 1,
+      duration: peer ? 720 : 620,
       ease: "Cubic.easeInOut",
-      onUpdate: trail
-        ? () => {
-            // Drop a fading gold mote every few frames along the card's path.
-            this._handoffTrailTick = (this._handoffTrailTick + 1) % 3;
-            if (this._handoffTrailTick !== 0) return;
-            const mote = this.add.circle(card.x, card.y, 2.4, 0xc9a84c, 0.7).setDepth(13);
-            this.tweens.add({
-              targets: mote, alpha: 0, scale: 0.3, duration: 360,
-              onComplete: () => mote.destroy(),
-            });
-          }
-        : undefined,
+      onUpdate: () => {
+        const t = proxy.t;
+        const mt = 1 - t;
+        card.x = mt * mt * fromX + 2 * mt * t * cx + t * t * toX;
+        card.y = mt * mt * fromY + 2 * mt * t * cy + t * t * toY;
+        if (!trail) return;
+        // Drop a fading gold mote every few frames along the card's path.
+        this._handoffTrailTick = (this._handoffTrailTick + 1) % 3;
+        if (this._handoffTrailTick !== 0) return;
+        const mote = this.add.circle(card.x, card.y, 2.4, 0xc9a84c, 0.7).setDepth(13);
+        this.tweens.add({
+          targets: mote, alpha: 0, scale: 0.3, duration: 360,
+          onComplete: () => mote.destroy(),
+        });
+      },
       onComplete: () => {
         this.tweens.add({
           targets: card, alpha: 0, scale: 1.6, duration: 220,
