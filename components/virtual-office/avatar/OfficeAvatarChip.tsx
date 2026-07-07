@@ -39,11 +39,22 @@ export function OfficeAvatarChip({
     }
   };
 
+  // Position so the panel never bleeds off-screen: on narrow screens it's a
+  // viewport-centered fixed sheet (independent of where the chip sits in the
+  // wrapping rail); from `sm` up it's anchored under the chip and right-aligned
+  // so its 340px body extends inward, not past the right edge. Either way the
+  // tall body is height-capped and scrolls rather than running off the bottom.
+  const positionClass = compact
+    ? "fixed left-1/2 top-[4.5rem] z-40 w-[calc(100vw-1.5rem)] max-w-[340px] -translate-x-1/2 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:w-[340px] sm:translate-x-0"
+    : "absolute right-0 z-40 mt-2 w-max max-w-[340px]";
+
   const selector = open ? (
     <>
       <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-      <div className={`absolute z-40 w-max max-w-[340px] ${compact ? "left-0 top-full mt-1" : "right-0 mt-2"}`}>
-        <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} />
+      <div className={positionClass}>
+        <div className="max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-lg">
+          <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} />
+        </div>
       </div>
     </>
   ) : null;
