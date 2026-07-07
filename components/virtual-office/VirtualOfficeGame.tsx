@@ -12,6 +12,7 @@ import { MediaPermissionBanner } from "./MediaPermissionBanner";
 import { OfficeHUD } from "./program/OfficeHUD";
 import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
 import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
+import { MarketplacePanel } from "./program/MarketplacePanel";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
@@ -112,6 +113,7 @@ const ROOM_NAV = [
   { key: "legal",     label: "Compliance & Legal", icon: "§" },
   { key: "marketing", label: "Treasury",          icon: "◬" },
   { key: "reception", label: "IR Lounge",         icon: "⬢" },
+  { key: "marketplace", label: "Marketplace",     icon: "◈" },
 ];
 
 // Emote bar — mirrors keys 1-4 in the scene
@@ -1020,6 +1022,15 @@ export function VirtualOfficeGame({
             </button>
           ))}
         </div>
+
+        {/* In-world Marketplace browser — appears while standing in the
+            Marketplace hall; lists live public listings and deep-links into the
+            full /marketplace surfaces. */}
+        {currentRoom === "marketplace" && (
+          <div className="pointer-events-auto absolute right-2 top-10 z-10 w-[290px]">
+            <MarketplacePanel />
+          </div>
+        )}
 
         {/* Phaser canvas mount point — fills the floor column (Phaser FIT-scales
             to it), so hiding the side panels lets the office widen into the
