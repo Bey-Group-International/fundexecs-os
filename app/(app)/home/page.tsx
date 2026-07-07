@@ -5,7 +5,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import { stageLabel, sectorLabel } from "@/lib/deal-share";
 import type { DealStage, AgentKey } from "@/lib/supabase/database.types";
-import { MobileCommandCenter, type CommandCenterData } from "@/components/mobile/MobileCommandCenter";
+import { type CommandCenterData } from "@/components/mobile/MobileCommandCenter";
+import { MobileEarnHome } from "@/components/mobile/MobileEarnHome";
 
 export const metadata: Metadata = {
   title: "Home · FundExecs OS",
@@ -241,5 +242,5 @@ export default async function MobileHomePage() {
     activity,
   };
 
-  return <MobileCommandCenter data={data} />;
+  return <MobileEarnHome data={data} />;
 }

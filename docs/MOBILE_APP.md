@@ -11,6 +11,27 @@ as before.
 
 ---
 
+## 0. Direction — a distinct on-the-go experience
+
+Rounds 1–6 gave the phone an app shell, card-based lists, gestures, and
+thumb-reachable detail bars — but the *screens themselves* still read like the
+desktop app. This round changes the model, not just the chrome: the mobile home
+is now a **conversation with Earn**, not a dashboard.
+
+**`/home` is a chat-first Earn home** (`MobileEarnHome`). Instead of stacked
+dashboard sections, Earn greets the operator, states the brief in a sentence
+("3 approvals need your sign-off, I've got 4 workflows running, and 12 deals are
+live"), drops a **Live Pulse** glance card (the monitor surface), then walks
+through what needs attention — approvals, the hottest deal (swipeable), workflows
+in motion — as rich cards attached to its messages. Suggested-reply chips and a
+persistent **"Message Earn" composer** (fixed above the tab bar) let the operator
+talk back from anywhere. The quick-action FAB is suppressed on `/home` so the
+composer owns the bottom-right. This is a **dedicated mobile surface**; the
+desktop dashboard is untouched. It is the first screen of an ongoing move to
+purpose-built mobile screens rather than restyled desktop pages.
+
+---
+
 ## 1. UX audit (before)
 
 The pre-existing app is desktop-first:
