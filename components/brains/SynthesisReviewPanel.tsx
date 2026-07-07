@@ -250,7 +250,7 @@ export function SynthesisReviewPanel({ orgId }: Props) {
 
     if (res.ok) {
       setItems((prev) => prev.filter((i) => i.id !== id));
-      setToast("Knowledge article published to Brain");
+      setToast("Knowledge article published to your knowledge base");
     }
   };
 
@@ -276,7 +276,7 @@ export function SynthesisReviewPanel({ orgId }: Props) {
       {items.length === 0 ? (
         <EmptyState
           title="No pending syntheses"
-          description="Synthesis items will appear here when the Brain processes new artifacts."
+          description="Synthesis items will appear here when Earn processes new artifacts."
         />
       ) : (
         items.map((item) => (

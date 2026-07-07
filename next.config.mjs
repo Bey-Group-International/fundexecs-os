@@ -50,6 +50,15 @@ const nextConfig = {
       { source: "/graphs", destination: "/graph", permanent: true },
       // Legacy match-inbox URL — canonical destination is /inbox.
       { source: "/match-inbox", destination: "/inbox", permanent: true },
+      // Network is now a standalone side-rail destination, no longer a Source
+      // module. Heal old /source/network links (and its session-frame variant).
+      { source: "/source/network", destination: "/network", permanent: true },
+      // Outreach moved from Source to Run.
+      { source: "/source/outreach", destination: "/run/outreach", permanent: true },
+      // Documents moved from Run to Build.
+      { source: "/run/documents", destination: "/build/documents", permanent: true },
+      // Run's "Brains" module was renamed to "Evaluate".
+      { source: "/run/brains", destination: "/run/evaluate", permanent: true },
       // The Signing module used to link envelope actions under
       // /execute/signing/* — routes that never existed (the wizard/detail live
       // at /envelopes/*). Heal any stale bookmarks. The bare /execute/signing

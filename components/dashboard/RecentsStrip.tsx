@@ -22,7 +22,7 @@ const KNOWN_LABELS: Record<string, string> = {
   "/inbox": "Inbox",
   "/source/pipeline": "Deal Pipeline",
   "/source/allocators": "Allocators",
-  "/source/outreach": "Outreach",
+  "/run/outreach": "Outreach",
   "/run/deal": "Deal War Room",
   "/run/underwriting": "Underwriting",
   "/run/diligence": "Diligence",

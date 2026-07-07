@@ -44,7 +44,7 @@ export const TABS: TabItem[] = [
   { key: "home", label: "Home", href: "/home", icon: HomeIcon, match: ["/home", "/dashboard", "/command-center"] },
   { key: "earn", label: "Earn", href: "/earn", icon: EarnIcon, match: ["/earn", "/workspace", "/sessions", "/session", "/automations"] },
   { key: "deals", label: "Deals", href: "/deals/feed", icon: DealsIcon, match: ["/deals", "/run", "/deal/", "/portfolio"] },
-  { key: "network", label: "Network", href: "/source/network", icon: NetworkIcon, match: ["/source", "/relationship", "/prospecting", "/investor"] },
+  { key: "network", label: "Network", href: "/network", icon: NetworkIcon, match: ["/network", "/source", "/relationship", "/prospecting", "/investor"] },
   { key: "more", label: "More", href: "#more", icon: MoreIcon },
 ];
 
@@ -61,7 +61,7 @@ export interface QuickAction {
 export const QUICK_ACTIONS: QuickAction[] = [
   { key: "ask-earn", label: "Ask Earn", hint: "Delegate a task to your copilot", href: "/earn", icon: SparkIcon },
   { key: "add-deal", label: "Add a deal", hint: "Start a new opportunity", href: "/deals/feed", icon: DealsIcon },
-  { key: "add-contact", label: "Add a contact", hint: "Investor, LP, advisor or operator", href: "/source/network", icon: ContactIcon },
+  { key: "add-contact", label: "Add a contact", hint: "Investor, LP, advisor or operator", href: "/network", icon: ContactIcon },
   { key: "upload-doc", label: "Upload a document", hint: "Into your materials & data room", href: "/build/data_room", icon: UploadIcon },
   { key: "create-task", label: "Create a task", hint: "Route work to an executive agent", href: "/earn", icon: TaskIcon },
   { key: "start-diligence", label: "Start diligence", hint: "Open the diligence workspace", href: "/run/diligence", icon: ShieldIcon },

@@ -308,7 +308,7 @@ function DealSlideOver({
                 Now in {stageLabel(deal.stage)} — consider creating a {DOC_LABEL[suggestDoc] ?? suggestDoc}.
               </p>
               <a
-                href="/run/documents"
+                href="/build/documents"
                 className="mt-1.5 inline-block font-mono text-[10px] uppercase tracking-widest text-gold-300 hover:underline"
               >
                 Go to Documents →
@@ -475,16 +475,10 @@ function DealSlideOver({
             <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Quick Actions</p>
             <div className="flex flex-wrap gap-2">
               <a
-                href="/run/documents"
+                href="/build/documents"
                 className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:border-gold-500/40 hover:text-fg-primary"
               >
                 Generate Document
-              </a>
-              <a
-                href="/run/comms"
-                className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-secondary hover:border-gold-500/40 hover:text-fg-primary"
-              >
-                Draft Comms
               </a>
             </div>
           </div>

@@ -112,13 +112,13 @@ export function recommendMove(item: {
     return { label: "Find buyers", kind: "buyers", href: `/source/buyers?q=${q}` };
   }
   if (item.propensity.raise >= 50 && isAllocator) {
-    return { label: "Start outreach", kind: "outreach", href: `/source/outreach` };
+    return { label: "Start outreach", kind: "outreach", href: `/run/outreach` };
   }
   if (!item.inPipeline && item.fit >= 55) {
     return { label: "Add to pipeline", kind: "pipeline" };
   }
   if (item.propensity.sell >= 50 || item.propensity.raise >= 50) {
-    return { label: "Start outreach", kind: "outreach", href: `/source/outreach` };
+    return { label: "Start outreach", kind: "outreach", href: `/run/outreach` };
   }
   return { label: "Watch signals", kind: "signals", href: `/source/signals?q=${q}` };
 }
