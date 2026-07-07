@@ -18,6 +18,8 @@ export { MobileApprovalCard, type MobileApproval } from "./MobileApprovalCard";
 export { MobileStatTile, MobileNextAction, type CommandStat } from "./MobileCommandCard";
 export { SwipeableCard, type SwipeAction } from "./SwipeableCard";
 export { PullToRefresh } from "./PullToRefresh";
+export { MobileDealActionBar } from "./MobileDealActionBar";
+export { MobileContactActionBar } from "./MobileContactActionBar";
 export { useHideOnScroll } from "./useHideOnScroll";
 export { haptic } from "./haptics";
 export * from "./nav-config";
