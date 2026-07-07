@@ -525,7 +525,7 @@ export function VirtualOfficeGame({
               game.events.emit("program:room-activity", cmd.roomKey, cmd.active, cmd.taskCount, cmd.tier);
               break;
             case "handoff":
-              game.events.emit("program:handoff", cmd.toAgentId);
+              game.events.emit("program:handoff", cmd.toAgentId, cmd.fromAgentId);
               break;
             case "approval-gate":
               game.events.emit("program:approval-gate", cmd.roomKey, cmd.active, cmd.tier, cmd.title);

@@ -56,7 +56,7 @@ export type SceneCommand =
   | { type: "npc-goto"; agentId: AgentId; roomKey: RoomKey }
   | { type: "npc-state"; agentId: AgentId; state: AgentState; label: string }
   | { type: "room-activity"; roomKey: RoomKey; active: boolean; taskCount: number; tier: RiskTier | null }
-  | { type: "handoff"; toAgentId: AgentId }
+  | { type: "handoff"; toAgentId: AgentId; fromAgentId?: AgentId }
   | { type: "approval-gate"; roomKey: RoomKey; active: boolean; tier: Exclude<RiskTier, "internal"> | null; title: string };
 
 type SceneListener = (cmd: SceneCommand) => void;
@@ -1038,7 +1038,8 @@ export function reassignAgentTask(fromAgentId: AgentId, toAgentId: AgentId) {
   patchAgent(toAgentId, { owns: a.owns, progress: a.progress, workload: 1 });
   updateNPCState(toAgentId, "moving", `Taking over: ${a.owns}`);
   moveNPCToRoom(toAgentId, a.roomKey);
-  sceneBus.emit({ type: "handoff", toAgentId });
+  // Source the card at the outgoing agent so the pass animates station-to-station.
+  sceneBus.emit({ type: "handoff", toAgentId, fromAgentId });
   after(900, () => updateNPCState(toAgentId, a.done ? "complete" : "working", a.status));
 
   pushChat("earn", "Earn", `Reassigned "${a.owns}" from ${from.name} to ${to.name}. ${to.name} is taking over now.`);
