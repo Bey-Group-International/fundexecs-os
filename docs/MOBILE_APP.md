@@ -166,11 +166,28 @@ respect `prefers-reduced-motion` and both light/dark themes.
 
 ---
 
-## 7. Follow-ups (not in this pass)
+## 7. Destination pages — responsive records
 
-The Deals (`/deals/feed`) and Network (`/source/network`) destination pages
-still use their existing responsive layouts. The reusable `MobileDealCard` /
-`MobileContactCard` components are ready to be dropped into mobile-specific
-renders of those pages when desired — this pass wires navigation and the
-command center; converting each destination's internals to cards is a safe,
-incremental next step.
+The tab destinations reached from the bottom nav are mobile-native too:
+
+- **Deals** (`/deals/feed`) is already a vertical card feed; its intelligence
+  widgets (sector heatmap, signal feed) scroll inside their own containers, so
+  the page never scrolls horizontally.
+- **Network / CRM and every table-backed module** (`/source/network`,
+  `lp_pipeline`, `deal_pipeline`, partners, providers, debt, …) render through
+  the shared `components/ModuleTable.tsx`. It is now **responsive**: the dense
+  table shows at `md`+ (unchanged), and below `md` each record becomes a
+  tappable card — title + key facets in a 2-column grid, the AI-sourced /
+  verified badges, and a tap-to-expand body with full fields, the LP war-room
+  drill-down, provenance meta, and the verify / archive / delete lifecycle
+  actions. No horizontal scroll; the desktop table is byte-for-byte the same,
+  just wrapped `hidden md:block`.
+
+This single `ModuleTable` change makes the record grids across the Source, Run,
+and Execute hubs phone-usable at once, rather than converting each page.
+
+### Later (not in this pass)
+
+Per-record hero pages (deal detail, contact detail) could adopt the dedicated
+`MobileDealCard` / `MobileContactCard` layouts for an even richer one-record
+view; the current pass makes every list surface usable one-handed.
