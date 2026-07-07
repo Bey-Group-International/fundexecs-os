@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ROOMS } from "./types";
+import { officeInviteUrl } from "@/lib/office/floor-link";
 
 export type RosterEntry = {
   id: string;
@@ -24,9 +25,18 @@ export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const onCallCount = roster.filter((m) => m.onCall).length;
 
+  // Each room has its own stable invite link — copy the one for the room you're
+  // standing in so teammates land right next to you.
+  const selfRoom = roster.find((m) => m.self)?.roomKey ?? null;
+  const selfRoomLabel = selfRoom ? ROOM_LABEL[selfRoom] ?? null : null;
+
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      const url =
+        typeof window !== "undefined"
+          ? officeInviteUrl(window.location.origin, { room: selfRoom })
+          : "";
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -64,7 +74,9 @@ export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
           style={{ borderColor: "rgba(201,168,76,0.22)", background: "rgba(201,168,76,0.05)" }}
         >
           <p className="mb-1.5 text-[10px] leading-snug text-fg-muted">
-            Share this floor link. Teammates in your org join instantly; anyone else joins as a guest.
+            {selfRoomLabel
+              ? `Share this link to ${selfRoomLabel}. Teammates in your org land in the room; anyone else joins as a guest.`
+              : "Share this floor link. Teammates in your org join instantly; anyone else joins as a guest."}
           </p>
           <button
             type="button"
@@ -72,7 +84,7 @@ export function FloorRoster({ roster }: { roster: RosterEntry[] }) {
             className="w-full rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors"
             style={{ color: "#0a0806", background: "#c9a84c" }}
           >
-            {copied ? "Link copied ✓" : "Copy floor link"}
+            {copied ? "Link copied ✓" : selfRoomLabel ? `Copy ${selfRoomLabel} link` : "Copy floor link"}
           </button>
         </div>
       ) : null}

@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json()) as { emails?: string[] };
+  const body = (await req.json()) as { emails?: string[]; room?: string | null; meet?: boolean };
   if (!Array.isArray(body.emails) || body.emails.length === 0) {
     return NextResponse.json({ error: "emails required" }, { status: 400 });
   }
@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
     origin,
     senderName: user.email ?? "Someone",
     emails: body.emails,
+    room: typeof body.room === "string" ? body.room : null,
+    meet: body.meet === true,
   });
 
   return NextResponse.json({ ok: true, sent, total });
