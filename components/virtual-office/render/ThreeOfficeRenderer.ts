@@ -41,8 +41,14 @@ import {
   yawOf,
   type Box3D,
 } from "./officeGeometry3D";
-import { officeFurniture3D, roomFloorImage, type FurnitureBox } from "./officeFurniture3D";
+import { officeFurniture3D, type FurnitureBox } from "./officeFurniture3D";
 import { resolveClip, type AvatarClip } from "./avatarAnimation3D";
+import {
+  characterSpriteFor,
+  frameIndexAt,
+  spriteAnimationState,
+  type CharacterSprite,
+} from "./avatarSprite3D";
 
 /** Per-actor scene handles + interpolation state. */
 interface ActorHandle {
@@ -64,6 +70,18 @@ interface ActorHandle {
   target: { x: number; z: number };
   /** Idle-bob phase so figures don't all bob in lockstep. */
   bob: number;
+  /**
+   * Billboard character sprite (2.5D), when this actor maps to a character
+   * sheet. Null for the capsule fallback (user / remote / sheet-less agents).
+   */
+  sprite: THREE.Sprite | null;
+  spriteTex: THREE.Texture | null;
+  charSprite: CharacterSprite | null;
+  /** Sheet grid, learned once the texture image loads. */
+  sheetCols: number;
+  sheetRows: number;
+  /** Elapsed ms feeding the sprite frame cycle. */
+  animMs: number;
 }
 
 /** Emissive accent per program state, so an actor's activity reads at a glance. */
@@ -274,7 +292,48 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       clip: resolveClip(spec.state ?? "idle", { seated: spec.seated ?? false }),
       target: { x: w.x, z: w.z },
       bob: Math.abs((spec.x * 13 + spec.y * 7) % 6.28),
+      sprite: null,
+      spriteTex: null,
+      charSprite: null,
+      sheetCols: 1,
+      sheetRows: 1,
+      animMs: 0,
     };
+
+    // If this actor maps to a character sprite sheet, draw it as a billboard
+    // (2.5D) and hide the capsule fallback — this brings the real executives
+    // and NPCs into the 3D office using the existing sprite art.
+    const charSprite = characterSpriteFor(spec.spriteKey);
+    if (charSprite) {
+      const tex = new THREE.TextureLoader().load(charSprite.sheetUrl, (loaded) => {
+        const img = loaded.image as { width?: number; height?: number } | undefined;
+        if (img?.width && img?.height) {
+          handle.sheetCols = Math.max(1, Math.round(img.width / charSprite.frameWidth));
+          handle.sheetRows = Math.max(1, Math.round(img.height / charSprite.frameHeight));
+          loaded.repeat.set(1 / handle.sheetCols, 1 / handle.sheetRows);
+          loaded.needsUpdate = true;
+        }
+      });
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sprite = new THREE.Sprite(spriteMat);
+      const spriteH = 1.7;
+      sprite.scale.set(spriteH * (charSprite.frameWidth / charSprite.frameHeight), spriteH, 1);
+      sprite.position.y = spriteH / 2;
+      sprite.userData.actorId = spec.id;
+      group.add(sprite);
+      this.bodyToActor.set(sprite, spec.id);
+      body.visible = false;
+      head.visible = false;
+      this.disposables.push(tex, spriteMat);
+
+      handle.sprite = sprite;
+      handle.spriteTex = tex;
+      handle.charSprite = charSprite;
+    }
+
     this.applySeated(handle);
     this.actors.set(spec.id, handle);
   }
@@ -342,31 +401,27 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.floorPlane = floor;
     this.disposables.push(floorGeo, floorMat);
 
-    // Per-room floor art: map each room's (empty) background PNG onto its floor
-    // tile — the same "empty room bg + furniture layer" the 2D office uses.
-    // Falls back to a faint accent wash if the image is missing.
-    const loader = new THREE.TextureLoader();
+    // Per-room floor, built procedurally (no room-image textures): a subtle
+    // department-accent wash over the whole room, plus a stronger central rug —
+    // mirroring the drawn rugs of the 2D office. Furniture sits on top of this.
     for (const { roomKey, box } of roomFloors()) {
-      const img = roomFloorImage(roomKey);
-      const geo = new THREE.PlaneGeometry(box.width, box.depth);
-      let mat: THREE.MeshBasicMaterial;
-      if (img) {
-        const tex = loader.load(img);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.92 });
-        this.disposables.push(tex);
-      } else {
-        mat = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(roomAccentHex(roomKey)),
-          transparent: true,
-          opacity: 0.08,
-        });
-      }
-      const tile = new THREE.Mesh(geo, mat);
-      tile.rotation.x = -Math.PI / 2;
-      tile.position.set(box.cx, 0.01, box.cz);
-      scene.add(tile);
-      this.disposables.push(geo, mat);
+      const accent = new THREE.Color(roomAccentHex(roomKey));
+
+      const tintGeo = new THREE.PlaneGeometry(box.width, box.depth);
+      const tintMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.07 });
+      const tint = new THREE.Mesh(tintGeo, tintMat);
+      tint.rotation.x = -Math.PI / 2;
+      tint.position.set(box.cx, 0.01, box.cz);
+      scene.add(tint);
+      this.disposables.push(tintGeo, tintMat);
+
+      const rugGeo = new THREE.PlaneGeometry(box.width * 0.42, box.depth * 0.4);
+      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.16 });
+      const rug = new THREE.Mesh(rugGeo, rugMat);
+      rug.rotation.x = -Math.PI / 2;
+      rug.position.set(box.cx, 0.02, box.cz);
+      scene.add(rug);
+      this.disposables.push(rugGeo, rugMat);
     }
 
     // Walls (one instanced draw call) + the full per-room furniture set.
@@ -465,6 +520,10 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     });
     handle.body.geometry.dispose();
     handle.bodyMat.dispose();
+    if (handle.sprite) {
+      (handle.sprite.material as THREE.SpriteMaterial).dispose();
+      handle.spriteTex?.dispose();
+    }
     // Head + label geometries/materials are tracked in `disposables` and freed
     // wholesale in `destroy`; nulling the group reference lets GC reclaim them
     // when an actor is removed mid-session.
@@ -490,15 +549,26 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.camera.position.set(this.camLook.x, this.camHeight, this.camLook.z + this.camDist);
     this.camera.lookAt(this.camLook.x, 0, this.camLook.z);
 
-    // Actor position lerp, facing, and a gentle idle bob when standing.
+    // Actor position lerp, facing, a gentle idle bob, and sprite animation.
     for (const a of this.actors.values()) {
       const g = a.group;
+      const moving = Math.hypot(a.target.x - g.position.x, a.target.z - g.position.z) > 0.05;
       g.position.x += (a.target.x - g.position.x) * Math.min(1, dt * 6);
       g.position.z += (a.target.z - g.position.z) * Math.min(1, dt * 6);
-      g.rotation.y += (yawOf(a.facing) - g.rotation.y) * Math.min(1, dt * 8);
+      // A billboard sprite always faces the camera; only rotate the (capsule)
+      // fallback, whose facing is conveyed by yaw rather than the walk row.
+      if (!a.sprite) g.rotation.y += (yawOf(a.facing) - g.rotation.y) * Math.min(1, dt * 8);
       if (!a.seated) {
         a.bob += dt * 2.2;
         a.group.position.y = Math.sin(a.bob) * 0.03;
+      }
+
+      if (a.sprite && a.spriteTex && a.charSprite) {
+        a.animMs += dt * 1000;
+        const anim = a.charSprite.animations[spriteAnimationState(a.state, a.facing, moving)];
+        const col = frameIndexAt(anim, a.animMs);
+        a.spriteTex.repeat.set(1 / a.sheetCols, 1 / a.sheetRows);
+        a.spriteTex.offset.set(col / a.sheetCols, 1 - (anim.row + 1) / a.sheetRows);
       }
     }
 
