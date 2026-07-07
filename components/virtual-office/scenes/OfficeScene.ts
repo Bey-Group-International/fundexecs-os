@@ -203,8 +203,14 @@ export class OfficeScene extends Phaser.Scene {
   private walkPath: Array<{ x: number; y: number }> = [];
   private walkMarker: Phaser.GameObjects.Arc | null = null;
 
-  // Minimap HUD
+  // Minimap HUD — all objects tracked so the RESIZE reflow can rebuild them.
   private minimapPlayerDot!: Phaser.GameObjects.Arc;
+  private minimapObjects: Phaser.GameObjects.GameObject[] = [];
+
+  // Scroll-locked vignette graphics, redrawn to viewport size on resize.
+  private vignette?: Phaser.GameObjects.Graphics;
+  private _onResize?: (gameSize: Phaser.Structs.Size) => void;
+  private _reflowScheduled = false;
 
   // Interactive objects (press-X hotspots)
   private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number; marker: Phaser.GameObjects.Text }> = [];
@@ -400,6 +406,9 @@ export class OfficeScene extends Phaser.Scene {
     this._setupProgramBridge();
     this._setupPointerTeleport();
     this._createMinimap();
+    // RESIZE mode: re-anchor the scroll-locked HUD whenever the viewport changes.
+    this._onResize = () => this._scheduleReflow();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this._onResize, this);
     this._createInteractives();
     // Live marketplace stalls — React pushes public listings; each becomes a
     // signboard + press-X hotspot on a stall in the Marketplace hall.
@@ -540,6 +549,10 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("program:approval-gate");
     if (this._onDomFocusIn) window.removeEventListener("focusin", this._onDomFocusIn);
     if (this._onDomFocusOut) window.removeEventListener("focusout", this._onDomFocusOut);
+    if (this._onResize) this.scale.off(Phaser.Scale.Events.RESIZE, this._onResize, this);
+    this._onResize = undefined;
+    this._reflowScheduled = false;
+    this.minimapObjects = [];
     if (this.sfuMode) {
       this.sfu?.leave();
     } else {
@@ -906,21 +919,12 @@ export class OfficeScene extends Phaser.Scene {
     const H = cam.height;
 
     // Vignette — feathered dark bands on each edge; overlapping corners deepen
-    // naturally. Depth 16 sits above the floor/avatars but below all HUD.
+    // naturally. Depth 16 sits above the floor/avatars but below all HUD. Kept as
+    // a field so the resize reflow can redraw it to the new viewport size.
     const vig = this.add.graphics().setScrollFactor(0).setDepth(16);
-    const reach = 70;
-    const N = 28;
-    for (let i = 0; i < N; i++) {
-      const f = 1 - i / N;
-      vig.fillStyle(0x05070c, 0.28 * f * f);
-      const o = (reach * i) / N;
-      const th = reach / N + 1;
-      vig.fillRect(0, o, W, th);
-      vig.fillRect(0, H - o - th, W, th);
-      vig.fillRect(o, 0, th, H);
-      vig.fillRect(W - o - th, 0, th, H);
-    }
+    this.vignette = vig;
     this.atmosphere.push(vig);
+    this._drawVignette(W, H);
 
     if (this.reducedMotion) return;
 
@@ -945,6 +949,25 @@ export class OfficeScene extends Phaser.Scene {
         repeat: -1,
         delay: i * 300,
       });
+    }
+  }
+
+  /** Redraw the edge vignette bands to the given viewport size (create + resize). */
+  private _drawVignette(W: number, H: number) {
+    const vig = this.vignette;
+    if (!vig) return;
+    vig.clear();
+    const reach = 70;
+    const N = 28;
+    for (let i = 0; i < N; i++) {
+      const f = 1 - i / N;
+      vig.fillStyle(0x05070c, 0.28 * f * f);
+      const o = (reach * i) / N;
+      const th = reach / N + 1;
+      vig.fillRect(0, o, W, th);
+      vig.fillRect(0, H - o - th, W, th);
+      vig.fillRect(o, 0, th, H);
+      vig.fillRect(W - o - th, 0, th, H);
     }
   }
 
@@ -1994,6 +2017,7 @@ export class OfficeScene extends Phaser.Scene {
     bg.fillRoundedRect(ox - 5, oy - 5, mw + 10, mh + 10, 4);
     bg.lineStyle(1, 0xc9a84c, 0.3);
     bg.strokeRoundedRect(ox - 5, oy - 5, mw + 10, mh + 10, 4);
+    this.minimapObjects.push(bg);
 
     for (const room of ROOMS) {
       const roomW = (room.colSpan ?? 1) * ROOM_W;
@@ -2013,12 +2037,14 @@ export class OfficeScene extends Phaser.Scene {
         this._cancelWalk();
         this._cancelFollow();
       });
+      this.minimapObjects.push(cell);
     }
 
     this.minimapPlayerDot = this.add.arc(ox, oy, 2, 0, 360, false, 0xc9a84c)
       .setScrollFactor(0).setDepth(30);
     // Stash origin/scale for the per-frame dot update
     this.minimapPlayerDot.setData({ ox, oy, scale: SCALE });
+    this.minimapObjects.push(this.minimapPlayerDot);
   }
 
   private _updateMinimap() {
@@ -2027,6 +2053,33 @@ export class OfficeScene extends Phaser.Scene {
     const oy = this.minimapPlayerDot.getData("oy") as number;
     const s  = this.minimapPlayerDot.getData("scale") as number;
     this.minimapPlayerDot.setPosition(ox + this.player.x * s, oy + this.player.y * s);
+  }
+
+  /**
+   * RESIZE reflow. The game runs in Phaser.Scale.RESIZE, so when the container
+   * box changes the camera viewport (cam.width/height) changes with it. Every
+   * scroll-locked HUD element is anchored to those dimensions, so re-anchor it:
+   * redraw the edge vignette to the new size, move the net dot back to the
+   * bottom-right, and rebuild the minimap (its cells are placed absolutely at
+   * creation time). Coalesced to once per tick so a drag-resize can't thrash.
+   */
+  private _scheduleReflow() {
+    if (this._reflowScheduled) return;
+    this._reflowScheduled = true;
+    this.time.delayedCall(0, () => {
+      this._reflowScheduled = false;
+      this._reflowFixedHud();
+    });
+  }
+
+  private _reflowFixedHud() {
+    if (!this.cameras?.main) return;
+    const cam = this.cameras.main;
+    this._drawVignette(cam.width, cam.height);
+    if (this.netDot) this.netDot.setPosition(cam.width - 14, cam.height - 14);
+    for (const obj of this.minimapObjects) obj.destroy();
+    this.minimapObjects = [];
+    this._createMinimap();
   }
 
   private _setupPointerTeleport() {
