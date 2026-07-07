@@ -62,6 +62,17 @@ export function OfficeTabs() {
     setOpened((prev) => ({ ...prev, [next]: true }));
   }, []);
 
+  // The Virtual Office has its own Earn entry points (⌘K + the Earn Center
+  // button on its footer), so hide the app-wide floating "Ask Earn" launcher
+  // while that tab is active. It returns on the Overview tab and off this page.
+  useEffect(() => {
+    const suppress = tab === "virtual";
+    window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress: false } }));
+    };
+  }, [tab]);
+
   // Fetch Supabase access token and character identity once on mount
   useEffect(() => {
     const supabase = createClient();

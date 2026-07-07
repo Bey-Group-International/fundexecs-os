@@ -84,6 +84,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const team = ctx.hub ? AGENTS.filter((a) => a.hub === ctx.hub) : [];
 
   const [open, setOpen] = useState(false);
+  // Some surfaces (the Virtual Office, which has its own Earn entry points) ask
+  // to hide the floating launcher pill; ⌘K still opens the dock.
+  const [launcherSuppressed, setLauncherSuppressed] = useState(false);
   const [body, setBody] = useState("");
   const [thread, setThread] = useState<Turn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -233,6 +236,17 @@ export function EarnCopilotDock({ name }: { name: string }) {
     askRef.current = ask;
   });
 
+  // Surfaces with their own Earn entry (the Virtual Office) can hide the
+  // floating launcher pill via this event. ⌘K still opens the dock.
+  useEffect(() => {
+    const onSuppress = (e: Event) => {
+      const detail = (e as CustomEvent<{ suppress?: boolean }>).detail;
+      setLauncherSuppressed(Boolean(detail?.suppress));
+    };
+    window.addEventListener("earn:suppress-launcher", onSuppress);
+    return () => window.removeEventListener("earn:suppress-launcher", onSuppress);
+  }, []);
+
   /** Start a fresh conversation: drop the current thread and session. */
   function newConversation() {
     setThread([]);
@@ -330,7 +344,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
   return (
     <>
       {/* Launcher */}
-      {!open ? (
+      {!open && !launcherSuppressed ? (
         <button
           onClick={() => setOpen(true)}
           title="Ask Earn (⌘K)"
