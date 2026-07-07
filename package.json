@@ -37,21 +37,18 @@
   "private": true,
   "scripts": {
     "build": "next build --webpack",
-    "prebuild": "node scripts/copy-mediapipe.mjs",
-    "predev": "node scripts/copy-mediapipe.mjs",
     "db:diff": "supabase db diff",
     "db:reset": "supabase db reset",
     "db:start": "supabase start",
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "dev": "next dev",
     "lint": "eslint .",
+    "prebuild": "node scripts/copy-mediapipe.mjs",
+    "predev": "node scripts/copy-mediapipe.mjs",
     "start": "next start",
     "test": "jest",
     "typecheck": "tsc --noEmit"
   },
   "version": "0.0.1",
-  "workspaces": [
-    "shared",
-    "server"
-  ]
+  "workspaces": [ "shared", "server" ]
 }
