@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { prettyListingType, formatListingAmount } from "@/lib/office/listingFormat";
 
 const TEAL = "#2dd4bf";
 
@@ -13,29 +14,6 @@ export type PublicListing = {
   amount: number | null;
   status: string;
 };
-
-const TYPE_LABELS: Record<string, string> = {
-  deal: "Deal",
-  fund: "Fund",
-  co_invest: "Co-invest",
-  secondary: "Secondary",
-  service: "Service",
-  lp_seeking: "LP Seeking",
-};
-
-function prettyType(t: string): string {
-  return TYPE_LABELS[t] ?? t.split(/[_\s]+/).map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
-}
-
-function formatAmount(a: number | null): string | null {
-  if (a == null) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-    notation: "compact",
-  }).format(a);
-}
 
 /**
  * In-world Marketplace browser. Shown while the operator stands in the
@@ -118,9 +96,9 @@ export function MarketplacePanel({
                 <span className="truncate text-[11px] font-medium text-slate-100" style={{ fontFamily: "Georgia, serif" }}>
                   {l.title}
                 </span>
-                {formatAmount(l.amount) && (
+                {formatListingAmount(l.amount) && (
                   <span className="shrink-0 text-[10px]" style={{ color: TEAL }}>
-                    {formatAmount(l.amount)}
+                    {formatListingAmount(l.amount)}
                   </span>
                 )}
               </div>
@@ -129,7 +107,7 @@ export function MarketplacePanel({
                   className="shrink-0 rounded-sm px-1 text-[8px] uppercase tracking-wider"
                   style={{ background: "rgba(45,212,191,0.12)", color: TEAL }}
                 >
-                  {prettyType(l.listing_type)}
+                  {prettyListingType(l.listing_type)}
                 </span>
                 {l.summary && <span className="truncate text-[9px] text-slate-500">{l.summary}</span>}
               </div>

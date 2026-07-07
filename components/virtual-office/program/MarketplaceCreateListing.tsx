@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FloorOverlay } from "./FloorOverlay";
 
 const TEAL = "#2dd4bf";
 
@@ -82,43 +83,36 @@ export function MarketplaceCreateListing({
   };
 
   return (
-    <div
-      className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center p-4"
-      style={{ background: "rgba(4,6,10,0.55)" }}
-      onClick={onClose}
-      role="presentation"
-    >
-      <form
-        onSubmit={submit}
-        className="flex max-h-[92%] w-full max-w-[380px] flex-col overflow-hidden rounded-xl border backdrop-blur-sm"
-        style={{ borderColor: "rgba(45,212,191,0.35)", background: "rgba(10,8,6,0.97)" }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="List something"
-      >
-        <div className="h-[3px]" style={{ background: `linear-gradient(90deg, transparent, ${TEAL}, transparent)` }} />
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 border-b px-4 py-3" style={{ borderColor: "rgba(45,212,191,0.18)" }}>
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.22em]" style={{ color: TEAL, fontFamily: "Georgia, serif" }}>
-              List something
-            </span>
-            <p className="mt-0.5 text-[10px] text-slate-500">Publish to the exchange floor without leaving the office.</p>
-          </div>
+    <FloorOverlay
+      accent={TEAL}
+      onClose={onClose}
+      ariaLabel="List something"
+      maxWidth={380}
+      eyebrow="List something"
+      subtitle="Publish to the exchange floor without leaving the office."
+      footer={
+        <div className="flex gap-1.5">
+          <button
+            type="submit"
+            form="fx-create-listing"
+            disabled={state === "pending"}
+            className="flex-1 rounded px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-opacity disabled:opacity-50"
+            style={{ background: TEAL, color: "#0a0806", fontFamily: "Georgia, serif" }}
+          >
+            {state === "pending" ? "Publishing…" : "Publish listing"}
+          </button>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-[13px] leading-none text-slate-400 transition-colors hover:text-slate-100"
-            style={{ border: "1px solid rgba(45,212,191,0.25)" }}
+            className="rounded border px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-slate-300 transition-colors hover:text-slate-100"
+            style={{ borderColor: "rgba(255,255,255,0.15)" }}
           >
-            ✕
+            Cancel
           </button>
         </div>
-
-        {/* Body */}
-        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
+      }
+    >
+      <form id="fx-create-listing" onSubmit={submit} className="space-y-2.5">
           <input
             name="title"
             autoFocus
@@ -191,28 +185,7 @@ export function MarketplaceCreateListing({
           </label>
 
           {state === "error" && <p className="text-[10px]" style={{ color: "#ef4444" }}>{error}</p>}
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-1.5 border-t px-4 py-3" style={{ borderColor: "rgba(45,212,191,0.18)" }}>
-          <button
-            type="submit"
-            disabled={state === "pending"}
-            className="flex-1 rounded px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-opacity disabled:opacity-50"
-            style={{ background: TEAL, color: "#0a0806", fontFamily: "Georgia, serif" }}
-          >
-            {state === "pending" ? "Publishing…" : "Publish listing"}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-slate-300 transition-colors hover:text-slate-100"
-            style={{ borderColor: "rgba(255,255,255,0.15)" }}
-          >
-            Cancel
-          </button>
-        </div>
       </form>
-    </div>
+    </FloorOverlay>
   );
 }

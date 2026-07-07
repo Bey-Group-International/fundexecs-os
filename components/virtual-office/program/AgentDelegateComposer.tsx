@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FloorOverlay } from "./FloorOverlay";
 
 /** The subset of the proximity agent this composer needs. */
 export type DelegateAgent = {
@@ -70,88 +71,15 @@ export function AgentDelegateComposer({
   };
 
   return (
-    <div
-      className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center p-4"
-      style={{ background: "rgba(4,6,10,0.55)" }}
-      onClick={onClose}
-      role="presentation"
-    >
-      <div
-        className="flex w-full max-w-[360px] flex-col overflow-hidden rounded-xl border backdrop-blur-sm"
-        style={{ borderColor: `${accent}59`, background: "rgba(10,8,6,0.97)" }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label={`Delegate to ${agent.name}`}
-      >
-        <div className="h-[3px]" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 border-b px-4 py-3" style={{ borderColor: `${accent}2e` }}>
-          <div className="min-w-0">
-            <span className="text-[10px] uppercase tracking-[0.22em]" style={{ color: accent, fontFamily: "Georgia, serif" }}>
-              Delegate a task
-            </span>
-            <h2 className="mt-0.5 text-[15px] font-semibold leading-tight text-slate-100" style={{ fontFamily: "Georgia, serif" }}>
-              {agent.name}
-            </h2>
-            <p className="text-[10px] text-slate-500">{agent.role}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-[13px] leading-none text-slate-400 transition-colors hover:text-slate-100"
-            style={{ border: `1px solid ${accent}40` }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="space-y-3 px-4 py-3">
-          <div>
-            <p className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-slate-500">Quick tasks</p>
-            <div className="flex flex-wrap gap-1.5">
-              {quick.map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => delegate(q)}
-                  className="rounded-full border px-2.5 py-1 text-[11px] text-slate-200 transition-colors"
-                  style={{ borderColor: `${accent}3d`, background: `${accent}12` }}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-slate-500">Or write your own</p>
-            <textarea
-              autoFocus
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  delegate(task);
-                }
-              }}
-              rows={2}
-              placeholder={`Tell ${agent.name.split(" ")[0]} what to do…`}
-              className="w-full resize-none rounded-md border px-2.5 py-2 text-[12px] text-slate-100 placeholder:text-slate-600 focus:outline-none"
-              style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}
-            />
-          </div>
-
-          <p className="text-[9px] leading-snug text-slate-500">
-            Routes through Earn as a gated plan — external-facing and capital-binding work still needs your approval.
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-1.5 border-t px-4 py-3" style={{ borderColor: `${accent}2e` }}>
+    <FloorOverlay
+      accent={accent}
+      onClose={onClose}
+      ariaLabel={`Delegate to ${agent.name}`}
+      eyebrow="Delegate a task"
+      title={agent.name}
+      subtitle={agent.role}
+      footer={
+        <div className="flex gap-1.5">
           <button
             type="button"
             onClick={() => delegate(task)}
@@ -170,7 +98,47 @@ export function AgentDelegateComposer({
             Cancel
           </button>
         </div>
+      }
+    >
+      <div>
+        <p className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-slate-500">Quick tasks</p>
+        <div className="flex flex-wrap gap-1.5">
+          {quick.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => delegate(q)}
+              className="rounded-full border px-2.5 py-1 text-[11px] text-slate-200 transition-colors"
+              style={{ borderColor: `${accent}3d`, background: `${accent}12` }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
+
+      <div>
+        <p className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-slate-500">Or write your own</p>
+        <textarea
+          autoFocus
+          value={task}
+          onChange={(e) => setTask(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              delegate(task);
+            }
+          }}
+          rows={2}
+          placeholder={`Tell ${agent.name.split(" ")[0]} what to do…`}
+          className="w-full resize-none rounded-md border px-2.5 py-2 text-[12px] text-slate-100 placeholder:text-slate-600 focus:outline-none"
+          style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}
+        />
+      </div>
+
+      <p className="text-[9px] leading-snug text-slate-500">
+        Routes through Earn as a gated plan — external-facing and capital-binding work still needs your approval.
+      </p>
+    </FloorOverlay>
   );
 }

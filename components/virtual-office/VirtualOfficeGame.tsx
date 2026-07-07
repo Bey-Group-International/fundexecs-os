@@ -572,7 +572,15 @@ export function VirtualOfficeGame({
         kind: detail.kind,
         text: detail.text,
       };
-      setFloorActivity((prev) => [entry, ...prev].slice(0, 20));
+      setFloorActivity((prev) => {
+        // Collapse rapid duplicates (e.g. a meeting re-announced within seconds)
+        // so the ticker shows distinct moments, not a stutter of the same line.
+        const top = prev[0];
+        if (top && top.kind === entry.kind && top.text === entry.text && entry.ts - top.ts < 8000) {
+          return prev;
+        }
+        return [entry, ...prev].slice(0, 20);
+      });
     };
     window.addEventListener(FLOOR_ACTIVITY_EVENT, onActivity);
     return () => window.removeEventListener(FLOOR_ACTIVITY_EVENT, onActivity);
@@ -1379,6 +1387,19 @@ export function VirtualOfficeGame({
           <div className="pointer-events-none absolute left-1/2 top-2 z-20 w-[min(92%,460px)] -translate-x-1/2">
             <DealRoomBanner listingId={dealListingId} onClose={() => setDealListingId(null)} />
           </div>
+        )}
+
+        {/* A deal room is convened but you've walked out of the Deal Room —
+            offer a one-tap way back to it. */}
+        {dealListingId && currentRoom !== "trading" && (
+          <button
+            type="button"
+            onClick={() => teleportTo("trading")}
+            className="pointer-events-auto absolute bottom-2 left-1/2 z-20 -translate-x-1/2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm transition-colors"
+            style={{ borderColor: "#c9a84c66", background: "rgba(10,8,6,0.9)", color: "#c9a84c", fontFamily: "Georgia, serif" }}
+          >
+            ◈ Back to the deal room
+          </button>
         )}
 
         {/* In-world listing detail — opened from a stall press-X or a panel row. */}
