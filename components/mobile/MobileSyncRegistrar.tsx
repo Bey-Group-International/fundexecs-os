@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { registerExecutor } from "./offlineQueue";
+import { registerExecutor, registerLabeler } from "./offlineQueue";
 import { decideApprovalAction } from "@/app/(app)/approvals/actions";
 
 // The type key + payload shape for a queued approval decision. Shared between
@@ -26,6 +26,19 @@ export function MobileSyncRegistrar() {
       const p = payload as ApprovalDecisionPayload;
       const res = await decideApprovalAction(p.approvalId, p.decision, p.note);
       return Boolean(res?.ok);
+    });
+
+    // Human-friendly line for the pending-sync review sheet, so a queued
+    // decision reads as "Approve: Series B — Acme" rather than a raw type.
+    registerLabeler(APPROVAL_DECISION_TYPE, (payload) => {
+      const p = payload as ApprovalDecisionPayload;
+      const verb =
+        p.decision === "approved"
+          ? "Approve"
+          : p.decision === "rejected"
+            ? "Reject"
+            : "Revise";
+      return `${verb}: ${p.title}`;
     });
   }, []);
 

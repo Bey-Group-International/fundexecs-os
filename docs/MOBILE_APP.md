@@ -418,3 +418,37 @@ Accessibility section), built in parallel across disjoint files:
 Verified at a 390px viewport: the ARIA roles/live regions render, and with
 Playwright `reducedMotion: "reduce"` the nav/FAB transition durations resolve to
 `0s`. `tsc`/`eslint`/`build` clean; no console errors. Desktop untouched.
+
+## 16. Perf split + reviewable offline queue
+
+Two more fortifications, built in parallel across disjoint files, then
+integrated:
+
+- **Lighter initial bundle** (`AppShellMobile.tsx`): the two slide-up drawers —
+  the quick-action FAB sheet (`MobileQuickAction`) and the More menu
+  (`MobileMoreMenu`) — are now `next/dynamic({ ssr: false })` imports rendered
+  only once opened (`{quickOpen && …}` / `{moreOpen && …}`). Their code is split
+  out of the initial mobile JS and fetched on first tap. Props and behavior are
+  identical; `ssr: false` is safe because both return `null` while closed.
+- **Hardened offline queue** (`offlineQueue.ts`): `enqueue` now **dedupes** by
+  `type` + serialized payload (a double-tap on a flaky connection can't
+  double-submit), **caps** the buffer at `MAX_ITEMS = 100` (drops oldest), and
+  **expires** actions older than `MAX_AGE_MS = 24h` on load, enqueue, and flush —
+  replaying a day-old "approve" on reconnect would be surprising, so expiry beats
+  blind retry. New API: `getItems()`, `remove(id)`, `useQueueItems()`,
+  `registerLabeler(type, fn)`, `labelFor(item)`. All prior exports preserved.
+- **Reviewable pending sync** (`MobilePendingSheet.tsx`): a `MobileSheet` listing
+  every queued action with a human label, a "Retry all now" button, and per-item
+  dismiss. Empty state: "You're all synced." Labels come from `labelFor`; the
+  approvals executor registers a labeler in `MobileSyncRegistrar` so a queued
+  decision reads as "Approve: Series B — Acme" rather than a raw type string.
+- **Tappable banner** (`OfflineBanner.tsx`): when there is queued work the banner
+  becomes a button (with a "Review" affordance) that opens the pending-sync
+  sheet; with nothing queued it stays a plain `role="status"` notice. Offline vs.
+  syncing copy is unchanged.
+
+Verified at a 390px viewport with Playwright under `context.setOffline(true)`:
+seeding two unique decisions plus one duplicate yields a "2 changes" banner
+(dedupe held), tapping opens the sheet with the humanized "Approve: …" /
+"Reject: …" labels, and per-item dismiss drops a row. `tsc`/`eslint`/`build`
+clean. All new surfaces are `md:hidden`; desktop/web untouched.

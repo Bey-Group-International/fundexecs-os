@@ -1,15 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { MobileQuickAction } from "./MobileQuickAction";
-import { MobileMoreMenu } from "./MobileMoreMenu";
 import { PlusIcon } from "./icons";
 import { useHideOnScroll } from "./useHideOnScroll";
 import { haptic } from "./haptics";
 import { OfflineBanner } from "./OfflineBanner";
 import { MobileSyncRegistrar } from "./MobileSyncRegistrar";
+
+// The slide-up drawers are only rendered once the user opens them, so their
+// code is split out of the initial mobile bundle and fetched on first open.
+// `ssr: false` is fine here — this is a client component and the drawers have
+// no server-rendered content (they return null while closed).
+const MobileQuickAction = dynamic(
+  () => import("./MobileQuickAction").then((m) => m.MobileQuickAction),
+  { ssr: false },
+);
+const MobileMoreMenu = dynamic(
+  () => import("./MobileMoreMenu").then((m) => m.MobileMoreMenu),
+  { ssr: false },
+);
 
 // The mobile app shell: the persistent chrome that turns the responsive web
 // app into an app-native experience on phones. Renders the bottom tab bar, the
@@ -79,14 +91,16 @@ export function AppShellMobile({
         }}
       />
 
-      <MobileQuickAction open={quickOpen} onClose={() => setQuickOpen(false)} />
-      <MobileMoreMenu
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        name={name}
-        planName={planName}
-        signOutAction={signOutAction}
-      />
+      {quickOpen && <MobileQuickAction open onClose={() => setQuickOpen(false)} />}
+      {moreOpen && (
+        <MobileMoreMenu
+          open
+          onClose={() => setMoreOpen(false)}
+          name={name}
+          planName={planName}
+          signOutAction={signOutAction}
+        />
+      )}
     </div>
   );
 }
