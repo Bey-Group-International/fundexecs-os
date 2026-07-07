@@ -56,6 +56,7 @@ app/(app)/layout.tsx
 ```
 
 ### New routes
+
 - **`/home`** — the Mobile App Home / Command Center. A server component that
   reuses existing auth + Supabase queries (deals, approvals, workflows, inbox)
   and renders card-first. Auth-gated by the shared layout. On desktop it renders
@@ -64,28 +65,30 @@ app/(app)/layout.tsx
 - **`/offline`** — static offline fallback served by the service worker.
 
 ### Component map (`components/mobile/`)
-| File | Role |
-|------|------|
-| `AppShellMobile.tsx` | Mounts nav + FAB + drawers; owns open/close state |
-| `MobileBottomNav.tsx` | 5-tab native bottom bar with active + badge states |
-| `MobileQuickAction.tsx` | Quick-action drawer (Ask Earn, Add deal, Upload…) |
-| `MobileMoreMenu.tsx` | "More" sheet: workspace, relationships, account |
-| `MobileSheet.tsx` | Reusable slide-up sheet (scrim, Esc, scroll-lock, focus) |
-| `MobileCommandCenter.tsx` | Home screen composition |
-| `MobileEarnPanel.tsx` | AI-first Earn entry point (input + prompt chips) |
-| `MobileDealCard.tsx` | Scannable, tappable deal card |
-| `MobileContactCard.tsx` | Relationship/network card |
-| `MobileWorkflowCard.tsx` | Active workflow / delegated-task card w/ progress |
-| `MobileApprovalCard.tsx` | Approval card w/ risk level + review CTA |
-| `MobileCommandCard.tsx` | Stat tiles + "recommended next action" hero |
-| `MobileSectionHeader.tsx` | Standard section heading w/ "See all" |
-| `MobileInstallPrompt.tsx` | Add-to-Home-Screen nudge (beforeinstallprompt) |
-| `ServiceWorkerRegister.tsx` | Registers the app-shell SW (production only) |
-| `icons.tsx` | Dependency-free inline SVG icon set |
-| `nav-config.tsx` | Single source of truth for tabs / quick actions / more |
-| `format.ts` | Currency, relative-time, initials helpers |
+
+|            File             |                           Role                           |
+|-----------------------------|----------------------------------------------------------|
+| `AppShellMobile.tsx`        | Mounts nav + FAB + drawers; owns open/close state        |
+| `MobileBottomNav.tsx`       | 5-tab native bottom bar with active + badge states       |
+| `MobileQuickAction.tsx`     | Quick-action drawer (Ask Earn, Add deal, Upload…)        |
+| `MobileMoreMenu.tsx`        | "More" sheet: workspace, relationships, account          |
+| `MobileSheet.tsx`           | Reusable slide-up sheet (scrim, Esc, scroll-lock, focus) |
+| `MobileCommandCenter.tsx`   | Home screen composition                                  |
+| `MobileEarnPanel.tsx`       | AI-first Earn entry point (input + prompt chips)         |
+| `MobileDealCard.tsx`        | Scannable, tappable deal card                            |
+| `MobileContactCard.tsx`     | Relationship/network card                                |
+| `MobileWorkflowCard.tsx`    | Active workflow / delegated-task card w/ progress        |
+| `MobileApprovalCard.tsx`    | Approval card w/ risk level + review CTA                 |
+| `MobileCommandCard.tsx`     | Stat tiles + "recommended next action" hero              |
+| `MobileSectionHeader.tsx`   | Standard section heading w/ "See all"                    |
+| `MobileInstallPrompt.tsx`   | Add-to-Home-Screen nudge (beforeinstallprompt)           |
+| `ServiceWorkerRegister.tsx` | Registers the app-shell SW (production only)             |
+| `icons.tsx`                 | Dependency-free inline SVG icon set                      |
+| `nav-config.tsx`            | Single source of truth for tabs / quick actions / more   |
+| `format.ts`                 | Currency, relative-time, initials helpers                |
 
 ### Navigation model
+
 - **Bottom tab bar** for the five primary sections (Home, Earn, Deals, Network,
   More). Every tab deep-links to a real, existing route.
 - **Quick-action FAB** floats above the bar — the fastest way to start work.
@@ -95,6 +98,7 @@ app/(app)/layout.tsx
   contact, workflow, and approval surfaces are card-based.
 
 ### Isolation guarantees
+
 - All chrome is `md:hidden`; the desktop sidebar remains `hidden md:flex`.
 - The floating Earn dock and download banner are wrapped desktop-only so they
   never overlap the bottom nav.
@@ -150,15 +154,15 @@ respect `prefers-reduced-motion` and both light/dark themes.
 
 ## 6. Before / after
 
-| | Before | After (mobile) |
-|---|---|---|
-| Primary nav on phone | Hamburger slide-over only | Native bottom tab bar + FAB |
-| Landing | `/workspace` list | `/home` command center ("what needs me now?") |
-| Earn | Floating dock (overlaps) | Primary tab + FAB + home input |
-| Deals / approvals | Desktop panels | Summary-first cards |
-| Start an action | Navigate through menus | One-tap quick-action drawer |
-| Install | Basic manifest | Shortcuts, install prompt, offline, iOS status bar |
-| Desktop / web | — | **Unchanged** |
+|                      |          Before           |                   After (mobile)                   |
+|----------------------|---------------------------|----------------------------------------------------|
+| Primary nav on phone | Hamburger slide-over only | Native bottom tab bar + FAB                        |
+| Landing              | `/workspace` list         | `/home` command center ("what needs me now?")      |
+| Earn                 | Floating dock (overlaps)  | Primary tab + FAB + home input                     |
+| Deals / approvals    | Desktop panels            | Summary-first cards                                |
+| Start an action      | Navigate through menus    | One-tap quick-action drawer                        |
+| Install              | Basic manifest            | Shortcuts, install prompt, offline, iOS status bar |
+| Desktop / web        | —                         | **Unchanged**                                      |
 
 ---
 
