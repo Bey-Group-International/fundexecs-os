@@ -83,25 +83,34 @@ is untouched.
 All four target renderers implement the same `OfficeRenderer` surface. They
 differ only in fidelity, where they run, and what they cost.
 
-### 1. Three.js / WebGPU — native browser 3D *(this scaffold)*
+### 1. Three.js — native browser 3D *(implemented)*
 
-`ThreeOfficeRenderer.ts` is a dependency-free scaffold (no `three` import yet;
-Three.js objects are represented by local interface stubs with `TODO(three)`
-bodies). It plugs in directly as the first 3D renderer.
+`ThreeOfficeRenderer.ts` is a **working** renderer built on `three` (WebGL). It
+runs on the client GPU — no cloud, no external engine — and is the native way
+to get real 3D fidelity. It stays fully additive: nothing constructs it yet, so
+the live Phaser floor is untouched until a composition root opts in.
 
-- **Coordinate mapping** — the top-down 2D plane (`+x` right, `+y` **down**,
-  fake `yDepth` occlusion) becomes the X-Z floor plane with `+y` up; real
-  depth comes from the GPU z-buffer. Facing → yaw about `+Y`.
-- **Geometry** — rooms and desks as **instanced meshes** (one draw call for
-  all rooms / all desks); avatars as an instanced or skinned-mesh pool. It
-  reads the **same** `ROOMS` / `WORKSTATIONS` / `LAYOUT` data as the Phaser
-  floor, so the two stay pixel-congruent.
-- **Picking** — a `Raycaster` (or GPU id-buffer read-back at scale) maps
-  pointer hits to `onActorClick` / `onFloorClick`.
-- **Renderer** — prefer `WebGPURenderer` when `navigator.gpu` exists, fall
-  back to `WebGLRenderer`; both share the scene-graph API, so it is one branch
-  in `mount()`.
+- **Coordinate mapping + geometry** — all 2D→3D translation lives in the pure,
+  unit-tested `officeGeometry3D.ts`: the top-down plane (`+x` right, `+y`
+  **down**) becomes the X-Z floor plane with `+y` up, real GPU depth replaces
+  the fake `yDepth`, and facing → yaw about `+Y`. It reads the **same** `ROOMS`
+  / walls / `WORKSTATIONS` data as the Phaser floor (door-split partition walls
+  included), so the two stay congruent.
+- **Draw calls** — rooms are accent-tinted floor quads; walls and desks are each
+  a single **`InstancedMesh`** (one draw call for all walls, one for all desks).
+  Avatars are a small pool of grouped meshes (capsule body + head + canvas name
+  sprite), colored by role accent and lit by an emissive tint per `AgentState`.
+- **Picking** — a `Raycaster` tests avatar bodies first, then the floor plane,
+  mapping hits to `onActorClick` / `onFloorClick` (floor hits converted back to
+  top-down pixels for the behavior layer).
+- **Loop + camera** — self-drives its own `requestAnimationFrame` loop (so the
+  interface `update()` is a no-op): eased camera for `focusRoom` / `follow`,
+  position lerp, and a gentle idle bob. `WebGPURenderer` can slot in behind the
+  same scene-graph API later.
 - **Runs** on the client; no server GPU. Best near-term upgrade.
+
+The pure geometry mapping is covered by `officeGeometry3D.test.ts`, so the
+2D↔3D translation is verified headlessly without a GPU.
 
 ### 2. Unity WebGL — richer avatar controllers
 
@@ -146,8 +155,9 @@ animation, and presence.
 
 1. Wrap the existing Phaser scene in a `PhaserOfficeRenderer` adapter so the
    app depends on `OfficeRenderer`, not the scene directly.
-2. Fill in `ThreeOfficeRenderer` (add `three`, delete the local stubs) as the
-   first real 3D path, validated against the same `ROOMS` data.
+2. ✅ `ThreeOfficeRenderer` is implemented (real `three`/WebGL, reads the same
+   `ROOMS` data via `officeGeometry3D`). Next: wire a composition root that can
+   opt into it, then enrich avatar fidelity (skinned meshes / animation clips).
 3. Evaluate Unity / Unreal / Omniverse only where the extra fidelity justifies
    the payload, latency, or cloud-GPU cost — each behind the same interface.
 
