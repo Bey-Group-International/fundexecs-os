@@ -37,6 +37,7 @@ import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar }
 import {
   createWallVisuals,
   createFurniture,
+  roomAccentColor,
   officeSeats,
   boardroomTableSeats,
   coffeePoints,
@@ -242,6 +243,8 @@ export class OfficeScene extends Phaser.Scene {
   /** 2.5D environment (extruded walls + department furniture) for cleanup. */
   private envWalls: Phaser.GameObjects.Graphics | null = null;
   private furniture: FurniturePiece[] = [];
+  /** Scroll-locked ambience (vignette + drifting motes) for cleanup. */
+  private atmosphere: Phaser.GameObjects.GameObject[] = [];
   /** On-floor approval-gate banner (one at a time; lives in the gate's room). */
   private approvalGateMarker: Phaser.GameObjects.Container | null = null;
   /** Throttle counter for the task-handoff motion trail. */
@@ -386,6 +389,7 @@ export class OfficeScene extends Phaser.Scene {
     this._createRoomLabel();
     this._createNetDot();
     this._setupCamera();
+    this._createAtmosphere();
     this._setupInput();
     this._setupSeating();
     this._spawnProgramAgents();
@@ -546,6 +550,12 @@ export class OfficeScene extends Phaser.Scene {
     this.envWalls?.destroy();
     for (const piece of this.furniture) piece.gfx.destroy();
     this.furniture = [];
+    // Tear down scroll-locked ambience (kill mote tweens first, then destroy).
+    for (const obj of this.atmosphere) {
+      this.tweens.killTweensOf(obj);
+      obj.destroy();
+    }
+    this.atmosphere = [];
     // Tear down the approval-gate banner if one is showing.
     if (this.approvalGateMarker) {
       this.tweens.killTweensOf(this.approvalGateMarker);
@@ -565,36 +575,62 @@ export class OfficeScene extends Phaser.Scene {
     map.createLayer("floor", tileset, 0, 0)?.setDepth(0);
     map.createLayer("decor", tileset, 0, 0)?.setDepth(1);
 
-    // Per-room premium dressing: floor wash, ambient light pool, corner
-    // accents, inner shadow frame, and a clean executive label.
+    // Per-room premium dressing: an accent-tinted floor wash, a layered center
+    // light pool plus corner glows, a faint department emblem, an inner shadow
+    // frame, and a clean engraved label — so each department reads with its own
+    // identity instead of a uniform brown field.
     for (const room of ROOMS) {
       const rx = room.col * ROOM_W;
       const ry = room.row * ROOM_H;
-
-      // Soft floor wash — subtly darkens the room field for depth.
-      const wash = this.add.graphics().setDepth(1);
-      wash.fillStyle(0x0a0e16, 0.28);
-      wash.fillRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
-
-      // Ambient light pool at room center — layered discs fake a soft glow.
+      const accent = roomAccentColor(room.key);
       const cx = rx + ROOM_W / 2;
       const cy = ry + ROOM_H / 2;
+
+      // Soft floor wash — a dark base for depth plus a whisper of the room's
+      // accent so departments feel tinted rather than identical.
+      const wash = this.add.graphics().setDepth(1);
+      wash.fillStyle(0x0a0e16, 0.26);
+      wash.fillRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+      wash.fillStyle(accent, 0.035);
+      wash.fillRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+
+      // Ambient light: a warm accent pool at room center + fainter pools in the
+      // four corners, so the floor glows from within in the department's hue.
       const pool = this.add.graphics().setDepth(1);
       for (let i = 3; i >= 1; i--) {
-        pool.fillStyle(0xc9a84c, 0.015 * i);
+        pool.fillStyle(accent, 0.018 * i);
         pool.fillCircle(cx, cy, 40 + i * 26);
       }
+      const cg = 30;
+      const cornerGlows: Array<[number, number]> = [
+        [rx + cg, ry + cg], [rx + ROOM_W - cg, ry + cg],
+        [rx + cg, ry + ROOM_H - cg], [rx + ROOM_W - cg, ry + ROOM_H - cg],
+      ];
+      for (const [gx, gy] of cornerGlows) {
+        for (let i = 2; i >= 1; i--) {
+          pool.fillStyle(accent, 0.012 * i);
+          pool.fillCircle(gx, gy, 14 + i * 12);
+        }
+      }
 
-      // Inner shadow frame + gold hairline border.
+      // Faint department emblem — concentric accent rings, a subtle insignia
+      // beneath the center rug.
+      const emblem = this.add.graphics().setDepth(1);
+      emblem.lineStyle(1, accent, 0.1);
+      emblem.strokeCircle(cx, cy, 30);
+      emblem.lineStyle(1, accent, 0.06);
+      emblem.strokeCircle(cx, cy, 46);
+
+      // Inner shadow frame + accent hairline border.
       const gfx = this.add.graphics().setDepth(2);
       gfx.lineStyle(3, 0x000000, 0.22);
       gfx.strokeRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
-      gfx.lineStyle(1, 0xc9a84c, 0.22);
+      gfx.lineStyle(1, accent, 0.24);
       gfx.strokeRect(rx + 2, ry + 2, ROOM_W - 4, ROOM_H - 4);
 
-      // Gold corner accents (L-ticks) for a command-floor feel.
+      // Accent corner ticks (L-marks) for a command-floor feel.
       const t = 10;
-      gfx.lineStyle(1.5, 0xc9a84c, 0.5);
+      gfx.lineStyle(1.5, accent, 0.5);
       const corners: Array<[number, number, number, number]> = [
         [rx + 6, ry + 6, 1, 1], [rx + ROOM_W - 6, ry + 6, -1, 1],
         [rx + 6, ry + ROOM_H - 6, 1, -1], [rx + ROOM_W - 6, ry + ROOM_H - 6, -1, -1],
@@ -605,21 +641,22 @@ export class OfficeScene extends Phaser.Scene {
         gfx.strokePath();
       }
 
-      // Executive label — pill badge with an accent dot, bottom-left.
+      // Engraved executive nameplate — accent dot + label on a slim dark
+      // plaque, seated in the bottom-left where the floor is clear.
       const lx = rx + 10;
-      const ly = ry + ROOM_H - 24;
+      const ly = ry + ROOM_H - 30;
       const label = this.add.text(lx + 14, ly + 3, room.label.toUpperCase(), {
         fontFamily: "'Georgia','Times New Roman',serif",
         fontSize: "8px",
-        color: "#d8c07a",
+        color: "#e6d6a0",
         letterSpacing: 2,
-      }).setDepth(4).setAlpha(0.95);
+      }).setDepth(4).setAlpha(0.96);
       const bg = this.add.graphics().setDepth(3);
-      bg.fillStyle(0x0a0806, 0.82);
-      bg.fillRoundedRect(lx, ly, label.width + 22, 18, 4);
-      bg.lineStyle(1, 0xc9a84c, 0.28);
-      bg.strokeRoundedRect(lx, ly, label.width + 22, 18, 4);
-      bg.fillStyle(0xc9a84c, 0.9);
+      bg.fillStyle(0x0a0806, 0.85);
+      bg.fillRoundedRect(lx, ly, label.width + 24, 18, 4);
+      bg.lineStyle(1, accent, 0.35);
+      bg.strokeRoundedRect(lx, ly, label.width + 24, 18, 4);
+      bg.fillStyle(accent, 0.95);
       bg.fillCircle(lx + 8, ly + 9, 2);
     }
   }
@@ -831,6 +868,60 @@ export class OfficeScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(20)
       .setVisible(false);
+  }
+
+  /**
+   * Scroll-locked ambience over the whole viewport: a soft vignette that fades
+   * the floor edges (so nothing reads as hard-clipped and the eye settles on
+   * the action), plus a scatter of slow-drifting dust motes for a warm,
+   * lived-in mood. Motes are suppressed entirely under reduced motion.
+   */
+  private _createAtmosphere() {
+    const cam = this.cameras.main;
+    const W = cam.width;
+    const H = cam.height;
+
+    // Vignette — feathered dark bands on each edge; overlapping corners deepen
+    // naturally. Depth 16 sits above the floor/avatars but below all HUD.
+    const vig = this.add.graphics().setScrollFactor(0).setDepth(16);
+    const reach = 70;
+    const N = 28;
+    for (let i = 0; i < N; i++) {
+      const f = 1 - i / N;
+      vig.fillStyle(0x05070c, 0.28 * f * f);
+      const o = (reach * i) / N;
+      const th = reach / N + 1;
+      vig.fillRect(0, o, W, th);
+      vig.fillRect(0, H - o - th, W, th);
+      vig.fillRect(o, 0, th, H);
+      vig.fillRect(W - o - th, 0, th, H);
+    }
+    this.atmosphere.push(vig);
+
+    if (this.reducedMotion) return;
+
+    // Drifting motes — a handful of faint gold specks that rise and fade,
+    // seeded deterministically so they spread evenly across the viewport.
+    for (let i = 0; i < 14; i++) {
+      const mx = (i * 97) % W;
+      const my = (i * 61) % H;
+      const mote = this.add
+        .circle(mx, my, 1 + (i % 2) * 0.6, 0xc9a84c, 0.1)
+        .setScrollFactor(0)
+        .setDepth(15);
+      this.atmosphere.push(mote);
+      this.tweens.add({
+        targets: mote,
+        y: my - 40 - (i % 3) * 20,
+        x: mx + (i % 2 ? 14 : -14),
+        alpha: 0.02,
+        duration: 6000 + (i % 5) * 1200,
+        ease: "Sine.easeInOut",
+        yoyo: true,
+        repeat: -1,
+        delay: i * 300,
+      });
+    }
   }
 
   private _createNetDot() {

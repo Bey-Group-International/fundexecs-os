@@ -62,6 +62,12 @@ const ROOM_ACCENT: Record<string, number> = {
   reception: 0xf59e0b,
 };
 
+/** The department accent color for a room key (gold fallback). Shared with the
+ *  scene so per-room floor dressing can tint to match the furniture glow. */
+export function roomAccentColor(key: string): number {
+  return ROOM_ACCENT[key] ?? C.gold;
+}
+
 type PieceType = "desk" | "screens" | "shelf" | "sofa" | "table" | "plant" | "safe" | "console" | "reception" | "coffee";
 type Piece = { type: PieceType; rx: number; ry: number };
 
@@ -119,6 +125,24 @@ const LAYOUT: Record<string, Piece[]> = {
     { type: "coffee", rx: 344, ry: 150 },
     { type: "plant", rx: 40, ry: 232 },
   ],
+};
+
+/**
+ * One floor lamp per room, in a corner known to be clear of that room's
+ * LAYOUT furniture, the center agent cluster, and the door lanes. The lamp
+ * casts a soft accent pool on the floor so every department gets a warm,
+ * lived-in light source without cloning the same corner prop.
+ */
+const LAMPS: Record<string, { rx: number; ry: number }> = {
+  ceo:       { rx: 346, ry: 232 },
+  boardroom: { rx: 44,  ry: 236 },
+  trading:   { rx: 40,  ry: 232 },
+  research:  { rx: 346, ry: 232 },
+  office:    { rx: 40,  ry: 232 },
+  ops:       { rx: 346, ry: 236 },
+  legal:     { rx: 346, ry: 232 },
+  marketing: { rx: 346, ry: 232 },
+  reception: { rx: 346, ry: 236 },
 };
 
 /**
@@ -270,13 +294,35 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
     const oy = room.row * ROOM_H;
     const accent = ROOM_ACCENT[room.key] ?? C.gold;
 
-    // A soft department rug anchors the center of the floor (flat, no height).
+    // A soft department rug anchors the center of the floor (flat, no height),
+    // finished with an inset border so it reads as a woven runner, not a wash.
     const rug = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
+    const rcx = ox + ROOM_W / 2, rcy = oy + ROOM_H / 2;
     rug.fillStyle(accent, 0.05);
-    rug.fillRoundedRect(ox + ROOM_W / 2 - 70, oy + ROOM_H / 2 - 40, 140, 90, 10);
-    rug.lineStyle(1, accent, 0.12);
-    rug.strokeRoundedRect(ox + ROOM_W / 2 - 70, oy + ROOM_H / 2 - 40, 140, 90, 10);
+    rug.fillRoundedRect(rcx - 70, rcy - 40, 140, 90, 10);
+    rug.lineStyle(1, accent, 0.14);
+    rug.strokeRoundedRect(rcx - 70, rcy - 40, 140, 90, 10);
+    rug.lineStyle(1, accent, 0.09);
+    rug.strokeRoundedRect(rcx - 60, rcy - 32, 120, 74, 7);
     pieces.push({ gfx: rug, footY: -1 });
+
+    // Floor lamp — a warm accent pool on the floor (flat) plus a y-sorted body
+    // (pole + shade) so avatars pass in front of or behind it correctly.
+    const lamp = LAMPS[room.key];
+    if (lamp) {
+      const lx = ox + lamp.rx;
+      const lfy = oy + lamp.ry;
+      const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
+      for (let i = 3; i >= 1; i--) {
+        glow.fillStyle(accent, 0.03 * i);
+        glow.fillCircle(lx, lfy - 4, 16 + i * 11);
+      }
+      pieces.push({ gfx: glow, footY: -1 });
+
+      const body = scene.add.graphics().setDepth(yDepth(lfy));
+      drawLamp(body, lx, lfy, accent);
+      pieces.push({ gfx: body, footY: lfy });
+    }
 
     for (const p of LAYOUT[room.key] ?? []) {
       const x = ox + p.rx;
@@ -326,6 +372,26 @@ function drawChair(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accen
   g.fillRoundedRect(cx - 8, fy - 17, 16, 2.2, 3); // lit top of backrest
   g.fillStyle(accent, 0.55);
   g.fillRect(cx - 6.5, fy - 6, 13, 1); // accent trim
+}
+
+/** A slim floor lamp: weighted base, pole, warm shade, and a lit glow spill. */
+function drawLamp(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number) {
+  // Contact shadow + weighted base.
+  g.fillStyle(0x000000, 0.22);
+  g.fillEllipse(cx, fy + 1, 16, 5);
+  g.fillStyle(C.legDark, 1);
+  g.fillEllipse(cx, fy - 1, 12, 4);
+  // Pole.
+  g.fillStyle(0x2a323f, 1);
+  g.fillRect(cx - 1, fy - 34, 2, 33);
+  // Shade — a warm accent trapezoid with a lit top rim.
+  g.fillStyle(shade(accent, 0.7), 1);
+  g.fillRoundedRect(cx - 9, fy - 46, 18, 12, 2);
+  g.fillStyle(shade(accent, 1.5), 0.9);
+  g.fillRect(cx - 9, fy - 46, 18, 1.8);
+  // Glow spilling from under the shade.
+  g.fillStyle(accent, 0.5);
+  g.fillEllipse(cx, fy - 33, 15, 5);
 }
 
 /** A single monitor seen from behind, at (mx) rising from the desk surface. */
