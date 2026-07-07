@@ -18,7 +18,7 @@ import { MarketplaceCreateListing } from "./program/MarketplaceCreateListing";
 import { AgentDelegateComposer } from "./program/AgentDelegateComposer";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
-import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
+import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./program/officeProgramStore";
 import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
 import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { RichText } from "@/components/RichText";
@@ -130,6 +130,30 @@ const ROOM_NAV = [
   { key: "reception", label: "IR Lounge",         icon: "⬢" },
   { key: "marketplace", label: "Marketplace",     icon: "◈" },
 ];
+
+/**
+ * Maps a copilot agent key (from lib/agents — what Earn's planner assigns) to
+ * the office floor's executive id, so real routed work lights up the right
+ * executive. Sprite-consistent where the office reused a copilot sprite; by
+ * function otherwise. Anything unmapped falls back to Earn (the coordinator).
+ */
+const KEY_TO_OFFICE: Record<string, AgentId> = {
+  analyst: "analyst",
+  associate: "earn",
+  investor_relations: "investor_relations",
+  portfolio_ops: "portfolio_ops",
+  diligence: "risk",
+  fund_admin: "ops_admin",
+  executive_advisor: "principal",
+  capital_raiser: "analyst",
+  capital_connector: "treasury",
+  deal_sourcer: "associate",
+  rainmaker: "business_dev",
+  lead_generator: "business_dev",
+  pr_director: "investor_relations",
+  seo_disruptor: "business_dev",
+  curator: "ops_admin",
+};
 
 // Emote bar — mirrors keys 1-4 in the scene
 const EMOTE_BAR = [
@@ -431,6 +455,67 @@ export function VirtualOfficeGame({
     window.addEventListener("office:start-meeting", open);
     return () => window.removeEventListener("office:start-meeting", open);
   }, [requestMedia]);
+
+  // Living executives — reflect REAL Earn activity on the floor. When Earn routes
+  // work (from the floor's "Give a task", or the app-wide dock), it announces the
+  // assigned agents via earn:exec-activity. We light up exactly those executives:
+  // they stand, take on the plan as their status line, and their room glows,
+  // reverting once the activity settles. This is a pure visual reflection through
+  // the existing program bridge — it never touches the store's workflow state, and
+  // it stands down whenever the in-scene program engine is running its own
+  // choreography, so the two never fight over the same avatars.
+  const execReflectRef = useRef<{ agents: Set<AgentId>; timer: ReturnType<typeof setTimeout> | null }>({
+    agents: new Set(),
+    timer: null,
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ref = execReflectRef.current; // stable container from useRef
+    const revert = () => {
+      const game = gameRef.current;
+      if (game && !getOfficeProgramState().activeWorkflow) {
+        for (const id of ref.agents) {
+          game.events.emit("program:npc-state", id, "idle", AGENT_BY_ID[id]?.role ?? "");
+          const home = AGENT_BY_ID[id]?.homeRoom;
+          if (home) game.events.emit("program:room-activity", home, false, 0, null);
+        }
+      }
+      ref.agents.clear();
+      ref.timer = null;
+    };
+    const onExecActivity = (e: Event) => {
+      const detail = (e as CustomEvent<{ agentKeys?: string[]; planTitle?: string }>).detail;
+      const game = gameRef.current;
+      if (!game) return;
+      // Don't fight the in-scene program engine's own live choreography.
+      const st = getOfficeProgramState();
+      if (st.activeWorkflow || st.officeStatus !== "calm") return;
+
+      const ids = Array.from(
+        new Set((detail?.agentKeys ?? []).map((k) => KEY_TO_OFFICE[k] ?? "earn")),
+      ).slice(0, 4);
+      if (ids.length === 0) ids.push("earn");
+      const raw = (detail?.planTitle ?? "On a task").trim();
+      const label = raw.length > 32 ? `${raw.slice(0, 31)}…` : raw;
+
+      if (ref.timer) clearTimeout(ref.timer);
+      for (const id of ids) {
+        ref.agents.add(id);
+        const home = AGENT_BY_ID[id]?.homeRoom;
+        game.events.emit("program:npc-state", id, "working", label);
+        if (home) {
+          game.events.emit("program:npc-goto", id, home);
+          game.events.emit("program:room-activity", home, true, 1, null);
+        }
+      }
+      ref.timer = setTimeout(revert, 15000);
+    };
+    window.addEventListener("earn:exec-activity", onExecActivity);
+    return () => {
+      window.removeEventListener("earn:exec-activity", onExecActivity);
+      if (ref.timer) clearTimeout(ref.timer);
+    };
+  }, []);
 
   // Pull live public listings and push them to both the scene (live stall
   // signboards) and the panel. Reused on first entry to the hall and again after
