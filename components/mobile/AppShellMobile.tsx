@@ -9,6 +9,7 @@ import { PlusIcon } from "./icons";
 import { useHideOnScroll } from "./useHideOnScroll";
 import { haptic } from "./haptics";
 import { OfflineBanner } from "./OfflineBanner";
+import { MobileSyncRegistrar } from "./MobileSyncRegistrar";
 
 // The mobile app shell: the persistent chrome that turns the responsive web
 // app into an app-native experience on phones. Renders the bottom tab bar, the
@@ -40,7 +41,11 @@ export function AppShellMobile({
 
   return (
     <div className="md:hidden print:hidden">
-      {/* Connectivity notice for on-the-go dead zones. */}
+      {/* Registers offline-queue executors app-wide so queued actions flush on
+          reconnect regardless of the current screen. Renders nothing. */}
+      <MobileSyncRegistrar />
+
+      {/* Connectivity + pending-sync notice for on-the-go dead zones. */}
       <OfflineBanner />
 
       {/* Floating persistent quick-action button — one tap to move work. */}

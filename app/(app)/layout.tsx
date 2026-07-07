@@ -30,6 +30,7 @@ import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { AppShellMobile } from "@/components/mobile/AppShellMobile";
 import { MobileToastProvider } from "@/components/mobile/MobileToast";
+import { SessionGuard } from "@/components/mobile/SessionGuard";
 import { MobileInstallPrompt } from "@/components/mobile/MobileInstallPrompt";
 import { ServiceWorkerRegister } from "@/components/mobile/ServiceWorkerRegister";
 
@@ -263,6 +264,8 @@ export default async function AppLayout({
       />
       <MobileInstallPrompt />
       <ServiceWorkerRegister />
+      {/* Graceful re-auth on mobile when a session expires in the background. */}
+      <SessionGuard />
       </MobileToastProvider>
       </MobileNavProvider>
     </div>

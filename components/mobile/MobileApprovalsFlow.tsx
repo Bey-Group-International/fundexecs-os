@@ -2,13 +2,14 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { decideApprovalAction } from "@/app/(app)/approvals/actions";
 import { MobileSheet } from "./MobileSheet";
 import { ShieldIcon, SparkIcon, CloseIcon, EarnIcon } from "./icons";
 import { haptic } from "./haptics";
 import { relativeTime } from "./format";
 import { useOnline } from "./useOnline";
 import { useMobileToast } from "./MobileToast";
+import { enqueue } from "./offlineQueue";
+import { APPROVAL_DECISION_TYPE, type ApprovalDecisionPayload } from "./MobileSyncRegistrar";
 
 export interface ApprovalItem {
   approvalId: string;
@@ -70,47 +71,29 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
     setIndex((i) => i + 1);
   }
 
-  // Block a decision when there's no connectivity — an on-the-go operator must
-  // never think they cleared something that never reached the server.
-  function blockedOffline(): boolean {
-    if (online) return false;
-    setDx(0);
-    setDragging(false);
-    toast({ message: "You're offline — reconnect to submit your decision.", tone: "error" });
-    return true;
-  }
-
   function commit(decision: "approved" | "rejected" | "regenerate", item: ApprovalItem, noteText?: string) {
-    if (blockedOffline()) return;
     haptic(decision === "rejected" ? "warn" : "success");
 
-    // Optimistic: capture the decision server-side while the stack advances.
-    // Approving kicks off (potentially long) execution, so we never block on it
-    // — but we DO surface a failure with a Retry so a dropped request is never
-    // silently lost.
-    const submit = () => {
-      decideApprovalAction(item.approvalId, decision, noteText)
-        .then((res) => {
-          if (!res?.ok) {
-            toast({ message: `Couldn't submit "${item.title}".`, tone: "error", action: { label: "Retry", onClick: submit } });
-          }
-        })
-        .catch(() => {
-          toast({ message: `Couldn't submit "${item.title}".`, tone: "error", action: { label: "Retry", onClick: submit } });
-        });
-    };
-    submit();
+    // Durable + optimistic: every decision goes onto the offline queue, which
+    // runs it immediately when online, holds it and flushes on reconnect when
+    // offline, and retries on failure. Either way the stack advances now and
+    // the decision is never lost — no dead-end when signal drops mid-swipe.
+    const payload: ApprovalDecisionPayload = { approvalId: item.approvalId, decision, note: noteText, title: item.title };
+    enqueue(APPROVAL_DECISION_TYPE, payload);
 
-    toast({
-      message:
-        decision === "approved" ? "Approved — Earn is running it." : decision === "rejected" ? "Rejected." : "Sent back to Earn.",
-      tone: "success",
-    });
+    toast(
+      online
+        ? {
+            message:
+              decision === "approved" ? "Approved — Earn is running it." : decision === "rejected" ? "Rejected." : "Sent back to Earn.",
+            tone: "success",
+          }
+        : { message: "Saved — this will sync when you reconnect.", tone: "neutral" },
+    );
     advance(decision === "rejected" ? "rejected" : decision === "regenerate" ? "revised" : "approved");
   }
 
   function onApprove(item: ApprovalItem) {
-    if (blockedOffline()) return;
     if (item.risk === "high") {
       setDx(0);
       setConfirm(item);
