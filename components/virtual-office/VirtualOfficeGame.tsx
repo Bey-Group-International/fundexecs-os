@@ -13,6 +13,7 @@ import { OfficeHUD } from "./program/OfficeHUD";
 import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
 import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
 import { MarketplacePanel, type PublicListing } from "./program/MarketplacePanel";
+import { MarketplaceListingDetail } from "./program/MarketplaceListingDetail";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
@@ -310,6 +311,8 @@ export function VirtualOfficeGame({
   // Marketplace hall; shared by the in-world stall signboards and the panel.
   const [marketplaceListings, setMarketplaceListings] = useState<PublicListing[] | null>(null);
   const marketplaceFetchedRef = useRef(false);
+  // Which listing's in-world detail overlay is open (null = none).
+  const [activeListingId, setActiveListingId] = useState<string | null>(null);
   const [isTouch, setIsTouch] = useState(false);
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
@@ -639,7 +642,10 @@ export function VirtualOfficeGame({
 
         // Interactive-object bridge — press X on a hotspot triggers its action
         game.events.on("office:interact", (obj: InteractiveObject) => {
-          if (obj.href) {
+          if (obj.id.startsWith("mkt-")) {
+            // Market stall — open the listing detail in-world (no navigation).
+            setActiveListingId(obj.id.slice("mkt-".length));
+          } else if (obj.href) {
             window.location.href = obj.href;
           } else if (obj.event) {
             window.dispatchEvent(new CustomEvent(obj.event, { detail: {} }));
@@ -1060,8 +1066,13 @@ export function VirtualOfficeGame({
             full /marketplace surfaces. */}
         {currentRoom === "marketplace" && (
           <div className="pointer-events-auto absolute right-2 top-10 z-10 w-[290px]">
-            <MarketplacePanel listings={marketplaceListings} />
+            <MarketplacePanel listings={marketplaceListings} onOpenListing={setActiveListingId} />
           </div>
+        )}
+
+        {/* In-world listing detail — opened from a stall press-X or a panel row. */}
+        {activeListingId && (
+          <MarketplaceListingDetail listingId={activeListingId} onClose={() => setActiveListingId(null)} />
         )}
 
         {/* Phaser canvas mount point — fills the floor column (Phaser FIT-scales

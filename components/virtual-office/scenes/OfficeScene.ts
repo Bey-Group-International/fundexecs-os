@@ -1673,6 +1673,8 @@ export class OfficeScene extends Phaser.Scene {
       this.tweens.add({ targets: marker, y: a.y - 6, alpha: 0.4, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
 
+    // No href/event: the "mkt-<id>" id tells the React layer to open the
+    // in-world listing detail overlay (rather than navigating off the floor).
     const obj: InteractiveObject = {
       id: `mkt-${listing.id}`,
       roomKey: "marketplace",
@@ -1680,7 +1682,6 @@ export class OfficeScene extends Phaser.Scene {
       y: 0,
       label: listing.title.length > 28 ? `${listing.title.slice(0, 27)}…` : listing.title,
       icon: "◈",
-      href: `/marketplace/${listing.id}`,
     };
     // Hotspot sits just in front of the counter so it's reachable from the walkway.
     this.interactives.push({ obj, wx: a.x, wy: a.y + 20, marker });

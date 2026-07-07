@@ -44,7 +44,14 @@ function formatAmount(a: number | null): string | null {
  * into the full /marketplace pages. The office stays the spatial entry point;
  * the transaction surfaces already live under /marketplace do the rest.
  */
-export function MarketplacePanel({ listings: provided }: { listings?: PublicListing[] | null }) {
+export function MarketplacePanel({
+  listings: provided,
+  onOpenListing,
+}: {
+  listings?: PublicListing[] | null;
+  /** Open a listing's in-world detail overlay instead of navigating away. */
+  onOpenListing?: (id: string) => void;
+}) {
   const [fetched, setFetched] = useState<PublicListing[] | null>(null);
   // The parent (VirtualOfficeGame) usually supplies listings so the same data
   // feeds the in-world stall signboards; fall back to a self-fetch if not.
@@ -94,10 +101,14 @@ export function MarketplacePanel({ listings: provided }: { listings?: PublicList
           </p>
         ) : (
           listings.map((l) => (
-            <a
+            <button
               key={l.id}
-              href={`/marketplace/${l.id}`}
-              className="block rounded-md border px-2.5 py-2 transition-colors hover:border-teal-400/50"
+              type="button"
+              onClick={() => {
+                if (onOpenListing) onOpenListing(l.id);
+                else window.location.href = `/marketplace/${l.id}`;
+              }}
+              className="block w-full rounded-md border px-2.5 py-2 text-left transition-colors hover:border-teal-400/50"
               style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
             >
               <div className="flex items-center justify-between gap-2">
@@ -119,7 +130,7 @@ export function MarketplacePanel({ listings: provided }: { listings?: PublicList
                 </span>
                 {l.summary && <span className="truncate text-[9px] text-slate-500">{l.summary}</span>}
               </div>
-            </a>
+            </button>
           ))
         )}
       </div>
