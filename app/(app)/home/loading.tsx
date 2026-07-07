@@ -9,11 +9,14 @@ function Bar({ className = "" }: { className?: string }) {
 export default function HomeLoading() {
   return (
     <div className="mx-auto max-w-lg space-y-5" aria-hidden>
-      {/* Greeting */}
-      <div className="space-y-2 pt-1">
-        <Bar className="h-3 w-24" />
-        <Bar className="h-7 w-56" />
-        <Bar className="h-3 w-40" />
+      {/* Executive hero */}
+      <div className="flex items-start gap-3 pt-1">
+        <Bar className="h-11 w-11 rounded-full" />
+        <div className="flex-1 space-y-2">
+          <Bar className="h-3 w-24" />
+          <Bar className="h-6 w-48" />
+          <Bar className="h-3 w-40" />
+        </div>
       </div>
 
       {/* Earn panel */}

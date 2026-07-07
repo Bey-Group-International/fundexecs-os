@@ -223,3 +223,30 @@ progressive enhancements over the accessible base:
 All four are verified at a 390px touch viewport (auto-hide toggles on
 scroll direction; a real CDP swipe reveals the action strip; no horizontal
 overflow; no console errors). Desktop / tablet never mount any of it.
+
+---
+
+## 9. Command-center landing revision
+
+The `/home` landing (the PWA `start_url`) was revised into a more premium,
+mobile-first executive surface:
+
+- **Executive hero** — an avatar/initials mark, the date, a time-aware greeting,
+  and a thumb-reachable notifications bell (unread dot → `/inbox`), over a subtle
+  gold/blue ambient wash.
+- **Digest line** — a single scannable summary of what's on the plate
+  (e.g. "3 to approve · 4 in motion · 12 active deals · 6 unread"), so the
+  answer to "what needs me?" is legible before any scroll.
+- **Reordered for focus** — the single recommended next action now sits directly
+  under the Earn panel, above the snapshot tiles, so the most important thing is
+  above the fold.
+- **Pull-to-refresh** (`PullToRefresh`) — pull down at the top of the command
+  center to re-run its server queries. Attaches to the `<main>` scroll
+  container, engages only at `scrollTop 0` on a downward drag (so it never
+  fights scrolling), shows a gold spinner that arms past the threshold with a
+  haptic tick, and calls `router.refresh()` on release. The skeleton
+  (`home/loading.tsx`) mirrors the new hero to avoid layout shift.
+
+Verified at a 390px touch viewport: the hero + digest render, a real CDP
+downward drag reveals the refresh spinner (`translateY`), no horizontal
+overflow, no console errors.
