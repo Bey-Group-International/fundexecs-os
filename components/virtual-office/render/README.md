@@ -110,7 +110,15 @@ the live Phaser floor is untouched until a composition root opts in.
 - **Runs** on the client; no server GPU. Best near-term upgrade.
 
 The pure geometry mapping is covered by `officeGeometry3D.test.ts`, so the
-2D↔3D translation is verified headlessly without a GPU.
+2D↔3D translation is verified headlessly without a GPU. Avatar animation is
+resolved by `avatarAnimation3D.ts` (`AgentState` → clip + cross-fade), glTF-ready.
+
+**Wired in (opt-in).** `Office3DView.tsx` is the composition root: it drives
+this renderer from the shared office program store (agents placed by room,
+re-targeted on room change → the renderer lerps them, clicks forwarded as the
+Phaser office's `onNpcClick` payload). `OfficeTabs` mounts it **only** when
+`NEXT_PUBLIC_OFFICE_RENDERER=3d`; unset, the Phaser office remains the default,
+so the live layout is unchanged.
 
 ### 2. Unity WebGL — richer avatar controllers
 
