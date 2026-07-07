@@ -17,7 +17,9 @@ export function OfficeHUD({ currentRoom }: { currentRoom: string }) {
   const wf = s.activeWorkflow;
   const agentsActive = Object.values(s.agents).filter((a) => a.state !== "idle").length;
   const openApprovals = s.approvals.filter((g) => g.status === "pending").length;
-  const roomLabel = currentRoom ? ROOM_BY_KEY[currentRoom as RoomKey]?.label ?? currentRoom : "—";
+  const roomLabel = currentRoom
+    ? ROOM_BY_KEY[currentRoom as RoomKey]?.label ?? currentRoom.charAt(0).toUpperCase() + currentRoom.slice(1)
+    : "—";
 
   const statusLabel =
     s.officeStatus === "calm" ? "Calm" :

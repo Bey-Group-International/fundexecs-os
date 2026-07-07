@@ -5,6 +5,7 @@ import {
   ROOM_H,
   GRID_COLS,
   GRID_ROWS,
+  TOTAL_ROWS,
   WORLD_W,
   WORLD_H,
   PLAYER_SPEED,
@@ -479,7 +480,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.on("office:teleport", (roomKey: string) => {
       const room = ROOMS.find((r) => r.key === roomKey);
       if (!room) return;
-      const tx = room.col * ROOM_W + ROOM_W / 2;
+      const tx = room.col * ROOM_W + ((room.colSpan ?? 1) * ROOM_W) / 2;
       const ty = room.row * ROOM_H + ROOM_H / 2;
       this._playerStand();
       this.player.setPosition(tx, ty);
@@ -582,29 +583,37 @@ export class OfficeScene extends Phaser.Scene {
     for (const room of ROOMS) {
       const rx = room.col * ROOM_W;
       const ry = room.row * ROOM_H;
+      const roomW = (room.colSpan ?? 1) * ROOM_W;
       const accent = roomAccentColor(room.key);
-      const cx = rx + ROOM_W / 2;
+      const cx = rx + roomW / 2;
       const cy = ry + ROOM_H / 2;
 
       // Soft floor wash — a dark base for depth plus a whisper of the room's
       // accent so departments feel tinted rather than identical.
       const wash = this.add.graphics().setDepth(1);
       wash.fillStyle(0x0a0e16, 0.26);
-      wash.fillRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+      wash.fillRect(rx + 4, ry + 4, roomW - 8, ROOM_H - 8);
       wash.fillStyle(accent, 0.035);
-      wash.fillRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+      wash.fillRect(rx + 4, ry + 4, roomW - 8, ROOM_H - 8);
 
-      // Ambient light: a warm accent pool at room center + fainter pools in the
-      // four corners, so the floor glows from within in the department's hue.
+      // Ambient light: warm accent pools at the room center + fainter pools in
+      // the four corners, so the floor glows from within in the department's
+      // hue. A wide hall gets extra pools spread along its length.
       const pool = this.add.graphics().setDepth(1);
-      for (let i = 3; i >= 1; i--) {
-        pool.fillStyle(accent, 0.018 * i);
-        pool.fillCircle(cx, cy, 40 + i * 26);
+      const poolCenters: Array<[number, number]> =
+        (room.colSpan ?? 1) > 1
+          ? Array.from({ length: room.colSpan! }, (_, k) => [rx + (k + 0.5) * ROOM_W, cy] as [number, number])
+          : [[cx, cy]];
+      for (const [px, py] of poolCenters) {
+        for (let i = 3; i >= 1; i--) {
+          pool.fillStyle(accent, 0.018 * i);
+          pool.fillCircle(px, py, 40 + i * 26);
+        }
       }
       const cg = 30;
       const cornerGlows: Array<[number, number]> = [
-        [rx + cg, ry + cg], [rx + ROOM_W - cg, ry + cg],
-        [rx + cg, ry + ROOM_H - cg], [rx + ROOM_W - cg, ry + ROOM_H - cg],
+        [rx + cg, ry + cg], [rx + roomW - cg, ry + cg],
+        [rx + cg, ry + ROOM_H - cg], [rx + roomW - cg, ry + ROOM_H - cg],
       ];
       for (const [gx, gy] of cornerGlows) {
         for (let i = 2; i >= 1; i--) {
@@ -624,16 +633,16 @@ export class OfficeScene extends Phaser.Scene {
       // Inner shadow frame + accent hairline border.
       const gfx = this.add.graphics().setDepth(2);
       gfx.lineStyle(3, 0x000000, 0.22);
-      gfx.strokeRect(rx + 4, ry + 4, ROOM_W - 8, ROOM_H - 8);
+      gfx.strokeRect(rx + 4, ry + 4, roomW - 8, ROOM_H - 8);
       gfx.lineStyle(1, accent, 0.24);
-      gfx.strokeRect(rx + 2, ry + 2, ROOM_W - 4, ROOM_H - 4);
+      gfx.strokeRect(rx + 2, ry + 2, roomW - 4, ROOM_H - 4);
 
       // Accent corner ticks (L-marks) for a command-floor feel.
       const t = 10;
       gfx.lineStyle(1.5, accent, 0.5);
       const corners: Array<[number, number, number, number]> = [
-        [rx + 6, ry + 6, 1, 1], [rx + ROOM_W - 6, ry + 6, -1, 1],
-        [rx + 6, ry + ROOM_H - 6, 1, -1], [rx + ROOM_W - 6, ry + ROOM_H - 6, -1, -1],
+        [rx + 6, ry + 6, 1, 1], [rx + roomW - 6, ry + 6, -1, 1],
+        [rx + 6, ry + ROOM_H - 6, 1, -1], [rx + roomW - 6, ry + ROOM_H - 6, -1, -1],
       ];
       for (const [x, y, sx, sy] of corners) {
         gfx.beginPath();
@@ -681,7 +690,10 @@ export class OfficeScene extends Phaser.Scene {
     wall(WORLD_W - W, 0, W, WORLD_H);                // right
 
     // ── Internal horizontal walls (between grid rows) ──
-    for (let r = 1; r < GRID_ROWS; r++) {
+    // Runs through TOTAL_ROWS so the last pass (r = MARKETPLACE_ROW) lays the
+    // boundary between the office grid and the Marketplace hall, with a door
+    // gap under each column so you can descend from any bottom-row room.
+    for (let r = 1; r < TOTAL_ROWS; r++) {
       const wallY = r * ROOM_H - W / 2;
       for (let c = 0; c < GRID_COLS; c++) {
         const wallX = c * ROOM_W;
@@ -697,6 +709,8 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     // ── Internal vertical walls (between grid columns) ──
+    // Capped at GRID_ROWS so the Marketplace hall stays open across its full
+    // width — no column dividers below the office grid.
     for (let c = 1; c < GRID_COLS; c++) {
       const wallX = c * ROOM_W - W / 2;
       for (let r = 0; r < GRID_ROWS; r++) {
@@ -820,9 +834,10 @@ export class OfficeScene extends Phaser.Scene {
 
   private _createRoomZones() {
     for (const room of ROOMS) {
-      const zx = room.col * ROOM_W + ROOM_W / 2;
+      const roomW = (room.colSpan ?? 1) * ROOM_W;
+      const zx = room.col * ROOM_W + roomW / 2;
       const zy = room.row * ROOM_H + ROOM_H / 2;
-      const zone = this.add.zone(zx, zy, ROOM_W - WALL_THICKNESS * 2, ROOM_H - WALL_THICKNESS * 2);
+      const zone = this.add.zone(zx, zy, roomW - WALL_THICKNESS * 2, ROOM_H - WALL_THICKNESS * 2);
       this.physics.world.enable(zone, Phaser.Physics.Arcade.STATIC_BODY);
       this.roomZones.push({ zone, key: room.key, label: room.label });
     }
@@ -1869,9 +1884,10 @@ export class OfficeScene extends Phaser.Scene {
     bg.strokeRoundedRect(ox - 5, oy - 5, mw + 10, mh + 10, 4);
 
     for (const room of ROOMS) {
+      const roomW = (room.colSpan ?? 1) * ROOM_W;
       const rx = ox + room.col * ROOM_W * SCALE;
       const ry = oy + room.row * ROOM_H * SCALE;
-      const rw = ROOM_W * SCALE - 1, rh = ROOM_H * SCALE - 1;
+      const rw = roomW * SCALE - 1, rh = ROOM_H * SCALE - 1;
       const cell = this.add.rectangle(rx + rw / 2, ry + rh / 2, rw, rh, 0xc9a84c, 0.12)
         .setStrokeStyle(0.5, 0xc9a84c, 0.35)
         .setScrollFactor(0)
@@ -1881,7 +1897,7 @@ export class OfficeScene extends Phaser.Scene {
       cell.on("pointerout",  () => cell.setFillStyle(0xc9a84c, 0.12));
       cell.on("pointerup", (ptr: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
         ev.stopPropagation();   // don't also trigger click-to-walk
-        this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
+        this.player.setPosition(room.col * ROOM_W + roomW / 2, room.row * ROOM_H + ROOM_H / 2);
         this._cancelWalk();
         this._cancelFollow();
       });
@@ -1917,7 +1933,7 @@ export class OfficeScene extends Phaser.Scene {
       const room = ROOMS.find((r) => r.key === roomKey);
       if (!room) return;
       this._playerStand();
-      this.player.setPosition(room.col * ROOM_W + ROOM_W / 2, room.row * ROOM_H + ROOM_H / 2);
+      this.player.setPosition(room.col * ROOM_W + ((room.colSpan ?? 1) * ROOM_W) / 2, room.row * ROOM_H + ROOM_H / 2);
       this._cancelWalk();
       this._cancelFollow();
       this.game.canvas.focus();
@@ -1926,9 +1942,10 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── Click-to-walk pathfinding ───────────────────────────────────────────────
   //
-  // The world is a 3×3 room grid; movement between adjacent tiles is free
-  // inside a room, and crossing a room boundary is only allowed through the
-  // door gap at the center of each shared edge (mirrors _createWalls()).
+  // The world is a 3×3 office grid plus a full-width Marketplace hall below it;
+  // movement between adjacent tiles is free inside a room (and anywhere in the
+  // open hall), and crossing a room boundary is only allowed through the door
+  // gap at the center of each shared edge (mirrors _createWalls()).
 
   private static readonly TILE = 32;
 
@@ -1940,10 +1957,13 @@ export class OfficeScene extends Phaser.Scene {
     if (ax !== bx) {
       const boundary = Math.max(ax, bx);
       if (boundary % tilesPerRoomX === 0 && boundary > 0 && boundary < (WORLD_W / T)) {
+        const roomRow = Math.floor(ay / tilesPerRoomY);
+        // The Marketplace hall (rows below the office grid) is one open room
+        // with no internal column walls — crossing is unrestricted there.
+        if (roomRow >= GRID_ROWS) return true;
         // The 64px DOOR_GAP centered on the odd-height (9-tile) room edge fully
         // covers only tile row 4; the adjacent rows are half-blocked, so a
         // 20px body walking their centers would clip the wall. One row only.
-        const roomRow = Math.floor(ay / tilesPerRoomY);
         const doorRow = roomRow * tilesPerRoomY + Math.floor(tilesPerRoomY / 2);
         return ay === doorRow;
       }
@@ -1975,7 +1995,7 @@ export class OfficeScene extends Phaser.Scene {
 
     while (open.length > 0) {
       // TODO: replace linear-scan open set with a min-heap if the map grows
-      // beyond the current 36×27 grid (O(n²) is ~fine at 972 tiles).
+      // beyond the current 36×36 grid (O(n²) is ~fine at 1296 tiles).
       let bi = 0;
       for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
       const cur = open.splice(bi, 1)[0];

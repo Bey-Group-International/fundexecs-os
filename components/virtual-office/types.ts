@@ -5,6 +5,9 @@ export type RoomDef = {
   col: number;
   row: number;
   href: string;
+  /** How many grid columns this room spans (default 1). The Marketplace hall
+   *  spans the full width as a single wide room. */
+  colSpan?: number;
 };
 
 /**
@@ -131,6 +134,11 @@ export const ROOM_ACTIONS: Record<string, RoomAction[]> = {
     { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
     { id: "office-tour", label: "Office Tour",     icon: "◎", event: "fx:open-tour" },
   ],
+  marketplace: [
+    { id: "browse",      label: "Browse Listings", icon: "◈", href: "/marketplace/browse" },
+    { id: "my-listings", label: "My Listings",     icon: "▤", href: "/marketplace" },
+    { id: "ask-earn",    label: "Ask Earn",        icon: "✦", event: "earn:open-with-context" },
+  ],
 };
 
 export const TILE_SIZE = 32;
@@ -139,16 +147,23 @@ export const ROOM_ROWS_COUNT = 9; // tiles tall
 export const ROOM_W = TILE_SIZE * ROOM_COLS; // 384
 export const ROOM_H = TILE_SIZE * ROOM_ROWS_COUNT; // 288
 export const GRID_COLS = 3;
-export const GRID_ROWS = 3;
+export const GRID_ROWS = 3; // office grid (Command Center … IR Lounge)
+// The Marketplace hall is a full-width fourth row below the office grid. It is
+// deliberately kept out of GRID_ROWS so the internal wall loops never split it;
+// only the world height and the office/marketplace boundary account for it.
+export const MARKETPLACE_ROW = GRID_ROWS; // row index 3
+export const TOTAL_ROWS = GRID_ROWS + 1; // office grid + marketplace hall
 export const WORLD_W = ROOM_W * GRID_COLS; // 1152
-export const WORLD_H = ROOM_H * GRID_ROWS; // 864
+export const WORLD_H = ROOM_H * TOTAL_ROWS; // 1152 (4 rows)
 
 export const PLAYER_SPEED = 160;
 export const WALL_THICKNESS = 8;
 export const DOOR_GAP = 64;
 
-// Labels are the institutional room purposes of the FundExecs execution
-// floor — they must stay in sync with PROGRAM_ROOMS in program/officeProgram.ts.
+// The nine office-grid rooms are the institutional room purposes of the
+// FundExecs execution floor — their labels must stay in sync with PROGRAM_ROOMS
+// in program/officeProgram.ts. The Marketplace hall that follows is a spatial
+// browse space, not a workflow room, so it is intentionally NOT a PROGRAM_ROOM.
 export const ROOMS: RoomDef[] = [
   { key: "ceo",       label: "Command Center",    imagePath: "/assets/fundexecs/office/rooms/day/ceo-office-day-empty.png",      col: 0, row: 0, href: "/dashboard" },
   { key: "boardroom", label: "Boardroom",         imagePath: "/assets/fundexecs/office/rooms/day/boardroom-day-empty.png",        col: 1, row: 0, href: "/dashboard" },
@@ -159,6 +174,9 @@ export const ROOMS: RoomDef[] = [
   { key: "legal",     label: "Compliance & Legal", imagePath: "/assets/fundexecs/office/rooms/day/legal-corner-day-empty.png",    col: 0, row: 2, href: "/dashboard/capital" },
   { key: "marketing", label: "Treasury Desk",     imagePath: "/assets/fundexecs/office/rooms/day/marketing-saloon-day-empty.png", col: 1, row: 2, href: "/dashboard/marketing" },
   { key: "reception", label: "IR Lounge",         imagePath: "/assets/fundexecs/office/rooms/day/reception-lounge-day-empty.png", col: 2, row: 2, href: "/dashboard" },
+  // Marketplace hall — a full-width exchange floor below the office grid where
+  // public listings are browsed in-world. Spans all three columns as one room.
+  { key: "marketplace", label: "Marketplace",     imagePath: "/assets/fundexecs/office/rooms/day/reception-lounge-day-empty.png", col: 0, row: MARKETPLACE_ROW, href: "/marketplace", colSpan: GRID_COLS },
 ];
 
 // Sprite animation rows — mirrors spriteFrameMap.ts

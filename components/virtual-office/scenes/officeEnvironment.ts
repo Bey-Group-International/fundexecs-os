@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { ROOMS, ROOM_W, ROOM_H, GRID_COLS, GRID_ROWS, WORLD_W, WORLD_H, WALL_THICKNESS, DOOR_GAP } from "../types";
+import { ROOMS, ROOM_W, ROOM_H, GRID_COLS, GRID_ROWS, TOTAL_ROWS, WORLD_W, WORLD_H, WALL_THICKNESS, DOOR_GAP } from "../types";
 
 /**
  * FundExecs OS — 2.5D office environment (rendering layer).
@@ -60,6 +60,7 @@ const ROOM_ACCENT: Record<string, number> = {
   legal: 0xef4444,
   marketing: 0x14b8a6,
   reception: 0xf59e0b,
+  marketplace: 0x2dd4bf,
 };
 
 /** The department accent color for a room key (gold fallback). Shared with the
@@ -250,8 +251,9 @@ export function createWallVisuals(scene: Phaser.Scene): Phaser.GameObjects.Graph
   vWall(0, 0, WORLD_H);
   vWall(WORLD_W - W, 0, WORLD_H);
 
-  // Internal horizontal walls (between rows), split around the door gap.
-  for (let r = 1; r < GRID_ROWS; r++) {
+  // Internal horizontal walls (between rows), split around the door gap. Runs
+  // through TOTAL_ROWS so the final pass lays the office/marketplace boundary.
+  for (let r = 1; r < TOTAL_ROWS; r++) {
     const wallY = r * ROOM_H - W / 2;
     for (let c = 0; c < GRID_COLS; c++) {
       const wallX = c * ROOM_W;
@@ -262,7 +264,8 @@ export function createWallVisuals(scene: Phaser.Scene): Phaser.GameObjects.Graph
     }
   }
 
-  // Internal vertical walls (between columns), split around the door gap.
+  // Internal vertical walls (between columns), split around the door gap. Capped
+  // at GRID_ROWS so the wide Marketplace hall has no column dividers.
   for (let c = 1; c < GRID_COLS; c++) {
     const wallX = c * ROOM_W - W / 2;
     for (let r = 0; r < GRID_ROWS; r++) {
@@ -293,6 +296,13 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
     const ox = room.col * ROOM_W;
     const oy = room.row * ROOM_H;
     const accent = ROOM_ACCENT[room.key] ?? C.gold;
+
+    // The Marketplace hall is a wide bazaar, not a department office — it gets a
+    // bespoke row of market stalls instead of the standard desk furniture.
+    if (room.key === "marketplace") {
+      pieces.push(...createMarketplaceHall(scene, ox, oy, (room.colSpan ?? 1) * ROOM_W, accent));
+      continue;
+    }
 
     // A soft department rug anchors the center of the floor (flat, no height),
     // finished with an inset border so it reads as a woven runner, not a wash.
@@ -352,6 +362,104 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
   }
 
   return pieces;
+}
+
+/**
+ * The Marketplace hall — a wide bazaar of awninged market stalls along the back
+ * wall, a central runner rug, corner plants, and lamps for warmth. Draws across
+ * the full hall width `w`, leaving the three entry lanes and center walkway
+ * clear so avatars can move through.
+ */
+function createMarketplaceHall(
+  scene: Phaser.Scene, ox: number, oy: number, w: number, accent: number,
+): FurniturePiece[] {
+  const pieces: FurniturePiece[] = [];
+  const cy = oy + ROOM_H / 2;
+
+  // Central runner rug down the length of the hall (flat).
+  const rug = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
+  rug.fillStyle(accent, 0.05);
+  rug.fillRoundedRect(ox + 60, cy - 24, w - 120, 48, 10);
+  rug.lineStyle(1, accent, 0.14);
+  rug.strokeRoundedRect(ox + 60, cy - 24, w - 120, 48, 10);
+  pieces.push({ gfx: rug, footY: -1 });
+
+  // Awninged stalls along the back wall. X positions dodge the three entry
+  // lanes (door centers at 192 / 576 / 960, ±32).
+  const awnings = [0xef4444, accent, 0xf59e0b, 0x38bdf8, 0xa855f7, 0x22c55e];
+  const stallX = [96, 300, 468, 684, 852, 1056];
+  stallX.forEach((sx, i) => {
+    const x = ox + sx;
+    const fy = oy + 66;
+    const awning = awnings[i % awnings.length];
+    const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
+    glow.fillStyle(awning, 0.04);
+    glow.fillEllipse(x, fy + 8, 62, 24);
+    pieces.push({ gfx: glow, footY: -1 });
+
+    const g = scene.add.graphics().setDepth(yDepth(fy));
+    drawStall(g, x, fy, awning, accent);
+    pieces.push({ gfx: g, footY: fy });
+  });
+
+  // Front corner plants + lamps for warmth.
+  for (const px of [ox + 40, ox + w - 40]) {
+    const fy = oy + ROOM_H - 44;
+    const g = scene.add.graphics().setDepth(yDepth(fy));
+    drawPiece(g, "plant", px, fy, accent);
+    pieces.push({ gfx: g, footY: fy });
+  }
+  for (const px of [ox + 168, ox + w - 168]) {
+    const fy = oy + ROOM_H - 54;
+    const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
+    for (let i = 3; i >= 1; i--) {
+      glow.fillStyle(accent, 0.03 * i);
+      glow.fillCircle(px, fy - 4, 16 + i * 11);
+    }
+    pieces.push({ gfx: glow, footY: -1 });
+    const g = scene.add.graphics().setDepth(yDepth(fy));
+    drawLamp(g, px, fy, accent);
+    pieces.push({ gfx: g, footY: fy });
+  }
+
+  return pieces;
+}
+
+/** A bazaar market stall — wood counter, goods, posts, and a striped awning. */
+function drawStall(g: Phaser.GameObjects.Graphics, cx: number, fy: number, awning: number, accent: number) {
+  // Counter.
+  box(g, cx, fy, 46, 7, 13, C.woodTop, C.wood);
+  const sy = fy - 13 - 7; // counter surface
+  // Goods crates on the counter.
+  const goods = [0xef4444, 0xf59e0b, 0x22c55e, 0x38bdf8];
+  for (let i = -1; i <= 1; i++) {
+    g.fillStyle(goods[(i + 1) % goods.length], 0.9);
+    g.fillRoundedRect(cx + i * 13 - 5, sy - 4, 10, 4, 1);
+  }
+  // Canopy posts.
+  g.fillStyle(C.legDark, 1);
+  g.fillRect(cx - 24, fy - 40, 2, 26);
+  g.fillRect(cx + 22, fy - 40, 2, 26);
+  // Striped awning (parallelogram) with a lit top edge and a scalloped hem.
+  const ay = fy - 44;
+  g.fillStyle(awning, 1);
+  g.fillPoints([
+    { x: cx - 28, y: ay + 6 }, { x: cx + 28, y: ay + 6 },
+    { x: cx + 32, y: ay }, { x: cx - 32, y: ay },
+  ], true);
+  g.fillStyle(shade(awning, 1.4), 0.8);
+  g.fillPoints([
+    { x: cx - 32, y: ay }, { x: cx + 32, y: ay },
+    { x: cx + 30, y: ay + 2 }, { x: cx - 30, y: ay + 2 },
+  ], true);
+  g.fillStyle(shade(awning, 0.8), 1);
+  for (let i = -2; i <= 2; i++) {
+    const hx = cx + i * 11;
+    g.fillTriangle(hx - 5, ay + 6, hx + 5, ay + 6, hx, ay + 11);
+  }
+  // Accent trim band on the counter front.
+  g.fillStyle(accent, 0.7);
+  g.fillRect(cx - 23, fy - 3, 46, 1.4);
 }
 
 /** An executive chair — the backrest rises behind the seated occupant. */
