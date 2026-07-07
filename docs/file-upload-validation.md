@@ -13,19 +13,19 @@ The single source of truth for what is accepted and why. No Node- or
 browser-only imports, so it runs in Server Components, route handlers, and
 `"use client"` components alike.
 
-|                    Export                    |                                                                          Purpose                                                                          |
-|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `detectFileType(file)`                       | Resolve the real kind from extension **+** MIME **+** magic-byte signature. Signature wins over extension.                                                |
+|                    Export                    |                                                                           Purpose                                                                           |
+|----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `detectFileType(file)`                       | Resolve the real kind from extension **+** MIME **+** magic-byte signature. Signature wins over extension.                                                  |
 | `validateFileType(file, opts?)`              | Allowlist enforcement + extension/content mismatch detection + size guard (`opts.maxBytes`). Returns `{ ok, kind, error }` with one human-readable message. |
-| `decodeText(bytes)`                          | BOM-aware decode (UTF-16LE/BE, UTF-8) — Excel's default CSV exports are UTF-16, so decode through this, not `File.text()`.                                 |
-| `parseCSV(text)`                             | RFC 4180 parser (quotes, escaped quotes, embedded newlines, BOM).                                                                                         |
-| `normalizeInstitutionalFormat(rows, schema)` | Auto-map source columns to the internal schema, validate required fields, reorder columns/rows into institutional order, and surface `errors`/`warnings`. |
-| `returnUserFacingErrors(errors, context?)`   | Aggregate problems into a consistent, logged, non-throwing payload.                                                                                       |
-| `readFileHead(blob, n?)`                     | Browser helper — read the first `n` bytes for signature sniffing.                                                                                         |
-| `ACCEPTED_UPLOAD_ATTR`                       | Value for `<input type="file" accept=…>`.                                                                                                                 |
-| `ACCEPTED_FORMATS_HELP`                      | Data for "View accepted formats" tooltips/links.                                                                                                          |
-| `UNSUPPORTED_FILE_MESSAGE`                   | The canonical rejection copy.                                                                                                                             |
-| `MAX_UPLOAD_BYTES`                           | Default per-file size ceiling (10 MB) for client surfaces; the server route may set a stricter `maxBytes`.                                                |
+| `decodeText(bytes)`                          | BOM-aware decode (UTF-16LE/BE, UTF-8) — Excel's default CSV exports are UTF-16, so decode through this, not `File.text()`.                                  |
+| `parseCSV(text)`                             | RFC 4180 parser (quotes, escaped quotes, embedded newlines, BOM).                                                                                           |
+| `normalizeInstitutionalFormat(rows, schema)` | Auto-map source columns to the internal schema, validate required fields, reorder columns/rows into institutional order, and surface `errors`/`warnings`.   |
+| `returnUserFacingErrors(errors, context?)`   | Aggregate problems into a consistent, logged, non-throwing payload.                                                                                         |
+| `readFileHead(blob, n?)`                     | Browser helper — read the first `n` bytes for signature sniffing.                                                                                           |
+| `ACCEPTED_UPLOAD_ATTR`                       | Value for `<input type="file" accept=…>`.                                                                                                                   |
+| `ACCEPTED_FORMATS_HELP`                      | Data for "View accepted formats" tooltips/links.                                                                                                            |
+| `UNSUPPORTED_FILE_MESSAGE`                   | The canonical rejection copy.                                                                                                                               |
+| `MAX_UPLOAD_BYTES`                           | Default per-file size ceiling (10 MB) for client surfaces; the server route may set a stricter `maxBytes`.                                                  |
 
 Supported formats today: **CSV (`.csv`)** and **Excel (`.xlsx`)**. Extend by
 adding a `FormatSpec` to `SUPPORTED_FORMATS`.
