@@ -132,6 +132,7 @@ function Control({
  */
 export function MeetingDock({
   localStream, tiles, localLabel, micOn, camOn, onToggleMic, onToggleCam, onEnd, inviteUrl,
+  blurOn = false, blurBusy = false, blurSupported = false, onToggleBlur,
   devices, selectedMic, selectedCam, selectedSpeaker,
   onSelectMic, onSelectCam, onSelectSpeaker, onSendInvites,
 }: {
@@ -143,6 +144,11 @@ export function MeetingDock({
   onToggleMic: () => void;
   onToggleCam: () => void;
   onEnd: () => void;
+  /** Virtual-background (on-device blur) state + control. */
+  blurOn?: boolean;
+  blurBusy?: boolean;
+  blurSupported?: boolean;
+  onToggleBlur?: () => void;
   inviteUrl: string;
   devices: Devices;
   selectedMic: string;
@@ -244,6 +250,24 @@ export function MeetingDock({
           icon={camOn ? "🎥" : "🚫"} title={camOn ? "Turn camera off" : "Turn camera on"} active={camOn} onToggle={onToggleCam}
           devices={devices.cams} selectedId={selectedCam} onSelect={onSelectCam} deviceFallback="Camera"
         />
+        {blurSupported && onToggleBlur ? (
+          <button
+            type="button"
+            onClick={onToggleBlur}
+            disabled={blurBusy}
+            title={blurBusy ? "Loading background blur…" : blurOn ? "Turn background blur off" : "Blur my background"}
+            aria-label="Toggle background blur"
+            aria-pressed={blurOn}
+            className="grid h-8 w-8 place-items-center rounded-full text-[13px] transition-colors disabled:opacity-50"
+            style={{
+              color: blurOn ? "#0a0806" : GOLD,
+              border: `1px solid ${blurOn ? GOLD : "rgba(201,168,76,0.5)"}`,
+              background: blurOn ? GOLD : "rgba(201,168,76,0.07)",
+            }}
+          >
+            {blurBusy ? "…" : "🌫"}
+          </button>
+        ) : null}
         {speakerSelectable && devices.speakers.length > 0 ? (
           <Control
             icon="🔊" title="Speaker"

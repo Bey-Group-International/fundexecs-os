@@ -17,6 +17,7 @@ import { MarketplaceListingDetail } from "./program/MarketplaceListingDetail";
 import { MarketplaceCreateListing } from "./program/MarketplaceCreateListing";
 import { AgentDelegateComposer } from "./program/AgentDelegateComposer";
 import { DealRoomBanner } from "./program/DealRoomBanner";
+import { BackgroundProcessor, backgroundBlurSupported } from "@/lib/office/backgroundEffect";
 import { FloorActivityFeed } from "./program/FloorActivityFeed";
 import { emitFloorActivity, FLOOR_ACTIVITY_EVENT, type FloorEvent, type FloorActivityKind } from "@/lib/office/floor-activity";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
@@ -399,6 +400,15 @@ export function VirtualOfficeGame({
   const [meetingActive, setMeetingActive] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  // Virtual background (on-device segmentation blur) for meeting video. The
+  // processor owns the raw camera track while active; refs hold both so the
+  // effect can be torn down and the raw track restored to peers.
+  const [bgBlur, setBgBlur] = useState(false);
+  const [bgBusy, setBgBusy] = useState(false);
+  const [bgSupported, setBgSupported] = useState(false);
+  const bgProcessorRef = useRef<BackgroundProcessor | null>(null);
+  const rawVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  useEffect(() => setBgSupported(backgroundBlurSupported()), []);
   const [devices, setDevices] = useState<{ mics: MediaDeviceInfo[]; cams: MediaDeviceInfo[]; speakers: MediaDeviceInfo[] }>({ mics: [], cams: [], speakers: [] });
   const [selectedMic, setSelectedMic] = useState("");
   const [selectedCam, setSelectedCam] = useState("");
@@ -606,8 +616,69 @@ export function VirtualOfficeGame({
     setCamOn(track.enabled);
   }, []);
 
+  // Turn virtual background off: restore the raw camera track to the local
+  // stream and every peer, then dispose the processor. Safe to call when off.
+  const disableBgBlur = useCallback(() => {
+    const proc = bgProcessorRef.current;
+    const raw = rawVideoTrackRef.current;
+    const stream = localStreamRef.current;
+    if (stream && raw) {
+      const processed = stream.getVideoTracks()[0];
+      if (processed) stream.removeTrack(processed);
+      raw.enabled = camOn;
+      stream.addTrack(raw);
+      setLocalStream(new MediaStream(stream.getTracks()));
+      gameRef.current?.events.emit("rtc:replace-track", "video", raw);
+    }
+    proc?.stop(); // stops the processed track + model; leaves the raw track live
+    bgProcessorRef.current = null;
+    rawVideoTrackRef.current = null;
+    setBgBlur(false);
+  }, [camOn]);
+
+  // Toggle on-device background blur. Enabling processes the live camera track
+  // and swaps the blurred output in for the local tile and every peer; any
+  // failure tears down and falls back to the raw camera so the call is never lost.
+  const toggleBackgroundBlur = useCallback(async () => {
+    const stream = localStreamRef.current;
+    if (!stream || bgBusy) return;
+    if (bgBlur) {
+      disableBgBlur();
+      return;
+    }
+    const raw = stream.getVideoTracks()[0];
+    if (!raw) return;
+    setBgBusy(true);
+    try {
+      const proc = new BackgroundProcessor();
+      const processed = await proc.start(raw);
+      processed.enabled = camOn;
+      bgProcessorRef.current = proc;
+      rawVideoTrackRef.current = raw;
+      stream.removeTrack(raw); // keep raw alive — the processor feeds on it
+      stream.addTrack(processed);
+      setLocalStream(new MediaStream(stream.getTracks()));
+      gameRef.current?.events.emit("rtc:replace-track", "video", processed);
+      setBgBlur(true);
+    } catch {
+      bgProcessorRef.current?.stop();
+      bgProcessorRef.current = null;
+      rawVideoTrackRef.current = null;
+      setBgBlur(false);
+    } finally {
+      setBgBusy(false);
+    }
+  }, [bgBlur, bgBusy, camOn, disableBgBlur]);
+
   const endMeeting = useCallback(() => {
     setMeetingActive(false);
+    // Dispose the blur pipeline and its raw camera track (which lives outside
+    // localStreamRef while blur is active) before stopping the rest.
+    bgProcessorRef.current?.stop();
+    bgProcessorRef.current = null;
+    rawVideoTrackRef.current?.stop();
+    rawVideoTrackRef.current = null;
+    setBgBlur(false);
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     setLocalStream(null);
@@ -642,6 +713,9 @@ export function VirtualOfficeGame({
   // local stream and on every peer (replaceTrack, no renegotiation).
   const selectInputDevice = useCallback(async (kind: "audioinput" | "videoinput", deviceId: string) => {
     const isAudio = kind === "audioinput";
+    // Switching cameras changes the track the blur pipeline feeds on — turn the
+    // effect off first (restoring the raw track) so the swap stays consistent.
+    if (!isAudio && bgProcessorRef.current) disableBgBlur();
     try {
       const ns = await navigator.mediaDevices.getUserMedia(
         isAudio ? { audio: { deviceId: { exact: deviceId } } } : { video: { deviceId: { exact: deviceId } } },
@@ -661,7 +735,7 @@ export function VirtualOfficeGame({
     } catch {
       /* device busy or denied */
     }
-  }, [micOn, camOn]);
+  }, [micOn, camOn, disableBgBlur]);
 
   // Meeting invites carry the host's current room + meet=1, so the recipient
   // lands in the same room and the video dock auto-opens (they join the call).
@@ -1170,6 +1244,10 @@ export function VirtualOfficeGame({
             onToggleMic={toggleMic}
             onToggleCam={toggleCam}
             onEnd={endMeeting}
+            blurOn={bgBlur}
+            blurBusy={bgBusy}
+            blurSupported={bgSupported}
+            onToggleBlur={() => void toggleBackgroundBlur()}
             inviteUrl={typeof window !== "undefined" ? officeInviteUrl(window.location.origin, { room: currentRoom || null, meet: true }) : ""}
             devices={devices}
             selectedMic={selectedMic}
