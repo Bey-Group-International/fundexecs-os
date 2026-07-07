@@ -20,7 +20,6 @@ import { DealRoomBanner } from "./program/DealRoomBanner";
 import { BackgroundProcessor, backgroundBlurSupported } from "@/lib/office/backgroundEffect";
 import { FloorActivityFeed } from "./program/FloorActivityFeed";
 import { emitFloorActivity, FLOOR_ACTIVITY_EVENT, type FloorEvent, type FloorActivityKind } from "@/lib/office/floor-activity";
-import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./program/officeProgramStore";
 import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
@@ -448,7 +447,7 @@ export function VirtualOfficeGame({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const DESKTOP_MIN = 1024;
-    const RESERVE = 96; // footer toggles + breathing room below the floor
+    const RESERVE = 40; // small breathing room below the floor (audit bar is gone)
     const measure = () => {
       const el = containerRef.current;
       if (!el) return;
@@ -466,7 +465,18 @@ export function VirtualOfficeGame({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", measure);
     };
-  }, [active, meetingActive, mediaState]);
+    // `token` is included because token-driven chrome (the avatar chip) changes
+    // the header height after it resolves, shifting the canvas top.
+  }, [active, meetingActive, mediaState, token]);
+
+  // After a canvasCap change resizes the container via CSS (no window resize
+  // fires), tell Phaser's FIT scale manager to re-measure so the canvas tracks
+  // the new box immediately — matching how panel toggles / tab activation refresh.
+  useEffect(() => {
+    if (canvasCap == null || !gameRef.current) return;
+    const id = setTimeout(() => gameRef.current?.scale.refresh(), 60);
+    return () => clearTimeout(id);
+  }, [canvasCap]);
 
   // Emit the normalized D-pad vector to the Phaser scene's movement handler.
   const emitTouchMove = useCallback((dx: number, dy: number) => {
@@ -1070,9 +1080,6 @@ export function VirtualOfficeGame({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Institutional HUD — mode, workflow, stage, approvals, audit status */}
-      <OfficeHUD currentRoom={currentRoom} />
-
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
         {/* ── Execution floor column ── */}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -1082,6 +1089,10 @@ export function VirtualOfficeGame({
 
           <div className="flex flex-col bg-[#080604] rounded-xl overflow-hidden border border-[#c9a84c22]"
             style={{ boxShadow: "0 0 40px rgba(201,168,76,0.06), inset 0 1px 0 rgba(201,168,76,0.08)" }}>
+
+      {/* Unified status strip — the office's single status bar, first row of the
+          card so the whole control surface (status → rails → floor) reads as one. */}
+      <OfficeHUD currentRoom={currentRoom} presenceCount={token ? Math.max(roster.length, 1) : undefined} />
 
       {/* Media permission banner */}
       {mediaState === "prompt" && (
@@ -1511,9 +1522,6 @@ export function VirtualOfficeGame({
         )}
       </div>
           </div>
-
-          {/* Audit-ready activity log */}
-          <OfficeAuditDrawer />
         </div>
 
         {/* ── Command & work-visibility column ── (removed when both hidden, so
