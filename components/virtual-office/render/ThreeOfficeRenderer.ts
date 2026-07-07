@@ -1,38 +1,26 @@
 /**
- * FundExecs OS — Phase-2 Three.js / WebGPU renderer scaffold.
+ * FundExecs OS — Three.js native-browser 3D renderer.
  *
- * ⚠️  This file is a SCAFFOLD, not a working renderer. It documents, in code
- * plus comments, HOW a native-browser 3D implementation would satisfy every
- * `OfficeRenderer` method — so the Phase-2 work is a matter of filling the
- * `TODO(three)` bodies rather than redesigning the seam.
+ * A WORKING `OfficeRenderer` (no longer a scaffold): it renders the virtual
+ * office in real 3D on the client GPU via Three.js/WebGL — no cloud GPU, no
+ * external engine. This is the "recreate the cloud-render fidelity natively"
+ * path: rooms, door-split partition walls, desks, and avatars are all built
+ * from the SAME 2D office data (`ROOMS` / walls / `WORKSTATIONS`) the Phaser
+ * floor reads, projected onto the X-Z plane by `officeGeometry3D`, so the two
+ * renderers stay congruent.
  *
- * It is intentionally DEPENDENCY-FREE: it does NOT import `three`,
- * `@react-three/*`, or any other package (none are installed). The Three.js
- * objects it would use are represented by the minimal LOCAL interface stubs
- * below (`Scene3D`, `Camera3D`, `Mesh3D`, …). When the `three` dependency is
- * actually added in Phase 2, these stubs are deleted and the real imports
- * (`import * as THREE from "three"`) take their place — the method contracts
- * and the mapping notes stay exactly the same.
+ * Static world geometry (walls, desks) is drawn with `InstancedMesh` — one draw
+ * call for all walls and one for all desks. Avatars are a small pool of grouped
+ * meshes (body + head + name label) keyed by actor id. Picking is a `Raycaster`
+ * against the avatar bodies then the floor plane. The renderer self-drives its
+ * own `requestAnimationFrame` loop (camera easing, position lerp, idle bob), so
+ * the interface `update()` is a no-op — callers need not pump it.
  *
- * ── Coordinate mapping (2D top-down → 3D) ─────────────────────────────────
- * The current world is a top-down plane in pixels: +x right, +y DOWN, with
- * `yDepth(footY)` faking occlusion. In Three.js the floor becomes the X-Z
- * plane and +Y is up:
- *
- *     world2D (px)      →     world3D (world units)
- *     ( x , y )         →     ( x * S , 0 , y * S )
- *
- * where S is a pixels→meters scale. The fake y-depth sort disappears — real
- * depth is handled by the GPU z-buffer, and a perspective (or tilted ortho)
- * camera replaces Phaser's zoomed top-down view. Avatar "facing" maps to a
- * yaw rotation about +Y.
- *
- * ── Renderer choice ──────────────────────────────────────────────────────
- * Prefer `WebGPURenderer` (three/webgpu) when `navigator.gpu` is present,
- * falling back to `WebGLRenderer`. Both satisfy the same scene-graph API, so
- * the fallback is a single branch in `mount()`.
+ * SSR-safe: importing this module touches no DOM; WebGL/`document` are used
+ * only inside `mount()`.
  */
 
+import * as THREE from "three";
 import type {
   ActorClickHandler,
   ActorFacing,
@@ -41,279 +29,467 @@ import type {
   OfficeRenderer,
 } from "./OfficeRenderer";
 import type { AgentState, RoomKey } from "../program/officeProgram";
+import {
+  floorCenter,
+  floorSize,
+  pixelsOf,
+  roomAccentHex,
+  roomCenterWorld,
+  roomFloors,
+  wallSegments,
+  workstations3D,
+  worldOf,
+  yawOf,
+  type Box3D,
+} from "./officeGeometry3D";
 
-// ─── Minimal local stand-ins for Three.js objects ──────────────────────────────
-// These exist ONLY so this scaffold type-checks without the `three` package.
-// In Phase 2 each is replaced by the corresponding real class from `three`:
-//   Scene3D → THREE.Scene, Camera3D → THREE.PerspectiveCamera,
-//   Renderer3D → THREE.WebGPURenderer | THREE.WebGLRenderer,
-//   Mesh3D → THREE.Mesh, InstancedMesh3D → THREE.InstancedMesh,
-//   Object3D → THREE.Object3D, Raycaster3D → THREE.Raycaster.
-
-/** Stand-in for THREE.Object3D — anything with a transform in the scene graph. */
-interface Object3D {
-  position: { x: number; y: number; z: number };
-  rotation: { x: number; y: number; z: number };
-  visible: boolean;
-}
-
-/** Stand-in for THREE.Scene. */
-interface Scene3D {
-  add(obj: Object3D): void;
-  remove(obj: Object3D): void;
-}
-
-/** Stand-in for THREE.PerspectiveCamera / OrthographicCamera. */
-interface Camera3D extends Object3D {
-  lookAt(x: number, y: number, z: number): void;
-}
-
-/** Stand-in for a WebGPU/WebGL renderer. */
-interface Renderer3D {
-  domElement: HTMLCanvasElement;
-  setSize(w: number, h: number): void;
-  render(scene: Scene3D, camera: Camera3D): void;
-  dispose(): void;
-}
-
-/** Stand-in for THREE.Mesh. */
-interface Mesh3D extends Object3D {
-  dispose?(): void;
-}
-
-/**
- * Stand-in for THREE.InstancedMesh — one draw call for N identical rooms,
- * desks, or avatar bodies, with a per-instance transform matrix.
- */
-interface InstancedMesh3D extends Object3D {
-  count: number;
-  setInstanceTransform(index: number, x: number, y: number, z: number, yaw: number): void;
-}
-
-/** Stand-in for THREE.Raycaster — used for GPU/CPU pointer picking. */
-interface Raycaster3D {
-  setFromCamera(ndcX: number, ndcY: number, camera: Camera3D): void;
-  intersect(scene: Scene3D): Array<{ actorId: string | null; point: { x: number; z: number } }>;
-}
-
-/** Per-actor GPU handle set. In Phase 2 this holds real THREE objects. */
+/** Per-actor scene handles + interpolation state. */
 interface ActorHandle {
   spec: ActorSpec;
-  /** Instanced-pool slot for this actor's body, or a dedicated skinned mesh. */
-  instanceIndex: number;
+  group: THREE.Group;
+  body: THREE.Mesh;
+  bodyMat: THREE.MeshStandardMaterial;
+  label: THREE.Sprite | null;
   facing: ActorFacing;
   state: AgentState;
   seated: boolean;
-  root: Object3D | null;
+  /** Target floor position (world units); the group lerps toward it. */
+  target: { x: number; z: number };
+  /** Idle-bob phase so figures don't all bob in lockstep. */
+  bob: number;
 }
 
-const PX_TO_WORLD = 1 / 32; // pixels → world units (1 tile = 1 unit)
+/** Emissive accent per program state, so an actor's activity reads at a glance. */
+const STATE_EMISSIVE: Partial<Record<AgentState, number>> = {
+  idle: 0x000000,
+  listening: 0x1e3a5f,
+  classifying: 0x3b2f6b,
+  assigned: 0x264a6b,
+  moving: 0x1f4d55,
+  working: 0x14532d,
+  collaborating: 0x155e63,
+  waiting_for_approval: 0x5b1d1d,
+  reviewing: 0x7c5312,
+  complete: 0x2f6b3f,
+  blocked: 0x6b1d1d,
+};
 
-/**
- * Phase-2 native-browser 3D renderer. Every method is a scaffold: it either
- * no-ops or throws `NOT_WIRED`, but the type surface and the `TODO(three)`
- * notes describe the real implementation precisely.
- */
+const BODY_HEIGHT = 1.15; // world units (~ a person against 9-unit-tall rooms)
+const BODY_RADIUS = 0.32;
+const HEAD_RADIUS = 0.26;
+const SEATED_DROP = 0.32; // lower the figure when seated at a desk
+
 export class ThreeOfficeRenderer implements OfficeRenderer {
-  private static readonly NOT_WIRED =
-    "ThreeOfficeRenderer is a Phase-2 scaffold — not yet wired";
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.PerspectiveCamera | null = null;
+  private renderer: THREE.WebGLRenderer | null = null;
+  private raycaster = new THREE.Raycaster();
+  private container: HTMLElement | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private rafId = 0;
+  private lastTime = 0;
 
-  // ── Engine handles (null until mount(); typed as the local stand-ins) ──
-  private scene: Scene3D | null = null;
-  private camera: Camera3D | null = null;
-  private renderer: Renderer3D | null = null;
-  private raycaster: Raycaster3D | null = null;
+  /** Static-world instanced pools + the pickable floor plane. */
+  private wallMesh: THREE.InstancedMesh | null = null;
+  private deskMesh: THREE.InstancedMesh | null = null;
+  private floorPlane: THREE.Mesh | null = null;
+  private readonly disposables: Array<{ dispose(): void }> = [];
 
-  /** GPU instance pools for the static world and the avatar bodies. */
-  private roomPool: InstancedMesh3D | null = null;
-  private deskPool: InstancedMesh3D | null = null;
-  private avatarPool: InstancedMesh3D | null = null;
-
-  /** Per-actor handles keyed by actor id. */
   private readonly actors = new Map<string, ActorHandle>();
+  private readonly bodyToActor = new Map<THREE.Object3D, string>();
 
-  /** Interaction callbacks, wired to raycaster hits in the pointer handler. */
   private actorClick: ActorClickHandler | null = null;
   private floorClick: FloorClickHandler | null = null;
 
-  /** Actor the camera is currently following, or null for free framing. */
+  /** Camera easing state: where it looks, and its offset above/behind. */
+  private camLook = { x: 0, z: 0 };
+  private camLookTarget = { x: 0, z: 0 };
   private followId: string | null = null;
+  private readonly camHeight = 16;
+  private readonly camDist = 15;
+
+  private readonly onPointerDown = (ev: PointerEvent) => this.handlePointer(ev);
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-  mount(container: HTMLElement): void {
-    // TODO(three): create the renderer, scene, and camera, then attach the
-    // canvas to `container` and start a requestAnimationFrame loop:
-    //   const useGPU = typeof navigator !== "undefined" && "gpu" in navigator;
-    //   this.renderer = useGPU ? new THREE.WebGPURenderer({ antialias: true })
-    //                          : new THREE.WebGLRenderer({ antialias: true });
-    //   this.renderer.setSize(container.clientWidth, container.clientHeight);
-    //   container.appendChild(this.renderer.domElement);
-    //   this.scene = new THREE.Scene();
-    //   this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
-    //   // key + fill + ambient lights approximating the current gold key light
-    //   this.raycaster = new THREE.Raycaster();
-    //   // pointer listeners → _handlePointer() for actor/floor picking
-    //   // ResizeObserver → this.renderer.setSize + camera.aspect update
-    void container;
-    throw new Error(ThreeOfficeRenderer.NOT_WIRED);
+  async mount(container: HTMLElement): Promise<void> {
+    if (typeof document === "undefined") {
+      throw new Error("ThreeOfficeRenderer requires a browser environment.");
+    }
+    this.container = container;
+    const width = container.clientWidth || 1;
+    const height = container.clientHeight || 1;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(width, height);
+    renderer.shadowMap.enabled = false;
+    container.appendChild(renderer.domElement);
+    this.renderer = renderer;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0e14);
+    this.scene = scene;
+
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
+    this.camera = camera;
+
+    // Lighting: soft hemisphere fill + a warm gold key, echoing the 2D floor's
+    // "light from above" gold key light.
+    scene.add(new THREE.HemisphereLight(0x9fb4d6, 0x0b0e14, 0.9));
+    const key = new THREE.DirectionalLight(0xffe6b0, 1.1);
+    key.position.set(6, 20, 8);
+    scene.add(key);
+    scene.add(new THREE.AmbientLight(0x404a5c, 0.6));
+
+    this.buildStaticIfReady();
+
+    // Frame the whole floor to start.
+    const c = floorCenter();
+    this.camLook = { ...c };
+    this.camLookTarget = { ...c };
+
+    // Pointer picking + responsive resize.
+    renderer.domElement.addEventListener("pointerdown", this.onPointerDown);
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(container);
+
+    this.lastTime = performance.now();
+    this.loop();
   }
 
   destroy(): void {
-    // TODO(three): stop the RAF loop, dispose geometries/materials/instanced
-    // pools, remove pointer + resize listeners, and drop the canvas:
-    //   this.renderer?.dispose();
-    //   for (const geo of geometries) geo.dispose();
-    //   this.renderer?.domElement.remove();
+    cancelAnimationFrame(this.rafId);
+    this.rafId = 0;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.renderer?.domElement.removeEventListener("pointerdown", this.onPointerDown);
+
+    for (const actor of this.actors.values()) this.disposeActor(actor);
     this.actors.clear();
-    this.roomPool = null;
-    this.deskPool = null;
-    this.avatarPool = null;
+    this.bodyToActor.clear();
+
+    for (const d of this.disposables) d.dispose();
+    this.disposables.length = 0;
+    this.wallMesh = null;
+    this.deskMesh = null;
+    this.floorPlane = null;
+
+    if (this.renderer) {
+      this.renderer.dispose();
+      this.renderer.domElement.remove();
+      this.renderer = null;
+    }
     this.scene = null;
     this.camera = null;
-    this.renderer = null;
-    this.raycaster = null;
+    this.container = null;
   }
 
-  update(deltaMs: number): void {
-    // TODO(three): advance skeletal/state animation mixers and interpolate any
-    // in-flight actor transforms, then render:
-    //   this.mixers.forEach((m) => m.update(deltaMs / 1000));
-    //   if (this.followId) this._trackCameraTo(this.followId, deltaMs);
-    //   if (this.scene && this.camera) this.renderer?.render(this.scene, this.camera);
-    void deltaMs;
-    // No-op in the scaffold: nothing is mounted, so there is nothing to draw.
+  update(_deltaMs: number): void {
+    // No-op: the renderer self-drives its own RAF loop (see `loop`), so callers
+    // do not need to pump frames. Kept to satisfy the interface.
+    void _deltaMs;
   }
 
   // ── World ─────────────────────────────────────────────────────────────────
 
   buildFloor(): void {
-    // TODO(three): build the static world once, reading the SAME data the
-    // Phaser floor reads (ROOMS / WORKSTATIONS / LAYOUT from officeEnvironment
-    // + types), so the two renderers stay pixel-congruent:
-    //   • Rooms: one InstancedMesh of box/plane geometry, one instance per
-    //     room, positioned at (col*ROOM_W, 0, row*ROOM_H) * PX_TO_WORLD.
-    //   • Walls: extruded box segments split around each DOOR_GAP, matching
-    //     _createWalls() so doorways line up with the collision model.
-    //   • Furniture/desks: an InstancedMesh per repeated piece type (desk,
-    //     screens, shelf, plant …) — one draw call for all desks on the floor.
-    //   this.roomPool = new THREE.InstancedMesh(roomGeo, roomMat, ROOMS.length);
-    //   this.deskPool = new THREE.InstancedMesh(deskGeo, deskMat, totalDesks);
-    throw new Error(ThreeOfficeRenderer.NOT_WIRED);
+    // Static world is built in `mount` once the scene exists; if `buildFloor`
+    // is called before mount (unusual), this defers to `buildStaticIfReady`.
+    this.buildStaticIfReady();
   }
 
   focusRoom(roomKey: RoomKey): void {
-    // TODO(three): look up the room's center from ROOM_BY_KEY, convert to
-    // world units, and tween the camera + look-at target there:
-    //   const c = roomCenterWorld(roomKey);
-    //   this.followId = null;
-    //   tweenCamera(this.camera, c, this.renderer); // ease over ~400ms
-    void roomKey;
-    // No-op in the scaffold (no camera yet).
+    const c = roomCenterWorld(roomKey);
+    if (!c) return;
+    this.followId = null;
+    this.camLookTarget = { x: c.x, z: c.z };
   }
 
   follow(actorId: string | null): void {
-    // TODO(three): store the target; update() lerps the camera toward the
-    // actor's world position each frame (mirrors Phaser startFollow lerp).
     this.followId = actorId;
+    if (!actorId) {
+      const c = floorCenter();
+      this.camLookTarget = { ...c };
+    }
   }
 
   // ── Actors ────────────────────────────────────────────────────────────────
 
   addActor(spec: ActorSpec): void {
-    // TODO(three): claim an avatar-pool instance slot (or instantiate a
-    // skinned MetaHuman-lite mesh), set its initial transform from spec.x/y →
-    // world, apply role accent to its material, and register a name-tag
-    // sprite. Store the handle for later mutators:
-    //   const index = this._claimAvatarSlot();
-    //   this.avatarPool?.setInstanceTransform(index, ...worldOf(spec.x, spec.y), yawOf(spec.facing));
+    if (!this.scene || this.actors.has(spec.id)) return;
+    // Role accent drives the body color; fall back to the gold house accent.
+    const accent = new THREE.Color(spec.accent ?? roomAccentHex("__default__"));
+
+    const group = new THREE.Group();
+    const w = worldOf(spec.x, spec.y);
+    group.position.set(w.x, 0, w.z);
+    group.rotation.y = yawOf(spec.facing);
+
+    const bodyGeo = new THREE.CapsuleGeometry(BODY_RADIUS, BODY_HEIGHT - BODY_RADIUS * 2, 4, 12);
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: accent,
+      roughness: 0.55,
+      metalness: 0.1,
+      emissive: new THREE.Color(STATE_EMISSIVE[spec.state ?? "idle"] ?? 0x000000),
+      emissiveIntensity: 0.9,
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = BODY_HEIGHT / 2;
+    body.userData.actorId = spec.id;
+    group.add(body);
+    this.bodyToActor.set(body, spec.id);
+
+    const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 16, 12);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xe8d6b8, roughness: 0.7 });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.y = BODY_HEIGHT + HEAD_RADIUS * 0.6;
+    head.userData.actorId = spec.id;
+    group.add(head);
+    this.bodyToActor.set(head, spec.id);
+
+    const label = this.makeLabel(spec.name);
+    if (label) {
+      label.position.y = BODY_HEIGHT + HEAD_RADIUS * 2.2 + 0.35;
+      group.add(label);
+    }
+
+    this.scene.add(group);
+    this.disposables.push(bodyGeo, bodyMat, headGeo, headMat);
+
     const handle: ActorHandle = {
       spec,
-      instanceIndex: this.actors.size,
+      group,
+      body,
+      bodyMat,
+      label,
       facing: spec.facing,
       state: spec.state ?? "idle",
       seated: spec.seated ?? false,
-      root: null,
+      target: { x: w.x, z: w.z },
+      bob: Math.abs((spec.x * 13 + spec.y * 7) % 6.28),
     };
+    this.applySeated(handle);
     this.actors.set(spec.id, handle);
   }
 
   removeActor(id: string): void {
-    // TODO(three): free the avatar-pool slot (or dispose the dedicated mesh)
-    // and its name tag, then compact the instance buffer.
     const handle = this.actors.get(id);
-    if (handle?.root && this.scene) this.scene.remove(handle.root);
+    if (!handle) return;
+    this.scene?.remove(handle.group);
+    this.disposeActor(handle);
     this.actors.delete(id);
   }
 
   moveActor(id: string, x: number, y: number): void {
-    // TODO(three): write the actor's instance transform, mapping the top-down
-    // (x, y) pixel position onto the X-Z floor plane:
-    //   const wx = x * PX_TO_WORLD, wz = y * PX_TO_WORLD;
-    //   this.avatarPool?.setInstanceTransform(h.instanceIndex, wx, 0, wz, yawOf(h.facing));
     const handle = this.actors.get(id);
-    if (!handle || !handle.root) return;
-    handle.root.position.x = x * PX_TO_WORLD;
-    handle.root.position.z = y * PX_TO_WORLD;
+    if (!handle) return;
+    handle.target = worldOf(x, y); // lerped toward in the loop
   }
 
   setActorFacing(id: string, facing: ActorFacing): void {
-    // TODO(three): convert facing → yaw about +Y and set the instance/mesh
-    // rotation (down = toward camera, up = away, left/right = ±90°).
     const handle = this.actors.get(id);
     if (handle) handle.facing = facing;
   }
 
   setActorState(id: string, state: AgentState): void {
-    // TODO(three): resolve program state → animation clip (typing, reviewing,
-    // presenting, analyzing, celebrating) and cross-fade the actor's mixer;
-    // update its aura/rim emissive color to match the state palette.
     const handle = this.actors.get(id);
-    if (handle) handle.state = state;
+    if (!handle) return;
+    handle.state = state;
+    handle.bodyMat.emissive.setHex(STATE_EMISSIVE[state] ?? 0x000000);
   }
 
   setActorSeated(id: string, seated: boolean): void {
-    // TODO(three): switch between the standing rig and a seated pose clip so
-    // the figure reads as working at a desk (seated is the idle stance).
     const handle = this.actors.get(id);
-    if (handle) handle.seated = seated;
+    if (!handle) return;
+    handle.seated = seated;
+    this.applySeated(handle);
   }
 
   // ── Interaction ───────────────────────────────────────────────────────────
 
   onActorClick(cb: ActorClickHandler): void {
-    // Wired to raycaster hits against the avatar pool in the pointer handler.
     this.actorClick = cb;
   }
 
   onFloorClick(cb: FloorClickHandler): void {
-    // Wired to raycaster hits against the floor plane in the pointer handler.
     this.floorClick = cb;
   }
 
-  // ── Internal (Phase-2) ─────────────────────────────────────────────────────
+  // ── Internal: static world ──────────────────────────────────────────────────
 
-  /**
-   * Pointer → pick. In Phase 2 this converts the pointer to normalized device
-   * coordinates, raycasts against the avatar pool then the floor plane, and
-   * dispatches to `actorClick` / `floorClick`. Kept here (referencing the
-   * handler + raycaster fields) so the interaction wiring is explicit.
-   */
-  private _handlePointer(ndcX: number, ndcY: number): void {
-    // TODO(three): GPU-assisted picking is preferable at scale — render actor
-    // ids to an off-screen id buffer and read back one pixel — but a CPU
-    // Raycaster is fine for the current ~11 agents + a few humans.
-    if (!this.raycaster || !this.scene || !this.camera) return;
-    this.raycaster.setFromCamera(ndcX, ndcY, this.camera);
-    const hits = this.raycaster.intersect(this.scene);
-    const top = hits[0];
-    if (!top) return;
-    if (top.actorId && this.actorClick) {
-      this.actorClick(top.actorId);
-    } else if (this.floorClick) {
-      // Map the floor hit (world units) back to top-down pixels for the
-      // behavior layer, which still reasons in the 2D coordinate system.
-      this.floorClick(top.point.x / PX_TO_WORLD, top.point.z / PX_TO_WORLD);
+  private buildStaticIfReady(): void {
+    if (!this.scene || this.floorPlane) return; // build once
+    const scene = this.scene;
+    const { width, depth } = floorSize();
+    const c = floorCenter();
+
+    // Floor plane (pickable for click-to-walk).
+    const floorGeo = new THREE.PlaneGeometry(width, depth);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.95 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(c.x, 0, c.z);
+    scene.add(floor);
+    this.floorPlane = floor;
+    this.disposables.push(floorGeo, floorMat);
+
+    // Per-room accent tint quads, just above the floor.
+    for (const { roomKey, box } of roomFloors()) {
+      const geo = new THREE.PlaneGeometry(box.width * 0.82, box.depth * 0.72);
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(roomAccentHex(roomKey)),
+        transparent: true,
+        opacity: 0.06,
+      });
+      const tile = new THREE.Mesh(geo, mat);
+      tile.rotation.x = -Math.PI / 2;
+      tile.position.set(box.cx, 0.01, box.cz);
+      scene.add(tile);
+      this.disposables.push(geo, mat);
+    }
+
+    // Walls + desks as instanced boxes (one draw call each).
+    this.wallMesh = this.buildInstancedBoxes(wallSegments(), 0x2b3242, 0.85);
+    this.deskMesh = this.buildInstancedBoxes(
+      workstations3D().map((w) => w.desk),
+      0x39414f,
+      0.7,
+    );
+  }
+
+  private buildInstancedBoxes(boxes: Box3D[], color: number, roughness: number): THREE.InstancedMesh | null {
+    if (!this.scene || boxes.length === 0) return null;
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    const mat = new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05 });
+    const mesh = new THREE.InstancedMesh(geo, mat, boxes.length);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+    boxes.forEach((b, i) => {
+      pos.set(b.cx, b.height / 2, b.cz);
+      scale.set(b.width, b.height || 0.01, b.depth);
+      m.compose(pos, q, scale);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    this.scene.add(mesh);
+    this.disposables.push(geo, mat);
+    return mesh;
+  }
+
+  // ── Internal: actors ────────────────────────────────────────────────────────
+
+  private applySeated(handle: ActorHandle): void {
+    handle.group.position.y = handle.seated ? -SEATED_DROP : 0;
+  }
+
+  private makeLabel(name: string): THREE.Sprite | null {
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    canvas.width = 256;
+    canvas.height = 64;
+    ctx.font = "600 30px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(9,12,20,0.72)";
+    const w = Math.min(248, ctx.measureText(name).width + 24);
+    ctx.fillRect((256 - w) / 2, 12, w, 40);
+    ctx.fillStyle = "#e8eef5";
+    ctx.fillText(name, 128, 33);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(2, 0.5, 1);
+    this.disposables.push(tex, mat);
+    return sprite;
+  }
+
+  private disposeActor(handle: ActorHandle): void {
+    this.bodyToActor.delete(handle.body);
+    handle.group.traverse((obj) => {
+      if (obj !== handle.body) this.bodyToActor.delete(obj);
+    });
+    handle.body.geometry.dispose();
+    handle.bodyMat.dispose();
+    // Head + label geometries/materials are tracked in `disposables` and freed
+    // wholesale in `destroy`; nulling the group reference lets GC reclaim them
+    // when an actor is removed mid-session.
+  }
+
+  // ── Internal: loop, camera, picking ─────────────────────────────────────────
+
+  private loop = (): void => {
+    if (!this.renderer || !this.scene || !this.camera) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - this.lastTime) / 1000);
+    this.lastTime = now;
+
+    // Ease camera look toward its target (room center, followed actor, or floor).
+    if (this.followId) {
+      const followed = this.actors.get(this.followId);
+      if (followed) {
+        this.camLookTarget = { x: followed.group.position.x, z: followed.group.position.z };
+      }
+    }
+    this.camLook.x += (this.camLookTarget.x - this.camLook.x) * Math.min(1, dt * 4);
+    this.camLook.z += (this.camLookTarget.z - this.camLook.z) * Math.min(1, dt * 4);
+    this.camera.position.set(this.camLook.x, this.camHeight, this.camLook.z + this.camDist);
+    this.camera.lookAt(this.camLook.x, 0, this.camLook.z);
+
+    // Actor position lerp, facing, and a gentle idle bob when standing.
+    for (const a of this.actors.values()) {
+      const g = a.group;
+      g.position.x += (a.target.x - g.position.x) * Math.min(1, dt * 6);
+      g.position.z += (a.target.z - g.position.z) * Math.min(1, dt * 6);
+      g.rotation.y += (yawOf(a.facing) - g.rotation.y) * Math.min(1, dt * 8);
+      if (!a.seated) {
+        a.bob += dt * 2.2;
+        a.group.position.y = Math.sin(a.bob) * 0.03;
+      }
+    }
+
+    this.renderer.render(this.scene, this.camera);
+    this.rafId = requestAnimationFrame(this.loop);
+  };
+
+  private resize(): void {
+    if (!this.renderer || !this.camera || !this.container) return;
+    const w = this.container.clientWidth || 1;
+    const h = this.container.clientHeight || 1;
+    this.renderer.setSize(w, h);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  private handlePointer(ev: PointerEvent): void {
+    if (!this.camera || !this.renderer) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+      -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.camera);
+
+    // Avatars first, then the floor plane.
+    const bodies = Array.from(this.bodyToActor.keys());
+    const actorHits = this.raycaster.intersectObjects(bodies, false);
+    if (actorHits.length > 0) {
+      const id = this.bodyToActor.get(actorHits[0].object);
+      if (id && this.actorClick) this.actorClick(id);
+      return;
+    }
+    if (this.floorPlane && this.floorClick) {
+      const floorHits = this.raycaster.intersectObject(this.floorPlane, false);
+      const hit = floorHits[0];
+      if (hit) {
+        const px = pixelsOf(hit.point.x, hit.point.z);
+        this.floorClick(px.x, px.y);
+      }
     }
   }
 }
