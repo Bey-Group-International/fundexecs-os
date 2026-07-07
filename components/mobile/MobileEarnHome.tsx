@@ -10,6 +10,7 @@ import { MobileWorkflowCard } from "./MobileWorkflowCard";
 import { PullToRefresh } from "./PullToRefresh";
 import { EarnIcon, SparkIcon, DealsIcon, ShieldIcon, TaskIcon, BellIcon } from "./icons";
 import { haptic } from "./haptics";
+import { MicButton } from "./MicButton";
 
 // Earn's coin avatar for the conversation.
 function EarnAvatar({ size = 30 }: { size?: number }) {
@@ -234,6 +235,12 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
             className="w-full rounded-full border border-line bg-surface-0/80 py-2.5 pl-4 pr-4 text-[15px] text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-400/25"
           />
         </div>
+        {/* Hands-free path: dictate an ask to Earn while on the move. Renders
+            nothing on browsers without the Web Speech API. Final transcripts are
+            appended to whatever is already typed. */}
+        <MicButton
+          onFinal={(text) => setValue((v) => (v ? `${v.trimEnd()} ${text}` : text))}
+        />
         <button
           type="submit"
           aria-label="Send to Earn"

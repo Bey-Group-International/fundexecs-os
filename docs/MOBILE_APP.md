@@ -452,3 +452,37 @@ seeding two unique decisions plus one duplicate yields a "2 changes" banner
 (dedupe held), tapping opens the sheet with the humanized "Approve: …" /
 "Reject: …" labels, and per-item dismiss drops a row. `tsc`/`eslint`/`build`
 clean. All new surfaces are `md:hidden`; desktop/web untouched.
+
+## 17. Hands-free voice + resilient screens
+
+Two more on-the-go fortifications, built in parallel across disjoint new files
+and then integrated:
+
+- **Voice dictation to Earn** (`useSpeechInput.ts`, `MicButton.tsx`): the
+  "Message Earn" composer on the home screen now has a mic. An exec walking
+  between meetings can tap it, speak an ask, and have the transcript land in the
+  composer without typing. `useSpeechInput` is a thin, SSR-safe wrapper over the
+  Web Speech API's `SpeechRecognition` (`interimResults`, single-shot,
+  `en-US`), exposing `{ supported, listening, start, stop, error }` and mapping
+  error codes to human copy ("Microphone permission denied", "Didn't catch
+  that"). `MicButton` renders **nothing** when the API is unavailable — SSR,
+  headless, Firefox, many in-app webviews — so unsupported browsers just see no
+  mic rather than a dead control; while listening it shows a pulsing
+  `status-danger` affordance and `aria-pressed`. Final transcripts are appended
+  to whatever is already typed (`MobileEarnHome`); interim results stream via an
+  optional callback.
+- **Mobile error boundary** (`MobileErrorBoundary.tsx`): a compact, recoverable
+  React error boundary. When a client component in a mobile subtree throws during
+  render, the operator sees an inline `role="alert"` card — "This screen hit a
+  snag" + a "Try again" button that bumps a key to remount the subtree — instead
+  of the heavy full-page route fallback in `app/(app)/error.tsx`. The app shell
+  (tab bar, nav) stays intact so a single misbehaving screen can be retried
+  without a full reload. The home screen wraps `MobileEarnHome` in it
+  (`<MobileErrorBoundary label="home">`). It's safe on desktop: rendering only
+  changes when an error is actually thrown, and the styling is neutral/tokenized.
+
+Verified at a 390px viewport with Playwright: with the Speech API stubbed out the
+mic is absent; forcing a child render throw shows the "This screen hit a snag"
+card and "Try again" recovers the subtree; with the Speech API stubbed in, the
+mic renders and a simulated final result lands the dictated text in the composer.
+`tsc`/`eslint`/`build` clean. Desktop/web untouched.

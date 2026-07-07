@@ -7,6 +7,7 @@ import { stageLabel, sectorLabel } from "@/lib/deal-share";
 import type { DealStage, AgentKey } from "@/lib/supabase/database.types";
 import { type CommandCenterData } from "@/components/mobile/MobileCommandCenter";
 import { MobileEarnHome } from "@/components/mobile/MobileEarnHome";
+import { MobileErrorBoundary } from "@/components/mobile/MobileErrorBoundary";
 
 export const metadata: Metadata = {
   title: "Home · FundExecs OS",
@@ -242,5 +243,9 @@ export default async function MobileHomePage() {
     activity,
   };
 
-  return <MobileEarnHome data={data} />;
+  return (
+    <MobileErrorBoundary label="home">
+      <MobileEarnHome data={data} />
+    </MobileErrorBoundary>
+  );
 }
