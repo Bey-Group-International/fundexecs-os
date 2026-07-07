@@ -265,3 +265,19 @@ thumb without scrolling. The deal page renders a matching `md:hidden` spacer so
 no war-room content hides behind the bar; desktop keeps the war room's own
 controls untouched. Verified at a 390px viewport (renders, no horizontal
 overflow, no errors).
+
+---
+
+## 11. LP / contact detail — thumb-reachable actions
+
+The per-LP war room (`/investor/[id]`) gets the same treatment as the deal
+detail: a `md:hidden` sticky action bar (`MobileContactActionBar`) pinned above
+the bottom tab bar, mirroring the deal bar's shape. It **adapts to the
+contact's details** — **Ask Earn** (a "draft the next outreach" prompt) is
+always present; **Email** (`mailto:`) and **Call** (`tel:`) appear when the LP
+has a contact address / number, otherwise a **Follow up** task fills the slot —
+capped at three so it stays one-handed. The page renders a matching `md:hidden`
+spacer; desktop keeps the war room's own controls. This satisfies the Network
+spec's "email / call / link actions where appropriate." Verified at a 390px
+viewport (the Email + Call variant renders `mailto:` / `tel:` actions, no
+horizontal overflow).
