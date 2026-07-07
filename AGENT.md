@@ -155,11 +155,12 @@ Every feature you build should reduce the time between **information arriving** 
 ```
 Build     →  Identity, thesis, brand, entity, track record, team, documents
 Source    →  LP pipeline, debt, partners, providers, deal pipeline
-Run       →  Strategy, diligence, underwriting, stress test, risk, outreach, evaluate
+Run       →  Strategy, diligence, underwriting, stress test, risk, outreach, campaigns, evaluate
 Execute   →  Closing, capital events, asset management, reporting, exit
 ```
 
-Network is a standalone side-rail destination (`/network`), not a hub module.
+Network, Search, Marketplace, and Meetings are standalone side-rail
+destinations (`/network`, `/search`, `/marketplace`, `/meetings`), not hub modules.
 
 ### The Fifteen Agents (grouped by hub; see `lib/agents.ts`)
 

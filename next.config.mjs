@@ -59,6 +59,8 @@ const nextConfig = {
       { source: "/run/documents", destination: "/build/documents", permanent: true },
       // Run's "Brains" module was renamed to "Evaluate".
       { source: "/run/brains", destination: "/run/evaluate", permanent: true },
+      // Campaigns moved from a standalone page into Run › Campaigns.
+      { source: "/campaigns", destination: "/run/campaigns", permanent: true },
       // The Signing module used to link envelope actions under
       // /execute/signing/* — routes that never existed (the wizard/detail live
       // at /envelopes/*). Heal any stale bookmarks. The bare /execute/signing
