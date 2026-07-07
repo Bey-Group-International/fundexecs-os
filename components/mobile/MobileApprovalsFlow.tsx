@@ -7,6 +7,8 @@ import { MobileSheet } from "./MobileSheet";
 import { ShieldIcon, SparkIcon, CloseIcon, EarnIcon } from "./icons";
 import { haptic } from "./haptics";
 import { relativeTime } from "./format";
+import { useOnline } from "./useOnline";
+import { useMobileToast } from "./MobileToast";
 
 export interface ApprovalItem {
   approvalId: string;
@@ -54,6 +56,8 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
 
   const startX = useRef(0);
   const active = useRef(false);
+  const online = useOnline();
+  const { toast } = useMobileToast();
 
   const current = items[index];
   const next = items[index + 1];
@@ -66,15 +70,47 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
     setIndex((i) => i + 1);
   }
 
+  // Block a decision when there's no connectivity — an on-the-go operator must
+  // never think they cleared something that never reached the server.
+  function blockedOffline(): boolean {
+    if (online) return false;
+    setDx(0);
+    setDragging(false);
+    toast({ message: "You're offline — reconnect to submit your decision.", tone: "error" });
+    return true;
+  }
+
   function commit(decision: "approved" | "rejected" | "regenerate", item: ApprovalItem, noteText?: string) {
+    if (blockedOffline()) return;
     haptic(decision === "rejected" ? "warn" : "success");
-    // Fire-and-forget: approving kicks off (potentially long) execution on the
-    // server; we never block the swipe on it.
-    decideApprovalAction(item.approvalId, decision, noteText).catch(() => undefined);
+
+    // Optimistic: capture the decision server-side while the stack advances.
+    // Approving kicks off (potentially long) execution, so we never block on it
+    // — but we DO surface a failure with a Retry so a dropped request is never
+    // silently lost.
+    const submit = () => {
+      decideApprovalAction(item.approvalId, decision, noteText)
+        .then((res) => {
+          if (!res?.ok) {
+            toast({ message: `Couldn't submit "${item.title}".`, tone: "error", action: { label: "Retry", onClick: submit } });
+          }
+        })
+        .catch(() => {
+          toast({ message: `Couldn't submit "${item.title}".`, tone: "error", action: { label: "Retry", onClick: submit } });
+        });
+    };
+    submit();
+
+    toast({
+      message:
+        decision === "approved" ? "Approved — Earn is running it." : decision === "rejected" ? "Rejected." : "Sent back to Earn.",
+      tone: "success",
+    });
     advance(decision === "rejected" ? "rejected" : decision === "regenerate" ? "revised" : "approved");
   }
 
   function onApprove(item: ApprovalItem) {
+    if (blockedOffline()) return;
     if (item.risk === "high") {
       setDx(0);
       setConfirm(item);

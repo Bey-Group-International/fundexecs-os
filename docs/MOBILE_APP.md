@@ -331,3 +331,31 @@ its approval controls are untouched. Verified at a 390px viewport: the card
 renders, a full pointer-drag past threshold and the button path both decide and
 advance, the high-sensitivity confirm gate fires, no horizontal overflow, no
 console errors.
+
+---
+
+## 13. Fortification — connectivity & resilient actions
+
+On-the-go operators move through dead zones constantly, so the app is hardened
+to stay honest when the network isn't there:
+
+- **Connectivity awareness** (`useOnline`, `OfflineBanner`): a slim banner above
+  the tab bar appears the moment the device goes offline ("You're offline —
+  we'll reconnect and sync automatically") and clears on reconnect. `md:hidden`.
+- **Mobile toast system** (`MobileToastProvider` / `useMobileToast`): a
+  lightweight, stacked, auto-dismissing feedback channel above the tab bar,
+  mounted for the whole authed app. Supports an action (e.g. **Retry**). The
+  desktop keeps its own CoachingToast; this is mobile-only.
+- **Resilient approvals** (`MobileApprovalsFlow`): the swipe-to-decide flow no
+  longer silently swallows failures. If the device is **offline**, a decision is
+  **blocked** with a clear toast — the operator never thinks they cleared
+  something that never reached the server. When online, decisions stay optimistic
+  (the stack advances instantly) but a dropped request now surfaces a
+  **"Couldn't submit … · Retry"** toast that re-fires the exact decision, so
+  nothing is lost on a flaky connection. A brief success toast confirms each
+  decision sent.
+
+Verified at a 390px viewport with Playwright offline emulation: the banner shows
+on `offline` and hides on `online`; approving while offline is blocked (the card
+does not advance) and raises the error toast; no horizontal overflow, no console
+errors. Desktop/tablet mount none of it.

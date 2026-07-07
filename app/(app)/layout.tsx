@@ -29,6 +29,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { EarnCopilotDock } from "@/components/copilot/EarnCopilotDock";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { AppShellMobile } from "@/components/mobile/AppShellMobile";
+import { MobileToastProvider } from "@/components/mobile/MobileToast";
 import { MobileInstallPrompt } from "@/components/mobile/MobileInstallPrompt";
 import { ServiceWorkerRegister } from "@/components/mobile/ServiceWorkerRegister";
 
@@ -196,6 +197,7 @@ export default async function AppLayout({
   return (
     <div className="flex h-dvh overflow-hidden bg-surface-0 text-fg-primary print:block print:h-auto print:overflow-visible">
       <MobileNavProvider>
+      <MobileToastProvider>
       <div className="contents print:hidden">
       <AppSidebar
         name={name}
@@ -261,6 +263,7 @@ export default async function AppLayout({
       />
       <MobileInstallPrompt />
       <ServiceWorkerRegister />
+      </MobileToastProvider>
       </MobileNavProvider>
     </div>
   );

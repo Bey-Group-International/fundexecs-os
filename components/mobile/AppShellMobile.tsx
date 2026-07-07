@@ -8,6 +8,7 @@ import { MobileMoreMenu } from "./MobileMoreMenu";
 import { PlusIcon } from "./icons";
 import { useHideOnScroll } from "./useHideOnScroll";
 import { haptic } from "./haptics";
+import { OfflineBanner } from "./OfflineBanner";
 
 // The mobile app shell: the persistent chrome that turns the responsive web
 // app into an app-native experience on phones. Renders the bottom tab bar, the
@@ -39,6 +40,9 @@ export function AppShellMobile({
 
   return (
     <div className="md:hidden print:hidden">
+      {/* Connectivity notice for on-the-go dead zones. */}
+      <OfflineBanner />
+
       {/* Floating persistent quick-action button — one tap to move work. */}
       {!fabSuppressed && (
         <button
