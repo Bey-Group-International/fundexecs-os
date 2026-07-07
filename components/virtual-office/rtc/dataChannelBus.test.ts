@@ -78,7 +78,7 @@ describe("DataChannelBus events", () => {
       seen.push(p);
     });
     busA.emit("ping", { n: 1 });
-    await new Promise((r) => queueMicrotask(r));
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
     expect(seen).toEqual([{ n: 1 }]);
   });
 
@@ -90,7 +90,7 @@ describe("DataChannelBus events", () => {
     const off = busB.on("ping", (p) => seen.push(p));
     off();
     busA.emit("ping", 1);
-    await new Promise((r) => queueMicrotask(r));
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
     expect(seen).toEqual([]);
   });
 });
