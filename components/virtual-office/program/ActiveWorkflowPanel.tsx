@@ -26,7 +26,7 @@ const GOLD = "#c9a84c";
  * confidence summary. The user should never have to infer office state
  * from animation alone.
  */
-export function ActiveWorkflowPanel() {
+export function ActiveWorkflowPanel({ onDismiss }: { onDismiss?: () => void }) {
   const s = useOfficeProgram();
   const wf = s.activeWorkflow;
   const pendingGate = s.approvals.find((g) => g.status === "pending");
@@ -40,14 +40,28 @@ export function ActiveWorkflowPanel() {
         <span className="text-[10px] uppercase tracking-[0.22em]" style={{ color: GOLD, fontFamily: "Georgia, serif" }}>
           Active Work
         </span>
-        {wf && (
-          <span
-            className="rounded-sm border px-1.5 py-0.5 text-[8px] uppercase tracking-wider"
-            style={{ color: RISK_TIERS[wf.riskTier].color, borderColor: `${RISK_TIERS[wf.riskTier].color}55` }}
-          >
-            {RISK_TIERS[wf.riskTier].label}
-          </span>
-        )}
+        <span className="flex items-center gap-2">
+          {wf && (
+            <span
+              className="rounded-sm border px-1.5 py-0.5 text-[8px] uppercase tracking-wider"
+              style={{ color: RISK_TIERS[wf.riskTier].color, borderColor: `${RISK_TIERS[wf.riskTier].color}55` }}
+            >
+              {RISK_TIERS[wf.riskTier].label}
+            </span>
+          )}
+          {onDismiss ? (
+            <button
+              type="button"
+              onClick={onDismiss}
+              aria-label="Hide Active Work"
+              title="Hide Active Work"
+              className="grid h-5 w-5 place-items-center rounded text-[11px] leading-none transition-colors hover:text-fg-primary"
+              style={{ color: "#9aa4b2", border: "1px solid rgba(201,168,76,0.3)" }}
+            >
+              ✕
+            </button>
+          ) : null}
+        </span>
       </div>
 
       {/* Copilot plan approval */}

@@ -1063,10 +1063,10 @@ export function VirtualOfficeGame({
           <div className="flex w-full flex-col gap-3 xl:w-[340px] xl:shrink-0">
             {showCommandPanel && (
               <div className="flex h-[430px] flex-col">
-                <OfficeCommandPanel />
+                <OfficeCommandPanel onDismiss={() => setShowCommandPanel(false)} />
               </div>
             )}
-            {showActiveWork && <ActiveWorkflowPanel />}
+            {showActiveWork && <ActiveWorkflowPanel onDismiss={() => setShowActiveWork(false)} />}
           </div>
         )}
       </div>
