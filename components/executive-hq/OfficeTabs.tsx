@@ -35,8 +35,8 @@ const VirtualOfficeGame = dynamic(
 // NEXT_PUBLIC_OFFICE_RENDERER=3d does the floor render in 3D instead of Phaser.
 // Same seam, same program store — see components/virtual-office/render/README.md.
 const RENDERER_3D = process.env.NEXT_PUBLIC_OFFICE_RENDERER === "3d";
-const Office3DView = dynamic(
-  () => import("@/components/virtual-office/Office3DView").then((m) => m.Office3DView),
+const Office3DShell = dynamic(
+  () => import("@/components/virtual-office/Office3DShell").then((m) => m.Office3DShell),
   { ssr: false }
 );
 
@@ -347,12 +347,7 @@ export function OfficeTabs() {
                 renderer is an opt-in preview (NEXT_PUBLIC_OFFICE_RENDERER=3d);
                 the Phaser office remains the default. */}
             {renderMode === "3d" ? (
-              <div className="relative h-[640px] w-full overflow-hidden rounded-2xl border border-line/60 bg-surface-0">
-                <Office3DView active={tab === "virtual"} onNpcClick={handleNpcClick} />
-                <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-300">
-                  3D · Beta
-                </span>
-              </div>
+              <Office3DShell active={tab === "virtual"} onAskEarn={handleNpcClick} />
             ) : (
               <VirtualOfficeGame
                 token={token}
