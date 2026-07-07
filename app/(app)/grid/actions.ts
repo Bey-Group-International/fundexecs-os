@@ -11,6 +11,11 @@ import {
   type TargetEngine,
   type LifecycleStage,
 } from "@/lib/intelligence";
+import {
+  engineOfWorkflow,
+  engineFromSlug,
+  type GridWorkflow,
+} from "@/lib/execution-grid";
 
 // The Execution Grid buckets a workflow by the engine its lifecycle_stage maps
 // to (engineOfWorkflow → engineForStage). So re-routing to an engine means
@@ -71,6 +76,79 @@ export async function rerouteWorkflow(
 
   revalidatePath("/grid");
   return { ok: true };
+}
+
+/**
+ * Permanently delete a single routed workflow (parent task) from the Execution
+ * Grid. Hard delete — the schema cascades child steps, task events, approvals,
+ * and produced artifacts (on delete cascade). Org-scoped and defensive.
+ */
+export async function deleteWorkflow(
+  workflowId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
+
+    const supabase = await createServerClient();
+    const { error } = await supabase
+      .from("tasks")
+      .delete()
+      .eq("id", workflowId)
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null);
+    if (error) return { ok: false, error: "Could not delete workflow." };
+
+    revalidatePath("/grid");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not delete workflow." };
+  }
+}
+
+/**
+ * Permanently clear every workflow routed to one engine. Resolves the engine
+ * from its URL slug, fetches the org's parent workflows, filters to the ones
+ * this engine owns (same engineOfWorkflow logic the pane renders with), and
+ * hard-deletes them. Org-scoped and defensive.
+ */
+export async function clearEngine(
+  engineSlugValue: string,
+): Promise<{ ok: boolean; error?: string; deleted?: number }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
+
+    const engine = engineFromSlug(engineSlugValue);
+    if (!engine) return { ok: false, error: "Unknown engine." };
+
+    const supabase = await createServerClient();
+    const { data } = await supabase
+      .from("tasks")
+      .select("id, title, status, session_id, created_at, hub, description, lifecycle_stage, target_engine")
+      .eq("organization_id", ctx.orgId)
+      .is("parent_task_id", null)
+      .limit(500);
+
+    const ids = ((data ?? []) as GridWorkflow[])
+      .filter((w) => engineOfWorkflow(w) === engine)
+      .map((w) => w.id);
+
+    if (ids.length === 0) return { ok: true, deleted: 0 };
+
+    const { error } = await supabase
+      .from("tasks")
+      .delete()
+      .eq("organization_id", ctx.orgId)
+      .in("id", ids);
+    if (error) return { ok: false, error: "Could not clear engine." };
+
+    revalidatePath("/grid");
+    revalidatePath(`/grid/${engineSlugValue}`);
+    return { ok: true, deleted: ids.length };
+  } catch {
+    return { ok: false, error: "Could not clear engine." };
+  }
 }
 
 /**
