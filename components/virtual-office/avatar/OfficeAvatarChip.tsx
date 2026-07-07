@@ -39,20 +39,26 @@ export function OfficeAvatarChip({
     }
   };
 
-  // Position so the panel never bleeds off-screen: on narrow screens it's a
-  // viewport-centered fixed sheet (independent of where the chip sits in the
-  // wrapping rail); from `sm` up it's anchored under the chip and right-aligned
-  // so its 340px body extends inward, not past the right edge. Either way the
-  // tall body is height-capped and scrolls rather than running off the bottom.
+  // The rail chip's editor is a tall (~560px) multi-section form. Anchoring it
+  // under a near-the-top trigger runs its bottom off the floor and behind the
+  // footer, so the compact variant opens as a viewport-CENTERED modal instead:
+  // fixed, clamped to the viewport on both axes, and scrolled internally — it
+  // can never bleed off-screen at any window size or wherever the chip wrapped.
+  // The non-compact (settings-style) variant keeps its inline anchored dropdown.
   const positionClass = compact
-    ? "fixed left-1/2 top-[4.5rem] z-40 w-[calc(100vw-1.5rem)] max-w-[340px] -translate-x-1/2 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:w-[340px] sm:translate-x-0"
+    ? "fixed left-1/2 top-1/2 z-40 w-[calc(100vw-1.5rem)] max-w-[360px] -translate-x-1/2 -translate-y-1/2"
     : "absolute right-0 z-40 mt-2 w-max max-w-[340px]";
 
   const selector = open ? (
     <>
-      <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+      <div
+        className={`fixed inset-0 z-30 ${compact ? "bg-black/55 backdrop-blur-[1px]" : ""}`}
+        onClick={() => setOpen(false)}
+      />
       <div className={positionClass}>
-        <div className="max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-lg">
+        <div
+          className={`overflow-y-auto overflow-x-hidden rounded-lg ${compact ? "max-h-[calc(100vh-4rem)]" : "max-h-[80vh]"}`}
+        >
           <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} />
         </div>
       </div>
