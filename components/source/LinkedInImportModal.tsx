@@ -1,6 +1,13 @@
 "use client";
 
 import { useState, useRef, useTransition } from "react";
+import {
+  ACCEPTED_UPLOAD_ATTR,
+  ACCEPTED_FORMATS_HELP,
+  readFileHead,
+  validateFileType,
+  type FileKind,
+} from "@/lib/file-validation";
 
 type ImportMode = "auto" | "person" | "firm";
 
@@ -9,34 +16,37 @@ interface Props {
   onImported: (count: number) => void;
 }
 
-const ACCEPTED = ".csv";
 const MODE_LABELS: Record<ImportMode, string> = {
   auto: "Auto-detect",
   person: "People list",
   firm: "Firm / Fund list",
 };
 
-function fileType(f: File): "csv" | null {
-  const n = f.name.toLowerCase();
-  if (n.endsWith(".csv")) return "csv";
-  return null;
-}
-
 export function LinkedInImportModal({ onClose, onImported }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [fileKind, setFileKind] = useState<FileKind | null>(null);
   const [mode, setMode] = useState<ImportMode>("auto");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showFormats, setShowFormats] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(f: File) {
-    if (!fileType(f)) {
-      setError("Please upload a CSV file. Convert spreadsheets to CSV before importing.");
+  async function handleFile(f: File) {
+    const head = await readFileHead(f);
+    const check = validateFileType(
+      { name: f.name, mime: f.type, head },
+      { accept: ["csv", "xlsx"] },
+    );
+    if (!check.ok) {
+      setFile(null);
+      setFileKind(null);
+      setError(check.error);
       return;
     }
     setError(null);
     setFile(f);
+    setFileKind(check.kind ?? null);
   }
 
   async function submit() {
@@ -60,7 +70,7 @@ export function LinkedInImportModal({ onClose, onImported }: Props) {
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
           <div>
             <h2 className="font-semibold text-fg">Import Contacts</h2>
-            <p className="text-xs text-fg-muted mt-0.5">LinkedIn export, family office list, or fund list CSV</p>
+            <p className="text-xs text-fg-muted mt-0.5">LinkedIn export, family office list, or fund list — CSV or XLSX</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-surface text-fg-muted hover:text-fg transition-colors">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -72,11 +82,29 @@ export function LinkedInImportModal({ onClose, onImported }: Props) {
         <div className="p-6 flex flex-col gap-5">
           {/* Format guide */}
           <div className="rounded-lg border border-line bg-surface p-4 text-sm text-fg-muted space-y-2">
-            <p className="font-medium text-fg text-xs uppercase tracking-wider font-mono">Supported formats</p>
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-fg text-xs uppercase tracking-wider font-mono">Supported formats</p>
+              <button
+                type="button"
+                onClick={() => setShowFormats((v) => !v)}
+                className="text-xs text-accent underline"
+              >
+                View accepted formats
+              </button>
+            </div>
+            {showFormats && (
+              <ul className="space-y-1 text-xs list-disc ml-4 border-b border-line pb-2">
+                {ACCEPTED_FORMATS_HELP.map((f) => (
+                  <li key={f.label}>
+                    <strong className="text-fg">{f.label}</strong> — {f.hint}
+                  </li>
+                ))}
+              </ul>
+            )}
             <ul className="space-y-1 text-xs list-disc ml-4">
               <li><strong className="text-fg">LinkedIn CSV</strong> — export from LinkedIn Settings → Data Privacy → Connections</li>
-              <li><strong className="text-fg">People list CSV</strong> — first name, last name, email, title, company, LinkedIn URL</li>
-              <li><strong className="text-fg">Fund / Firm list CSV</strong> — fund name, city, state, stage; no person columns required</li>
+              <li><strong className="text-fg">People list (CSV/XLSX)</strong> — first name, last name, email, title, company, LinkedIn URL</li>
+              <li><strong className="text-fg">Fund / Firm list (CSV/XLSX)</strong> — fund name, city, state, stage; no person columns required</li>
             </ul>
           </div>
 
@@ -122,15 +150,15 @@ export function LinkedInImportModal({ onClose, onImported }: Props) {
             {file ? (
               <div className="text-center">
                 <p className="text-sm font-medium text-fg">{file.name}</p>
-                <p className="text-xs text-fg-muted">{(file.size / 1024).toFixed(0)} KB · CSV</p>
+                <p className="text-xs text-fg-muted">{(file.size / 1024).toFixed(0)} KB · {fileKind?.toUpperCase() ?? "FILE"}</p>
               </div>
             ) : (
               <div className="text-center">
                 <p className="text-sm text-fg">Drop file here or <span className="text-accent underline">browse</span></p>
-                <p className="text-xs text-fg-muted mt-1">CSV only</p>
+                <p className="text-xs text-fg-muted mt-1">CSV or XLSX</p>
               </div>
             )}
-            <input ref={fileRef} type="file" accept={ACCEPTED} className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept={ACCEPTED_UPLOAD_ATTR} className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}

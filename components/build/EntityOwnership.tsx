@@ -4,6 +4,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "r
 import { inputClass } from "./DraftWithEarn";
 import { rollupOwnership } from "@/lib/entity-ownership";
 import { holdingsToCsv, parseHoldingsCsv, csvFilenameStem } from "@/lib/holdings-csv";
+import { ACCEPTED_UPLOAD_ATTR, readFileHead, validateFileType } from "@/lib/file-validation";
+import { xlsxToRows, rowsToCsv } from "@/lib/xlsx";
 import type { EquityHolding } from "@/lib/supabase/database.types";
 import {
   addStakeholder,
@@ -131,27 +133,43 @@ export function EntityOwnership({
     URL.revokeObjectURL(url);
   }
 
-  // Read a chosen CSV client-side, parse it, and import via the server action.
-  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // Read a chosen CSV/XLSX client-side, parse it, and import via the server action.
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-importing the same file
     if (!file) return;
     setNote(null);
-    const reader = new FileReader();
-    reader.onerror = () => setNote("Couldn't read that file.");
-    reader.onload = () => {
-      const rows = parseHoldingsCsv(String(reader.result ?? ""));
-      if (rows.length === 0) {
-        setNote("No rows found in that CSV.");
-        return;
+
+    const head = await readFileHead(file);
+    const check = validateFileType({ name: file.name, mime: file.type, head }, { accept: ["csv", "xlsx"] });
+    if (!check.ok) {
+      setNote(check.error);
+      return;
+    }
+
+    let csvText: string;
+    try {
+      if (check.kind === "xlsx") {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        csvText = rowsToCsv(await xlsxToRows(bytes));
+      } else {
+        csvText = await file.text();
       }
-      startTransition(async () => {
-        const res = await importHoldingsCsv(entityId, rows);
-        if ("error" in res) setNote(res.error);
-        else setNote(`Imported ${res.created} holder${res.created === 1 ? "" : "s"} — review below.`);
-      });
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Couldn't read that file.");
+      return;
+    }
+
+    const rows = parseHoldingsCsv(csvText);
+    if (rows.length === 0) {
+      setNote("No rows found in that file.");
+      return;
+    }
+    startTransition(async () => {
+      const res = await importHoldingsCsv(entityId, rows);
+      if ("error" in res) setNote(res.error);
+      else setNote(`Imported ${res.created} holder${res.created === 1 ? "" : "s"} — review below.`);
+    });
   }
 
   function startEdit(holdingId: string) {
@@ -275,12 +293,12 @@ export function EntityOwnership({
             disabled={pending}
             className="rounded-md border border-line px-3 py-2 text-sm text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-60"
           >
-            {pending ? "Importing…" : "Import CSV"}
+            {pending ? "Importing…" : "Import CSV / XLSX"}
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept={ACCEPTED_UPLOAD_ATTR}
             onChange={onImportFile}
             className="hidden"
             aria-hidden="true"
