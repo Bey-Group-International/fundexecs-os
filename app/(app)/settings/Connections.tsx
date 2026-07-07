@@ -116,7 +116,7 @@ export function Connections({ connections }: { connections: IntegrationConnectio
           sending anything out. Backend connectors (Google Contacts, official
           LinkedIn API) surface here as they become available; manual entry,
           LinkedIn profile URLs, and the CSV fallback are always available at
-          /source/network. */}
+          /network. */}
       <div className="rounded-xl border border-line bg-surface-1 p-4">
         <div className="flex items-start gap-3">
           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-status-success" aria-label="import available" />
@@ -150,7 +150,7 @@ export function Connections({ connections }: { connections: IntegrationConnectio
             </div>
           </div>
           <a
-            href="/source/network"
+            href="/network"
             className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs text-fg-secondary transition-colors hover:border-accent/50 hover:text-accent"
           >
             Open Network

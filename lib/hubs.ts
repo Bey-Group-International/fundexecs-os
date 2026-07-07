@@ -32,6 +32,7 @@ export const HUBS: HubDefinition[] = [
       { key: "track_record", label: "Track Record" },
       { key: "team", label: "Team" },
       { key: "data_room", label: "Materials & Data Room" },
+      { key: "documents", label: "Documents" },
     ],
   },
   {
@@ -40,13 +41,11 @@ export const HUBS: HubDefinition[] = [
     purpose:
       "Build LP, deal, and partner pipelines that move. Earn surfaces qualified matches, scores relationship momentum, and alerts you the moment a counterparty is ready for the next step.",
     modules: [
-      { key: "network", label: "Network" },
       { key: "lp_pipeline", label: "LP Pipeline" },
       { key: "debt", label: "Debt & Hybrid" },
       { key: "partners", label: "Partners" },
       { key: "providers", label: "Providers" },
       { key: "deal_pipeline", label: "Deal Pipeline" },
-      { key: "outreach", label: "Outreach" },
     ],
   },
   {
@@ -60,10 +59,9 @@ export const HUBS: HubDefinition[] = [
       { key: "diligence", label: "Diligence" },
       { key: "underwriting", label: "Underwriting" },
       { key: "stress_test", label: "Stress Test" },
-      { key: "comms", label: "Comms" },
       { key: "risk", label: "Risk" },
-      { key: "documents", label: "Documents" },
-      { key: "brains", label: "Brains" },
+      { key: "outreach", label: "Outreach" },
+      { key: "evaluate", label: "Evaluate" },
     ],
   },
   {

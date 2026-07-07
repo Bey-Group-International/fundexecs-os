@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { getSessionContext, requireOrgContext } from "@/lib/auth";
-import { handlePrompt } from "@/lib/engine";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { logLPContact } from "@/lib/lp-relationships";
 import { LP_DOCUMENT_TYPES, renderDocumentTemplate } from "@/lib/document-templates";
@@ -233,43 +232,6 @@ export async function createModuleRow(
   return { ok: true };
 }
 
-// --- Run › Comms: deal-aware Earn launcher --------------------------------
-// Seeds an Earn session pre-prompted to draft a comms artifact for a specific
-// deal, then opens it. Keeps the Run › Comms module a productive launchpad
-// rather than a dead-end scaffold.
-const COMMS_PROMPTS: Record<string, (deal: string) => string> = {
-  ic_memo: (deal) =>
-    `Draft an institutional IC memo for the deal "${deal}": opportunity summary, thesis fit, base/downside underwriting, key diligence findings and open risks, and a clear recommendation.`,
-  lp_update: (deal) =>
-    `Draft a concise LP update on the deal "${deal}" we're evaluating: what it is, why it fits the mandate, where we are in diligence, and expected next steps — confident but measured.`,
-  screening_memo: (deal) =>
-    `Draft a one-page screening memo for the deal "${deal}": the opportunity, thesis fit, the two or three things that would make or break it, and a go / no-go recommendation on whether to spend diligence time.`,
-};
-
-export async function draftDealComms(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const dealId = String(formData.get("deal_id") ?? "");
-  const kind = String(formData.get("kind") ?? "");
-  const build = COMMS_PROMPTS[kind];
-  if (!dealId || !build) { redirect("/workspace"); }
-
-  const supabase = await createServerClient();
-  const { data: deal } = await supabase
-    .from("deals")
-    .select("name")
-    .eq("id", dealId)
-    .eq("organization_id", ctx.orgId)
-    .maybeSingle();
-  if (!deal) redirect("/run/comms");
-
-  const result = await handlePrompt(
-    { supabase, orgId: ctx.orgId, actorId: ctx.userId },
-    build(deal.name as string),
-  );
-  redirect(result.session_id ? `/session/${result.session_id}` : "/workspace");
-}
-
 export async function logContactAction(investorId: string) {
   const auth = await requireOrgContext();
   if (!auth.ok) return { error: "Unauthorized" };
@@ -355,7 +317,7 @@ export async function generateDocumentAction(formData: FormData) {
     });
     if (insertError) throw insertError;
 
-    revalidatePath("/run/documents");
+    revalidatePath("/build/documents");
     return { ok: true };
   } catch (e) {
     console.error("[generateDocumentAction] failed", e);
@@ -391,7 +353,7 @@ export async function advanceContractAction(contractId: string) {
       .eq("organization_id", auth.ctx.orgId);
     if (updateError) throw updateError;
 
-    revalidatePath("/run/documents");
+    revalidatePath("/build/documents");
     return { ok: true };
   } catch (e) {
     console.error("[advanceContractAction] failed", e);

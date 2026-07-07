@@ -2,7 +2,6 @@ import Link from "next/link";
 import { getRunConviction, toPercent, effectiveSeverity, type DealConviction } from "@/lib/run-conviction";
 import type { DiligenceItem } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
-import { draftDealComms } from "@/app/(app)/[hub]/[module]/actions";
 
 // Shared empty state for the derived Run modules — points back to the deal
 // pipeline, the source of the working set these modules read from.
@@ -217,55 +216,3 @@ export async function RunStressTestModule({ orgId }: { orgId: string }) {
   );
 }
 
-// --- Comms: deal-aware Earn launchpad -------------------------------------
-function CommsButton({ dealId, kind, label }: { dealId: string; kind: string; label: string }) {
-  return (
-    <form action={draftDealComms}>
-      <input type="hidden" name="deal_id" value={dealId} />
-      <input type="hidden" name="kind" value={kind} />
-      <button className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20">
-        ✶ {label}
-      </button>
-    </form>
-  );
-}
-
-export async function RunCommsModule({ orgId }: { orgId: string }) {
-  const { deals } = await getRunConviction(orgId);
-
-  if (deals.length === 0) {
-    return (
-      <div>
-        <ModuleHeader title="Comms" blurb="Draft deal communications grounded in the live evaluation." />
-        <NoActiveDeals note="No deals in evaluation. Once a deal is in flight, draft its IC memo and LP updates here." />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ModuleHeader
-        title="Comms"
-        blurb="Turn the evaluation into the memo. Earn drafts each artifact from this deal's live diligence and underwriting."
-      />
-      <div className="flex flex-col gap-2.5">
-        {deals.map((d) => (
-          <div
-            key={d.deal.id}
-            className="flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="flex items-center gap-2.5">
-              <StageBadge d={d} />
-              <span className="truncate font-medium text-fg-primary">{d.deal.name}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <CommsButton dealId={d.deal.id} kind="screening_memo" label="Screening memo" />
-              <CommsButton dealId={d.deal.id} kind="ic_memo" label="IC memo" />
-              <CommsButton dealId={d.deal.id} kind="lp_update" label="LP update" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}

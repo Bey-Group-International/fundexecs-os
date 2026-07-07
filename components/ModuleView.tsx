@@ -14,7 +14,7 @@ import { MaterialsModule } from "@/components/build/MaterialsModule";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
-import { RunRiskModule, RunStressTestModule, RunCommsModule } from "@/components/run/RunModules";
+import { RunRiskModule, RunStressTestModule } from "@/components/run/RunModules";
 import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
 import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
 import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
@@ -27,7 +27,6 @@ import { BrainsModule } from "@/components/run/BrainsModule";
 import { FundScoringModule } from "@/components/run/FundScoringModule";
 import { DiligenceRoomModule } from "@/components/run/DiligenceRoomModule";
 import { ContractReviewModule } from "@/components/run/ContractReviewModule";
-import { MarketIntelModule } from "@/components/source/MarketIntelModule";
 import {
   ExecuteReportingModule,
   ExecuteExitModule,
@@ -189,7 +188,6 @@ export async function ModuleView({
     if (mod.key === "strategy") return <RunStrategyModule orgId={ctx.orgId} />;
     if (mod.key === "risk") return <RunRiskModule orgId={ctx.orgId} />;
     if (mod.key === "stress_test") return <RunStressTestModule orgId={ctx.orgId} />;
-    if (mod.key === "comms") return <RunCommsModule orgId={ctx.orgId} />;
     if (mod.key === "diligence")
       return (
         <>
@@ -204,14 +202,7 @@ export async function ModuleView({
           <FundScoringModule />
         </>
       );
-    if (mod.key === "documents")
-      return (
-        <>
-          <DocumentsModuleLive />
-          <ContractReviewModule />
-        </>
-      );
-    if (mod.key === "brains") return <BrainsModule />;
+    if (mod.key === "evaluate") return <BrainsModule />;
   }
 
   // --- Execute hub: bespoke operating modules ------------------------------
@@ -244,6 +235,13 @@ export async function ModuleView({
     if (mod.key === "track_record") return <TrackRecordModule />;
     if (mod.key === "team") return <TeamModule />;
     if (mod.key === "data_room") return <MaterialsModule />;
+    if (mod.key === "documents")
+      return (
+        <>
+          <DocumentsModuleLive />
+          <ContractReviewModule />
+        </>
+      );
     // profile falls through to the editable org form below
   }
 
@@ -285,17 +283,6 @@ export async function ModuleView({
   }
 
   // --- Source hub: enriched directory views ---------------------------------
-  // Network renders the unified deal/investor intelligence directory (a native,
-  // open take on a PitchBook-style market view) synthesized from live records.
-  if (hub.key === "source" && mod.key === "network") {
-    return (
-      <div>
-        {mandateStrip}
-        <MarketIntelModule />
-      </div>
-    );
-  }
-
   // LP pipeline and Providers render bespoke relationship-aware directories
   // instead of the generic table, while retaining AI sourcing and add-row forms.
   if (hub.key === "source" && mod.key === "lp_pipeline") {

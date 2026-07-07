@@ -72,7 +72,6 @@ const MODULE_AGENT: Record<string, AgentKey> = {
   "run/underwriting": "analyst",
   "run/stress_test": "analyst",
   "run/risk": "diligence",
-  "run/comms": "investor_relations",
   deal: "diligence",
   // Source
   "source/lp_pipeline": "capital_raiser",
@@ -167,17 +166,6 @@ const SUGGESTIONS: Record<string, CopilotSuggestion[]> = {
       prompt:
         "Consolidate the open risks across our active deals into a single register ranked by residual severity, and propose a mitigation for each high or critical item.",
       agent: "diligence",
-    },
-  ],
-  "run/comms": [
-    {
-      id: "ic-memo",
-      label: "Draft an IC memo",
-      hint: "IR turns the evaluation into a committee memo.",
-      prompt:
-        "Draft an institutional IC memo for our most-progressed active deal: opportunity, thesis fit, base/downside underwriting, key diligence findings and open risks, and a clear recommendation.",
-      agent: "investor_relations",
-      action: "draft_memo",
     },
   ],
   "source/lp_pipeline": [

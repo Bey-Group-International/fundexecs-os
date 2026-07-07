@@ -467,6 +467,17 @@ function SidebarPanel({
               </span>
             ) : null}
           </Link>
+          {/* Network — standalone relationship-capital surface (formerly a
+              Source module), now a top-level destination in its own right. */}
+          <Link
+            href="/network"
+            className={`${navHrefActive(pathname, "/network") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="font-mono text-base leading-none text-neural-400">◎</span>
+              Network
+            </span>
+          </Link>
 
           {/* More — secondary destinations expand on click */}
           <button

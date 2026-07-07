@@ -173,7 +173,7 @@ The tab destinations reached from the bottom nav are mobile-native too:
 - **Deals** (`/deals/feed`) is already a vertical card feed; its intelligence
   widgets (sector heatmap, signal feed) scroll inside their own containers, so
   the page never scrolls horizontally.
-- **Network / CRM and every table-backed module** (`/source/network`,
+- **Network / CRM and every table-backed module** (`/network`,
   `lp_pipeline`, `deal_pipeline`, partners, providers, debt, …) render through
   the shared `components/ModuleTable.tsx`. It is now **responsive**: the dense
   table shows at `md`+ (unchanged), and below `md` each record becomes a

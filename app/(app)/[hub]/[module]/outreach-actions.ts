@@ -85,7 +85,7 @@ export async function createOutreachSequence(input: {
     })),
   });
   if (!res.ok) return { ok: false, error: res.error };
-  revalidatePath("/source/outreach");
+  revalidatePath("/run/outreach");
   return { ok: true, sequence: res.sequence };
 }
 
@@ -118,7 +118,7 @@ export async function enrollOutreachTarget(input: {
     entityId: input.entityId ?? null,
   });
   if (!res.ok) return { ok: false, error: res.error };
-  revalidatePath("/source/outreach");
+  revalidatePath("/run/outreach");
   return { ok: true, enrollment: res.enrollment };
 }
 
@@ -233,7 +233,7 @@ export async function advanceOutreachEnrollment(enrollmentId: string): Promise<A
     },
   });
 
-  revalidatePath("/source/outreach");
+  revalidatePath("/run/outreach");
   if (!res.ok) return { ok: false, error: res.error };
   if (!res.outcome) {
     return { ok: true, noop: true, status: res.status, message: "Nothing is due to send yet." };
@@ -263,7 +263,7 @@ export async function deleteOutreachSequenceAction(
       .eq("id", sequenceId)
       .eq("organization_id", auth.ctx.orgId);
     if (error) throw error;
-    revalidatePath("/source/outreach");
+    revalidatePath("/run/outreach");
     return { ok: true };
   } catch (e) {
     console.error("[deleteOutreachSequenceAction] failed", e);
@@ -281,7 +281,7 @@ export async function clearOutreachSequencesAction(): Promise<{ ok: boolean; err
       .delete()
       .eq("organization_id", auth.ctx.orgId);
     if (error) throw error;
-    revalidatePath("/source/outreach");
+    revalidatePath("/run/outreach");
     return { ok: true };
   } catch (e) {
     console.error("[clearOutreachSequencesAction] failed", e);

@@ -50,7 +50,7 @@ const EMPTY_STATE: Record<GraphKind, {
     title: "Start with your relationship graph.",
     description: "Import network contacts or connect inbox channels so FundExecs can map who knows whom before outreach starts.",
     primaryLabel: "Open Network",
-    primaryHref: "/source/network",
+    primaryHref: "/network",
     secondaryLabel: "Connect channels",
     secondaryHref: "/settings#integrations",
   },
