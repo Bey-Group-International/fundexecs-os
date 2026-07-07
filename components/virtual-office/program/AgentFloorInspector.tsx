@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { RichText } from "@/components/RichText";
 import { text } from "@/lib/richtext";
-import { AGENT_BY_ID, ROOM_BY_KEY, type AgentId, type AgentState } from "./officeProgram";
+import { AGENT_BY_ID, roomLabel, type AgentId, type AgentState } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 import {
   interactWithAgent,
@@ -98,7 +98,7 @@ export function AgentFloorInspector({
             <RichText component={nameComponent} />
           </div>
           <div style={{ fontSize: 8.5, color: "rgba(255,248,220,0.5)", letterSpacing: "0.06em", marginTop: 2 }}>
-            {meta.role} · {ROOM_BY_KEY[rt.roomKey].label}
+            {meta.role} · {roomLabel(rt.roomKey)}
           </div>
         </div>
         <button

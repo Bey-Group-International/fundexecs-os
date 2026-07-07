@@ -1,6 +1,6 @@
 "use client";
 
-import { AGENT_BY_ID, ROOM_BY_KEY } from "./officeProgram";
+import { AGENT_BY_ID, roomLabel } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 
 const GOLD = "#c9a84c";
@@ -30,7 +30,7 @@ export function MeetingPresenceGrid() {
         <p className="text-[9px] uppercase tracking-[0.18em]" style={{ color: GOLD, fontFamily: "Georgia, serif" }}>
           {meeting.label}
         </p>
-        <p className="text-[8px] text-slate-500">{ROOM_BY_KEY[meeting.roomKey].label} · live session</p>
+        <p className="text-[8px] text-slate-500">{roomLabel(meeting.roomKey)} · live session</p>
       </div>
 
       {/* Local user presence */}

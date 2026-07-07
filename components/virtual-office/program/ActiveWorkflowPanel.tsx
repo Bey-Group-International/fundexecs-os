@@ -4,7 +4,7 @@ import {
   AGENT_BY_ID,
   RISK_TIERS,
   ROLE_LABELS,
-  ROOM_BY_KEY,
+  roomLabel,
   STAGE_LABELS,
   STAGE_ORDER,
   canRoleApprove,
@@ -178,7 +178,7 @@ export function ActiveWorkflowPanel({ onDismiss }: { onDismiss?: () => void }) {
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: agent.accent }} />
                       {agent.name}
                     </span>
-                    <span className="text-[9px] text-slate-500">{ROOM_BY_KEY[a.roomKey].label}</span>
+                    <span className="text-[9px] text-slate-500">{roomLabel(a.roomKey)}</span>
                   </div>
                   <p className="mt-0.5 text-[9px] text-slate-400">
                     Owns: <span className="text-slate-300">{a.owns}</span> · {a.done ? "Complete" : a.status}
