@@ -89,6 +89,23 @@ export class MeshManager {
     }
   }
 
+  /**
+   * Swap the outgoing mic or camera track on every peer — used when the operator
+   * picks a different input device mid-meeting. replaceTrack needs no
+   * renegotiation, so peers keep receiving in place.
+   */
+  async replaceTrack(kind: "audio" | "video", track: MediaStreamTrack | null): Promise<void> {
+    for (const [, state] of this.peers) {
+      const sender = state.pc.getSenders().find((s) => s.track?.kind === kind);
+      if (!sender) continue;
+      try {
+        await sender.replaceTrack(track);
+      } catch {
+        // Track ended mid-swap — ignore
+      }
+    }
+  }
+
   /** Called when bubble.join fires — initiate offers to members with lower id */
   async joinBubble(myId: string, memberIds: string[]): Promise<void> {
     this.myId = myId;

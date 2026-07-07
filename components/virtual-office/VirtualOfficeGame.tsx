@@ -313,6 +313,10 @@ export function VirtualOfficeGame({
   const [meetingActive, setMeetingActive] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [devices, setDevices] = useState<{ mics: MediaDeviceInfo[]; cams: MediaDeviceInfo[]; speakers: MediaDeviceInfo[] }>({ mics: [], cams: [], speakers: [] });
+  const [selectedMic, setSelectedMic] = useState("");
+  const [selectedCam, setSelectedCam] = useState("");
+  const [selectedSpeaker, setSelectedSpeaker] = useState("");
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const [directoryOpen, setDirectoryOpen] = useState(false);
@@ -409,6 +413,70 @@ export function VirtualOfficeGame({
     localStreamRef.current = null;
     setLocalStream(null);
     setMediaState("idle");
+  }, []);
+
+  const refreshDevices = useCallback(async () => {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setDevices({
+        mics: list.filter((d) => d.kind === "audioinput" && d.deviceId),
+        cams: list.filter((d) => d.kind === "videoinput" && d.deviceId),
+        speakers: list.filter((d) => d.kind === "audiooutput" && d.deviceId),
+      });
+    } catch {
+      /* enumeration unavailable */
+    }
+  }, []);
+
+  // Enumerate input/output devices while a meeting is live (labels are only
+  // populated after a getUserMedia grant), and refresh on hot-plug.
+  useEffect(() => {
+    if (!meetingActive || !localStream) return;
+    void refreshDevices();
+    const md = navigator.mediaDevices;
+    const onChange = () => void refreshDevices();
+    md?.addEventListener?.("devicechange", onChange);
+    return () => md?.removeEventListener?.("devicechange", onChange);
+  }, [meetingActive, localStream, refreshDevices]);
+
+  // Switch the active mic/camera in place — new track replaces the old on the
+  // local stream and on every peer (replaceTrack, no renegotiation).
+  const selectInputDevice = useCallback(async (kind: "audioinput" | "videoinput", deviceId: string) => {
+    const isAudio = kind === "audioinput";
+    try {
+      const ns = await navigator.mediaDevices.getUserMedia(
+        isAudio ? { audio: { deviceId: { exact: deviceId } } } : { video: { deviceId: { exact: deviceId } } },
+      );
+      const newTrack = isAudio ? ns.getAudioTracks()[0] : ns.getVideoTracks()[0];
+      if (!newTrack) return;
+      const stream = localStreamRef.current;
+      if (stream) {
+        const old = isAudio ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+        if (old) { stream.removeTrack(old); old.stop(); }
+        newTrack.enabled = isAudio ? micOn : camOn;
+        stream.addTrack(newTrack);
+        setLocalStream(new MediaStream(stream.getTracks()));
+      }
+      gameRef.current?.events.emit("rtc:replace-track", isAudio ? "audio" : "video", newTrack);
+      if (isAudio) setSelectedMic(deviceId); else setSelectedCam(deviceId);
+    } catch {
+      /* device busy or denied */
+    }
+  }, [micOn, camOn]);
+
+  const sendFloorInvite = useCallback(async (emails: string[]): Promise<{ ok: boolean; sent: number }> => {
+    try {
+      const res = await fetch("/api/office/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails }),
+      });
+      if (!res.ok) return { ok: false, sent: 0 };
+      const data = (await res.json()) as { sent: number };
+      return { ok: true, sent: data.sent };
+    } catch {
+      return { ok: false, sent: 0 };
+    }
   }, []);
 
   const stopScreenShare = useCallback(() => {
@@ -823,6 +891,14 @@ export function VirtualOfficeGame({
             onToggleCam={toggleCam}
             onEnd={endMeeting}
             inviteUrl={typeof window !== "undefined" ? window.location.href : ""}
+            devices={devices}
+            selectedMic={selectedMic}
+            selectedCam={selectedCam}
+            selectedSpeaker={selectedSpeaker}
+            onSelectMic={(id) => selectInputDevice("audioinput", id)}
+            onSelectCam={(id) => selectInputDevice("videoinput", id)}
+            onSelectSpeaker={setSelectedSpeaker}
+            onSendInvites={sendFloorInvite}
           />
         )}
 
