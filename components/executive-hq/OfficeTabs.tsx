@@ -44,6 +44,7 @@ export function OfficeTabs() {
   const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
   const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
+  const [dealRoomListingId, setDealRoomListingId] = useState<string | null>(null);
   const [occupancy, setOccupancy] = useState<Record<string, number>>({});
 
   // Guest join state — shown when no session and virtual tab is requested
@@ -138,6 +139,10 @@ export function OfficeTabs() {
   useEffect(() => {
     const room = searchParams.get("room");
     const requestedTab = searchParams.get("tab");
+    // A ?deal= link convenes a deal room around that listing — the Deal Room
+    // shows its context on arrival (see VirtualOfficeGame / DealRoomBanner).
+    const deal = searchParams.get("deal");
+    if (deal) setDealRoomListingId(deal);
     if (requestedTab === "overview" || requestedTab === "hq") {
       activateTab("hq");
     } else if (requestedTab === "virtual") {
@@ -313,6 +318,7 @@ export function OfficeTabs() {
               displayName={displayName}
               active={tab === "virtual"}
               teleportTarget={teleportTarget}
+              dealRoomListingId={dealRoomListingId}
               onOccupancyChange={setOccupancy}
               onNpcClick={handleNpcClick}
               zoneUrlOverrides={zoneUrlOverrides}

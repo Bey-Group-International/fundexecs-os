@@ -18,6 +18,20 @@ describe("officeInvitePath", () => {
     expect(officeInvitePath({ room: null })).toBe("/command-center");
     expect(officeInvitePath({ room: "" })).toBe("/command-center");
   });
+
+  it("carries a deal-room listing id", () => {
+    expect(officeInvitePath({ room: "trading", deal: "abc-123" })).toBe(
+      "/command-center?room=trading&deal=abc-123",
+    );
+    expect(officeInvitePath({ room: "trading", meet: true, deal: "abc-123" })).toBe(
+      "/command-center?room=trading&meet=1&deal=abc-123",
+    );
+  });
+
+  it("omits an empty/nullish deal", () => {
+    expect(officeInvitePath({ room: "trading", deal: null })).toBe("/command-center?room=trading");
+    expect(officeInvitePath({ room: "trading", deal: "" })).toBe("/command-center?room=trading");
+  });
 });
 
 describe("officeInviteUrl", () => {
