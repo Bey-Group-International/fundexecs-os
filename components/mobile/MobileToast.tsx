@@ -64,11 +64,16 @@ export function MobileToastProvider({ children }: { children: React.ReactNode })
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] z-[55] flex flex-col items-center gap-2 px-3 md:hidden print:hidden">
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] z-[55] flex flex-col items-center gap-2 px-3 md:hidden print:hidden"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="status"
+            role={t.tone === "error" ? "alert" : "status"}
+            aria-live={t.tone === "error" ? "assertive" : undefined}
             className={`fx-sheet-enter pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border px-3.5 py-3 shadow-[0_16px_40px_-20px_rgb(0_0_0/0.7)] backdrop-blur-xl ${TONE[t.tone ?? "neutral"]}`}
           >
             <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${DOT[t.tone ?? "neutral"]}`} />

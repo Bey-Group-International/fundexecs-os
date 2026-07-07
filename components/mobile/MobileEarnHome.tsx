@@ -130,7 +130,7 @@ export function MobileEarnHome({ data }: { data: CommandCenterData }) {
   return (
     <div className="mx-auto max-w-lg">
       <PullToRefresh>
-        <div className="space-y-4 pb-28">
+        <div className="space-y-4 pb-28" role="region" aria-label="Conversation with Earn">
           {/* Conversation header */}
           <header className="flex items-center gap-2.5 pb-1 pt-1">
             <EarnAvatar size={38} />

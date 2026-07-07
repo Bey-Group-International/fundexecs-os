@@ -54,6 +54,8 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
   const [reviseFor, setReviseFor] = useState<null | ApprovalItem>(null);
   const [note, setNote] = useState("");
   const [counts, setCounts] = useState({ approved: 0, rejected: 0, revised: 0 });
+  // Screen-reader announcement for each decision + the cleared completion.
+  const [announce, setAnnounce] = useState("");
 
   const startX = useRef(0);
   const active = useRef(false);
@@ -80,6 +82,11 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
     // the decision is never lost — no dead-end when signal drops mid-swipe.
     const payload: ApprovalDecisionPayload = { approvalId: item.approvalId, decision, note: noteText, title: item.title };
     enqueue(APPROVAL_DECISION_TYPE, payload);
+
+    // Announce the decision (and remaining count) to assistive tech.
+    const decidedLabel = decision === "approved" ? "Approved" : decision === "rejected" ? "Rejected" : "Sent back to Earn";
+    const left = remaining - 1;
+    setAnnounce(left > 0 ? `${decidedLabel}. ${left} of ${items.length} remaining.` : `${decidedLabel}. Cleared.`);
 
     toast(
       online
@@ -128,6 +135,9 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
     const total = counts.approved + counts.rejected + counts.revised;
     return (
       <div className="mx-auto flex max-w-lg flex-col items-center justify-center px-6 pt-20 text-center">
+        <span className="sr-only" role="status" aria-live="polite">
+          {total > 0 ? "Cleared. All approvals decided." : "Nothing to approve."}
+        </span>
         <span className="flex h-16 w-16 items-center justify-center rounded-2xl border border-status-success/40 bg-status-success/10 text-status-success">
           <CheckIcon width={30} height={30} />
         </span>
@@ -157,6 +167,10 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
 
   return (
     <div className="mx-auto max-w-lg select-none">
+      {/* Live region: announces each decision + remaining count. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {announce}
+      </span>
       {/* Header + progress */}
       <header className="pt-1">
         <div className="flex items-end justify-between">
@@ -170,9 +184,16 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
             {index + 1} / {items.length}
           </span>
         </div>
-        <div className="mt-3 flex gap-1">
+        <div
+          className="mt-3 flex gap-1"
+          role="progressbar"
+          aria-label="Approvals progress"
+          aria-valuemin={0}
+          aria-valuemax={items.length}
+          aria-valuenow={index}
+        >
           {items.map((_, i) => (
-            <span key={i} className={`h-1 flex-1 rounded-full ${i < index ? "bg-gold-500/70" : i === index ? "bg-gold-400" : "bg-surface-3"}`} />
+            <span key={i} aria-hidden className={`h-1 flex-1 rounded-full ${i < index ? "bg-gold-500/70" : i === index ? "bg-gold-400" : "bg-surface-3"}`} />
           ))}
         </div>
       </header>
@@ -186,6 +207,9 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
 
         {/* Current card */}
         <div
+          role="group"
+          aria-roledescription="approval card"
+          aria-label={current.title}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -198,10 +222,10 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
           className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl border border-line bg-surface-1 shadow-[0_20px_60px_-30px_rgb(0_0_0/0.7)]"
         >
           {/* Swipe intent overlays */}
-          <span className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-status-success px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider text-status-success" style={{ opacity: approveHint, transform: `rotate(-12deg)` }}>
+          <span aria-hidden className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-status-success px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider text-status-success" style={{ opacity: approveHint, transform: `rotate(-12deg)` }}>
             Approve
           </span>
-          <span className="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border-2 border-status-danger px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider text-status-danger" style={{ opacity: rejectHint, transform: `rotate(12deg)` }}>
+          <span aria-hidden className="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border-2 border-status-danger px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider text-status-danger" style={{ opacity: rejectHint, transform: `rotate(12deg)` }}>
             Reject
           </span>
 
