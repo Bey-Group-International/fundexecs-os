@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { officeInviteUrl } from "@/lib/office/floor-link";
+import { prettyListingType, formatListingAmount } from "@/lib/office/listingFormat";
 
 const GOLD = "#c9a84c";
 
@@ -12,24 +13,6 @@ type DealListing = {
   listing_type: string;
   amount: number | null;
 };
-
-const TYPE_LABELS: Record<string, string> = {
-  deal: "Deal",
-  fund: "Fund",
-  co_invest: "Co-invest",
-  secondary: "Secondary",
-  service: "Service",
-  lp_seeking: "LP Seeking",
-};
-
-function prettyType(t: string): string {
-  return TYPE_LABELS[t] ?? t.split(/[_\s-]+/).map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
-}
-
-function formatAmount(a: number | null): string | null {
-  if (a == null) return null;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0, notation: "compact" }).format(a);
-}
 
 /**
  * Deal-room context banner. Shown at the top of the Deal Room while a specific
@@ -73,7 +56,7 @@ export function DealRoomBanner({ listingId, onClose }: { listingId: string; onCl
     }
   };
 
-  const amount = listing && listing !== "error" ? formatAmount(listing.amount) : null;
+  const amount = listing && listing !== "error" ? formatListingAmount(listing.amount) : null;
 
   return (
     <div
@@ -98,7 +81,7 @@ export function DealRoomBanner({ listingId, onClose }: { listingId: string; onCl
               {listing.title}
             </span>
             <span className="shrink-0 text-[9px] uppercase tracking-wider" style={{ color: GOLD }}>
-              {prettyType(listing.listing_type)}
+              {prettyListingType(listing.listing_type)}
               {amount ? ` · ${amount}` : ""}
             </span>
           </div>
