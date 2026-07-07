@@ -1,6 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
+import {
+  ACCEPTED_UPLOAD_ATTR,
+  parseCSV,
+  readFileHead,
+  validateFileType,
+} from "@/lib/file-validation";
+import { xlsxToRows } from "@/lib/xlsx";
 
 export interface CsvImportRow {
   [column: string]: string;
@@ -13,40 +20,6 @@ interface CsvImportProps {
   onImport: (rows: CsvImportRow[]) => Promise<void> | void;
   /** Max rows allowed per import (default 500). */
   maxRows?: number;
-}
-
-// ─── CSV parser ───────────────────────────────────────────────────────────────
-
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let inQuote = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-
-    if (inQuote) {
-      if (ch === '"' && next === '"') { cell += '"'; i++; }
-      else if (ch === '"') { inQuote = false; }
-      else { cell += ch; }
-    } else {
-      if (ch === '"') { inQuote = true; }
-      else if (ch === ",") { row.push(cell); cell = ""; }
-      else if (ch === "\n" || (ch === "\r" && next === "\n")) {
-        row.push(cell); cell = "";
-        if (row.some((c) => c.trim())) rows.push(row);
-        row = [];
-        if (ch === "\r") i++;
-      } else {
-        cell += ch;
-      }
-    }
-  }
-  row.push(cell);
-  if (row.some((c) => c.trim())) rows.push(row);
-  return rows;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -63,35 +36,50 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
 
-  function handleFile(file: File) {
-    if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
-      setErrorMsg("Please upload a .csv file.");
+  async function handleFile(file: File) {
+    const head = await readFileHead(file);
+    const check = validateFileType(
+      { name: file.name, mime: file.type, head },
+      { accept: ["csv", "xlsx"] },
+    );
+    if (!check.ok) {
+      setErrorMsg(check.error);
       setStage("error");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const parsed = parseCsv(text.trim());
-      if (parsed.length < 2) {
-        setErrorMsg("The CSV must have a header row and at least one data row.");
-        setStage("error");
-        return;
+
+    let parsed: string[][];
+    try {
+      if (check.kind === "xlsx") {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        parsed = (await xlsxToRows(bytes)).filter((r) => r.some((c) => c.trim() !== ""));
+      } else {
+        const text = await file.text();
+        parsed = parseCSV(text);
       }
-      const csvHeaders = parsed[0].map((h) => h.trim());
-      const dataRows = parsed.slice(1, maxRows + 1);
-      setHeaders(csvHeaders);
-      setRawRows(dataRows);
-      // Auto-map columns whose names match exactly (case-insensitive).
-      const auto: Record<string, string> = {};
-      for (const col of expectedColumns) {
-        const match = csvHeaders.find((h) => h.toLowerCase() === col.toLowerCase());
-        auto[col] = match ?? "";
-      }
-      setMapping(auto);
-      setStage("mapping");
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Couldn't read that file.");
+      setStage("error");
+      return;
+    }
+
+    if (parsed.length < 2) {
+      setErrorMsg("The file must have a header row and at least one data row.");
+      setStage("error");
+      return;
+    }
+    const csvHeaders = parsed[0].map((h) => h.trim());
+    const dataRows = parsed.slice(1, maxRows + 1);
+    setHeaders(csvHeaders);
+    setRawRows(dataRows);
+    // Auto-map columns whose names match exactly (case-insensitive).
+    const auto: Record<string, string> = {};
+    for (const col of expectedColumns) {
+      const match = csvHeaders.find((h) => h.toLowerCase() === col.toLowerCase());
+      auto[col] = match ?? "";
+    }
+    setMapping(auto);
+    setStage("mapping");
   }
 
   function buildMappedRows(): CsvImportRow[] {
@@ -149,7 +137,7 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
         >
           <span className="text-2xl">📄</span>
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-medium text-fg-primary">Drop a CSV file here</p>
+            <p className="text-sm font-medium text-fg-primary">Drop a CSV or XLSX file here</p>
             <p className="text-xs text-fg-muted">or click to browse — up to {maxRows} rows</p>
           </div>
           <span className="rounded border border-line px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
@@ -159,13 +147,15 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,text/csv"
+          accept={ACCEPTED_UPLOAD_ATTR}
           className="sr-only"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
         {errorMsg ? (
-          <p className="text-xs text-status-danger">{errorMsg}</p>
-        ) : null}
+          <p className="text-xs text-status-danger" role="alert">{errorMsg}</p>
+        ) : (
+          <p className="text-[11px] text-fg-muted">Accepted formats: CSV (.csv) and Excel (.xlsx).</p>
+        )}
       </div>
     );
   }

@@ -3,6 +3,8 @@ import { requireOrgContext } from "@/lib/auth";
 import { importContacts, parseNetworkCsv } from "@/lib/network-import";
 import type { ImportMode } from "@/lib/network-import";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { validateFileType } from "@/lib/file-validation";
+import { xlsxToRows, rowsToCsv } from "@/lib/xlsx";
 
 export const dynamic = "force-dynamic";
 
@@ -39,17 +41,30 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const name = file.name.toLowerCase();
-
-      if (!name.endsWith(".csv")) {
-        return NextResponse.json(
-          { error: "Only CSV imports are accepted. Convert spreadsheets to CSV before uploading." },
-          { status: 400 },
-        );
+      // Auto-detect the real type from bytes + MIME, not just the extension,
+      // so a mislabeled or unsupported file is rejected with a clear message.
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const check = validateFileType(
+        { name: file.name, mime: file.type, head: bytes.subarray(0, 512) },
+        { accept: ["csv", "xlsx"] },
+      );
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 });
       }
 
-      // CSV (LinkedIn export or generic)
-      const csvText = await file.text();
+      // Read CSV directly; unwrap XLSX into CSV text so both flow through the
+      // same header-detection + normalization pipeline.
+      let csvText: string;
+      if (check.kind === "xlsx") {
+        try {
+          csvText = rowsToCsv(await xlsxToRows(bytes));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Could not read that Excel workbook.";
+          return NextResponse.json({ error: msg }, { status: 400 });
+        }
+      } else {
+        csvText = new TextDecoder("utf-8").decode(bytes);
+      }
       if (!csvText.trim()) return NextResponse.json({ error: "Empty file" }, { status: 400 });
       const contacts = parseNetworkCsv(csvText, modeHint);
       if (contacts.length > MAX_IMPORT_ROWS) {
