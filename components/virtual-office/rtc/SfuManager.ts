@@ -91,6 +91,17 @@ export class SfuManager {
     }
   }
 
+  /** Swap the mic or camera producer's track when a new input device is picked. */
+  async replaceTrack(kind: "audio" | "video", track: MediaStreamTrack | null): Promise<void> {
+    const producer = kind === "audio" ? this.audioProducer : this.videoProducer;
+    if (!producer || !track) return;
+    try {
+      await producer.replaceTrack({ track });
+    } catch {
+      // Track ended mid-swap — ignore
+    }
+  }
+
   // ── Handle inbound SFU server messages ───────────────────────────────────────
 
   handleRouterCaps(msg: SfuRouterCapsMessage): void {

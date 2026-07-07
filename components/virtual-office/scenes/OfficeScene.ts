@@ -450,6 +450,12 @@ export class OfficeScene extends Phaser.Scene {
       void this.sfu?.setScreenTrack(track);
     });
 
+    // Mid-meeting input-device switch: replace the mic/camera track on all peers.
+    this.game.events.on("rtc:replace-track", (kind: "audio" | "video", track: MediaStreamTrack | null) => {
+      void this.mesh?.replaceTrack(kind, track);
+      void this.sfu?.replaceTrack(kind, track);
+    });
+
     // Live character customization: when the operator saves a new look, rebuild
     // the on-floor figure in place — no full game reload — so skin / hair /
     // build / wardrobe / accent changes are reflected immediately.
@@ -511,6 +517,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
     this.game.events.off("rtc:screen-share");
+    this.game.events.off("rtc:replace-track");
     this.game.events.off("office:avatar-update");
     this.game.events.off("program:npc-goto");
     this.game.events.off("program:npc-state");
