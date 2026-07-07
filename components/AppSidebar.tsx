@@ -59,19 +59,17 @@ const HUB_IDENTITY: Record<string, { icon: string; color: string }> = {
 // the single reporting surface (/reports now redirects there); "Portfolio"
 // lives under Execute › Asset Management; "Command Center" is the /command-center
 // / dashboard surface; and "Capital Map" overlaps Graphs + Source › LP Pipeline.
+// "Search", "Marketplace", and "Meetings" were promoted to top-level rail
+// destinations; "Campaigns" moved into Run › Campaigns.
 const MORE_ITEMS: NavItem[] = [
   { href: "/relationship", label: "Relationship Center" },
   { href: "/prospecting", label: "Prospecting" },
   { href: "/signals", label: "Intent Signals" },
-  { href: "/campaigns", label: "Campaigns" },
   { href: "/grid", label: "Execution Grid" },
   { href: "/grid/review", label: "Routing Review" },
   { href: "/activity", label: "Activity" },
   { href: "/agenda", label: "Agenda" },
-  { href: "/meetings", label: "Meetings" },
-  { href: "/search", label: "Search" },
   { href: "/graph", label: "Graphs" },
-  { href: "/marketplace", label: "Marketplace" },
 ];
 
 // Account menu, in display order. Items with a real destination are links;
@@ -476,6 +474,35 @@ function SidebarPanel({
             <span className="flex items-center gap-2">
               <span aria-hidden className="font-mono text-base leading-none text-neural-400">◎</span>
               Network
+            </span>
+          </Link>
+          {/* Search · Marketplace · Meetings — promoted out of "More" into their
+              own top-level rail destinations, grouped just below Network. */}
+          <Link
+            href="/search"
+            className={`${navHrefActive(pathname, "/search") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="font-mono text-base leading-none text-neural-400">⌕</span>
+              Search
+            </span>
+          </Link>
+          <Link
+            href="/marketplace"
+            className={`${navHrefActive(pathname, "/marketplace") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="font-mono text-base leading-none text-neural-400">▦</span>
+              Marketplace
+            </span>
+          </Link>
+          <Link
+            href="/meetings"
+            className={`${navHrefActive(pathname, "/meetings") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="font-mono text-base leading-none text-neural-400">◷</span>
+              Meetings
             </span>
           </Link>
 

@@ -48,6 +48,9 @@ const CronHealth = nextDynamic(() =>
 const RunSearch = nextDynamic(() =>
   import("@/components/run/RunSearch").then((m) => m.RunSearch),
 );
+const CampaignsClient = nextDynamic(() =>
+  import("@/app/(app)/campaigns/CampaignsClient").then((m) => m.default),
+);
 const ExecuteSearch = nextDynamic(() =>
   import("@/components/execute/ExecuteSearch").then((m) => m.ExecuteSearch),
 );
@@ -134,6 +137,11 @@ export default async function ModulePage(
   }
   if (params.hub === "run" && params.module === "search") {
     return <RunSearch live={copilotLive()} initialPrompt={initialPrompt} />;
+  }
+  // Run › Campaigns — outreach analytics over enrolled sequences (formerly the
+  // standalone /campaigns page; /campaigns now redirects here).
+  if (params.hub === "run" && params.module === "campaigns") {
+    return <CampaignsClient />;
   }
   if (params.hub === "execute" && params.module === "search") {
     return <ExecuteSearch live={copilotLive()} initialPrompt={initialPrompt} />;

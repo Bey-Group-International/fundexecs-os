@@ -91,13 +91,14 @@ FundExecs OS is structured around four operational hubs, six AI agents, and thre
 
 ### The Four Hubs
 
-|     Hub     |              Purpose               |                                  Key Modules                                   |
-|-------------|------------------------------------|--------------------------------------------------------------------------------|
-| **Build**   | Define identity and foundation     | Profile · Thesis · Brand · Entity · Track Record · Team · Documents            |
-| **Source**  | Manage pipelines and relationships | LP Pipeline · Debt & Hybrid · Partners · Providers · Deal Pipeline             |
-| **Run**     | Evaluate and manage active deals   | Strategy · Diligence · Underwriting · Stress Test · Risk · Outreach · Evaluate |
-| **Execute** | Operate assets post-closing        | Closing · Capital Events · Asset Management · Reporting · Exit                 |
-| _Network_   | Relationship-capital directory     | Standalone side-rail page (`/network`)                                         |
+|                Hub                |              Purpose               |                                        Key Modules                                         |
+|-----------------------------------|------------------------------------|--------------------------------------------------------------------------------------------|
+| **Build**                         | Define identity and foundation     | Profile · Thesis · Brand · Entity · Track Record · Team · Documents                        |
+| **Source**                        | Manage pipelines and relationships | LP Pipeline · Debt & Hybrid · Partners · Providers · Deal Pipeline                         |
+| **Run**                           | Evaluate and manage active deals   | Strategy · Diligence · Underwriting · Stress Test · Risk · Outreach · Campaigns · Evaluate |
+| **Execute**                       | Operate assets post-closing        | Closing · Capital Events · Asset Management · Reporting · Exit                             |
+| _Network_                         | Relationship-capital directory     | Standalone side-rail page (`/network`)                                                     |
+| _Search · Marketplace · Meetings_ | Cross-cutting destinations         | Standalone side-rail pages (`/search`, `/marketplace`, `/meetings`)                        |
 
 ### The Six AI Agents
 

@@ -76,7 +76,7 @@ export default function RelationshipClient() {
           <section className="space-y-2">
             <div className="text-xs font-medium uppercase tracking-wide text-ink-400">Campaigns</div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Tile label="Enrolled" value={data.campaigns.total} href="/campaigns" />
+              <Tile label="Enrolled" value={data.campaigns.total} href="/run/campaigns" />
               <Tile label="Active" value={data.campaigns.active} />
               <Tile label="Replied" value={data.campaigns.replied} />
               <Tile label="Reply rate" value={`${data.campaigns.replyRate}%`} />
