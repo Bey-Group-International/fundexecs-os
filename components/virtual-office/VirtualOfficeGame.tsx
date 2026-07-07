@@ -12,7 +12,7 @@ import { MediaPermissionBanner } from "./MediaPermissionBanner";
 import { OfficeHUD } from "./program/OfficeHUD";
 import { OfficeCommandPanel } from "./program/OfficeCommandPanel";
 import { ActiveWorkflowPanel } from "./program/ActiveWorkflowPanel";
-import { MarketplacePanel } from "./program/MarketplacePanel";
+import { MarketplacePanel, type PublicListing } from "./program/MarketplacePanel";
 import { OfficeAuditDrawer } from "./program/OfficeAuditDrawer";
 import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram } from "./program/officeProgramStore";
@@ -27,6 +27,7 @@ import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
 import { FloorShortcuts } from "./FloorShortcuts";
 import { officeInviteUrl } from "@/lib/office/floor-link";
+import { createClient } from "@/lib/supabase/client";
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
@@ -305,6 +306,10 @@ export function VirtualOfficeGame({
   const [activeZone, setActiveZone] = useState<ZoneDef | null>(null);
   const [canvasFocused, setCanvasFocused] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string>("");
+  // Public marketplace listings — fetched once the operator first steps into the
+  // Marketplace hall; shared by the in-world stall signboards and the panel.
+  const [marketplaceListings, setMarketplaceListings] = useState<PublicListing[] | null>(null);
+  const marketplaceFetchedRef = useRef(false);
   const [isTouch, setIsTouch] = useState(false);
   // Which executive's on-floor inspector is open (null = none).
   const [inspectAgentId, setInspectAgentId] = useState<AgentId | null>(null);
@@ -406,6 +411,30 @@ export function VirtualOfficeGame({
     window.addEventListener("office:start-meeting", open);
     return () => window.removeEventListener("office:start-meeting", open);
   }, [requestMedia]);
+
+  // Fetch public listings the first time the operator enters the Marketplace
+  // hall, then push them to the scene (live stall signboards) and the panel.
+  useEffect(() => {
+    if (currentRoom !== "marketplace" || marketplaceFetchedRef.current) return;
+    marketplaceFetchedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("marketplace_listings")
+        .select("id, title, listing_type, summary, amount, status")
+        .eq("is_public", true)
+        .order("created_at", { ascending: false })
+        .limit(12);
+      if (cancelled) return;
+      const listings = (data as PublicListing[] | null) ?? [];
+      setMarketplaceListings(listings);
+      gameRef.current?.events.emit("office:marketplace-listings", listings);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRoom]);
 
   const toggleMic = useCallback(() => {
     const track = localStreamRef.current?.getAudioTracks()[0];
@@ -1031,7 +1060,7 @@ export function VirtualOfficeGame({
             full /marketplace surfaces. */}
         {currentRoom === "marketplace" && (
           <div className="pointer-events-auto absolute right-2 top-10 z-10 w-[290px]">
-            <MarketplacePanel />
+            <MarketplacePanel listings={marketplaceListings} />
           </div>
         )}
 

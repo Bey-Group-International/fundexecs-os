@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const TEAL = "#2dd4bf";
 
-type PublicListing = {
+export type PublicListing = {
   id: string;
   title: string;
   listing_type: string;
@@ -44,10 +44,14 @@ function formatAmount(a: number | null): string | null {
  * into the full /marketplace pages. The office stays the spatial entry point;
  * the transaction surfaces already live under /marketplace do the rest.
  */
-export function MarketplacePanel() {
-  const [listings, setListings] = useState<PublicListing[] | null>(null);
+export function MarketplacePanel({ listings: provided }: { listings?: PublicListing[] | null }) {
+  const [fetched, setFetched] = useState<PublicListing[] | null>(null);
+  // The parent (VirtualOfficeGame) usually supplies listings so the same data
+  // feeds the in-world stall signboards; fall back to a self-fetch if not.
+  const listings = provided !== undefined ? provided : fetched;
 
   useEffect(() => {
+    if (provided !== undefined) return;
     let cancelled = false;
     (async () => {
       const supabase = createClient();
@@ -57,12 +61,12 @@ export function MarketplacePanel() {
         .eq("is_public", true)
         .order("created_at", { ascending: false })
         .limit(12);
-      if (!cancelled) setListings((data as PublicListing[] | null) ?? []);
+      if (!cancelled) setFetched((data as PublicListing[] | null) ?? []);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [provided]);
 
   return (
     <div
