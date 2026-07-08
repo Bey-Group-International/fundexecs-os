@@ -36,6 +36,13 @@ import { FloorCommandPalette } from "./FloorCommandPalette";
 import { FloorShortcuts } from "./FloorShortcuts";
 import { AreaMapEditor } from "./program/AreaMapEditor";
 import { officeInviteUrl } from "@/lib/office/floor-link";
+import {
+  loadPrivateRooms,
+  togglePrivateRoom,
+  privacyAnnouncement,
+  knockAnnouncement,
+  ROOM_PRIVACY_EVENT,
+} from "@/lib/office/roomPrivacy";
 import { createClient } from "@/lib/supabase/client";
 
 /** A teammate present on the floor (from the scene's presence bridge). */
@@ -460,6 +467,28 @@ export function VirtualOfficeGame({
   // WorkAdventure-style scripted-area map editor (persists to localStorage; the
   // scene reacts to the store's change event and re-renders areas live).
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
+  // The set of private rooms, mirrored into React state so the "Private" toggle
+  // and any privacy-aware chrome re-render whenever a room is locked/unlocked.
+  const [privateRooms, setPrivateRooms] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setPrivateRooms(new Set(loadPrivateRooms()));
+    sync();
+    window.addEventListener(ROOM_PRIVACY_EVENT, sync);
+    return () => window.removeEventListener(ROOM_PRIVACY_EVENT, sync);
+  }, []);
+
+  // Whether the room the operator is standing in is currently private.
+  const currentRoomPrivate = !!currentRoom && privateRooms.has(currentRoom);
+
+  /** Lock or unlock the current room (Spot-style private / knock-to-join). */
+  const toggleRoomPrivacy = useCallback(() => {
+    if (!currentRoom) return;
+    const label = ROOM_NAV.find((r) => r.key === currentRoom)?.label ?? currentRoom;
+    const nowPrivate = togglePrivateRoom(currentRoom);
+    emitFloorActivity("presence", privacyAnnouncement(label, nowPrivate));
+  }, [currentRoom]);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -987,6 +1016,14 @@ export function VirtualOfficeGame({
           setCurrentRoom(key);
         });
 
+        // Knock-to-join bridge — a teammate stepped into a private room. Announce
+        // the knock to the floor feed and pop a bubble over the operator.
+        game.events.on("office:knock", (visitor: string, roomLabel: string) => {
+          const line = knockAnnouncement(visitor, roomLabel);
+          emitFloorActivity("presence", line);
+          gameRef.current?.events.emit("office:say", "🔔 Someone's knocking…");
+        });
+
         // Iframe zone bridge
         game.events.on("office:zone-enter", (def: ZoneDef) => setActiveZone(def));
         game.events.on("office:zone-leave", () => setActiveZone(null));
@@ -1328,6 +1365,25 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">▧</span>
           Map editor
         </button>
+        {/* Private room — Spot-style lock / knock-to-join for the current room */}
+        {currentRoom && (
+          <button
+            type="button"
+            onClick={toggleRoomPrivacy}
+            title={currentRoomPrivate ? "Make this room open again" : "Make this room private (knock to join)"}
+            className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+            style={{
+              fontFamily: "Georgia, serif",
+              letterSpacing: "0.06em",
+              color: currentRoomPrivate ? "#fca5a5" : "#94a3b8",
+              background: currentRoomPrivate ? "rgba(239,68,68,0.10)" : "transparent",
+              border: currentRoomPrivate ? "1px solid rgba(239,68,68,0.35)" : "1px solid rgba(255,255,255,0.05)",
+            }}
+          >
+            <span className="opacity-60 text-[8px]">{currentRoomPrivate ? "🔒" : "🔓"}</span>
+            {currentRoomPrivate ? "Private" : "Make private"}
+          </button>
+        )}
         {/* Share workspace — captures the screen into a floating PiP dock */}
         <button
           type="button"
