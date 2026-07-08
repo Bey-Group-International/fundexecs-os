@@ -34,6 +34,7 @@ import { ScreenShareDock } from "./ScreenShareDock";
 import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
 import { FloorShortcuts } from "./FloorShortcuts";
+import { AreaMapEditor } from "./program/AreaMapEditor";
 import { officeInviteUrl } from "@/lib/office/floor-link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -456,6 +457,9 @@ export function VirtualOfficeGame({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+  // WorkAdventure-style scripted-area map editor (persists to localStorage; the
+  // scene reacts to the store's change event and re-renders areas live).
+  const [mapEditorOpen, setMapEditorOpen] = useState(false);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -1307,6 +1311,23 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">☰</span>
           Directory
         </button>
+        {/* Map editor — author the floor's WorkAdventure-style scripted areas */}
+        <button
+          type="button"
+          onClick={() => setMapEditorOpen(true)}
+          title="Edit the floor's scripted areas"
+          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          style={{
+            fontFamily: "Georgia, serif",
+            letterSpacing: "0.06em",
+            color: "#94a3b8",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <span className="opacity-60 text-[8px]">▧</span>
+          Map editor
+        </button>
         {/* Share workspace — captures the screen into a floating PiP dock */}
         <button
           type="button"
@@ -1450,6 +1471,9 @@ export function VirtualOfficeGame({
 
         {/* Controls cheat sheet — "?" */}
         {shortcutsOpen && <FloorShortcuts onClose={() => setShortcutsOpen(false)} />}
+
+        {/* Map editor — author scripted areas; the scene re-renders them live */}
+        {mapEditorOpen && <AreaMapEditor onClose={() => setMapEditorOpen(false)} />}
 
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
