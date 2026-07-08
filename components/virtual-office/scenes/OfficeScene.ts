@@ -33,7 +33,7 @@ import {
   type RoomKey,
 } from "../program/officeProgram";
 import { ExecutiveAvatar, type AvatarFacing } from "../avatar/ExecutiveAvatar";
-import { agentAvatarSpec, remoteAvatarSpec } from "../avatar/avatarPalette";
+import { agentAvatarSpec, remoteAvatarSpec, vivify } from "../avatar/avatarPalette";
 import { SCRIPTED_AREAS, areaAt, type ScriptedArea } from "@/lib/office/scriptedAreas";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
 import {
@@ -649,6 +649,10 @@ export class OfficeScene extends Phaser.Scene {
       const ry = room.row * ROOM_H;
       const roomW = (room.colSpan ?? 1) * ROOM_W;
       const accent = roomAccentColor(room.key);
+      // A punchier, higher-saturation version of the department color for the
+      // sharp structural accents (emblem, frame hairline, corner ticks, plate) —
+      // so each room reads bold and vivid while the ambient washes stay muted.
+      const vivAccent = vivify(accent);
       const cx = rx + roomW / 2;
       const cy = ry + ROOM_H / 2;
 
@@ -657,7 +661,7 @@ export class OfficeScene extends Phaser.Scene {
       const wash = this.add.graphics().setDepth(1);
       wash.fillStyle(0x0a0e16, 0.26);
       wash.fillRect(rx + 4, ry + 4, roomW - 8, ROOM_H - 8);
-      wash.fillStyle(accent, 0.035);
+      wash.fillStyle(vivAccent, 0.04);
       wash.fillRect(rx + 4, ry + 4, roomW - 8, ROOM_H - 8);
 
       // Ambient light: warm accent pools at the room center + fainter pools in
@@ -670,7 +674,7 @@ export class OfficeScene extends Phaser.Scene {
           : [[cx, cy]];
       for (const [px, py] of poolCenters) {
         for (let i = 3; i >= 1; i--) {
-          pool.fillStyle(accent, 0.018 * i);
+          pool.fillStyle(vivAccent, 0.02 * i);
           pool.fillCircle(px, py, 40 + i * 26);
         }
       }
@@ -681,29 +685,29 @@ export class OfficeScene extends Phaser.Scene {
       ];
       for (const [gx, gy] of cornerGlows) {
         for (let i = 2; i >= 1; i--) {
-          pool.fillStyle(accent, 0.012 * i);
+          pool.fillStyle(vivAccent, 0.013 * i);
           pool.fillCircle(gx, gy, 14 + i * 12);
         }
       }
 
-      // Faint department emblem — concentric accent rings, a subtle insignia
-      // beneath the center rug.
+      // Department emblem — concentric accent rings, a crisp insignia beneath
+      // the center rug (vivid so the department signature reads clearly).
       const emblem = this.add.graphics().setDepth(1);
-      emblem.lineStyle(1, accent, 0.1);
+      emblem.lineStyle(1, vivAccent, 0.16);
       emblem.strokeCircle(cx, cy, 30);
-      emblem.lineStyle(1, accent, 0.06);
+      emblem.lineStyle(1, vivAccent, 0.09);
       emblem.strokeCircle(cx, cy, 46);
 
-      // Inner shadow frame + accent hairline border.
+      // Inner shadow frame + a crisp vivid accent hairline border.
       const gfx = this.add.graphics().setDepth(2);
-      gfx.lineStyle(3, 0x000000, 0.22);
+      gfx.lineStyle(3, 0x000000, 0.28);
       gfx.strokeRect(rx + 4, ry + 4, roomW - 8, ROOM_H - 8);
-      gfx.lineStyle(1, accent, 0.24);
+      gfx.lineStyle(1, vivAccent, 0.34);
       gfx.strokeRect(rx + 2, ry + 2, roomW - 4, ROOM_H - 4);
 
-      // Accent corner ticks (L-marks) for a command-floor feel.
-      const t = 10;
-      gfx.lineStyle(1.5, accent, 0.5);
+      // Accent corner ticks (L-marks) for a command-floor feel — bold + vivid.
+      const t = 11;
+      gfx.lineStyle(1.75, vivAccent, 0.65);
       const corners: Array<[number, number, number, number]> = [
         [rx + 6, ry + 6, 1, 1], [rx + roomW - 6, ry + 6, -1, 1],
         [rx + 6, ry + ROOM_H - 6, 1, -1], [rx + roomW - 6, ry + ROOM_H - 6, -1, -1],
@@ -725,11 +729,14 @@ export class OfficeScene extends Phaser.Scene {
         letterSpacing: 2,
       }).setDepth(4).setAlpha(0.96);
       const bg = this.add.graphics().setDepth(3);
-      bg.fillStyle(0x0a0806, 0.85);
+      bg.fillStyle(0x0a0806, 0.88);
       bg.fillRoundedRect(lx, ly, label.width + 24, 18, 4);
-      bg.lineStyle(1, accent, 0.35);
+      bg.lineStyle(1, vivAccent, 0.5);
       bg.strokeRoundedRect(lx, ly, label.width + 24, 18, 4);
-      bg.fillStyle(accent, 0.95);
+      // Vivid accent status dot with a soft halo so the plate reads sharply.
+      bg.fillStyle(vivAccent, 0.22);
+      bg.fillCircle(lx + 8, ly + 9, 3.4);
+      bg.fillStyle(vivAccent, 1);
       bg.fillCircle(lx + 8, ly + 9, 2);
     }
   }
