@@ -9,13 +9,34 @@ import {
   pantomimeForSkill,
   pantomimeForAgent,
   SKILL_PANTOMIME,
+  topicKey,
+  topicsOverlap,
+  buildExecMemoryIndex,
+  precedentsFor,
+  recallPrecedent,
+  triggerFires,
+  evaluateTriggers,
   EXEC_PROFILES,
   SKILLS,
   TRAIT_KEYS,
   type CharacterAttributes,
   type Skill,
+  type Precedent,
+  type AutonomousTrigger,
+  type TriggerContext,
 } from "./characterSheet";
 import { PROGRAM_AGENTS, AGENT_BY_ID, type AgentId } from "@/components/virtual-office/program/officeProgram";
+
+/** Build a precedent with sensible defaults for the memory/trigger tests. */
+function precedent(p: Partial<Precedent> & Pick<Precedent, "execId" | "label">): Precedent {
+  return {
+    topic: topicKey(p.label),
+    outcome: "complete",
+    auditEventId: `aud-${p.label}`,
+    ts: 1_000,
+    ...p,
+  };
+}
 
 const FLAT: CharacterAttributes = {
   rigor: 50, creativity: 50, riskAppetite: 50, speed: 50, diligence: 50, communication: 50,
@@ -247,5 +268,115 @@ describe("reputationFromShipped", () => {
 
   it("clamps negatives to the base standing", () => {
     expect(reputationFromShipped(-5)).toEqual({ level: 1, inLevel: 0, toNext: 1 });
+  });
+});
+
+describe("topicKey / topicsOverlap", () => {
+  it("normalizes whitespace and case", () => {
+    expect(topicKey("  KPI   Board ")).toBe("kpi board");
+  });
+
+  it("matches an exact normalized topic", () => {
+    expect(topicsOverlap("KPI Board", "kpi   board")).toBe(true);
+  });
+
+  it("matches on a shared significant token", () => {
+    // "Draft"/"Review" are stopwords; "Update" is the shared signal.
+    expect(topicsOverlap("LP Update Draft", "LP Update Review")).toBe(true);
+  });
+
+  it("does not match unrelated topics", () => {
+    expect(topicsOverlap("Model & Scenarios", "Market Validation")).toBe(false);
+  });
+});
+
+describe("buildExecMemoryIndex / precedentsFor", () => {
+  it("groups precedents by exec, newest first", () => {
+    const index = buildExecMemoryIndex([
+      precedent({ execId: "portfolio_ops", label: "KPI Board", ts: 100 }),
+      precedent({ execId: "portfolio_ops", label: "KPI Board", ts: 300 }),
+      precedent({ execId: "analyst", label: "Model & Scenarios", ts: 200 }),
+    ]);
+    const ops = precedentsFor(index, "portfolio_ops");
+    expect(ops.map((p) => p.ts)).toEqual([300, 100]); // newest first
+    expect(precedentsFor(index, "analyst")).toHaveLength(1);
+    expect(precedentsFor(index, "treasury")).toEqual([]); // exec with no history
+  });
+});
+
+describe("recallPrecedent", () => {
+  const history: Precedent[] = [
+    precedent({ execId: "portfolio_ops", label: "KPI Board", ts: 100 }),
+    precedent({ execId: "portfolio_ops", label: "KPI Board", ts: 400 }),
+    precedent({ execId: "portfolio_ops", label: "KPI Board", ts: 250, outcome: "rejected" }),
+  ];
+
+  it("returns null when nothing matches (or history is empty)", () => {
+    expect(recallPrecedent(history, "Closing Documents")).toBeNull();
+    expect(recallPrecedent([], "KPI Board")).toBeNull();
+  });
+
+  it("recalls the most recent completed matching precedent", () => {
+    const hit = recallPrecedent(history, "KPI Board");
+    expect(hit?.ts).toBe(400);
+    expect(hit?.outcome).toBe("complete");
+  });
+
+  it("prefers a completed precedent over a newer rejected one", () => {
+    const hit = recallPrecedent(
+      [
+        precedent({ execId: "analyst", label: "Model & Scenarios", ts: 100 }),
+        precedent({ execId: "analyst", label: "Model & Scenarios", ts: 500, outcome: "rejected" }),
+      ],
+      "Model & Scenarios",
+    );
+    expect(hit?.ts).toBe(100);
+    expect(hit?.outcome).toBe("complete");
+  });
+});
+
+describe("autonomous triggers", () => {
+  const trigger: AutonomousTrigger = {
+    id: "portfolio-review",
+    execId: "portfolio_ops",
+    command: "Portfolio operations review",
+    announce: "Refreshing KPIs.",
+    condition: { kind: "recurring_review", topic: "KPI Board", everyMs: 1_000 },
+  };
+
+  const ctx = (over: Partial<TriggerContext>): TriggerContext => ({
+    now: 10_000,
+    officeIdle: true,
+    precedentsFor: () => [precedent({ execId: "portfolio_ops", label: "KPI Board", ts: 5_000 })],
+    ...over,
+  });
+
+  it("fires when the last matching shipment is stale and the office is idle", () => {
+    expect(triggerFires(trigger, ctx({ now: 6_001 }))).toBe(true);
+  });
+
+  it("does not fire before the interval elapses", () => {
+    expect(triggerFires(trigger, ctx({ now: 5_500 }))).toBe(false);
+  });
+
+  it("never fires while the office is busy", () => {
+    expect(triggerFires(trigger, ctx({ now: 9_999, officeIdle: false }))).toBe(false);
+  });
+
+  it("needs genuine prior history — a fresh office never self-starts", () => {
+    expect(triggerFires(trigger, ctx({ precedentsFor: () => [] }))).toBe(false);
+  });
+
+  it("ignores an unrelated exec's history", () => {
+    const fires = evaluateTriggers([trigger], ctx({
+      precedentsFor: (id) =>
+        id === "analyst" ? [precedent({ execId: "analyst", label: "KPI Board", ts: 1 })] : [],
+    }));
+    expect(fires).toHaveLength(0);
+  });
+
+  it("evaluateTriggers returns the ready triggers in order", () => {
+    expect(evaluateTriggers([trigger], ctx({ now: 6_001 })).map((t) => t.id)).toEqual(["portfolio-review"]);
+    expect(evaluateTriggers([trigger], ctx({ now: 5_100 }))).toEqual([]);
   });
 });

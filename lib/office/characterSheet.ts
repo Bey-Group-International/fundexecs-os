@@ -404,3 +404,181 @@ export function reputationFromShipped(shipped: number): Reputation {
     toNext: next === undefined ? 0 : next - n,
   };
 }
+
+// ─── Per-exec memory & precedent recall ──────────────────────────────────────
+//
+// An executive's institutional memory: a compact, data-driven projection of the
+// work it has already shipped. It is intentionally NOT a parallel source of
+// truth — the store derives precedents from the existing append-only audit log
+// (one per completed deliverable) and feeds them here, so memory can never drift
+// from what actually happened on the floor. Everything below is pure: the store
+// supplies already-extracted precedents and this module indexes, matches, and
+// recalls them deterministically.
+
+/** How a past deliverable resolved. */
+export type PrecedentOutcome = "complete" | "rejected";
+
+/**
+ * One past deliverable an executive handled — the atom of institutional memory.
+ * Derived from a single audit entry; {@link auditEventId} references it so a
+ * recalled precedent can always be traced back to the record it came from.
+ */
+export type Precedent = {
+  /** The executive who owned the deliverable. */
+  execId: AgentId;
+  /** Normalized topic key for matching — see {@link topicKey}. */
+  topic: string;
+  /** Human-readable deliverable, e.g. "KPI Board". */
+  label: string;
+  outcome: PrecedentOutcome;
+  /** The audit entry this precedent was derived from. */
+  auditEventId: string;
+  /** When the deliverable completed (audit event timestamp). */
+  ts: number;
+};
+
+/** Per-exec memory index: precedents grouped by exec, each list newest-first. */
+export type ExecMemoryIndex = Partial<Record<AgentId, Precedent[]>>;
+
+// Short, generic deliverable words carry no topic signal on their own.
+const TOPIC_STOPWORDS: ReadonlySet<string> = new Set([
+  "the", "and", "for", "review", "draft", "output", "pack", "board",
+]);
+
+/** Normalize a deliverable/topic string into a stable match key. */
+export function topicKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Significant tokens of a topic — lowercase, ≥3 chars, stopwords removed. */
+function topicTokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3 && !TOPIC_STOPWORDS.has(t)),
+  );
+}
+
+/**
+ * Whether two topics are "about" the same thing. True on an exact normalized
+ * match or any shared significant token — so "KPI Board" recalls a prior
+ * "KPI Board" and "LP Update Draft" recalls a prior "LP Update".
+ */
+export function topicsOverlap(a: string, b: string): boolean {
+  if (topicKey(a) === topicKey(b) && topicKey(a).length > 0) return true;
+  const ta = topicTokens(a);
+  for (const t of topicTokens(b)) if (ta.has(t)) return true;
+  return false;
+}
+
+/** Group a flat precedent list into a per-exec index, each list newest-first. */
+export function buildExecMemoryIndex(precedents: Precedent[]): ExecMemoryIndex {
+  const index: ExecMemoryIndex = {};
+  for (const p of precedents) {
+    (index[p.execId] ??= []).push(p);
+  }
+  for (const id of Object.keys(index) as AgentId[]) {
+    index[id]!.sort((a, b) => b.ts - a.ts);
+  }
+  return index;
+}
+
+/** Precedents for one exec from an index — never null. */
+export function precedentsFor(index: ExecMemoryIndex, execId: AgentId): Precedent[] {
+  return index[execId] ?? [];
+}
+
+/**
+ * Recall the most relevant prior precedent for a new topic: the most recent
+ * completed deliverable whose topic overlaps. Completed precedents win over
+ * rejected ones; ties break toward the newer. Returns null when nothing matches.
+ */
+export function recallPrecedent(precedents: Precedent[], topic: string): Precedent | null {
+  let best: Precedent | null = null;
+  for (const p of precedents) {
+    if (!topicsOverlap(p.topic, topic)) continue;
+    if (!best) { best = p; continue; }
+    const better =
+      (p.outcome === "complete") !== (best.outcome === "complete")
+        ? p.outcome === "complete"
+        : p.ts > best.ts;
+    if (better) best = p;
+  }
+  return best;
+}
+
+// ─── Autonomous triggers (declarative) ───────────────────────────────────────
+//
+// A declarative way for an executive to initiate an action on its own when a
+// condition holds. Conditions are data, not code, and are evaluated purely
+// against audit-derived memory (below); the store owns the wiring that turns a
+// firing trigger into a real, governed office command.
+
+/**
+ * A declarative trigger condition. Discriminated so new conditions can be added
+ * without touching the ones already wired.
+ *  - recurring_review: the exec last shipped {@link topic} more than
+ *    {@link everyMs} ago (or the topic has genuine prior history that is now
+ *    stale) — a periodic review has come due.
+ */
+export type TriggerCondition = {
+  kind: "recurring_review";
+  /** Topic whose recurrence is tracked, e.g. "KPI Board". */
+  topic: string;
+  /** How long after the last shipment the review is considered due. */
+  everyMs: number;
+};
+
+/** An executive's standing intent to self-initiate a command when a condition holds. */
+export type AutonomousTrigger = {
+  id: string;
+  /** The executive that initiates the action. */
+  execId: AgentId;
+  /** The office command issued when the trigger fires. */
+  command: string;
+  /** What the executive says when it self-initiates. */
+  announce: string;
+  condition: TriggerCondition;
+};
+
+/** Everything a pure trigger evaluation needs — supplied by the runtime. */
+export type TriggerContext = {
+  /** Evaluation clock. */
+  now: number;
+  /** Whether the office is free to accept a proactive task. */
+  officeIdle: boolean;
+  /** Audit-derived precedents for an exec. */
+  precedentsFor: (execId: AgentId) => Precedent[];
+};
+
+/**
+ * Whether a single trigger fires now. Pure and total. A trigger never fires
+ * while the office is busy. A recurring review requires genuine prior history
+ * for the exec/topic (so a brand-new office never auto-starts work) and fires
+ * only once that history has gone stale past {@link TriggerCondition.everyMs}.
+ */
+export function triggerFires(t: AutonomousTrigger, ctx: TriggerContext): boolean {
+  if (!ctx.officeIdle) return false;
+  switch (t.condition.kind) {
+    case "recurring_review": {
+      const { topic, everyMs } = t.condition;
+      const matches = ctx
+        .precedentsFor(t.execId)
+        .filter((p) => p.outcome === "complete" && topicsOverlap(p.topic, topic));
+      if (matches.length === 0) return false; // recurring ⇒ needs prior history
+      const latest = matches.reduce((m, p) => (p.ts > m ? p.ts : m), 0);
+      return ctx.now - latest >= everyMs;
+    }
+    default:
+      return false;
+  }
+}
+
+/** The triggers that fire under the given context, in declaration order. */
+export function evaluateTriggers(
+  triggers: AutonomousTrigger[],
+  ctx: TriggerContext,
+): AutonomousTrigger[] {
+  return triggers.filter((t) => triggerFires(t, ctx));
+}

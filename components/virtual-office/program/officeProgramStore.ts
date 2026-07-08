@@ -47,6 +47,16 @@ import {
   type WorkflowMode,
   type WorkflowStage,
 } from "./officeProgram";
+import {
+  buildExecMemoryIndex,
+  evaluateTriggers,
+  precedentsFor,
+  recallPrecedent,
+  topicKey,
+  type AutonomousTrigger,
+  type ExecMemoryIndex,
+  type Precedent,
+} from "@/lib/office/characterSheet";
 
 // ─── Scene command bus ───────────────────────────────────────────────────────
 // The Phaser scene cannot import React state; it listens to this bus and
@@ -446,6 +456,113 @@ export function hydrateWorkflows(workflows: OfficeWorkflow[]) {
   setState({ archive: merged });
 }
 
+// ─── Per-exec memory, precedent recall & autonomous triggers ─────────────────
+// Institutional memory is a live projection of the append-only audit log — not
+// a parallel store. Each completed per-agent output ("Output completed — …")
+// becomes one precedent for that exec, so memory can never drift from what the
+// floor actually did. Recall and trigger evaluation are the pure functions in
+// characterSheet.ts; the runtime only supplies audit-derived precedents.
+
+const AGENT_ID_BY_NAME: Record<string, AgentId> = Object.fromEntries(
+  PROGRAM_AGENTS.map((a) => [a.name, a.id]),
+) as Record<string, AgentId>;
+
+const OUTPUT_DONE_PREFIX = "Output completed — ";
+
+/** How long after the last KPI refresh a portfolio review comes due (6h). */
+const PORTFOLIO_REVIEW_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/** Project a single audit event into a precedent, or null if it isn't one. */
+function precedentFromAudit(ev: AuditEvent): Precedent | null {
+  if (ev.status !== "complete") return null;
+  if (!ev.action.startsWith(OUTPUT_DONE_PREFIX)) return null;
+  const execId = AGENT_ID_BY_NAME[ev.actor];
+  if (!execId) return null; // actor isn't a floor executive (e.g. Earn/You)
+  const label = ev.action.slice(OUTPUT_DONE_PREFIX.length).trim();
+  if (!label) return null;
+  return { execId, topic: topicKey(label), label, outcome: "complete", auditEventId: ev.id, ts: ev.ts };
+}
+
+/** Per-exec memory derived on demand from the current audit log. */
+export function getExecMemory(): ExecMemoryIndex {
+  const precedents: Precedent[] = [];
+  for (const ev of state.audit) {
+    const p = precedentFromAudit(ev);
+    if (p) precedents.push(p);
+  }
+  return buildExecMemoryIndex(precedents);
+}
+
+/** Precedents an executive has shipped, newest-first. */
+export function getExecPrecedents(execId: AgentId): Precedent[] {
+  return precedentsFor(getExecMemory(), execId);
+}
+
+/**
+ * Declarative autonomous triggers. Each lets an executive proactively initiate
+ * a governed office command when its condition holds. Conditions are data,
+ * evaluated purely (characterSheet.evaluateTriggers) against audit-derived
+ * memory. Wired end-to-end: runAutonomousTriggers runs whenever the office
+ * returns to calm, and Portfolio Ops re-runs its review once the last KPI
+ * refresh has gone stale.
+ */
+export const OFFICE_TRIGGERS: AutonomousTrigger[] = [
+  {
+    id: "portfolio-ops-recurring-review",
+    execId: "portfolio_ops",
+    command: "Portfolio operations review",
+    announce:
+      "It's been a while since the last portfolio operations review — I'm proactively refreshing the KPI board and reporting pack.",
+    condition: { kind: "recurring_review", topic: "KPI Board", everyMs: PORTFOLIO_REVIEW_INTERVAL_MS },
+  },
+];
+
+/** Whether the office is calm and free to accept a proactive task. */
+function officeIsIdle(): boolean {
+  return (
+    state.activeWorkflow === null &&
+    state.pendingPlan === null &&
+    state.meeting === null &&
+    state.queuedCommands.length === 0 &&
+    state.officeStatus === "calm"
+  );
+}
+
+/** The autonomous triggers that are ready to fire right now (pure read). */
+export function evaluateOfficeTriggers(now: number = Date.now()): AutonomousTrigger[] {
+  const memory = getExecMemory();
+  return evaluateTriggers(OFFICE_TRIGGERS, {
+    now,
+    officeIdle: officeIsIdle(),
+    precedentsFor: (execId) => precedentsFor(memory, execId),
+  });
+}
+
+/**
+ * Fire the first ready autonomous trigger, if any. The initiating executive
+ * announces the self-started action, and the command is routed through the
+ * exact same governed intake as a human command (classify → plan/execute), so
+ * autonomy never bypasses approval gates. No-op in conversation mode or while
+ * the office is busy. Returns the fired trigger id, or null when none fire.
+ */
+export function runAutonomousTriggers(now: number = Date.now()): string | null {
+  if (state.mode === "conversation") return null;
+  if (!officeIsIdle()) return null;
+  const [fired] = evaluateOfficeTriggers(now);
+  if (!fired) return null;
+  const agent = AGENT_BY_ID[fired.execId];
+  pushChat("agent_update", agent.name, fired.announce);
+  addAuditEvent({
+    actor: agent.name,
+    action: `Autonomous trigger fired — ${fired.command}`,
+    room: roomLabel(agent.homeRoom),
+    tier: null,
+    status: "info",
+  });
+  classifyAndRoute(fired.command);
+  return fired.id;
+}
+
 // ─── Command intake ──────────────────────────────────────────────────────────
 
 /**
@@ -589,6 +706,24 @@ function assignTaskToNPCs(workflow: OfficeWorkflow) {
         tier: workflow.riskTier,
         status: "info",
       });
+
+      // Precedent recall: if this exec has shipped a similar deliverable
+      // before, surface it so the response is informed by that mandate.
+      const prior = recallPrecedent(getExecPrecedents(a.agentId), a.owns);
+      if (prior) {
+        pushChat(
+          "agent_update",
+          agent.name,
+          `I've handled a similar mandate before — ${prior.label}. I'll apply that precedent here.`,
+        );
+        addAuditEvent({
+          actor: agent.name,
+          action: `Precedent recalled — ${prior.label} informs ${a.owns}`,
+          room: roomLabel(a.roomKey),
+          tier: workflow.riskTier,
+          status: "info",
+        });
+      }
     });
   });
 
@@ -902,12 +1037,15 @@ export function completeOfficeTask(outcome: "approved" | "rejected") {
     });
     updateNPCState("earn", "idle", "AI Command Operator");
 
-    // Run the next queued command, if any.
+    // Run the next queued command, if any. With nothing queued, give the
+    // executives a chance to self-initiate a due recurring action.
     const [next, ...rest] = state.queuedCommands;
     if (next) {
       setState({ queuedCommands: rest });
       pushChat("earn", "Earn", `Picking up the queued command: "${next}".`);
       classifyAndRoute(next);
+    } else {
+      runAutonomousTriggers();
     }
   });
 }
