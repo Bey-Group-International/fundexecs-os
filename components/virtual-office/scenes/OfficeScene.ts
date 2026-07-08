@@ -212,6 +212,13 @@ export class OfficeScene extends Phaser.Scene {
   private _onResize?: (gameSize: Phaser.Structs.Size) => void;
   private _reflowScheduled = false;
 
+  // Cinematic approval interrupt — a tier-colored edge vignette that pulses when
+  // a high-risk gate opens, plus (Tier 3 only) a camera move to the gate room.
+  private approvalVignette?: Phaser.GameObjects.Graphics;
+  private _approvalCinematic = false;
+  private _approvalColor = 0xef4444;
+  private _approvalGen = 0;
+
   // Interactive objects (press-X hotspots)
   private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number; marker: Phaser.GameObjects.Text }> = [];
   private interactPrompt!: Phaser.GameObjects.Text;
@@ -585,6 +592,13 @@ export class OfficeScene extends Phaser.Scene {
       this.approvalGateMarker.destroy(true);
       this.approvalGateMarker = null;
     }
+    // Tear down the cinematic approval vignette and drop any camera hijack.
+    if (this.approvalVignette) {
+      this.tweens.killTweensOf(this.approvalVignette);
+      this.approvalVignette.destroy();
+      this.approvalVignette = undefined;
+    }
+    this._approvalCinematic = false;
   }
 
   // ── private helpers ─────────────────────────────────────────────────────────
@@ -1336,8 +1350,124 @@ export class OfficeScene extends Phaser.Scene {
       "program:approval-gate",
       (roomKey: RoomKey, active: boolean, tier: Exclude<RiskTier, "internal"> | null, title: string) => {
         this._renderApprovalGate(roomKey, active, tier, title);
+        this._approvalInterrupt(roomKey, active, tier);
       }
     );
+  }
+
+  /**
+   * Cinematic approval interrupt. When a high-risk gate opens, a tier-colored
+   * edge vignette pulses over the whole viewport so a pending decision can't be
+   * missed; for a Tier-3 (capital-binding) gate the camera also breaks its
+   * player-follow to pan/zoom onto the room where the decision waits, then
+   * releases back to the player on resolve or after a short hold. Tier 2 pulses
+   * the vignette only. Reduced motion skips the camera move entirely.
+   */
+  private _approvalInterrupt(
+    roomKey: RoomKey,
+    active: boolean,
+    tier: Exclude<RiskTier, "internal"> | null,
+  ) {
+    if (!active) {
+      this._pulseApprovalVignette(false);
+      this._releaseApprovalCinematic();
+      return;
+    }
+
+    const hex = tier ? RISK_TIERS[tier].color : "#ef4444";
+    this._approvalColor = parseInt(hex.slice(1), 16);
+    this._pulseApprovalVignette(true);
+
+    // Only the most consequential tier commandeers the camera — Tier 2 gets the
+    // ambient pulse alone so a busy workflow session isn't yanked around.
+    const cinematic = tier === "capital_binding" && !this.reducedMotion;
+    if (!cinematic) return;
+
+    const room = ROOMS.find((r) => r.key === roomKey);
+    if (!room) return;
+    const cx = room.col * ROOM_W + ((room.colSpan ?? 1) * ROOM_W) / 2;
+    const cy = room.row * ROOM_H + ROOM_H / 2;
+
+    const cam = this.cameras.main;
+    this._approvalCinematic = true;
+    const gen = ++this._approvalGen;
+    cam.stopFollow();
+    cam.pan(cx, cy, 620, "Sine.easeInOut", true);
+    cam.zoomTo(2.35, 620, "Sine.easeInOut", true);
+    // Auto-release if the gate lingers unresolved, so control returns to the
+    // user. Guard on the generation so a stale timer can't cut short a newer one.
+    this.time.delayedCall(2800, () => {
+      if (this._approvalGen === gen) this._releaseApprovalCinematic();
+    });
+  }
+
+  /** Return the camera to the player after an approval cinematic. */
+  private _releaseApprovalCinematic() {
+    if (!this._approvalCinematic) return;
+    this._approvalCinematic = false;
+    const cam = this.cameras.main;
+    cam.zoomTo(2.0, 520, "Sine.easeInOut", true);
+    cam.pan(this.player.x, this.player.y, 520, "Sine.easeInOut", true, (camera: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+      // Resume follow only once the return pan has fully completed, so the
+      // hand-off from scripted pan to lerped follow doesn't jump.
+      if (progress >= 1) camera.startFollow(this.player, true, 0.08, 0.08);
+    });
+  }
+
+  /** Lazily build + pulse (or fade out) the tier-colored approval edge vignette. */
+  private _pulseApprovalVignette(on: boolean) {
+    if (!on) {
+      if (this.approvalVignette) {
+        this.tweens.killTweensOf(this.approvalVignette);
+        this.tweens.add({
+          targets: this.approvalVignette,
+          alpha: 0,
+          duration: 400,
+          ease: "Sine.easeOut",
+          onComplete: () => this.approvalVignette?.setVisible(false),
+        });
+      }
+      return;
+    }
+    if (!this.approvalVignette) {
+      // Depth 17 sits just above the dark vignette (16) but below all HUD.
+      this.approvalVignette = this.add.graphics().setScrollFactor(0).setDepth(17);
+    }
+    const cam = this.cameras.main;
+    this._drawApprovalVignette(cam.width, cam.height);
+    this.approvalVignette.setVisible(true).setAlpha(0);
+    this.tweens.killTweensOf(this.approvalVignette);
+    if (this.reducedMotion) {
+      this.approvalVignette.setAlpha(0.32);
+      return;
+    }
+    this.tweens.add({
+      targets: this.approvalVignette,
+      alpha: 0.5,
+      duration: 720,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+  }
+
+  /** Draw the approval edge bands to the given viewport size (create + resize). */
+  private _drawApprovalVignette(W: number, H: number) {
+    const g = this.approvalVignette;
+    if (!g) return;
+    g.clear();
+    const reach = 64;
+    const N = 22;
+    for (let i = 0; i < N; i++) {
+      const f = 1 - i / N;
+      g.fillStyle(this._approvalColor, 0.22 * f * f);
+      const o = (reach * i) / N;
+      const th = reach / N + 1;
+      g.fillRect(0, o, W, th);
+      g.fillRect(0, H - o - th, W, th);
+      g.fillRect(o, 0, th, H);
+      g.fillRect(W - o - th, 0, th, H);
+    }
   }
 
   /** On-floor approval-gate banner. One at a time; cleared when resolved. */
@@ -2076,6 +2206,7 @@ export class OfficeScene extends Phaser.Scene {
     if (!this.cameras?.main) return;
     const cam = this.cameras.main;
     this._drawVignette(cam.width, cam.height);
+    if (this.approvalVignette?.visible) this._drawApprovalVignette(cam.width, cam.height);
     if (this.netDot) this.netDot.setPosition(cam.width - 14, cam.height - 14);
     for (const obj of this.minimapObjects) obj.destroy();
     this.minimapObjects = [];
