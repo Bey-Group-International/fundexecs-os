@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 import { GradientText } from "@/components/marketing/GradientText";
 import { SpinBorderButton } from "@/components/marketing/SpinBorderButton";
 import { StatCounter } from "@/components/marketing/StatCounter";
+import { FaqAccordion } from "@/components/marketing/FaqAccordion";
 
 const OPERATING_LOOP = [
   {
@@ -25,6 +26,29 @@ const OPERATING_LOOP = [
     step: "Report",
     body: "Outcomes collapse into the dashboard as targets, introductions, packages, and updates.",
     signal: "Results delivered",
+  },
+];
+
+const FAQ_ITEMS = [
+  {
+    question: "What is FundExecs OS?",
+    answer:
+      "An AI-native operating system for private-market participants. Earn plans, delegates, and routes decisions while an AI workforce sources deals, raises capital, conducts diligence, manages relationships, and executes transactions — all from one command surface.",
+  },
+  {
+    question: "Who is it for?",
+    answer:
+      "Private equity, search funds, family offices, sponsors, banks, and capital raisers — operators who move capital at scale and want an execution layer that replaces fragmented spreadsheets, email threads, and CRMs.",
+  },
+  {
+    question: "How does the agent stay under control?",
+    answer:
+      "Every workstream runs through explicit approval gates. Earn structures analysis, planning, delegation, and delivery so the operating model stays visible from objective to outcome, and nothing outbound happens without a human sign-off.",
+  },
+  {
+    question: "How do I get access?",
+    answer:
+      "FundExecs OS is invite-only during early access. Request access and our team will onboard your first mandate.",
   },
 ];
 
@@ -162,6 +186,20 @@ export default async function LandingPage(
             </div>
           ))}
         </div>
+      </section>
+
+      <div className="border-t border-line" />
+
+      <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mb-8 text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+            FAQ
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+            Frequently asked questions
+          </h2>
+        </div>
+        <FaqAccordion items={FAQ_ITEMS} />
       </section>
 
       <div className="border-t border-line" />
