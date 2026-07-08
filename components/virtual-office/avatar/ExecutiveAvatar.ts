@@ -767,6 +767,18 @@ export class ExecutiveAvatar {
   /** Back view (facing up / away). */
   private _drawBack(g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number) {
     const sw = this._shoulder(s);
+    // Bold outline — matches the front silhouette so the rim reads the same
+    // from behind (torso, head, legs, shoes; arms omitted).
+    g.fillStyle(OUTLINE, 1);
+    g.fillRoundedRect(-5.05, 5.4 - Math.max(0, swing), 4.1, 10.2 + Math.abs(swing) * 0.4, 1.6);
+    g.fillRoundedRect(0.45, 5.4 - Math.max(0, -swing), 4.1, 10.2 + Math.abs(swing) * 0.4, 1.6);
+    g.fillEllipse(-2.7, 15 - Math.max(0, swing), 5.4, 3.2);
+    g.fillEllipse(2.7, 15 - Math.max(0, -swing), 5.4, 3.2);
+    g.fillPoints([
+      new Phaser.Geom.Point(-sw - 0.85, -6.7), new Phaser.Geom.Point(sw + 0.85, -6.7),
+      new Phaser.Geom.Point(6.35, 7.6), new Phaser.Geom.Point(-6.35, 7.6),
+    ], true);
+    g.fillEllipse(0, -13, 11, 12.5);
     g.fillStyle(s.trouser, 1);
     g.fillRoundedRect(-4.5, 6 - Math.max(0, swing), 3.5, 9 + Math.abs(swing) * 0.4, 1.4);
     g.fillRoundedRect(1, 6 - Math.max(0, -swing), 3.5, 9 + Math.abs(swing) * 0.4, 1.4);
@@ -817,6 +829,20 @@ export class ExecutiveAvatar {
   private _drawProfile(
     g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number, dir: number, arm: ArmMode, workStep: number,
   ) {
+    // Bold outline — inflated silhouette behind the profile figure (legs,
+    // shoes, torso, head + the back-of-head hair bump). Arms omitted.
+    g.fillStyle(OUTLINE, 1);
+    g.fillRoundedRect(-2.05 + dir * swing * 0.6, 5.4, 3.7, 11.2, 1.5);
+    g.fillRoundedRect(-2.05 - dir * swing * 0.6, 5.4, 3.7, 11.2, 1.5);
+    g.fillEllipse(dir * (2.5 + swing * 0.5), 15.5, 6, 3.2);
+    g.fillEllipse(-dir * (1 + swing * 0.5), 15.5, 6, 3.2);
+    g.fillPoints([
+      new Phaser.Geom.Point(-5.85, -6.7), new Phaser.Geom.Point(5.85, -6.7),
+      new Phaser.Geom.Point(4.85, 7.6), new Phaser.Geom.Point(-4.85, 7.6),
+    ], true);
+    g.fillEllipse(dir * 1.3, -13, 10.7, 12.2);
+    g.fillEllipse(dir * 1.3 - dir * 3.4, -13, 6, 9.4);
+
     // Legs (front/back leg offset along facing axis)
     g.fillStyle(s.trouser, 1);
     g.fillRoundedRect(-2 + dir * swing * 0.6, 6, 3.6, 10, 1.4);
