@@ -326,15 +326,30 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       tex.colorSpace = THREE.SRGBColorSpace;
       const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
       const sprite = new THREE.Sprite(spriteMat);
-      const spriteH = 2.7;
+      // Anchor at the bottom-center so the figure stands ON the floor.
+      sprite.center.set(0.5, 0);
+      const spriteH = 3.2;
       sprite.scale.set(spriteH * (charSprite.frameWidth / charSprite.frameHeight), spriteH, 1);
-      sprite.position.y = spriteH / 2;
+      sprite.position.y = 0.02;
       sprite.userData.actorId = spec.id;
       group.add(sprite);
       this.bodyToActor.set(sprite, spec.id);
       body.visible = false;
       head.visible = false;
-      this.disposables.push(tex, spriteMat);
+
+      // Soft contact shadow so the character reads as grounded, not pasted on.
+      const shadowGeo = new THREE.CircleGeometry(0.55, 16);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.26,
+        depthWrite: false,
+      });
+      const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.y = 0.015;
+      group.add(shadow);
+      this.disposables.push(tex, spriteMat, shadowGeo, shadowMat);
 
       handle.sprite = sprite;
       handle.spriteTex = tex;
