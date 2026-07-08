@@ -683,6 +683,13 @@ export type MarketplaceListing = Timestamps & {
   geography: string | null;
   asset_class: string | null;
   teaser_url: string | null;
+  // Rich-card fields (migration 20260708180000)
+  reference_code: string | null;
+  country: string | null;
+  currency: string;
+  ebitda: number | null;
+  gross_revenue: number | null;
+  featured: boolean;
 }
 
 export type MarketplaceInterest = {

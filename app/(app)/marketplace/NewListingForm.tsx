@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import type { ReputationTier } from "@/lib/compounding";
 import { tierLabel } from "@/components/TierBadge";
+import { LISTING_CURRENCIES } from "@/lib/marketplace/format";
 import { createListing } from "./actions";
 
 const LISTING_TYPES = [
@@ -178,6 +179,46 @@ export function NewListingForm({
               />
             </label>
             <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Country</span>
+              <input
+                name="country"
+                placeholder="United States"
+                className="w-36 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Currency</span>
+              <select
+                name="currency"
+                defaultValue="USD"
+                className="rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary focus:border-gold-500/60 focus:outline-none"
+              >
+                {LISTING_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">EBITDA</span>
+              <input
+                name="ebitda"
+                inputMode="decimal"
+                placeholder="3,200,000"
+                className="w-32 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
+              <span className="font-mono uppercase tracking-wider text-fg-muted">Gross rev.</span>
+              <input
+                name="gross_revenue"
+                inputMode="decimal"
+                placeholder="8,100,000"
+                className="w-32 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-fg-secondary">
               <span className="font-mono uppercase tracking-wider text-fg-muted">Geography</span>
               <input
                 name="geography"
@@ -201,6 +242,12 @@ export function NewListingForm({
                 placeholder="https://…"
                 className="w-48 rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
               />
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500/40 hover:bg-gold-500/5 hover:text-fg-primary">
+              <input type="checkbox" name="featured" className="h-3.5 w-3.5 accent-gold-500" />
+              <span>
+                Featured <span className="text-fg-muted">— surfaces first</span>
+              </span>
             </label>
           </div>
         </details>

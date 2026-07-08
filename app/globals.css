@@ -601,3 +601,19 @@ body {
     rgb(var(--fx-gold-400))
   );
 }
+
+/* Marketplace print / "Save as PDF" — hide interactive chrome so a printed
+   view is just the listing grid on a clean background. Triggered by the PDF
+   button in the marketplace toolbar (window.print()). */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .fx-ambient::before,
+  .fx-neural-ambient::before {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}
