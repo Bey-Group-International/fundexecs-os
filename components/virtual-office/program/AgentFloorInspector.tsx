@@ -11,6 +11,15 @@ import {
   reassignAgentTask,
   reassignmentTargets,
 } from "./officeProgramStore";
+import {
+  executiveSheet,
+  deriveTraits,
+  traitDescriptor,
+  reputationFromShipped,
+  SKILL_LABELS,
+  TRAIT_KEYS,
+  TRAIT_LABELS,
+} from "@/lib/office/characterSheet";
 
 const GOLD = "#c9a84c";
 
@@ -67,6 +76,14 @@ export function AgentFloorInspector({
   const sm = STATE_META[rt.state] ?? STATE_META.idle;
   const hasOwns = !!rt.owns;
   const targets = hasOwns ? reassignmentTargets(agentId) : [];
+
+  // Competency layer (declarative character sheet). Reputation is a live,
+  // read-only reflection of the audit trail: how many outputs this executive
+  // has shipped ("complete" events under their name), mapped to a standing.
+  const sheet = executiveSheet(meta);
+  const traits = deriveTraits(sheet.attributes);
+  const shipped = s.audit.filter((e) => e.actor === meta.name && e.status === "complete").length;
+  const rep = reputationFromShipped(shipped);
 
   const panel: React.CSSProperties = {
     position: "absolute",
@@ -138,6 +155,45 @@ export function AgentFloorInspector({
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ fontSize: 8, letterSpacing: "0.2em", textTransform: "uppercase", color: `${GOLD}aa`, fontFamily: "Georgia,serif" }}>Why this agent?</div>
           <div style={{ fontSize: 10, lineHeight: 1.5, color: "rgba(255,248,220,0.6)" }}>{WHY[agentId]}</div>
+        </div>
+
+        {/* Competency — skills, derived traits, and shipped-based standing. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 8, letterSpacing: "0.2em", textTransform: "uppercase", color: `${GOLD}aa`, fontFamily: "Georgia,serif" }}>Competency</div>
+            <span
+              title={`${shipped} output${shipped === 1 ? "" : "s"} shipped`}
+              style={{ fontSize: 8.5, letterSpacing: "0.06em", color: meta.accent, background: `${meta.accent}18`, border: `1px solid ${meta.accent}44`, borderRadius: 999, padding: "1px 7px" }}
+            >
+              Lv {rep.level} · {shipped} shipped
+            </span>
+          </div>
+
+          {/* Skill chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {sheet.skills.map((sk) => (
+              <span
+                key={sk}
+                style={{ fontSize: 9, color: "rgba(255,248,220,0.72)", background: "rgba(255,255,255,0.04)", border: `1px solid ${GOLD}2e`, borderRadius: 3, padding: "1px 6px" }}
+              >
+                {SKILL_LABELS[sk]}
+              </span>
+            ))}
+          </div>
+
+          {/* Derived-trait descriptor + mini bars */}
+          <div style={{ fontSize: 9.5, fontStyle: "italic", color: "rgba(255,248,220,0.55)" }}>{traitDescriptor(sheet.attributes)}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {TRAIT_KEYS.map((k) => (
+              <div key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 66, flexShrink: 0, fontSize: 8, letterSpacing: "0.04em", color: "rgba(255,248,220,0.5)" }}>{TRAIT_LABELS[k]}</span>
+                <span style={{ flex: 1, height: 3, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                  <span style={{ display: "block", height: "100%", width: `${traits[k]}%`, background: `${meta.accent}cc` }} />
+                </span>
+                <span style={{ width: 18, textAlign: "right", fontSize: 8, color: "rgba(255,248,220,0.4)" }}>{traits[k]}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Reassign picker */}
