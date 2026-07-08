@@ -541,6 +541,9 @@ export class ExecutiveAvatar {
     g.fillGradientStyle(legHi, legHi, legLo, legLo, 1);
     g.fillRect(-4.5, 6 - Math.max(0, swing), 3.5, 9 + Math.abs(swing) * 0.4);
     g.fillRect(1, 6 - Math.max(0, -swing), 3.5, 9 + Math.abs(swing) * 0.4);
+    // Inseam shadow between the legs — a defined trouser break.
+    g.fillStyle(this._shade(s.trouser, 0.55), 0.7);
+    g.fillRect(-0.4, 6.5, 0.8, 8);
     // Shoes — dark leather with a specular toe highlight.
     g.fillStyle(0x14110d, 1);
     g.fillEllipse(-2.7, 15 - Math.max(0, swing), 4.4, 2.4);
@@ -562,6 +565,9 @@ export class ExecutiveAvatar {
       new Phaser.Geom.Point(-sw, -6), new Phaser.Geom.Point(sw, -6),
       new Phaser.Geom.Point(5.5, 7), new Phaser.Geom.Point(-5.5, 7),
     ], true);
+    // Shoulder-seam highlight across the top of the blazer — a defined shoulder line.
+    g.lineStyle(0.5, this._shade(s.suit, 1.5), 0.6);
+    g.beginPath(); g.moveTo(-sw + 0.6, -5.6); g.lineTo(sw - 0.6, -5.6); g.strokePath();
     // Waist ambient occlusion for a grounded torso.
     g.fillStyle(this._shade(s.suit, 0.55), 0.3);
     g.fillTriangle(-5.5, 7, 5.5, 7, 0, 2.5);
@@ -579,9 +585,13 @@ export class ExecutiveAvatar {
     g.fillStyle(this._shade(s.suit, 0.8), 1);
     g.fillTriangle(-3.2, -6, -0.4, -6, -2.2, 1);
     g.fillTriangle(3.2, -6, 0.4, -6, 2.2, 1);
-    g.lineStyle(0.4, this._shade(s.suit, 1.4), 0.7);
+    // Defined lapel notch — a dark seam with a crisp lit outer edge alongside it.
+    g.lineStyle(0.7, OUTLINE, 0.55);
     g.beginPath(); g.moveTo(-3.2, -6); g.lineTo(-2.2, 1); g.strokePath();
     g.beginPath(); g.moveTo(3.2, -6); g.lineTo(2.2, 1); g.strokePath();
+    g.lineStyle(0.4, this._shade(s.suit, 1.5), 0.8);
+    g.beginPath(); g.moveTo(-3.0, -5.6); g.lineTo(-2.1, 0.6); g.strokePath();
+    g.beginPath(); g.moveTo(3.0, -5.6); g.lineTo(2.1, 0.6); g.strokePath();
     // Pocket square — a small folded accent on the left chest (vivid accent).
     g.fillStyle(this._shade(acc, 1.1), 0.98);
     g.fillTriangle(-4.6, -2.2, -3.2, -2.2, -3.9, -3.6);
@@ -636,6 +646,10 @@ export class ExecutiveAvatar {
     g.fillStyle(sleeve, 1);
     g.fillRoundedRect(-8, -5 + swing * 0.4, 3.2, 11, 1.6);
     g.fillRoundedRect(4.8, -5 - swing * 0.4, 3.2, 11, 1.6);
+    // Inner-sleeve shadow — a crisp seam so each arm reads separate from the torso.
+    g.fillStyle(this._shade(s.suit, 0.6), 0.8);
+    g.fillRect(-5.1, -4.5 + swing * 0.4, 0.8, 10);
+    g.fillRect(4.6, -4.5 - swing * 0.4, 0.8, 10);
     g.fillStyle(s.skin, 1);
     g.fillCircle(-6.4, 6 + swing * 0.4, 1.7);
     g.fillCircle(6.4, 6 - swing * 0.4, 1.7);
@@ -653,6 +667,10 @@ export class ExecutiveAvatar {
     g.fillStyle(this._shade(s.skin, 0.94), 1);
     g.fillEllipse(ox - 4.7, oy - 12.6, 2, 3.2);
     g.fillEllipse(ox + 4.7, oy - 12.6, 2, 3.2);
+    // Defined face edge — a darker skin contour behind the head base so the jaw
+    // and cheeks read as a sculpted shape, not a soft blob.
+    g.fillStyle(this._shade(s.skin, 0.6), 0.9);
+    g.fillEllipse(ox, oy - 12.6, 10.4, 11.8);
     // Head base
     g.fillStyle(s.skin, 1);
     g.fillEllipse(ox, oy - 13, 9.5, 11);
@@ -662,11 +680,17 @@ export class ExecutiveAvatar {
     g.fillStyle(skinLo, 0.45);
     g.fillEllipse(ox, oy - 9.6, 7, 3.4);      // jaw
     g.fillEllipse(ox + 2.9, oy - 12, 3.2, 6); // cheek
+    // Cheekbone contour — a crisp shadow under the cheek for facial structure.
+    g.fillStyle(this._shade(s.skin, 0.72), 0.4);
+    g.fillEllipse(ox + 2.6, oy - 10.8, 3, 1.5);
     // Lit cheek plane on the key-light (left) side — rounder facial volume.
     g.fillStyle(this._shade(s.skin, 1.16), 0.32);
     g.fillEllipse(ox - 2.7, oy - 12.2, 3.4, 4.4);
     // Hair
     if (s.hairStyle !== "bald") {
+      // Crisp dark hair-edge silhouette behind the hair mass — a defined crown.
+      g.fillStyle(this._shade(s.hair, 0.55), 1);
+      g.fillEllipse(ox, oy - 15.9, 10.8, 8);
       g.fillStyle(s.hair, 1);
       g.fillEllipse(ox, oy - 15.6, 10, 7.2);
       g.fillRect(ox - 5, oy - 15.6, 10, 2.6);
@@ -687,32 +711,38 @@ export class ExecutiveAvatar {
         g.fillStyle(this._shade(s.hair, 1.32), 0.5); // sheen
         g.fillEllipse(ox - 2, oy - 17.4, 3.6, 1.7);
       }
-      // Hairline shadow where hair meets the forehead.
-      g.fillStyle(this._shade(s.hair, 0.7), 0.4);
-      g.fillEllipse(ox, oy - 16.4, 8.6, 1.4);
+      // Crisper hairline shadow where hair meets the forehead — a defined brow ridge.
+      g.fillStyle(this._shade(s.hair, 0.55), 0.55);
+      g.fillEllipse(ox, oy - 16.2, 8.8, 1.5);
     }
-    // Brows
-    g.fillStyle(this._shade(s.hair, 0.85), 0.85);
-    g.fillRect(ox - 3.2, oy - 13.7, 2.4, 0.7);
-    g.fillRect(ox + 0.8, oy - 13.7, 2.4, 0.7);
-    // Eyes — open (with a catchlight) or a thin closed line while blinking.
+    // Eye-socket shadow — a soft band setting the eyes back into the skull.
+    g.fillStyle(this._shade(s.skin, 0.74), 0.4);
+    g.fillEllipse(ox - 2, oy - 12.9, 2.6, 1.6);
+    g.fillEllipse(ox + 2, oy - 12.9, 2.6, 1.6);
+    // Brows — bolder, darker and defined.
+    g.fillStyle(this._shade(s.hair, 0.6), 1);
+    g.fillRect(ox - 3.4, oy - 13.9, 2.7, 0.9);
+    g.fillRect(ox + 0.7, oy - 13.9, 2.7, 0.9);
+    // Eyes — open (deep-set, with a catchlight) or a thin closed line while blinking.
     if (this.eyesClosed) {
       g.fillStyle(this._shade(s.skin, 0.55), 0.9);
       g.fillRect(ox - 2.9, oy - 12.4, 1.9, 0.7);
       g.fillRect(ox + 1, oy - 12.4, 1.9, 0.7);
     } else {
-      g.fillStyle(0x2a2320, 1);
-      g.fillEllipse(ox - 2, oy - 12.4, 1.5, 1.7);
-      g.fillEllipse(ox + 2, oy - 12.4, 1.5, 1.7);
-      g.fillStyle(0xf4f0e8, 0.85);
-      g.fillCircle(ox - 2.4, oy - 12.8, 0.4);
-      g.fillCircle(ox + 1.6, oy - 12.8, 0.4);
+      g.fillStyle(0x181310, 1);
+      g.fillEllipse(ox - 2, oy - 12.4, 1.6, 1.9);
+      g.fillEllipse(ox + 2, oy - 12.4, 1.6, 1.9);
+      g.fillStyle(0xf7f3ea, 0.95);
+      g.fillCircle(ox - 2.4, oy - 12.9, 0.45);
+      g.fillCircle(ox + 1.6, oy - 12.9, 0.45);
     }
-    // Nose shadow to the shaded side.
+    // Nose shadow to the shaded side + a defined nostril base.
     g.fillStyle(skinLo, 0.5);
     g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
+    g.fillStyle(this._shade(s.skin, 0.62), 0.5);
+    g.fillEllipse(ox, oy - 10.4, 1.8, 0.8);
     // Nose-bridge highlight — a defined, lit ridge.
-    g.fillStyle(this._shade(s.skin, 1.12), 0.3);
+    g.fillStyle(this._shade(s.skin, 1.14), 0.35);
     g.fillRect(ox - 0.5, oy - 13, 0.7, 2.6);
     // Facial hair — hair-colored, under the mouth so lips still read on top.
     this._drawFacialHairFront(g, s, ox, oy);
@@ -1113,6 +1143,13 @@ export class ExecutiveAvatar {
    * narrowed ellipses (3/4 profile).
    */
   private _coinBody(g: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, ry: number, ring: boolean) {
+    // Bold dark outline behind the disc (head-on views) so Earn carries the same
+    // crisp premium rim as the humanized executives. Profiles keep their milled
+    // edge instead, so the outline is tied to the head-on `ring` flag.
+    if (ring) {
+      g.fillStyle(OUTLINE, 1);
+      g.fillEllipse(cx, cy, rx * 2 + 5, ry * 2 + 5);
+    }
     g.fillStyle(ExecutiveAvatar.COIN_RIM, 1);
     g.fillEllipse(cx, cy, rx * 2 + 2.6, ry * 2 + 2.6);
     g.fillStyle(ExecutiveAvatar.COIN_BASE, 1);
