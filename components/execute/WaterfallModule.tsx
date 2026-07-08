@@ -2,6 +2,7 @@ import { getCapTable } from "@/lib/cap-table";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { EarnAction } from "@/components/execute/ui";
 import WaterfallCalculator from "@/components/execute/WaterfallCalculator";
+import FundWaterfallTool from "@/components/execute/FundWaterfallTool";
 
 // Execute › Waterfall: the distribution & carry engine. Seeds an interactive
 // scenario from the firm's live paid-in capital and cap table, and puts Fund
@@ -25,6 +26,7 @@ export async function ExecuteWaterfallModule({ orgId }: { orgId: string }) {
         <EarnAction kind="waterfall_model" label="Model with Earn" />
       </div>
       <WaterfallCalculator paidIn={paidIn} holders={holders} defaultDistribution={defaultDistribution} />
+      <FundWaterfallTool />
     </div>
   );
 }
