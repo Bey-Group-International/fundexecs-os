@@ -317,6 +317,8 @@ export class OfficeScene extends Phaser.Scene {
   /** The seat the local player is sitting in, if any. */
   private playerSeat: SeatAnchor | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
+  // Two-view camera: false = follow-zoom (default), true = overhead zoomed-out.
+  private overheadView = false;
   // Spot-style claimed desk ("your spot") — reserved from NPCs + badged.
   private claimedDeskKey: string | null = null;
   private claimedSeat: SeatAnchor | null = null;
@@ -583,6 +585,26 @@ export class OfficeScene extends Phaser.Scene {
       this._playerSit(seat);
       this.game.canvas.focus();
     });
+
+    // Two views: the default follow-cam ↔ an overhead, zoomed-out whole-floor view.
+    this.game.events.on("office:set-view", (overhead: boolean) => {
+      this.overheadView = overhead;
+      this._applyView();
+    });
+  }
+
+  /** Apply the current view mode to the camera (follow-zoom or overhead). */
+  private _applyView() {
+    const cam = this.cameras.main;
+    if (this.overheadView) {
+      cam.stopFollow();
+      const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H) * 0.96;
+      cam.setZoom(fit);
+      cam.centerOn(WORLD_W / 2, WORLD_H / 2);
+    } else {
+      cam.startFollow(this.player, true, 0.08, 0.08);
+      cam.setZoom(2.0);
+    }
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -620,6 +642,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:follow");
     this.game.events.off("office:claim-desk");
     this.game.events.off("office:go-to-desk");
+    this.game.events.off("office:set-view");
     this.game.events.off("office:marketplace-listings", this._setMarketplaceStalls, this);
     for (const g of this.marketplaceStallGfx) g.destroy();
     this.marketplaceStallGfx = [];
@@ -2508,6 +2531,8 @@ export class OfficeScene extends Phaser.Scene {
   private _reflowFixedHud() {
     if (!this.cameras?.main) return;
     const cam = this.cameras.main;
+    // Re-fit the overhead view when the container resizes.
+    if (this.overheadView) this._applyView();
     this._drawVignette(cam.width, cam.height);
     if (this.approvalVignette?.visible) this._drawApprovalVignette(cam.width, cam.height);
     if (this.netDot) this.netDot.setPosition(cam.width - 14, cam.height - 14);

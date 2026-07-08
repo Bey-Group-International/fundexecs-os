@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ExecutiveHQ } from "./ExecutiveHQ";
 import { CommandCenter } from "@/components/command-center/CommandCenter";
 import { hydrateWorkflows, setApprovalDecider, setOfficePersistence, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
 import { rowToWorkflow, type OfficeWorkflow } from "@/components/virtual-office/program/officeProgram";
@@ -32,20 +31,16 @@ const VirtualOfficeGame = dynamic(
   }
 );
 
-type Tab = "hq" | "virtual" | "earn";
-
-// HQ room ids that differ from virtual office room keys
-const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
+type Tab = "virtual" | "earn";
 
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
-  const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true, earn: false });
+  const [opened, setOpened] = useState<Record<Tab, boolean>>({ virtual: true, earn: false });
   const [token, setToken] = useState<string | undefined>(undefined);
   const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
   const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
   const [dealRoomListingId, setDealRoomListingId] = useState<string | null>(null);
-  const [occupancy, setOccupancy] = useState<Record<string, number>>({});
 
   // Guest join state — shown when no session and virtual tab is requested
   const [zoneUrlOverrides, setZoneUrlOverrides] = useState<Record<string, string>>({});
@@ -156,9 +151,7 @@ export function OfficeTabs() {
     // shows its context on arrival (see VirtualOfficeGame / DealRoomBanner).
     const deal = searchParams.get("deal");
     if (deal) setDealRoomListingId(deal);
-    if (requestedTab === "overview" || requestedTab === "hq") {
-      activateTab("hq");
-    } else if (requestedTab === "virtual") {
+    if (requestedTab === "virtual") {
       activateTab("virtual");
     } else if (requestedTab === "earn") {
       activateTab("earn");
@@ -223,14 +216,6 @@ export function OfficeTabs() {
     window.dispatchEvent(new CustomEvent("earn:open-with-context", { detail: { execName, prompt } }));
   }, []);
 
-  const handleNavigateRoom = (hqRoomId: string) => {
-    const virtualKey = HQ_TO_VIRTUAL[hqRoomId] ?? hqRoomId;
-    setTeleportTarget(virtualKey);
-    activateTab("virtual");
-    // Clear target after one frame so repeated clicks on same room re-trigger
-    setTimeout(() => setTeleportTarget(null), 100);
-  };
-
   return (
     <div className="bg-surface-0">
       {/* Slim single-row header — keeps the floor fitting the viewport without
@@ -257,21 +242,11 @@ export function OfficeTabs() {
           <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
             Execution Floor
           </TabButton>
-          <TabButton active={tab === "hq"} onClick={() => activateTab("hq")}>
-            Overview
-          </TabButton>
           <TabButton active={tab === "earn"} onClick={() => activateTab("earn")}>
             Earn Command
           </TabButton>
         </div>
       </div>
-
-      {/* Overview is secondary and mounts only when requested. */}
-      {opened.hq ? (
-        <div className={tab === "hq" ? "block" : "hidden"}>
-          <ExecutiveHQ onNavigateRoom={handleNavigateRoom} roomOccupancy={occupancy} />
-        </div>
-      ) : null}
 
       {/* Earn Command — the split chat + live spatial world, driven by Earn
           (Claude via /api/command-center/plan). Mounts only once requested and
@@ -334,7 +309,6 @@ export function OfficeTabs() {
               active={tab === "virtual"}
               teleportTarget={teleportTarget}
               dealRoomListingId={dealRoomListingId}
-              onOccupancyChange={setOccupancy}
               onNpcClick={handleNpcClick}
               zoneUrlOverrides={zoneUrlOverrides}
             />
