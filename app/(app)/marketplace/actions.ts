@@ -18,6 +18,15 @@ import type { MarketplaceStatus } from "@/lib/supabase/database.types";
 
 const STATUSES: MarketplaceStatus[] = ["draft", "listed", "paused", "closed"];
 
+// Parse a currency/number form field into a positive number, or null. Strips
+// symbols and separators so "$3,200,000" and "3200000" both work.
+function parseMoney(raw: FormDataEntryValue | null): number | null {
+  const s = String(raw ?? "").replace(/[^0-9.]/g, "");
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isNaN(n) || n < 0 ? null : n;
+}
+
 // Create a marketplace listing for the active org. Only the title is required;
 // everything else defaults sensibly (draft, private) so a listing can be filled
 // in over time before it goes public.
@@ -37,6 +46,11 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   const geography = String(formData.get("geography") ?? "").trim() || null;
   const assetClass = String(formData.get("asset_class") ?? "").trim() || null;
   const teaserUrl = String(formData.get("teaser_url") ?? "").trim() || null;
+  const country = String(formData.get("country") ?? "").trim() || null;
+  const currency = String(formData.get("currency") ?? "").trim().toUpperCase() || "USD";
+  const ebitda = parseMoney(formData.get("ebitda"));
+  const grossRevenue = parseMoney(formData.get("gross_revenue"));
+  const featured = formData.get("featured") === "on";
 
   if (!title) return { error: "Title is required" };
 
@@ -86,6 +100,11 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
       geography,
       asset_class: assetClass,
       teaser_url: teaserUrl,
+      country,
+      currency,
+      ebitda,
+      gross_revenue: grossRevenue,
+      featured,
     })
     .select("id")
     .single();
@@ -290,18 +309,18 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
 
   const summary = String(formData.get("summary") ?? "").trim() || null;
   const listingType = String(formData.get("listing_type") ?? "").trim() || undefined;
-  const amountRaw = String(formData.get("amount") ?? "").trim();
   const targetIrrRaw = String(formData.get("target_irr") ?? "").trim();
   const holdPeriodRaw = String(formData.get("hold_period_years") ?? "").trim();
   const geography = String(formData.get("geography") ?? "").trim() || null;
   const assetClass = String(formData.get("asset_class") ?? "").trim() || null;
   const teaserUrl = String(formData.get("teaser_url") ?? "").trim() || null;
+  const country = String(formData.get("country") ?? "").trim() || null;
+  const currency = String(formData.get("currency") ?? "").trim().toUpperCase() || "USD";
+  const ebitda = parseMoney(formData.get("ebitda"));
+  const grossRevenue = parseMoney(formData.get("gross_revenue"));
+  const featured = formData.get("featured") === "on";
 
-  let amount: number | null = null;
-  if (amountRaw) {
-    const parsed = Number(amountRaw.replace(/[^0-9.]/g, ""));
-    if (!Number.isNaN(parsed)) amount = parsed;
-  }
+  const amount = parseMoney(formData.get("amount"));
   let targetIrr: number | null = null;
   if (targetIrrRaw) {
     const parsed = Number(targetIrrRaw.replace(/[^0-9.]/g, ""));
@@ -326,6 +345,11 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
       geography,
       asset_class: assetClass,
       teaser_url: teaserUrl,
+      country,
+      currency,
+      ebitda,
+      gross_revenue: grossRevenue,
+      featured,
     })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);

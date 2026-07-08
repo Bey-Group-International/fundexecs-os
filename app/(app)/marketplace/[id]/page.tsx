@@ -9,6 +9,8 @@ import { expressInterestInListing, updateListingStatus, toggleListingPublic, del
 import { InterestButton } from "./InterestButton";
 import { rankInvestorsForListing } from "@/lib/matching";
 import type { Investor } from "@/lib/supabase/database.types";
+import { formatMoney } from "@/lib/marketplace/format";
+import { resolveCountry } from "@/lib/marketplace/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +44,6 @@ function prettyType(t: string): string {
     service: "Service",
   };
   return map[t] ?? t.split(/[_\s]+/).map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
-}
-
-function formatAmount(n: number | null) {
-  if (n == null) return null;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 }
 
 function formatPct(n: number | null) {
@@ -141,12 +138,23 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
     }
   }
 
+  const currency = listing.currency ?? "USD";
+  const country = resolveCountry(listing.country);
   const dealCardFields = [
+    listing.amount != null && { label: "Target price", value: formatMoney(listing.amount, currency) },
+    listing.ebitda != null && { label: "EBITDA", value: formatMoney(listing.ebitda, currency) },
+    listing.gross_revenue != null && {
+      label: "Gross revenue",
+      value: formatMoney(listing.gross_revenue, currency),
+    },
     listing.target_irr != null && { label: "Target IRR", value: formatPct(listing.target_irr) },
-    listing.hold_period_years != null && { label: "Hold period", value: `${listing.hold_period_years}y` },
+    listing.hold_period_years != null && {
+      label: "Hold period",
+      value: `${listing.hold_period_years}y`,
+    },
+    country && { label: "Country", value: `${country.flag} ${country.label}` },
     listing.geography && { label: "Geography", value: listing.geography },
     listing.asset_class && { label: "Asset class", value: listing.asset_class },
-    listing.amount != null && { label: "Amount", value: formatAmount(listing.amount) },
   ].filter(Boolean) as { label: string; value: string }[];
 
   return (
@@ -165,6 +173,11 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
             {listing.organizations?.name ?? "Unknown firm"}
           </span>
           <TierBadge tier={ownerTier} />
+          {listing.featured ? (
+            <span className="rounded-full border border-gold-500/50 bg-gold-500/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              ★ Featured
+            </span>
+          ) : null}
           <span
             className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_BADGE[listing.status]}`}
           >
@@ -186,6 +199,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
         </h1>
 
         <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          {listing.reference_code ? `${listing.reference_code} · ` : ""}
           {prettyType(listing.listing_type)} · {timeAgo(listing.created_at)}
           {interestCount > 0 ? ` · ${interestCount} interested` : ""}
         </p>

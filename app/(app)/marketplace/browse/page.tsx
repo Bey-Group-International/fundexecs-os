@@ -17,8 +17,11 @@ export default async function MarketplaceBrowsePage() {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("marketplace_listings")
-    .select("id, title, listing_type, summary, amount, status, created_at, organization_id, organizations(name)")
+    .select(
+      "id, title, listing_type, summary, amount, status, created_at, organization_id, currency, country, asset_class, reference_code, ebitda, gross_revenue, target_irr, featured, teaser_url, organizations(name)",
+    )
     .eq("is_public", true)
+    .order("featured", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(200);
 

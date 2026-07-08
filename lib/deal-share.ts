@@ -74,6 +74,12 @@ export function dealToListing(deal: Deal): MarketplaceListing {
     geography: null,
     asset_class: null,
     teaser_url: null,
+    reference_code: null,
+    country: null,
+    currency: "USD",
+    ebitda: null,
+    gross_revenue: null,
+    featured: false,
     created_at: deal.created_at,
     updated_at: deal.updated_at,
   };
