@@ -920,6 +920,19 @@ export function VirtualOfficeGame({
           onOccupancyChangeRef.current?.(counts);
         });
 
+        // Scripted area entered — map the declarative trigger to a concrete
+        // action (WorkAdventure-style walk-in zones). Kept in one place so the
+        // scene stays trigger-agnostic and a future map editor just adds data.
+        game.events.on(
+          "office:area-enter",
+          (payload: { id: string; label: string; trigger: { kind: string; text?: string } }) => {
+            const t = payload.trigger;
+            if (t.kind === "say" && t.text) gameRef.current?.events.emit("office:say", t.text);
+            else if (t.kind === "toast" && t.text) emitFloorActivity("presence", t.text);
+            else if (t.kind === "start-meeting") window.dispatchEvent(new CustomEvent("office:start-meeting"));
+          },
+        );
+
         // NPC click bridge — opens Earn AI sidebar scoped to the clicked executive
         // and records a role-specific interaction response in office chat.
         game.events.on("npc:click", (payload: NpcClickPayload) => {
