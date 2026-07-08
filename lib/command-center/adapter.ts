@@ -40,6 +40,36 @@ export const scriptedEarnDriver: EarnDriver = {
     // (Earn executes), everything else to Flow A (delegate the team).
     const direct = /thesis|tighten|review|flag|diligence|memo|check|refine/.test(p);
     const flow = FLOWS.find((f) => f.kind === (direct ? "B" : "A")) ?? FLOWS[0];
-    return { kind: flow.kind, steps: flow.steps };
+    // Swap the operator's own words into the opening user line.
+    const steps = flow.steps.map((s) =>
+      s.kind === "say" && s.role === "user" ? { ...s, text: prompt } : s,
+    );
+    return { kind: flow.kind, steps };
+  },
+};
+
+// Live driver: asks the server (Claude) to synthesize Earn's dialogue + flow
+// choice via /api/command-center/plan, and degrades to the scripted driver on
+// any error. The route itself falls back deterministically when Claude isn't
+// configured, so this is resilient end-to-end.
+export const liveEarnDriver: EarnDriver = {
+  listFlows: () => FLOWS,
+  plan: async (prompt: string) => {
+    try {
+      const res = await fetch("/api/command-center/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error(`plan failed: ${res.status}`);
+      const data = (await res.json()) as { kind?: unknown; steps?: unknown };
+      if ((data.kind === "A" || data.kind === "B") && Array.isArray(data.steps)) {
+        return { kind: data.kind, steps: data.steps as Step[] };
+      }
+      throw new Error("bad plan shape");
+    } catch (err) {
+      console.error("[liveEarnDriver] falling back to scripted:", err);
+      return scriptedEarnDriver.plan(prompt);
+    }
   },
 };
