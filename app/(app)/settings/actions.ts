@@ -66,6 +66,34 @@ export async function setDiscoverable(formData: FormData): Promise<void> {
   revalidatePath("/settings");
 }
 
+// Set the firm-wide marketplace booking link. Buyers see a "Book a meeting"
+// button on any of the firm's listings that don't carry their own link.
+// Accepts any well-formed https scheduling URL; blank/invalid clears it. Admin-
+// gated by RLS (organizations_update → is_org_admin), so a non-admin submit is a
+// silent no-op.
+export async function setFirmBookingUrl(formData: FormData): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return;
+  const raw = String(formData.get("booking_url") ?? "").trim();
+  let bookingUrl: string | null = null;
+  if (raw) {
+    try {
+      const u = new URL(raw);
+      if (u.protocol === "https:") bookingUrl = u.toString();
+    } catch {
+      bookingUrl = null;
+    }
+  }
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ booking_url: bookingUrl })
+    .eq("id", ctx.orgId);
+  if (error) { console.error("[setFirmBookingUrl]", error.message); return; }
+  revalidatePath("/settings");
+  revalidatePath("/marketplace");
+}
+
 // Stand down the active mandate — every Tier-2 action falls back to operator
 // sign-off until a new mandate is activated.
 export async function deactivateMandate(formData: FormData): Promise<void> {

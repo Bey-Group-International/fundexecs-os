@@ -19,7 +19,7 @@ import { ShortcutsAndCustomization } from "./ShortcutsAndCustomization";
 import { DownloadOSCard } from "@/components/DownloadOS";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { TIER_2_ACTIONS } from "./tier2-actions";
-import { deactivateMandate, setDiscoverable } from "./actions";
+import { deactivateMandate, setDiscoverable, setFirmBookingUrl } from "./actions";
 import { UserProfileForm } from "./UserProfileForm";
 import { canAdminOrg } from "@/lib/rbac";
 
@@ -106,10 +106,11 @@ export default async function SettingsPage() {
   // freshly onboarded org (the column default), so treat a null as discoverable.
   const { data: orgRow } = await supabase
     .from("organizations")
-    .select("discoverable")
+    .select("discoverable, booking_url")
     .eq("id", ctx.orgId)
     .maybeSingle();
   const discoverable = (orgRow as { discoverable: boolean | null } | null)?.discoverable !== false;
+  const firmBookingUrl = (orgRow as { booking_url: string | null } | null)?.booking_url ?? "";
 
   const { data: principalRow } = await supabase
     .from("principals")
@@ -199,6 +200,27 @@ export default async function SettingsPage() {
                     </button>
                   </form>
                 </div>
+              </div>
+              <div className="fx-card p-4">
+                <p className="text-sm font-medium text-fg-primary">Marketplace booking link</p>
+                <p className="mt-1 text-xs leading-snug text-fg-secondary">
+                  Buyers see a <span className="text-fg-primary">Book a meeting</span> button on your
+                  listings that don&rsquo;t set their own. Any https scheduler (Calendly, Cal.com,
+                  Google…). Leave blank to disable.
+                </p>
+                <form action={setFirmBookingUrl} className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    name="booking_url"
+                    type="url"
+                    inputMode="url"
+                    defaultValue={firmBookingUrl}
+                    placeholder="https://calendly.com/your-firm/15min"
+                    className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-3 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+                  />
+                  <button className="shrink-0 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20">
+                    Save
+                  </button>
+                </form>
               </div>
               <Link href="/wallet" className="fx-card fx-card-hover group p-4">
                 <RowLink label="Wallet & credits" hint="Balance, plan, and billing" />
