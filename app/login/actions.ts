@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
+import { notifyNewSignupOnce } from "@/lib/admin/signup-alert";
 
 const SUPABASE_CONFIG_ERROR =
   "Authentication is not configured for this environment. Add Supabase URL and anon key, then try again.";
@@ -63,6 +64,14 @@ export async function signUp(formData: FormData) {
   if (error) {
     // Keep the user on the sign-up form so they can correct and retry.
     redirect(`/login?mode=signup&error=${encodeURIComponent(error.message)}`);
+  }
+
+  // Alert the internal team about the new signup. Fire-and-forget with an
+  // await'd best-effort call (it never throws) so it runs before the redirect
+  // unwinds the request; the DB claim in the helper makes it exactly-once even
+  // if the OAuth path also fires.
+  if (data.user?.id) {
+    await notifyNewSignupOnce(data.user.id);
   }
 
   // When email confirmation is required, signUp returns no session. Attempt an

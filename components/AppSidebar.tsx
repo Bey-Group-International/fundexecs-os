@@ -339,6 +339,8 @@ interface AppSidebarProps {
   groups: GroupItem[];
   streak?: StreakState;
   inboxUnread?: number;
+  /** True only for internal platform admins — reveals the hidden Admin link. */
+  isPlatformAdmin?: boolean;
   signOutAction: () => void;
   createGroupAction: (formData: FormData) => void;
   moveSessionAction: (formData: FormData) => void;
@@ -371,6 +373,7 @@ function SidebarPanel({
   pinSessionAction,
   unreadSessionAction,
   inboxUnread = 0,
+  isPlatformAdmin = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -773,6 +776,19 @@ function SidebarPanel({
 
           {accountOpen ? (
             <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-col gap-0.5 rounded-xl border border-line/80 bg-surface-1/95 p-1.5 shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-fade-up">
+              {/* Internal-only: hidden admin console, shown to @beygroupintl.com. */}
+              {isPlatformAdmin ? (
+                <Link
+                  href="/admin"
+                  onClick={() => setAccountOpen(false)}
+                  className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-gold-300 transition duration-100 hover:bg-gold-500/10 hover:text-gold-200"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gold-500/15 font-mono text-[11px] leading-none text-gold-300 transition group-hover:bg-gold-500/25">
+                    ★
+                  </span>
+                  Admin console
+                </Link>
+              ) : null}
               {ACCOUNT_ITEMS.map((item) => {
                 const inner = (
                   <>

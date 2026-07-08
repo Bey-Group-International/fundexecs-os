@@ -146,6 +146,9 @@ export type Principal = {
   // same columns later. Null until verified.
   identity_verified_at: string | null;
   identity_verified_by: string | null;
+  // Set once, atomically, the first time the platform-admin new-signup alert is
+  // emailed for this principal (migration 20260708120000). Null until alerted.
+  signup_alerted_at: string | null;
   created_at: string;
   updated_at: string;
 }
