@@ -178,6 +178,10 @@ export class OfficeScene extends Phaser.Scene {
   // call" presence badge on the floor roster — reuses the existing proximity
   // bubbles, no extra signalling.
   private bubbleMemberIds = new Set<string>();
+  // Spot-style conversation bubble — a soft ring under the player while anyone
+  // is inside the proximity call, so "who's in your conversation" reads at a glance.
+  private convoRing?: Phaser.GameObjects.Arc;
+  private convoPhase = 0;
 
   // M3 — WebRTC mesh
   private mesh: MeshManager | null = null;
@@ -601,6 +605,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateCollaborationLinks(delta);
     this._updateNpcProximity(delta);
     this._updateSpatialAudio(delta);
+    this._updateConvoRing(delta);
     this._updateRoster(delta);
     this._updateMinimap();
 
@@ -914,6 +919,32 @@ export class OfficeScene extends Phaser.Scene {
 
     // The player appears as their own human avatar (gender + wardrobe + accent).
     this.playerAvatar = new ExecutiveAvatar(this, spawnX, spawnY, userAvatarSpec(this.myOfficeAvatar), 10);
+
+    // Conversation bubble — a soft cyan ring at the player's feet, shown only
+    // while a proximity call is active. Depth just under the figure.
+    this.convoRing = this.add
+      .arc(spawnX, spawnY + 6, 26, 0, 360, false)
+      .setStrokeStyle(2, 0x38bdf8, 0.5)
+      .setDepth(8)
+      .setVisible(false);
+  }
+
+  /** Pulse + follow the conversation bubble while a proximity call is active. */
+  private _updateConvoRing(delta: number) {
+    if (!this.convoRing) return;
+    const inCall = this.bubbleMemberIds.size > 0;
+    if (!inCall) {
+      if (this.convoRing.visible) this.convoRing.setVisible(false);
+      return;
+    }
+    this.convoRing.setVisible(true).setPosition(this.player.x, this.player.y + 6);
+    if (this.reducedMotion) {
+      this.convoRing.setStrokeStyle(2, 0x38bdf8, 0.5).setScale(1);
+      return;
+    }
+    this.convoPhase += delta * 0.005;
+    const s = Math.sin(this.convoPhase);
+    this.convoRing.setStrokeStyle(2, 0x38bdf8, 0.42 + 0.16 * s).setScale(1 + 0.05 * s);
   }
 
   /**
@@ -3038,10 +3069,11 @@ export class OfficeScene extends Phaser.Scene {
       } else {
         this.mesh?.updateSpatialGain(id, dist);
       }
-      const f = Math.max(
-        OfficeScene.VIDEO_MIN,
-        Math.min(1, (OfficeScene.VIDEO_FAR_PX - dist) / (OfficeScene.VIDEO_FAR_PX - OfficeScene.VIDEO_NEAR_PX)),
-      );
+      // Smoothstep the linear distance ratio so the tile eases in/out near the
+      // band edges instead of ramping abruptly (matches the audio curve).
+      const ratio = Math.min(1, Math.max(0,
+        (OfficeScene.VIDEO_FAR_PX - dist) / (OfficeScene.VIDEO_FAR_PX - OfficeScene.VIDEO_NEAR_PX)));
+      const f = Math.max(OfficeScene.VIDEO_MIN, ratio * ratio * (3 - 2 * ratio));
       prox[id] = Math.round(f * 100) / 100;
     }
 

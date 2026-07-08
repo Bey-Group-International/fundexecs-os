@@ -208,7 +208,9 @@ export class SfuManager {
     if (!gainNode || !this.audioCtx) return;
     const BUBBLE_R = 160;
     const EXIT_R = 200;
-    const gain = Math.max(0, Math.min(1, 1 - (distancePx - BUBBLE_R) / (EXIT_R - BUBBLE_R)));
+    // Smoothstep the linear falloff so the volume eases at the band edges.
+    const t = Math.max(0, Math.min(1, 1 - (distancePx - BUBBLE_R) / (EXIT_R - BUBBLE_R)));
+    const gain = t * t * (3 - 2 * t);
     gainNode.gain.setTargetAtTime(gain, this.audioCtx.currentTime, 0.05);
   }
 
