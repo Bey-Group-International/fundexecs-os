@@ -930,6 +930,12 @@ export function VirtualOfficeGame({
             if (t.kind === "say" && t.text) gameRef.current?.events.emit("office:say", t.text);
             else if (t.kind === "toast" && t.text) emitFloorActivity("presence", t.text);
             else if (t.kind === "start-meeting") window.dispatchEvent(new CustomEvent("office:start-meeting"));
+            else if (t.kind === "broadcast" && t.text) {
+              // All-hands: announce floor-wide (feed everyone sees) and pop a
+              // Say bubble over the operator who convened it.
+              emitFloorActivity("meeting", t.text);
+              gameRef.current?.events.emit("office:say", t.text);
+            }
           },
         );
 

@@ -47,4 +47,23 @@ describe("SCRIPTED_AREAS defaults", () => {
     expect(hit?.once).toBe(true);
     expect(hit?.trigger.kind).toBe("say");
   });
+
+  it("broadcasts an all-hands announcement from the center-room auditorium", () => {
+    // Center of the 3×3 grid's middle room (576,432) is inside the all-hands zone.
+    const hit = areaAt(SCRIPTED_AREAS, 576, 432);
+    expect(hit?.id).toBe("all-hands");
+    expect(hit?.trigger.kind).toBe("broadcast");
+    // Broadcast carries the announcement text shown floor-wide.
+    if (hit?.trigger.kind === "broadcast") {
+      expect(hit.trigger.text.length).toBeGreaterThan(0);
+    }
+    // Re-fires on re-entry (not a one-shot), so it can be convened again.
+    expect(hit?.once).toBeFalsy();
+  });
+
+  it("keeps the welcome and all-hands areas from overlapping", () => {
+    // The all-hands center room must not swallow the spawn greeting.
+    expect(areaAt(SCRIPTED_AREAS, 192, 144)?.id).toBe("welcome");
+    expect(areaAt(SCRIPTED_AREAS, 576, 432)?.id).toBe("all-hands");
+  });
 });
