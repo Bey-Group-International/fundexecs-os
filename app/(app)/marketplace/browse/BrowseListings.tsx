@@ -25,6 +25,7 @@ export type BrowseListing = ListingCardData & {
   organization_id: string;
   organizations: { name: string } | null;
   ownerTier: ReputationTier;
+  booking_url: string | null;
 };
 
 const TIER_ORDER: ReputationTier[] = ["principal", "established", "verified", "unranked"];
@@ -39,9 +40,11 @@ type ExplorerItem = BrowseListing & { orgName: string | null; tierRank: number }
 export function BrowseListings({
   listings,
   onExpressInterest,
+  bookingUrl,
 }: {
   listings: BrowseListing[];
   onExpressInterest: (listingId: string, listingTitle: string) => Promise<{ error?: string }>;
+  bookingUrl?: string | null;
 }) {
   const items: ExplorerItem[] = listings.map((l) => ({
     ...l,
@@ -92,7 +95,7 @@ export function BrowseListings({
   return (
     <div>
       <TrustBar stats={stats} />
-      <BookMeetingCTA />
+      <BookMeetingCTA href={bookingUrl ?? undefined} />
 
       <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
         <div className="no-print mb-4 lg:mb-0">
@@ -158,22 +161,34 @@ export function BrowseListings({
                       </div>
                     }
                     actions={
-                      isDone ? (
-                        <span className="rounded-md border border-emerald-500/40 px-2.5 py-1 text-xs text-emerald-300">
-                          Queued ✓
-                        </span>
-                      ) : (
-                        <div className="flex flex-col items-end gap-1">
-                          <button
-                            disabled={isPending}
-                            onClick={() => handleExpressInterest(l)}
-                            className="no-print rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 text-xs text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
-                          >
-                            {isPending ? "Queuing…" : "Express interest"}
-                          </button>
-                          {errMsg ? <span className="text-[11px] text-red-400">{errMsg}</span> : null}
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-1.5">
+                          {l.booking_url ? (
+                            <a
+                              href={l.booking_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="no-print inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs text-fg-secondary transition hover:border-gold-500/50 hover:text-fg-primary"
+                            >
+                              <span aria-hidden>📅</span> Book
+                            </a>
+                          ) : null}
+                          {isDone ? (
+                            <span className="rounded-md border border-emerald-500/40 px-2.5 py-1 text-xs text-emerald-300">
+                              Queued ✓
+                            </span>
+                          ) : (
+                            <button
+                              disabled={isPending}
+                              onClick={() => handleExpressInterest(l)}
+                              className="no-print rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 text-xs text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+                            >
+                              {isPending ? "Queuing…" : "Express interest"}
+                            </button>
+                          )}
                         </div>
-                      )
+                        {errMsg ? <span className="text-[11px] text-red-400">{errMsg}</span> : null}
+                      </div>
                     }
                   />
                 );

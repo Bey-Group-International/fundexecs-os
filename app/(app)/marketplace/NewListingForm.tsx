@@ -153,6 +153,25 @@ export function NewListingForm({
           </label>
         </div>
 
+        {/* Booking / calendar link — buyers can book a meeting with the seller. */}
+        <div className="flex flex-col gap-1">
+          <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            Booking / calendar link
+          </label>
+          <input
+            name="booking_url"
+            type="url"
+            inputMode="url"
+            placeholder="https://calendly.com/you/15min"
+            className="rounded-md border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
+          />
+          <p className="text-[11px] leading-snug text-fg-muted">
+            Any scheduling link (Calendly, Cal.com, Google…). Buyers see a{" "}
+            <span className="text-fg-secondary">Book a meeting</span> button. Leave blank to use your
+            firm&rsquo;s connected Calendly.
+          </p>
+        </div>
+
         {/* Deal card fields */}
         <details className="group">
           <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary transition select-none">

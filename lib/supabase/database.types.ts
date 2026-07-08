@@ -690,6 +690,8 @@ export type MarketplaceListing = Timestamps & {
   ebitda: number | null;
   gross_revenue: number | null;
   featured: boolean;
+  // Per-listing seller booking link (migration 20260708200000)
+  booking_url: string | null;
 }
 
 export type MarketplaceInterest = {

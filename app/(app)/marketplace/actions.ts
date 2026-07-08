@@ -27,6 +27,20 @@ function parseMoney(raw: FormDataEntryValue | null): number | null {
   return Number.isNaN(n) || n < 0 ? null : n;
 }
 
+// Accept any well-formed https URL (Calendly, Cal.com, Google, TidyCal, …).
+// Anything else — including plain http — is dropped to null so a bad paste
+// never renders as a broken link.
+function parseHttpsUrl(raw: FormDataEntryValue | null): string | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 // Create a marketplace listing for the active org. Only the title is required;
 // everything else defaults sensibly (draft, private) so a listing can be filled
 // in over time before it goes public.
@@ -51,6 +65,7 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
   const ebitda = parseMoney(formData.get("ebitda"));
   const grossRevenue = parseMoney(formData.get("gross_revenue"));
   const featured = formData.get("featured") === "on";
+  const bookingUrl = parseHttpsUrl(formData.get("booking_url"));
 
   if (!title) return { error: "Title is required" };
 
@@ -105,6 +120,7 @@ export async function createListing(formData: FormData): Promise<{ error?: strin
       ebitda,
       gross_revenue: grossRevenue,
       featured,
+      booking_url: bookingUrl,
     })
     .select("id")
     .single();
@@ -319,6 +335,7 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
   const ebitda = parseMoney(formData.get("ebitda"));
   const grossRevenue = parseMoney(formData.get("gross_revenue"));
   const featured = formData.get("featured") === "on";
+  const bookingUrl = parseHttpsUrl(formData.get("booking_url"));
 
   const amount = parseMoney(formData.get("amount"));
   let targetIrr: number | null = null;
@@ -350,6 +367,7 @@ export async function updateListing(formData: FormData): Promise<{ error?: strin
       ebitda,
       gross_revenue: grossRevenue,
       featured,
+      booking_url: bookingUrl,
     })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
