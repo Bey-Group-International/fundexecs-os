@@ -162,16 +162,16 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Lighting: soft hemisphere fill + a warm gold key, echoing the 2D floor's
     // "light from above" gold key light.
-    scene.add(new THREE.HemisphereLight(0xbcc6dc, 0x140f0a, 0.85));
+    scene.add(new THREE.HemisphereLight(0xd8c4a0, 0x241a12, 0.95));
     // Warm gold key from above, echoing the 2D office's light-from-above.
-    const key = new THREE.DirectionalLight(0xffe0a8, 1.35);
+    const key = new THREE.DirectionalLight(0xffe0a8, 1.45);
     key.position.set(6, 24, 8);
     scene.add(key);
-    // Cool fill from the opposite side softens the shadows the key casts.
-    const fill = new THREE.DirectionalLight(0x9fb4d6, 0.3);
+    // Gentle fill from the opposite side softens the shadows the key casts.
+    const fill = new THREE.DirectionalLight(0xbfc8dc, 0.28);
     fill.position.set(-8, 12, -6);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0x4a4034, 0.6));
+    scene.add(new THREE.AmbientLight(0x6a5844, 0.7));
 
     this.buildStaticIfReady();
 
@@ -400,8 +400,9 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Floor plane (pickable for click-to-walk).
     const floorGeo = new THREE.PlaneGeometry(width, depth);
-    // Warm charcoal base, echoing the 2D office's warm-lit wood floors.
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1613, roughness: 0.92 });
+    // Warm wood-toned base across the whole office (like the 2D floor). Rooms
+    // are ONE warm floor; department color is only a faint accent + rug + sign.
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x35291d, roughness: 0.9 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(c.x, 0, c.z);
@@ -415,17 +416,18 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     for (const { roomKey, box } of roomFloors()) {
       const accent = new THREE.Color(roomAccentHex(roomKey));
 
+      // Faint department wash — a hint of color, not a saturated block.
       const tintGeo = new THREE.PlaneGeometry(box.width, box.depth);
-      const tintMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.1 });
+      const tintMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.045 });
       const tint = new THREE.Mesh(tintGeo, tintMat);
       tint.rotation.x = -Math.PI / 2;
       tint.position.set(box.cx, 0.01, box.cz);
       scene.add(tint);
       this.disposables.push(tintGeo, tintMat);
 
-      // Rug: a stronger accent runner with a lighter inset border.
-      const rugGeo = new THREE.PlaneGeometry(box.width * 0.44, box.depth * 0.42);
-      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.22 });
+      // Rug: the main department-color cue, a contained runner in the center.
+      const rugGeo = new THREE.PlaneGeometry(box.width * 0.4, box.depth * 0.38);
+      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.16 });
       const rug = new THREE.Mesh(rugGeo, rugMat);
       rug.rotation.x = -Math.PI / 2;
       rug.position.set(box.cx, 0.02, box.cz);
@@ -433,14 +435,14 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       this.disposables.push(rugGeo, rugMat);
     }
 
-    // Warm floor glow pools under each lamp — the soft light spill of the 2D
-    // office, as additive accent discs on the floor.
+    // Warm floor glow pools under each lamp — the soft WARM light spill of the
+    // 2D office (gold, not department-colored), as additive discs on the floor.
     for (const g of officeLampGlows()) {
       const geo = new THREE.CircleGeometry(g.radius, 24);
       const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(g.color),
+        color: 0xffca8a,
         transparent: true,
-        opacity: 0.14,
+        opacity: 0.09,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
@@ -455,16 +457,19 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.wallMesh = this.buildInstancedBoxes(wallSegments(), 0x2b3242, 0.85);
     this.buildFurniture(officeFurniture3D());
 
-    // Per-room polish: a floating department sign + a warm accent point light,
-    // so each room reads as its department at a glance.
+    // Per-room polish: a floating department sign + a WARM (gold) fill light per
+    // room. The light is deliberately warm, not the department color — that
+    // keeps the office one cohesive warm space instead of rainbow rooms; the
+    // department color lives only in the rug + the sign's accent underline.
     for (const anchor of roomLabelAnchors()) {
       const accentHex = roomAccentHex(anchor.roomKey);
-      const glow = new THREE.PointLight(new THREE.Color(accentHex), 0.28, 9, 2);
-      glow.position.set(anchor.x, 3, anchor.z);
+      const glow = new THREE.PointLight(0xffd9a0, 0.5, 13, 2);
+      glow.position.set(anchor.x, 3.5, anchor.z);
       scene.add(glow);
       const sign = this.makeRoomSign(anchor.label, accentHex);
       if (sign) {
-        sign.position.set(anchor.x, 4.4, anchor.z);
+        // Sit the sign high, above the (taller) sprites so it never overlaps.
+        sign.position.set(anchor.x, 6, anchor.z);
         scene.add(sign);
       }
     }
