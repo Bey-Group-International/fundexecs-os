@@ -5,7 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { MarketplaceStatus, ReputationTierName } from "@/lib/supabase/database.types";
 import { tierForScore, type ReputationTier } from "@/lib/compounding";
 import { expressInterestInListing } from "../actions";
-import { resolveBookingUrl } from "@/lib/marketplace/booking";
+import { resolveBookingUrl, resolveFirmBookingUrls } from "@/lib/marketplace/booking";
 import { BrowseListings, type BrowseListing } from "./BrowseListings";
 
 export const dynamic = "force-dynamic";
@@ -44,9 +44,16 @@ export default async function MarketplaceBrowsePage() {
     }
   }
 
+  // Firm-wide booking links for the sellers on this page — one cheap DB read.
+  // A listing without its own booking_url falls back to its firm's link on the
+  // card (live-Calendly fallback stays on the detail page to avoid per-seller
+  // API calls on the grid).
+  const firmBookingByOrg = await resolveFirmBookingUrls(ownerIds);
+
   const listings: BrowseListing[] = raw.map((l) => ({
     ...l,
     ownerTier: tierByOrg.get(l.organization_id) ?? "unranked",
+    booking_url: l.booking_url ?? firmBookingByOrg[l.organization_id] ?? null,
   }));
 
   return (

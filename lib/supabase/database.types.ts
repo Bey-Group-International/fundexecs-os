@@ -180,6 +180,8 @@ export type Organization = Timestamps & {
   kyc_status: string;
   kyc_verified_at: string | null;
   setup_hidden: boolean;
+  // Firm-wide default marketplace booking link (migration 20260708210000)
+  booking_url: string | null;
 }
 
 export type OrganizationMember = {
