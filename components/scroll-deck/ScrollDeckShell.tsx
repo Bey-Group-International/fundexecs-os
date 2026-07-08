@@ -1,18 +1,20 @@
 "use client";
 
-// Orchestrator for the Scroll-Deck builder. Holds all UI-only state: the chat
-// transcript, the assembled deck, the Auto-Accept mode, and the drag-resizable
-// split between the chat panel and the canvas. No network, no persistence —
-// the "build" is the scripted sequence in mock-data.ts.
-import { useCallback, useRef, useState } from "react";
+// Orchestrator for the Scroll-Deck builder. Composes two hooks:
+//   • useDeckStore   — the deck: applied sections (persisted to localStorage),
+//                      the pending/review section, inline field edits.
+//   • useBuilderChat — the chat: posts to /api/scroll-deck/chat, which calls
+//                      Claude (or the deterministic fallback when no API key).
+// The shell owns only the presentational glue: nav selection, the Auto-Accept
+// vs Review mode, the What's-next suggestion, and the drag-resizable split.
+import { useCallback, useMemo, useRef, useState } from "react";
 import { NavRail } from "./NavRail";
-import { BuilderChatPanel, type ChatMessage } from "./BuilderChatPanel";
-import {
-  BuilderCanvas,
-  type AppliedSection,
-  type PendingSection,
-} from "./BuilderCanvas";
-import { BUILD_STEPS } from "./mock-data";
+import { BuilderChatPanel } from "./BuilderChatPanel";
+import { BuilderCanvas } from "./BuilderCanvas";
+import { useDeckStore } from "./useDeckStore";
+import { useBuilderChat } from "./useBuilderChat";
+import { suggestNextPrompt } from "./mock-data";
+import type { DeckSection } from "./types";
 
 const MIN_PCT = 24;
 const MAX_PCT = 55;
@@ -20,105 +22,38 @@ const MAX_PCT = 55;
 export function ScrollDeckShell() {
   const [activeNav, setActiveNav] = useState("scroll-deck");
   const [splitPct, setSplitPct] = useState(34);
-
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
   const [autoAccept, setAutoAccept] = useState(true);
-  const [busy, setBusy] = useState(false);
 
-  const [applied, setApplied] = useState<AppliedSection[]>([]);
-  const [pending, setPending] = useState<PendingSection | null>(null);
+  const deck = useDeckStore();
 
-  // Which scripted step comes next. Sending anything advances this pointer so
-  // the demo always makes forward progress regardless of what's typed.
-  const stepRef = useRef(0);
-  const msgId = useRef(0);
-  const nextId = () => ++msgId.current;
-  // Monotonic id for canvas section instances — kept distinct from message ids
-  // so React keys stay unique even when the same section is placed twice.
-  const sectionKey = useRef(0);
-  const nextSectionKey = () => ++sectionKey.current;
+  // Keep the newest deck + mode in refs so the chat callbacks read live values
+  // without re-creating the chat controller on every applied-section change.
+  const deckRef = useRef(deck);
+  deckRef.current = deck;
+  const autoAcceptRef = useRef(autoAccept);
+  autoAcceptRef.current = autoAccept;
 
-  const nextStep = stepRef.current < BUILD_STEPS.length ? BUILD_STEPS[stepRef.current] : null;
-
-  const runStep = useCallback(
-    (userText: string) => {
-      const step = stepRef.current < BUILD_STEPS.length ? BUILD_STEPS[stepRef.current] : null;
-      if (!step) {
-        // Deck complete — acknowledge without changing the canvas.
-        setMessages((m) => [
-          ...m,
-          { id: nextId(), role: "user", text: userText },
-          {
-            id: nextId(),
-            role: "assistant",
-            text: "Your deck already has all six sections. You can export it, or head to Legal and the Data Room to keep going.",
-          },
-        ]);
-        setInput("");
-        return;
-      }
-
-      stepRef.current += 1;
-      setBusy(true);
-      setInput("");
-
-      const assistantId = nextId();
-      setMessages((m) => [
-        ...m,
-        { id: nextId(), role: "user", text: userText },
-        { id: assistantId, role: "assistant", text: "", streaming: true },
-      ]);
-
-      // "Stream" the reply a few words at a time — purely cosmetic.
-      const words = step.reply.split(" ");
-      let i = 0;
-      const tick = () => {
-        i += 1;
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, text: words.slice(0, i).join(" ") }
-              : msg,
-          ),
-        );
-        if (i < words.length) {
-          window.setTimeout(tick, 45);
-        } else {
-          setMessages((m) =>
-            m.map((msg) =>
-              msg.id === assistantId ? { ...msg, streaming: false } : msg,
-            ),
-          );
-          // Apply or propose the section, honoring the Auto-Accept mode. The
-          // instance key is computed here (not inside the setState updater) so
-          // the updater stays pure under React Strict Mode's double-invoke.
-          const instance = { key: nextSectionKey(), section: step.section };
-          if (autoAccept) {
-            setApplied((a) => [...a, instance]);
-          } else {
-            setPending(instance);
-          }
-          setBusy(false);
-        }
-      };
-      window.setTimeout(tick, 250);
-    },
-    [autoAccept],
+  const getSections = useCallback(
+    () => deckRef.current.applied.map((a) => a.section),
+    [],
   );
 
-  const acceptPending = useCallback(() => {
-    if (!pending) return;
-    // Two independent, pure updaters — never nest one setState inside another.
-    setApplied((a) => [...a, pending]);
-    setPending(null);
-  }, [pending]);
-
-  const rejectPending = useCallback(() => {
-    // Rolling back a rejected edit re-arms that scripted step.
-    setPending(null);
-    stepRef.current = Math.max(0, stepRef.current - 1);
+  const onSection = useCallback((section: DeckSection) => {
+    // Auto-Accept applies straight to the deck; Review mode stages it as a
+    // pending proposal the user can Accept/Reject on the canvas.
+    if (autoAcceptRef.current) {
+      deckRef.current.applyDirect(section);
+    } else {
+      deckRef.current.propose(section);
+    }
   }, []);
+
+  const chat = useBuilderChat({ getSections, onSection });
+
+  const nextPrompt = useMemo(
+    () => suggestNextPrompt(deck.applied.map((a) => a.section)),
+    [deck.applied],
+  );
 
   // Drag-to-resize between chat panel and canvas.
   const dragging = useRef(false);
@@ -153,14 +88,14 @@ export function ScrollDeckShell() {
           style={{ width: `${splitPct}%` }}
         >
           <BuilderChatPanel
-            messages={messages}
-            input={input}
-            onInputChange={setInput}
-            onSend={runStep}
+            messages={chat.messages}
+            input={chat.input}
+            onInputChange={chat.setInput}
+            onSend={chat.send}
             autoAccept={autoAccept}
             onToggleAutoAccept={() => setAutoAccept((v) => !v)}
-            nextPrompt={nextStep ? nextStep.prompt : null}
-            busy={busy}
+            nextPrompt={nextPrompt}
+            busy={chat.busy}
           />
         </div>
 
@@ -178,10 +113,11 @@ export function ScrollDeckShell() {
         {/* Canvas */}
         <div className="min-w-0 flex-1 bg-surface-0">
           <BuilderCanvas
-            applied={applied}
-            pending={pending}
-            onAccept={acceptPending}
-            onReject={rejectPending}
+            applied={deck.applied}
+            pending={deck.pending}
+            onAccept={deck.accept}
+            onReject={deck.reject}
+            onEditField={deck.editField}
           />
         </div>
       </div>

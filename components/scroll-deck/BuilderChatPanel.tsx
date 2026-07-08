@@ -12,14 +12,9 @@ import {
   SparklesIcon,
   ChevronDownIcon,
 } from "./icons";
+import type { ChatMessage } from "./types";
 
-export interface ChatMessage {
-  id: number;
-  role: "user" | "assistant";
-  text: string;
-  /** True while the assistant reply is still "streaming" in. */
-  streaming?: boolean;
-}
+export type { ChatMessage } from "./types";
 
 export function BuilderChatPanel({
   messages,
