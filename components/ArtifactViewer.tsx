@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ArtifactType, Json } from "@/lib/supabase/database.types";
 import { ArtifactModal } from "@/components/ArtifactModal";
 import { parseSources, verificationView, type VerificationLevel } from "@/lib/artifact-provenance";
+import { criticView, parseCriticIssues } from "@/lib/engine-critic";
 import type { SealStatus } from "@/lib/attestation-seal";
 import { verifyArtifact } from "@/components/copilot/actions";
 
@@ -14,6 +15,12 @@ const VERIFY_TONE: Record<VerificationLevel, string> = {
   verified: "border-status-success/45 bg-status-success/[0.08] text-status-success",
   grounded: "border-gold-500/40 bg-gold-500/[0.07] text-gold-300",
   unverified: "border-line/70 bg-surface-2/50 text-fg-muted",
+};
+
+// Critic flag palette — a soft warn for "review", a hard alert for "fail".
+const CRITIC_TONE: Record<"warn" | "alert", string> = {
+  warn: "border-gold-500/45 bg-gold-500/[0.08] text-gold-300",
+  alert: "border-rose-400/45 bg-rose-400/[0.08] text-rose-300",
 };
 
 // A recomputed-seal chip. Only "sealed" / "tampered" render — "tampered" is loud
@@ -54,12 +61,16 @@ export function ProvenanceBar({
   verificationStatus,
   groundingScore,
   sealStatus,
+  criticVerdict,
+  criticIssues,
 }: {
   artifactId?: string;
   sources?: Json | null;
   verificationStatus?: string | null;
   groundingScore?: number | null;
   sealStatus?: SealStatus;
+  criticVerdict?: string | null;
+  criticIssues?: Json | null;
 }) {
   const [open, setOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -70,6 +81,7 @@ export function ProvenanceBar({
   const router = useRouter();
   const cited = parseSources(sources);
   const view = verificationView({ verification_status: verificationStatus, sources, grounding_score: groundingScore });
+  const critic = criticView({ verdict: criticVerdict, issues: parseCriticIssues(criticIssues) });
   const canVerify = Boolean(artifactId) && verificationStatus === "unverified" && !verified;
 
   return (
@@ -82,6 +94,15 @@ export function ProvenanceBar({
           {view.level === "verified" ? "✓ " : null}
           {view.label}
         </span>
+        {critic.show ? (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${CRITIC_TONE[critic.tone]}`}
+            title={critic.detail}
+          >
+            {critic.tone === "alert" ? "✕ " : "⚠ "}
+            {critic.label}
+          </span>
+        ) : null}
         <SealChip status={sealStatus} />
         {cited.length ? (
           <button
@@ -458,6 +479,8 @@ interface ArtifactCardProps {
   verificationStatus?: string | null;
   groundingScore?: number | null;
   sealStatus?: SealStatus;
+  criticVerdict?: string | null;
+  criticIssues?: Json | null;
 }
 
 export function ArtifactCard({
@@ -472,6 +495,8 @@ export function ArtifactCard({
   verificationStatus,
   groundingScore,
   sealStatus,
+  criticVerdict,
+  criticIssues,
 }: ArtifactCardProps) {
   const [expanded, setExpanded] = useState(false);
   const label = ARTIFACT_LABEL[artifact_type] ?? "Artifact";
@@ -513,6 +538,8 @@ export function ArtifactCard({
               verificationStatus={verificationStatus}
               groundingScore={groundingScore}
               sealStatus={sealStatus}
+              criticVerdict={criticVerdict}
+              criticIssues={criticIssues}
             />
           ) : null}
           <button
@@ -538,6 +565,8 @@ export function ArtifactInline({
   verificationStatus,
   groundingScore,
   sealStatus,
+  criticVerdict,
+  criticIssues,
 }: {
   id?: string;
   content: string;
@@ -550,6 +579,8 @@ export function ArtifactInline({
   verificationStatus?: string | null;
   groundingScore?: number | null;
   sealStatus?: SealStatus;
+  criticVerdict?: string | null;
+  criticIssues?: Json | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -589,6 +620,8 @@ export function ArtifactInline({
           verificationStatus={verificationStatus}
           groundingScore={groundingScore}
           sealStatus={sealStatus}
+          criticVerdict={criticVerdict}
+          criticIssues={criticIssues}
         />
       ) : null}
       {modalOpen && (

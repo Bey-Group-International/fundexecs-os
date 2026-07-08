@@ -1742,6 +1742,8 @@ function WorkflowSteps({
                     verificationStatus={artifact.verification_status}
                     groundingScore={artifact.grounding_score}
                     sealStatus={artifact.seal_status}
+                    criticVerdict={artifact.critic_verdict}
+                    criticIssues={artifact.critic_issues}
                   />
                 ) : (
                   // Inline step result: plain-text deliverable with truncation + expand.
@@ -1861,6 +1863,8 @@ function WorkflowCard({
               verificationStatus={primaryArtifact.verification_status}
               groundingScore={primaryArtifact.grounding_score}
               sealStatus={primaryArtifact.seal_status}
+              criticVerdict={primaryArtifact.critic_verdict}
+              criticIssues={primaryArtifact.critic_issues}
             />
           </div>
           <p className="mt-2 text-xs text-fg-secondary">

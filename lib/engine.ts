@@ -982,6 +982,10 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           sources: sources as unknown as Json,
           brain_run_id: brain?.runId ?? null,
           grounding_score: groundingScore,
+          // Automated critic read, shown at the approval gate (lib/engine-critic).
+          critic_verdict: critique.verdict,
+          critic_score: critique.score,
+          critic_issues: critique.issues as unknown as Json,
         })
         .select("id")
         .single(),

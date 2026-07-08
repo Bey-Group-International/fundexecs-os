@@ -1526,6 +1526,11 @@ export type Artifact = Timestamps & {
   // Trust layer (migration 0066). Automated grounding score in [0,1] — how much
   // of the output reflects its cited sources.
   grounding_score: number;
+  // Trust layer (migration 20260708180000). Automated critic read of whether the
+  // deliverable is a usable answer (not a refusal / stub / off-topic drift).
+  critic_verdict: string | null; // 'pass' | 'revise' | 'fail'
+  critic_score: number | null; // 0–100
+  critic_issues: Json; // string[] of problems found
 };
 
 // The cron-run ledger (migration 20260623160000). Last-run tracking for the

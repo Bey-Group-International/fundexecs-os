@@ -115,4 +115,42 @@ export function critiqueArtifact(input: CritiqueInput): CritiqueResult {
   return { verdict: verdictFor(score), score, issues };
 }
 
+// ---------------------------------------------------------------------------
+// Presentation — a pure view model for the review UI
+// ---------------------------------------------------------------------------
+export interface CriticView {
+  /** Whether to render a critic flag at all — a clean `pass` shows nothing. */
+  show: boolean;
+  /** `warn` for revise, `alert` for fail. */
+  tone: "warn" | "alert";
+  label: string;
+  /** The issues, joined — the chip's tooltip / expanded detail. */
+  detail: string;
+}
+
+// Coerce a persisted `critic_issues` value (jsonb) into a string list. Pure.
+export function parseCriticIssues(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x): x is string => typeof x === "string");
+}
+
+/**
+ * Build the review-UI view model for a persisted critic read. Only a `revise`
+ * or `fail` verdict surfaces — a `pass` (or a legacy artifact with no verdict)
+ * shows nothing, so the badge is signal, not noise. Pure.
+ */
+export function criticView(input: { verdict?: string | null; issues?: string[] | null }): CriticView {
+  const verdict = input.verdict;
+  if (verdict !== "revise" && verdict !== "fail") {
+    return { show: false, tone: "warn", label: "", detail: "" };
+  }
+  const issues = input.issues ?? [];
+  return {
+    show: true,
+    tone: verdict === "fail" ? "alert" : "warn",
+    label: verdict === "fail" ? "Critic: fail" : "Critic: review",
+    detail: issues.length ? issues.join(" · ") : "The automated critic flagged this deliverable.",
+  };
+}
+
 export const __test = { verdictFor, REFUSAL_MARKERS, PLACEHOLDER_MARKERS, COVERAGE_FLOOR };
