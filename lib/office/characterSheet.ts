@@ -128,6 +128,84 @@ export const SKILL_LABELS: Record<Skill, string> = {
   fund_admin: "Fund Admin",
 };
 
+// ─── Skill inference (free-text → skills) ─────────────────────────────────────
+
+/**
+ * Lowercase substring cues that signal each skill in a raw task description.
+ * Deliberately conservative — a cue only fires when its stem is unambiguous —
+ * so classification stays deterministic and explainable. This is the seam that
+ * lets "Draft the LP update" or "Reconcile settlement" route themselves without
+ * the user naming an executive.
+ */
+const SKILL_KEYWORDS: Record<Skill, string[]> = {
+  sourcing: ["sourc", "pipeline", "partner", "origination", "outreach", "prospect"],
+  screening: ["screen", "shortlist", "target profile"],
+  underwriting: ["underwrit", "credit"],
+  modeling: ["model", "assumption", "sensitivit", "scenario", "valuation", "lbo", "forecast", "comparable"],
+  diligence: ["diligence", "review", "data room", "red flag", "validat", "verify", "verifying", "check"],
+  legal: ["legal", "nda", "document", "disclosure", "closing", "subscription", "contract", "papers"],
+  compliance: ["complian", "control", "risk", "approval", "regulat"],
+  ir: ["investor", "lp ", "lp update", "capital raise", "fundrais"],
+  treasury: ["treasury", "settlement", "capital call", "wire", "reconcil"],
+  portfolio_ops: ["portfolio", "kpi", "dashboard", "operating plan", "post-close"],
+  negotiation: ["negotiat", "term sheet", "deal terms"],
+  structuring: ["structur", "index", "waterfall"],
+  reporting: ["report", "quarterly", "summary", "letter", "pack"],
+  fund_admin: ["fund admin", "fund record", "administ", "calendar"],
+};
+
+/**
+ * Infer the private-markets skills a free-text task calls for. Pure and
+ * deterministic: scans for keyword cues and returns matched skills in taxonomy
+ * order (so the first element is a stable "primary" skill). Empty when nothing
+ * matches — callers treat that as "no confident skill signal".
+ */
+export function inferSkillsFromText(text: string): Skill[] {
+  const t = text.toLowerCase();
+  const hits: Skill[] = [];
+  for (const skill of SKILLS) {
+    if (SKILL_KEYWORDS[skill].some((kw) => t.includes(kw))) hits.push(skill);
+  }
+  return hits;
+}
+
+// ─── Work pantomime (skill → on-floor action) ─────────────────────────────────
+
+/**
+ * The visible work action an executive performs while heads-down. A strict
+ * subset of the avatar's animation vocabulary — the four *doing-work* poses —
+ * so the office program can pick a pantomime without reaching into the renderer.
+ */
+export type WorkPantomime = "typing" | "reviewing_docs" | "presenting" | "analyzing_model";
+
+/**
+ * The pantomime each skill reads as on the floor: modeling/desk work types,
+ * document- and control-heavy skills review docs, communication-facing skills
+ * present, and KPI/dashboard work analyzes. This is the data that makes a
+ * generic "working" agent actually mime its current craft.
+ */
+export const SKILL_PANTOMIME: Record<Skill, WorkPantomime> = {
+  sourcing: "presenting",
+  screening: "reviewing_docs",
+  underwriting: "typing",
+  modeling: "typing",
+  diligence: "reviewing_docs",
+  legal: "reviewing_docs",
+  compliance: "reviewing_docs",
+  ir: "presenting",
+  treasury: "typing",
+  portfolio_ops: "analyzing_model",
+  negotiation: "presenting",
+  structuring: "typing",
+  reporting: "typing",
+  fund_admin: "typing",
+};
+
+/** The pantomime for a single skill. */
+export function pantomimeForSkill(skill: Skill): WorkPantomime {
+  return SKILL_PANTOMIME[skill];
+}
+
 // ─── Executive profiles ──────────────────────────────────────────────────────
 
 /** The competency slice layered onto each executive's {@link ProgramAgent}. */
@@ -203,6 +281,19 @@ export const EXEC_PROFILES: Record<AgentId, ExecProfile> = {
   },
 };
 
+/**
+ * The pantomime an executive should mime for its current task. Driven by the
+ * work itself: the task text is classified into a skill, and that skill's
+ * pantomime is used. When the text carries no confident skill signal, the
+ * executive falls back to its own primary skill so its idle-into-work motion
+ * still reflects its craft. Total and deterministic.
+ */
+export function pantomimeForAgent(agentId: AgentId, taskText?: string): WorkPantomime {
+  const inferred = taskText ? inferSkillsFromText(taskText) : [];
+  const skill = inferred[0] ?? EXEC_PROFILES[agentId].skills[0];
+  return pantomimeForSkill(skill);
+}
+
 // ─── Assembled sheet ─────────────────────────────────────────────────────────
 
 export type CharacterKind = "executive" | "user";
@@ -259,6 +350,23 @@ export function matchExecForSkills(
     if (score > 0 && (!best || score > best.score)) best = { agentId: id, score };
   }
   return best;
+}
+
+/** The outcome of auto-routing a free-text task to its best-matched executive. */
+export type AutoRoute = { agentId: AgentId; skills: Skill[]; score: number };
+
+/**
+ * Route a raw task to the best-matching executive by inferring its required
+ * skills from the text, then matching them against the exec profiles. Returns
+ * `null` when the text yields no confident skill — the caller then falls back
+ * to an explicit target. Pure: composes {@link inferSkillsFromText} and
+ * {@link matchExecForSkills}, so it inherits their determinism.
+ */
+export function autoRouteTask(text: string): AutoRoute | null {
+  const skills = inferSkillsFromText(text);
+  const match = matchExecForSkills(skills);
+  if (!match) return null;
+  return { agentId: match.agentId, skills, score: match.score };
 }
 
 // ─── Reputation / level ──────────────────────────────────────────────────────

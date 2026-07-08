@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FloorOverlay } from "./FloorOverlay";
+import { AGENT_BY_ID } from "./officeProgram";
+import { autoRouteTask, SKILL_LABELS } from "@/lib/office/characterSheet";
 
 /** The subset of the proximity agent this composer needs. */
 export type DelegateAgent = {
@@ -54,17 +56,36 @@ export function AgentDelegateComposer({
 }) {
   const accent = agent.accent || "#c9a84c";
   const [task, setTask] = useState("");
+  // Routing target: this specific exec, or "auto" — let the task's required
+  // skills pick the best-matched executive across the whole floor.
+  const [auto, setAuto] = useState(false);
   const quick = QUICK_TASKS[agent.agentId] ?? GENERIC_TASKS;
+
+  // Live best-match preview for the free-text path, so the chosen exec is
+  // surfaced in the composer before the task is sent.
+  const autoMatch = useMemo(() => (auto ? autoRouteTask(task.trim()) : null), [auto, task]);
+  const autoTarget = autoMatch ? AGENT_BY_ID[autoMatch.agentId] : null;
+
+  /** Resolve which exec a given task text routes to: the auto best-match, or this exec. */
+  const resolveTargetName = (t: string): string => {
+    if (auto) {
+      const m = autoRouteTask(t);
+      if (m) return AGENT_BY_ID[m.agentId].name;
+    }
+    return agent.name;
+  };
 
   const delegate = (raw: string) => {
     const t = raw.trim();
     if (!t) return;
-    // Prefix with the exec's name so Earn's planner routes it to this specialist,
-    // matching the dock's "Have <Name> …" convention.
-    const prompt = `Have ${agent.name} ${lowerFirst(t)}`;
+    // Prefix with the target exec's name so Earn's planner routes it there,
+    // matching the dock's "Have <Name> …" convention. In auto mode the target
+    // is the best skill-match; otherwise it's the exec being addressed.
+    const targetName = resolveTargetName(t);
+    const prompt = `Have ${targetName} ${lowerFirst(t)}`;
     window.dispatchEvent(
       new CustomEvent("earn:open-with-context", {
-        detail: { execName: agent.name, prompt, autoSend: true },
+        detail: { execName: targetName, prompt, autoSend: true },
       }),
     );
     onClose();
@@ -87,7 +108,11 @@ export function AgentDelegateComposer({
             className="flex-1 rounded px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-opacity disabled:opacity-40"
             style={{ background: accent, color: "#0a0806", fontFamily: "Georgia, serif" }}
           >
-            Delegate to {agent.name.split(" ")[0]}
+            {auto
+              ? autoTarget
+                ? `Delegate to ${autoTarget.name.split(" ")[0]}`
+                : "Auto-route task"
+              : `Delegate to ${agent.name.split(" ")[0]}`}
           </button>
           <button
             type="button"
@@ -100,6 +125,50 @@ export function AgentDelegateComposer({
         </div>
       }
     >
+      <div>
+        <p className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-slate-500">Routing</p>
+        <div className="flex gap-1.5">
+          {[
+            { key: false, label: `To ${agent.name.split(" ")[0]}` },
+            { key: true, label: "Auto (best match)" },
+          ].map((opt) => {
+            const active = auto === opt.key;
+            return (
+              <button
+                key={String(opt.key)}
+                type="button"
+                onClick={() => setAuto(opt.key)}
+                aria-pressed={active}
+                className="flex-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors"
+                style={{
+                  borderColor: active ? accent : "rgba(255,255,255,0.15)",
+                  background: active ? `${accent}22` : "transparent",
+                  color: active ? "#f1e9d2" : "#94a3b8",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {auto && (
+          <p className="mt-1.5 text-[9px] leading-snug text-slate-400">
+            {autoTarget ? (
+              <>
+                Best match: <span style={{ color: accent }}>{autoTarget.name}</span>
+                {autoMatch && autoMatch.skills.length > 0 && (
+                  <> — {autoMatch.skills.map((s) => SKILL_LABELS[s]).join(", ")}</>
+                )}
+              </>
+            ) : task.trim() ? (
+              "No clear skill match yet — add detail, or it routes to this exec."
+            ) : (
+              "Describe the task and I'll route it to the best-matched executive."
+            )}
+          </p>
+        )}
+      </div>
+
       <div>
         <p className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-slate-500">Quick tasks</p>
         <div className="flex flex-wrap gap-1.5">
