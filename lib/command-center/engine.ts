@@ -144,6 +144,30 @@ export class WorldEngine {
     this.emit();
   }
 
+  /**
+   * Overlay live activity onto the idle world: each matching executive is shown
+   * at its station working on its real current task. A no-op while a flow runs
+   * (a launched flow owns the floor), so seeding after mount can't disrupt it.
+   * Positions are untouched — avatars already spawn at their home stand.
+   */
+  seedActivity(activity: Record<string, { task: string; progress?: number }>) {
+    if (this.running) return;
+    let changed = false;
+    for (const [id, info] of Object.entries(activity)) {
+      const a = this.avatars.get(id);
+      if (!a || !info || !info.task) continue;
+      a.task = info.task;
+      a.state = "work";
+      a.progress =
+        typeof info.progress === "number" ? Math.max(0, Math.min(1, info.progress)) : 0.4;
+      changed = true;
+    }
+    if (changed) {
+      this.phase = "Live — team at work";
+      this.emit();
+    }
+  }
+
   private resetAvatars() {
     for (const a of this.avatars.values()) {
       const { px, py } = cellCenter(a.def.spawn);
