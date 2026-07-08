@@ -1,4 +1,4 @@
--- 20260708180000_marketplace_rich_cards.sql
+-- 20260708190000_marketplace_rich_cards.sql
 -- Structured deal-card fields for the marketplace, adopted from the public
 -- business-for-sale listing pattern: a human reference code, country (for flag +
 -- facet), reporting currency, EBITDA / gross-revenue sub-metrics, and a curated
