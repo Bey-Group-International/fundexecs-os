@@ -9,6 +9,7 @@ import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import type { AgentKey, Hub, GraphKind, ArtifactType, Json, Task } from "@/lib/supabase/database.types";
 import type { TaskEventType } from "@/lib/events";
 import { generatePlan, generatePlans, executeStep, extractDealFields, extractAssetFields, type AgentPlan } from "@/lib/claude";
+import { classifyArtifact } from "@/lib/pe-frameworks";
 import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import type { BrainResult } from "@/lib/brains/types";
@@ -104,33 +105,6 @@ function hubToGraph(hub: Hub): GraphKind | null {
   return null;
 }
 
-/**
- * Classify a step's deliverable into a first-class artifact type from the
- * authoring agent and the step title. Deterministic so it holds in fallback
- * mode (no API key) too. Coarse on purpose — enough to route and badge.
- */
-function classifyArtifact(agent: AgentKey, stepTitle: string): ArtifactType {
-  const t = stepTitle.toLowerCase();
-  const has = (...w: string[]) => w.some((x) => t.includes(x));
-  if (has("ic memo", "ic ", "recommend", "committee")) return "ic_memo";
-  if (has("model", "lbo", "dcf", "underwrit", "pro forma", "valuation", "sensitivit"))
-    return "model";
-  if (has("risk", "flag", "diligence", "red flag")) return "risk_report";
-  if (has("summar", "recap", "synthes")) return "summary";
-  switch (agent) {
-    case "analyst":
-      return "analysis";
-    case "diligence":
-      return "risk_report";
-    case "investor_relations":
-      return "lp_update";
-    case "fund_admin":
-    case "portfolio_ops":
-    case "associate":
-    default:
-      return "memo";
-  }
-}
 
 async function recordEvent(
   ctx: Ctx,
