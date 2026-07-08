@@ -14,7 +14,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { buildMap, ROOMS, ROOM_BY_ID } from "@/lib/command-center/map";
 import { WorldEngine } from "@/lib/command-center/engine";
-import { demoDataSource, liveEarnDriver, scriptedEarnDriver } from "@/lib/command-center/adapter";
+import { liveDataSource, liveEarnDriver, scriptedEarnDriver } from "@/lib/command-center/adapter";
 import type { FlowDescriptor } from "@/lib/command-center/flows";
 import { WorldCanvas } from "./WorldCanvas";
 import { ChatPane } from "./ChatPane";
@@ -26,9 +26,24 @@ function useEngineState(engine: WorldEngine) {
 }
 
 export function CommandCenter() {
-  const engine = useMemo(() => new WorldEngine(buildMap(), demoDataSource.getRoster()), []);
+  const engine = useMemo(() => new WorldEngine(buildMap(), liveDataSource.getRoster()), []);
   const { chat, status } = useEngineState(engine);
   const flows = useMemo(() => scriptedEarnDriver.listFlows(), []);
+
+  // Seed the world with the org's real in-progress work on mount, so the floor
+  // opens showing which executives are busy on what — not an idle demo. A no-op
+  // once a flow is launched (the engine guards it), and empty on any error.
+  useEffect(() => {
+    let cancelled = false;
+    liveDataSource.getActivity?.().then((activity) => {
+      if (!cancelled && activity && Object.keys(activity).length > 0) {
+        engine.seedActivity(activity);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [engine]);
 
   const [hover, setHover] = useState<{ roomId: string | null; avatarId: string | null }>({
     roomId: null,

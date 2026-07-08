@@ -26,10 +26,36 @@ export interface EarnDriver {
 /** Source of the world's executives. Swap for a live agent/task feed later. */
 export interface WorldDataSource {
   getRoster(): AvatarDef[];
+  /**
+   * Optional live activity overlay: agentKey -> current task. Present on the
+   * live source; the engine seeds matching avatars so the floor reflects real
+   * in-progress work on load. Omitted by the demo source (fully idle world).
+   */
+  getActivity?(): Promise<Record<string, { task: string; progress: number }>>;
 }
 
 export const demoDataSource: WorldDataSource = {
   getRoster: () => buildRoster(),
+};
+
+// Live data source: the roster is the shipped catalog, but activity comes from
+// the org's real tasks via /api/command-center/roster. Falls back to an empty
+// overlay (idle world) on any error, so the floor always renders.
+export const liveDataSource: WorldDataSource = {
+  getRoster: () => buildRoster(),
+  getActivity: async () => {
+    try {
+      const res = await fetch("/api/command-center/roster");
+      if (!res.ok) throw new Error(`roster failed: ${res.status}`);
+      const data = (await res.json()) as { activity?: unknown };
+      return data.activity && typeof data.activity === "object"
+        ? (data.activity as Record<string, { task: string; progress: number }>)
+        : {};
+    } catch (err) {
+      console.error("[liveDataSource] activity fetch failed:", err);
+      return {};
+    }
+  },
 };
 
 export const scriptedEarnDriver: EarnDriver = {
