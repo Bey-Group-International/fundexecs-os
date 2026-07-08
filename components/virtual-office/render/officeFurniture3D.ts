@@ -34,6 +34,7 @@ const C = {
   leaf: "#2f6b3f",
   leafLight: "#3f8a54", // upper foliage layer
   screen: "#0a0d13",
+  screenGlow: "#6d86ad", // uniform powered-on monitor glow (not department-colored)
   sofa: "#28344a",
   cushion: "#30405c", // sofa back / cushions
   chair: "#3b4a63", // muted upholstery seat
@@ -129,7 +130,7 @@ function pieceBoxes(type: PieceType, fx: number, fy: number, accent: string): Fu
       // Desk + glowing monitor + keyboard/caddy/mug detail + a seat in front.
       return [
         box(fx, fy, 46, 16, 12, C.deskTop),
-        box(fx - 10, fy - 4, 14, 4, 20, accent, true), // powered-on monitor
+        box(fx - 10, fy - 4, 14, 4, 20, C.screenGlow, true), // powered-on monitor
         box(fx + 2, fy + 4, 22, 6, 3, C.screen), // keyboard strip
         box(fx + 18, fy, 6, 10, 10, C.caddy), // side caddy
         box(fx - 18, fy - 1, 4, 4, 5, C.mug), // desk mug
@@ -138,14 +139,14 @@ function pieceBoxes(type: PieceType, fx: number, fy: number, accent: string): Fu
     case "console":
       return [
         box(fx, fy, 60, 18, 13, C.deskTop),
-        box(fx, fy - 5, 44, 4, 22, accent, true),
-        box(fx, fy + 6, 60, 18, 2, accent, true),
+        box(fx, fy - 5, 44, 4, 22, C.screenGlow, true),
+        box(fx, fy + 6, 60, 18, 2, C.screenGlow, true),
         box(fx - 22, fy, 5, 5, 6, C.mug), // mug
       ];
     case "screens":
       return [
         box(fx, fy, 54, 16, 8, C.deskFront),
-        box(fx, fy - 8, 50, 3, 26, accent, true),
+        box(fx, fy - 8, 50, 3, 26, C.screenGlow, true),
         box(fx, fy + 4, 24, 6, 3, C.screen), // keyboard strip
       ];
     case "shelf":
