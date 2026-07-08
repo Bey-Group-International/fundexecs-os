@@ -31,46 +31,14 @@ const VirtualOfficeGame = dynamic(
   }
 );
 
-// Opt-in native 3D office (Three.js). Off by default: only when
-// NEXT_PUBLIC_OFFICE_RENDERER=3d does the floor render in 3D instead of Phaser.
-// Same seam, same program store — see components/virtual-office/render/README.md.
-const RENDERER_3D = process.env.NEXT_PUBLIC_OFFICE_RENDERER === "3d";
-const Office3DShell = dynamic(
-  () => import("@/components/virtual-office/Office3DShell").then((m) => m.Office3DShell),
-  { ssr: false }
-);
-
 type Tab = "hq" | "virtual";
 
 // HQ room ids that differ from virtual office room keys
 const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
 
-type RenderMode = "2d" | "3d";
-const RENDER_MODE_KEY = "fx-office-renderer";
-
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
   const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true });
-  // Which office renderer to show. Defaults to the Phaser 2D office (or the
-  // env default), then hydrates the user's saved choice on the client so the
-  // first server render stays deterministic (no hydration mismatch).
-  const [renderMode, setRenderMode] = useState<RenderMode>(RENDERER_3D ? "3d" : "2d");
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(RENDER_MODE_KEY);
-      if (saved === "2d" || saved === "3d") setRenderMode(saved);
-    } catch {
-      /* localStorage unavailable (private mode / SSR) — keep the default */
-    }
-  }, []);
-  const chooseRenderMode = useCallback((mode: RenderMode) => {
-    setRenderMode(mode);
-    try {
-      localStorage.setItem(RENDER_MODE_KEY, mode);
-    } catch {
-      /* ignore persistence failure */
-    }
-  }, []);
   const [token, setToken] = useState<string | undefined>(undefined);
   const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
@@ -288,9 +256,6 @@ export function OfficeTabs() {
             Overview
           </TabButton>
         </div>
-        {tab === "virtual" && !guestPrompt ? (
-          <RenderModeToggle mode={renderMode} onChange={chooseRenderMode} />
-        ) : null}
       </div>
 
       {/* Overview is secondary and mounts only when requested. */}
@@ -343,62 +308,23 @@ export function OfficeTabs() {
         ) : (
           <>
             {/* Character selection now lives in the header chip (one line with
-                the office metrics), so the game mounts directly here. The 3D
-                renderer is an opt-in preview (NEXT_PUBLIC_OFFICE_RENDERER=3d);
-                the Phaser office remains the default. */}
-            {renderMode === "3d" ? (
-              <Office3DShell active={tab === "virtual"} onAskEarn={handleNpcClick} />
-            ) : (
-              <VirtualOfficeGame
-                token={token}
-                officeAvatar={officeAvatar}
-                onAvatarSaved={setOfficeAvatar}
-                displayName={displayName}
-                active={tab === "virtual"}
-                teleportTarget={teleportTarget}
-                dealRoomListingId={dealRoomListingId}
-                onOccupancyChange={setOccupancy}
-                onNpcClick={handleNpcClick}
-                zoneUrlOverrides={zoneUrlOverrides}
-              />
-            )}
+                the office metrics), so the game mounts directly here. */}
+            <VirtualOfficeGame
+              token={token}
+              officeAvatar={officeAvatar}
+              onAvatarSaved={setOfficeAvatar}
+              displayName={displayName}
+              active={tab === "virtual"}
+              teleportTarget={teleportTarget}
+              dealRoomListingId={dealRoomListingId}
+              onOccupancyChange={setOccupancy}
+              onNpcClick={handleNpcClick}
+              zoneUrlOverrides={zoneUrlOverrides}
+            />
           </>
         )}
       </div>
       ) : null}
-    </div>
-  );
-}
-
-// A slim segmented 2D/3D switch for the office renderer. 2D is the Phaser
-// office (default); 3D is the native Three.js office (marked Beta while its
-// in-scene chrome is still catching up to the 2D floor).
-function RenderModeToggle({
-  mode,
-  onChange,
-}: {
-  mode: RenderMode;
-  onChange: (mode: RenderMode) => void;
-}) {
-  const opt = (value: RenderMode, label: string) => (
-    <button
-      type="button"
-      onClick={() => onChange(value)}
-      aria-pressed={mode === value}
-      title={value === "3d" ? "Native 3D office (Beta)" : "Classic 2D office"}
-      className={[
-        "rounded px-2 py-0.5 text-[11px] font-semibold transition-colors",
-        mode === value ? "bg-amber-400 text-slate-900" : "text-slate-400 hover:text-slate-200",
-      ].join(" ")}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div className="mb-1 flex items-center gap-0.5 rounded-md border border-line/60 bg-surface-0/80 p-0.5">
-      {opt("2d", "2D")}
-      {opt("3d", "3D")}
-      <span className="pr-1 text-[9px] font-medium uppercase tracking-wider text-gold-400/70">Beta</span>
     </div>
   );
 }
