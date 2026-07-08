@@ -132,9 +132,15 @@ Next.js reference.
    for an Earn "simulate" panel.
 4. Cluster 4 — sentiment signal source. ✅ **Shipped** — `lib/market-sentiment.ts`
    (deterministic finance-lexicon scorer) → `buildNewsSignal` emits a `news`
-   `EntitySignalInput` for `sourcing-signals`. **Deferred:** the Plaid/Dwolla-style
-   linked-account UI on `app/pay` (needs a provider decision + keys + a migration),
-   tracked as its own future slice.
+   `EntitySignalInput` for `sourcing-signals`.
+5. Cluster 4 (banking UX) — linked accounts + ACH transfers. ✅ **Shipped** —
+   `lib/treasury/` on **Stripe rails** (extends the existing Stripe integration,
+   no Plaid/Dwolla/Connect): Financial Connections for bank linking + ACH via
+   PaymentIntents (deposit) and payouts (withdrawal). New `linked_accounts` +
+   `treasury_transfers` tables (RLS, migration `20260708170000`), a pure
+   validation + status-machine core, and a live "Linked accounts & transfers"
+   panel on the Wallet page. Distilled from **adrianhajdin/banking**'s linked-
+   account + transfer flow, native to FundExecs' own Stripe rails.
 
 Each slice is native TS, pure + deterministic where possible, keyless in CI, and
 matches the existing `lib/` conventions and test discipline.
