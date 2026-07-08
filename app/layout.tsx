@@ -7,7 +7,22 @@ import {
   SITE_TITLE,
   SITE_URL,
 } from "@/lib/site";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { globalGraph } from "@/lib/seo/structured-data";
 import "./globals.css";
+
+// Origin of the Supabase project, derived from the public env var, so we can
+// preconnect to it. Returns null when unset (e.g. local builds without env),
+// in which case the hint is simply omitted.
+function supabaseOrigin(): string | null {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -51,6 +66,11 @@ export const metadata: Metadata = {
   category: "business",
   alternates: {
     canonical: "/",
+    // LLM context file, surfaced to AI crawlers as a plain-text alternate of the
+    // site. Renders <link rel="alternate" type="text/plain" href="/llms.txt">.
+    types: {
+      "text/plain": [{ url: "/llms.txt", title: "LLM Context File" }],
+    },
   },
   // Icons are driven by the app/ file conventions (favicon.ico, icon.png,
   // apple-icon.png) — all rendered from the Earn coin brand mark.
@@ -122,12 +142,27 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = supabaseOrigin();
   return (
     <html
       lang="en"
       className={`${display.variable} ${sans.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Resource hints — warm the connection to the Supabase origin (auth,
+            realtime, storage) before the app requests it. Next hoists these into
+            <head>. next/font already handles font preconnects. */}
+        {supabase ? (
+          <>
+            <link rel="preconnect" href={supabase} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={supabase} />
+          </>
+        ) : null}
+        {/* Global entity graph (Organization · WebSite · SoftwareApplication),
+            server-rendered so JS-less crawlers see it in the initial HTML. */}
+        <JsonLd id="ld-global" data={globalGraph()} />
+      </head>
       <body className="min-h-screen antialiased">
         <Script id="fx-theme-bootstrap" strategy="beforeInteractive">
           {themeBootstrap}

@@ -9,7 +9,7 @@ export const SITE_TAGLINE = "Agents that own the work";
 export const SITE_TITLE = `${SITE_NAME} — ${SITE_TAGLINE}`;
 
 export const SITE_DESCRIPTION =
-  "The AI-native operating system for private capital. Fifteen agents source capital, underwrite deals, manage LPs, and own the work across every hub — on a schedule, approval-gated by default.";
+  "The AI-native operating system for private capital. Specialist agents source capital, underwrite deals, manage LPs, and own the work across every hub — on a schedule, approval-gated by default.";
 
 // Canonical production URL. Overridable per-environment via NEXT_PUBLIC_APP_URL
 // (e.g. Vercel preview deployments, localhost). The fallback is the real
@@ -26,3 +26,69 @@ export const BRAND = {
   fg: "#F5F1E8",
   fgMuted: "#7E7869",
 } as const;
+
+// Absolute URL to the brand logo used by JSON-LD (ImageObject). Points at the
+// 512×512 Earn coin mark shipped in /public.
+export const SITE_LOGO = `${SITE_URL}/icon-512.png`;
+export const SITE_LOGO_SIZE = 512;
+
+// Support / contact address surfaced in structured data and ai.txt.
+export const SITE_CONTACT_EMAIL = "support@fundexecs.com";
+
+// Verified brand profiles. Emitted as schema.org `sameAs`. Intentionally empty
+// until we have confirmed URLs — the JSON-LD builder drops the field entirely
+// when this is empty rather than inventing profiles. Add entries like
+// "https://www.linkedin.com/company/fundexecs" as they are verified.
+export const SITE_SOCIALS: readonly string[] = [];
+
+// The single source of truth for what crawlers must NOT index: the API surface
+// and the entire authenticated app (every page under app/(app)/, plus /admin
+// and /onboarding). Consumed by robots.ts and the ai.txt builder so the two can
+// never drift. Public routes (/, /login, /marketing, token share links under
+// /s /d /pay /portal /sign /lp, meeting links) are deliberately absent and stay
+// crawlable. Entries are path prefixes: "/deal" also covers "/deals", "/session"
+// covers "/sessions". None of these prefixes match a public route.
+export const CRAWLER_DISALLOW: readonly string[] = [
+  "/api/",
+  "/admin",
+  "/onboarding",
+  "/settings",
+  "/workspace",
+  "/home",
+  "/dashboard",
+  "/command-center",
+  "/earn",
+  "/inbox",
+  "/activity",
+  "/agenda",
+  "/approvals",
+  "/asset",
+  "/automations",
+  "/build",
+  "/source",
+  "/run",
+  "/execute",
+  "/campaigns",
+  "/capital-map",
+  "/deal",
+  "/design-system",
+  "/document",
+  "/envelopes",
+  "/finance",
+  "/gift",
+  "/graph",
+  "/grid",
+  "/investor",
+  "/lp-report",
+  "/marketplace",
+  "/meetings",
+  "/network",
+  "/portfolio",
+  "/prospecting",
+  "/relationship",
+  "/reports",
+  "/search",
+  "/session",
+  "/signals",
+  "/wallet",
+];
