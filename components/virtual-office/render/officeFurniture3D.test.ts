@@ -6,8 +6,15 @@ describe("officeFurniture3D", () => {
   const boxes = officeFurniture3D();
 
   it("produces a rich set of furniture boxes across the floor", () => {
-    // Nine department rooms of furniture + workstations + lamps + 6 stalls.
-    expect(boxes.length).toBeGreaterThan(60);
+    // Nine department rooms of detailed furniture + staffed workstations
+    // (each with a chair) + lamps + marketplace stalls with goods.
+    expect(boxes.length).toBeGreaterThan(200);
+  });
+
+  it("seats staffed desks and boardroom tables with upholstered chairs", () => {
+    // Chairs use the muted upholstery tone; there should be many across the floor.
+    const chairs = boxes.filter((b: FurnitureBox) => b.color === "#3b4a63");
+    expect(chairs.length).toBeGreaterThan(20);
   });
 
   it("gives every box a color, positive extents, and a floor-standing height", () => {

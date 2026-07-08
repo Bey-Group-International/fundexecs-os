@@ -12,6 +12,9 @@ import {
   worldOf,
   yawOf,
   roomAccentHex,
+  baseboards,
+  doorPosts,
+  pilasters,
 } from "./officeGeometry3D";
 import { ROOMS, ROOM_W, ROOM_H, WORLD_W, WORLD_H } from "../types";
 
@@ -94,6 +97,66 @@ describe("walls", () => {
       expect(s.cz - halfD).toBeGreaterThanOrEqual(-1e-9);
       expect(s.cz + halfD).toBeLessThanOrEqual(WORLD_H * PX_TO_WORLD + 1e-9);
       expect(s.height).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("baseboards", () => {
+  const strips = baseboards();
+
+  it("emits a trim strip for every wall line", () => {
+    expect(strips.length).toBeGreaterThan(0);
+  });
+
+  it("keeps every strip positive and centered within world bounds", () => {
+    for (const s of strips) {
+      expect(s.width).toBeGreaterThan(0);
+      expect(s.depth).toBeGreaterThan(0);
+      expect(s.height).toBeGreaterThan(0);
+      expect(s.cx).toBeGreaterThanOrEqual(0);
+      expect(s.cx).toBeLessThanOrEqual(WORLD_W * PX_TO_WORLD);
+      expect(s.cz).toBeGreaterThanOrEqual(0);
+      expect(s.cz).toBeLessThanOrEqual(WORLD_H * PX_TO_WORLD);
+    }
+  });
+});
+
+describe("door posts", () => {
+  const posts = doorPosts();
+
+  it("emits posts flanking the internal door gaps", () => {
+    expect(posts.length).toBeGreaterThan(0);
+  });
+
+  it("keeps every post positive and centered within world bounds", () => {
+    for (const p of posts) {
+      expect(p.width).toBeGreaterThan(0);
+      expect(p.depth).toBeGreaterThan(0);
+      expect(p.height).toBeGreaterThan(0);
+      expect(p.cx).toBeGreaterThanOrEqual(0);
+      expect(p.cx).toBeLessThanOrEqual(WORLD_W * PX_TO_WORLD);
+      expect(p.cz).toBeGreaterThanOrEqual(0);
+      expect(p.cz).toBeLessThanOrEqual(WORLD_H * PX_TO_WORLD);
+    }
+  });
+});
+
+describe("pilasters", () => {
+  const cols = pilasters();
+
+  it("emits a column at each interior grid intersection", () => {
+    expect(cols.length).toBeGreaterThan(0);
+  });
+
+  it("keeps every column positive and centered within world bounds", () => {
+    for (const c of cols) {
+      expect(c.width).toBeGreaterThan(0);
+      expect(c.depth).toBeGreaterThan(0);
+      expect(c.height).toBeGreaterThan(0);
+      expect(c.cx).toBeGreaterThanOrEqual(0);
+      expect(c.cx).toBeLessThanOrEqual(WORLD_W * PX_TO_WORLD);
+      expect(c.cz).toBeGreaterThanOrEqual(0);
+      expect(c.cz).toBeLessThanOrEqual(WORLD_H * PX_TO_WORLD);
     }
   });
 });

@@ -11,10 +11,11 @@
  * / `submitOfficeTask`), which the 3D view feeds identically, so they work with
  * no Phaser dependency.
  *
- * What is intentionally NOT here yet: presence video tiles, proximity greeting
- * cards, and meeting docks — those are produced by the Phaser scene's presence
- * bridge, so they stay 2D-only until the 3D view grows an equivalent. Hence the
- * "Beta" marker in the renderer toggle.
+ * Proximity greeting cards now live in the 3D view itself (walk your avatar up
+ * to an executive and they greet you). What is intentionally NOT here yet:
+ * presence video tiles and meeting docks — those are produced by the Phaser
+ * scene's live media/presence bridge, so they stay 2D-only until the 3D view
+ * grows an equivalent. Hence the "Beta" marker in the renderer toggle.
  */
 
 import { useCallback, useState } from "react";

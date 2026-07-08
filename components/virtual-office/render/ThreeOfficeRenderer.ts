@@ -30,8 +30,11 @@ import type {
 } from "./OfficeRenderer";
 import type { AgentState, RoomKey } from "../program/officeProgram";
 import {
+  baseboards,
+  doorPosts,
   floorCenter,
   floorSize,
+  pilasters,
   pixelsOf,
   roomAccentHex,
   roomCenterWorld,
@@ -43,6 +46,8 @@ import {
   type Box3D,
 } from "./officeGeometry3D";
 import { officeFurniture3D, officeLampGlows, type FurnitureBox } from "./officeFurniture3D";
+import { buildWalkableGrid, findPath } from "../nav/officePathfinding";
+import { GRID_COLS, TOTAL_ROWS } from "../types";
 import { resolveClip, type AvatarClip } from "./avatarAnimation3D";
 import {
   characterSpriteFor,
@@ -69,6 +74,12 @@ interface ActorHandle {
   clip: AvatarClip;
   /** Target floor position (world units); the group lerps toward it. */
   target: { x: number; z: number };
+  /**
+   * Remaining A* waypoints (world units) to the final target, so a room change
+   * reads as the figure WALKING through doorways rather than sliding through
+   * walls. Null when the actor is already at (or headed straight to) its target.
+   */
+  path: Array<{ x: number; z: number }> | null;
   /** Idle-bob phase so figures don't all bob in lockstep. */
   bob: number;
   /**
@@ -124,6 +135,9 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
   private readonly actors = new Map<string, ActorHandle>();
   private readonly bodyToActor = new Map<THREE.Object3D, string>();
+
+  /** Cached A* walkability grid (the floor is static), reused for every route. */
+  private readonly walkGrid = buildWalkableGrid();
 
   private actorClick: ActorClickHandler | null = null;
   private floorClick: FloorClickHandler | null = null;
@@ -300,6 +314,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       seated: spec.seated ?? false,
       clip: resolveClip(spec.state ?? "idle", { seated: spec.seated ?? false }),
       target: { x: w.x, z: w.z },
+      path: null,
       bob: Math.abs((spec.x * 13 + spec.y * 7) % 6.28),
       sprite: null,
       spriteTex: null,
@@ -375,7 +390,24 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
   moveActor(id: string, x: number, y: number): void {
     const handle = this.actors.get(id);
     if (!handle) return;
-    handle.target = worldOf(x, y); // lerped toward in the loop
+    const dest = worldOf(x, y);
+    // If the destination barely moved, glide straight there (no re-route).
+    if (Math.hypot(dest.x - handle.target.x, dest.z - handle.target.z) < 0.5 && handle.path) {
+      handle.target = dest;
+      return;
+    }
+    // Route from where the figure currently STANDS to the destination, so a room
+    // change walks through doorways instead of sliding through partition walls.
+    const here = pixelsOf(handle.group.position.x, handle.group.position.z);
+    const route = findPath({ x: here.x, y: here.y }, { x, y }, this.walkGrid);
+    if (route && route.length > 1) {
+      // Drop the first waypoint (the tile the actor is already standing on).
+      handle.path = route.slice(1).map((p) => worldOf(p.x, p.y));
+      handle.target = handle.path[0];
+    } else {
+      handle.path = null;
+      handle.target = dest;
+    }
   }
 
   setActorFacing(id: string, facing: ActorFacing): void {
@@ -409,6 +441,13 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.floorClick = cb;
   }
 
+  /** Current interpolated position of an actor in top-down office pixels. */
+  actorPixel(id: string): { x: number; y: number } | null {
+    const handle = this.actors.get(id);
+    if (!handle) return null;
+    return pixelsOf(handle.group.position.x, handle.group.position.z);
+  }
+
   // ── Internal: static world ──────────────────────────────────────────────────
 
   private buildStaticIfReady(): void {
@@ -419,15 +458,22 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Floor plane (pickable for click-to-walk).
     const floorGeo = new THREE.PlaneGeometry(width, depth);
-    // Warm wood-toned base across the whole office (like the 2D floor). Rooms
-    // are ONE warm floor; department color is only a faint accent + rug + sign.
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x35291d, roughness: 0.9 });
+    // Warm wood-plank floor across the whole office (like the 2D brick/board
+    // floor). Rooms are ONE warm floor; department color is only a faint accent
+    // + rug + sign. A procedural plank texture, tiled once per room, gives the
+    // grain and seams that a flat fill was missing.
+    const floorTex = this.makeFloorTexture();
+    floorTex.wrapS = THREE.RepeatWrapping;
+    floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(GRID_COLS, TOTAL_ROWS);
+    floorTex.colorSpace = THREE.SRGBColorSpace;
+    const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, color: 0x8a6f52, roughness: 0.92 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(c.x, 0, c.z);
     scene.add(floor);
     this.floorPlane = floor;
-    this.disposables.push(floorGeo, floorMat);
+    this.disposables.push(floorGeo, floorMat, floorTex);
 
     // Per-room floor, built procedurally (no room-image textures): a department
     // wash over the whole room, plus a bordered central rug — mirroring the 2D
@@ -474,6 +520,11 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Walls (one instanced draw call) + the full per-room furniture set.
     this.wallMesh = this.buildInstancedBoxes(wallSegments(), 0x2b3242, 0.85);
+    // Architectural detail: warm baseboard trim, framed door posts, and corner
+    // pilasters — each one instanced draw call — so rooms read as a built space.
+    this.buildInstancedBoxes(baseboards(), 0x4a3a2c, 0.9);
+    this.buildInstancedBoxes(doorPosts(), 0x5b4636, 0.8);
+    this.buildInstancedBoxes(pilasters(), 0x343c4c, 0.85);
     this.buildFurniture(officeFurniture3D());
 
     // Per-room polish: a floating department sign + a WARM (gold) fill light per
@@ -519,6 +570,51 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     sprite.scale.set(5.2, 0.98, 1);
     this.disposables.push(tex, mat);
     return sprite;
+  }
+
+  /**
+   * A warm wood-plank floor tile drawn to a canvas — horizontal boards with
+   * subtle grain and darker seams — so the floor reads like the 2D office's
+   * warm board/brick floor instead of a flat fill. Falls back to a plain warm
+   * canvas where `document` is unavailable (SSR); tiled by the caller.
+   */
+  private makeFloorTexture(): THREE.Texture {
+    const size = 256;
+    if (typeof document === "undefined") {
+      // SSR / non-DOM: an empty texture is enough (this path never renders — the
+      // renderer is dynamically imported and only builds the floor client-side).
+      return new THREE.Texture();
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+    // Warm base.
+    ctx.fillStyle = "#6f5842";
+    ctx.fillRect(0, 0, size, size);
+    // Six horizontal planks with staggered grain + darker seams between them.
+    const planks = 6;
+    const ph = size / planks;
+    const tones = ["#755c44", "#6b5340", "#7a6149", "#664e3b", "#725944", "#6d5541"];
+    for (let i = 0; i < planks; i++) {
+      ctx.fillStyle = tones[i % tones.length];
+      ctx.fillRect(0, i * ph, size, ph);
+      // Grain streaks.
+      ctx.strokeStyle = "rgba(60,44,32,0.18)";
+      ctx.lineWidth = 1;
+      for (let s = 0; s < 4; s++) {
+        const gy = i * ph + ((s + 1) * ph) / 5;
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(size, gy + (s % 2 === 0 ? 1.5 : -1.5));
+        ctx.stroke();
+      }
+      // Darker seam under each plank.
+      ctx.fillStyle = "rgba(38,27,18,0.55)";
+      ctx.fillRect(0, i * ph + ph - 2, size, 2);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
   }
 
   /**
@@ -658,9 +754,22 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     // Actor position lerp, facing, a gentle idle bob, and sprite animation.
     for (const a of this.actors.values()) {
       const g = a.group;
-      const moving = Math.hypot(a.target.x - g.position.x, a.target.z - g.position.z) > 0.05;
-      g.position.x += (a.target.x - g.position.x) * Math.min(1, dt * 6);
-      g.position.z += (a.target.z - g.position.z) * Math.min(1, dt * 6);
+      // Advance along the A* route: once close to the current waypoint, retarget
+      // the next one so the figure threads the doorways corner to corner.
+      if (a.path && Math.hypot(a.target.x - g.position.x, a.target.z - g.position.z) < 0.12) {
+        a.path.shift();
+        if (a.path.length > 0) a.target = a.path[0];
+        else a.path = null;
+      }
+      const dx = a.target.x - g.position.x;
+      const dz = a.target.z - g.position.z;
+      const moving = Math.hypot(dx, dz) > 0.05;
+      // Face the way we walk, so the sprite plays the matching directional row.
+      if (moving) {
+        a.facing = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "right" : "left") : dz > 0 ? "down" : "up";
+      }
+      g.position.x += dx * Math.min(1, dt * 6);
+      g.position.z += dz * Math.min(1, dt * 6);
       // A billboard sprite always faces the camera; only rotate the (capsule)
       // fallback, whose facing is conveyed by yaw rather than the walk row.
       if (!a.sprite) g.rotation.y += (yawOf(a.facing) - g.rotation.y) * Math.min(1, dt * 8);
