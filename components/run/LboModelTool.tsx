@@ -8,6 +8,8 @@
 // leverage-blind equity CAGR.
 import { useMemo, useState } from "react";
 import { computeLbo, defaultLboInputs, lboSensitivity, type LboInputs } from "@/lib/lbo-model";
+import { ScenarioBar } from "@/components/shared/ScenarioBar";
+import type { SavedScenario } from "@/lib/financial-scenarios";
 
 // Inputs the UI collects as whole percentages (converted to fractions on the
 // way into computeLbo) versus raw dollar / multiple / year values.
@@ -74,7 +76,7 @@ function irrCellClass(irr: number | null): string {
   return "bg-status-danger/10 text-status-danger";
 }
 
-export function LboModelTool() {
+export function LboModelTool({ saved = [] }: { saved?: SavedScenario[] }) {
   const [raw, setRaw] = useState<Record<keyof LboInputs, string>>(() => {
     const d = defaultLboInputs();
     return Object.fromEntries(
@@ -82,6 +84,21 @@ export function LboModelTool() {
     ) as Record<keyof LboInputs, string>;
   });
   const [open, setOpen] = useState(false);
+
+  // Restore a saved scenario: its inputs are a stored LboInputs, mapped back to
+  // the raw display strings (percentage fields shown as whole numbers).
+  function loadScenario(stored: Record<string, unknown>) {
+    const d = defaultLboInputs();
+    setRaw((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(d) as (keyof LboInputs)[]) {
+        const v = stored[k];
+        if (typeof v === "number" && Number.isFinite(v)) next[k] = toDisplay(k, v);
+      }
+      return next;
+    });
+    setOpen(true);
+  }
 
   const inputs = useMemo<LboInputs>(() => {
     const d = defaultLboInputs();
@@ -140,6 +157,12 @@ export function LboModelTool() {
 
       {open && (
         <div className="border-t border-line px-4 py-4">
+          <ScenarioBar
+            kind="lbo"
+            saved={saved}
+            getInputs={() => inputs as unknown as Record<string, unknown>}
+            onLoad={loadScenario}
+          />
           {/* Inputs */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {FIELDS.map((f) => (

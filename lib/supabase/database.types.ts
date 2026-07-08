@@ -228,6 +228,16 @@ export type Investor = Timestamps & RecordMeta & {
   allocation_signal?: string | null;
 }
 
+export type FinancialScenario = Timestamps & {
+  id: string;
+  organization_id: string;
+  deal_id: string | null;
+  kind: "lbo" | "waterfall";
+  name: string;
+  inputs: Json;
+  created_by: string | null;
+};
+
 export type Fund = Timestamps & {
   id: string;
   organization_id: string;
@@ -2567,6 +2577,7 @@ export type Database = {
       meeting_notes: TableShape<MeetingNote>;
       agent_memories: TableShape<AgentMemory>;
       pipeline_stages: TableShape<PipelineStage>;
+      financial_scenarios: TableShape<FinancialScenario>;
       sequence_enrollments: TableShape<SequenceEnrollment>;
       alert_rules: TableShape<AlertRule>;
       alert_events: TableShape<AlertEvent>;

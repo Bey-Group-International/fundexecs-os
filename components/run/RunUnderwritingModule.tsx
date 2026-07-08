@@ -21,6 +21,7 @@ import {
 } from "@/lib/underwriting-calc";
 import { UnderwritingCalculator } from "@/components/run/UnderwritingCalculator";
 import { LboModelTool } from "@/components/run/LboModelTool";
+import { listFinancialScenarios } from "@/lib/financial-scenarios";
 import type { Deal, Underwriting } from "@/lib/supabase/database.types";
 
 // Deals you can still underwrite — everything that hasn't been passed on or
@@ -252,7 +253,7 @@ function DealPanel({
 // --- Run › Underwriting: org-wide cases, now actionable --------------------
 export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
   const supabase = await createServerClient();
-  const [deals, uwRes] = await Promise.all([
+  const [deals, uwRes, lboScenarios] = await Promise.all([
     activeDeals(orgId),
     supabase
       .from("underwritings")
@@ -261,6 +262,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
       .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(200),
+    listFinancialScenarios("lbo"),
   ]);
   const cases = (uwRes.data ?? []) as Underwriting[];
   const nameById = new Map(deals.map((d) => [d.id, d.name]));
@@ -279,7 +281,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
   return (
     <div>
       <ModuleHeader title="Underwriting" blurb="Base, bull, and bear cases behind every investment decision — compare scenarios, weight outcomes, and model returns." />
-      <LboModelTool />
+      <LboModelTool saved={lboScenarios} />
       {deals.length === 0 ? (
         <NoDeals what="underwrite" />
       ) : (
