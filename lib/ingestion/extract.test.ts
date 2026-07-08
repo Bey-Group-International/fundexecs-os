@@ -22,6 +22,21 @@ describe("stripHtml", () => {
   it("decodes common entities", () => {
     expect(stripHtml("A &amp; B &lt;x&gt;")).toBe("A & B <x>");
   });
+
+  it("strips script/style end tags that carry whitespace or attributes before '>'", () => {
+    // Regression (CodeQL js/bad-tag-filter): a crafted "</script >" or
+    // "</style foo>" must not leak the element body through as text.
+    expect(stripHtml("<script>evil()</script >Visible")).toBe("Visible");
+    expect(stripHtml("<style>.x{}</style\t>Shown")).toBe("Shown");
+    expect(stripHtml("<script>x</script foo=bar>After")).toBe("After");
+  });
+
+  it("does not double-unescape entities", () => {
+    // Regression (CodeQL js/double-unescaping): decoding "&amp;" runs last so
+    // "&amp;lt;" yields the literal text "&lt;", not the character "<".
+    expect(stripHtml("&amp;lt;")).toBe("&lt;");
+    expect(stripHtml("a &amp;amp; b")).toBe("a &amp; b");
+  });
 });
 
 describe("extractTitle", () => {

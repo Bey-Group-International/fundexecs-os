@@ -14,6 +14,7 @@ import { AGENTS } from "@/lib/agents";
 import { activateBrain } from "@/lib/brains";
 import type { BrainResult } from "@/lib/brains/types";
 import { computeGroundingScore } from "@/lib/grounding";
+import { critiqueArtifact } from "@/lib/engine-critic";
 import { brainForAgent } from "@/lib/brain-routing";
 import { buildRouting, deskOverride, engineForStage, executiveForStage, EXECUTIVE_LABEL, type Executive } from "@/lib/intelligence";
 import { shouldReuseRecord } from "@/lib/reference-binding";
@@ -946,6 +947,15 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     // Automated grounding signal: how much of the deliverable reflects its
     // citations. Persisted now; the human approval gate verifies on top of it.
     const groundingScore = computeGroundingScore(output, sources);
+    // Automated critic pre-screen: is this a usable answer (not a refusal, stub,
+    // or off-topic drift)? Deterministic + free; surfaced on the event so the
+    // approval gate leads with any red flags. Complements the grounding score.
+    const critique = critiqueArtifact({
+      content: output,
+      title: step.title,
+      description: step.description,
+      sources,
+    });
 
     const artifactType = classifyArtifact(effectiveAgent, step.title);
     const [, { data: artifact }] = await Promise.all([
@@ -991,7 +1001,15 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
         type: "artifact.created",
         agent: effectiveAgent,
         hub: step.hub,
-        payload: { artifact_id: artifact?.id, artifact_type: artifactType, title: step.title, sources: sources.length },
+        payload: {
+          artifact_id: artifact?.id,
+          artifact_type: artifactType,
+          title: step.title,
+          sources: sources.length,
+          critic_verdict: critique.verdict,
+          critic_score: critique.score,
+          critic_issues: critique.issues,
+        },
       }),
       ctx.supabase
         .from("tasks")
