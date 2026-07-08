@@ -190,6 +190,18 @@ const config: Config = {
           "60%":  { opacity: "1", transform: "translateY(-18px) scale(1)" },
           "100%": { opacity: "0", transform: "translateY(-34px) scale(0.9)" },
         },
+        // Marketing: pans an over-sized gradient across a text fill so a
+        // gold→neural wordmark shimmers left↔right (see .fx-text-gradient).
+        fxGradientPan: {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%":      { backgroundPosition: "100% 50%" },
+        },
+        // Marketing: slow continuous rotation for the conic CTA ring so only a
+        // thin lit border appears to travel around the button edge.
+        fxSpinSlow: {
+          "0%":   { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
+        },
       },
       animation: {
         pulse: "fxPulse 1.6s ease-in-out infinite",
@@ -212,6 +224,8 @@ const config: Config = {
         "coach-slide-up": "fxCoachSlideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1) both",
         "coach-fade-out": "fxCoachFadeOut 0.15s ease-in both",
         "credit-pop": "fxCreditPop 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+        "gradient-pan": "fxGradientPan 6s ease-in-out infinite",
+        "spin-slow": "fxSpinSlow 4.5s linear infinite",
       },
     },
   },

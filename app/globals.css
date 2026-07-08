@@ -559,3 +559,45 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   Marketing surfaces — gradient text + conic CTA ring. The mechanics are
+   adopted from the Evalyze landing patterns but retinted to the FundExecs
+   gold→neural ramp so they read inside the existing dark terminal system.
+   Both are theme-aware (they consume --fx-gold-* / --fx-accent-* which flip
+   with theme-day/theme-night) and their motion is frozen automatically by the
+   global prefers-reduced-motion catch-all above.
+   ========================================================================== */
+
+/* Clips a panning gold→neural gradient to the element's text. Add
+   `animate-gradient-pan` to shimmer it. Because the fill is transparent, keep
+   the text high-contrast on its own (the gradient stays within the gold/neural
+   luminance band) and avoid placing essential meaning in color alone. */
+.fx-text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    rgb(var(--fx-gold-300)),
+    rgb(var(--fx-gold-400)),
+    rgb(var(--fx-accent-300)),
+    rgb(var(--fx-gold-300))
+  );
+  background-size: 300% 100%;
+  background-position: 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Full conic sweep painted behind the primary CTA. The button pill sits on top
+   at a 2px inset, so only a thin lit edge of this ring shows; rotating it
+   (animate-spin-slow) sends that edge travelling around the border. */
+.fx-conic-ring {
+  background: conic-gradient(
+    from 0deg,
+    rgb(var(--fx-gold-400)),
+    rgb(var(--fx-accent-400)),
+    rgb(var(--fx-gold-300)),
+    rgb(var(--fx-gold-400))
+  );
+}
