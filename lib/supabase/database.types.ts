@@ -1757,6 +1757,49 @@ export type PaymentInvoice = Timestamps & {
   created_by: string | null;
 };
 
+// A linked external bank account (migration 20260708170000), connected through
+// Stripe Financial Connections. We keep only Stripe references + display-safe
+// metadata; no account/routing numbers are ever stored. See lib/treasury/linked-accounts.
+export type LinkedAccountType = "checking" | "savings" | "other";
+export type LinkedAccountStatus = "active" | "disconnected" | "errored";
+
+export type LinkedAccount = Timestamps & {
+  id: string;
+  organization_id: string;
+  stripe_fc_account_id: string | null;
+  stripe_payment_method_id: string | null;
+  institution_name: string | null;
+  display_name: string | null;
+  last4: string | null;
+  account_type: LinkedAccountType;
+  status: LinkedAccountStatus;
+  balance_cents: number | null;
+  currency: string;
+  created_by: string | null;
+};
+
+// An ACH transfer against a linked account (migration 20260708170000): a
+// `deposit` pulls funds in via an ACH-debit PaymentIntent, a `withdrawal` pushes
+// via a Stripe payout. Status mirrors the Stripe object. See lib/treasury/transfers.
+export type TransferDirection = "deposit" | "withdrawal";
+export type TransferStatus = "pending" | "processing" | "succeeded" | "failed" | "canceled";
+
+export type TreasuryTransfer = Timestamps & {
+  id: string;
+  organization_id: string;
+  linked_account_id: string | null;
+  direction: TransferDirection;
+  amount_cents: number;
+  currency: string;
+  status: TransferStatus;
+  stripe_payment_intent_id: string | null;
+  stripe_payout_id: string | null;
+  idempotency_key: string | null;
+  description: string | null;
+  failure_reason: string | null;
+  created_by: string | null;
+};
+
 // A shareable teaser of a deal (migration 0046): the public token + Earn's
 // confidential memo. The full deal room is never exposed — only this travels.
 export type DealShare = Timestamps & {
@@ -2534,6 +2577,8 @@ export type Database = {
       credit_gifts: TableShape<CreditGift>;
       stripe_checkouts: TableShape<StripeCheckout>;
       payment_invoices: TableShape<PaymentInvoice>;
+      linked_accounts: TableShape<LinkedAccount>;
+      treasury_transfers: TableShape<TreasuryTransfer>;
       processed_stripe_events: TableShape<ProcessedStripeEvent>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;

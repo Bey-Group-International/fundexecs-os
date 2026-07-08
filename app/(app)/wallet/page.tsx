@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
 import { recentSpend } from "@/lib/credits";
+import { createServerClient } from "@/lib/supabase/server";
+import { listLinkedAccounts } from "@/lib/treasury/linked-accounts";
+import { listTransfers } from "@/lib/treasury/transfers";
+import { TreasuryPanel } from "./TreasuryPanel";
 import {
   PLANS,
   PLAN_BY_KEY,
@@ -70,6 +74,12 @@ export default async function WalletPage(
     getWallet(ctx.orgId),
     recentSpend(ctx.orgId),
     compoundingProfile(ctx.orgId),
+  ]);
+
+  const supabase = await createServerClient();
+  const [linkedAccounts, treasuryTransfers] = await Promise.all([
+    listLinkedAccounts(supabase, ctx.orgId),
+    listTransfers(supabase, ctx.orgId),
   ]);
 
   const balance = wallet?.credits ?? 0;
@@ -337,6 +347,13 @@ export default async function WalletPage(
       <GamificationPanel />
 
       <CreditHistory />
+
+      <TreasuryPanel
+        accounts={linkedAccounts}
+        transfers={treasuryTransfers}
+        publishableKey={publishableKey}
+        stripeLive={live}
+      />
 
       {live && currentPlan && (
         <div className="mt-6 flex justify-center">
