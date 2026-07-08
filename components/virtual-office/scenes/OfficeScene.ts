@@ -99,6 +99,8 @@ export type OfficeSceneInitData = {
   characterId?: string;
   /** The operator's human Executive Floor avatar (from user_metadata). */
   officeAvatar?: unknown;
+  /** Whether the Earn-coin companion trails the operator (WorkAdventure-style). */
+  companion?: boolean;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -219,6 +221,15 @@ export class OfficeScene extends Phaser.Scene {
   private _approvalColor = 0xef4444;
   private _approvalGen = 0;
 
+  // WorkAdventure-style companion (Earn-coin sidekick) + "Say" speech bubble.
+  private companion?: ExecutiveAvatar;
+  private companionEnabled = false;
+  private companionX = 0;
+  private companionY = 0;
+  private companionBob = 0;
+  private sayText?: Phaser.GameObjects.Text;
+  private sayTimer = 0;
+
   // Interactive objects (press-X hotspots)
   private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number; marker: Phaser.GameObjects.Text }> = [];
   private interactPrompt!: Phaser.GameObjects.Text;
@@ -323,6 +334,7 @@ export class OfficeScene extends Phaser.Scene {
     // executives). The invisible physics sprite keeps a real sprite sheet for
     // movement/animation; the visible figure is built from the office avatar.
     this.myOfficeAvatar = parseUserAvatar(data?.officeAvatar) ?? DEFAULT_USER_AVATAR;
+    this.companionEnabled = data?.companion ?? false;
     if (data?.token) {
       this.socket = new VirtualOfficeSocket();
       this.socket.onMessage((msg: ServerMessage) => this._handleServerMessage(msg));
@@ -520,6 +532,8 @@ export class OfficeScene extends Phaser.Scene {
     this._updatePlayerAvatar(delta);
     this._updateInteractives(delta);
     this._updateEmotes(delta);
+    this._updateCompanion(delta);
+    this._updateSay(delta);
     this._updateRoomLabel();
     this._updateIframeZones();
     this._updateRemoteAvatars();
@@ -544,6 +558,8 @@ export class OfficeScene extends Phaser.Scene {
     this.marketplaceStallGfx = [];
     this.game.events.off("office:touch-move");
     this.game.events.off("office:emote");
+    this.game.events.off("office:say");
+    this.game.events.off("office:companion");
     this.game.events.off("office:zone-config");
     this.game.events.off("rtc:localStream");
     this.game.events.off("rtc:screen-share");
@@ -573,6 +589,10 @@ export class OfficeScene extends Phaser.Scene {
     this.socket = null;
     // Tear down vector avatars (containers + tweened auras).
     this.playerAvatar?.destroy();
+    this.companion?.destroy();
+    this.companion = undefined;
+    this.sayText?.destroy();
+    this.sayText = undefined;
     for (const [, s] of this.npcAvatars) s.avatar.destroy();
     for (const [, s] of this.remotePlayers) s.avatar.destroy();
     // Tear down the 2.5D environment (walls + furniture graphics).
@@ -2071,6 +2091,82 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.on("office:emote", (emoji: string) => {
       this._triggerLocalEmote(emoji);
     });
+    // "Say" — a text speech bubble over the operator (WorkAdventure-style).
+    this.game.events.on("office:say", (text: string) => this._showSay(text));
+    // Companion — a gold-coin sidekick that trails the operator.
+    this.game.events.on("office:companion", (on: boolean) => this._setCompanion(on));
+    this._setCompanion(this.companionEnabled);
+  }
+
+  /** Spawn or dismiss the Earn-coin companion that trails the operator. */
+  private _setCompanion(on: boolean) {
+    this.companionEnabled = on;
+    if (on) {
+      if (this.companion || !this.player) return;
+      this.companionX = this.player.x - 18;
+      this.companionY = this.player.y + 6;
+      this.companion = new ExecutiveAvatar(
+        this, this.companionX, this.companionY, agentAvatarSpec("earn", "#fbbf24"), 9,
+      );
+      this.companion.container.setScale(0.72);
+    } else if (this.companion) {
+      this.companion.destroy();
+      this.companion = undefined;
+    }
+  }
+
+  /** Trail the companion behind the operator with a gentle bob. */
+  private _updateCompanion(delta: number) {
+    if (!this.companion || !this.player) return;
+    this.companionBob += delta;
+    const tx = this.player.x - 18;
+    const ty = this.player.y + 6;
+    const lerp = 0.09;
+    this.companionX += (tx - this.companionX) * lerp;
+    this.companionY += (ty - this.companionY) * lerp;
+    const bob = this.reducedMotion ? 0 : Math.sin(this.companionBob / 260) * 1.4;
+    this.companion.setPosition(this.companionX, this.companionY + bob);
+    this.companion.update(delta);
+    this.companion.container.setDepth(yDepth(this.companionY) - 0.1);
+  }
+
+  /** Show a "Say" text bubble above the operator for a few seconds. */
+  private _showSay(text: string) {
+    const clean = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!clean || !this.player) return;
+    if (this.sayText) {
+      this.tweens.killTweensOf(this.sayText);
+      this.sayText.destroy();
+    }
+    this.sayText = this.add
+      .text(this.player.x, this.player.y - 40, clean, {
+        fontFamily: "'Georgia','Times New Roman',serif",
+        fontSize: "10px",
+        color: "#f4f0e8",
+        align: "center",
+        backgroundColor: "#0a0806e6",
+        padding: { x: 7, y: 4 },
+        wordWrap: { width: 150 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH_LABEL + 0.4);
+    if (!this.reducedMotion) {
+      this.sayText.setAlpha(0);
+      this.tweens.add({ targets: this.sayText, alpha: 1, duration: 150 });
+    }
+    this.sayTimer = 4200;
+  }
+
+  /** Keep the "Say" bubble pinned above the operator and expire it. */
+  private _updateSay(delta: number) {
+    if (!this.sayText) return;
+    this.sayText.setPosition(this.player.x, this.player.y - 40);
+    this.sayTimer -= delta;
+    if (this.sayTimer <= 0) {
+      this.tweens.killTweensOf(this.sayText);
+      this.sayText.destroy();
+      this.sayText = undefined;
+    }
   }
 
   /** Show an emote above the local player and broadcast it to the room. */

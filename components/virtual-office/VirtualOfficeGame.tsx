@@ -412,6 +412,26 @@ export function VirtualOfficeGame({
   const [showActiveWork, setShowActiveWork] = useState(() => readPanel("office:panel:work"));
   useEffect(() => { try { window.localStorage.setItem("office:panel:earn", showCommandPanel ? "1" : "0"); } catch { /* no-op */ } }, [showCommandPanel]);
   useEffect(() => { try { window.localStorage.setItem("office:panel:work", showActiveWork ? "1" : "0"); } catch { /* no-op */ } }, [showActiveWork]);
+  // WorkAdventure-style companion (Earn-coin sidekick) + "Say" bubble. The
+  // companion preference persists; the scene spawns it from initData and this
+  // effect re-emits on toggle. "Say" opens a one-line input in the rail.
+  const readCompanion = () => {
+    if (typeof window === "undefined") return false;
+    try { return window.localStorage.getItem("office:companion") === "1"; } catch { return false; }
+  };
+  const [companionOn, setCompanionOn] = useState(readCompanion);
+  useEffect(() => {
+    try { window.localStorage.setItem("office:companion", companionOn ? "1" : "0"); } catch { /* no-op */ }
+    gameRef.current?.events.emit("office:companion", companionOn);
+  }, [companionOn]);
+  const [sayOpen, setSayOpen] = useState(false);
+  const [sayValue, setSayValue] = useState("");
+  const submitSay = useCallback(() => {
+    const text = sayValue.trim();
+    if (text) gameRef.current?.events.emit("office:say", text);
+    setSayValue("");
+    setSayOpen(false);
+  }, [sayValue]);
   // In-office meeting: an explicit real-time video session, rendered as a
   // floating dock over the canvas (reuses the floor's WebRTC video).
   const [meetingActive, setMeetingActive] = useState(false);
@@ -971,7 +991,7 @@ export function VirtualOfficeGame({
         });
 
         if (token) {
-          const initData: OfficeSceneInitData = { token, characterId, officeAvatar };
+          const initData: OfficeSceneInitData = { token, characterId, officeAvatar, companion: readCompanion() };
           game.events.once("ready", () => {
             game?.scene.getScene("OfficeScene")?.scene.restart(initData);
           });
@@ -1285,7 +1305,7 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">▣</span>
           {screenStream ? "Sharing" : "Share screen"}
         </button>
-        {/* Emote bar — mirrors keyboard shortcuts 1-4 */}
+        {/* Emote bar — mirrors keyboard shortcuts 1-4 — plus Say + Companion. */}
         <div className="flex items-center gap-0.5 shrink-0 pl-2 border-l border-[#c9a84c18]">
           {EMOTE_BAR.map((e) => (
             <button
@@ -1297,6 +1317,59 @@ export function VirtualOfficeGame({
               {e.emoji}
             </button>
           ))}
+          {/* Say — a text speech bubble over your avatar */}
+          <div className="relative">
+            <button
+              type="button"
+              title="Say something"
+              aria-expanded={sayOpen}
+              onClick={() => setSayOpen((v) => !v)}
+              className={`px-1.5 py-0.5 rounded text-[13px] transition-colors ${sayOpen ? "bg-[#c9a84c2e]" : "hover:bg-[#c9a84c1f]"}`}
+            >
+              💬
+            </button>
+            {sayOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setSayOpen(false)} />
+                <div
+                  className="absolute right-0 top-full z-40 mt-1 flex items-center gap-1 rounded-md border p-1"
+                  style={{ borderColor: "rgba(201,168,76,0.35)", background: "rgba(10,8,6,0.97)" }}
+                >
+                  <input
+                    autoFocus
+                    value={sayValue}
+                    maxLength={120}
+                    onChange={(e) => setSayValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitSay();
+                      else if (e.key === "Escape") setSayOpen(false);
+                    }}
+                    placeholder="Say something…"
+                    className="w-40 rounded bg-[#12100c] px-2 py-1 text-[11px] text-fg-primary outline-none"
+                    style={{ border: "1px solid rgba(201,168,76,0.2)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={submitSay}
+                    className="rounded px-2 py-1 text-[10px] uppercase tracking-[0.1em]"
+                    style={{ background: "rgba(201,168,76,0.14)", color: "#c9a84c", border: "1px solid rgba(201,168,76,0.4)" }}
+                  >
+                    Say
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          {/* Companion — an Earn-coin sidekick that follows you */}
+          <button
+            type="button"
+            title={companionOn ? "Dismiss the Earn companion" : "Summon the Earn companion"}
+            aria-pressed={companionOn}
+            onClick={() => setCompanionOn((v) => !v)}
+            className={`px-1.5 py-0.5 rounded text-[13px] transition-colors ${companionOn ? "bg-[#c9a84c2e]" : "hover:bg-[#c9a84c1f]"}`}
+          >
+            🪙
+          </button>
         </div>
       </div>
 
