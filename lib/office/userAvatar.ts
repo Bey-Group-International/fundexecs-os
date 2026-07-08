@@ -81,6 +81,12 @@ export const WARDROBES: Wardrobe[] = [
   { id: "slate", label: "Slate", suit: 0x33383f, shirt: 0xeaf0f6, trouser: 0x262b31 },
   { id: "graphite", label: "Graphite", suit: 0x262b33, shirt: 0xf2ede2, trouser: 0x1c2027 },
   { id: "espresso", label: "Espresso", suit: 0x3a2f2a, shirt: 0xf2ede2, trouser: 0x2a221e },
+  // Expanded set — more executive palettes to choose from.
+  { id: "midnight", label: "Midnight", suit: 0x1a2436, shirt: 0xdbe4f0, trouser: 0x141b29 },
+  { id: "olive", label: "Olive", suit: 0x3b3d2a, shirt: 0xeef0e2, trouser: 0x2c2e1f },
+  { id: "oxblood", label: "Oxblood", suit: 0x3d2226, shirt: 0xf0e6e2, trouser: 0x2b1619 },
+  { id: "dove", label: "Dove", suit: 0x4a4e57, shirt: 0xf2f5f9, trouser: 0x3a3d45 },
+  { id: "ink", label: "Ink", suit: 0x1c1c22, shirt: 0xe6e8ee, trouser: 0x141419 },
 ];
 
 /**
@@ -94,6 +100,10 @@ export const AVATAR_ACCENTS: string[] = [
   "#3a6ea5", // royal blue
   "#3f7d4f", // forest green
   "#9aa4b2", // silver
+  "#b87333", // copper
+  "#7d4a8f", // plum
+  "#4aa3d6", // sky
+  "#d9694a", // coral
 ];
 
 /**
@@ -102,8 +112,11 @@ export const AVATAR_ACCENTS: string[] = [
  * SKIN / HAIR spreads (same values, same order) used for name-derived
  * fallbacks, so a chosen swatch and the auto-assigned default look identical.
  */
-export const SKIN_TONES: string[] = ["#f1c9a5", "#e0a878", "#c68642", "#8d5524", "#ffdbb0", "#d9a066"];
-export const HAIR_COLORS: string[] = ["#2b2320", "#4a3728", "#6b4a2f", "#1a1a1a", "#8a8a8a", "#3a2a1a"];
+// The first six mirror the name-derived SKIN / HAIR fallback spreads (below);
+// the remainder are extra selectable tones. Keep the leading six in order so
+// the auto-assigned default always maps onto a shown swatch.
+export const SKIN_TONES: string[] = ["#f1c9a5", "#e0a878", "#c68642", "#8d5524", "#ffdbb0", "#d9a066", "#f7d9bf", "#a9713f", "#5b3820"];
+export const HAIR_COLORS: string[] = ["#2b2320", "#4a3728", "#6b4a2f", "#1a1a1a", "#8a8a8a", "#3a2a1a", "#6e3b1f", "#cdb894", "#b0b0b8"];
 
 /** Selectable hair silhouettes and body builds the renderer supports. */
 export const HAIR_STYLES: AvatarHairStyle[] = ["short", "textured", "tied", "bald"];
@@ -144,6 +157,47 @@ export const DEFAULT_USER_AVATAR: UserAvatar = {
   accent: AVATAR_ACCENTS[0],
   roleLabel: ROLE_LABELS[0],
 };
+
+/**
+ * A curated one-click look. Appearance only — applying a preset never touches
+ * the display name or role, so an operator keeps their identity while trying on
+ * a coordinated wardrobe/accent/silhouette. Every field references an existing
+ * swatch/enum so a preset always round-trips cleanly through {@link parseUserAvatar}.
+ */
+export type AvatarPreset = {
+  id: string;
+  label: string;
+  genderStyle: UserAvatar["genderStyle"];
+  wardrobe: string;
+  accent: string;
+  skin: string;
+  hair: string;
+  hairStyle: AvatarHairStyle;
+  build: AvatarBuild;
+};
+
+export const AVATAR_PRESETS: AvatarPreset[] = [
+  { id: "closer",     label: "The Closer",     genderStyle: "male",    wardrobe: "charcoal", accent: "#c9a84c", skin: "#e0a878", hair: "#2b2320", hairStyle: "short",    build: "broad"   },
+  { id: "strategist", label: "The Strategist", genderStyle: "female",  wardrobe: "navy",     accent: "#2f8f83", skin: "#f1c9a5", hair: "#4a3728", hairStyle: "tied",     build: "slim"    },
+  { id: "rainmaker",  label: "The Rainmaker",  genderStyle: "male",    wardrobe: "espresso", accent: "#9b3b47", skin: "#c68642", hair: "#1a1a1a", hairStyle: "textured", build: "regular" },
+  { id: "analyst",    label: "The Analyst",    genderStyle: "neutral", wardrobe: "slate",    accent: "#4aa3d6", skin: "#ffdbb0", hair: "#6b4a2f", hairStyle: "short",    build: "slim"    },
+  { id: "diplomat",   label: "The Diplomat",   genderStyle: "female",  wardrobe: "dove",     accent: "#7d4a8f", skin: "#8d5524", hair: "#2b2320", hairStyle: "tied",     build: "regular" },
+  { id: "founder",    label: "The Founder",    genderStyle: "male",    wardrobe: "midnight", accent: "#b87333", skin: "#d9a066", hair: "#3a2a1a", hairStyle: "textured", build: "broad"   },
+];
+
+/** Apply a preset's look to an avatar, preserving its display name and role. */
+export function applyAvatarPreset(a: UserAvatar, p: AvatarPreset): UserAvatar {
+  return {
+    ...a,
+    genderStyle: p.genderStyle,
+    wardrobe: p.wardrobe,
+    accent: p.accent,
+    skin: p.skin,
+    hair: p.hair,
+    hairStyle: p.hairStyle,
+    build: p.build,
+  };
+}
 
 // A small spread of natural skin/hair tones, mirroring avatarPalette's SKIN /
 // HAIR arrays so a user reads as part of the same team. Duplicated (not
