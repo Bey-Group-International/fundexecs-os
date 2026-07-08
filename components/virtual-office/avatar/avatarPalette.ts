@@ -112,6 +112,20 @@ function hexToInt(hex: string): number {
   return parseInt(hex.replace("#", ""), 16);
 }
 
+/**
+ * Push a color's saturation away from its own gray for a more vivid, high-
+ * contrast accent — used on ties / pocket squares / auras so the institutional
+ * (muted) suits read against a punchy signature color. `f` > 1 saturates.
+ */
+export function vivify(color: number, f = 1.5): number {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const avg = (r + g + b) / 3;
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(avg + (n - avg) * f)));
+  return (clamp(r) << 16) | (clamp(g) << 8) | clamp(b);
+}
+
 /** Deterministic index from a string key. */
 function pick<T>(arr: T[], key: string, salt = 0): T {
   let h = salt;

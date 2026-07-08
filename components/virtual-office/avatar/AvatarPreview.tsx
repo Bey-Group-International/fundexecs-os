@@ -2,6 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import type { AvatarSpec } from "./avatarPalette";
+import { vivify } from "./avatarPalette";
+
+/** Bold silhouette outline color — mirrors ExecutiveAvatar's OUTLINE. */
+const OUTLINE = 0x0a0a0d;
 
 /**
  * A static, front-facing preview of an executive avatar rendered to a
@@ -302,6 +306,25 @@ function drawFrontArms(g: CanvasGraphics, s: AvatarSpec, swing: number) {
 function drawFront(g: CanvasGraphics, s: AvatarSpec) {
   const swing = 0;
   const sw = shoulder(s);
+  const acc = vivify(s.accent);
+
+  // Bold outline — a crisp dark silhouette behind the figure (mirrors
+  // ExecutiveAvatar._drawFront). Torso, head, legs, shoes; arms omitted.
+  g.fillStyle(OUTLINE, 1);
+  g.fillRect(-5.05, 5.4, 4.1, 10.2);
+  g.fillRect(0.45, 5.4, 4.1, 10.2);
+  g.fillEllipse(-2.7, 15, 5.4, 3.2);
+  g.fillEllipse(2.7, 15, 5.4, 3.2);
+  g.fillPoints(
+    [
+      { x: -sw - 0.85, y: -6.7 },
+      { x: sw + 0.85, y: -6.7 },
+      { x: 6.35, y: 7.6 },
+      { x: -6.35, y: 7.6 },
+    ],
+    true,
+  );
+  g.fillEllipse(0, -13, 11, 12.5);
 
   // Legs — soft vertical gradient (lit at the thigh, shaded at the cuff).
   const legHi = shade(s.trouser, 1.18);
@@ -362,15 +385,15 @@ function drawFront(g: CanvasGraphics, s: AvatarSpec) {
   g.moveTo(3.2, -6);
   g.lineTo(2.2, 1);
   g.strokePath();
-  // Pocket square — a small folded accent on the left chest.
-  g.fillStyle(shade(s.accent, 1.1), 0.95);
+  // Pocket square — a small folded accent on the left chest (vivid accent).
+  g.fillStyle(shade(acc, 1.1), 0.98);
   g.fillTriangle(-4.6, -2.2, -3.2, -2.2, -3.9, -3.6);
-  // Tie with a knot and a highlighted center ridge.
-  g.fillStyle(s.accent, 1);
+  // Tie with a knot and a highlighted center ridge (vivid accent).
+  g.fillStyle(acc, 1);
   g.fillTriangle(-1.1, -5, 1.1, -5, 0, 4);
-  g.fillStyle(shade(s.accent, 1.25), 0.8);
+  g.fillStyle(shade(acc, 1.3), 0.85);
   g.fillTriangle(-0.4, -4.6, 0.4, -4.6, 0, 3.4);
-  g.fillStyle(shade(s.accent, 1.15), 1);
+  g.fillStyle(shade(acc, 1.18), 1);
   g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
 
   drawHead(g, s, 0, 0);
