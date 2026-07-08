@@ -8,6 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient } from "@/lib/anthropic-client";
 import type { AgentKey, Hub, AssetType } from "@/lib/supabase/database.types";
 import { AGENTS } from "@/lib/agents";
+import { classifyArtifact, frameworkPromptFor } from "@/lib/pe-frameworks";
 import { guidanceText } from "@/lib/document-quality";
 import {
   deriveRouting,
@@ -511,10 +512,15 @@ export async function executeStep(args: {
   const anthropic = client();
   if (!anthropic) return fallbackStepOutput(args);
   const agentName = AGENTS.find((a) => a.key === args.agent)?.name ?? args.agent;
+  // Inject the institutional framework for heavy deliverables (IC memo, LP
+  // update, risk memo, model) so the output follows the expected structure and
+  // standards. Lightweight artifact types carry no framework and are untouched.
+  const framework = frameworkPromptFor(classifyArtifact(args.agent, args.stepTitle));
   const systemPrompt =
     `You are the ${agentName} agent inside FundExecs OS. Produce a crisp, professional deliverable for your assigned step. Lead with the outcome. No preamble.` +
     (args.orgContext ? `\n\nFirm context:\n${args.orgContext}` : "") +
-    (args.documentMode ? `\n\nProduce a structured document with clear headings and bullet points. Use specific numbers and names from the firm context above where available.` : "");
+    (args.documentMode ? `\n\nProduce a structured document with clear headings and bullet points. Use specific numbers and names from the firm context above where available.` : "") +
+    (framework ?? "");
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
