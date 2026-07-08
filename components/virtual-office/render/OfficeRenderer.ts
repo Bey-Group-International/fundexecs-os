@@ -150,4 +150,14 @@ export interface OfficeRenderer {
 
   /** Register the handler invoked when empty floor is clicked. */
   onFloorClick(cb: FloorClickHandler): void;
+
+  // ── Queries (optional) ──────────────────────────────────────────────────────
+
+  /**
+   * The actor's CURRENT interpolated position in top-down office pixels, or
+   * null if unknown. Optional: engines that can't cheaply report live positions
+   * may omit it. Used by proximity features (e.g. greet the executive you walk
+   * up to) that reason in the shared pixel space.
+   */
+  actorPixel?(id: string): { x: number; y: number } | null;
 }

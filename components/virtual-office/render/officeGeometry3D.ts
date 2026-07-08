@@ -214,6 +214,157 @@ export function wallSegments(): Box3D[] {
   return segments;
 }
 
+/** Baseboard trim height (world-facing, exported for the renderer). */
+export const BASEBOARD_HEIGHT_PX = 6;
+
+/** Door-post height — a touch taller than the walls so frames read as trim. */
+export const DOOR_POST_HEIGHT_PX = 46;
+
+const BASEBOARD_THICKNESS_PX = 12; // slightly proud of the 8px wall
+const DOOR_POST_SIZE_PX = 12; // small square column footprint
+const PILASTER_SIZE_PX = 14; // modest square column footprint
+
+/**
+ * A low trim strip hugging the foot of every wall line (perimeter + internal),
+ * so room edges read crisply where floor meets wall. Same wall math as
+ * `wallSegments`, but short and a touch proud of the wall, with the cross
+ * section clamped to the world so the perimeter trim never spills outside.
+ */
+export function baseboards(): Box3D[] {
+  const strips: Box3D[] = [];
+  const W = WALL_THICKNESS;
+  const DG = DOOR_GAP;
+  const T = BASEBOARD_THICKNESS_PX;
+  const H = BASEBOARD_HEIGHT_PX;
+
+  const hStrip = (x: number, y: number, w: number) => {
+    if (w <= 0) return;
+    const lo = Math.max(0, y + W / 2 - T / 2);
+    const hi = Math.min(WORLD_H, y + W / 2 + T / 2);
+    strips.push({
+      cx: (x + w / 2) * PX_TO_WORLD,
+      cz: ((lo + hi) / 2) * PX_TO_WORLD,
+      width: w * PX_TO_WORLD,
+      depth: (hi - lo) * PX_TO_WORLD,
+      height: H * PX_TO_WORLD,
+    });
+  };
+  const vStrip = (x: number, y: number, h: number) => {
+    if (h <= 0) return;
+    const lo = Math.max(0, x + W / 2 - T / 2);
+    const hi = Math.min(WORLD_W, x + W / 2 + T / 2);
+    strips.push({
+      cx: ((lo + hi) / 2) * PX_TO_WORLD,
+      cz: (y + h / 2) * PX_TO_WORLD,
+      width: (hi - lo) * PX_TO_WORLD,
+      depth: h * PX_TO_WORLD,
+      height: H * PX_TO_WORLD,
+    });
+  };
+
+  // Perimeter.
+  hStrip(0, 0, WORLD_W);
+  hStrip(0, WORLD_H - W, WORLD_W);
+  vStrip(0, 0, WORLD_H);
+  vStrip(WORLD_W - W, 0, WORLD_H);
+
+  // Internal horizontal walls (between rows), split around the door gap.
+  for (let r = 1; r < TOTAL_ROWS; r++) {
+    const wallY = r * ROOM_H - W / 2;
+    for (let c = 0; c < GRID_COLS; c++) {
+      const wallX = c * ROOM_W;
+      const doorCenter = wallX + ROOM_W / 2;
+      hStrip(wallX, wallY, doorCenter - DG / 2 - wallX);
+      const rightStart = doorCenter + DG / 2;
+      hStrip(rightStart, wallY, wallX + ROOM_W - rightStart);
+    }
+  }
+
+  // Internal vertical walls (between columns), capped at the office grid rows.
+  for (let c = 1; c < GRID_COLS; c++) {
+    const wallX = c * ROOM_W - W / 2;
+    for (let r = 0; r < TOTAL_ROWS - 1; r++) {
+      const wallY = r * ROOM_H;
+      const doorCenter = wallY + ROOM_H / 2;
+      vStrip(wallX, wallY, doorCenter - DG / 2 - wallY);
+      const botStart = doorCenter + DG / 2;
+      vStrip(wallX, botStart, wallY + ROOM_H - botStart);
+    }
+  }
+
+  return strips;
+}
+
+/**
+ * Short square posts flanking each internal door gap — one column on each side
+ * of every `DOOR_GAP` opening — so doorways read as real framed openings. Each
+ * post straddles the wall centerline at a gap edge; slightly taller than the
+ * walls. Perimeter openings have none (there are no perimeter doors).
+ */
+export function doorPosts(): Box3D[] {
+  const posts: Box3D[] = [];
+  const DG = DOOR_GAP;
+  const S = DOOR_POST_SIZE_PX;
+  const H = DOOR_POST_HEIGHT_PX;
+
+  const post = (px: number, py: number) => {
+    posts.push({
+      cx: px * PX_TO_WORLD,
+      cz: py * PX_TO_WORLD,
+      width: S * PX_TO_WORLD,
+      depth: S * PX_TO_WORLD,
+      height: H * PX_TO_WORLD,
+    });
+  };
+
+  // Internal horizontal walls: gap runs along X, posts flank it left/right.
+  for (let r = 1; r < TOTAL_ROWS; r++) {
+    const wallCz = r * ROOM_H; // wall centerline in y
+    for (let c = 0; c < GRID_COLS; c++) {
+      const doorCenter = c * ROOM_W + ROOM_W / 2;
+      post(doorCenter - DG / 2, wallCz);
+      post(doorCenter + DG / 2, wallCz);
+    }
+  }
+
+  // Internal vertical walls: gap runs along Y, posts flank it top/bottom.
+  for (let c = 1; c < GRID_COLS; c++) {
+    const wallCx = c * ROOM_W; // wall centerline in x
+    for (let r = 0; r < TOTAL_ROWS - 1; r++) {
+      const doorCenter = r * ROOM_H + ROOM_H / 2;
+      post(wallCx, doorCenter - DG / 2);
+      post(wallCx, doorCenter + DG / 2);
+    }
+  }
+
+  return posts;
+}
+
+/**
+ * Modest square columns at the interior grid intersections where partition
+ * walls meet, giving the floor plan visible structure. One per shared corner
+ * of the office grid (excludes the perimeter); full wall height.
+ */
+export function pilasters(): Box3D[] {
+  const cols: Box3D[] = [];
+  const S = PILASTER_SIZE_PX;
+  const H = WALL_HEIGHT_PX;
+
+  for (let c = 1; c < GRID_COLS; c++) {
+    for (let r = 1; r < TOTAL_ROWS; r++) {
+      cols.push({
+        cx: (c * ROOM_W) * PX_TO_WORLD,
+        cz: (r * ROOM_H) * PX_TO_WORLD,
+        width: S * PX_TO_WORLD,
+        depth: S * PX_TO_WORLD,
+        height: H * PX_TO_WORLD,
+      });
+    }
+  }
+
+  return cols;
+}
+
 // Desk workstations per room, room-relative seat pixels — kept in sync with
 // `officeEnvironment.WORKSTATIONS` (the 2D floor's desk banks). Duplicated here
 // rather than imported because that module pulls in Phaser at import time.

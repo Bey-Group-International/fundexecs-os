@@ -32,8 +32,15 @@ const C = {
   metal: "#4a5568",
   gold: "#c9a84c",
   leaf: "#2f6b3f",
+  leafLight: "#3f8a54", // upper foliage layer
   screen: "#0a0d13",
   sofa: "#28344a",
+  cushion: "#30405c", // sofa back / cushions
+  chair: "#3b4a63", // muted upholstery seat
+  caddy: "#39424f", // desk-side organizer
+  bookA: "#7a4636", // warm leather-brown spine
+  bookB: "#9c7b46", // warm tan spine
+  mug: "#c98a5a", // warm ceramic decor
 } as const;
 
 type PieceType =
@@ -61,7 +68,7 @@ const LAYOUT: Record<string, Piece[]> = {
   ops: [{ type: "screens", rx: 100, ry: 48 }, { type: "desk", rx: 300, ry: 60 }, { type: "coffee", rx: 344, ry: 150 }, { type: "plant", rx: 40, ry: 232 }],
   legal: [{ type: "shelf", rx: 66, ry: 50 }, { type: "shelf", rx: 300, ry: 50 }, { type: "desk", rx: 110, ry: 232 }],
   marketing: [{ type: "safe", rx: 84, ry: 58 }, { type: "desk", rx: 300, ry: 60 }, { type: "plant", rx: 40, ry: 232 }],
-  reception: [{ type: "reception", rx: 96, ry: 54 }, { type: "coffee", rx: 344, ry: 150 }, { type: "plant", rx: 40, ry: 232 }],
+  reception: [{ type: "reception", rx: 96, ry: 54 }, { type: "coffee", rx: 344, ry: 150 }, { type: "plant", rx: 40, ry: 232 }, { type: "sofa", rx: 160, ry: 210 }],
 };
 
 // One floor lamp per room (represented in 3D as a slim pole box + shade).
@@ -110,36 +117,90 @@ function box(
   };
 }
 
+/** A simple upholstered chair: low seat + back, centered at seat foot (fx, fy). */
+function chairBoxes(fx: number, fy: number): FurnitureBox[] {
+  return [box(fx, fy, 16, 14, 8, C.chair), box(fx, fy + 5, 16, 4, 16, C.chair)];
+}
+
 /** Build the 3D boxes for one furniture piece at world-pixel (fx, fy). */
 function pieceBoxes(type: PieceType, fx: number, fy: number, accent: string): FurnitureBox[] {
   switch (type) {
     case "desk":
-      // Desk + a glowing accent monitor, so a staffed desk reads as powered-on.
-      return [box(fx, fy, 46, 16, 12, C.deskTop), box(fx - 10, fy - 4, 14, 4, 20, accent, true)];
+      // Desk + glowing monitor + keyboard/caddy/mug detail + a seat in front.
+      return [
+        box(fx, fy, 46, 16, 12, C.deskTop),
+        box(fx - 10, fy - 4, 14, 4, 20, accent, true), // powered-on monitor
+        box(fx + 2, fy + 4, 22, 6, 3, C.screen), // keyboard strip
+        box(fx + 18, fy, 6, 10, 10, C.caddy), // side caddy
+        box(fx - 18, fy - 1, 4, 4, 5, C.mug), // desk mug
+        ...chairBoxes(fx, fy + 15),
+      ];
     case "console":
       return [
         box(fx, fy, 60, 18, 13, C.deskTop),
         box(fx, fy - 5, 44, 4, 22, accent, true),
         box(fx, fy + 6, 60, 18, 2, accent, true),
+        box(fx - 22, fy, 5, 5, 6, C.mug), // mug
       ];
     case "screens":
-      return [box(fx, fy, 54, 16, 8, C.deskFront), box(fx, fy - 8, 50, 3, 26, accent, true)];
+      return [
+        box(fx, fy, 54, 16, 8, C.deskFront),
+        box(fx, fy - 8, 50, 3, 26, accent, true),
+        box(fx, fy + 4, 24, 6, 3, C.screen), // keyboard strip
+      ];
     case "shelf":
-      return [box(fx, fy, 30, 16, 34, C.wood), box(fx, fy, 30, 16, 3, C.woodTop)];
+      // Shelf unit + a few warm-toned books and a mug of decor.
+      return [
+        box(fx, fy, 30, 16, 34, C.wood),
+        box(fx, fy, 30, 16, 3, C.woodTop),
+        box(fx - 7, fy, 5, 10, 16, C.bookA),
+        box(fx - 1, fy, 5, 10, 20, C.bookB),
+        box(fx + 6, fy, 5, 10, 14, C.bookA),
+        box(fx + 11, fy - 1, 4, 4, 6, C.mug),
+      ];
     case "sofa":
-      return [box(fx, fy, 58, 24, 9, C.sofa), box(fx, fy - 9, 58, 6, 14, "#30405c")];
+      return [
+        box(fx, fy, 58, 24, 9, C.sofa),
+        box(fx, fy - 9, 58, 6, 14, C.cushion), // backrest
+        box(fx - 16, fy, 22, 20, 12, C.cushion), // seat cushions
+        box(fx + 16, fy, 22, 20, 12, C.cushion),
+      ];
     case "table":
-      return [box(fx, fy, 150, 40, 9, C.wood), box(fx, fy, 150, 40, 2, C.gold)];
+      // Boardroom table + chairs on both long sides.
+      return [
+        box(fx, fy, 150, 40, 9, C.wood),
+        box(fx, fy, 150, 40, 2, C.gold),
+        ...chairBoxes(fx - 45, fy + 26),
+        ...chairBoxes(fx + 45, fy + 26),
+        ...chairBoxes(fx - 45, fy - 26),
+        ...chairBoxes(fx + 45, fy - 26),
+      ];
     case "plant":
-      return [box(fx, fy, 12, 12, 10, C.wood), box(fx, fy, 20, 20, 16, C.leaf)];
+      // Pot + rim + layered foliage.
+      return [
+        box(fx, fy, 12, 12, 10, C.wood),
+        box(fx, fy, 15, 15, 4, C.woodTop), // pot rim
+        box(fx, fy, 20, 20, 15, C.leaf), // lower foliage
+        box(fx, fy - 1, 12, 12, 22, C.leafLight), // upper foliage
+      ];
     case "safe":
       return [box(fx, fy, 36, 20, 30, C.metal), box(fx, fy - 2, 22, 4, 22, "#11151f")];
     case "reception":
       return [box(fx, fy, 64, 18, 15, C.deskTop), box(fx, fy + 7, 64, 18, 2, C.gold)];
     case "coffee":
-      return [box(fx, fy, 34, 16, 12, C.deskFront), box(fx, fy - 4, 16, 8, 14, "#11151f")];
+      return [
+        box(fx, fy, 34, 16, 12, C.deskFront),
+        box(fx, fy - 4, 16, 8, 14, "#11151f"),
+        box(fx + 10, fy + 2, 4, 4, 5, C.mug), // mug
+      ];
     case "stall":
-      return [box(fx, fy, 46, 18, 13, C.wood), box(fx, fy - 6, 56, 20, 4, accent)];
+      // Counter + awning + a couple of accent-colored goods on the counter.
+      return [
+        box(fx, fy, 46, 18, 13, C.wood),
+        box(fx, fy - 6, 56, 20, 4, accent),
+        box(fx - 12, fy, 10, 8, 8, accent),
+        box(fx + 11, fy, 8, 8, 6, accent),
+      ];
   }
 }
 
