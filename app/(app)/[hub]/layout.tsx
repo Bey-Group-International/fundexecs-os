@@ -7,6 +7,7 @@ import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
 import { getExecutePerformance } from "@/lib/execute-performance";
 import { ReadinessPanel } from "@/components/build/ReadinessPanel";
+import { ReadinessAlert } from "@/components/build/ReadinessAlert";
 import { RunCommandCenter } from "@/components/run/RunCommandCenter";
 import { SourceMomentumPanel } from "@/components/source/SourceMomentumPanel";
 import { ExecuteCommandCenter } from "@/components/execute/ExecuteCommandCenter";
@@ -40,7 +41,11 @@ export default async function HubLayout(
     if (ctx?.orgId) {
       const readiness = await getBuildReadiness(ctx.orgId);
       moduleStatuses = readiness.statuses;
-      momentumPanel = <ReadinessPanel readiness={readiness} />;
+      momentumPanel = (
+        <ReadinessAlert>
+          <ReadinessPanel readiness={readiness} floating />
+        </ReadinessAlert>
+      );
     }
   } else if (hub.key === "source") {
     const ctx = await getSessionContext();
