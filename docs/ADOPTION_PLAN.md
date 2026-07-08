@@ -29,15 +29,15 @@ The biggest real gap: `source-radar` / `sourcing-signals` explicitly note that
 "a real third-party feed plugs in behind this seam" — but there was no ingestion
 backbone. This PR builds it, compliant-only, in `lib/ingestion/`.
 
-| Repo | Verdict | What we take |
-|------|---------|--------------|
-| [apify/crawlee](https://github.com/apify/crawlee) | 🟢 Adopt | Compliant-crawler posture: identify the bot, honor `robots.txt`, per-host rate-limit. Distilled into `lib/ingestion/robots.ts` + `CompliantFetcher`. |
-| [ScrapeGraphAI/Scrapegraph-ai](https://github.com/ScrapeGraphAI/Scrapegraph-ai) | 🟢 Adopt | "Point an LLM at a page → structured records." Reimplemented as `extractEntities` on our Claude-optional seam, with a deterministic JSON-LD/`<title>`/meta fallback for keyless CI. |
-| [etkinbgronawnk/franchise-direct-scraper](https://github.com/etkinbgronawnk/franchise-direct-scraper) | 🟡 Harvest | Seed-list → normalize → dedupe entity pattern; informs `normalizeEntities` and `runIngestion` seed model. |
-| [getmaxun/maxun](https://github.com/getmaxun/maxun) | ⚪ Reference | No-code robot recorder. Good UX reference for a future "recorded extraction template" surface; no native port now. |
-| [CloakHQ/CloakBrowser](https://github.com/CloakHQ/CloakBrowser) | 🔴 Skip | Anti-detection / stealth browsing. Out of stance for a regulated financial product (see decision below). Seam left open via `FetcherStrategy` if ever justified per-source. |
-| [pinchtab/pinchtab](https://github.com/pinchtab/pinchtab) | 🔴 Skip | Same stealth category as CloakBrowser. |
-| [cporter202/API-mega-list](https://github.com/cporter202/API-mega-list) | ⚪ Reference | Curated public-API directory. Source of **official-API** seeds (the compliant alternative to scraping) — feed URLs into `IngestSeed`, no code to port. |
+|                                                 Repo                                                  |   Verdict   |                                                                                    What we take                                                                                     |
+|-------------------------------------------------------------------------------------------------------|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [apify/crawlee](https://github.com/apify/crawlee)                                                     | 🟢 Adopt    | Compliant-crawler posture: identify the bot, honor `robots.txt`, per-host rate-limit. Distilled into `lib/ingestion/robots.ts` + `CompliantFetcher`.                                |
+| [ScrapeGraphAI/Scrapegraph-ai](https://github.com/ScrapeGraphAI/Scrapegraph-ai)                       | 🟢 Adopt    | "Point an LLM at a page → structured records." Reimplemented as `extractEntities` on our Claude-optional seam, with a deterministic JSON-LD/`<title>`/meta fallback for keyless CI. |
+| [etkinbgronawnk/franchise-direct-scraper](https://github.com/etkinbgronawnk/franchise-direct-scraper) | 🟡 Harvest  | Seed-list → normalize → dedupe entity pattern; informs `normalizeEntities` and `runIngestion` seed model.                                                                           |
+| [getmaxun/maxun](https://github.com/getmaxun/maxun)                                                   | ⚪ Reference | No-code robot recorder. Good UX reference for a future "recorded extraction template" surface; no native port now.                                                                  |
+| [CloakHQ/CloakBrowser](https://github.com/CloakHQ/CloakBrowser)                                       | 🔴 Skip     | Anti-detection / stealth browsing. Out of stance for a regulated financial product (see decision below). Seam left open via `FetcherStrategy` if ever justified per-source.         |
+| [pinchtab/pinchtab](https://github.com/pinchtab/pinchtab)                                             | 🔴 Skip     | Same stealth category as CloakBrowser.                                                                                                                                              |
+| [cporter202/API-mega-list](https://github.com/cporter202/API-mega-list)                               | ⚪ Reference | Curated public-API directory. Source of **official-API** seeds (the compliant alternative to scraping) — feed URLs into `IngestSeed`, no code to port.                              |
 
 **Decision recorded:** compliant sources only — public pages, official APIs,
 `robots.txt`-respecting, rate-limited. No anti-detection layer. The
@@ -69,8 +69,8 @@ FundExecs already has a six-agent engine (`lib/engine.ts`, `lib/agents.ts`,
 `lib/brain-routing.ts`, `lib/handoff.ts`, `lib/tool-dispatch.ts`). The value here
 is *patterns*, not a framework swap.
 
-| Repo | Verdict | What we take |
-|------|---------|--------------|
+|                                                Repo                                                 |  Verdict   |                                                                                                                                                           What we take                                                                                                                                                           |
+|-----------------------------------------------------------------------------------------------------|------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [andyrewlee/awesome-agent-orchestrators](https://github.com/andyrewlee/awesome-agent-orchestrators) | 🟡 Harvest | A catalog, not a library. Mine it for three concrete upgrades to our engine: (1) an explicit **planner → router → worker → critic** loop with a verification/critic pass before `/approve`; (2) **supervisor** hierarchy for multi-agent handoff (maps onto `handoff.ts`); (3) **typed tool-use graphs** for `tool-dispatch.ts`. |
 
 **Proposed next slice:** add a `critic`/verification step to the engine's
@@ -86,13 +86,13 @@ We already have native waterfall, LBO, cap-table, 409A, dilution, and
 convertibles engines — so DeFi *protocol* code is a **Skip**; the math worth
 harvesting is liquidity-pool / yield mechanics for the Earn/Wallet surface.
 
-| Repo | Verdict | What we take |
-|------|---------|--------------|
-| [kupietools/excel-liquidity-pool-simulator](https://github.com/kupietools/excel-liquidity-pool-simulator) | 🟡 Harvest | The constant-product (x·y=k) LP + impermanent-loss math, reimplemented as a pure `lib/earn/lp-sim.ts` (deterministic, testable) powering a treasury "what-if" on the Earn surface. |
-| [hifi-finance/hifi-protocol](https://github.com/hifi-finance/hifi-protocol) | 🟡 Harvest | Fixed-rate/fixed-term yield curve concepts → treasury allocation modeling. Math only, no Solidity. |
-| [ChainInsighter/Ondo-Flux-Finance](https://github.com/ChainInsighter/Ondo-Flux-Finance) | ⚪ Reference | Tokenized-treasury (RWA) mechanics; useful mental model for a cash-management module. |
-| [OctoFi/octofi-app-aquafarm](https://github.com/OctoFi/octofi-app-aquafarm) | ⚪ Reference | DeFi dashboard UX (listed twice by the user). Reference for multi-asset yield UI; no port. |
-| [iloveitaly/openbook](https://github.com/iloveitaly/openbook) | ⚪ Reference | Order-book concepts; not applicable to private markets. |
+|                                                   Repo                                                    |   Verdict   |                                                                                    What we take                                                                                    |
+|-----------------------------------------------------------------------------------------------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [kupietools/excel-liquidity-pool-simulator](https://github.com/kupietools/excel-liquidity-pool-simulator) | 🟡 Harvest  | The constant-product (x·y=k) LP + impermanent-loss math, reimplemented as a pure `lib/earn/lp-sim.ts` (deterministic, testable) powering a treasury "what-if" on the Earn surface. |
+| [hifi-finance/hifi-protocol](https://github.com/hifi-finance/hifi-protocol)                               | 🟡 Harvest  | Fixed-rate/fixed-term yield curve concepts → treasury allocation modeling. Math only, no Solidity.                                                                                 |
+| [ChainInsighter/Ondo-Flux-Finance](https://github.com/ChainInsighter/Ondo-Flux-Finance)                   | ⚪ Reference | Tokenized-treasury (RWA) mechanics; useful mental model for a cash-management module.                                                                                              |
+| [OctoFi/octofi-app-aquafarm](https://github.com/OctoFi/octofi-app-aquafarm)                               | ⚪ Reference | DeFi dashboard UX (listed twice by the user). Reference for multi-asset yield UI; no port.                                                                                         |
+| [iloveitaly/openbook](https://github.com/iloveitaly/openbook)                                             | ⚪ Reference | Order-book concepts; not applicable to private markets.                                                                                                                            |
 
 **Proposed next slice:** pure `lib/earn/lp-sim.ts` (x·y=k, IL, fee APR) + tests,
 wired to an Earn "simulate" panel.
@@ -105,18 +105,18 @@ wired to an Earn "simulate" panel.
 in the list are student CRUD projects with nothing to port; one is a polished
 Next.js reference.
 
-| Repo | Verdict | What we take |
-|------|---------|--------------|
-| [adrianhajdin/banking](https://github.com/adrianhajdin/banking) | 🟡 Harvest | Real Next.js app with Plaid (account-linking) + Dwolla (transfers). Take the **linked-account + transfer flow model** and statement UX for `app/pay`; use our existing Stripe rails, not Dwolla. |
-| [Aritra-Basak/spring-boot-upi-wallet](https://github.com/Aritra-Basak/spring-boot-upi-wallet) | ⚪ Reference | UPI wallet flow (Java). Reference for P2P transfer UX only. |
-| [GoldenThrust/Virtual-Bank](https://github.com/GoldenThrust/Virtual-Bank) | ⚪ Reference | Virtual-account modeling reference. |
-| [yagnesh-lakshman-sai/VaultEdge-Enterprise-Banking-System](https://github.com/yagnesh-lakshman-sai/VaultEdge-Enterprise-Banking-System) | 🔴 Skip | Enterprise-banking CRUD; nothing native to gain. |
-| [Nachoxt17/AKERU-CAPITAL-FUNDS](https://github.com/Nachoxt17/AKERU-CAPITAL-FUNDS) | ⚪ Reference | Fund-structure reference. |
-| [sboysel/open-source-funding-toolkit](https://github.com/sboysel/open-source-funding-toolkit) | ⚪ Reference | Funding-model reference. |
-| [Bilovodskyi/ai-investor](https://github.com/Bilovodskyi/ai-investor) | 🟡 Harvest | AI-investing signal patterns → `deal-scoring.ts` / `market-intel.ts` inputs. |
-| [Nevvyboi/SentiVest](https://github.com/Nevvyboi/SentiVest) | 🟡 Harvest | News/sentiment scoring → a signal source for `sourcing-signals.ts` (`news` type already exists). |
-| [SIDD44CHAMPS/Loan_Prediction](https://github.com/SIDD44CHAMPS/Loan_Prediction) | ⚪ Reference | Credit-scoring features; reference for a future underwriting-risk signal. |
-| `Banking_system`, `mangoO-Microfinance`, `BasicBankingSystem`, `online-banking-system-with-python`, `iamvikash28/BankApp-master`, `thivyavignesh/DApp_Banking_Solidity` | 🔴 Skip | Student / demo CRUD banking apps. No native value beyond what `app/pay` already does. |
+|                                                                                  Repo                                                                                   |   Verdict   |                                                                                           What we take                                                                                           |
+|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [adrianhajdin/banking](https://github.com/adrianhajdin/banking)                                                                                                         | 🟡 Harvest  | Real Next.js app with Plaid (account-linking) + Dwolla (transfers). Take the **linked-account + transfer flow model** and statement UX for `app/pay`; use our existing Stripe rails, not Dwolla. |
+| [Aritra-Basak/spring-boot-upi-wallet](https://github.com/Aritra-Basak/spring-boot-upi-wallet)                                                                           | ⚪ Reference | UPI wallet flow (Java). Reference for P2P transfer UX only.                                                                                                                                      |
+| [GoldenThrust/Virtual-Bank](https://github.com/GoldenThrust/Virtual-Bank)                                                                                               | ⚪ Reference | Virtual-account modeling reference.                                                                                                                                                              |
+| [yagnesh-lakshman-sai/VaultEdge-Enterprise-Banking-System](https://github.com/yagnesh-lakshman-sai/VaultEdge-Enterprise-Banking-System)                                 | 🔴 Skip     | Enterprise-banking CRUD; nothing native to gain.                                                                                                                                                 |
+| [Nachoxt17/AKERU-CAPITAL-FUNDS](https://github.com/Nachoxt17/AKERU-CAPITAL-FUNDS)                                                                                       | ⚪ Reference | Fund-structure reference.                                                                                                                                                                        |
+| [sboysel/open-source-funding-toolkit](https://github.com/sboysel/open-source-funding-toolkit)                                                                           | ⚪ Reference | Funding-model reference.                                                                                                                                                                         |
+| [Bilovodskyi/ai-investor](https://github.com/Bilovodskyi/ai-investor)                                                                                                   | 🟡 Harvest  | AI-investing signal patterns → `deal-scoring.ts` / `market-intel.ts` inputs.                                                                                                                     |
+| [Nevvyboi/SentiVest](https://github.com/Nevvyboi/SentiVest)                                                                                                             | 🟡 Harvest  | News/sentiment scoring → a signal source for `sourcing-signals.ts` (`news` type already exists).                                                                                                 |
+| [SIDD44CHAMPS/Loan_Prediction](https://github.com/SIDD44CHAMPS/Loan_Prediction)                                                                                         | ⚪ Reference | Credit-scoring features; reference for a future underwriting-risk signal.                                                                                                                        |
+| `Banking_system`, `mangoO-Microfinance`, `BasicBankingSystem`, `online-banking-system-with-python`, `iamvikash28/BankApp-master`, `thivyavignesh/DApp_Banking_Solidity` | 🔴 Skip     | Student / demo CRUD banking apps. No native value beyond what `app/pay` already does.                                                                                                            |
 
 ---
 
