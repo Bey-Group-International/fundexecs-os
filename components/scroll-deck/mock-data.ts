@@ -1,31 +1,10 @@
-// Mocked script for the Scroll-Deck builder. This route is UI-only: there is
-// no backend, no AI call, and no persistence. The "build" is driven entirely by
-// this scripted sequence so the chat + canvas interplay can be demonstrated
-// natively in the fx design system. Each step appends an assistant turn and
-// unlocks / edits one deck section.
+// Scripted content for the Scroll-Deck builder. These steps are the
+// deterministic fallback the chat wiring uses when ANTHROPIC_API_KEY is absent
+// (mirroring lib/claude.ts), and they seed the What's-next suggestions. When a
+// key is present the live model produces sections in this same shape.
+import type { DeckField, DeckSection } from "./types";
 
-export type DeckSectionId =
-  | "cover"
-  | "thesis"
-  | "team"
-  | "terms"
-  | "track-record"
-  | "pipeline";
-
-export interface DeckField {
-  label: string;
-  value: string;
-  /** Rendered as a large gold financial figure when true. */
-  figure?: boolean;
-}
-
-export interface DeckSection {
-  id: DeckSectionId;
-  title: string;
-  /** Short label shown in the canvas outline / progress rail. */
-  kicker: string;
-  fields: DeckField[];
-}
+export type { DeckField, DeckSection } from "./types";
 
 /** A single scripted builder turn. */
 export interface BuildStep {
@@ -170,3 +149,15 @@ export const LOCKED_NAV: NavItem[] = [
   { id: "raise", label: "Raise", locked: true },
   { id: "manage", label: "Manage", locked: true },
 ];
+
+/**
+ * The `prompt` of the next scripted step whose section id isn't yet present —
+ * drives the "What's next?" chip. Returns null once every core section exists.
+ * Lives here (not in lib/scroll-deck.ts) so the client shell can import it
+ * without pulling the server-only Anthropic SDK into the browser bundle.
+ */
+export function suggestNextPrompt(sections: DeckSection[]): string | null {
+  const present = new Set(sections.map((s) => s.id));
+  const next = BUILD_STEPS.find((step) => !present.has(step.section.id));
+  return next ? next.prompt : null;
+}
