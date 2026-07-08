@@ -20,6 +20,7 @@ import {
   type WeightedCase,
 } from "@/lib/underwriting-calc";
 import { UnderwritingCalculator } from "@/components/run/UnderwritingCalculator";
+import { LboModelTool } from "@/components/run/LboModelTool";
 import type { Deal, Underwriting } from "@/lib/supabase/database.types";
 
 // Deals you can still underwrite — everything that hasn't been passed on or
@@ -278,6 +279,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
   return (
     <div>
       <ModuleHeader title="Underwriting" blurb="Base, bull, and bear cases behind every investment decision — compare scenarios, weight outcomes, and model returns." />
+      <LboModelTool />
       {deals.length === 0 ? (
         <NoDeals what="underwrite" />
       ) : (
