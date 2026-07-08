@@ -1,10 +1,12 @@
 // components/intelligence/ThesisLive.tsx
 // Server component for Build › Thesis. Loads real deal signals and sector
-// heatmap snapshots for the active org (migration 0058) and renders the Deal
-// Signal Feed + Sector Heatmap. Best-effort: any failure (no env, no org, query
-// error) falls back to empty arrays so the surface degrades to its empty states
-// rather than throwing.
-import { DealSignalFeed } from "@/components/intelligence/DealSignalFeed";
+// heatmap snapshots for the active org (migration 0058) and renders the Sector
+// Heatmap. The Deal Signal Feed lives on /deals/feed (the program-wide feed);
+// the signals loaded here are used only as the heatmap's fallback source when
+// no pre-aggregated snapshots exist. Best-effort: any failure (no env, no org,
+// query error) falls back to empty arrays so the surface degrades to its empty
+// states rather than throwing.
+import Link from "next/link";
 import { SectorHeatmap } from "@/components/intelligence/SectorHeatmap";
 import { buildHeatmap } from "@/lib/deal-intelligence";
 import type {
@@ -151,7 +153,10 @@ function orderStages(stages: string[]): string[] {
 }
 
 export async function ThesisLive() {
-  const { signals, cells } = await loadThesisData();
+  // signals feed the heatmap fallback (buildHeatmap) inside loadThesisData; the
+  // Deal Signal Feed itself now lives on /deals/feed, so only cells are used
+  // for rendering here.
+  const { cells } = await loadThesisData();
 
   // Derive the heatmap axes from the cells (the loader returns flat cells, not
   // separate sector/stage lists).
@@ -159,34 +164,26 @@ export async function ThesisLive() {
   const stages = orderStages(Array.from(new Set(cells.map((c) => c.stage))));
 
   return (
-    <>
-      <section>
-        <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
-          Deal Signal Feed
-        </p>
-        {signals.length === 0 && (
-          <p className="mb-4 text-xs text-fg-muted">
-            Signals surface automatically once your investment thesis is complete.
-            Finish your thesis above — Earn will start matching inbound deal flow
-            to your mandate.
-          </p>
-        )}
-        <DealSignalFeed signals={signals} />
-      </section>
-      <div className="border-t border-line" />
-      <section>
-        <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+    <section>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
           Sector Heatmap
         </p>
-        {cells.length === 0 && (
-          <p className="mb-4 text-xs text-fg-muted">
-            Activity levels across your target sectors will appear here as deal
-            signals accumulate. Add your asset classes and geographies in the
-            thesis editor to activate this view.
-          </p>
-        )}
-        <SectorHeatmap cells={cells} sectors={sectors} stages={stages} />
-      </section>
-    </>
+        <Link
+          href="/deals/feed"
+          className="font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+        >
+          Deal Signal Feed →
+        </Link>
+      </div>
+      {cells.length === 0 && (
+        <p className="mb-4 text-xs text-fg-muted">
+          Activity levels across your target sectors will appear here as deal
+          signals accumulate. Add your asset classes and geographies in the
+          thesis editor to activate this view.
+        </p>
+      )}
+      <SectorHeatmap cells={cells} sectors={sectors} stages={stages} />
+    </section>
   );
 }
