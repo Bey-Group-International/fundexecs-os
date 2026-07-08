@@ -15,9 +15,15 @@ import {
 } from "./officeProgram";
 import { LIFECYCLE_STAGES } from "@/lib/intelligence";
 import {
+  addAuditEvent,
+  evaluateOfficeTriggers,
+  getExecMemory,
+  getExecPrecedents,
   getOfficeProgramState,
   hydrateWorkflows,
+  OFFICE_TRIGGERS,
   resolveApprovalGate,
+  runAutonomousTriggers,
   sceneBus,
   setApprovalDecider,
   setUserRole,
@@ -501,5 +507,103 @@ describe("office program — server-side approval authority", () => {
     s = getOfficeProgramState();
     expect(s.activeWorkflow).toBeNull();
     expect(s.archive[0]?.outcome).toBe("rejected");
+  });
+});
+
+describe("office program — per-exec memory & precedent recall", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setUserRole("managing_partner");
+    setWorkflowMode("workflow");
+  });
+
+  afterEach(() => {
+    shutdownOfficeProgram();
+    jest.useRealTimers();
+  });
+
+  it("derives precedents from completed per-agent outputs in the audit log", () => {
+    addAuditEvent({ actor: "Portfolio Ops", action: "Output completed — KPI Board", room: "Portfolio Ops", tier: "internal", status: "complete" });
+    // Non-output completions and non-executive actors never become precedents.
+    addAuditEvent({ actor: "Earn", action: "Workflow archived — Portfolio Operations Review", room: "Command Center", tier: "internal", status: "complete" });
+    addAuditEvent({ actor: "Portfolio Ops", action: "Refreshing KPI dashboards", room: "Portfolio Ops", tier: "internal", status: "info" });
+
+    const precedents = getExecPrecedents("portfolio_ops");
+    const kpi = precedents.find((p) => p.label === "KPI Board");
+    expect(kpi).toBeDefined();
+    expect(kpi!.execId).toBe("portfolio_ops");
+    expect(kpi!.outcome).toBe("complete");
+    expect(kpi!.auditEventId).toMatch(/^aud-/);
+
+    // Memory is keyed by exec id and never invents history for other execs.
+    const memory = getExecMemory();
+    expect(memory.portfolio_ops?.some((p) => p.label === "KPI Board")).toBe(true);
+    expect((memory.earn ?? []).some((p) => p.label.includes("Workflow"))).toBe(false);
+  });
+
+  it("recalls a prior mandate when the same exec is re-assigned a similar deliverable", () => {
+    // First portfolio review ships the KPI board (Tier 1 → no gate, auto-completes).
+    submitOfficeTask("Portfolio operations review");
+    jest.advanceTimersByTime(60_000);
+    expect(getOfficeProgramState().activeWorkflow).toBeNull();
+    expect(getExecPrecedents("portfolio_ops").some((p) => p.label === "KPI Board")).toBe(true);
+
+    // Second identical mandate: Portfolio Ops should recall the precedent at assignment.
+    submitOfficeTask("Portfolio operations review");
+    jest.advanceTimersByTime(3_000); // reach the assignment step
+    const s = getOfficeProgramState();
+    expect(s.audit.some((e) => e.actor === "Portfolio Ops" && e.action.startsWith("Precedent recalled"))).toBe(true);
+    expect(s.chat.some((m) => m.author === "Portfolio Ops" && m.text.includes("similar mandate"))).toBe(true);
+
+    jest.advanceTimersByTime(60_000); // let it finish and calm the office
+  });
+});
+
+describe("office program — autonomous triggers", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setUserRole("managing_partner");
+    setWorkflowMode("workflow");
+  });
+
+  afterEach(() => {
+    shutdownOfficeProgram();
+    jest.useRealTimers();
+  });
+
+  it("exposes the portfolio recurring-review trigger", () => {
+    const t = OFFICE_TRIGGERS.find((x) => x.id === "portfolio-ops-recurring-review");
+    expect(t?.execId).toBe("portfolio_ops");
+    expect(t?.condition.kind).toBe("recurring_review");
+  });
+
+  it("does not self-start when no recurring review has come due", () => {
+    // A fresh KPI shipment means the review is NOT yet due at the current clock.
+    addAuditEvent({ actor: "Portfolio Ops", action: "Output completed — KPI Board", room: "Portfolio Ops", tier: "internal", status: "complete" });
+    expect(evaluateOfficeTriggers()).toEqual([]);
+    expect(runAutonomousTriggers()).toBeNull();
+    expect(getOfficeProgramState().activeWorkflow).toBeNull();
+  });
+
+  it("lets Portfolio Ops proactively initiate a review once the last one is stale", () => {
+    addAuditEvent({ actor: "Portfolio Ops", action: "Output completed — KPI Board", room: "Portfolio Ops", tier: "internal", status: "complete" });
+    const due = Date.now() + 7 * 60 * 60 * 1000; // past the 6h interval
+
+    // Conversation mode never self-starts.
+    setWorkflowMode("conversation");
+    expect(runAutonomousTriggers(due)).toBeNull();
+    expect(getOfficeProgramState().activeWorkflow).toBeNull();
+
+    // In an executing mode the trigger fires and routes through normal intake.
+    setWorkflowMode("workflow");
+    const firedId = runAutonomousTriggers(due);
+    expect(firedId).toBe("portfolio-ops-recurring-review");
+    let s = getOfficeProgramState();
+    expect(s.audit.some((e) => e.actor === "Portfolio Ops" && e.action.startsWith("Autonomous trigger fired"))).toBe(true);
+
+    jest.advanceTimersByTime(2_000); // classify → execute
+    s = getOfficeProgramState();
+    expect(s.activeWorkflow).not.toBeNull();
+    expect(s.activeWorkflow?.intent).toBe("portfolio_ops");
   });
 });
