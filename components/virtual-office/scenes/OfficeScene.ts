@@ -34,6 +34,7 @@ import {
 } from "../program/officeProgram";
 import { ExecutiveAvatar, type AvatarFacing } from "../avatar/ExecutiveAvatar";
 import { agentAvatarSpec, remoteAvatarSpec } from "../avatar/avatarPalette";
+import { SCRIPTED_AREAS, areaAt, type ScriptedArea } from "@/lib/office/scriptedAreas";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
 import {
   createWallVisuals,
@@ -229,6 +230,11 @@ export class OfficeScene extends Phaser.Scene {
   private companionBob = 0;
   private sayText?: Phaser.GameObjects.Text;
   private sayTimer = 0;
+
+  // Declarative scripted areas — zones that auto-fire a trigger on enter.
+  private scriptedAreas: ScriptedArea[] = SCRIPTED_AREAS;
+  private currentAreaId = "";
+  private firedAreas = new Set<string>();
 
   // Interactive objects (press-X hotspots)
   private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number; marker: Phaser.GameObjects.Text }> = [];
@@ -429,6 +435,7 @@ export class OfficeScene extends Phaser.Scene {
     this._onResize = () => this._scheduleReflow();
     this.scale.on(Phaser.Scale.Events.RESIZE, this._onResize, this);
     this._createInteractives();
+    this._createScriptedAreaMarkers();
     // Live marketplace stalls — React pushes public listings; each becomes a
     // signboard + press-X hotspot on a stall in the Marketplace hall.
     this.game.events.on("office:marketplace-listings", this._setMarketplaceStalls, this);
@@ -534,6 +541,7 @@ export class OfficeScene extends Phaser.Scene {
     this._updateEmotes(delta);
     this._updateCompanion(delta);
     this._updateSay(delta);
+    this._updateScriptedAreas();
     this._updateRoomLabel();
     this._updateIframeZones();
     this._updateRemoteAvatars();
@@ -2167,6 +2175,44 @@ export class OfficeScene extends Phaser.Scene {
       this.sayText.destroy();
       this.sayText = undefined;
     }
+  }
+
+  /** Faint floor markers so scripted areas are discoverable (WA-style). */
+  private _createScriptedAreaMarkers() {
+    for (const a of this.scriptedAreas) {
+      const accent = parseInt((a.accent ?? "#c9a84c").replace("#", ""), 16);
+      const g = this.add.graphics().setDepth(2);
+      g.fillStyle(accent, 0.04);
+      g.fillRect(a.x, a.y, a.w, a.h);
+      g.lineStyle(1, accent, 0.2);
+      g.strokeRect(a.x, a.y, a.w, a.h);
+      this.add
+        .text(a.x + 6, a.y + 5, a.label.toUpperCase(), {
+          fontFamily: "'Georgia','Times New Roman',serif",
+          fontSize: "8px",
+          color: "#c9a84c",
+          letterSpacing: 1,
+        })
+        .setAlpha(0.45)
+        .setDepth(2);
+    }
+  }
+
+  /**
+   * Fire a scripted area's trigger the moment the operator walks into it. Enter
+   * transitions only (like room detection); `once` areas fire a single time per
+   * session. The React layer maps the trigger to a concrete action.
+   */
+  private _updateScriptedAreas() {
+    if (!this.player) return;
+    const hit = areaAt(this.scriptedAreas, this.player.x, this.player.y);
+    const id = hit?.id ?? "";
+    if (id === this.currentAreaId) return;
+    this.currentAreaId = id;
+    if (!hit) return;
+    if (hit.once && this.firedAreas.has(hit.id)) return;
+    this.firedAreas.add(hit.id);
+    this.game.events.emit("office:area-enter", { id: hit.id, label: hit.label, trigger: hit.trigger });
   }
 
   /** Show an emote above the local player and broadcast it to the room. */
