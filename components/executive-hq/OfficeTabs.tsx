@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ExecutiveHQ } from "./ExecutiveHQ";
+import { CommandCenter } from "@/components/command-center/CommandCenter";
 import { hydrateWorkflows, setApprovalDecider, setOfficePersistence, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
 import { rowToWorkflow, type OfficeWorkflow } from "@/components/virtual-office/program/officeProgram";
 import { officeRoleFromMemberRole } from "@/lib/office/approvalAuthority";
@@ -31,14 +32,14 @@ const VirtualOfficeGame = dynamic(
   }
 );
 
-type Tab = "hq" | "virtual";
+type Tab = "hq" | "virtual" | "earn";
 
 // HQ room ids that differ from virtual office room keys
 const HQ_TO_VIRTUAL: Record<string, string> = { investor: "office" };
 
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
-  const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true });
+  const [opened, setOpened] = useState<Record<Tab, boolean>>({ hq: false, virtual: true, earn: false });
   const [token, setToken] = useState<string | undefined>(undefined);
   const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
@@ -65,7 +66,9 @@ export function OfficeTabs() {
   // button on its footer), so hide the app-wide floating "Ask Earn" launcher
   // while that tab is active. It returns on the Overview tab and off this page.
   useEffect(() => {
-    const suppress = tab === "virtual";
+    // The Virtual Office and the Earn Command tab both carry their own Earn
+    // entry point, so hide the app-wide floating launcher on either.
+    const suppress = tab === "virtual" || tab === "earn";
     window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress } }));
     return () => {
       window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress: false } }));
@@ -157,6 +160,8 @@ export function OfficeTabs() {
       activateTab("hq");
     } else if (requestedTab === "virtual") {
       activateTab("virtual");
+    } else if (requestedTab === "earn") {
+      activateTab("earn");
     }
     if (!room || !sessionChecked) return;
     if (token) {
@@ -255,6 +260,9 @@ export function OfficeTabs() {
           <TabButton active={tab === "hq"} onClick={() => activateTab("hq")}>
             Overview
           </TabButton>
+          <TabButton active={tab === "earn"} onClick={() => activateTab("earn")}>
+            Earn Command
+          </TabButton>
         </div>
       </div>
 
@@ -262,6 +270,15 @@ export function OfficeTabs() {
       {opened.hq ? (
         <div className={tab === "hq" ? "block" : "hidden"}>
           <ExecutiveHQ onNavigateRoom={handleNavigateRoom} roomOccupancy={occupancy} />
+        </div>
+      ) : null}
+
+      {/* Earn Command — the split chat + live spatial world, driven by Earn
+          (Claude via /api/command-center/plan). Mounts only once requested and
+          stays mounted after, so its world engine isn't torn down on tab switch. */}
+      {opened.earn ? (
+        <div className={tab === "earn" ? "block px-4 py-2" : "hidden"}>
+          <CommandCenter />
         </div>
       ) : null}
 
