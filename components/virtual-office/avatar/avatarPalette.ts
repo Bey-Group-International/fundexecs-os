@@ -46,6 +46,12 @@ export type AvatarBuild = "slim" | "regular" | "broad";
 /** Hair silhouette — varies the crown/back-of-head shape. */
 export type AvatarHairStyle = "short" | "textured" | "tied" | "bald";
 
+/** Optional eyewear drawn over the eyes (front + profile). */
+export type AvatarGlasses = "none" | "glasses";
+
+/** Optional facial hair drawn over the lower face (front + profile). */
+export type AvatarFacialHair = "none" | "stubble" | "mustache" | "beard";
+
 export type AvatarSpec = {
   skin: number;
   hair: number;
@@ -64,6 +70,10 @@ export type AvatarSpec = {
   build?: AvatarBuild;
   /** Hair silhouette. Defaults to "short". */
   hairStyle?: AvatarHairStyle;
+  /** Eyewear. Defaults to "none". */
+  glasses?: AvatarGlasses;
+  /** Facial hair. Defaults to "none". */
+  facialHair?: AvatarFacialHair;
   /**
    * When true the figure renders as the gold-coin mascot (Earn) instead of a
    * humanized executive — a round coin body with a friendly face, stubby arms

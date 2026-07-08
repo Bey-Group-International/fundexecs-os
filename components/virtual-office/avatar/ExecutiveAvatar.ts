@@ -689,9 +689,51 @@ export class ExecutiveAvatar {
     // Nose shadow to the shaded side.
     g.fillStyle(skinLo, 0.5);
     g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
+    // Facial hair — hair-colored, under the mouth so lips still read on top.
+    this._drawFacialHairFront(g, s, ox, oy);
     // Mouth
     g.fillStyle(this._shade(s.skin, 0.66), 0.6);
     g.fillRect(ox - 1.5, oy - 10, 3, 0.7);
+    // Eyewear — drawn last so the frames sit over the eyes.
+    this._drawGlassesFront(g, s, ox, oy);
+  }
+
+  /** Front-view facial hair over the lower face (stubble / mustache / beard). */
+  private _drawFacialHairFront(g: Phaser.GameObjects.Graphics, s: AvatarSpec, ox: number, oy: number) {
+    const fh = s.facialHair ?? "none";
+    if (fh === "none") return;
+    const hair = this._shade(s.hair, 0.92);
+    if (fh === "stubble") {
+      g.fillStyle(hair, 0.3);
+      g.fillEllipse(ox, oy - 9.4, 8.4, 4.8);
+    } else if (fh === "beard") {
+      g.fillStyle(hair, 1);
+      g.fillEllipse(ox, oy - 8.8, 8.4, 5.6);       // jaw + chin
+      g.fillRect(ox - 4.6, oy - 13.4, 1.5, 4.6);   // left sideburn link
+      g.fillRect(ox + 3.1, oy - 13.4, 1.5, 4.6);   // right sideburn link
+      g.fillStyle(this._shade(s.hair, 1.2), 0.4);  // top sheen
+      g.fillEllipse(ox, oy - 10.8, 6.2, 1.6);
+    }
+    if (fh === "beard" || fh === "mustache") {
+      g.fillStyle(hair, 1);
+      g.fillEllipse(ox, oy - 10.7, 3.8, 1.2);      // mustache above the lip
+    }
+  }
+
+  /** Front-view eyewear — rounded frames with a faint lens sheen. */
+  private _drawGlassesFront(g: Phaser.GameObjects.Graphics, s: AvatarSpec, ox: number, oy: number) {
+    if ((s.glasses ?? "none") === "none") return;
+    const frame = 0x241f1b;
+    g.fillStyle(0xbfe0f0, 0.12);                   // faint lens glass
+    g.fillCircle(ox - 2, oy - 12.4, 1.7);
+    g.fillCircle(ox + 2, oy - 12.4, 1.7);
+    g.lineStyle(0.7, frame, 0.95);
+    g.strokeCircle(ox - 2, oy - 12.4, 2.1);
+    g.strokeCircle(ox + 2, oy - 12.4, 2.1);
+    g.fillStyle(frame, 0.9);
+    g.fillRect(ox - 0.3, oy - 12.7, 0.6, 0.5);     // bridge
+    g.fillRect(ox - 4.9, oy - 12.7, 0.9, 0.4);     // left temple toward ear
+    g.fillRect(ox + 4, oy - 12.7, 0.9, 0.4);       // right temple toward ear
   }
 
   /** Back view (facing up / away). */
@@ -816,9 +858,47 @@ export class ExecutiveAvatar {
       g.fillStyle(0xf4f0e8, 0.85);
       g.fillCircle(hx + dir * 1.6, -13, 0.35);
     }
+    // Facial hair over the visible jaw (drawn under the mouth hint).
+    this._drawFacialHairProfile(g, s, hx, dir);
     // Mouth hint
     g.fillStyle(this._shade(s.skin, 0.66), 0.55);
     g.fillRect(hx + dir * 1.6, -10.2, 1.8, 0.6);
+    // Eyewear on the facing side.
+    this._drawGlassesProfile(g, s, hx, dir);
+  }
+
+  /** Profile facial hair over the visible jaw. Sign-safe primitives only. */
+  private _drawFacialHairProfile(g: Phaser.GameObjects.Graphics, s: AvatarSpec, hx: number, dir: number) {
+    const fh = s.facialHair ?? "none";
+    if (fh === "none") return;
+    const hair = this._shade(s.hair, 0.92);
+    if (fh === "stubble") {
+      g.fillStyle(hair, 0.3);
+      g.fillEllipse(hx + dir * 1.9, -9.4, 5.8, 4.6);
+    } else if (fh === "beard") {
+      g.fillStyle(hair, 1);
+      g.fillEllipse(hx + dir * 2.1, -9, 6, 5.2);        // jaw + chin
+      g.fillEllipse(hx + dir * 0.4, -12.4, 1.8, 3.2);   // sideburn toward the ear
+      g.fillStyle(this._shade(s.hair, 1.2), 0.4);
+      g.fillEllipse(hx + dir * 2.1, -10.8, 4.2, 1.4);   // top sheen
+    }
+    if (fh === "beard" || fh === "mustache") {
+      g.fillStyle(hair, 1);
+      g.fillEllipse(hx + dir * 1.9, -10.7, 2.6, 1.1);   // mustache
+    }
+  }
+
+  /** Profile eyewear — the visible lens plus a temple arm back to the ear. */
+  private _drawGlassesProfile(g: Phaser.GameObjects.Graphics, s: AvatarSpec, hx: number, dir: number) {
+    if ((s.glasses ?? "none") === "none") return;
+    const frame = 0x241f1b;
+    g.fillStyle(0xbfe0f0, 0.12);
+    g.fillCircle(hx + dir * 1.9, -12.6, 1.6);
+    g.lineStyle(0.7, frame, 0.95);
+    g.strokeCircle(hx + dir * 1.9, -12.6, 2);
+    // Temple arm back toward the ear + a short bridge forward over the nose.
+    g.beginPath(); g.moveTo(hx + dir * 3.9, -12.7); g.lineTo(hx - dir * 2, -12.9); g.strokePath();
+    g.beginPath(); g.moveTo(hx + dir * 3.8, -12.5); g.lineTo(hx + dir * 4.8, -12.3); g.strokePath();
   }
 
   private _drawProfileArm(

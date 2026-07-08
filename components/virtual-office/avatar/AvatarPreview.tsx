@@ -238,9 +238,44 @@ function drawHead(g: CanvasGraphics, s: AvatarSpec, ox: number, oy: number) {
   // Nose shadow to the shaded side.
   g.fillStyle(skinLo, 0.5);
   g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
+  // Facial hair — hair-colored, under the mouth so lips read on top. Mirrors
+  // ExecutiveAvatar._drawFacialHairFront exactly (same coordinates).
+  const fh = s.facialHair ?? "none";
+  if (fh !== "none") {
+    const beardHair = shade(s.hair, 0.92);
+    if (fh === "stubble") {
+      g.fillStyle(beardHair, 0.3);
+      g.fillEllipse(ox, oy - 9.4, 8.4, 4.8);
+    } else if (fh === "beard") {
+      g.fillStyle(beardHair, 1);
+      g.fillEllipse(ox, oy - 8.8, 8.4, 5.6);
+      g.fillRect(ox - 4.6, oy - 13.4, 1.5, 4.6);
+      g.fillRect(ox + 3.1, oy - 13.4, 1.5, 4.6);
+      g.fillStyle(shade(s.hair, 1.2), 0.4);
+      g.fillEllipse(ox, oy - 10.8, 6.2, 1.6);
+    }
+    if (fh === "beard" || fh === "mustache") {
+      g.fillStyle(beardHair, 1);
+      g.fillEllipse(ox, oy - 10.7, 3.8, 1.2);
+    }
+  }
   // Mouth
   g.fillStyle(shade(s.skin, 0.66), 0.6);
   g.fillRect(ox - 1.5, oy - 10, 3, 0.7);
+  // Eyewear — over the eyes. Mirrors ExecutiveAvatar._drawGlassesFront.
+  if ((s.glasses ?? "none") !== "none") {
+    const frame = 0x241f1b;
+    g.fillStyle(0xbfe0f0, 0.12);
+    g.fillCircle(ox - 2, oy - 12.4, 1.7);
+    g.fillCircle(ox + 2, oy - 12.4, 1.7);
+    g.lineStyle(0.7, frame, 0.95);
+    g.strokeCircle(ox - 2, oy - 12.4, 2.1);
+    g.strokeCircle(ox + 2, oy - 12.4, 2.1);
+    g.fillStyle(frame, 0.9);
+    g.fillRect(ox - 0.3, oy - 12.7, 0.6, 0.5);
+    g.fillRect(ox - 4.9, oy - 12.7, 0.9, 0.4);
+    g.fillRect(ox + 4, oy - 12.7, 0.9, 0.4);
+  }
 }
 
 /** Front-view arms — walk/idle branch (arms at the sides). */
