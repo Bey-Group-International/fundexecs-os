@@ -2,6 +2,12 @@ import {
   DEFAULT_USER_AVATAR,
   SKIN_TONES,
   HAIR_COLORS,
+  WARDROBES,
+  AVATAR_ACCENTS,
+  AVATAR_PRESETS,
+  HAIR_STYLES,
+  BUILDS,
+  applyAvatarPreset,
   presentationDefaults,
   effectiveSkin,
   effectiveHair,
@@ -81,5 +87,44 @@ describe("userAvatar — parse (backward compatible)", () => {
   it("still rejects a non-object or a bad genderStyle", () => {
     expect(parseUserAvatar(null)).toBeNull();
     expect(parseUserAvatar({ genderStyle: "robot" })).toBeNull();
+  });
+});
+
+describe("userAvatar — presets", () => {
+  it("every preset references only valid swatches and enums", () => {
+    const wardrobeIds = new Set(WARDROBES.map((w) => w.id));
+    for (const p of AVATAR_PRESETS) {
+      expect(wardrobeIds.has(p.wardrobe)).toBe(true);
+      expect(AVATAR_ACCENTS).toContain(p.accent);
+      expect(SKIN_TONES).toContain(p.skin);
+      expect(HAIR_COLORS).toContain(p.hair);
+      expect(HAIR_STYLES).toContain(p.hairStyle);
+      expect(BUILDS).toContain(p.build);
+    }
+  });
+
+  it("has unique preset ids", () => {
+    const ids = AVATAR_PRESETS.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("applying a preset restyles appearance but preserves name + role", () => {
+    const me: UserAvatar = { ...DEFAULT_USER_AVATAR, displayName: "Sheik", roleLabel: "Principal" };
+    const p = AVATAR_PRESETS[0];
+    const next = applyAvatarPreset(me, p);
+    expect(next.displayName).toBe("Sheik");
+    expect(next.roleLabel).toBe("Principal");
+    expect(next.wardrobe).toBe(p.wardrobe);
+    expect(next.accent).toBe(p.accent);
+    expect(next.genderStyle).toBe(p.genderStyle);
+  });
+
+  it("a preset result round-trips cleanly through parseUserAvatar", () => {
+    for (const p of AVATAR_PRESETS) {
+      const styled = applyAvatarPreset(DEFAULT_USER_AVATAR, p);
+      const parsed = parseUserAvatar(styled);
+      // Nothing gets dropped — every field is valid.
+      expect(parsed).toEqual(styled);
+    }
   });
 });

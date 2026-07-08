@@ -2,12 +2,14 @@
 
 import {
   AVATAR_ACCENTS,
+  AVATAR_PRESETS,
   BUILDS,
   HAIR_COLORS,
   HAIR_STYLES,
   ROLE_LABELS,
   SKIN_TONES,
   WARDROBES,
+  applyAvatarPreset,
   effectiveHair,
   effectiveSkin,
   presentationDefaults,
@@ -183,6 +185,25 @@ export function UserCharacterSelector({
           <span className="text-[12px]" style={{ color: GOLD, fontFamily: SERIF }}>
             {value.roleLabel}
           </span>
+        </div>
+      </div>
+
+      {/* Presets — one-click curated looks. Appearance only: the operator's
+          display name and role are preserved so identity survives a re-style. */}
+      <div>
+        <SectionLabel>Presets</SectionLabel>
+        <div className="flex flex-wrap gap-2">
+          {AVATAR_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onChange(applyAvatarPreset(value, p))}
+              className="rounded-md border px-2.5 py-1 text-[11px] transition-colors hover:brightness-125"
+              style={{ borderColor: BORDER_DIM, color: "#cbd2dc", fontFamily: SERIF, background: "transparent" }}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
       </div>
 
