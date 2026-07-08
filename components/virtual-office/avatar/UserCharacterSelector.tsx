@@ -4,6 +4,8 @@ import {
   AVATAR_ACCENTS,
   AVATAR_PRESETS,
   BUILDS,
+  FACIAL_HAIR_OPTIONS,
+  GLASSES_OPTIONS,
   HAIR_COLORS,
   HAIR_STYLES,
   ROLE_LABELS,
@@ -24,6 +26,13 @@ const HAIR_STYLE_LABELS: Record<string, string> = {
   textured: "Textured",
   tied: "Tied",
   bald: "Bald",
+};
+const GLASSES_LABELS: Record<string, string> = { none: "None", glasses: "Glasses" };
+const FACIAL_HAIR_LABELS: Record<string, string> = {
+  none: "None",
+  stubble: "Stubble",
+  mustache: "Mustache",
+  beard: "Beard",
 };
 
 /** Format a 0xRRGGBB int as a CSS `#rrggbb` string for swatch fills. */
@@ -228,6 +237,22 @@ export function UserCharacterSelector({
           options={HAIR_STYLES.map((h) => ({ id: h, label: HAIR_STYLE_LABELS[h] }))}
           selected={curHairStyle}
           onSelect={(h) => onChange({ ...value, hairStyle: h })}
+        />
+      </div>
+
+      {/* Eyewear + facial hair — new drawn features (front + profile). */}
+      <div className="flex flex-wrap gap-4">
+        <Segmented
+          label="Glasses"
+          options={GLASSES_OPTIONS.map((o) => ({ id: o, label: GLASSES_LABELS[o] }))}
+          selected={value.glasses ?? "none"}
+          onSelect={(o) => onChange({ ...value, glasses: o })}
+        />
+        <Segmented
+          label="Facial hair"
+          options={FACIAL_HAIR_OPTIONS.map((o) => ({ id: o, label: FACIAL_HAIR_LABELS[o] }))}
+          selected={value.facialHair ?? "none"}
+          onSelect={(o) => onChange({ ...value, facialHair: o })}
         />
       </div>
 

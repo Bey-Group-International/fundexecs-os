@@ -22,7 +22,13 @@
  * JSON `user_metadata` and HTML swatch inputs.
  */
 
-import type { AvatarSpec, AvatarBuild, AvatarHairStyle } from "@/components/virtual-office/avatar/avatarPalette";
+import type {
+  AvatarSpec,
+  AvatarBuild,
+  AvatarHairStyle,
+  AvatarGlasses,
+  AvatarFacialHair,
+} from "@/components/virtual-office/avatar/avatarPalette";
 
 /**
  * A human user's chosen appearance. Small and JSON-serializable so it can live
@@ -53,7 +59,15 @@ export type UserAvatar = {
   hairStyle?: AvatarHairStyle;
   /** Explicit body build; falls back to the presentation preset. */
   build?: AvatarBuild;
+  /** Optional eyewear. Defaults to "none". */
+  glasses?: AvatarGlasses;
+  /** Optional facial hair. Defaults to "none". */
+  facialHair?: AvatarFacialHair;
 };
+
+/** Selectable eyewear + facial-hair options for the character picker. */
+export const GLASSES_OPTIONS: AvatarGlasses[] = ["none", "glasses"];
+export const FACIAL_HAIR_OPTIONS: AvatarFacialHair[] = ["none", "stubble", "mustache", "beard"];
 
 /** One executive wardrobe: a coordinated blazer / shirt / trouser palette. */
 export type Wardrobe = {
@@ -288,6 +302,8 @@ export function userAvatarSpec(a: UserAvatar): AvatarSpec {
     prop: "none",
     build,
     hairStyle,
+    glasses: GLASSES_OPTIONS.includes(a.glasses as AvatarGlasses) ? a.glasses : "none",
+    facialHair: FACIAL_HAIR_OPTIONS.includes(a.facialHair as AvatarFacialHair) ? a.facialHair : "none",
     coin: false,
   };
 }
@@ -340,6 +356,16 @@ export function parseUserAvatar(raw: unknown): UserAvatar | null {
     ? (o.hairStyle as AvatarHairStyle)
     : undefined;
   const build = BUILDS.includes(o.build as AvatarBuild) ? (o.build as AvatarBuild) : undefined;
+  // Only keep eyewear / facial hair when they name a valid option and aren't the
+  // "none" default — so a plain avatar stays free of these keys (backward compat).
+  const glasses =
+    GLASSES_OPTIONS.includes(o.glasses as AvatarGlasses) && o.glasses !== "none"
+      ? (o.glasses as AvatarGlasses)
+      : undefined;
+  const facialHair =
+    FACIAL_HAIR_OPTIONS.includes(o.facialHair as AvatarFacialHair) && o.facialHair !== "none"
+      ? (o.facialHair as AvatarFacialHair)
+      : undefined;
 
   return {
     displayName,
@@ -351,5 +377,7 @@ export function parseUserAvatar(raw: unknown): UserAvatar | null {
     ...(hair ? { hair } : {}),
     ...(hairStyle ? { hairStyle } : {}),
     ...(build ? { build } : {}),
+    ...(glasses ? { glasses } : {}),
+    ...(facialHair ? { facialHair } : {}),
   };
 }

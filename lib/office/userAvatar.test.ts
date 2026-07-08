@@ -88,6 +88,36 @@ describe("userAvatar — parse (backward compatible)", () => {
     expect(parseUserAvatar(null)).toBeNull();
     expect(parseUserAvatar({ genderStyle: "robot" })).toBeNull();
   });
+
+  it("keeps valid glasses/facial hair and drops invalid or default-none", () => {
+    const parsed = parseUserAvatar({
+      displayName: "New", genderStyle: "male", wardrobe: "navy", accent: "#c9a84c", roleLabel: "Analyst",
+      glasses: "glasses", facialHair: "beard",
+    });
+    expect(parsed?.glasses).toBe("glasses");
+    expect(parsed?.facialHair).toBe("beard");
+
+    const bare = parseUserAvatar({
+      displayName: "N", genderStyle: "male", wardrobe: "navy", accent: "#c9a84c", roleLabel: "Analyst",
+      glasses: "none", facialHair: "wizard",
+    });
+    expect(bare).not.toHaveProperty("glasses"); // "none" is the default — not stored
+    expect(bare).not.toHaveProperty("facialHair"); // invalid enum dropped
+  });
+});
+
+describe("userAvatar — glasses + facial hair spec", () => {
+  it("passes explicit eyewear + facial hair through to the render spec", () => {
+    const spec = userAvatarSpec({ ...DEFAULT_USER_AVATAR, glasses: "glasses", facialHair: "beard" });
+    expect(spec.glasses).toBe("glasses");
+    expect(spec.facialHair).toBe("beard");
+  });
+
+  it("defaults both to none when absent", () => {
+    const spec = userAvatarSpec(DEFAULT_USER_AVATAR);
+    expect(spec.glasses).toBe("none");
+    expect(spec.facialHair).toBe("none");
+  });
 });
 
 describe("userAvatar — presets", () => {
