@@ -170,10 +170,13 @@ export class MeshManager {
   updateSpatialGain(peerId: string, distancePx: number): void {
     const state = this.peers.get(peerId);
     if (!state?.gainNode) return;
-    const gain = Math.max(
+    // Smoothstep the linear falloff so the volume eases at the band edges
+    // instead of ramping abruptly as a peer crosses the bubble boundary.
+    const t = Math.max(
       0,
       Math.min(1, 1 - (distancePx - BUBBLE_RADIUS_PX) / (EXIT_RADIUS_PX - BUBBLE_RADIUS_PX))
     );
+    const gain = t * t * (3 - 2 * t);
     state.gainNode.gain.setTargetAtTime(gain, this._audioCtx().currentTime, 0.05);
   }
 
