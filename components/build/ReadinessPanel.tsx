@@ -73,14 +73,26 @@ function topNextActions(
   return actions.slice(0, 3);
 }
 
-export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
+export function ReadinessPanel({
+  readiness,
+  floating = false,
+}: {
+  readiness: BuildReadiness;
+  /** When true, styles the panel for use inside the floating dismissable
+      alert: no bottom margin, a drop shadow, and header room for a ✕. */
+  floating?: boolean;
+}) {
   const { overall, stage, stages, modules, nextAction } = readiness;
   const nextStage = stages.find((s) => !s.unlocked);
   const gap = nextStage ? nextStage.threshold - overall : 0;
   const topActions = topNextActions(modules, nextAction);
 
   return (
-    <div className="mb-6 rounded-2xl border border-line bg-surface-1 p-5">
+    <div
+      className={`rounded-2xl border border-line bg-surface-1 p-5 ${
+        floating ? "shadow-2xl shadow-black/40" : "mb-6"
+      }`}
+    >
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">
           <Ring value={overall} />
@@ -90,7 +102,7 @@ export function ReadinessPanel({ readiness }: { readiness: BuildReadiness }) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={`flex flex-wrap items-center gap-2 ${floating ? "pr-6" : ""}`}>
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
               Investor Readiness
             </span>
