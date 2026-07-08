@@ -1,4 +1,4 @@
-import { officeFurniture3D, type FurnitureBox } from "./officeFurniture3D";
+import { officeFurniture3D, officeLampGlows, type FurnitureBox } from "./officeFurniture3D";
 import { PX_TO_WORLD } from "./officeGeometry3D";
 import { ROOMS, WORLD_W, WORLD_H } from "../types";
 
@@ -35,5 +35,21 @@ describe("officeFurniture3D", () => {
     const rowZmin = marketplace.row * 288 * PX_TO_WORLD; // ROOM_H = 288
     const stallish = boxes.filter((b: FurnitureBox) => b.cz >= rowZmin);
     expect(stallish.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("marks some surfaces (monitors) as glowing", () => {
+    expect(boxes.some((b) => b.glow)).toBe(true);
+  });
+});
+
+describe("officeLampGlows", () => {
+  const glows = officeLampGlows();
+
+  it("emits a positive-radius, colored glow pool per lamped room", () => {
+    expect(glows.length).toBeGreaterThan(5);
+    for (const g of glows) {
+      expect(g.radius).toBeGreaterThan(0);
+      expect(g.color).toMatch(/^#[0-9a-fA-F]{6}$/);
+    }
   });
 });
