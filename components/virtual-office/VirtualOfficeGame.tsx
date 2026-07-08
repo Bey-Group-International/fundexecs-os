@@ -1414,6 +1414,7 @@ export function VirtualOfficeGame({
         <button
           type="button"
           onClick={toggleView}
+          aria-pressed={overheadView}
           title={overheadView ? "Back to the follow view" : "Overhead view (see the whole floor)"}
           className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
           style={{

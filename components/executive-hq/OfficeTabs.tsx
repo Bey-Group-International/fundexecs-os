@@ -57,12 +57,10 @@ export function OfficeTabs() {
     setOpened((prev) => ({ ...prev, [next]: true }));
   }, []);
 
-  // The Virtual Office has its own Earn entry points (⌘K + the Earn Center
-  // button on its footer), so hide the app-wide floating "Ask Earn" launcher
-  // while that tab is active. It returns on the Overview tab and off this page.
+  // The Virtual Office and the Earn Command tab both carry their own Earn entry
+  // points (⌘K + the Earn Center button), so hide the app-wide floating
+  // "Ask Earn" launcher while either is active; it returns when we leave the page.
   useEffect(() => {
-    // The Virtual Office and the Earn Command tab both carry their own Earn
-    // entry point, so hide the app-wide floating launcher on either.
     const suppress = tab === "virtual" || tab === "earn";
     window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress } }));
     return () => {

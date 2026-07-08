@@ -229,20 +229,27 @@ export function createWallVisuals(scene: Phaser.Scene): Phaser.GameObjects.Graph
   const W = WALL_THICKNESS;
   const DG = DOOR_GAP;
 
+  // Taller downward extrusion so the partitions read as real 2.5D walls.
+  const EXT = 11;
   const hWall = (x: number, y: number, w: number) => {
     if (w <= 0) return;
-    // Downward extrusion (the wall's visible height toward the viewer).
-    g.fillStyle(C.wallExtrude, 1); g.fillRect(x, y + W, w, 5);
-    g.fillStyle(0x000000, 0.16); g.fillRect(x, y + W + 5, w, 3);
-    // Body + lit cap.
+    // Downward-facing wall front (the visible height toward the viewer), with a
+    // top-to-bottom darkening and a grounded contact shadow beneath it.
+    g.fillStyle(C.wallFace, 1); g.fillRect(x, y + W, w, EXT);
+    g.fillStyle(C.wallExtrude, 0.85); g.fillRect(x, y + W + EXT * 0.5, w, EXT * 0.5);
+    g.fillStyle(0x000000, 0.2); g.fillRect(x, y + W + EXT, w, 4);
+    // Body + lit cap (top plane catching the overhead light).
     g.fillStyle(C.wallFace, 1); g.fillRect(x, y + 2.5, w, W - 2.5);
     g.fillStyle(C.wallCap, 1); g.fillRect(x, y, w, 2.5);
+    g.fillStyle(shade(C.wallCap, 1.2), 0.7); g.fillRect(x, y, w, 1);
   };
   const vWall = (x: number, y: number, h: number) => {
     if (h <= 0) return;
-    g.fillStyle(C.wallExtrude, 0.9); g.fillRect(x + W - 2, y, 2, h);
-    g.fillStyle(C.wallFace, 1); g.fillRect(x + 2.5, y, W - 4.5, h);
+    // A wider shadowed right face gives the vertical run visible thickness.
+    g.fillStyle(C.wallExtrude, 0.95); g.fillRect(x + W - 3, y, 3, h);
+    g.fillStyle(C.wallFace, 1); g.fillRect(x + 2.5, y, W - 5.5, h);
     g.fillStyle(C.wallCap, 1); g.fillRect(x, y, 2.5, h); // left edge catches light
+    g.fillStyle(shade(C.wallCap, 1.2), 0.7); g.fillRect(x, y, 1, h);
   };
 
   // Perimeter
@@ -606,13 +613,22 @@ function box(
   cx: number, footY: number, w: number, capDepth: number, height: number,
   topColor: number, frontColor: number,
 ) {
-  g.fillStyle(0x000000, 0.22);
-  g.fillEllipse(cx, footY + 1, w * 0.96, capDepth * 0.7);
+  // Grounding contact shadow — deeper + offset to the shaded (right) side.
+  g.fillStyle(0x000000, 0.28);
+  g.fillEllipse(cx + w * 0.06, footY + 1.5, w * 1.02, capDepth * 0.82);
+  // Front face + a top-to-bottom darkening so the block has vertical form.
   g.fillStyle(frontColor, 1);
   g.fillRect(cx - w / 2, footY - height, w, height);
+  g.fillStyle(shade(frontColor, 0.7), 0.55);
+  g.fillRect(cx - w / 2, footY - height * 0.42, w, height * 0.42);
+  // Lit left edge + shadowed right edge give the front real side-lighting.
+  g.fillStyle(shade(frontColor, 1.3), 0.6);
+  g.fillRect(cx - w / 2, footY - height, 1.4, height);
+  g.fillStyle(shade(frontColor, 0.5), 0.7);
+  g.fillRect(cx + w / 2 - 1.4, footY - height, 1.4, height);
+  // Top cap (overhead-lit) with a bright front lip.
   g.fillStyle(topColor, 1);
   g.fillRect(cx - w / 2, footY - height - capDepth, w, capDepth);
-  // Top highlight edge (lit).
   g.fillStyle(shade(topColor, 1.25), 0.8);
   g.fillRect(cx - w / 2, footY - height - capDepth, w, 1.2);
 }
