@@ -198,6 +198,9 @@ function drawHead(g: CanvasGraphics, s: AvatarSpec, ox: number, oy: number) {
   g.fillStyle(skinLo, 0.45);
   g.fillEllipse(ox, oy - 9.6, 7, 3.4); // jaw
   g.fillEllipse(ox + 2.9, oy - 12, 3.2, 6); // cheek
+  // Lit cheek plane on the key-light (left) side — rounder facial volume.
+  g.fillStyle(shade(s.skin, 1.16), 0.32);
+  g.fillEllipse(ox - 2.7, oy - 12.2, 3.4, 4.4);
   // Hair
   if (s.hairStyle !== "bald") {
     g.fillStyle(s.hair, 1);
@@ -238,6 +241,9 @@ function drawHead(g: CanvasGraphics, s: AvatarSpec, ox: number, oy: number) {
   // Nose shadow to the shaded side.
   g.fillStyle(skinLo, 0.5);
   g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
+  // Nose-bridge highlight — a defined, lit ridge.
+  g.fillStyle(shade(s.skin, 1.12), 0.3);
+  g.fillRect(ox - 0.5, oy - 13, 0.7, 2.6);
   // Facial hair — hair-colored, under the mouth so lips read on top. Mirrors
   // ExecutiveAvatar._drawFacialHairFront exactly (same coordinates).
   const fh = s.facialHair ?? "none";
@@ -262,6 +268,9 @@ function drawHead(g: CanvasGraphics, s: AvatarSpec, ox: number, oy: number) {
   // Mouth
   g.fillStyle(shade(s.skin, 0.66), 0.6);
   g.fillRect(ox - 1.5, oy - 10, 3, 0.7);
+  // Lower-lip highlight — a touch of life beneath the mouth.
+  g.fillStyle(shade(s.skin, 1.1), 0.35);
+  g.fillRect(ox - 1, oy - 9.4, 2, 0.45);
   // Eyewear — over the eyes. Mirrors ExecutiveAvatar._drawGlassesFront.
   if ((s.glasses ?? "none") !== "none") {
     const frame = 0x241f1b;

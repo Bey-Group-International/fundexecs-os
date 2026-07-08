@@ -643,6 +643,9 @@ export class ExecutiveAvatar {
     g.fillStyle(skinLo, 0.45);
     g.fillEllipse(ox, oy - 9.6, 7, 3.4);      // jaw
     g.fillEllipse(ox + 2.9, oy - 12, 3.2, 6); // cheek
+    // Lit cheek plane on the key-light (left) side — rounder facial volume.
+    g.fillStyle(this._shade(s.skin, 1.16), 0.32);
+    g.fillEllipse(ox - 2.7, oy - 12.2, 3.4, 4.4);
     // Hair
     if (s.hairStyle !== "bald") {
       g.fillStyle(s.hair, 1);
@@ -689,11 +692,17 @@ export class ExecutiveAvatar {
     // Nose shadow to the shaded side.
     g.fillStyle(skinLo, 0.5);
     g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
+    // Nose-bridge highlight — a defined, lit ridge.
+    g.fillStyle(this._shade(s.skin, 1.12), 0.3);
+    g.fillRect(ox - 0.5, oy - 13, 0.7, 2.6);
     // Facial hair — hair-colored, under the mouth so lips still read on top.
     this._drawFacialHairFront(g, s, ox, oy);
     // Mouth
     g.fillStyle(this._shade(s.skin, 0.66), 0.6);
     g.fillRect(ox - 1.5, oy - 10, 3, 0.7);
+    // Lower-lip highlight — a touch of life beneath the mouth.
+    g.fillStyle(this._shade(s.skin, 1.1), 0.35);
+    g.fillRect(ox - 1, oy - 9.4, 2, 0.45);
     // Eyewear — drawn last so the frames sit over the eyes.
     this._drawGlassesFront(g, s, ox, oy);
   }
