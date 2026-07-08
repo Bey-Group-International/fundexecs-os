@@ -116,7 +116,7 @@ export class ExecutiveAvatar {
     // "Thinking" pulse — three dots floating above the head, ACE-style
     // presence cue shown only while analyzing.
     this.think = scene.add.graphics().setVisible(false).setPosition(0, -25);
-    this.think.fillStyle(spec.accent, 0.95);
+    this.think.fillStyle(vivify(spec.accent), 0.95);
     this.think.fillCircle(-3, 0, 1.1);
     this.think.fillCircle(0, 0, 1.1);
     this.think.fillCircle(3, 0, 1.1);
@@ -344,14 +344,17 @@ export class ExecutiveAvatar {
       this.rim.setVisible(false);
       return;
     }
+    // Push the state color to a punchier, higher-saturation hue so the AI-native
+    // cue reads bold and vivid — matching the figures and the room accents.
+    const vivColor = vivify(color);
     this.aura.setVisible(true);
-    this.aura.setStrokeStyle(1.5, color, 0.85);
-    this.aura.setFillStyle(color, 0.07);
+    this.aura.setStrokeStyle(1.75, vivColor, 0.92);
+    this.aura.setFillStyle(vivColor, 0.09);
     this.aura.setScale(1).setAlpha(1);
 
     // Presence rim light — soft disc that glows under working agents.
     this.rim.setVisible(true);
-    this.rim.setFillStyle(color, 0.1).setScale(1).setAlpha(1);
+    this.rim.setFillStyle(vivColor, 0.13).setScale(1).setAlpha(1);
 
     const pulses =
       !ExecutiveAvatar.reducedMotion &&
