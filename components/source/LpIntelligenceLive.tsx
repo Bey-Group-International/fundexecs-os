@@ -64,6 +64,11 @@ export async function LpIntelligenceLive() {
         checkMin: inv.typical_check_min,
         checkMax: inv.typical_check_max,
         jurisdiction: inv.jurisdiction,
+        // Enrichable scoring signals — surfaced so the board's inline editor can
+        // seed them and the score sharpens as they're filled in.
+        sectors: inv.sectors ?? [],
+        openToEmergingManagers: inv.open_to_emerging_managers ?? null,
+        allocationSignal: inv.allocation_signal ?? null,
         committed: committedByInvestor.get(inv.id) ?? 0,
         score: fit.score,
         tier: fit.tier,

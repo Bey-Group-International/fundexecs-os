@@ -1,4 +1,4 @@
-import { computeLbo, defaultLboInputs, type LboInputs } from "./lbo-model";
+import { computeLbo, defaultLboInputs, lboSensitivity, type LboInputs } from "./lbo-model";
 
 describe("computeLbo — structure", () => {
   it("splits entry EV into debt and equity from the multiple and debt share", () => {
@@ -103,5 +103,76 @@ describe("computeLbo — guards", () => {
     const r = computeLbo({ ...defaultLboInputs(), holdYears: 3.9 });
     expect(r.schedule).toHaveLength(3);
     expect(r.exitEquity).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("lboSensitivity", () => {
+  it("builds a square grid of the default size, centered on the base multiples", () => {
+    const base = defaultLboInputs();
+    const grid = lboSensitivity(base);
+    expect(grid.rows.values).toHaveLength(5);
+    expect(grid.cols.values).toHaveLength(5);
+    expect(grid.cells).toHaveLength(5);
+    for (const row of grid.cells) expect(row).toHaveLength(5);
+    expect(grid.rows.baseIndex).toBe(2);
+    expect(grid.cols.baseIndex).toBe(2);
+    expect(grid.rows.values[grid.rows.baseIndex]).toBeCloseTo(base.entryMultiple, 6);
+    expect(grid.cols.values[grid.cols.baseIndex]).toBeCloseTo(base.exitMultiple, 6);
+  });
+
+  it("has strictly ascending, distinct axis values", () => {
+    const grid = lboSensitivity(defaultLboInputs());
+    for (const axis of [grid.rows, grid.cols]) {
+      for (let i = 1; i < axis.values.length; i++) {
+        expect(axis.values[i]).toBeGreaterThan(axis.values[i - 1]);
+      }
+    }
+  });
+
+  it("the center cell equals computeLbo(base)'s IRR and MOIC", () => {
+    const base = defaultLboInputs();
+    const grid = lboSensitivity(base);
+    const r = computeLbo(base);
+    const center = grid.cells[grid.rows.baseIndex][grid.cols.baseIndex];
+    expect(center.irr!).toBeCloseTo(r.irr!, 10);
+    expect(center.moic!).toBeCloseTo(r.moic!, 10);
+  });
+
+  it("IRR rises monotonically as exit multiple increases (entry held fixed)", () => {
+    const grid = lboSensitivity(defaultLboInputs());
+    const row = grid.cells[grid.rows.baseIndex];
+    for (let c = 1; c < row.length; c++) {
+      expect(row[c].irr!).toBeGreaterThan(row[c - 1].irr!);
+    }
+  });
+
+  it("IRR falls monotonically as entry multiple increases (exit held fixed)", () => {
+    const grid = lboSensitivity(defaultLboInputs());
+    const col = grid.cols.baseIndex;
+    for (let r = 1; r < grid.cells.length; r++) {
+      expect(grid.cells[r][col].irr!).toBeLessThan(grid.cells[r - 1][col].irr!);
+    }
+  });
+
+  it("honors a custom step count and spacing", () => {
+    const base = defaultLboInputs();
+    const grid = lboSensitivity(base, { steps: 3, entryStep: 1, exitStep: 1 });
+    expect(grid.rows.values).toHaveLength(3);
+    expect(grid.rows.values).toEqual([
+      base.entryMultiple - 1,
+      base.entryMultiple,
+      base.entryMultiple + 1,
+    ]);
+    expect(grid.cols.values).toEqual([
+      base.exitMultiple - 1,
+      base.exitMultiple,
+      base.exitMultiple + 1,
+    ]);
+  });
+
+  it("forces an even step count odd so the base stays centered", () => {
+    const grid = lboSensitivity(defaultLboInputs(), { steps: 4 });
+    expect(grid.rows.values).toHaveLength(5);
+    expect(grid.rows.baseIndex).toBe(2);
   });
 });

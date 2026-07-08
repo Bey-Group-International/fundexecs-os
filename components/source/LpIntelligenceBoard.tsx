@@ -5,9 +5,11 @@
 // firm's allocators. Complements the LP Pipeline CRM: where that lists and
 // works LPs, this ranks them by fit against the current raise (mandate) with an
 // explainable per-LP breakdown. Data is scored server-side by LpIntelligenceLive.
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { LpScoredFactor, LpTier } from "@/lib/lp-scoring";
+import { updateLpSignals } from "@/components/source/lp-signal-actions";
 
 export interface ScoredLp {
   id: string;
@@ -17,6 +19,10 @@ export interface ScoredLp {
   checkMin: number | null;
   checkMax: number | null;
   jurisdiction: string | null;
+  // Enrichable scoring signals, editable inline from the score breakdown.
+  sectors: string[];
+  openToEmergingManagers: boolean | null;
+  allocationSignal: string | null;
   committed: number;
   score: number;
   tier: LpTier;
@@ -63,6 +69,92 @@ function checkBand(min: number | null, max: number | null): string {
   if (min == null && max == null) return "—";
   if (min != null && max != null) return `${formatUsd(min)}–${formatUsd(max)}`;
   return min != null ? `${formatUsd(min)}+` : `≤${formatUsd(max)}`;
+}
+
+const fieldClass =
+  "w-full rounded border border-line bg-surface-2 px-2 py-1 font-mono text-[11px] text-fg-primary placeholder:text-fg-muted/50 focus:border-gold-500/40 focus:outline-none";
+const fieldLabel = "block font-mono text-[9px] uppercase tracking-widest text-fg-muted mb-0.5";
+
+// Inline enrichment form shown inside the "why this score" detail. Editing any
+// of these three signals re-scores the LP: sectors feed Sector alignment,
+// openness feeds Emerging-manager openness, and the allocation note feeds
+// Recent activity. Submits to the updateLpSignals server action, then refreshes.
+function LpSignalEditor({ lp }: { lp: ScoredLp }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [sectors, setSectors] = useState(lp.sectors.join(", "));
+  const [openness, setOpenness] = useState(
+    lp.openToEmergingManagers === true ? "yes" : lp.openToEmergingManagers === false ? "no" : "unknown",
+  );
+  const [allocation, setAllocation] = useState(lp.allocationSignal ?? "");
+
+  function handleSave() {
+    setError(null);
+    const formData = new FormData();
+    formData.set("id", lp.id);
+    formData.set("sectors", sectors);
+    formData.set("openToEmergingManagers", openness);
+    formData.set("allocationSignal", allocation);
+    start(async () => {
+      const result = await updateLpSignals(formData);
+      if (result.error) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-gold-500/20 bg-surface-2 p-3">
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-gold-300">
+        Enrich signals — sharpen this score
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_2fr]">
+        <div>
+          <label className={fieldLabel}>Sectors (comma-separated)</label>
+          <input
+            className={fieldClass}
+            value={sectors}
+            onChange={(e) => setSectors(e.target.value)}
+            placeholder="SaaS, Fintech, Healthcare"
+          />
+        </div>
+        <div>
+          <label className={fieldLabel}>Open to emerging?</label>
+          <select
+            className={fieldClass}
+            value={openness}
+            onChange={(e) => setOpenness(e.target.value)}
+          >
+            <option value="unknown">Unknown</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div>
+          <label className={fieldLabel}>Allocation signal</label>
+          <input
+            className={fieldClass}
+            value={allocation}
+            onChange={(e) => setAllocation(e.target.value)}
+            placeholder="Actively deploying 2026 vintage"
+          />
+        </div>
+      </div>
+      {error && (
+        <p className="mt-2 font-mono text-[10px] text-red-400">{error}</p>
+      )}
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={pending}
+          className="rounded border border-gold-500/40 bg-gold-500/10 px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-gold-300 hover:bg-gold-500/20 disabled:opacity-40"
+        >
+          {pending ? "Saving…" : "Save signals"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function LpRow({ lp }: { lp: ScoredLp }) {
@@ -145,6 +237,7 @@ function LpRow({ lp }: { lp: ScoredLp }) {
                 );
               })}
             </div>
+            <LpSignalEditor lp={lp} />
           </td>
         </tr>
       )}

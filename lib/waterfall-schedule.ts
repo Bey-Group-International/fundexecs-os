@@ -10,6 +10,16 @@
 // and mirrors the return-cap / tiered-payout structures the model was adapted
 // from.
 //
+// Two waterfall MODES are supported:
+//   • 'european' (default, whole-fund) — carry is only paid after ALL LP capital
+//     and pref across the WHOLE fund is returned; each distribution amortizes the
+//     entire outstanding unreturned balance before any profit is split.
+//   • 'american' (deal-by-deal) — the GP earns carry on EACH realization as it
+//     happens: a distribution returns only its OWN pro-rata slice of capital + the
+//     pref on that slice, then splits carry on the residual immediately, so carry
+//     starts earlier. See computeWaterfallSchedule for the documented pro-rata
+//     modeling assumption.
+//
 // Pure and dependency-free so the interactive calculator runs it client-side and
 // the agents reason over the same math server-side.
 
@@ -29,6 +39,12 @@ export interface ScheduleTerms {
   compounding: boolean;
   /** Carry tiers, ordered ascending by `upToMultiple`; the last must be Infinity. */
   carryTiers: CarryTier[];
+  /**
+   * Waterfall structure. 'european' (default) returns the whole fund's capital +
+   * pref before any carry; 'american' (deal-by-deal) pays carry on each
+   * realization's own pro-rata slice. Unset is treated as 'european'.
+   */
+  mode?: "european" | "american";
 }
 
 export const DEFAULT_SCHEDULE_TERMS: ScheduleTerms = {
@@ -36,6 +52,7 @@ export const DEFAULT_SCHEDULE_TERMS: ScheduleTerms = {
   catchUp: 1.0,
   compounding: true,
   carryTiers: [{ carry: 0.2, upToMultiple: Infinity }],
+  mode: "european",
 };
 
 /** One event in the fund timeline. Contribution is applied before distribution. */
@@ -123,6 +140,23 @@ export function splitResidualTiered(
  * Run a full contribution/distribution schedule through the waterfall. Events
  * are processed in period order; between events, pref accrues (compounding when
  * enabled) on the unreturned balance.
+ *
+ * MODE — see ScheduleTerms.mode. In 'european' mode each distribution amortizes
+ * the WHOLE fund's unreturned capital and accrued pref before any carry. In
+ * 'american' (deal-by-deal) mode each distribution returns only its OWN pro-rata
+ * slice before splitting carry, so the GP earns carry earlier.
+ *
+ * AMERICAN MODELING ASSUMPTION (deterministic, conservative): with no per-deal
+ * cost tags on the events, we deem each distribution to realize a pro-rata slice
+ * of paid-in capital equal to its share of the fund's TOTAL distributions,
+ * `basis = paidIn × (distribution / Σ distributions)`. The pref charged is the
+ * matching pro-rata slice of the fund's accrued pref (charged only on the capital
+ * that realization returns, not the whole outstanding balance). Everything above
+ * that slice's capital + pref is profit and is split (catch-up → tiered carry)
+ * immediately, without first clearing the rest of the fund's unreturned balance.
+ * Because the shares sum to 1, a profitable fund still returns 100% of capital
+ * over its life — American only shifts WHEN carry is paid, matching the intent of
+ * a deal-by-deal structure while staying fully deterministic.
  */
 export function computeWaterfallSchedule(
   events: CashflowEvent[],
@@ -133,6 +167,11 @@ export function computeWaterfallSchedule(
   const catchUp = Math.min(Math.max(terms.catchUp, 0), 1);
   const tiers = terms.carryTiers.length ? terms.carryTiers : DEFAULT_SCHEDULE_TERMS.carryTiers;
   const baseCarry = Math.min(Math.max(tiers[0].carry, 0), 0.99);
+  const american = terms.mode === "american";
+  // Fund-wide distribution total drives the American pro-rata capital basis.
+  const totalDist = american
+    ? evs.reduce((s, e) => s + clamp0(e.distribution ?? 0), 0)
+    : 0;
 
   let paidIn = 0;
   let unreturned = 0;
@@ -169,14 +208,35 @@ export function computeWaterfallSchedule(
     const distribution = clamp0(e.distribution ?? 0);
     if (distribution > 0) {
       let rem = distribution;
+      let roc: number;
+      let pref: number;
 
-      const roc = Math.min(rem, unreturned);
-      rem -= roc;
-      unreturned -= roc;
+      if (american) {
+        // Deal-by-deal: return only this realization's pro-rata slice of paid-in
+        // capital (and the matching slice of accrued pref), NOT the whole-fund
+        // unreturned balance — so the residual is split for carry immediately.
+        const uBefore = unreturned;
+        const basisTarget = totalDist > 0 ? paidIn * (distribution / totalDist) : 0;
+        roc = Math.min(rem, basisTarget, unreturned);
+        rem -= roc;
+        unreturned -= roc;
 
-      const pref = Math.min(rem, accruedPref);
-      rem -= pref;
-      accruedPref -= pref;
+        // Pref is charged only on the capital this realization returns: the
+        // pro-rata share of the accrued balance, capped by what's actually owed.
+        const prefTarget = uBefore > 0 ? accruedPref * (roc / uBefore) : 0;
+        pref = Math.min(rem, prefTarget, accruedPref);
+        rem -= pref;
+        accruedPref -= pref;
+      } else {
+        // European (whole-fund): amortize the entire outstanding balance first.
+        roc = Math.min(rem, unreturned);
+        rem -= roc;
+        unreturned -= roc;
+
+        pref = Math.min(rem, accruedPref);
+        rem -= pref;
+        accruedPref -= pref;
+      }
 
       const cuTarget = baseCarry < 1 ? (baseCarry / (1 - baseCarry)) * pref * catchUp : 0;
       const cu = Math.min(rem, cuTarget);
