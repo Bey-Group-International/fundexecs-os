@@ -14,7 +14,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { buildMap, ROOMS, ROOM_BY_ID } from "@/lib/command-center/map";
 import { WorldEngine } from "@/lib/command-center/engine";
-import { demoDataSource, scriptedEarnDriver } from "@/lib/command-center/adapter";
+import { demoDataSource, liveEarnDriver, scriptedEarnDriver } from "@/lib/command-center/adapter";
 import type { FlowDescriptor } from "@/lib/command-center/flows";
 import { WorldCanvas } from "./WorldCanvas";
 import { ChatPane } from "./ChatPane";
@@ -53,13 +53,12 @@ export function CommandCenter() {
   };
 
   const prompt = async (text: string) => {
-    const plan = await scriptedEarnDriver.plan(text);
-    // Replace the scripted opening user line with the operator's own words.
-    const steps = plan.steps.map((s, i) =>
-      i === 0 && s.kind === "say" ? { ...s, text } : s,
-    );
+    // Live Earn (Claude) chooses the flow and writes the dialogue for this
+    // directive; it falls back to the scripted driver on any error. The plan's
+    // opening user line already carries the operator's own words.
+    const plan = await liveEarnDriver.plan(text);
     launchedRef.current = true;
-    engine.startFlow(plan.kind, steps);
+    engine.startFlow(plan.kind, plan.steps);
   };
 
   const selectedAvatar = selected.avatarId
