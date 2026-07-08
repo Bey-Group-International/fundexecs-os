@@ -47,6 +47,7 @@ const num = (s: string): number => {
 export default function FundWaterfallTool() {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Row[]>(DEFAULT_ROWS);
+  const [mode, setMode] = useState<"european" | "american">("european");
   const [prefPct, setPrefPct] = useState("8");
   const [catchUpPct, setCatchUpPct] = useState("100");
   const [compounding, setCompounding] = useState(true);
@@ -68,8 +69,9 @@ export default function FundWaterfallTool() {
       catchUp: num(catchUpPct) / 100,
       compounding,
       carryTiers: tiers,
+      mode,
     };
-  }, [prefPct, catchUpPct, compounding, baseCarryPct, superOn, superCarryPct, superAboveX]);
+  }, [prefPct, catchUpPct, compounding, baseCarryPct, superOn, superCarryPct, superAboveX, mode]);
 
   const events = useMemo<CashflowEvent[]>(
     () =>
@@ -123,6 +125,18 @@ export default function FundWaterfallTool() {
         <div className="border-t border-line px-4 py-4">
           {/* Terms */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <label className="flex flex-col gap-1">
+              <span className={labelClass}>Mode</span>
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value as "european" | "american")}
+                className={fieldClass}
+                aria-label="Waterfall mode"
+              >
+                <option value="european">European (whole-fund)</option>
+                <option value="american">American (deal-by-deal)</option>
+              </select>
+            </label>
             <label className="flex flex-col gap-1">
               <span className={labelClass}>Pref (%)</span>
               <input value={prefPct} onChange={(e) => setPrefPct(e.target.value)} inputMode="decimal" className={fieldClass} />
@@ -253,7 +267,10 @@ export default function FundWaterfallTool() {
           {(result.unreturnedCapital > 1 || result.accruedPrefRemaining > 1) && (
             <p className="mt-3 text-[11px] text-fg-muted">
               Outstanding to LPs: {money(result.unreturnedCapital)} unreturned capital
-              {result.accruedPrefRemaining > 1 ? ` + ${money(result.accruedPrefRemaining)} accrued pref` : ""} — GP carry accrues only once these are cleared.
+              {result.accruedPrefRemaining > 1 ? ` + ${money(result.accruedPrefRemaining)} accrued pref` : ""}
+              {mode === "american"
+                ? " — carry is taken deal-by-deal as realizations occur."
+                : " — GP carry accrues only once these are cleared."}
             </p>
           )}
         </div>

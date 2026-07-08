@@ -227,3 +227,95 @@ export function computeLbo(inp: LboInputs): LboResult {
     bridge,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Two-variable sensitivity table
+//
+// The classic PE "football field": hold every operating assumption fixed and
+// sweep the two multiples that dominate returns — entry multiple (what you pay)
+// down the rows, exit multiple (what you sell for) across the columns —
+// recomputing the full LBO in each cell. Pure and deterministic: it just calls
+// computeLbo on shallow-cloned inputs, so degenerate cells inherit its nulls.
+
+/** One (entry, exit) cell of the sensitivity grid. */
+export interface SensitivityCell {
+  entryMultiple: number;
+  exitMultiple: number;
+  /** IRR at this pair, or null if the cell is degenerate (mirrors LboResult). */
+  irr: number | null;
+  moic: number | null;
+}
+
+/** One axis of the grid: the swept variable and its values, low → high. */
+export interface SensitivityAxis {
+  /** Which LboInputs field this axis varies. */
+  variable: "entryMultiple" | "exitMultiple";
+  /** The multiple values along the axis, ascending and distinct. */
+  values: number[];
+  /** Index of the base (center) value within `values`. */
+  baseIndex: number;
+}
+
+/** A row × column grid of recomputed returns around the base scenario. */
+export interface SensitivityGrid {
+  /** Row axis — entry multiple, running down the table. */
+  rows: SensitivityAxis;
+  /** Column axis — exit multiple, running across the table. */
+  cols: SensitivityAxis;
+  /** cells[rowIndex][colIndex] — returns for that (entry, exit) pair. */
+  cells: SensitivityCell[][];
+}
+
+/** How to shape the grid; all optional, with sensible PE defaults. */
+export interface SensitivityOptions {
+  /** Points per axis; forced odd so the base lands dead center. Default 5. */
+  steps?: number;
+  /** Spacing between entry-multiple rows. Default 0.5 (5 steps span base ±1.0). */
+  entryStep?: number;
+  /** Spacing between exit-multiple columns. Default 0.5. */
+  exitStep?: number;
+}
+
+/** A positive, finite step, else the shared default — guards a collapsed axis. */
+function normStep(step: number | undefined): number {
+  return typeof step === "number" && Number.isFinite(step) && step > 0 ? step : 0.5;
+}
+
+/** Ascending, distinct multiples centered on `base`; rounded to shed FP dust. */
+function axisValues(base: number, steps: number, step: number): number[] {
+  const center = (steps - 1) / 2;
+  const values: number[] = [];
+  for (let i = 0; i < steps; i++) {
+    values.push(Math.round((base + (i - center) * step) * 1e6) / 1e6);
+  }
+  return values;
+}
+
+/**
+ * Sweep entry multiple (rows) × exit multiple (columns) around a base scenario,
+ * recomputing computeLbo per cell. Defaults to a 5×5 grid centered on the base
+ * multiples in 0.5x steps. The step count is forced odd (so the base sits in the
+ * center) and steps are clamped positive, which also keeps axis values distinct.
+ */
+export function lboSensitivity(base: LboInputs, opts?: SensitivityOptions): SensitivityGrid {
+  let steps = Math.floor(opts?.steps ?? 5);
+  if (!Number.isFinite(steps) || steps < 1) steps = 5;
+  if (steps % 2 === 0) steps += 1; // keep the base centered
+
+  const entryValues = axisValues(base.entryMultiple, steps, normStep(opts?.entryStep));
+  const exitValues = axisValues(base.exitMultiple, steps, normStep(opts?.exitStep));
+  const baseIndex = (steps - 1) / 2;
+
+  const cells: SensitivityCell[][] = entryValues.map((entryMultiple) =>
+    exitValues.map((exitMultiple) => {
+      const r = computeLbo({ ...base, entryMultiple, exitMultiple });
+      return { entryMultiple, exitMultiple, irr: r.irr, moic: r.moic };
+    }),
+  );
+
+  return {
+    rows: { variable: "entryMultiple", values: entryValues, baseIndex },
+    cols: { variable: "exitMultiple", values: exitValues, baseIndex },
+    cells,
+  };
+}

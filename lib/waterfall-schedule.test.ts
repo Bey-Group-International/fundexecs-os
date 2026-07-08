@@ -137,4 +137,68 @@ describe("computeWaterfallSchedule", () => {
     expect(r.totalToLps).toBe(0);
     expect(r.distributions).toHaveLength(0);
   });
+
+  describe("american (deal-by-deal) mode", () => {
+    // 300 paid in up front, realized in two tranches. The first distribution
+    // (150) is well below the fund's 300 unreturned capital, so under a European
+    // whole-fund waterfall it is pure return of capital — zero carry — while a
+    // deal-by-deal waterfall lets the GP take carry on that early realization.
+    const events: CashflowEvent[] = [
+      { period: 0, contribution: 300 },
+      { period: 2, distribution: 150 },
+      { period: 5, distribution: 300 },
+    ];
+    const american: ScheduleTerms = { ...DEFAULT_SCHEDULE_TERMS, mode: "american" };
+
+    it("pays GP carry earlier on an early realization than european mode", () => {
+      const euro = computeWaterfallSchedule(events);
+      const amer = computeWaterfallSchedule(events, american);
+      // European: the 150 is below the 300 unreturned balance → pure ROC, no carry.
+      expect(euro.distributions[0].toGp).toBeCloseTo(0, 6);
+      // American: carry is taken on the first realization's profit immediately.
+      expect(amer.distributions[0].toGp).toBeGreaterThan(0);
+      expect(amer.distributions[0].toGp).toBeGreaterThan(euro.distributions[0].toGp);
+    });
+
+    it("returns only the pro-rata capital slice on the first realization", () => {
+      const amer = computeWaterfallSchedule(events, american);
+      // basis = paidIn * (150 / 450) = 100 of the 150 is return of capital.
+      expect(amer.distributions[0].roc).toBeCloseTo(100, 6);
+    });
+
+    it("conserves cash: LP + GP splits sum to the amount distributed", () => {
+      const amer = computeWaterfallSchedule(events, american);
+      expect(amer.totalToLps + amer.totalToGp).toBeCloseTo(amer.totalDistributed, 6);
+      expect(amer.totalDistributed).toBeCloseTo(450, 6);
+      for (const d of amer.distributions) {
+        expect(d.toLps + d.toGp).toBeCloseTo(d.distribution, 6);
+      }
+    });
+
+    it("agrees with european on a single full-fund realization", () => {
+      // One contribution fully realized by one distribution → the whole fund IS
+      // the deal, so the pro-rata slice equals the whole balance and both modes
+      // must coincide.
+      const single: CashflowEvent[] = [
+        { period: 0, contribution: 100 },
+        { period: 1, distribution: 150 },
+      ];
+      const euro = computeWaterfallSchedule(single);
+      const amer = computeWaterfallSchedule(single, american);
+      expect(amer.totalToGp).toBeCloseTo(euro.totalToGp, 6);
+      expect(amer.totalToLps).toBeCloseTo(euro.totalToLps, 6);
+    });
+  });
+
+  it("leaves european behavior unchanged whether mode is unset or explicit", () => {
+    const euro: ScheduleTerms = { ...DEFAULT_SCHEDULE_TERMS, mode: "european" };
+    const withMode = computeWaterfallSchedule(single, euro);
+    const withoutMode = computeWaterfallSchedule(single, {
+      prefRate: DEFAULT_SCHEDULE_TERMS.prefRate,
+      catchUp: DEFAULT_SCHEDULE_TERMS.catchUp,
+      compounding: DEFAULT_SCHEDULE_TERMS.compounding,
+      carryTiers: DEFAULT_SCHEDULE_TERMS.carryTiers,
+    });
+    expect(withMode).toEqual(withoutMode);
+  });
 });

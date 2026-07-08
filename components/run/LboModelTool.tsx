@@ -7,7 +7,7 @@
 // bridge. Complements the per-case UnderwritingCalculator, which is a simpler
 // leverage-blind equity CAGR.
 import { useMemo, useState } from "react";
-import { computeLbo, defaultLboInputs, type LboInputs } from "@/lib/lbo-model";
+import { computeLbo, defaultLboInputs, lboSensitivity, type LboInputs } from "@/lib/lbo-model";
 
 // Inputs the UI collects as whole percentages (converted to fractions on the
 // way into computeLbo) versus raw dollar / multiple / year values.
@@ -62,6 +62,18 @@ function money(n: number): string {
   return `$${Math.round(n)}`;
 }
 
+// Subtle IRR heat scale on the app's status/accent tokens — emerald high, amber
+// mid, danger low, muted for a degenerate (null) cell. Mirrors the tiered badge
+// colors in lib/allocator-directory.ts rather than introducing a new palette.
+function irrCellClass(irr: number | null): string {
+  if (irr == null) return "text-fg-muted";
+  if (irr >= 0.3) return "bg-emerald-500/20 text-emerald-200";
+  if (irr >= 0.2) return "bg-emerald-500/10 text-emerald-300";
+  if (irr >= 0.12) return "bg-amber-500/10 text-amber-300";
+  if (irr >= 0) return "bg-surface-2 text-fg-secondary";
+  return "bg-status-danger/10 text-status-danger";
+}
+
 export function LboModelTool() {
   const [raw, setRaw] = useState<Record<keyof LboInputs, string>>(() => {
     const d = defaultLboInputs();
@@ -84,6 +96,7 @@ export function LboModelTool() {
   }, [raw]);
 
   const result = useMemo(() => computeLbo(inputs), [inputs]);
+  const sensitivity = useMemo(() => lboSensitivity(inputs), [inputs]);
 
   const bridgeParts = [
     { label: "EBITDA growth", value: result.bridge.ebitdaGrowth },
@@ -204,6 +217,58 @@ export function LboModelTool() {
                       <td className="py-1.5 pr-3 text-fg-secondary">{money(y.fcf)}</td>
                       <td className="py-1.5 pr-3 text-emerald-300">{money(y.debtPaydown)}</td>
                       <td className="py-1.5 pr-3 text-fg-primary">{money(y.endingDebt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Sensitivity — IRR across entry × exit multiple */}
+          {sensitivity.cells.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <p className={`${labelClass} mb-2`}>IRR sensitivity — entry (rows) × exit multiple (cols)</p>
+              <table className="w-full border-collapse text-center text-sm">
+                <thead>
+                  <tr>
+                    <th className={`${labelClass} py-1.5 pr-3 text-left font-normal`}>Entry ╲ Exit</th>
+                    {sensitivity.cols.values.map((exit, c) => (
+                      <th
+                        key={c}
+                        className={`${labelClass} px-2 py-1.5 font-normal ${
+                          c === sensitivity.cols.baseIndex ? "text-gold-300" : ""
+                        }`}
+                      >
+                        {exit.toFixed(1)}x
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="font-mono">
+                  {sensitivity.cells.map((row, r) => (
+                    <tr key={r} className="border-t border-line/40">
+                      <td
+                        className={`${labelClass} py-1.5 pr-3 text-left ${
+                          r === sensitivity.rows.baseIndex ? "text-gold-300" : ""
+                        }`}
+                      >
+                        {sensitivity.rows.values[r].toFixed(1)}x
+                      </td>
+                      {row.map((cell, c) => {
+                        const isBase =
+                          r === sensitivity.rows.baseIndex && c === sensitivity.cols.baseIndex;
+                        return (
+                          <td
+                            key={c}
+                            title={cell.moic != null ? `${cell.moic.toFixed(2)}x MOIC` : "—"}
+                            className={`px-2 py-1.5 ${irrCellClass(cell.irr)} ${
+                              isBase ? "ring-1 ring-inset ring-gold-500/70" : ""
+                            }`}
+                          >
+                            {cell.irr != null ? `${(cell.irr * 100).toFixed(0)}%` : "—"}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
