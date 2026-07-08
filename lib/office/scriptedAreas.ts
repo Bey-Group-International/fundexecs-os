@@ -19,7 +19,12 @@ export type AreaTrigger =
   /** Announce a moment in the floor activity feed. */
   | { kind: "toast"; text: string }
   /** Convene an in-office meeting (reuses office:start-meeting). */
-  | { kind: "start-meeting" };
+  | { kind: "start-meeting" }
+  /**
+   * Broadcast an all-hands announcement to the whole floor: posts to the live
+   * floor activity feed everyone sees and pops a Say bubble over the operator.
+   */
+  | { kind: "broadcast"; text: string };
 
 export type ScriptedArea = {
   /** Stable id — also the de-dupe key for `once`. */
@@ -72,6 +77,23 @@ export const SCRIPTED_AREAS: ScriptedArea[] = [
     trigger: {
       kind: "say",
       text: "Welcome to the Executive Floor — walk up to an executive to delegate a task.",
+    },
+  },
+  // All-Hands: the center-room auditorium. Stepping in broadcasts an all-hands
+  // announcement floor-wide (activity feed + Say bubble). Re-fires on re-entry
+  // so it can be convened again. The center room spans x[384,768] y[288,576];
+  // this rectangle is that room inset by a 20px margin.
+  {
+    id: "all-hands",
+    label: "All-Hands Auditorium",
+    x: 404,
+    y: 308,
+    w: 344,
+    h: 248,
+    accent: "#38bdf8",
+    trigger: {
+      kind: "broadcast",
+      text: "All-hands convened on the Executive Floor — everyone gather in the auditorium.",
     },
   },
 ];
