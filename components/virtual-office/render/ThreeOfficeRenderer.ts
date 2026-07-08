@@ -77,6 +77,8 @@ interface ActorHandle {
    */
   sprite: THREE.Sprite | null;
   spriteTex: THREE.Texture | null;
+  /** Contact-shadow disc under a character sprite; null for the capsule fallback. */
+  shadow: THREE.Mesh | null;
   charSprite: CharacterSprite | null;
   /** Sheet grid, learned once the texture image loads. */
   sheetCols: number;
@@ -301,6 +303,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       bob: Math.abs((spec.x * 13 + spec.y * 7) % 6.28),
       sprite: null,
       spriteTex: null,
+      shadow: null,
       charSprite: null,
       sheetCols: 1,
       sheetRows: 1,
@@ -353,6 +356,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
       handle.sprite = sprite;
       handle.spriteTex = tex;
+      handle.shadow = shadow;
       handle.charSprite = charSprite;
     }
 
@@ -621,6 +625,10 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     if (handle.sprite) {
       (handle.sprite.material as THREE.SpriteMaterial).dispose();
       handle.spriteTex?.dispose();
+    }
+    if (handle.shadow) {
+      handle.shadow.geometry.dispose();
+      (handle.shadow.material as THREE.Material).dispose();
     }
     // Head + label geometries/materials are tracked in `disposables` and freed
     // wholesale in `destroy`; nulling the group reference lets GC reclaim them
