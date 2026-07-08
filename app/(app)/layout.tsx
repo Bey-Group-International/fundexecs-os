@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { signOut } from "@/app/login/actions";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
@@ -208,6 +209,7 @@ export default async function AppLayout({
         groups={groups}
         streak={streak}
         inboxUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
+        isPlatformAdmin={isPlatformAdminEmail(ctx.email)}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}

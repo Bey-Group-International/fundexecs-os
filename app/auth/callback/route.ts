@@ -5,6 +5,7 @@ import {
   hasSupabaseServerEnv,
 } from "@/lib/supabase/server";
 import { grantTrialCreditsIfEligible } from "@/lib/trial";
+import { notifyNewSignupOnce } from "@/lib/admin/signup-alert";
 
 // OAuth callback (Google) and email OTP verification callback.
 // Supabase redirects here with either:
@@ -87,6 +88,10 @@ async function maybeGrantTrial(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+    // Alert the internal team on the first login of a new user. The DB claim in
+    // notifyNewSignupOnce dedupes across auth paths AND across repeat logins, so
+    // calling it on every OAuth callback only ever sends once — the very first.
+    await notifyNewSignupOnce(user.id);
     // Membership lookup via the service client — the new session's RLS grants
     // may not be attached to this request either.
     const { data: membership } = await createServiceClient()
