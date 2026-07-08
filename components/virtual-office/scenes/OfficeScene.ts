@@ -37,6 +37,7 @@ import { agentAvatarSpec, remoteAvatarSpec, vivify } from "../avatar/avatarPalet
 import { pantomimeForAgent } from "@/lib/office/characterSheet";
 import { areaAt, type ScriptedArea } from "@/lib/office/scriptedAreas";
 import { loadScriptedAreas, AREA_STORE_EVENT } from "@/lib/office/areaStore";
+import { loadPrivateRooms, ROOM_PRIVACY_EVENT } from "@/lib/office/roomPrivacy";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
 import {
   createWallVisuals,
@@ -157,6 +158,13 @@ export class OfficeScene extends Phaser.Scene {
   private roomLabel!: Phaser.GameObjects.Text;
   private roomZones: RoomZone[] = [];
   private currentRoom = "";
+
+  // Spot-style private / knock-to-join rooms.
+  private privateRooms = new Set<string>();
+  private roomPrivacyBadges?: Phaser.GameObjects.Container;
+  private _onRoomPrivacyChange?: () => void;
+  // Last room each remote avatar was seen in, so we knock only on entry.
+  private remoteRoomTrack = new Map<string, string>();
 
   // M1 — networking
   private socket: VirtualOfficeSocket | null = null;
@@ -590,6 +598,8 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("program:approval-gate");
     if (this._onAreasChanged) window.removeEventListener(AREA_STORE_EVENT, this._onAreasChanged);
     this._onAreasChanged = undefined;
+    if (this._onRoomPrivacyChange) window.removeEventListener(ROOM_PRIVACY_EVENT, this._onRoomPrivacyChange);
+    this._onRoomPrivacyChange = undefined;
     for (const m of this.scriptedAreaMarkers) m.destroy();
     this.scriptedAreaMarkers = [];
     if (this._onDomFocusIn) window.removeEventListener("focusin", this._onDomFocusIn);
@@ -753,6 +763,45 @@ export class OfficeScene extends Phaser.Scene {
       bg.fillStyle(vivAccent, 1);
       bg.fillCircle(lx + 8, ly + 9, 2);
     }
+
+    // Private-room lock badges — reflect the persisted privacy set, and
+    // re-render live whenever the operator locks/unlocks a room.
+    this.privateRooms = loadPrivateRooms();
+    this._renderRoomPrivacyBadges();
+    this._onRoomPrivacyChange = () => {
+      this.privateRooms = loadPrivateRooms();
+      this._renderRoomPrivacyBadges();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener(ROOM_PRIVACY_EVENT, this._onRoomPrivacyChange);
+    }
+  }
+
+  /** Draw a lock badge at the top-center of each currently-private room. */
+  private _renderRoomPrivacyBadges() {
+    this.roomPrivacyBadges?.destroy(true);
+    const badges = this.add.container(0, 0).setDepth(5);
+    for (const room of ROOMS) {
+      if (!this.privateRooms.has(room.key)) continue;
+      const rx = room.col * ROOM_W;
+      const ry = room.row * ROOM_H;
+      const roomW = (room.colSpan ?? 1) * ROOM_W;
+      const cx = rx + roomW / 2;
+      const plate = this.add.graphics();
+      plate.fillStyle(0x0a0806, 0.9);
+      plate.fillRoundedRect(cx - 30, ry + 8, 60, 16, 4);
+      plate.lineStyle(1, 0xef4444, 0.55);
+      plate.strokeRoundedRect(cx - 30, ry + 8, 60, 16, 4);
+      const text = this.add
+        .text(cx, ry + 16, "🔒 PRIVATE", {
+          fontFamily: "monospace",
+          fontSize: "7px",
+          color: "#fca5a5",
+        })
+        .setOrigin(0.5);
+      badges.add([plate, text]);
+    }
+    this.roomPrivacyBadges = badges;
   }
 
   private _createWalls() {
@@ -2947,10 +2996,22 @@ export class OfficeScene extends Phaser.Scene {
       },
     ];
     for (const [id, state] of this.remotePlayers) {
+      const roomKey = this._roomKeyAt(state.sprite.x, state.sprite.y);
+      // Knock-to-join: when a teammate crosses into a private room, announce a
+      // knock (once per entry) rather than letting them slip in silently.
+      const prevRoom = this.remoteRoomTrack.get(id) ?? "";
+      const nowRoom = roomKey ?? "";
+      if (nowRoom !== prevRoom) {
+        this.remoteRoomTrack.set(id, nowRoom);
+        if (nowRoom && this.privateRooms.has(nowRoom)) {
+          const label = ROOMS.find((r) => r.key === nowRoom)?.label ?? nowRoom;
+          this.game.events.emit("office:knock", state.label.text, label);
+        }
+      }
       roster.push({
         id,
         name: state.label.text,
-        roomKey: this._roomKeyAt(state.sprite.x, state.sprite.y),
+        roomKey,
         self: false,
         onCall: this.bubbleMemberIds.has(id),
       });
