@@ -131,6 +131,19 @@ export function roomCenterWorld(roomKey: string): { x: number; z: number } | nul
   return box ? { x: box.cx, z: box.cz } : null;
 }
 
+/** A room's display label + where to float its 3D signage (room center, world). */
+export type RoomLabelAnchor = { roomKey: string; label: string; x: number; z: number };
+
+/** Per-room signage anchors: the department name at each room's center. */
+export function roomLabelAnchors(): RoomLabelAnchor[] {
+  const out: RoomLabelAnchor[] = [];
+  for (const room of ROOMS) {
+    const center = roomCenterWorld(room.key);
+    if (center) out.push({ roomKey: room.key, label: room.label, x: center.x, z: center.z });
+  }
+  return out;
+}
+
 const WALL_HEIGHT_PX = 40; // extruded wall height; reads as a partition, not a silo
 
 /**
