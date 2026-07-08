@@ -38,6 +38,7 @@ import { pantomimeForAgent } from "@/lib/office/characterSheet";
 import { areaAt, type ScriptedArea } from "@/lib/office/scriptedAreas";
 import { loadScriptedAreas, AREA_STORE_EVENT } from "@/lib/office/areaStore";
 import { loadPrivateRooms, ROOM_PRIVACY_EVENT } from "@/lib/office/roomPrivacy";
+import { loadClaimedDesk, claimDesk, seatKey, DESK_CLAIM_EVENT } from "@/lib/office/deskClaim";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
 import {
   createWallVisuals,
@@ -312,6 +313,11 @@ export class OfficeScene extends Phaser.Scene {
   /** The seat the local player is sitting in, if any. */
   private playerSeat: SeatAnchor | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
+  // Spot-style claimed desk ("your spot") — reserved from NPCs + badged.
+  private claimedDeskKey: string | null = null;
+  private claimedSeat: SeatAnchor | null = null;
+  private deskBadge?: Phaser.GameObjects.Container;
+  private _onDeskClaimChange?: () => void;
   private sitPrompt!: Phaser.GameObjects.Text;
   // While a DOM text field / select is focused, the floor yields the keyboard so
   // typing (incl. shortcut letters like W/E/X) reaches the field instead of
@@ -429,6 +435,12 @@ export class OfficeScene extends Phaser.Scene {
     // Desk seats (must exist before agents spawn so they can take a seat).
     this.seats = officeSeats();
     this.freeSeats = new Set(this.seats);
+    // Reserve + badge the operator's claimed desk (if any), and keep it in sync.
+    this._resolveClaimedDesk();
+    this._onDeskClaimChange = () => this._resolveClaimedDesk();
+    if (typeof window !== "undefined") {
+      window.addEventListener(DESK_CLAIM_EVENT, this._onDeskClaimChange);
+    }
     this.tableSeats = boardroomTableSeats();
     this.freeTableSeats = new Set(this.tableSeats);
     this.coffeeSpots = coffeePoints();
@@ -552,6 +564,21 @@ export class OfficeScene extends Phaser.Scene {
       if (this.followTargetId === peerId) this._cancelFollow();
       else this._startFollow(peerId);
     });
+
+    // Claim the seat you're sitting in as your desk (persist via deskClaim).
+    this.game.events.on("office:claim-desk", () => {
+      if (this.playerSeat) claimDesk(seatKey(this.playerSeat));
+    });
+    // Walk over to your claimed desk and sit down.
+    this.game.events.on("office:go-to-desk", () => {
+      if (!this.claimedSeat) return;
+      const seat = this.claimedSeat;
+      this._cancelFollow();
+      this._playerStand();
+      this.player.setPosition(seat.x, seat.y);
+      this._playerSit(seat);
+      this.game.canvas.focus();
+    });
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -586,6 +613,8 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:teleport");
     this.game.events.off("office:teleport-room");
     this.game.events.off("office:follow");
+    this.game.events.off("office:claim-desk");
+    this.game.events.off("office:go-to-desk");
     this.game.events.off("office:marketplace-listings", this._setMarketplaceStalls, this);
     for (const g of this.marketplaceStallGfx) g.destroy();
     this.marketplaceStallGfx = [];
@@ -2784,13 +2813,54 @@ export class OfficeScene extends Phaser.Scene {
     this.playerAvatar.setSeated(true);
     this.playerAvatar.setFacing("down");
     this.sitPrompt.setVisible(false);
+    this.game.events.emit("office:seated", true, seatKey(seat));
   }
 
   private _playerStand() {
     if (!this.playerSeat) return;
-    this.freeSeats.add(this.playerSeat);
+    const seat = this.playerSeat;
     this.playerSeat = null;
     this.playerAvatar.setSeated(false);
+    // A claimed desk stays reserved (out of the free pool) even when you leave it.
+    if (seat !== this.claimedSeat) this.freeSeats.add(seat);
+    this.game.events.emit("office:seated", false, null);
+  }
+
+  /**
+   * Resolve the operator's claimed desk from storage: return any previously
+   * reserved seat to the pool, then reserve the newly-claimed one (so NPCs skip
+   * it) and (re)draw its "your desk" badge. Idempotent; runs on load + on change.
+   */
+  private _resolveClaimedDesk() {
+    if (this.claimedSeat && this.claimedSeat !== this.playerSeat) {
+      this.freeSeats.add(this.claimedSeat);
+    }
+    this.claimedSeat = null;
+    this.claimedDeskKey = loadClaimedDesk();
+    if (this.claimedDeskKey) {
+      this.claimedSeat = this.seats.find((s) => seatKey(s) === this.claimedDeskKey) ?? null;
+      if (this.claimedSeat && this.claimedSeat !== this.playerSeat) {
+        this.freeSeats.delete(this.claimedSeat);
+      }
+    }
+    this._renderDeskBadge();
+  }
+
+  private _renderDeskBadge() {
+    this.deskBadge?.destroy(true);
+    if (!this.claimedSeat) { this.deskBadge = undefined; return; }
+    const s = this.claimedSeat;
+    const c = this.add.container(0, 0).setDepth(6);
+    const plate = this.add.graphics();
+    plate.fillStyle(0x0a0806, 0.9);
+    plate.fillRoundedRect(s.x - 27, s.y - 36, 54, 14, 3);
+    plate.lineStyle(1, 0xc9a84c, 0.6);
+    plate.strokeRoundedRect(s.x - 27, s.y - 36, 54, 14, 3);
+    const t = this.add
+      .text(s.x, s.y - 29, "★ YOUR DESK", { fontFamily: "monospace", fontSize: "6px", color: "#e6d6a0" })
+      .setOrigin(0.5);
+    c.add([plate, t]);
+    this.deskBadge = c;
   }
 
   // ── Ambient floor life — occasional coffee runs ───────────────────────────

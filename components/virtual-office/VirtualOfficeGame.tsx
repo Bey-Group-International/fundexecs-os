@@ -37,6 +37,12 @@ import {
   PRESENCE_STATUS_EVENT,
   type PresenceStatus,
 } from "@/lib/office/presenceStatus";
+import {
+  loadClaimedDesk,
+  releaseDesk,
+  roomOfDeskKey,
+  DESK_CLAIM_EVENT,
+} from "@/lib/office/deskClaim";
 import { OfficeAvatarChip } from "./avatar/OfficeAvatarChip";
 import type { UserAvatar } from "@/lib/office/userAvatar";
 import { ScreenShareDock } from "./ScreenShareDock";
@@ -521,6 +527,41 @@ export function VirtualOfficeGame({
   /** Follow a specific teammate from the roster — the avatar walks to them. */
   const followPeer = useCallback((peerId: string) => {
     gameRef.current?.events.emit("office:follow", peerId);
+  }, []);
+
+  // Spot-style claimed desk ("your spot") + whether the player is seated now.
+  const [claimedDesk, setClaimedDesk] = useState<string | null>(null);
+  const [seated, setSeated] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setClaimedDesk(loadClaimedDesk());
+    const sync = () => setClaimedDesk(loadClaimedDesk());
+    window.addEventListener(DESK_CLAIM_EVENT, sync);
+    return () => window.removeEventListener(DESK_CLAIM_EVENT, sync);
+  }, []);
+
+  const claimDeskLabel = useMemo(() => {
+    if (!claimedDesk) return null;
+    const key = roomOfDeskKey(claimedDesk);
+    return ROOM_NAV.find((r) => r.key === key)?.label ?? "your desk";
+  }, [claimedDesk]);
+
+  /** Claim the seat you're sitting in as your desk. */
+  const claimMyDesk = useCallback(() => {
+    gameRef.current?.events.emit("office:claim-desk");
+    emitFloorActivity("presence", "You claimed a desk on the floor");
+  }, []);
+
+  /** Walk to your claimed desk and sit. */
+  const goToMyDesk = useCallback(() => {
+    gameRef.current?.events.emit("office:go-to-desk");
+  }, []);
+
+  /** Give up your claimed desk. */
+  const releaseMyDesk = useCallback(() => {
+    releaseDesk();
+    emitFloorActivity("presence", "You gave up your desk");
   }, []);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
@@ -1057,6 +1098,12 @@ export function VirtualOfficeGame({
           gameRef.current?.events.emit("office:say", "🔔 Someone's knocking…");
         });
 
+        // Seated bridge — whether the player is sitting at a desk right now, so
+        // the "claim this desk" affordance only shows when there's a seat to claim.
+        game.events.on("office:seated", (isSeated: boolean) => {
+          setSeated(isSeated);
+        });
+
         // Iframe zone bridge
         game.events.on("office:zone-enter", (def: ZoneDef) => setActiveZone(def));
         game.events.on("office:zone-leave", () => setActiveZone(null));
@@ -1422,6 +1469,55 @@ export function VirtualOfficeGame({
             <span className="opacity-60 text-[8px]">{currentRoomPrivate ? "🔒" : "🔓"}</span>
             {currentRoomPrivate ? "Private" : "Make private"}
           </button>
+        )}
+        {/* Persistent desk — claim a seat as "your spot", then jump back to it */}
+        {claimedDesk ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={goToMyDesk}
+              title={`Walk to your desk in ${claimDeskLabel}`}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+              style={{
+                fontFamily: "Georgia, serif",
+                letterSpacing: "0.06em",
+                color: "#e6d6a0",
+                background: "rgba(201,168,76,0.10)",
+                border: "1px solid rgba(201,168,76,0.30)",
+              }}
+            >
+              <span className="opacity-70 text-[8px]">★</span>
+              My desk
+            </button>
+            <button
+              type="button"
+              onClick={releaseMyDesk}
+              title="Give up your desk"
+              className="shrink-0 rounded px-1.5 py-1 text-[9px] text-slate-500 transition-colors hover:text-slate-300"
+              style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.05)" }}
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          seated && (
+            <button
+              type="button"
+              onClick={claimMyDesk}
+              title="Claim the desk you're sitting at as your own"
+              className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+              style={{
+                fontFamily: "Georgia, serif",
+                letterSpacing: "0.06em",
+                color: "#94a3b8",
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.05)",
+              }}
+            >
+              <span className="opacity-60 text-[8px]">☆</span>
+              Claim this desk
+            </button>
+          )
         )}
         {/* Share workspace — captures the screen into a floating PiP dock */}
         <button
