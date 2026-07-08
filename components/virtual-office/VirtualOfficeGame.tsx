@@ -1095,16 +1095,18 @@ export function VirtualOfficeGame({
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
         {/* ── Execution floor column ── */}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {/* Live agent presence for the active work session (real runtime
-              status; human peer video is the VideoTileBar below). */}
-          <MeetingPresenceGrid />
-
           <div className="flex flex-col bg-[#080604] rounded-xl overflow-hidden border border-[#c9a84c22]"
             style={{ boxShadow: "0 0 40px rgba(201,168,76,0.06), inset 0 1px 0 rgba(201,168,76,0.08)" }}>
 
       {/* Unified status strip — the office's single status bar, first row of the
           card so the whole control surface (status → rails → floor) reads as one. */}
       <OfficeHUD currentRoom={currentRoom} presenceCount={token ? Math.max(roster.length, 1) : undefined} />
+
+      {/* Live agent presence for the active work session — a flush band inside
+          the card (real runtime status; human peer video is the VideoTileBar
+          below). Kept in the card so it never floats as a detached strip that
+          separates the top nav from the office. Renders only during a session. */}
+      <MeetingPresenceGrid />
 
       {/* Media permission banner */}
       {mediaState === "prompt" && (

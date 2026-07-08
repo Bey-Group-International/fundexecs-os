@@ -23,8 +23,8 @@ export function MeetingPresenceGrid() {
 
   return (
     <div
-      className="flex items-center gap-2 overflow-x-auto rounded-lg border px-3 py-2"
-      style={{ borderColor: "rgba(201,168,76,0.25)", background: "#0a0806" }}
+      className="flex items-center gap-2 overflow-x-auto border-b px-3 py-2"
+      style={{ borderColor: "rgba(201,168,76,0.18)", background: "#0a0806" }}
     >
       <div className="shrink-0 pr-2" style={{ borderRight: "1px solid rgba(201,168,76,0.15)" }}>
         <p className="text-[9px] uppercase tracking-[0.18em]" style={{ color: GOLD, fontFamily: "Georgia, serif" }}>
