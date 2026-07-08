@@ -14,6 +14,8 @@ import {
   type Propensity,
 } from "@/lib/sourcing-signals";
 import type { EntityKind } from "@/lib/sourcing-intel";
+import { ingestEntities } from "@/lib/sourcing-intel";
+import { enrichFromWeb } from "@/lib/ingestion/enrich";
 
 // A subject the signal feed groups around: an entity (or bare subject) with its
 // signals + the derived propensity read.
@@ -162,4 +164,65 @@ export async function topSignals(): Promise<TopSignalsResult> {
   const supabase = await createServerClient();
   const signals = await listSignals(supabase, auth.ctx.orgId, { limit: 120 });
   return { ok: true, subjects: groupBySubject(signals) };
+}
+
+// Enrich an entity from its own website: fetch the site once (compliant crawler),
+// refresh the catalog record from what the page says (ingestion engine), and
+// score the coverage tone into a `news` signal (sentiment engine). Unlike
+// scanSignals (which synthesizes signals), this reads the REAL web. With no
+// entityId, picks the most-recent catalog entity that has a domain on file.
+export async function enrichEntityFromWeb(entityId?: string): Promise<ScanResult> {
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const orgId = auth.ctx.orgId;
+  const supabase = await createServerClient();
+
+  let query = supabase
+    .from("sourcing_entities")
+    .select("id, name, kind, domain")
+    .eq("organization_id", orgId)
+    .not("domain", "is", null);
+  query = entityId ? query.eq("id", entityId) : query.order("created_at", { ascending: false });
+  const { data } = await query.limit(1).maybeSingle();
+  const entity = data ?? null;
+
+  if (!entity) {
+    return { ok: false, error: "No entity with a website on file — add a domain to enrich from the web." };
+  }
+  if (!entity.domain) {
+    return { ok: false, error: `${entity.name} has no website on file — add a domain to enrich it.` };
+  }
+
+  const result = await enrichFromWeb({
+    subjectName: entity.name,
+    entityId: entity.id,
+    kind: entity.kind as EntityKind,
+    domain: entity.domain,
+  });
+  if (!result.ok) {
+    const message =
+      result.reason === "robots"
+        ? `${entity.name}'s site disallows crawling (robots.txt).`
+        : `Couldn't read ${entity.name}'s site right now.`;
+    return { ok: false, error: message };
+  }
+
+  let recorded = 0;
+  try {
+    if (result.entity) await ingestEntities(supabase, orgId, auth.ctx.userId, [result.entity]);
+    if (result.newsSignal) recorded = await recordSignals(supabase, orgId, auth.ctx.userId, [result.newsSignal]);
+  } catch {
+    // Persistence is best-effort; we still return the entity's current feed.
+  }
+
+  const all = await listSignals(supabase, orgId, { entityId: entity.id });
+  const subject: SubjectSignals = {
+    entityId: entity.id,
+    subjectName: entity.name,
+    kind: entity.kind,
+    signals: all,
+    propensity: propensityScore({ kind: entity.kind }, all),
+    summary: summarizeSignals(all),
+  };
+  return { ok: true, subject, recorded };
 }
