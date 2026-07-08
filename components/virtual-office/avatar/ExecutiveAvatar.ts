@@ -100,12 +100,15 @@ export class ExecutiveAvatar {
     this.scene = scene;
     this.spec = spec;
 
-    // Soft, layered ground shadow — two stacked ellipses fake a penumbra.
+    // Soft, layered ground shadow — three stacked ellipses fake a penumbra and
+    // ground the figure in the 2.5D floor (deeper + slightly offset from the light).
     this.shadow = scene.add.graphics();
-    this.shadow.fillStyle(0x000000, 0.16);
-    this.shadow.fillEllipse(0, 16, 22, 8);
-    this.shadow.fillStyle(0x000000, 0.26);
-    this.shadow.fillEllipse(0, 16, 15, 5);
+    this.shadow.fillStyle(0x000000, 0.14);
+    this.shadow.fillEllipse(1.5, 16.5, 26, 9.5);
+    this.shadow.fillStyle(0x000000, 0.22);
+    this.shadow.fillEllipse(1, 16, 20, 7);
+    this.shadow.fillStyle(0x000000, 0.32);
+    this.shadow.fillEllipse(0.5, 16, 14, 4.6);
 
     // Presence rim light — a soft disc behind the figure. Neural-rendering
     // influence: ignites only while an agent is actively working.
