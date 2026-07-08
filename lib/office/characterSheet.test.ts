@@ -4,6 +4,11 @@ import {
   executiveSheet,
   matchExecForSkills,
   reputationFromShipped,
+  inferSkillsFromText,
+  autoRouteTask,
+  pantomimeForSkill,
+  pantomimeForAgent,
+  SKILL_PANTOMIME,
   EXEC_PROFILES,
   SKILLS,
   TRAIT_KEYS,
@@ -122,6 +127,95 @@ describe("matchExecForSkills", () => {
     const m = matchExecForSkills(["modeling", "underwriting"]);
     // analyst owns both; associate owns only modeling.
     expect(m?.agentId).toBe("analyst");
+  });
+});
+
+describe("inferSkillsFromText", () => {
+  it("returns no skills for text without cues", () => {
+    expect(inferSkillsFromText("")).toEqual([]);
+    expect(inferSkillsFromText("hello there")).toEqual([]);
+  });
+
+  it("only returns skills from the taxonomy", () => {
+    const skillSet = new Set<Skill>(SKILLS);
+    for (const s of inferSkillsFromText("draft the LP update and review the closing documents")) {
+      expect(skillSet.has(s)).toBe(true);
+    }
+  });
+
+  it("infers ir from an LP update task", () => {
+    expect(inferSkillsFromText("Draft the LP update")).toContain("ir");
+  });
+
+  it("infers legal from a closing-documents task", () => {
+    expect(inferSkillsFromText("Review the closing documents")).toContain("legal");
+  });
+
+  it("returns matches in taxonomy order (stable primary)", () => {
+    const skills = inferSkillsFromText("build a base-case model and screen the target");
+    // screening precedes modeling in SKILLS order.
+    expect(skills.indexOf("screening")).toBeLessThan(skills.indexOf("modeling"));
+  });
+
+  it("is deterministic", () => {
+    const txt = "Prepare a capital call and reconcile settlement";
+    expect(inferSkillsFromText(txt)).toEqual(inferSkillsFromText(txt));
+  });
+});
+
+describe("autoRouteTask", () => {
+  it("returns null when no skill can be inferred", () => {
+    expect(autoRouteTask("xyzzy")).toBeNull();
+  });
+
+  it("routes an LP-update task to investor relations", () => {
+    const r = autoRouteTask("Draft the quarterly LP update");
+    expect(r?.agentId).toBe("investor_relations");
+    expect(r?.score).toBeGreaterThan(0);
+    expect(r?.skills).toContain("ir");
+  });
+
+  it("routes an underwriting-model task to the analyst", () => {
+    // analyst owns both underwriting + modeling; associate owns only modeling.
+    const r = autoRouteTask("Run the underwriting model and sensitivities");
+    expect(r?.agentId).toBe("analyst");
+  });
+
+  it("routes a fund-admin task to ops/admin", () => {
+    // fund_admin is owned only by ops_admin.
+    const r = autoRouteTask("Generate the fund admin report");
+    expect(r?.agentId).toBe("ops_admin");
+  });
+});
+
+describe("pantomime", () => {
+  const POSES = new Set(["typing", "reviewing_docs", "presenting", "analyzing_model"]);
+
+  it("maps every skill to a valid work pose", () => {
+    for (const s of SKILLS) {
+      expect(POSES.has(SKILL_PANTOMIME[s])).toBe(true);
+      expect(pantomimeForSkill(s)).toBe(SKILL_PANTOMIME[s]);
+    }
+  });
+
+  it("derives a document skill's pantomime as reviewing_docs", () => {
+    expect(pantomimeForSkill("legal")).toBe("reviewing_docs");
+  });
+
+  it("uses the task text when it carries a skill signal", () => {
+    // Legal reviewing docs even though the agent addressed is the analyst.
+    expect(pantomimeForAgent("analyst", "Review the closing documents")).toBe("reviewing_docs");
+  });
+
+  it("falls back to the agent's primary skill without task text", () => {
+    expect(pantomimeForAgent("analyst")).toBe(pantomimeForSkill(EXEC_PROFILES.analyst.skills[0]));
+    expect(pantomimeForAgent("investor_relations")).toBe("presenting");
+  });
+
+  it("returns a defined pose for every executive with no task text", () => {
+    for (const id of Object.keys(EXEC_PROFILES) as (keyof typeof EXEC_PROFILES)[]) {
+      expect(POSES.has(pantomimeForAgent(id))).toBe(true);
+    }
   });
 });
 

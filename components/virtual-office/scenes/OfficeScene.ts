@@ -34,6 +34,7 @@ import {
 } from "../program/officeProgram";
 import { ExecutiveAvatar, type AvatarFacing } from "../avatar/ExecutiveAvatar";
 import { agentAvatarSpec, remoteAvatarSpec, vivify } from "../avatar/avatarPalette";
+import { pantomimeForAgent } from "@/lib/office/characterSheet";
 import { areaAt, type ScriptedArea } from "@/lib/office/scriptedAreas";
 import { loadScriptedAreas, AREA_STORE_EVENT } from "@/lib/office/areaStore";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
@@ -1362,6 +1363,11 @@ export class OfficeScene extends Phaser.Scene {
         if (!npc) return;
         npc.programState = state;
         npc.statusText.setText(this._shortStatus(state, label));
+        // Action-aware pantomime: derive the on-floor work motion from this
+        // agent and its current task so a "working" figure mimes its actual
+        // craft (typing a model, reviewing docs, presenting, analyzing) instead
+        // of a generic pose. Set before setState so it resolves in one pass.
+        if (npc.agentId) npc.avatar.setWorkPantomime(pantomimeForAgent(npc.agentId, label));
         npc.avatar.setState(state);
         // Sitting is the idle stance: sit when the agent goes idle (and isn't
         // walking), stand for any active state.

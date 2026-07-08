@@ -5,6 +5,7 @@ import { vivify } from "./avatarPalette";
 /** Bold silhouette outline color — a near-black cool ink for a crisp rim. */
 const OUTLINE = 0x0a0a0d;
 import type { AgentState } from "../program/officeProgram";
+import type { WorkPantomime } from "@/lib/office/characterSheet";
 
 export type AvatarFacing = "down" | "up" | "left" | "right";
 
@@ -78,6 +79,13 @@ export class ExecutiveAvatar {
   private seated = false;
   private programState: AgentState = "idle";
   private animState: AnimationState = "idle_breathing";
+  /**
+   * The action this figure mimes while heads-down ("working"). Derived from the
+   * agent's current task/skill by the scene; null falls back to typing so the
+   * pose is always defined. Only refines the generic "working" state — explicit
+   * program states (reviewing, presenting) still win.
+   */
+  private workPantomime: WorkPantomime | null = null;
 
   private walkPhase = 0;
   private workPhase = 0;
@@ -172,6 +180,22 @@ export class ExecutiveAvatar {
     this._redraw();
     // Brief celebration pop on transition into "complete".
     if (state === "complete" && prev !== "complete") this._celebrate();
+  }
+
+  /**
+   * Set the work pantomime this figure mimes while "working" — the on-floor
+   * action that matches its current task/skill (typing a model, reviewing docs,
+   * presenting to a room, analyzing a dashboard). Data-driven: the scene derives
+   * it from the agent and passes it in. Re-resolves the pose immediately when the
+   * figure is currently heads-down so a mid-task action change reads at once.
+   */
+  setWorkPantomime(pantomime: WorkPantomime | null) {
+    if (this.workPantomime === pantomime) return;
+    this.workPantomime = pantomime;
+    if (this.programState === "working" && !this.walking && !this.seated) {
+      this._resolveAnim();
+      this._redraw();
+    }
   }
 
   /** Make the figure clickable; the whole silhouette is the hit target. */
@@ -277,7 +301,7 @@ export class ExecutiveAvatar {
     if (this.seated) { this.animState = "idle_breathing"; this.think.setVisible(false); return; }
     if (this.walking) { this.animState = "walking"; return; }
     switch (this.programState) {
-      case "working":              this.animState = "typing"; break;
+      case "working":              this.animState = this.workPantomime ?? "typing"; break;
       case "reviewing":            this.animState = "reviewing_docs"; break;
       case "collaborating":        this.animState = "presenting"; break;
       case "classifying":
