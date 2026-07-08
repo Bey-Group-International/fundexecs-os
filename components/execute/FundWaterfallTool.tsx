@@ -11,6 +11,8 @@ import {
   type CashflowEvent,
   type ScheduleTerms,
 } from "@/lib/waterfall-schedule";
+import { ScenarioBar } from "@/components/shared/ScenarioBar";
+import type { SavedScenario } from "@/lib/financial-scenarios";
 
 const M = 1_000_000;
 
@@ -44,7 +46,7 @@ const num = (s: string): number => {
   return Number.isFinite(v) ? v : 0;
 };
 
-export default function FundWaterfallTool() {
+export default function FundWaterfallTool({ saved = [] }: { saved?: SavedScenario[] }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Row[]>(DEFAULT_ROWS);
   const [mode, setMode] = useState<"european" | "american">("european");
@@ -55,6 +57,24 @@ export default function FundWaterfallTool() {
   const [superOn, setSuperOn] = useState(false);
   const [superCarryPct, setSuperCarryPct] = useState("30");
   const [superAboveX, setSuperAboveX] = useState("2");
+
+  // Snapshot the current UI state for saving, and restore it on load. Stored
+  // shape is this tool's own state (rows + term strings), read back defensively.
+  function getInputs(): Record<string, unknown> {
+    return { rows, mode, prefPct, catchUpPct, compounding, baseCarryPct, superOn, superCarryPct, superAboveX };
+  }
+  function loadScenario(s: Record<string, unknown>) {
+    if (Array.isArray(s.rows)) setRows(s.rows as Row[]);
+    if (s.mode === "european" || s.mode === "american") setMode(s.mode);
+    if (typeof s.prefPct === "string") setPrefPct(s.prefPct);
+    if (typeof s.catchUpPct === "string") setCatchUpPct(s.catchUpPct);
+    if (typeof s.compounding === "boolean") setCompounding(s.compounding);
+    if (typeof s.baseCarryPct === "string") setBaseCarryPct(s.baseCarryPct);
+    if (typeof s.superOn === "boolean") setSuperOn(s.superOn);
+    if (typeof s.superCarryPct === "string") setSuperCarryPct(s.superCarryPct);
+    if (typeof s.superAboveX === "string") setSuperAboveX(s.superAboveX);
+    setOpen(true);
+  }
 
   const terms = useMemo<ScheduleTerms>(() => {
     const base = num(baseCarryPct) / 100;
@@ -123,6 +143,7 @@ export default function FundWaterfallTool() {
 
       {open && (
         <div className="border-t border-line px-4 py-4">
+          <ScenarioBar kind="waterfall" saved={saved} getInputs={getInputs} onLoad={loadScenario} />
           {/* Terms */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <label className="flex flex-col gap-1">
