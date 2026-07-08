@@ -39,9 +39,9 @@ describe("spriteAnimationState", () => {
     expect(spriteAnimationState("moving", "right", false)).toBe("walkRight");
   });
 
-  it("maps expressive states, else idle", () => {
-    expect(spriteAnimationState("collaborating", "down", false)).toBe("talk");
-    expect(spriteAnimationState("complete", "down", false)).toBe("success");
+  it("idles for every stationary state (sheets have no talk/success rows)", () => {
+    expect(spriteAnimationState("collaborating", "down", false)).toBe("idle");
+    expect(spriteAnimationState("complete", "down", false)).toBe("idle");
     expect(spriteAnimationState("working", "down", false)).toBe("idle");
     expect(spriteAnimationState("blocked", "down", false)).toBe("idle");
   });

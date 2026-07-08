@@ -52,9 +52,9 @@ export function characterSpriteFor(spriteKey: string | undefined): CharacterSpri
 
 /**
  * Map an agent's program state + facing to a sprite animation. Movement (the
- * `moving` state or an in-flight walk) picks the directional walk cycle; a few
- * states get expressive loops (collaborating → talk, complete → success);
- * everything else idles.
+ * `moving` state or an in-flight walk) picks the directional walk cycle; every
+ * stationary state idles. Constrained to the 5 rows the shipped sheets have
+ * (idle + walk down/up/left/right) so the UV never lands on a missing row.
  */
 export function spriteAnimationState(
   state: AgentState,
@@ -73,14 +73,10 @@ export function spriteAnimationState(
         return "walkDown";
     }
   }
-  switch (state) {
-    case "collaborating":
-      return "talk";
-    case "complete":
-      return "success";
-    default:
-      return "idle";
-  }
+  // The shipped character sheets have ONLY 5 rows (idle + 4 walk directions);
+  // talk/success/loading rows don't exist in the art, so every stationary
+  // state idles rather than pointing the UV at a non-existent (blank) row.
+  return "idle";
 }
 
 /**

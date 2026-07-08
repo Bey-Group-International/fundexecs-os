@@ -77,6 +77,8 @@ interface ActorHandle {
    */
   sprite: THREE.Sprite | null;
   spriteTex: THREE.Texture | null;
+  /** Contact-shadow disc under a character sprite; null for the capsule fallback. */
+  shadow: THREE.Mesh | null;
   charSprite: CharacterSprite | null;
   /** Sheet grid, learned once the texture image loads. */
   sheetCols: number;
@@ -301,6 +303,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       bob: Math.abs((spec.x * 13 + spec.y * 7) % 6.28),
       sprite: null,
       spriteTex: null,
+      shadow: null,
       charSprite: null,
       sheetCols: 1,
       sheetRows: 1,
@@ -326,18 +329,34 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       tex.colorSpace = THREE.SRGBColorSpace;
       const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
       const sprite = new THREE.Sprite(spriteMat);
-      const spriteH = 2.7;
+      // Anchor at the bottom-center so the figure stands ON the floor.
+      sprite.center.set(0.5, 0);
+      const spriteH = 3.2;
       sprite.scale.set(spriteH * (charSprite.frameWidth / charSprite.frameHeight), spriteH, 1);
-      sprite.position.y = spriteH / 2;
+      sprite.position.y = 0.02;
       sprite.userData.actorId = spec.id;
       group.add(sprite);
       this.bodyToActor.set(sprite, spec.id);
       body.visible = false;
       head.visible = false;
-      this.disposables.push(tex, spriteMat);
+
+      // Soft contact shadow so the character reads as grounded, not pasted on.
+      const shadowGeo = new THREE.CircleGeometry(0.55, 16);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.26,
+        depthWrite: false,
+      });
+      const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.y = 0.015;
+      group.add(shadow);
+      this.disposables.push(tex, spriteMat, shadowGeo, shadowMat);
 
       handle.sprite = sprite;
       handle.spriteTex = tex;
+      handle.shadow = shadow;
       handle.charSprite = charSprite;
     }
 
@@ -606,6 +625,10 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     if (handle.sprite) {
       (handle.sprite.material as THREE.SpriteMaterial).dispose();
       handle.spriteTex?.dispose();
+    }
+    if (handle.shadow) {
+      handle.shadow.geometry.dispose();
+      (handle.shadow.material as THREE.Material).dispose();
     }
     // Head + label geometries/materials are tracked in `disposables` and freed
     // wholesale in `destroy`; nulling the group reference lets GC reclaim them
