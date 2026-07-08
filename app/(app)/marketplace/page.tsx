@@ -9,6 +9,7 @@ import { requiredListingStake } from "@/lib/stake";
 import { TierBadge, tierLabel } from "@/components/TierBadge";
 import { TrustBar } from "@/components/marketplace/TrustBar";
 import { BookMeetingCTA } from "@/components/marketplace/BookMeetingCTA";
+import { resolveBookingUrl } from "@/lib/marketplace/booking";
 import { formatCompact } from "@/lib/marketplace/format";
 import { NewListingForm } from "./NewListingForm";
 import { OwnerListings } from "./OwnerListings";
@@ -57,6 +58,11 @@ export default async function MarketplacePage() {
   // by its reputation (see docs/TOKENIZATION_LAYERS.md §4.2). Threaded into the
   // create form so the cost is visible before posting.
   const listingStake = requiredListingStake(profile);
+
+  // Platform advisor booking link for the top-of-page CTA (deploy Calendly or
+  // NEXT_PUBLIC_BOOKING_URL). Per-listing seller links are handled on the cards
+  // and detail page.
+  const bookingUrl = await resolveBookingUrl();
 
   const stats = [
     { label: "Listings", value: String(listings.length) },
@@ -138,7 +144,7 @@ export default async function MarketplacePage() {
 
       {listings.length > 0 ? <TrustBar stats={stats} /> : null}
 
-      <BookMeetingCTA />
+      <BookMeetingCTA href={bookingUrl ?? undefined} />
 
       <NewListingForm
         deals={deals.map((d) => ({ id: d.id, name: d.name }))}

@@ -11,6 +11,8 @@ import { rankInvestorsForListing } from "@/lib/matching";
 import type { Investor } from "@/lib/supabase/database.types";
 import { formatMoney } from "@/lib/marketplace/format";
 import { resolveCountry } from "@/lib/marketplace/flags";
+import { resolveBookingUrl } from "@/lib/marketplace/booking";
+import { BookMeetingCTA } from "@/components/marketplace/BookMeetingCTA";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +142,13 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
 
   const currency = listing.currency ?? "USD";
   const country = resolveCountry(listing.country);
+
+  // Booking link buyers use to reach the seller: the listing's own link, else
+  // the seller's connected firm Calendly, else a deploy-wide link. Resolved for
+  // the listing owner's org (the seller), not the viewer.
+  const sellerBookingUrl = isOwner
+    ? listing.booking_url
+    : (listing.booking_url ?? (await resolveBookingUrl(listing.organization_id)));
   const dealCardFields = [
     listing.amount != null && { label: "Target price", value: formatMoney(listing.amount, currency) },
     listing.ebitda != null && { label: "EBITDA", value: formatMoney(listing.ebitda, currency) },
@@ -274,8 +283,18 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
                 alreadyInterested={alreadyInterested}
                 onExpressInterest={expressInterestInListing}
               />
+              {sellerBookingUrl ? (
+                <div className="mt-2">
+                  <BookMeetingCTA
+                    href={sellerBookingUrl}
+                    compact
+                    label={`Book a meeting with ${listing.organizations?.name ?? "the seller"}`}
+                  />
+                </div>
+              ) : null}
               <p className="mt-2 text-[11px] leading-snug text-fg-muted">
-                Expressing interest queues a routed outreach to the listing owner.
+                Expressing interest queues a routed outreach to the listing owner
+                {sellerBookingUrl ? "; booking opens their calendar directly" : ""}.
               </p>
             </div>
           ) : null}

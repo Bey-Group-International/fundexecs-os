@@ -80,6 +80,7 @@ export function dealToListing(deal: Deal): MarketplaceListing {
     ebitda: null,
     gross_revenue: null,
     featured: false,
+    booking_url: null,
     created_at: deal.created_at,
     updated_at: deal.updated_at,
   };

@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { MarketplaceStatus, ReputationTierName } from "@/lib/supabase/database.types";
 import { tierForScore, type ReputationTier } from "@/lib/compounding";
 import { expressInterestInListing } from "../actions";
+import { resolveBookingUrl } from "@/lib/marketplace/booking";
 import { BrowseListings, type BrowseListing } from "./BrowseListings";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +15,15 @@ export default async function MarketplaceBrowsePage() {
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
+  // Platform advisor booking link for the top-of-page banner; per-listing seller
+  // links ride on each card via booking_url.
+  const bookingUrl = await resolveBookingUrl();
+
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("marketplace_listings")
     .select(
-      "id, title, listing_type, summary, amount, status, created_at, organization_id, currency, country, asset_class, reference_code, ebitda, gross_revenue, target_irr, featured, teaser_url, organizations(name)",
+      "id, title, listing_type, summary, amount, status, created_at, organization_id, currency, country, asset_class, reference_code, ebitda, gross_revenue, target_irr, featured, teaser_url, booking_url, organizations(name)",
     )
     .eq("is_public", true)
     .order("featured", { ascending: false })
@@ -96,6 +101,7 @@ export default async function MarketplaceBrowsePage() {
         <BrowseListings
           listings={listings}
           onExpressInterest={expressInterestInListing}
+          bookingUrl={bookingUrl}
         />
       )}
     </div>
