@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { GradientText } from "@/components/marketing/GradientText";
+import { SpinBorderButton } from "@/components/marketing/SpinBorderButton";
+import { StatCounter } from "@/components/marketing/StatCounter";
 
 const OPERATING_LOOP = [
   {
@@ -71,20 +74,19 @@ export default async function LandingPage(
             Private Markets Operating System
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
-            FundExecs OS is an autonomous executive team for private markets.
+            FundExecs OS is an{" "}
+            <GradientText as="span">autonomous executive team</GradientText> for
+            private markets.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-fg-secondary">
             Earn plans, delegates, monitors, and routes decisions while an AI
             workforce sources deals, raises capital, conducts diligence, manages
             relationships, and executes transactions.
           </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/login?mode=signup"
-              className="rounded-md bg-gold-400 px-5 py-2.5 text-sm font-medium text-surface-0 shadow-[0_14px_34px_-20px_rgb(var(--fx-accent-rgb)/0.95)] transition hover:opacity-90"
-            >
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <SpinBorderButton href="/login?mode=signup">
               Meet Earn
-            </Link>
+            </SpinBorderButton>
             <Link
               href="#operating-model"
               className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
@@ -107,18 +109,22 @@ export default async function LandingPage(
             Built for operators who move capital at scale
           </p>
           <div className="grid gap-6 sm:grid-cols-3">
-            <div className="text-center">
-              <p className="text-3xl font-semibold text-gold-300">$2B+</p>
-              <p className="mt-1 text-sm text-fg-secondary">private-market deal flow tracked by early teams</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-semibold text-gold-300">4 hubs</p>
-              <p className="mt-1 text-sm text-fg-secondary">replacing fragmented spreadsheets, email threads, and CRMs</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-semibold text-gold-300">1 agent</p>
-              <p className="mt-1 text-sm text-fg-secondary">Earn plans, delegates, and delivers like a senior exec</p>
-            </div>
+            <StatCounter
+              value={2}
+              prefix="$"
+              suffix="B+"
+              label="private-market deal flow tracked by early teams"
+            />
+            <StatCounter
+              value={4}
+              suffix=" hubs"
+              label="replacing fragmented spreadsheets, email threads, and CRMs"
+            />
+            <StatCounter
+              value={1}
+              suffix=" agent"
+              label="Earn plans, delegates, and delivers like a senior exec"
+            />
           </div>
           <blockquote className="mt-8 border-l-2 border-gold-500/40 pl-4 text-sm italic text-fg-secondary">
             &ldquo;FundExecs OS gives our team an execution layer we couldn&rsquo;t afford to hire — Earn does in minutes what used to take a full analyst day.&rdquo;
@@ -172,12 +178,7 @@ export default async function LandingPage(
           with one autonomous execution layer.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/login?mode=signup"
-            className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
-          >
-            Meet Earn
-          </Link>
+          <SpinBorderButton href="/login?mode=signup">Meet Earn</SpinBorderButton>
           <Link
             href="#operating-model"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
