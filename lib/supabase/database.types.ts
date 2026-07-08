@@ -222,6 +222,10 @@ export type Investor = Timestamps & RecordMeta & {
   session_id: string | null;
   website?: string | null;
   url_source?: string | null;
+  // LP-fit signal columns (20260708120000_investor_lp_signals).
+  sectors?: string[];
+  open_to_emerging_managers?: boolean | null;
+  allocation_signal?: string | null;
 }
 
 export type Fund = Timestamps & {

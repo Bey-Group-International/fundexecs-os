@@ -42,6 +42,7 @@ export const HUBS: HubDefinition[] = [
       "Build LP, deal, and partner pipelines that move. Earn surfaces qualified matches, scores relationship momentum, and alerts you the moment a counterparty is ready for the next step.",
     modules: [
       { key: "lp_pipeline", label: "LP Pipeline" },
+      { key: "lp_intelligence", label: "LP Intelligence" },
       { key: "debt", label: "Debt & Hybrid" },
       { key: "partners", label: "Partners" },
       { key: "providers", label: "Providers" },

@@ -17,6 +17,7 @@ import { MandateStrip } from "@/components/build/MandateStrip";
 import { RunRiskModule, RunStressTestModule } from "@/components/run/RunModules";
 import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
 import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
+import { LpIntelligenceLive } from "@/components/source/LpIntelligenceLive";
 import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
 import { PartnersLive } from "@/components/source/PartnersLiveServer";
 import { DealPipelineLive } from "@/components/source/DealPipelineLive";
@@ -306,6 +307,18 @@ export async function ModuleView({
           fields={ADD_ROW_CONFIGS[key]?.fields ?? []}
         />
         <AllocatorDirectoryLive />
+      </div>
+    );
+  }
+
+  // LP Intelligence — the scored, tiered prioritization view over allocators.
+  // Complements the LP Pipeline CRM above: same investors, ranked by fit against
+  // the current mandate with an explainable per-LP breakdown.
+  if (hub.key === "source" && mod.key === "lp_intelligence") {
+    return (
+      <div>
+        {mandateStrip}
+        <LpIntelligenceLive />
       </div>
     );
   }
