@@ -122,11 +122,19 @@ Next.js reference.
 
 ## Sequencing
 
-1. **This PR** — Cluster 1 ingestion engine (native, compliant, tested). ✅
-2. Cluster 2 — engine `critic`/verification pass (highest single-pattern ROI).
-3. Cluster 3 — `lib/earn/lp-sim.ts` treasury what-if.
-4. Cluster 4 — Plaid-style linked-account flow on `app/pay`; sentiment signal
-   source into `sourcing-signals`.
+1. Cluster 1 — ingestion engine (native, compliant, tested). ✅ **Shipped (#744)**
+2. Cluster 2 — engine `critic`/verification pass. ✅ **Shipped** — `lib/engine-critic.ts`
+   (deterministic pre-screen for refusals / stubs / off-topic drift, complements
+   `grounding.ts`), wired into the engine's `artifact.created` event so the
+   approval gate leads with red flags. No schema change.
+3. Cluster 3 — `lib/earn/lp-sim.ts` treasury what-if. ✅ **Shipped** — pure
+   constant-product (x·y=k) swap / price-impact / impermanent-loss / fee-APR math
+   for an Earn "simulate" panel.
+4. Cluster 4 — sentiment signal source. ✅ **Shipped** — `lib/market-sentiment.ts`
+   (deterministic finance-lexicon scorer) → `buildNewsSignal` emits a `news`
+   `EntitySignalInput` for `sourcing-signals`. **Deferred:** the Plaid/Dwolla-style
+   linked-account UI on `app/pay` (needs a provider decision + keys + a migration),
+   tracked as its own future slice.
 
-Each is a self-contained vertical slice on its own branch/PR, matching the
-existing `lib/` conventions and test discipline.
+Each slice is native TS, pure + deterministic where possible, keyless in CI, and
+matches the existing `lib/` conventions and test discipline.
