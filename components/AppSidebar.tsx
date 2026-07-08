@@ -4,8 +4,6 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { StreakBar } from "@/components/StreakBar";
-import type { StreakState } from "@/lib/gamification";
 import { useMobileNav } from "@/components/nav/mobile-nav";
 import { navHrefActive } from "@/lib/nav-active";
 
@@ -337,7 +335,6 @@ interface AppSidebarProps {
   hubs: HubItem[];
   sessions: SessionItem[];
   groups: GroupItem[];
-  streak?: StreakState;
   inboxUnread?: number;
   /** True only for internal platform admins — reveals the hidden Admin link. */
   isPlatformAdmin?: boolean;
@@ -362,7 +359,6 @@ function SidebarPanel({
   hubs,
   sessions,
   groups,
-  streak,
   signOutAction,
   createGroupAction,
   moveSessionAction,
@@ -639,18 +635,6 @@ function SidebarPanel({
             </div>
           );
         })}
-
-        {/* Execution streak — sits beneath the hub list. */}
-        {streak ? (
-          <div className="mt-3">
-            <StreakBar
-              current={streak.current}
-              longest={streak.longest}
-              lastActivityAt={streak.lastActivityAt}
-              freezeUsedAt={streak.freezeUsedAt}
-            />
-          </div>
-        ) : null}
 
         {/* Conversation list below the hubs, filed under group names with an
             Ungrouped bucket. */}
