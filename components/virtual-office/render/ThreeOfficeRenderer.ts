@@ -170,7 +170,9 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.renderer = renderer;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b0e14);
+    // Warm, not near-black: a soft brown surround so the office reads bright and
+    // cozy like the 2D floor rather than a dim room at night.
+    scene.background = new THREE.Color(0x241a14);
     this.scene = scene;
 
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
@@ -178,16 +180,16 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Lighting: soft hemisphere fill + a warm gold key, echoing the 2D floor's
     // "light from above" gold key light.
-    scene.add(new THREE.HemisphereLight(0xd8c4a0, 0x241a12, 0.95));
+    scene.add(new THREE.HemisphereLight(0xe6d4b0, 0x30241a, 1.25));
     // Warm gold key from above, echoing the 2D office's light-from-above.
-    const key = new THREE.DirectionalLight(0xffe0a8, 1.45);
+    const key = new THREE.DirectionalLight(0xffe6b8, 1.6);
     key.position.set(6, 24, 8);
     scene.add(key);
     // Gentle fill from the opposite side softens the shadows the key casts.
-    const fill = new THREE.DirectionalLight(0xbfc8dc, 0.28);
+    const fill = new THREE.DirectionalLight(0xcdd6e6, 0.35);
     fill.position.set(-8, 12, -6);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0x6a5844, 0.7));
+    scene.add(new THREE.AmbientLight(0x8a7358, 1.05));
 
     this.buildStaticIfReady();
 
@@ -467,7 +469,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     floorTex.wrapT = THREE.RepeatWrapping;
     floorTex.repeat.set(GRID_COLS, TOTAL_ROWS);
     floorTex.colorSpace = THREE.SRGBColorSpace;
-    const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, color: 0x8a6f52, roughness: 0.92 });
+    const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb0906a, roughness: 0.88 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(c.x, 0, c.z);
@@ -478,21 +480,15 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     // Per-room floor, built procedurally (no room-image textures): a department
     // wash over the whole room, plus a bordered central rug — mirroring the 2D
     // office's drawn rugs. Furniture sits on top of this.
+    const rugBase = new THREE.Color(0x6f5842); // warm floor tone to mute accents toward
     for (const { roomKey, box } of roomFloors()) {
-      const accent = new THREE.Color(roomAccentHex(roomKey));
+      // Department color, heavily muted toward the warm floor so rooms read as
+      // one warm office with a hint of identity — NOT saturated color blocks.
+      const accent = new THREE.Color(roomAccentHex(roomKey)).lerp(rugBase, 0.7);
 
-      // Faint department wash — a hint of color, not a saturated block.
-      const tintGeo = new THREE.PlaneGeometry(box.width, box.depth);
-      const tintMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.045 });
-      const tint = new THREE.Mesh(tintGeo, tintMat);
-      tint.rotation.x = -Math.PI / 2;
-      tint.position.set(box.cx, 0.01, box.cz);
-      scene.add(tint);
-      this.disposables.push(tintGeo, tintMat);
-
-      // Rug: the main department-color cue, a contained runner in the center.
-      const rugGeo = new THREE.PlaneGeometry(box.width * 0.4, box.depth * 0.38);
-      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.16 });
+      // Rug: a small, contained central runner — the only department-color cue.
+      const rugGeo = new THREE.PlaneGeometry(box.width * 0.34, box.depth * 0.32);
+      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.5 });
       const rug = new THREE.Mesh(rugGeo, rugMat);
       rug.rotation.x = -Math.PI / 2;
       rug.position.set(box.cx, 0.02, box.cz);
@@ -644,7 +640,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
         roughness: first.glow ? 0.4 : 0.7,
         metalness: 0.05,
         emissive: first.glow ? color : new THREE.Color(0x000000),
-        emissiveIntensity: first.glow ? 0.8 : 0,
+        emissiveIntensity: first.glow ? 0.4 : 0,
       });
       const geo = new THREE.BoxGeometry(1, 1, 1);
       const mesh = new THREE.InstancedMesh(geo, mat, group.length);
