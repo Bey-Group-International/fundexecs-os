@@ -8,6 +8,8 @@
 // `WebSite` node via stable `@id` references so search engines and LLM crawlers
 // treat them as one entity graph.
 
+import { AGENTS } from "@/lib/agents";
+import { HUBS } from "@/lib/hubs";
 import {
   SITE_CONTACT_EMAIL,
   SITE_DESCRIPTION,
@@ -76,6 +78,13 @@ export function websiteSchema(): JsonLdNode {
 }
 
 export function softwareApplicationSchema(): JsonLdNode {
+  // Capability set, projected from the live product catalogs so search + AI
+  // engines see the real hubs and agents. Adding a hub or agent extends this
+  // list automatically.
+  const featureList = [
+    ...HUBS.map((hub) => `${hub.label} hub`),
+    ...AGENTS.map((agent) => `${agent.name} agent`),
+  ];
   return compact({
     "@type": "SoftwareApplication",
     "@id": SOFTWARE_ID,
@@ -85,6 +94,7 @@ export function softwareApplicationSchema(): JsonLdNode {
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     publisher: { "@id": ORG_ID },
+    featureList,
     // No `offers` node: pricing is not public, and inventing a price would be
     // both wrong and flagged by Google's Rich Results validator.
   });

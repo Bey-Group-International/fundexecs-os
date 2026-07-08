@@ -1,11 +1,14 @@
 // Builders for the AI-crawler context files served at /llms.txt, /llms-full.txt,
-// and /ai.txt. Centralized here (rather than as static files in /public) so the
-// product description, hubs, and agents stay derived from a single source and
-// never drift from the rest of the site's metadata.
+// and /ai.txt. The hubs and agents are projected directly from the live product
+// catalogs (lib/hubs.ts, lib/agents.ts) — the same source the app renders from —
+// so this context can never drift from what the product actually ships. Add an
+// agent or a hub module and these files update on the next build automatically.
 //
 // Format follows the emerging llms.txt convention: an H1, a blockquote summary,
 // then Markdown sections of links + prose that an LLM can ingest directly.
 
+import { AGENTS } from "@/lib/agents";
+import { HUBS } from "@/lib/hubs";
 import {
   CRAWLER_DISALLOW,
   SITE_CONTACT_EMAIL,
@@ -15,24 +18,18 @@ import {
   SITE_URL,
 } from "@/lib/site";
 
-// Product architecture — the authoritative catalog mirrored from the README.
-const HUBS: Array<{ name: string; purpose: string }> = [
-  { name: "Build", purpose: "Define identity and foundation (Profile, Thesis, Brand, Entity, Track Record, Team, Documents)." },
-  { name: "Source", purpose: "Manage pipelines and relationships (LP Pipeline, Debt & Hybrid, Partners, Providers, Deal Pipeline)." },
-  { name: "Run", purpose: "Evaluate and manage active deals (Strategy, Diligence, Underwriting, Stress Test, Risk, Outreach, Campaigns)." },
-  { name: "Execute", purpose: "Operate assets post-closing (Closing, Capital Events, Asset Management, Reporting, Exit)." },
+// Orchestrator first (the hub-less agent, Earn), then the specialists in catalog
+// order — matches how the product frames the roster.
+const ORDERED_AGENTS = [
+  ...AGENTS.filter((a) => a.hub === null),
+  ...AGENTS.filter((a) => a.hub !== null),
 ];
 
-const AGENTS: Array<{ name: string; role: string }> = [
-  { name: "Earn", role: "The orchestrating copilot — plans objectives, delegates to specialist agents, gates approvals, and reports outcomes." },
-  { name: "Analyst", role: "Ingests deal data, financials, and market comps; produces pro formas and valuations." },
-  { name: "Associate", role: "Coordinates workflows and task execution across all hubs." },
-  { name: "Investor Relations", role: "Manages LP communications, capital calls, and reporting." },
-  { name: "Portfolio Ops", role: "Monitors asset KPIs, budgets, capex, and variance alerts." },
-  { name: "Diligence", role: "Parses documents, flags risks, and produces diligence memos." },
-  { name: "Fund Admin", role: "Handles waterfall calculations, fund accounting, and audit prep." },
-];
+function hubModules(hub: (typeof HUBS)[number]): string {
+  return hub.modules.map((m) => m.label).join(", ");
+}
 
+// The three native graphs have no code catalog, so they stay described here.
 const GRAPHS: Array<{ name: string; detail: string }> = [
   { name: "Relationship Graph", detail: "Who knows whom; who invested or financed what." },
   { name: "Deal Graph", detail: "Deals, targets, portfolio companies, SPVs, and funds." },
@@ -55,11 +52,11 @@ ${SITE_NAME} is an AI-native operating system for private markets. A copilot nam
 - [Request access](${SITE_URL}/login): Sign in or request access to the platform.
 - [Sitemap](${SITE_URL}/sitemap.xml): Machine-readable index of indexable pages.
 
-## The four hubs
-${HUBS.map((h) => `- ${h.name}: ${h.purpose}`).join("\n")}
+## Operating hubs
+${HUBS.map((h) => `- ${h.label}: ${hubModules(h)}.`).join("\n")}
 
 ## The AI agents
-${AGENTS.map((a) => `- ${a.name}: ${a.role}`).join("\n")}
+${ORDERED_AGENTS.map((a) => `- ${a.name}: ${a.role}`).join("\n")}
 
 ## Native data graphs
 ${GRAPHS.map((g) => `- ${g.name}: ${g.detail}`).join("\n")}
@@ -85,11 +82,11 @@ ${SITE_NAME} unifies relationships, deals, and capital into a single intelligenc
 3. Execute — AI agents source, raise, diligence, document, and follow up across the hubs.
 4. Report — outcomes collapse into the dashboard as targets, introductions, packages, and updates.
 
-### The four hubs
-${HUBS.map((h) => `#### ${h.name}\n${h.purpose}`).join("\n\n")}
+### Operating hubs
+${HUBS.map((h) => `#### ${h.label}\n${h.purpose}\nModules: ${hubModules(h)}.`).join("\n\n")}
 
 ### The AI agents
-${AGENTS.map((a) => `#### ${a.name}\n${a.role}`).join("\n\n")}
+${ORDERED_AGENTS.map((a) => `#### ${a.name}\n${a.role}`).join("\n\n")}
 
 ### Native data graphs
 All graphs are first-party data structures with no external dependencies.

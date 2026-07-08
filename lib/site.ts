@@ -1,6 +1,7 @@
 // Single source of truth for site-level branding and metadata. Imported by
 // the root layout, manifest, robots, sitemap, and the dynamic OG image so the
 // name, description, and canonical URL never drift apart.
+import { AGENTS } from "./agents";
 
 export const SITE_NAME = "FundExecs OS";
 
@@ -8,8 +9,34 @@ export const SITE_TAGLINE = "Agents that own the work";
 
 export const SITE_TITLE = `${SITE_NAME} — ${SITE_TAGLINE}`;
 
+// Live agent count, derived from the catalog (lib/agents.ts) so the marketing
+// copy can never disagree with the real roster — add or remove an agent and the
+// number below (and everywhere SITE_DESCRIPTION is used) updates automatically.
+export const AGENT_COUNT = AGENTS.length;
+
+// Spell a small integer as a capitalized word ("Fifteen"), falling back to the
+// numeral outside the covered range. Keeps the copy reading naturally.
+function spellCountCapitalized(n: number): string {
+  const ones = [
+    "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
+    "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
+    "Sixteen", "Seventeen", "Eighteen", "Nineteen",
+  ];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty"];
+  if (n < 0) return String(n);
+  if (n < 20) return ones[n];
+  if (n < 60) {
+    const t = tens[Math.floor(n / 10)];
+    const o = n % 10;
+    return o ? `${t}-${ones[o].toLowerCase()}` : t;
+  }
+  return String(n);
+}
+
+export const AGENT_COUNT_WORD = spellCountCapitalized(AGENT_COUNT);
+
 export const SITE_DESCRIPTION =
-  "The AI-native operating system for private capital. Specialist agents source capital, underwrite deals, manage LPs, and own the work across every hub — on a schedule, approval-gated by default.";
+  `The AI-native operating system for private capital. ${AGENT_COUNT_WORD} agents source capital, underwrite deals, manage LPs, and own the work across every hub — on a schedule, approval-gated by default.`;
 
 // Canonical production URL. Overridable per-environment via NEXT_PUBLIC_APP_URL
 // (e.g. Vercel preview deployments, localhost). The fallback is the real
