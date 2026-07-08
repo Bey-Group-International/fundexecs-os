@@ -28,7 +28,6 @@ import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
 import { FloorInviteButton } from "./FloorInviteButton";
-import { FloorRosterButton } from "./FloorRosterButton";
 import {
   loadStatus,
   saveStatus,
@@ -562,6 +561,16 @@ export function VirtualOfficeGame({
   const releaseMyDesk = useCallback(() => {
     releaseDesk();
     emitFloorActivity("presence", "You gave up your desk");
+  }, []);
+
+  // Two views: the default follow-cam and an overhead, zoomed-out whole-floor view.
+  const [overheadView, setOverheadView] = useState(false);
+  const toggleView = useCallback(() => {
+    setOverheadView((v) => {
+      const next = !v;
+      gameRef.current?.events.emit("office:set-view", next);
+      return next;
+    });
   }, []);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
@@ -1387,8 +1396,9 @@ export function VirtualOfficeGame({
             gap (they sit before the ml-auto tool group, so they stay left). */}
         {token && (
           <>
-            <FloorActivityFeed events={floorActivity} presenceCount={Math.max(roster.length, 1)} />
-            <FloorRosterButton
+            <FloorActivityFeed
+              events={floorActivity}
+              presenceCount={Math.max(roster.length, 1)}
               roster={roster}
               status={presence}
               onCycleStatus={cyclePresence}
@@ -1400,41 +1410,25 @@ export function VirtualOfficeGame({
             )}
           </>
         )}
-        {/* Command palette — keyboard-first launcher (⌘K) for floor actions */}
+        {/* View toggle — current follow-cam ↔ overhead (zoomed-out) whole floor */}
         <button
           type="button"
-          onClick={() => setPaletteOpen(true)}
-          title="Floor actions (⌘K)"
+          onClick={toggleView}
+          title={overheadView ? "Back to the follow view" : "Overhead view (see the whole floor)"}
           className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
           style={{
             fontFamily: "Georgia, serif",
             letterSpacing: "0.06em",
-            color: "#94a3b8",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.05)",
+            color: overheadView ? "#c9a84c" : "#94a3b8",
+            background: overheadView ? "rgba(201,168,76,0.12)" : "transparent",
+            border: `1px solid ${overheadView ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.05)"}`,
           }}
         >
-          <span className="opacity-60 text-[8px]">⌘K</span>
-          Actions
+          <span className="opacity-60 text-[8px]">{overheadView ? "⤢" : "⤡"}</span>
+          {overheadView ? "Overhead" : "Follow"}
         </button>
-        {/* Executive Directory — an in-floor tool to jump to any executive */}
-        <button
-          type="button"
-          onClick={() => setDirectoryOpen(true)}
-          title="Open the executive directory"
-          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
-          style={{
-            fontFamily: "Georgia, serif",
-            letterSpacing: "0.06em",
-            color: "#94a3b8",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.05)",
-          }}
-        >
-          <span className="opacity-60 text-[8px]">☰</span>
-          Directory
-        </button>
-        {/* Map editor — author the floor's WorkAdventure-style scripted areas */}
+        {/* Map editor — author the floor's WorkAdventure-style scripted areas.
+            (⌘K opens the command palette; the directory has its own event entry.) */}
         <button
           type="button"
           onClick={() => setMapEditorOpen(true)}
@@ -1536,8 +1530,10 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">▣</span>
           {screenStream ? "Sharing" : "Share screen"}
         </button>
-        {/* Emote bar — mirrors keyboard shortcuts 1-4 — plus Say + Companion. */}
-        <div className="flex items-center gap-0.5 shrink-0 pl-2 border-l border-[#c9a84c18]">
+        {/* Force the emote bar onto its own bottom row of the nav (flex-wrap break). */}
+        <div className="basis-full h-0" aria-hidden />
+        {/* Emote bar — its own bottom row; mirrors keyboard shortcuts 1-4 — plus Say + Companion. */}
+        <div className="flex items-center gap-0.5 shrink-0 pr-2 border-r border-[#c9a84c18]">
           {EMOTE_BAR.map((e) => (
             <button
               key={e.emoji}
