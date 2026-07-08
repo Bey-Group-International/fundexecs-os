@@ -1,5 +1,9 @@
 import * as Phaser from "phaser";
 import type { AvatarProp, AvatarSpec } from "./avatarPalette";
+import { vivify } from "./avatarPalette";
+
+/** Bold silhouette outline color — a near-black cool ink for a crisp rim. */
+const OUTLINE = 0x0a0a0d;
 import type { AgentState } from "../program/officeProgram";
 
 export type AvatarFacing = "down" | "up" | "left" | "right";
@@ -515,6 +519,21 @@ export class ExecutiveAvatar {
   /** Front view (facing down / toward the viewer). */
   private _drawFront(g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number, arm: ArmMode, workStep: number) {
     const sw = this._shoulder(s);
+    const acc = vivify(s.accent);
+
+    // Bold outline — a crisp dark silhouette behind the figure for a sharp,
+    // premium read (torso, head, legs, shoes; arms omitted so work poses stay
+    // clean). Drawn first so the colored fills leave a thin rim.
+    g.fillStyle(OUTLINE, 1);
+    g.fillRect(-5.05, 5.4 - Math.max(0, swing), 4.1, 10.2 + Math.abs(swing) * 0.4);
+    g.fillRect(0.45, 5.4 - Math.max(0, -swing), 4.1, 10.2 + Math.abs(swing) * 0.4);
+    g.fillEllipse(-2.7, 15 - Math.max(0, swing), 5.4, 3.2);
+    g.fillEllipse(2.7, 15 - Math.max(0, -swing), 5.4, 3.2);
+    g.fillPoints([
+      new Phaser.Geom.Point(-sw - 0.85, -6.7), new Phaser.Geom.Point(sw + 0.85, -6.7),
+      new Phaser.Geom.Point(6.35, 7.6), new Phaser.Geom.Point(-6.35, 7.6),
+    ], true);
+    g.fillEllipse(0, -13, 11, 12.5);
 
     // Legs — soft vertical gradient (lit at the thigh, shaded at the cuff).
     const legHi = this._shade(s.trouser, 1.18);
@@ -563,15 +582,15 @@ export class ExecutiveAvatar {
     g.lineStyle(0.4, this._shade(s.suit, 1.4), 0.7);
     g.beginPath(); g.moveTo(-3.2, -6); g.lineTo(-2.2, 1); g.strokePath();
     g.beginPath(); g.moveTo(3.2, -6); g.lineTo(2.2, 1); g.strokePath();
-    // Pocket square — a small folded accent on the left chest.
-    g.fillStyle(this._shade(s.accent, 1.1), 0.95);
+    // Pocket square — a small folded accent on the left chest (vivid accent).
+    g.fillStyle(this._shade(acc, 1.1), 0.98);
     g.fillTriangle(-4.6, -2.2, -3.2, -2.2, -3.9, -3.6);
-    // Tie with a knot and a highlighted center ridge.
-    g.fillStyle(s.accent, 1);
+    // Tie with a knot and a highlighted center ridge (vivid accent).
+    g.fillStyle(acc, 1);
     g.fillTriangle(-1.1, -5, 1.1, -5, 0, 4);
-    g.fillStyle(this._shade(s.accent, 1.25), 0.8);
+    g.fillStyle(this._shade(acc, 1.3), 0.85);
     g.fillTriangle(-0.4, -4.6, 0.4, -4.6, 0, 3.4);
-    g.fillStyle(this._shade(s.accent, 1.15), 1);
+    g.fillStyle(this._shade(acc, 1.18), 1);
     g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
 
     this._drawHead(g, s, 0, 0);
@@ -821,8 +840,8 @@ export class ExecutiveAvatar {
     // Front-facing sheen band on the facing side.
     g.fillStyle(this._shade(s.suit, 1.3), 0.35);
     g.fillRect(dir * 1.8, -6, dir * 2.4, 12);
-    // Accent placket down the facing side
-    g.fillStyle(s.accent, 1);
+    // Accent placket down the facing side (vivid accent).
+    g.fillStyle(vivify(s.accent), 1);
     g.fillRect(dir * 2.4 - 0.7, -5, 1.5, 9);
 
     // Front arm — posed by work mode.
