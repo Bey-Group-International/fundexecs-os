@@ -546,6 +546,12 @@ export class OfficeScene extends Phaser.Scene {
       this._cancelWalk();
       this.game.canvas.focus();
     });
+
+    // Follow a specific teammate from the roster UI (toggles off if already them).
+    this.game.events.on("office:follow", (peerId: string) => {
+      if (this.followTargetId === peerId) this._cancelFollow();
+      else this._startFollow(peerId);
+    });
   }
 
   // ── update ──────────────────────────────────────────────────────────────────
@@ -579,6 +585,7 @@ export class OfficeScene extends Phaser.Scene {
   shutdown() {
     this.game.events.off("office:teleport");
     this.game.events.off("office:teleport-room");
+    this.game.events.off("office:follow");
     this.game.events.off("office:marketplace-listings", this._setMarketplaceStalls, this);
     for (const g of this.marketplaceStallGfx) g.destroy();
     this.marketplaceStallGfx = [];
@@ -2119,6 +2126,17 @@ export class OfficeScene extends Phaser.Scene {
     this._cancelWalk();
   }
 
+  /** Begin trailing a specific teammate (F-key nearest-pick or roster "Follow"). */
+  private _startFollow(id: string) {
+    const target = this.remotePlayers.get(id);
+    if (!target) return;
+    this.followTargetId = id;
+    this.followHud.setText(`◈  Following ${target.label.text} — F to stop`);
+    const cam = this.cameras.main;
+    this.followHud.setPosition(cam.width / 2 - this.followHud.width / 2, 40);
+    this.followHud.setVisible(true);
+  }
+
   private _updateFollowMode(delta: number) {
     if (Phaser.Input.Keyboard.JustDown(this.keyF)) {
       if (this.followTargetId) {
@@ -2131,14 +2149,7 @@ export class OfficeScene extends Phaser.Scene {
           const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, state.sprite.x, state.sprite.y);
           if (d < bestDist) { bestDist = d; bestId = id; }
         }
-        if (bestId) {
-          this.followTargetId = bestId;
-          const name = this.remotePlayers.get(bestId)?.label.text ?? "player";
-          this.followHud.setText(`◈  Following ${name} — F to stop`);
-          const cam = this.cameras.main;
-          this.followHud.setPosition(cam.width / 2 - this.followHud.width / 2, 40);
-          this.followHud.setVisible(true);
-        }
+        if (bestId) this._startFollow(bestId);
       }
     }
 

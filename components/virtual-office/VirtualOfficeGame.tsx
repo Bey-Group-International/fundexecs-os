@@ -28,6 +28,15 @@ import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
 import { FloorInviteButton } from "./FloorInviteButton";
+import { FloorRosterButton } from "./FloorRosterButton";
+import {
+  loadStatus,
+  saveStatus,
+  nextStatus,
+  statusMeta,
+  PRESENCE_STATUS_EVENT,
+  type PresenceStatus,
+} from "@/lib/office/presenceStatus";
 import { OfficeAvatarChip } from "./avatar/OfficeAvatarChip";
 import type { UserAvatar } from "@/lib/office/userAvatar";
 import { ScreenShareDock } from "./ScreenShareDock";
@@ -489,6 +498,30 @@ export function VirtualOfficeGame({
     const nowPrivate = togglePrivateRoom(currentRoom);
     emitFloorActivity("presence", privacyAnnouncement(label, nowPrivate));
   }, [currentRoom]);
+
+  // Operator availability status (Spot-style ambient presence). Persisted +
+  // mirrored so the roster pill reflects it live.
+  const [presence, setPresence] = useState<PresenceStatus>("available");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setPresence(loadStatus());
+    const sync = () => setPresence(loadStatus());
+    window.addEventListener(PRESENCE_STATUS_EVENT, sync);
+    return () => window.removeEventListener(PRESENCE_STATUS_EVENT, sync);
+  }, []);
+
+  /** Advance availability (Available → Focused → DND → Away) + announce it. */
+  const cyclePresence = useCallback(() => {
+    const next = nextStatus(presence);
+    saveStatus(next);
+    emitFloorActivity("presence", `You ${statusMeta(next).verb}`);
+  }, [presence]);
+
+  /** Follow a specific teammate from the roster — the avatar walks to them. */
+  const followPeer = useCallback((peerId: string) => {
+    gameRef.current?.events.emit("office:follow", peerId);
+  }, []);
 
   // Detect a touch-capable device once on mount (client-only). Desktop keeps
   // keyboard + click-to-walk; touch devices additionally get an on-screen D-pad.
@@ -1308,6 +1341,12 @@ export function VirtualOfficeGame({
         {token && (
           <>
             <FloorActivityFeed events={floorActivity} presenceCount={Math.max(roster.length, 1)} />
+            <FloorRosterButton
+              roster={roster}
+              status={presence}
+              onCycleStatus={cyclePresence}
+              onFollow={followPeer}
+            />
             <FloorInviteButton currentRoom={currentRoom} />
             {officeAvatar && onAvatarSaved && (
               <OfficeAvatarChip compact avatar={officeAvatar} onSaved={onAvatarSaved} />
