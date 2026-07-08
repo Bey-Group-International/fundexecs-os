@@ -16,8 +16,12 @@
 import { ROOMS, ROOM_W, ROOM_H } from "../types";
 import { PX_TO_WORLD, roomAccentHex, type Box3D } from "./officeGeometry3D";
 
-/** A furniture box: a `Box3D` (world units) plus a fill color. */
-export type FurnitureBox = Box3D & { color: string };
+/** A furniture box: a `Box3D` (world units), a fill color, and optional glow
+ *  (emissive) for lit surfaces like monitors so they read as powered-on. */
+export type FurnitureBox = Box3D & { color: string; glow?: boolean };
+
+/** A warm floor glow pool cast under a lamp (world units). */
+export type LampGlow = { x: number; z: number; radius: number; color: string };
 
 // ── Palette (mirrors officeEnvironment's furniture colors) ──────────────────
 const C = {
@@ -86,7 +90,15 @@ const MARKETPLACE_STALL_FY = 66;
 const MARKETPLACE_AWNINGS = ["#ef4444", "#2dd4bf", "#f59e0b", "#38bdf8", "#a855f7", "#22c55e"];
 
 /** A box standing on the floor: center from foot pixel, extents in px → world. */
-function box(footXpx: number, footYpx: number, wPx: number, dPx: number, hPx: number, color: string): FurnitureBox {
+function box(
+  footXpx: number,
+  footYpx: number,
+  wPx: number,
+  dPx: number,
+  hPx: number,
+  color: string,
+  glow = false,
+): FurnitureBox {
   return {
     cx: footXpx * PX_TO_WORLD,
     cz: footYpx * PX_TO_WORLD,
@@ -94,6 +106,7 @@ function box(footXpx: number, footYpx: number, wPx: number, dPx: number, hPx: nu
     depth: dPx * PX_TO_WORLD,
     height: hPx * PX_TO_WORLD,
     color,
+    glow,
   };
 }
 
@@ -101,11 +114,16 @@ function box(footXpx: number, footYpx: number, wPx: number, dPx: number, hPx: nu
 function pieceBoxes(type: PieceType, fx: number, fy: number, accent: string): FurnitureBox[] {
   switch (type) {
     case "desk":
-      return [box(fx, fy, 46, 16, 12, C.deskTop), box(fx - 10, fy - 4, 14, 4, 20, C.screen)];
+      // Desk + a glowing accent monitor, so a staffed desk reads as powered-on.
+      return [box(fx, fy, 46, 16, 12, C.deskTop), box(fx - 10, fy - 4, 14, 4, 20, accent, true)];
     case "console":
-      return [box(fx, fy, 60, 18, 13, C.deskTop), box(fx, fy - 5, 44, 4, 22, C.screen), box(fx, fy + 6, 60, 18, 2, accent)];
+      return [
+        box(fx, fy, 60, 18, 13, C.deskTop),
+        box(fx, fy - 5, 44, 4, 22, accent, true),
+        box(fx, fy + 6, 60, 18, 2, accent, true),
+      ];
     case "screens":
-      return [box(fx, fy, 54, 16, 8, C.deskFront), box(fx, fy - 8, 50, 3, 26, accent)];
+      return [box(fx, fy, 54, 16, 8, C.deskFront), box(fx, fy - 8, 50, 3, 26, accent, true)];
     case "shelf":
       return [box(fx, fy, 30, 16, 34, C.wood), box(fx, fy, 30, 16, 3, C.woodTop)];
     case "sofa":
@@ -157,6 +175,23 @@ export function officeFurniture3D(): FurnitureBox[] {
     }
     const lamp = LAMPS[room.key];
     if (lamp) out.push(...lampBoxes(ox + lamp.rx, oy + lamp.ry, accent));
+  }
+  return out;
+}
+
+/** Warm floor glow pools, one under each room's lamp — the soft light spill the
+ *  2D office draws under its lamps, as flat accent discs on the floor. */
+export function officeLampGlows(): LampGlow[] {
+  const out: LampGlow[] = [];
+  for (const room of ROOMS) {
+    const lamp = LAMPS[room.key];
+    if (!lamp) continue;
+    out.push({
+      x: (room.col * ROOM_W + lamp.rx) * PX_TO_WORLD,
+      z: (room.row * ROOM_H + lamp.ry) * PX_TO_WORLD,
+      radius: 70 * PX_TO_WORLD,
+      color: roomAccentHex(room.key),
+    });
   }
   return out;
 }

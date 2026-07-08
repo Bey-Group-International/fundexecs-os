@@ -42,7 +42,7 @@ import {
   yawOf,
   type Box3D,
 } from "./officeGeometry3D";
-import { officeFurniture3D, type FurnitureBox } from "./officeFurniture3D";
+import { officeFurniture3D, officeLampGlows, type FurnitureBox } from "./officeFurniture3D";
 import { resolveClip, type AvatarClip } from "./avatarAnimation3D";
 import {
   characterSpriteFor,
@@ -130,8 +130,9 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
   private camLook = { x: 0, z: 0 };
   private camLookTarget = { x: 0, z: 0 };
   private followId: string | null = null;
-  private readonly camHeight = 16;
-  private readonly camDist = 15;
+  // Steep near-top-down 2.5D framing, echoing the 2D office's isometric view.
+  private readonly camHeight = 27;
+  private readonly camDist = 9;
 
   private readonly onPointerDown = (ev: PointerEvent) => this.handlePointer(ev);
 
@@ -161,15 +162,16 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Lighting: soft hemisphere fill + a warm gold key, echoing the 2D floor's
     // "light from above" gold key light.
-    scene.add(new THREE.HemisphereLight(0x9fb4d6, 0x0b0e14, 0.9));
-    const key = new THREE.DirectionalLight(0xffe6b0, 1.1);
-    key.position.set(6, 20, 8);
+    scene.add(new THREE.HemisphereLight(0xbcc6dc, 0x140f0a, 0.85));
+    // Warm gold key from above, echoing the 2D office's light-from-above.
+    const key = new THREE.DirectionalLight(0xffe0a8, 1.35);
+    key.position.set(6, 24, 8);
     scene.add(key);
     // Cool fill from the opposite side softens the shadows the key casts.
-    const fill = new THREE.DirectionalLight(0x9fb4d6, 0.35);
+    const fill = new THREE.DirectionalLight(0x9fb4d6, 0.3);
     fill.position.set(-8, 12, -6);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0x404a5c, 0.6));
+    scene.add(new THREE.AmbientLight(0x4a4034, 0.6));
 
     this.buildStaticIfReady();
 
@@ -324,7 +326,7 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
       tex.colorSpace = THREE.SRGBColorSpace;
       const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
       const sprite = new THREE.Sprite(spriteMat);
-      const spriteH = 1.7;
+      const spriteH = 2.7;
       sprite.scale.set(spriteH * (charSprite.frameWidth / charSprite.frameHeight), spriteH, 1);
       sprite.position.y = spriteH / 2;
       sprite.userData.actorId = spec.id;
@@ -398,7 +400,8 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
 
     // Floor plane (pickable for click-to-walk).
     const floorGeo = new THREE.PlaneGeometry(width, depth);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.95 });
+    // Warm charcoal base, echoing the 2D office's warm-lit wood floors.
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1613, roughness: 0.92 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(c.x, 0, c.z);
@@ -406,27 +409,46 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
     this.floorPlane = floor;
     this.disposables.push(floorGeo, floorMat);
 
-    // Per-room floor, built procedurally (no room-image textures): a subtle
-    // department-accent wash over the whole room, plus a stronger central rug —
-    // mirroring the drawn rugs of the 2D office. Furniture sits on top of this.
+    // Per-room floor, built procedurally (no room-image textures): a department
+    // wash over the whole room, plus a bordered central rug — mirroring the 2D
+    // office's drawn rugs. Furniture sits on top of this.
     for (const { roomKey, box } of roomFloors()) {
       const accent = new THREE.Color(roomAccentHex(roomKey));
 
       const tintGeo = new THREE.PlaneGeometry(box.width, box.depth);
-      const tintMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.07 });
+      const tintMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.1 });
       const tint = new THREE.Mesh(tintGeo, tintMat);
       tint.rotation.x = -Math.PI / 2;
       tint.position.set(box.cx, 0.01, box.cz);
       scene.add(tint);
       this.disposables.push(tintGeo, tintMat);
 
-      const rugGeo = new THREE.PlaneGeometry(box.width * 0.42, box.depth * 0.4);
-      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.16 });
+      // Rug: a stronger accent runner with a lighter inset border.
+      const rugGeo = new THREE.PlaneGeometry(box.width * 0.44, box.depth * 0.42);
+      const rugMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.22 });
       const rug = new THREE.Mesh(rugGeo, rugMat);
       rug.rotation.x = -Math.PI / 2;
       rug.position.set(box.cx, 0.02, box.cz);
       scene.add(rug);
       this.disposables.push(rugGeo, rugMat);
+    }
+
+    // Warm floor glow pools under each lamp — the soft light spill of the 2D
+    // office, as additive accent discs on the floor.
+    for (const g of officeLampGlows()) {
+      const geo = new THREE.CircleGeometry(g.radius, 24);
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(g.color),
+        transparent: true,
+        opacity: 0.14,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const disc = new THREE.Mesh(geo, mat);
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.set(g.x, 0.03, g.z);
+      scene.add(disc);
+      this.disposables.push(geo, mat);
     }
 
     // Walls (one instanced draw call) + the full per-room furniture set.
@@ -482,19 +504,29 @@ export class ThreeOfficeRenderer implements OfficeRenderer {
    */
   private buildFurniture(boxes: FurnitureBox[]): void {
     if (!this.scene) return;
-    const byColor = new Map<string, FurnitureBox[]>();
+    // Group by (color, glow) so lit surfaces (monitors) become emissive.
+    const byKey = new Map<string, FurnitureBox[]>();
     for (const b of boxes) {
-      const group = byColor.get(b.color) ?? [];
+      const key = `${b.color}|${b.glow ? 1 : 0}`;
+      const group = byKey.get(key) ?? [];
       group.push(b);
-      byColor.set(b.color, group);
+      byKey.set(key, group);
     }
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const pos = new THREE.Vector3();
     const scale = new THREE.Vector3();
-    for (const [color, group] of byColor) {
+    for (const group of byKey.values()) {
+      const first = group[0];
+      const color = new THREE.Color(first.color);
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness: first.glow ? 0.4 : 0.7,
+        metalness: 0.05,
+        emissive: first.glow ? color : new THREE.Color(0x000000),
+        emissiveIntensity: first.glow ? 0.8 : 0,
+      });
       const geo = new THREE.BoxGeometry(1, 1, 1);
-      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.7, metalness: 0.05 });
       const mesh = new THREE.InstancedMesh(geo, mat, group.length);
       group.forEach((b, i) => {
         pos.set(b.cx, b.height / 2, b.cz);
