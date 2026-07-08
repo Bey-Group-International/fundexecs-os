@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   scanSignals,
+  enrichEntityFromWeb,
   topSignals,
   type SubjectSignals,
 } from "@/app/(app)/[hub]/[module]/sourcing-signals-actions";
@@ -188,12 +189,36 @@ export function SourceSignals({
     }
   }
 
+  async function enrich() {
+    if (scanning) return;
+    setScanning(true);
+    setNote(null);
+    setError(null);
+    try {
+      const res = await enrichEntityFromWeb();
+      if (!res.ok) {
+        setError(res.error ?? "Could not enrich from the web.");
+      } else {
+        setNote(
+          res.subject
+            ? `Enriched ${res.subject.subjectName} from the web — ${res.recorded ?? 0} news signal${(res.recorded ?? 0) === 1 ? "" : "s"}.`
+            : "Enrichment complete.",
+        );
+        await loadFeed();
+      }
+    } catch {
+      setError("Could not enrich from the web.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   useEffect(() => {
     if (!ranInitial.current) {
       ranInitial.current = true;
       loadFeed();
     }
-     
+
   }, []);
 
   return (
@@ -230,6 +255,15 @@ export function SourceSignals({
           className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
         >
           {scanning ? "Scanning…" : "✶ Scan for signals"}
+        </button>
+        <button
+          type="button"
+          onClick={enrich}
+          disabled={scanning}
+          title="Fetch the entity's website, refresh its catalog record, and score news sentiment into a signal"
+          className="rounded-md border border-neural-400/40 bg-neural-400/10 px-4 py-2 text-sm font-medium text-neural-200 transition hover:bg-neural-400/20 disabled:opacity-50"
+        >
+          {scanning ? "Working…" : "🌐 Enrich from web"}
         </button>
         <button
           type="button"
