@@ -43,14 +43,6 @@ interface GroupItem {
   name: string;
 }
 
-// Per-hub visual identity — icon glyph + left-edge accent color.
-const HUB_IDENTITY: Record<string, { icon: string; color: string }> = {
-  build:   { icon: "⬡", color: "#f59e0b" },  // gold — foundation
-  source:  { icon: "◎", color: "#38bdf8" },  // blue — deal radar
-  run:     { icon: "⚡", color: "#22c55e" }, // emerald — execution
-  execute: { icon: "▶", color: "#a78bfa" },  // violet — outbound
-};
-
 // Secondary destinations folded under "More". Kept intentionally lean: entries
 // that duplicate a hub module or another destination live where they belong and
 // are not repeated here. Notably "LP Report" is gone — Execute › Reporting is
@@ -71,17 +63,16 @@ const MORE_ITEMS: NavItem[] = [
 ];
 
 // Account menu, in display order. Items with a real destination are links;
-// Walkthrough has no href and instead re-opens the guided tour overlay. Each
-// carries a glyph so the popout reads at a glance.
-const ACCOUNT_ITEMS: { label: string; href?: string; icon: string }[] = [
-  { label: "Settings", href: "/settings", icon: "⚙" },
-  { label: "Integrations", href: "/settings#integrations", icon: "⇆" },
-  { label: "Get help", href: "/settings#help", icon: "?" },
-  { label: "Walkthrough", icon: "✷" },
-  { label: "Learn more", href: "/settings#about", icon: "ℹ" },
-  { label: "View plans", href: "/wallet", icon: "◆" },
-  { label: "Gift Earn", href: "/gift", icon: "✦" },
-  { label: "Earn guide", href: "/earn", icon: "✧" },
+// Walkthrough has no href and instead re-opens the guided tour overlay.
+const ACCOUNT_ITEMS: { label: string; href?: string }[] = [
+  { label: "Settings", href: "/settings" },
+  { label: "Integrations", href: "/settings#integrations" },
+  { label: "Get help", href: "/settings#help" },
+  { label: "Walkthrough" },
+  { label: "Learn more", href: "/settings#about" },
+  { label: "View plans", href: "/wallet" },
+  { label: "Gift Earn", href: "/gift" },
+  { label: "Earn guide", href: "/earn" },
 ];
 
 function useDismiss<T extends HTMLElement>(onDismiss: () => void) {
@@ -444,12 +435,9 @@ function SidebarPanel({
               executive team). Sits between Automations and Inbox. */}
           <Link
             href="/command-center"
-            className={`${navHrefActive(pathname, "/command-center") ? `${activeLinkClass} flex items-center justify-between gap-2` : `${linkClass} justify-between`}`}
+            className={navHrefActive(pathname, "/command-center") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="font-mono text-base leading-none text-neural-400">◈</span>
-              Virtual Office
-            </span>
+            Virtual Office
           </Link>
           <Link
             href="/inbox"
@@ -468,41 +456,29 @@ function SidebarPanel({
               Source module), now a top-level destination in its own right. */}
           <Link
             href="/network"
-            className={`${navHrefActive(pathname, "/network") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+            className={navHrefActive(pathname, "/network") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="font-mono text-base leading-none text-neural-400">◎</span>
-              Network
-            </span>
+            Network
           </Link>
           {/* Search · Marketplace · Meetings — promoted out of "More" into their
               own top-level rail destinations, grouped just below Network. */}
           <Link
             href="/search"
-            className={`${navHrefActive(pathname, "/search") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+            className={navHrefActive(pathname, "/search") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="font-mono text-base leading-none text-neural-400">⌕</span>
-              Search
-            </span>
+            Search
           </Link>
           <Link
             href="/marketplace"
-            className={`${navHrefActive(pathname, "/marketplace") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+            className={navHrefActive(pathname, "/marketplace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="font-mono text-base leading-none text-neural-400">▦</span>
-              Marketplace
-            </span>
+            Marketplace
           </Link>
           <Link
             href="/meetings"
-            className={`${navHrefActive(pathname, "/meetings") ? `${activeLinkClass} flex items-center gap-2` : `${linkClass}`}`}
+            className={navHrefActive(pathname, "/meetings") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="font-mono text-base leading-none text-neural-400">◷</span>
-              Meetings
-            </span>
+            Meetings
           </Link>
 
           {/* More — secondary destinations expand on click */}
@@ -513,7 +489,6 @@ function SidebarPanel({
             className={`${linkClass} w-full justify-between`}
           >
             <span className="flex items-center gap-2">
-              <span className="font-mono text-base leading-none text-gold-400">⋯</span>
               More
             </span>
             <span className="font-mono text-[10px] text-fg-muted transition-transform duration-150" style={{ transform: moreOpen ? "rotate(90deg)" : "rotate(0deg)" }}>
@@ -544,17 +519,8 @@ function SidebarPanel({
         </p>
         {hubs.map((hub) => {
           const isOpen = openHub === hub.key;
-          const identity = HUB_IDENTITY[hub.key];
           return (
             <div key={hub.key} className="relative">
-              {/* Left-edge accent stripe when open */}
-              {isOpen && identity && (
-                <span
-                  aria-hidden
-                  className="absolute left-0 top-[15%] bottom-[15%] w-[2px] rounded-r-full"
-                  style={{ background: identity.color, boxShadow: `0 0 6px ${identity.color}` }}
-                />
-              )}
               <button
                 type="button"
                 onClick={() => setOpenHub(isOpen ? null : hub.key)}
@@ -566,15 +532,6 @@ function SidebarPanel({
                 }`}
               >
                 <span className="flex items-center gap-1.5">
-                  {identity && (
-                    <span
-                      aria-hidden
-                      className="shrink-0 font-mono text-[13px] leading-none"
-                      style={{ color: isOpen ? identity.color : undefined, opacity: isOpen ? 1 : 0.5 }}
-                    >
-                      {identity.icon}
-                    </span>
-                  )}
                   {hub.label}
                   {hub.approvalGated ? (
                     <span
@@ -765,25 +722,14 @@ function SidebarPanel({
                 <Link
                   href="/admin"
                   onClick={() => setAccountOpen(false)}
-                  className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-gold-300 transition duration-100 hover:bg-gold-500/10 hover:text-gold-200"
+                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-gold-300 transition duration-100 hover:bg-gold-500/10 hover:text-gold-200"
                 >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gold-500/15 font-mono text-[11px] leading-none text-gold-300 transition group-hover:bg-gold-500/25">
-                    ★
-                  </span>
                   Admin console
                 </Link>
               ) : null}
               {ACCOUNT_ITEMS.map((item) => {
-                const inner = (
-                  <>
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-2/80 font-mono text-[11px] leading-none text-gold-400/90 transition group-hover:bg-gold-500/15 group-hover:text-gold-300">
-                      {item.icon}
-                    </span>
-                    {item.label}
-                  </>
-                );
                 const cls =
-                  "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition duration-100 hover:bg-surface-2/80 hover:text-fg-primary";
+                  "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-fg-secondary transition duration-100 hover:bg-surface-2/80 hover:text-fg-primary";
                 return item.href ? (
                   <Link
                     key={item.label}
@@ -791,7 +737,7 @@ function SidebarPanel({
                     onClick={() => setAccountOpen(false)}
                     className={cls}
                   >
-                    {inner}
+                    {item.label}
                   </Link>
                 ) : (
                   <button
@@ -803,7 +749,7 @@ function SidebarPanel({
                     }}
                     className={`${cls} text-left`}
                   >
-                    {inner}
+                    {item.label}
                   </button>
                 );
               })}
