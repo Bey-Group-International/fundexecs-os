@@ -74,11 +74,11 @@ export async function CreditHistory() {
 
     if (entries.length === 0) {
       return (
-        <section className="mt-8">
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+        <section className="mt-10">
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
             Credit history
           </h2>
-          <div className="rounded-2xl border border-dashed border-neural-400/25 px-6 py-10 text-center">
+          <div className="rounded-2xl border border-dashed border-line/60 px-6 py-10 text-center">
             <p className="text-sm text-fg-muted">No transactions yet.</p>
             <p className="mt-1 text-xs text-fg-muted/60">
               Your credits and spend will appear here.
@@ -89,9 +89,9 @@ export async function CreditHistory() {
     }
 
     return (
-      <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+      <section className="mt-10">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
             Credit history
           </h2>
           <span className="font-mono text-[11px] text-fg-muted">
@@ -99,10 +99,10 @@ export async function CreditHistory() {
           </span>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-neural-400/20 bg-black/45">
+        <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1/30">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neural-400/15">
+              <tr className="border-b border-line/60 bg-surface-2/30">
                 <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
                   Type
                 </th>
@@ -125,7 +125,7 @@ export async function CreditHistory() {
                   <tr
                     key={entry.id}
                     className={
-                      isLast ? "" : "border-b border-neural-400/10"
+                      isLast ? "" : "border-b border-line/40"
                     }
                   >
                     <td className="px-4 py-3">
