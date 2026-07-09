@@ -16,6 +16,12 @@ export type FloorLinkOptions = {
    * opens the link lands in the same deal room with the same context.
    */
   deal?: string | null;
+  /**
+   * Single-use invite token (see lib/office/invite-tokens.ts). When present the
+   * office validates and consumes it on arrival before joining, so a per-invitee
+   * link can't be forwarded, reused, or replayed after it expires.
+   */
+  invite?: string | null;
 };
 
 /** The path + query for an office invite (no origin). */
@@ -24,6 +30,7 @@ export function officeInvitePath(opts: FloorLinkOptions = {}): string {
   if (opts.room) params.set("room", opts.room);
   if (opts.meet) params.set("meet", "1");
   if (opts.deal) params.set("deal", opts.deal);
+  if (opts.invite) params.set("invite", opts.invite);
   const qs = params.toString();
   return `/command-center${qs ? `?${qs}` : ""}`;
 }
