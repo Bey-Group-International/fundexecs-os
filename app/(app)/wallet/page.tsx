@@ -3,10 +3,6 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { getWallet } from "@/lib/wallet";
 import { recentSpend } from "@/lib/credits";
-import { createServerClient } from "@/lib/supabase/server";
-import { listLinkedAccounts } from "@/lib/treasury/linked-accounts";
-import { listTransfers } from "@/lib/treasury/transfers";
-import { TreasuryPanel } from "./TreasuryPanel";
 import {
   PLANS,
   PLAN_BY_KEY,
@@ -16,11 +12,9 @@ import {
   annualSavingsPct,
   loyaltyBonus,
   tenureMonths,
-  LOYALTY_STEP,
-  LOYALTY_CAP,
 } from "@/lib/billing";
 import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
-import { compoundingProfile, type ReputationTier } from "@/lib/compounding";
+import { compoundingProfile } from "@/lib/compounding";
 import {
   walletRunway,
   formatRunway,
@@ -31,31 +25,12 @@ import { PlanSelector, type PlanView } from "./PlanSelector";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
 import { CreditHistory } from "./CreditHistory";
-import { GamificationPanel } from "./GamificationPanel";
 import { CouponRedemption } from "./CouponRedemption";
 import { BillingPortalButton } from "./BillingPortalButton";
+import { TIER_META } from "./standing";
 import { CREDIT_GRACE_BUFFER } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
-
-const TIER_META: Record<ReputationTier, { label: string; blurb: string }> = {
-  unranked: {
-    label: "New Member",
-    blurb: "Complete verified transactions to build your standing — it reduces the cost of every AI action.",
-  },
-  verified: {
-    label: "Verified Operator",
-    blurb: "A proven track record. Your actions cost less and your listings surface higher.",
-  },
-  established: {
-    label: "Established",
-    blurb: "Priority queue, deeper discounts, and the ability to attest verified outcomes.",
-  },
-  principal: {
-    label: "Principal",
-    blurb: "Top standing — maximum discount, lowest stake, and the standing to vouch for others.",
-  },
-};
 
 export default async function WalletPage(
   props: {
@@ -74,12 +49,6 @@ export default async function WalletPage(
     getWallet(ctx.orgId),
     recentSpend(ctx.orgId),
     compoundingProfile(ctx.orgId),
-  ]);
-
-  const supabase = await createServerClient();
-  const [linkedAccounts, treasuryTransfers] = await Promise.all([
-    listLinkedAccounts(supabase, ctx.orgId),
-    listTransfers(supabase, ctx.orgId),
   ]);
 
   const balance = wallet?.credits ?? 0;
@@ -102,6 +71,8 @@ export default async function WalletPage(
     annualSavingsPct: annualSavingsPct(p),
   }));
 
+  const standing = TIER_META[profile.tier];
+
   return (
     <div className="fx-neural-ambient mx-auto max-w-5xl">
       <header className="mb-6 flex flex-col gap-4 border-b border-line/50 pb-6 sm:flex-row sm:items-end sm:justify-between">
@@ -113,8 +84,8 @@ export default async function WalletPage(
             Credits &amp; plans
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-fg-secondary">
-            A high-control credit console for keeping the operating agents funded,
-            routed, and ready for institutional workflows.
+            Keep the operating agents funded — check your balance, choose a plan,
+            and top up compute credits.
           </p>
         </div>
         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-line/60 bg-surface-2/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-fg-secondary">
@@ -165,8 +136,9 @@ export default async function WalletPage(
       </h2>
       <section className="fx-neural-panel p-5 sm:p-6">
         <div className="relative z-10">
-          {/* Balance ledger line — the account's headline figure. */}
-          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line/40 pb-5">
+          {/* Balance ledger line — the account's headline figure, with the two
+              live rates that describe it (burn out, loyalty in) and the plan. */}
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5 border-b border-line/40 pb-5">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
                 Available balance
@@ -193,113 +165,57 @@ export default async function WalletPage(
                   : "no recent burn"}
               </p>
             </div>
-            <div className="rounded-lg border border-line/60 bg-surface-2/40 px-4 py-2.5 text-right">
-              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
-                Active plan
-              </p>
-              <p className="mt-1 font-display text-lg font-semibold text-gold-300">
-                {planName ?? "Unassigned"}
-              </p>
-            </div>
-          </div>
-
-          {/* Primary account metrics — balance, burn, loyalty accrual, plan economics. */}
-          <div className="mt-5 grid gap-px overflow-hidden rounded-xl border border-line/50 bg-line/40 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="bg-surface-1/40 p-4">
-              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
-                30-day burn
-              </p>
-              <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-fg-primary">
-                {formatCredits(spend30d)}
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] text-fg-muted">credits / 30d</p>
-            </div>
-            <div className="bg-surface-1/40 p-4">
-              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
-                Loyalty accrual
-              </p>
-              <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-gold-300">
-                +{formatCredits(loyalty)}
-                <span className="ml-1 font-mono text-[11px] font-normal text-fg-muted">/mo</span>
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
-                {currentPlan
-                  ? `${months} mo tenure · caps ${formatCredits(LOYALTY_CAP)}/mo`
-                  : `+${LOYALTY_STEP}/mo per month subscribed`}
-              </p>
-            </div>
-            <div className="bg-surface-1/40 p-4">
-              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
-                Suggested plan
-              </p>
-              <p className="mt-1.5 font-display text-2xl font-semibold text-fg-primary">
-                {recommendedPlan?.name}
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] text-fg-muted">based on recent burn</p>
-            </div>
-            <div className="bg-surface-1/40 p-4">
-              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
-                Entry price
-              </p>
-              <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-fg-primary">
-                {recommendedPlan ? formatUsd(recommendedPlan.monthly) : "—"}
-                <span className="ml-0.5 font-mono text-[11px] font-normal text-fg-muted">/mo</span>
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
-                {recommendedPlan ? `${formatCredits(recommendedPlan.creditsPerMonth)} credits/mo` : "—"}
-              </p>
-            </div>
-          </div>
-
-          {/* Standing + routing guidance. */}
-          <div className="mt-5 grid gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-line/50 bg-surface-1/30 p-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
-                Standing
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="font-display text-sm font-semibold text-fg-primary">
-                  {TIER_META[profile.tier].label}
-                </span>
-                {profile.discountPct > 0 && (
-                  <span className="rounded-md border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[10px] text-gold-300">
-                    −{profile.discountPct}% on every action
-                  </span>
-                )}
+            <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line/50 bg-line/40 text-center">
+              <div className="bg-surface-1/40 px-4 py-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
+                  30-day burn
+                </p>
+                <p className="mt-1.5 font-display text-xl font-semibold tabular-nums text-fg-primary">
+                  {formatCredits(spend30d)}
+                </p>
               </div>
-              <p className="mt-2 text-xs leading-5 text-fg-secondary">
-                {TIER_META[profile.tier].blurb}
-              </p>
-            </div>
-            <div className="rounded-xl border border-line/50 bg-surface-1/30 p-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
-                Recommended routing
-              </p>
-              <p className="mt-2 text-xs leading-5 text-fg-secondary">
-                {spend30d > 0 ? (
-                  <>
-                    Based on {formatCredits(spend30d)} credits used in the last 30 days,{" "}
-                    <span className="text-fg-primary">{recommendedPlan?.name}</span> {recommendation.reason}
-                  </>
-                ) : (
-                  <>
-                    Most fund managers start on <span className="text-fg-primary">{recommendedPlan?.name}</span>{" "}
-                    for balanced monthly capacity.
-                  </>
-                )}
-                {topUpPack ? (
-                  <>
-                    {" "}
-                    Need credits now? The{" "}
-                    <span className="text-fg-primary">{formatCredits(topUpPack.credits)}-credit pack</span>{" "}
-                    ({formatUsd(topUpPack.price)}) bridges you to next cycle.
-                  </>
-                ) : null}
-              </p>
+              <div className="bg-surface-1/40 px-4 py-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
+                  Loyalty accrual
+                </p>
+                <p className="mt-1.5 font-display text-xl font-semibold tabular-nums text-gold-300">
+                  +{formatCredits(loyalty)}
+                  <span className="ml-0.5 font-mono text-[10px] font-normal text-fg-muted">/mo</span>
+                </p>
+              </div>
+              <div className="bg-surface-1/40 px-4 py-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
+                  Active plan
+                </p>
+                <p className="mt-1.5 font-display text-xl font-semibold text-gold-300">
+                  {planName ?? "—"}
+                </p>
+              </div>
             </div>
           </div>
 
-          <p className="mt-5 text-xs leading-5 text-fg-muted">
+          {/* Slim standing + rewards summary — full detail lives on /wallet/rewards. */}
+          <Link
+            href="/wallet/rewards"
+            className="group mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line/50 bg-surface-1/30 px-4 py-3 text-sm transition hover:border-gold-400/40 hover:bg-surface-1/50"
+          >
+            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+              Standing
+            </span>
+            <span className="font-medium text-fg-primary">{standing.label}</span>
+            {profile.discountPct > 0 && (
+              <span className="rounded-md border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[10px] text-gold-300">
+                −{profile.discountPct}% on every action
+              </span>
+            )}
+            <span className="text-fg-muted">·</span>
+            <span className="text-fg-secondary">+{formatCredits(loyalty)}/mo loyalty</span>
+            <span className="ml-auto font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300">
+              View rewards →
+            </span>
+          </Link>
+
+          <p className="mt-4 text-xs leading-5 text-fg-muted">
             {planName ? (
               <>
                 You&apos;re on <span className="text-fg-secondary">{planName}</span>. Unused credits
@@ -316,7 +232,7 @@ export default async function WalletPage(
       </section>
 
       <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
-        Plan compute tiers
+        Choose a plan
       </h2>
       <PlanSelector
         plans={plans}
@@ -326,50 +242,18 @@ export default async function WalletPage(
         publishableKey={publishableKey}
       />
 
-      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
-        One-off credit packs
+      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+        Add credits
       </h2>
       <CreditPacks live={live} publishableKey={publishableKey} />
-
-      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
-        Promo code
-      </h2>
-      <CouponRedemption />
-
-      <Link
-        href="/gift"
-        className="group relative mt-8 flex items-center gap-3 overflow-hidden rounded-2xl border border-line/60 bg-surface-1/30 p-5 transition hover:border-neural-400/40 hover:bg-surface-1/50"
-      >
-        <span className="absolute left-0 top-0 h-full w-0.5 rounded-l-2xl bg-neural-400/50 opacity-0 transition group-hover:opacity-100" />
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fg-muted">
-            Earn credits
-          </p>
-          <p className="mt-1 text-sm font-medium text-fg-primary">Earn credits instead of buying them</p>
-          <p className="mt-0.5 text-xs text-fg-secondary">
-            Introduce other firms and build a partner network — escalating rewards three levels
-            deep, plus milestone bonuses. Or gift credits to a colleague or portfolio company.
-          </p>
-        </div>
-        <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>
-      </Link>
-
-      <h2 className="mb-3 mt-8 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
-        Execution rewards
-      </h2>
-      <GamificationPanel />
+      <div className="mt-3">
+        <CouponRedemption />
+      </div>
 
       <CreditHistory />
 
-      <TreasuryPanel
-        accounts={linkedAccounts}
-        transfers={treasuryTransfers}
-        publishableKey={publishableKey}
-        stripeLive={live}
-      />
-
       {live && currentPlan && (
-        <div className="mt-6 flex justify-center">
+        <div className="mt-8 flex justify-center">
           <BillingPortalButton />
         </div>
       )}

@@ -71,6 +71,7 @@ const ACCOUNT_ITEMS: { label: string; href?: string }[] = [
   { label: "Walkthrough" },
   { label: "Learn more", href: "/settings#about" },
   { label: "View plans", href: "/wallet" },
+  { label: "Treasury", href: "/wallet/treasury" },
   { label: "Gift Earn", href: "/gift" },
   { label: "Earn guide", href: "/earn" },
 ];

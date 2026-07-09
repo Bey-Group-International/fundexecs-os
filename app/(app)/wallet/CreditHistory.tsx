@@ -88,73 +88,95 @@ export async function CreditHistory() {
       );
     }
 
+    // Compact-by-default: the section shows a one-line summary of the most
+    // recent movement, and the full ledger table opens behind a native
+    // <details> expander so the wallet stays short until you ask for detail.
+    const latest = entries[0];
+    const latestMeta = reasonMeta(latest.reason);
+
     return (
       <section className="mt-10">
-        <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
-            Credit history
-          </h2>
-          <span className="font-mono text-[11px] text-fg-muted">
-            Last {entries.length} transactions
-          </span>
-        </div>
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+          Credit history
+        </h2>
 
-        <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1/30">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line/60 bg-surface-2/30">
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Type
-                </th>
-                <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Credits
-                </th>
-                <th className="hidden px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted sm:table-cell">
-                  Note
-                </th>
-                <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-                  Date
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry, i) => {
-                const meta = reasonMeta(entry.reason);
-                const isLast = i === entries.length - 1;
-                return (
-                  <tr
-                    key={entry.id}
-                    className={
-                      isLast ? "" : "border-b border-line/40"
-                    }
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`font-mono text-base ${meta.colorClass}`}
-                        >
-                          {meta.icon}
-                        </span>
-                        <span className="text-fg-secondary">{meta.label}</span>
-                      </div>
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-right font-display font-semibold tabular-nums ${meta.colorClass}`}
+        <details className="group overflow-hidden rounded-2xl border border-line/60 bg-surface-1/30">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 transition hover:bg-surface-1/50 [&::-webkit-details-marker]:hidden">
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <span className={`font-mono text-base ${latestMeta.colorClass}`}>
+                {latestMeta.icon}
+              </span>
+              <span className="truncate text-fg-secondary">{latestMeta.label}</span>
+              <span className={`font-display font-semibold tabular-nums ${latestMeta.colorClass}`}>
+                {formatAmount(latest.amount)}
+              </span>
+              {entries.length > 1 && (
+                <span className="hidden font-mono text-[11px] text-fg-muted sm:inline">
+                  · +{entries.length - 1} more
+                </span>
+              )}
+            </div>
+            <span className="flex shrink-0 items-center gap-2 font-mono text-[11px] text-fg-muted">
+              <span className="hidden sm:inline">Last {entries.length} transactions</span>
+              <span className="transition-transform group-open:rotate-180" aria-hidden>
+                ▾
+              </span>
+            </span>
+          </summary>
+
+          <div className="overflow-x-auto border-t border-line/60">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line/60 bg-surface-2/30">
+                  <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                    Type
+                  </th>
+                  <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                    Credits
+                  </th>
+                  <th className="hidden px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted sm:table-cell">
+                    Note
+                  </th>
+                  <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                    Date
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, i) => {
+                  const meta = reasonMeta(entry.reason);
+                  const isLast = i === entries.length - 1;
+                  return (
+                    <tr
+                      key={entry.id}
+                      className={isLast ? "" : "border-b border-line/40"}
                     >
-                      {formatAmount(entry.amount)}
-                    </td>
-                    <td className="hidden max-w-[260px] truncate px-4 py-3 text-xs text-fg-muted sm:table-cell">
-                      {entry.note ?? "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-mono text-[11px] text-fg-muted">
-                      {formatDate(entry.created_at)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-mono text-base ${meta.colorClass}`}>
+                            {meta.icon}
+                          </span>
+                          <span className="text-fg-secondary">{meta.label}</span>
+                        </div>
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-display font-semibold tabular-nums ${meta.colorClass}`}
+                      >
+                        {formatAmount(entry.amount)}
+                      </td>
+                      <td className="hidden max-w-[260px] truncate px-4 py-3 text-xs text-fg-muted sm:table-cell">
+                        {entry.note ?? "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-mono text-[11px] text-fg-muted">
+                        {formatDate(entry.created_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </section>
     );
   } catch {
