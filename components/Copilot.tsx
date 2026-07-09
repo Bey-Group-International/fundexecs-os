@@ -25,6 +25,7 @@ import {
 } from "@/lib/earn-conversation";
 import type { ActiveIntegration } from "@/lib/integrations/active";
 import type { AgentPlan } from "@/lib/claude";
+import type { EarnPlan } from "@/lib/earn-plan";
 import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
 import { ModelCompare, type ModelComparison } from "@/components/ModelCompare";
@@ -517,6 +518,56 @@ export default function Copilot({
 
   // Stream a conversational answer from Earn into the transcript, token by
   // token. Ungated and client-side — no workflow, no approval, just an answer.
+  // "Plan with Earn": the directive planner (formerly the Command Center's Earn
+  // composer). POSTs the composer's directive to /api/earn/plan and drops Earn's
+  // plan — delegate-vs-execute + action bullets — straight into the transcript
+  // as a normal Earn turn (rendered as Markdown).
+  async function planWithEarn() {
+    const directive = prompt.trim();
+    if (!directive || busy) return;
+    setBusy(true);
+    setOpenMenu(null);
+    setPrompt("");
+
+    const now = Date.now();
+    const youId = `you-${now}`;
+    const earnId = `earn-${now}`;
+    setChatTurns((prev) => [
+      ...prev,
+      { id: youId, role: "you", content: directive, ts: now },
+      { id: earnId, role: "earn", content: "", ts: now + 1, streaming: true, sourcePrompt: directive },
+    ]);
+
+    try {
+      const res = await fetch("/api/earn/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: directive }),
+      });
+      if (!res.ok) throw new Error(`plan failed: ${res.status}`);
+      const plan = (await res.json()) as EarnPlan;
+      const header =
+        plan.kind === "A" ? "**Plan — delegate to the team**" : "**Plan — Earn executes directly**";
+      const md = `${header}\n\n${plan.recommendation}\n\n${plan.bullets
+        .map((b) => `- ${b}`)
+        .join("\n")}\n\n${plan.closing}`;
+      setChatTurns((prev) =>
+        prev.map((t) => (t.id === earnId ? { ...t, content: md, streaming: false } : t)),
+      );
+    } catch (err) {
+      console.error("planWithEarn error:", err);
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === earnId
+            ? { ...t, content: "Earn couldn't draft that plan just now — please try again.", streaming: false }
+            : t,
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runChat(body: string) {
     setBusy(true);
     setOpenMenu(null);
@@ -1360,6 +1411,19 @@ export default function Copilot({
                       role="menu"
                       className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
                     >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy || !prompt.trim()}
+                        onClick={() => {
+                          planWithEarn();
+                        }}
+                        title="Have Earn decide whether to delegate or execute this directive, with an action plan"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span aria-hidden className="font-mono text-gold-400">◆</span>
+                        Plan with Earn
+                      </button>
                       <button
                         type="button"
                         role="menuitem"

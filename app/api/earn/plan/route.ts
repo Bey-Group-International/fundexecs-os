@@ -1,15 +1,16 @@
 import { requireOrgContext } from "@/lib/auth";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
-import { planLiveEarn } from "@/lib/command-center-live";
+import { planEarnDirective } from "@/lib/earn-plan";
 
-// Planning a flow calls Claude; give it room beyond the default request window.
+// Planning calls Claude; give it room beyond the default request window.
 export const maxDuration = 60;
 
-// POST /api/command-center/plan — turn an operator directive into the Command
-// Center's Earn timeline (flow kind + Step[]), with Earn's dialogue synthesized
-// by Claude. Authed like the rest of the (app) surface; the spend gate is a
-// no-op when Claude isn't configured, so the deterministic fallback runs free.
+// POST /api/earn/plan — turn an operator directive into Earn's plan
+// (delegate-vs-execute + recommendation + action bullets + closing). Authed
+// like the rest of the (app) surface; the spend gate is a no-op when Claude
+// isn't configured, so the deterministic fallback runs free. Consumed by the
+// session composer's "Plan with Earn" action and the Build hub's Plan module.
 export async function POST(request: Request) {
   const auth = await requireOrgContext();
   if (!auth.ok) {
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   const { orgId } = auth.ctx;
 
   const rateLimit = checkRateLimit({
-    key: `org:${orgId}:command-center-plan`,
+    key: `org:${orgId}:earn-plan`,
     limit: 30,
     windowMs: 60_000,
   });
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const gate = await gateConversationalSpend(orgId, CONVERSATIONAL_COST.promptPlan, "command-center-plan");
+  const gate = await gateConversationalSpend(orgId, CONVERSATIONAL_COST.promptPlan, "earn-plan");
   if (!gate.ok) {
     return new Response(JSON.stringify({ error: gate.error }), {
       status: gate.status,
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const plan = await planLiveEarn({ prompt });
+  const plan = await planEarnDirective({ prompt });
   return new Response(JSON.stringify(plan), {
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });

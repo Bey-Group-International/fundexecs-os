@@ -33,6 +33,7 @@ export const HUBS: HubDefinition[] = [
       { key: "team", label: "Team" },
       { key: "data_room", label: "Materials & Data Room" },
       { key: "documents", label: "Documents" },
+      { key: "plan", label: "Plan with Earn" },
     ],
   },
   {

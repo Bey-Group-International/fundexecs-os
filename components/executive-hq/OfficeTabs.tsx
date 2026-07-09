@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { CommandCenter } from "@/components/command-center/CommandCenter";
 import { hydrateWorkflows, setApprovalDecider, setOfficePersistence, setUserRole } from "@/components/virtual-office/program/officeProgramStore";
 import { rowToWorkflow, type OfficeWorkflow } from "@/components/virtual-office/program/officeProgram";
 import { officeRoleFromMemberRole } from "@/lib/office/approvalAuthority";
@@ -31,7 +30,7 @@ const VirtualOfficeGame = dynamic(
   }
 );
 
-type Tab = "virtual" | "earn";
+type Tab = "virtual";
 
 // User-facing copy for a rejected single-use invite token (server reasons from
 // consumeInviteToken). `unavailable` isn't shown — it means the token backend is
@@ -45,7 +44,7 @@ const INVITE_ERRORS: Record<string, string> = {
 
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
-  const [opened, setOpened] = useState<Record<Tab, boolean>>({ virtual: true, earn: false });
+  const [opened, setOpened] = useState<Record<Tab, boolean>>({ virtual: true });
   const [token, setToken] = useState<string | undefined>(undefined);
   const [officeAvatar, setOfficeAvatar] = useState<UserAvatar>(DEFAULT_USER_AVATAR);
   const [displayName, setDisplayName] = useState<string>("You");
@@ -116,11 +115,11 @@ export function OfficeTabs() {
     [applyRoomJoin],
   );
 
-  // The Virtual Office and the Earn Command tab both carry their own Earn entry
-  // points (⌘K + the Earn Center button), so hide the app-wide floating
-  // "Ask Earn" launcher while either is active; it returns when we leave the page.
+  // The Virtual Office carries its own Earn entry points (⌘K + the Earn Center
+  // button), so hide the app-wide floating "Ask Earn" launcher while it's
+  // active; it returns when we leave the page.
   useEffect(() => {
-    const suppress = tab === "virtual" || tab === "earn";
+    const suppress = tab === "virtual";
     window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress } }));
     return () => {
       window.dispatchEvent(new CustomEvent("earn:suppress-launcher", { detail: { suppress: false } }));
@@ -210,8 +209,6 @@ export function OfficeTabs() {
     if (deal) setDealRoomListingId(deal);
     if (requestedTab === "virtual") {
       activateTab("virtual");
-    } else if (requestedTab === "earn") {
-      activateTab("earn");
     }
     if (!room || !sessionChecked) return;
     if (token) {
@@ -297,20 +294,8 @@ export function OfficeTabs() {
           <TabButton active={tab === "virtual"} onClick={() => activateTab("virtual")}>
             Execution Floor
           </TabButton>
-          <TabButton active={tab === "earn"} onClick={() => activateTab("earn")}>
-            Earn Command
-          </TabButton>
         </div>
       </div>
-
-      {/* Earn Command — the split chat + live spatial world, driven by Earn
-          (Claude via /api/command-center/plan). Mounts only once requested and
-          stays mounted after, so its world engine isn't torn down on tab switch. */}
-      {opened.earn ? (
-        <div className={tab === "earn" ? "block px-4 py-2" : "hidden"}>
-          <CommandCenter />
-        </div>
-      ) : null}
 
       {/* Virtual panel stays mounted after first activation so Phaser does not
           reinitialise on tab switch, but is not mounted before it is needed. */}
