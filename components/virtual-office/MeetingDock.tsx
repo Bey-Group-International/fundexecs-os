@@ -135,6 +135,7 @@ export function MeetingDock({
   blurOn = false, blurBusy = false, blurSupported = false, onToggleBlur,
   devices, selectedMic, selectedCam, selectedSpeaker,
   onSelectMic, onSelectCam, onSelectSpeaker, onSendInvites,
+  waiting = [], onSummon,
 }: {
   localStream: MediaStream | null;
   tiles: VideoTile[];
@@ -158,6 +159,10 @@ export function MeetingDock({
   onSelectCam: (id: string) => void;
   onSelectSpeaker: (id: string) => void;
   onSendInvites: (emails: string[]) => Promise<{ ok: boolean; sent: number }>;
+  /** Teammates on the floor but not yet in the call — the meeting "waiting room". */
+  waiting?: { id: string; name: string; roomLabel: string | null }[];
+  /** Summon a waiting teammate into the meeting (walks their avatar over). */
+  onSummon?: (id: string, name: string) => void;
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [name, setName] = useState("");
@@ -233,12 +238,41 @@ export function MeetingDock({
         {tiles.map((t) => (
           <Tile key={t.peerId} stream={t.el.srcObject as MediaStream | null} label={t.label} sinkId={selectedSpeaker} />
         ))}
-        {tiles.length === 0 ? (
+        {tiles.length === 0 && waiting.length === 0 ? (
           <div className="grid h-[84px] flex-1 place-items-center rounded-lg border border-dashed px-3 text-center text-[11px]" style={{ borderColor: "rgba(201,168,76,0.3)", color: SUBTLE }}>
             Waiting for teammates — invite someone or walk together on the floor.
           </div>
         ) : null}
       </div>
+
+      {/* Waiting room — teammates on the floor not yet in the call. "Add" walks
+          them over to join. */}
+      {waiting.length > 0 && (
+        <div className="rounded-lg border p-1.5" style={{ borderColor: "rgba(201,168,76,0.22)", background: "rgba(201,168,76,0.05)" }}>
+          <p className="mb-1 px-0.5 font-mono text-[9px] uppercase tracking-[0.16em]" style={{ color: SUBTLE }}>
+            On the floor
+          </p>
+          <ul className="flex max-h-[104px] flex-col gap-0.5 overflow-y-auto">
+            {waiting.map((w) => (
+              <li key={w.id} className="flex items-center gap-2 rounded-md px-1.5 py-1">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: "#64748b" }} />
+                <span className="min-w-0 flex-1 truncate text-[11px]" style={{ color: TEXT }}>
+                  {w.name}
+                  {w.roomLabel ? <span style={{ color: SUBTLE }}>{` · ${w.roomLabel}`}</span> : null}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onSummon?.(w.id, w.name)}
+                  className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors"
+                  style={{ color: "#0a0806", background: GOLD }}
+                >
+                  Add
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Sleek control row: mic / camera / speaker (with device menus) + actions */}
       <div className="flex items-center gap-1.5">

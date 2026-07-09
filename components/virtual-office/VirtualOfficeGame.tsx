@@ -528,6 +528,26 @@ export function VirtualOfficeGame({
     gameRef.current?.events.emit("office:follow", peerId);
   }, []);
 
+  // The meeting "waiting room" — teammates on the floor who aren't in the call yet.
+  const meetingWaiting = useMemo(
+    () =>
+      roster
+        .filter((r) => !r.self && !r.onCall)
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          roomLabel: r.roomKey ? ROOM_NAV.find((n) => n.key === r.roomKey)?.label ?? null : null,
+        })),
+    [roster],
+  );
+
+  /** Summon a waiting teammate into the meeting — walk their avatar over + nudge them. */
+  const summonToMeeting = useCallback((peerId: string, name: string) => {
+    gameRef.current?.events.emit("office:summon", peerId);
+    gameRef.current?.events.emit("office:say", `Come join the meeting, ${name}!`);
+    emitFloorActivity("meeting", `Summoned ${name} to the meeting`);
+  }, []);
+
   // Spot-style claimed desk ("your spot") + whether the player is seated now.
   const [claimedDesk, setClaimedDesk] = useState<string | null>(null);
   const [seated, setSeated] = useState(false);
@@ -1632,6 +1652,8 @@ export function VirtualOfficeGame({
             onSelectCam={(id) => selectInputDevice("videoinput", id)}
             onSelectSpeaker={setSelectedSpeaker}
             onSendInvites={sendFloorInvite}
+            waiting={meetingWaiting}
+            onSummon={summonToMeeting}
           />
         )}
 

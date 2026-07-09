@@ -591,6 +591,15 @@ export class OfficeScene extends Phaser.Scene {
       this.overheadView = overhead;
       this._applyView();
     });
+
+    // Summon a waiting teammate into the meeting — set their lerp target to a
+    // spot beside the host so they walk over into the proximity bubble.
+    this.game.events.on("office:summon", (peerId: string) => {
+      const state = this.remotePlayers.get(peerId);
+      if (!state) return;
+      state.targetX = this.player.x + 26;
+      state.targetY = this.player.y + 6;
+    });
   }
 
   /** Apply the current view mode to the camera (follow-zoom or overhead). */
@@ -645,6 +654,7 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:claim-desk");
     this.game.events.off("office:go-to-desk");
     this.game.events.off("office:set-view");
+    this.game.events.off("office:summon");
     this.game.events.off("office:marketplace-listings", this._setMarketplaceStalls, this);
     for (const g of this.marketplaceStallGfx) g.destroy();
     this.marketplaceStallGfx = [];
