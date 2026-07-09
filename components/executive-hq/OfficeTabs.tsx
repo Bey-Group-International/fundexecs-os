@@ -33,6 +33,16 @@ const VirtualOfficeGame = dynamic(
 
 type Tab = "virtual" | "earn";
 
+// User-facing copy for a rejected single-use invite token (server reasons from
+// consumeInviteToken). `unavailable` isn't shown — it means the token backend is
+// off, so the client just proceeds as a plain shared link.
+const INVITE_ERRORS: Record<string, string> = {
+  expired: "This meeting invite has expired. Ask the host to send a new one.",
+  used: "This invite link has already been used.",
+  mismatch: "This invite was sent to a different email address.",
+  invalid: "This invite link isn't valid.",
+};
+
 export function OfficeTabs() {
   const [tab, setTab] = useState<Tab>("virtual");
   const [opened, setOpened] = useState<Record<Tab, boolean>>({ virtual: true, earn: false });
@@ -41,6 +51,7 @@ export function OfficeTabs() {
   const [displayName, setDisplayName] = useState<string>("You");
   const [teleportTarget, setTeleportTarget] = useState<string | null>(null);
   const [dealRoomListingId, setDealRoomListingId] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   // Guest join state — shown when no session and virtual tab is requested
   const [zoneUrlOverrides, setZoneUrlOverrides] = useState<Record<string, string>>({});
@@ -56,6 +67,54 @@ export function OfficeTabs() {
     setTab(next);
     setOpened((prev) => ({ ...prev, [next]: true }));
   }, []);
+
+  // Teleport into a room and, for a meeting link, auto-open the video dock once
+  // we're there. Shared by the plain shared-link and validated-invite paths.
+  const applyRoomJoin = useCallback((targetRoom: string | null, meet: boolean) => {
+    if (targetRoom) {
+      setTeleportTarget(targetRoom);
+      setTimeout(() => setTeleportTarget(null), 100);
+    }
+    if (meet) {
+      setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 900);
+    }
+  }, []);
+
+  // Validate + consume a single-use invite token server-side before joining. On
+  // success the room/meeting come from the token (server-authoritative), not the
+  // URL. A rejected token surfaces a banner but still lands the (already
+  // authenticated) user on the floor; an unavailable backend or network error
+  // falls back to the plain shared-link behavior so joins never hard-fail.
+  const joinWithInvite = useCallback(
+    async (invite: string, fallbackRoom: string | null, fallbackMeet: boolean) => {
+      try {
+        const res = await fetch("/api/office/invite/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: invite }),
+        });
+        const data = (await res.json()) as {
+          ok: boolean;
+          reason?: string;
+          room?: string | null;
+          meet?: boolean;
+        };
+        if (data.ok) {
+          applyRoomJoin(data.room ?? fallbackRoom, data.meet ?? false);
+          return;
+        }
+        if (data.reason && data.reason !== "unavailable") {
+          setInviteError(INVITE_ERRORS[data.reason] ?? "This invite link is no longer valid.");
+        }
+        // Rejected, unavailable, or unknown — still let them onto the floor via
+        // the plain link (they reached an authenticated page to get here).
+        applyRoomJoin(fallbackRoom, fallbackMeet);
+      } catch {
+        applyRoomJoin(fallbackRoom, fallbackMeet);
+      }
+    },
+    [applyRoomJoin],
+  );
 
   // The Virtual Office and the Earn Command tab both carry their own Earn entry
   // points (⌘K + the Earn Center button), so hide the app-wide floating
@@ -156,20 +215,19 @@ export function OfficeTabs() {
     }
     if (!room || !sessionChecked) return;
     if (token) {
-      // Authenticated — go straight to the room
+      // Authenticated — go straight to the room. A single-use ?invite= token is
+      // validated + consumed server-side first; a plain shared link joins as-is.
       activateTab("virtual");
-      setTeleportTarget(room);
-      setTimeout(() => setTeleportTarget(null), 100);
-      // A meeting link (?meet=1) auto-opens the video dock once we're in the room.
-      if (searchParams.get("meet") === "1") {
-        setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 900);
-      }
+      const invite = searchParams.get("invite");
+      const wantsMeet = searchParams.get("meet") === "1";
+      if (invite) void joinWithInvite(invite, room, wantsMeet);
+      else applyRoomJoin(room, wantsMeet);
     } else {
       // No session — show guest name prompt, remember the target room
       setGuestPrompt(true);
       activateTab("virtual");
     }
-  }, [activateTab, searchParams, sessionChecked, token]);
+  }, [activateTab, applyRoomJoin, joinWithInvite, searchParams, sessionChecked, token]);
 
   const handleGuestJoin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,21 +247,20 @@ export function OfficeTabs() {
       setGuestPrompt(false);
       // Guests get default zone URLs (no custom integrations)
       setZoneUrlOverrides({});
-      // Teleport to the room from ?room= if present
+      // Teleport to the room from ?room= if present. A single-use ?invite= token
+      // is validated + consumed server-side; a plain shared link joins as-is.
       const room = searchParams.get("room");
       if (room) {
-        setTeleportTarget(room);
-        setTimeout(() => setTeleportTarget(null), 100);
-        // A meeting link (?meet=1) auto-opens the video dock once we're in the room.
-        if (searchParams.get("meet") === "1") {
-          setTimeout(() => window.dispatchEvent(new CustomEvent("office:start-meeting")), 900);
-        }
+        const invite = searchParams.get("invite");
+        const wantsMeet = searchParams.get("meet") === "1";
+        if (invite) void joinWithInvite(invite, room, wantsMeet);
+        else applyRoomJoin(room, wantsMeet);
       }
     } catch (err) {
       setGuestError(err instanceof Error ? err.message : "Sign in failed");
       setGuestLoading(false);
     }
-  }, [guestName, searchParams]);
+  }, [applyRoomJoin, guestName, joinWithInvite, searchParams]);
 
   const handleNpcClick = useCallback(({ spriteKey, name }: { npcId: string; spriteKey: string; name: string }) => {
     const exec = executiveCharacters.find((c) => c.id === spriteKey);
@@ -297,6 +354,21 @@ export function OfficeTabs() {
           </div>
         ) : (
           <>
+            {/* A rejected single-use invite (expired / already used / wrong
+                email) surfaces here; the user still lands on the floor. */}
+            {inviteError && (
+              <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                <span>{inviteError}</span>
+                <button
+                  type="button"
+                  onClick={() => setInviteError(null)}
+                  className="rounded px-2 py-0.5 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-100"
+                  aria-label="Dismiss invite notice"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
             {/* Character selection now lives in the header chip (one line with
                 the office metrics), so the game mounts directly here. */}
             <VirtualOfficeGame

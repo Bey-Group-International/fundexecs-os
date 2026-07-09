@@ -5,6 +5,7 @@
 // joins the operator in the in-office meeting.
 import { sendEmail, escapeHtml } from "@/lib/email";
 import { officeInviteUrl } from "@/lib/office/floor-link";
+import { createInviteToken } from "@/lib/office/invite-tokens";
 
 export function buildFloorInviteHtml({
   floorUrl,
@@ -59,24 +60,50 @@ export async function sendFloorInvites(args: {
   room?: string | null;
   /** When true, send a video-meeting invite (auto-opens the dock on arrival). */
   meet?: boolean;
+  /** Marketplace listing id this invite convenes a deal room around. */
+  deal?: string | null;
+  /** Principal id of the sender — recorded on each minted invite token. */
+  inviterId?: string | null;
+  /** Sender's email — recorded on each minted invite token. */
+  inviterEmail?: string | null;
+  /** Sender's org — recorded on each minted invite token. */
+  organizationId?: string | null;
 }): Promise<{ sent: number; total: number }> {
   const emails = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (emails.length === 0) return { sent: 0, total: 0 };
 
-  const floorUrl = officeInviteUrl(args.origin, { room: args.room, meet: args.meet });
-  const html = buildFloorInviteHtml({ floorUrl, senderName: args.senderName, meet: args.meet });
   const subject = args.meet
     ? `${args.senderName} invited you to a video meeting on FundExecs`
     : `${args.senderName} invited you to the FundExecs Executive Floor`;
 
   const results = await Promise.allSettled(
-    emails.map((email) =>
-      sendEmail({
+    emails.map(async (email) => {
+      // Mint a single-use token per recipient so each link is unique and can't be
+      // forwarded, reused, or replayed. When the token backend is unavailable
+      // (createInviteToken → null), fall back to the shared link (no `invite`
+      // param) so the invite still sends and works exactly as it did before.
+      const token = await createInviteToken({
+        email,
+        room: args.room,
+        meet: args.meet,
+        deal: args.deal,
+        inviterId: args.inviterId,
+        inviterEmail: args.inviterEmail,
+        organizationId: args.organizationId,
+      });
+      const floorUrl = officeInviteUrl(args.origin, {
+        room: args.room,
+        meet: args.meet,
+        deal: args.deal,
+        invite: token ?? undefined,
+      });
+      const html = buildFloorInviteHtml({ floorUrl, senderName: args.senderName, meet: args.meet });
+      return sendEmail({
         to: { name: email.split("@")[0] ?? email, email },
         subject,
         htmlBody: html,
-      }),
-    ),
+      });
+    }),
   );
 
   const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;

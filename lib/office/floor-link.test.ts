@@ -32,6 +32,17 @@ describe("officeInvitePath", () => {
     expect(officeInvitePath({ room: "trading", deal: null })).toBe("/command-center?room=trading");
     expect(officeInvitePath({ room: "trading", deal: "" })).toBe("/command-center?room=trading");
   });
+
+  it("carries a single-use invite token", () => {
+    expect(officeInvitePath({ room: "boardroom", meet: true, invite: "tok_123" })).toBe(
+      "/command-center?room=boardroom&meet=1&invite=tok_123",
+    );
+  });
+
+  it("omits an empty/nullish invite", () => {
+    expect(officeInvitePath({ room: "boardroom", invite: null })).toBe("/command-center?room=boardroom");
+    expect(officeInvitePath({ room: "boardroom", invite: "" })).toBe("/command-center?room=boardroom");
+  });
 });
 
 describe("officeInviteUrl", () => {
