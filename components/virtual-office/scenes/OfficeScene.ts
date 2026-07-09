@@ -598,8 +598,10 @@ export class OfficeScene extends Phaser.Scene {
     const cam = this.cameras.main;
     if (this.overheadView) {
       cam.stopFollow();
-      const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H) * 0.96;
-      cam.setZoom(fit);
+      // Fill the viewport width — the whole floor width spans the screen with no
+      // side gaps. On a wide screen the floor runs a little past the top/bottom
+      // edges; it stays centered so the department grid reads evenly.
+      cam.setZoom(cam.width / WORLD_W);
       cam.centerOn(WORLD_W / 2, WORLD_H / 2);
     } else {
       cam.startFollow(this.player, true, 0.08, 0.08);
