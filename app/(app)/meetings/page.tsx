@@ -7,8 +7,8 @@ import { PastMeetingsList } from "./PastMeetingsList";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 
 export const metadata: Metadata = {
-  title: "Meeting — FundExecs OS",
-  description: "Real-time video meetings with AI transcription, live notes, and action items.",
+  title: "Meetings — FundExecs OS",
+  description: "Real-time video meetings with live presence, AI transcription, briefing notes, and action items.",
 };
 
 export const dynamic = "force-dynamic";

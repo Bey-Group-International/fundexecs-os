@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AGENTS } from "@/lib/agents";
 import {
   deriveMeetingStatus,
+  meetingTimeState,
   EXTERNAL_SYNC_STATUS_LABELS,
   type MeetingDisplayStatus,
+  type MeetingTimePhase,
   type ExternalSyncStatus,
 } from "@/lib/meetings/schedule";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import { useNow, useLivePresence } from "./hooks";
 
 export interface UpcomingMeeting {
   id: string;
@@ -55,6 +58,7 @@ export interface UpcomingMeeting {
 
 function formatScheduled(iso: string) {
   return new Date(iso).toLocaleString("en-US", {
+    weekday: "short",
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -70,6 +74,13 @@ const STATUS_TONE: Record<MeetingDisplayStatus, string> = {
   Live: "border-emerald-500/50 bg-emerald-500/15 text-emerald-400",
   Completed: "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-muted)]",
   "Follow-Up Needed": "border-purple-500/40 bg-purple-500/10 text-purple-400",
+};
+
+const COUNTDOWN_TONE: Record<MeetingTimePhase, string> = {
+  upcoming: "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-muted)]",
+  imminent: "border-[var(--gold-400)]/50 bg-[var(--gold-400)]/15 text-[var(--gold-400)]",
+  in_progress: "border-emerald-500/50 bg-emerald-500/15 text-emerald-400",
+  ended: "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-muted)]",
 };
 
 function copilotName(key: string | null): string | null {
@@ -115,6 +126,11 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
   const [clearConfirm, setClearConfirm] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const now = useNow(1000);
+  const meetingIds = useMemo(() => meetings.map((m) => m.id), [meetings]);
+  const { presence, recentJoins } = useLivePresence(meetingIds);
 
   async function refresh() {
     const res = await fetch("/api/meetings/upcoming", { cache: "no-store" });
@@ -127,13 +143,21 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
     const supabase = createClient();
     void refresh();
 
+    // Coalesce bursts of postgres changes into a single refetch so a save that
+    // fires several row events doesn't trigger a refetch storm.
+    function scheduleRefresh() {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => void refresh(), 350);
+    }
+
     const channel = supabase
       .channel("upcoming-meetings-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "live_meetings" }, () => {
-        void refresh();
+        scheduleRefresh();
       })
       .subscribe();
     return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
       void supabase.removeChannel(channel);
     };
   }, []);
@@ -185,12 +209,31 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
   const editingMeeting = editingId ? meetings.find((m) => m.id === editingId) : null;
   const detailsMeeting = detailsId ? meetings.find((m) => m.id === detailsId) : null;
 
+  // Live roll-up for the section header: how many meetings have someone in the
+  // room right now, and how many start within the hour.
+  const liveCount = meetingIds.filter((id) => (presence[id]?.count ?? 0) > 0).length;
+  const startingSoon = meetings.filter((m) => {
+    const ts = meetingTimeState(m.scheduled_at, m.duration_minutes, now);
+    return ts?.phase === "upcoming" && ts.minutesToStart <= 60;
+  }).length;
+
   return (
     <section className="mx-auto w-full max-w-2xl px-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
-          Upcoming meetings
-        </h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
+            Upcoming
+          </h2>
+          <div className="flex items-center gap-2 text-[11px] text-[var(--fg-muted)]">
+            {liveCount > 0 ? (
+              <span className="inline-flex items-center gap-1 text-emerald-400">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                {liveCount} live
+              </span>
+            ) : null}
+            {startingSoon > 0 ? <span>{startingSoon} within the hour</span> : null}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button onClick={() => void refresh()} className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)]">
             Refresh
@@ -225,16 +268,35 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
 
       <div className="grid gap-2">
         {meetings.map((meeting) => {
-          const status = deriveMeetingStatus(meeting);
+          const status = deriveMeetingStatus(meeting, now);
+          const timeState = meetingTimeState(meeting.scheduled_at, meeting.duration_minutes, now);
+          const room = presence[meeting.id];
+          const live = (room?.count ?? 0) > 0 || timeState?.phase === "in_progress";
+          const joinLabel = recentJoins.find(
+            (j) => j.meetingId === meeting.id && now - j.at < 45_000,
+          );
           const copilot = copilotName(meeting.assigned_copilot_agent);
           const syncStatus = (meeting.external_calendar_sync_status as ExternalSyncStatus) ?? "not_connected";
           const prep = meeting.preparation_status ?? "prep_needed";
           return (
-            <div key={meeting.id} className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
+            <div
+              key={meeting.id}
+              className={`rounded-xl border bg-[var(--surface-1)] p-4 transition-colors ${
+                live ? "border-emerald-500/40" : "border-[var(--line)]"
+              }`}
+            >
               <div className="flex items-start justify-between gap-3 pb-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_TONE[status]}`}>{status}</span>
+                    {timeState && timeState.phase !== "ended" ? (
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${COUNTDOWN_TONE[timeState.phase]}`}>
+                        {(timeState.phase === "imminent" || timeState.phase === "in_progress") ? (
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                        ) : null}
+                        {timeState.phase === "in_progress" ? "In progress" : timeState.label}
+                      </span>
+                    ) : null}
                     <p className="text-sm font-medium text-[var(--fg-primary)]">{meeting.title}</p>
                   </div>
                   <p className="mt-1 text-xs text-[var(--fg-muted)]">
@@ -244,6 +306,21 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
                     {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
                     {meeting.timezone ? ` · ${meeting.timezone}` : ""}
                   </p>
+
+                  {/* Live presence — who is in the room right now */}
+                  {room && room.count > 0 ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                        {room.count} in the room
+                      </span>
+                      <span className="truncate text-[11px] text-[var(--fg-muted)]">{room.names.join(", ")}</span>
+                    </div>
+                  ) : null}
+                  {joinLabel ? (
+                    <p className="mt-1 text-[11px] text-emerald-400/80">{joinLabel.name} just joined</p>
+                  ) : null}
+
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <StatusPill label={`prep: ${prep}`} />
                     {copilot ? <StatusPill label={`copilot: ${copilot}`} /> : null}
@@ -258,8 +335,15 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
                     </p>
                   ) : null}
                 </div>
-                <Link href={`/meetings/${meeting.room_code}`} className="shrink-0 rounded-full bg-[var(--gold-400)]/10 px-2 py-0.5 text-xs font-medium text-[var(--gold-400)]">
-                  Join →
+                <Link
+                  href={`/meetings/${meeting.room_code}`}
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    live
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : "bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                  }`}
+                >
+                  {live ? "Join live →" : "Join →"}
                 </Link>
               </div>
               <div className="flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">

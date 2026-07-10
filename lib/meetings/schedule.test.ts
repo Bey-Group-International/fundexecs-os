@@ -7,6 +7,7 @@ import {
   wasEditedAfterSave,
   findConflicts,
   nextExternalSyncStatus,
+  meetingTimeState,
 } from "./schedule";
 
 describe("validateMeetingDraft", () => {
@@ -100,6 +101,45 @@ describe("wasEditedAfterSave", () => {
     expect(
       wasEditedAfterSave({ locked_at: "2026-07-09T10:00:00.000Z", updated_at: "2026-07-09T11:00:00.000Z" }),
     ).toBe(true);
+  });
+});
+
+describe("meetingTimeState", () => {
+  const start = "2026-07-10T10:00:00.000Z";
+
+  it("returns null without a scheduled time", () => {
+    expect(meetingTimeState(null, 60)).toBeNull();
+  });
+
+  it("counts down while upcoming", () => {
+    const now = new Date("2026-07-10T09:48:00.000Z").getTime();
+    const state = meetingTimeState(start, 60, now)!;
+    expect(state.phase).toBe("upcoming");
+    expect(state.label).toBe("in 12 mins");
+    expect(state.minutesToStart).toBe(12);
+  });
+
+  it("flips to imminent within the last two minutes", () => {
+    const now = new Date("2026-07-10T09:59:00.000Z").getTime();
+    expect(meetingTimeState(start, 60, now)!.phase).toBe("imminent");
+    expect(meetingTimeState(start, 60, now)!.label).toBe("Starts now");
+  });
+
+  it("reports time left while in progress", () => {
+    const now = new Date("2026-07-10T10:36:00.000Z").getTime();
+    const state = meetingTimeState(start, 60, now)!;
+    expect(state.phase).toBe("in_progress");
+    expect(state.label).toBe("24 mins left");
+  });
+
+  it("is ended once the window has passed", () => {
+    const now = new Date("2026-07-10T11:30:00.000Z").getTime();
+    expect(meetingTimeState(start, 60, now)!.phase).toBe("ended");
+  });
+
+  it("humanizes hours and days for distant meetings", () => {
+    expect(meetingTimeState(start, 60, new Date("2026-07-10T07:00:00.000Z").getTime())!.label).toBe("in 3 hrs");
+    expect(meetingTimeState(start, 60, new Date("2026-07-08T10:00:00.000Z").getTime())!.label).toBe("in 2 days");
   });
 });
 
