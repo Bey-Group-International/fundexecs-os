@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { sendMeetingInvites } from "@/lib/meetings/invite";
+import { SITE_URL } from "@/lib/site";
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerClient();
@@ -12,9 +13,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "roomCode and emails required" }, { status: 400 });
   }
 
-  const origin = req.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
   const { sent, total } = await sendMeetingInvites({
-    origin,
+    // Canonical app URL so the emailed link is stable across hosts/proxies.
+    origin: SITE_URL,
     roomCode: body.roomCode,
     title: body.meetingTitle ?? "Meeting",
     senderName: user.email ?? "Someone",

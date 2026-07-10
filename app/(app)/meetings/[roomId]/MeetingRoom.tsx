@@ -1093,21 +1093,37 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     let mId: string | null = null;
     let hostFlag = false;
     try {
-      const { data: existing } = await supabase.from("live_meetings").select("id, status, host_id, title").eq("room_code", roomCode).single();
+      const { data: { user } } = await supabase.auth.getUser();
+      // Org members resolve the meeting directly under RLS. Guests (and cross-org
+      // viewers) can't read live_meetings, so they fall back to the minimal
+      // public lookup by room code — which is what makes emailed invites joinable
+      // without an account.
+      const { data: existing } = await supabase
+        .from("live_meetings")
+        .select("id, status, host_id, title")
+        .eq("room_code", roomCode)
+        .maybeSingle();
       const ex = existing as { id: string; status: string; host_id: string; title: string | null } | null;
       if (ex) {
         mId = ex.id;
         if (ex.title) setMeetingTitle(ex.title);
         if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
-        const { data: { user } } = await supabase.auth.getUser();
         hostFlag = !!user && user.id === ex.host_id;
       } else {
-        const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
-        if (res.ok) {
-          const d = await res.json() as { id: string; roomCode: string; hostId: string };
+        const pub = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
+        if (pub.ok) {
+          const d = await pub.json() as { id: string; title: string | null; status: string };
           mId = d.id;
-          const { data: { user } } = await supabase.auth.getUser();
-          hostFlag = !!user && user.id === d.hostId;
+          if (d.title) setMeetingTitle(d.title);
+          if (d.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
+        } else if (user) {
+          // Authenticated user opening a brand-new room by code → create it.
+          const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
+          if (res.ok) {
+            const d = await res.json() as { id: string; roomCode: string; hostId: string };
+            mId = d.id;
+            hostFlag = user.id === d.hostId;
+          }
         }
       }
     } catch { /* proceed */ }
@@ -1174,20 +1190,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         setWaitingTimedOut(true);
       }, 120_000);
 
-      // Poll every 10s for meeting ended
-      const currentMId = mId;
+      // Poll every 10s for meeting ended. Uses the public lookup by room code so
+      // it works for guests too (who can't read live_meetings under RLS).
       waitingPollRef.current = setInterval(async () => {
-        if (!currentMId) return;
         try {
-          const { data } = await supabase
-            .from("live_meetings")
-            .select("status")
-            .eq("id", currentMId)
-            .single();
-          const row = data as { status: string } | null;
-          if (row?.status === "ended") {
-            clearWaitingTimers();
-            router.push(`/meetings/${roomCode}/report`);
+          const res = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
+          if (res.ok) {
+            const row = (await res.json()) as { status: string };
+            if (row.status === "ended") {
+              clearWaitingTimers();
+              router.push(`/meetings/${roomCode}/report`);
+            }
           }
         } catch { /* ignore */ }
       }, 10_000);
