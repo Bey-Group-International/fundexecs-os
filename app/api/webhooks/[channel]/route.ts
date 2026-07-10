@@ -17,6 +17,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getOrgSecret } from "@/lib/org-secrets";
 import { getInboundChannel } from "@/lib/integrations/inbound";
 import { ingestInboundEvent } from "@/lib/integrations/inbound/ingest";
+import { refreshThreadSummary } from "@/lib/inbox/data";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,13 @@ export async function POST(
   if (result.duplicate) {
     return NextResponse.json({ received: true, duplicate: true });
   }
+
+  // Refresh the thread's AI summary + intent now that a new message has landed —
+  // one summarization per delivery, cached on the row. Best-effort by contract
+  // (it swallows its own failures), so the webhook is already acknowledged from
+  // the caller's perspective even if the model is slow or unavailable.
+  await refreshThreadSummary(supabase, orgId, result.threadId);
+
   return NextResponse.json({
     received: true,
     threadId: result.threadId,
