@@ -53,8 +53,5 @@
     "typecheck": "tsc --noEmit"
   },
   "version": "0.0.1",
-  "workspaces": [
-    "shared",
-    "server"
-  ]
+  "workspaces": [ "shared", "server" ]
 }
