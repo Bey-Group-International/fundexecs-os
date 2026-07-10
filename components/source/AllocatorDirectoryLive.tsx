@@ -9,6 +9,7 @@ import { ClearInvestorsBtn } from "@/components/source/SourceDeleteControls";
 import { getCached, setCached } from "@/lib/source-cache";
 import { enrichOrganization } from "@/lib/integrations/providers/apollo";
 import { getLPRelationshipSummaries } from "@/lib/lp-relationships";
+import { scoreLpFit, factorsFromInvestor, lpMandateFrom } from "@/lib/lp-scoring";
 import type { AllocatorType, AccreditationStatus } from "@/lib/allocator-directory";
 
 const US_STATES = new Set([
@@ -54,6 +55,10 @@ interface InvestorRow {
   provenance: string | null;
   accreditation_status: string | null;
   kyc_status: string | null;
+  // LP-fit scoring signals (folded in from the retired LP Intelligence module).
+  sectors: string[] | null;
+  open_to_emerging_managers: boolean | null;
+  allocation_signal: string | null;
 }
 
 interface EnrichedData {
@@ -140,18 +145,41 @@ async function loadAllocatorEntries() {
     const auth = await requireOrgContext();
     if (!auth.ok) return [];
     const supabase = await createServerClient();
-    const { data: investorRows } = await supabase
-      .from("investors")
-      .select(
-        "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source, provenance, accreditation_status, kyc_status",
-      )
-      .eq("organization_id", auth.ctx.orgId)
-      .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(200);
+    const { orgId } = auth.ctx;
+
+    // Load the allocators alongside the firm's mandate (Build › profile strategy
+    // + active thesis band) — the same inputs the retired LP Intelligence board
+    // scored on, now folded into the pipeline so every LP carries a mandate-fit
+    // score inline.
+    const [{ data: investorRows }, orgRes, thesisRes] = await Promise.all([
+      supabase
+        .from("investors")
+        .select(
+          "id, name, investor_type, aum, typical_check_min, typical_check_max, jurisdiction, pipeline_stage, verified, confidence, source_provider, last_verified_at, website, contact_name, contact_email, contact_phone, role, url_source, provenance, accreditation_status, kyc_status, sectors, open_to_emerging_managers, allocation_signal",
+        )
+        .eq("organization_id", orgId)
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("organizations")
+        .select("primary_strategy, fund_count")
+        .eq("id", orgId)
+        .maybeSingle(),
+      supabase
+        .from("investment_theses")
+        .select("check_size_min, check_size_max, geographies")
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1),
+    ]);
+
+    const mandate = lpMandateFrom(
+      orgRes.data ?? { primary_strategy: null, fund_count: null },
+      thesisRes.data?.[0] ?? null,
+    );
 
     const rows = (investorRows ?? []) as unknown as InvestorRow[];
-    const { orgId } = auth.ctx;
 
     // Enrich all rows with a concurrency cap to avoid rate-limiting Apollo on cold cache.
     // Cache-first: 24h TTL means most calls are instant on warm loads.
@@ -175,6 +203,10 @@ async function loadAllocatorEntries() {
     return rows.map((inv, i) => {
       const enr = enriched[i] ?? { confidence: inv.confidence ?? 0.3, verified: inv.verified ?? false, provider: "manual", primaryStrategies: [] };
       const rel = relationships.get(inv.id);
+      const fit = scoreLpFit(
+        mandate,
+        factorsFromInvestor({ ...inv, investor_type: inv.investor_type ?? "" }),
+      );
       return {
         id: inv.id,
         name: inv.name,
@@ -195,7 +227,9 @@ async function loadAllocatorEntries() {
         hqCity: enr.hqCity,
         // jurisdiction is legal domicile (e.g. "Delaware"), not HQ country — omit as fallback
         hqCountry: enr.hqCountry,
-        fitScore: undefined,
+        // Mandate-fit score (0–100), folded in from LP Intelligence. The
+        // directory surfaces it as a sortable "Fit" column.
+        fitScore: fit.score,
         pipelineStage: inv.pipeline_stage ?? "prospect",
         lastContactDays: rel?.lastContactDays ?? null,
         topActionTitle: rel?.topActionTitle ?? null,
