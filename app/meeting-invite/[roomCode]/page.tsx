@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 
 interface MeetingInfo {
   title: string;
   status: "waiting" | "active" | "ended";
-  host_id: string | null;
 }
 
 export default function MeetingInvitePage() {
@@ -26,14 +24,15 @@ export default function MeetingInvitePage() {
 
   useEffect(() => {
     async function fetchMeeting() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("live_meetings")
-        .select("title, status, host_id")
-        .eq("room_code", roomCode)
-        .maybeSingle();
-      if (!data) { setNotFound(true); }
-      else { setMeeting(data as MeetingInfo); }
+      // Public lookup by room code so invitees without an account can see the
+      // meeting and choose how to join. Only the title + status are returned.
+      try {
+        const res = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
+        if (!res.ok) setNotFound(true);
+        else setMeeting((await res.json()) as MeetingInfo);
+      } catch {
+        setNotFound(true);
+      }
       setLoading(false);
     }
     if (roomCode) void fetchMeeting();

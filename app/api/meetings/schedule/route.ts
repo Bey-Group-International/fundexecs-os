@@ -4,6 +4,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
+import { SITE_URL } from "@/lib/site";
 import {
   validateMeetingDraft,
   localToIso,
@@ -151,7 +152,9 @@ export async function POST(req: NextRequest) {
         try {
           const { data: userData } = await supabase.auth.getUser();
           const result = await sendMeetingInvites({
-            origin: req.nextUrl.origin,
+            // Canonical app URL so the emailed link is correct regardless of
+            // which host/proxy served this request.
+            origin: SITE_URL,
             roomCode: saved.roomCode,
             title: body.title ?? "Meeting",
             senderName: userData.user?.email ?? "Someone",
@@ -176,8 +179,8 @@ export async function POST(req: NextRequest) {
       externalSyncError,
       invited,
       conflicts,
-      roomUrl: buildMeetingRoomUrl(req.nextUrl.origin, saved.roomCode),
-      inviteUrl: buildMeetingInviteUrl(req.nextUrl.origin, saved.roomCode),
+      roomUrl: buildMeetingRoomUrl(SITE_URL, saved.roomCode),
+      inviteUrl: buildMeetingInviteUrl(SITE_URL, saved.roomCode),
     });
   } catch (err) {
     console.error("[/api/meetings/schedule]", err);
