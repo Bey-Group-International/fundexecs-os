@@ -233,16 +233,50 @@ function VideoTile({
   handRaised?: boolean; reaction?: string; large?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => { if (videoRef.current && stream) videoRef.current.srcObject = stream; }, [stream]);
-  const hasVideo = stream?.getVideoTracks().some((t) => t.enabled && t.readyState === "live");
+  const track = stream?.getVideoTracks()[0] ?? null;
+  // Whether the track is actually producing frames. `readyState`/`muted` change
+  // asynchronously (a camera warming up, a virtual cam that isn't streaming, a
+  // track that ends), so we track them via events and re-render.
+  const [trackLive, setTrackLive] = useState(false);
+
+  // Keep the <video> element ALWAYS mounted and (re)attach the stream whenever
+  // it changes. Previously the <video> was unmounted whenever we thought the
+  // camera was off, so when a track became live after mount — or the camera was
+  // toggled back on — a fresh <video> mounted but the [stream] effect never
+  // re-ran and srcObject was never set, leaving a black tile. Autoplay can also
+  // be blocked, so we call play() explicitly (joining is a user gesture).
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.srcObject !== (stream ?? null)) el.srcObject = stream ?? null;
+    if (stream) void el.play().catch(() => { /* autoplay race — retried on canplay */ });
+  }, [stream]);
+
+  useEffect(() => {
+    if (!track) { setTrackLive(false); return; }
+    const update = () => setTrackLive(track.readyState === "live" && !track.muted);
+    update();
+    track.addEventListener("ended", update);
+    track.addEventListener("mute", update);
+    track.addEventListener("unmute", update);
+    return () => {
+      track.removeEventListener("ended", update);
+      track.removeEventListener("mute", update);
+      track.removeEventListener("unmute", update);
+    };
+  }, [track]);
+
+  // `enabled` (the camera on/off toggle) has no event, so read it at render —
+  // the parent re-renders on toggle, which flips the placeholder immediately.
+  const hasVideo = !!track && track.enabled && trackLive;
 
   return (
     <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border border-[var(--line)] flex items-center justify-center ${large ? "w-full h-full" : "aspect-video"}`}>
-      {hasVideo ? (
-        <video ref={videoRef} autoPlay playsInline muted={muted}
-          className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""}`} />
-      ) : (
-        <div className="flex flex-col items-center gap-2">
+      <video ref={videoRef} autoPlay playsInline muted={muted}
+        onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
+        className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "invisible"}`} />
+      {!hasVideo && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
           <div className="w-12 h-12 rounded-full bg-[var(--surface-3)] flex items-center justify-center text-lg font-semibold text-[var(--fg-primary)]">
             {label.slice(0, 1).toUpperCase()}
           </div>
@@ -1237,14 +1271,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
     } catch (err) {
       const name = err instanceof Error ? err.name : "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setMediaError("Camera and microphone access was denied. Click the camera icon in your browser's address bar to allow access, then rejoin.");
-      } else if (name === "NotFoundError") {
-        setMediaError("No camera or microphone found. Check that your devices are connected.");
-      } else {
-        setMediaError("Could not access camera/microphone. Check your device settings.");
+      // A stale or now-unavailable device id (common with virtual cameras like
+      // OBS/EMEET that appear and disappear) makes the `exact` constraint throw
+      // OverconstrainedError — which would otherwise leave the user with a black
+      // tile. Retry once with unconstrained capture before giving up so the call
+      // still gets *a* camera + mic.
+      let recovered: MediaStream | null = null;
+      if ((name === "OverconstrainedError" || name === "NotFoundError") && (selectedCamId || selectedMicId)) {
+        try { recovered = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); }
+        catch { recovered = null; }
       }
-      stream = new MediaStream();
+      if (recovered) {
+        stream = recovered;
+      } else {
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          setMediaError("Camera and microphone access was denied. Click the camera icon in your browser's address bar to allow access, then rejoin.");
+        } else if (name === "NotFoundError") {
+          setMediaError("No camera or microphone found. Check that your devices are connected.");
+        } else {
+          setMediaError("Could not access camera/microphone. Check your device settings.");
+        }
+        stream = new MediaStream();
+      }
     }
     localStreamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
@@ -2037,8 +2085,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
 function PreviewVideo({ stream }: { stream: MediaStream }) {
   const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
-  return <video ref={ref} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.srcObject = stream;
+    void el.play().catch(() => { /* autoplay race — retried on canplay */ });
+  }, [stream]);
+  return <video ref={ref} autoPlay playsInline muted
+    onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
+    className="w-full h-full object-cover scale-x-[-1]" />;
 }
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
