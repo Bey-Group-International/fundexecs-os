@@ -7,7 +7,8 @@ import { extractOwnership } from "@/lib/claude";
 import type { Entity } from "@/lib/supabase/database.types";
 import type { ParsedHoldingRow } from "@/lib/holdings-csv";
 
-const ENTITY = "/build/entity";
+// Entity editing now lives on the unified Firm Identity page (#entity section).
+const ENTITY = "/build/profile";
 
 function num(raw: FormDataEntryValue | null): number | null {
   const v = String(raw ?? "").trim();

@@ -22,7 +22,7 @@ export async function MandateStrip({ orgId }: { orgId: string }) {
       <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line bg-surface-1 px-4 py-2.5 text-xs text-fg-muted">
         <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Mandate</span>
         <span>No active thesis yet —</span>
-        <Link href="/build/thesis" className="text-gold-400 hover:underline">
+        <Link href="/build/profile#thesis" className="text-gold-400 hover:underline">
           define it in Build → Thesis
         </Link>
         <span>to frame this work.</span>
@@ -41,7 +41,7 @@ export async function MandateStrip({ orgId }: { orgId: string }) {
 
   return (
     <Link
-      href="/build/thesis"
+      href="/build/profile#thesis"
       className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-surface-1 px-4 py-2.5 text-xs transition hover:border-gold-500/40"
     >
       <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Mandate</span>

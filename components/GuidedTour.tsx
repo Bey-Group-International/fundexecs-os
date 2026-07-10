@@ -25,13 +25,13 @@ const STEPS: SetupStep[] = [
   {
     title: "Define your investment thesis",
     body: "Set target sectors, check size, geography, and stage. This is Earn's mandate — the tighter it is, the better the matches.",
-    href: "/build/thesis",
+    href: "/build/profile#thesis",
     cta: "Open Thesis",
   },
   {
     title: "Set up your brand kit",
     body: "Upload your logo and set primary colors. Earn uses these in every memo, deck, and investor package it produces.",
-    href: "/build/brand",
+    href: "/build/profile#brand",
     cta: "Open Brand Studio",
   },
   {

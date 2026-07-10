@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import { getSessionContext } from "@/lib/auth";
-import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
+import {
+  getBuildReadiness,
+  combineStatuses,
+  IDENTITY_MODULE_KEYS,
+  type ModuleStatus,
+} from "@/lib/build-readiness";
 import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
 import { getExecutePerformance } from "@/lib/execute-performance";
@@ -40,7 +45,16 @@ export default async function HubLayout(
     const ctx = await getSessionContext();
     if (ctx?.orgId) {
       const readiness = await getBuildReadiness(ctx.orgId);
-      moduleStatuses = readiness.statuses;
+      // The "Firm Identity" tab (key: profile) unifies profile, thesis, brand,
+      // and entity — its marker reflects all four combined. Other tabs keep
+      // their own per-module status. (readiness.statuses stays per-module so
+      // other consumers, e.g. the data-room meter, are unaffected.)
+      moduleStatuses = {
+        ...readiness.statuses,
+        profile: combineStatuses(
+          IDENTITY_MODULE_KEYS.map((k) => readiness.statuses[k]).filter(Boolean),
+        ),
+      };
       momentumPanel = (
         <ReadinessAlert>
           <ReadinessPanel readiness={readiness} floating />

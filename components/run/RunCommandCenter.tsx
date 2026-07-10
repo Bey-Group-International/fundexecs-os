@@ -160,7 +160,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
               <>
                 {" "}
                 against{" "}
-                <Link href="/build/thesis" className="text-fg-primary hover:text-gold-300">
+                <Link href="/build/profile#thesis" className="text-fg-primary hover:text-gold-300">
                   {mandate.thesisTitle}
                 </Link>
               </>

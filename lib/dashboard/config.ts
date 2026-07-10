@@ -57,7 +57,7 @@ export const dashboardWorkspaces: WorkspaceConfig[] = [
     eyebrow: "Build authority",
     description: "SEO tasks, PR calendar, social proof, campaign analytics, and authority content.",
     href: "/dashboard/marketing",
-    primaryAction: { label: "Open brand studio", href: "/build/brand" },
+    primaryAction: { label: "Open brand studio", href: "/build/profile#brand" },
     characterId: "pr-director",
     recommendation: "Turn milestone proof into investor-safe authority content before launching more campaigns.",
   },
