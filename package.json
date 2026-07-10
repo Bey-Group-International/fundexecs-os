@@ -18,7 +18,8 @@
     "remark-gfm": "^4.0.1",
     "resend": "^6.16.0",
     "stripe": "^17.7.0",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "three-stdlib": "^2.36.1"
   },
   "description": "An AI-native operating system for private-market participants.",
   "devDependencies": {
