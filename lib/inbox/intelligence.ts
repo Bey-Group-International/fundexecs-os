@@ -127,6 +127,45 @@ export function partitionByTab<T extends FocusSignals>(items: T[]): Record<Inbox
   return { focused, other };
 }
 
+// --- Quick replies (pure) ---------------------------------------------------
+//
+// LinkedIn-style one-tap smart replies: three short, category-aware openers the
+// operator can drop into the composer and edit before sending. Deterministic
+// and instant (no model call, no latency) so a chip is always there the moment a
+// thread opens — full "Draft with Earn" stays the deeper, AI-backed option.
+// Like the fallback draft, a chip only ever acknowledges or asks; it never
+// fabricates a figure, date, or commitment.
+
+export interface QuickReplyContext {
+  category: InboxCategory;
+  // A time is on the table for a booking → the openers shift from "let's find
+  // time" to "that works / can we move it".
+  meetingAt?: string | null;
+}
+
+// Per-pillar opener sets. Booking swaps its set once a meeting time exists.
+const QUICK_REPLIES: Record<InboxCategory, string[]> = {
+  messaging: ["Thanks — I'll follow up shortly.", "Sounds good.", "Could you share a bit more detail?"],
+  booking: ["Happy to find time — I'll send a few options.", "What times work best on your end?", "Let's get something on the calendar."],
+  video: ["I'll send a meeting link shortly.", "A quick call works for me.", "Let's set up a video call."],
+  signing: ["Reviewing now — I'll get this executed shortly.", "Thanks — I'll sign and send it back.", "One quick question before I sign."],
+  finance: ["Received — I'll review this against our records.", "Thanks, looking into this now.", "Let me confirm and come back to you."],
+};
+
+// Booking's alternate set, used once a meeting time is on the table.
+const BOOKING_WITH_TIME = ["That time works — confirmed.", "Could we shift it slightly?", "Confirmed — talk then."];
+
+/**
+ * Three short, tappable reply openers for a thread, by pillar. Booking flips to
+ * confirm/reschedule phrasing once a time is proposed. Pure — safe to compute on
+ * the server and hand to the client so the composer shows chips with no bundle
+ * cost and no round-trip.
+ */
+export function quickReplies(ctx: QuickReplyContext): string[] {
+  if (ctx.category === "booking" && ctx.meetingAt) return [...BOOKING_WITH_TIME];
+  return [...QUICK_REPLIES[ctx.category]];
+}
+
 // --- Next move (pure) -------------------------------------------------------
 
 export interface SuggestedAction {

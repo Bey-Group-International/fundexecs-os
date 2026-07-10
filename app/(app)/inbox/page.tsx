@@ -8,6 +8,7 @@ import {
   buildDigest,
   priorityBucket,
   inboxTab,
+  quickReplies,
   suggestedAction,
   type DigestThread,
 } from "@/lib/inbox/intelligence";
@@ -119,6 +120,9 @@ export default async function InboxPage(
       suggested: move
         ? { action: move.action, label: move.label, tier: tierForAction(move.action) as GateTier }
         : null,
+      // One-tap reply openers for the composer — pure/instant, computed here so
+      // the client never imports the intelligence module.
+      quickReplies: quickReplies({ category: thread.category, meetingAt: thread.meeting_at }),
       canShare: Boolean(context),
       shareTier: tierForAction("share_materials") as GateTier,
     };

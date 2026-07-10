@@ -74,6 +74,8 @@ export interface InboxCardData {
   // "connect to send" hint.
   connected: boolean;
   suggested: { action: ActionKind; label: string; tier: GateTier } | null;
+  // One-tap smart-reply openers shown above the composer (server-computed).
+  quickReplies: string[];
   canShare: boolean;
   shareTier: GateTier;
 }
@@ -636,6 +638,22 @@ function ThreadCard({
 
           {/* Inline composer — routes through the same gate as every outward move. */}
           <div className="mt-3 border-t border-line/60 pt-3">
+            {/* One-tap smart replies — populate the composer for review; the
+                send is still the operator's gated move. Hidden once they type. */}
+            {card.quickReplies.length > 0 && !replyText.trim() ? (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {card.quickReplies.map((qr) => (
+                  <button
+                    key={qr}
+                    type="button"
+                    onClick={() => setReplyText(qr)}
+                    className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary transition hover:-translate-y-px hover:border-gold-500 hover:text-fg-primary"
+                  >
+                    {qr}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <textarea
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
