@@ -162,6 +162,7 @@ export function UserCharacterSelector({
   onSave,
   saving,
   bare = false,
+  hidePreview = false,
 }: {
   value: UserAvatar;
   onChange: (next: UserAvatar) => void;
@@ -169,6 +170,8 @@ export function UserCharacterSelector({
   saving?: boolean;
   /** Drop the panel's own border/background/padding when hosted in a modal shell. */
   bare?: boolean;
+  /** Hide the small inline preview (the studio shows its own large one). */
+  hidePreview?: boolean;
 }) {
   const selectedAccent = value.accent;
   const preset = presentationDefaults(value.genderStyle);
@@ -182,23 +185,25 @@ export function UserCharacterSelector({
       className={bare ? "flex flex-col gap-4" : "flex flex-col gap-4 rounded-lg border p-4"}
       style={bare ? undefined : { background: PANEL_BG, borderColor: BORDER }}
     >
-      {/* Live preview */}
-      <div className="flex items-center gap-3">
-        <span
-          className="grid h-[84px] w-[84px] place-items-center overflow-hidden rounded-md border"
-          style={{ background: PANEL_BG, borderColor: BORDER_DIM }}
-        >
-          <AvatarPreview spec={userAvatarSpec(value)} size={80} />
-        </span>
-        <div className="flex flex-col">
-          <span className="text-base font-semibold" style={{ color: "#f2ede2", fontFamily: SERIF }}>
-            {value.displayName || "You"}
+      {/* Live preview (hidden in the studio, which shows its own large one). */}
+      {!hidePreview && (
+        <div className="flex items-center gap-3">
+          <span
+            className="grid h-[84px] w-[84px] place-items-center overflow-hidden rounded-md border"
+            style={{ background: PANEL_BG, borderColor: BORDER_DIM }}
+          >
+            <AvatarPreview spec={userAvatarSpec(value)} size={80} />
           </span>
-          <span className="text-[12px]" style={{ color: GOLD, fontFamily: SERIF }}>
-            {value.roleLabel}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-base font-semibold" style={{ color: "#f2ede2", fontFamily: SERIF }}>
+              {value.displayName || "You"}
+            </span>
+            <span className="text-[12px]" style={{ color: GOLD, fontFamily: SERIF }}>
+              {value.roleLabel}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Presets — one-click curated looks. Appearance only: the operator's
           display name and role are preserved so identity survives a re-style. */}
