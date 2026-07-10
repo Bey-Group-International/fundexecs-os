@@ -84,6 +84,49 @@ export function priorityBucket(priority: number): PriorityBucket {
   return "later";
 }
 
+// --- Focused / Other split (pure) -------------------------------------------
+//
+// The LinkedIn-style top split for the communications lane: Focused holds the
+// high-signal conversations, Other collects the ambient remainder so it stays
+// one click away without crowding the queue. Derived from the same triage
+// score, so the two views never contradict the ranking below them.
+
+export type InboxTab = "focused" | "other";
+
+export interface FocusSignals {
+  // The 0-100 triage score (computePriority) — the primary signal.
+  priority: number;
+  // A still-unread thread always earns a place in Focused.
+  unread: boolean;
+  // Tied to a live deal or investor the operator already cares about.
+  hasContext: boolean;
+}
+
+/**
+ * Route a thread to the Focused or Other tab. Focused holds anything that
+ * plausibly needs the operator: ranked above "later", still unread, or tied to
+ * a live deal/investor. Other collects the read, low-priority, unattached
+ * remainder (digests, cold alerts). Pure and explainable — the same three
+ * signals a person would use to decide "does this matter right now?".
+ */
+export function inboxTab(s: FocusSignals): InboxTab {
+  if (priorityBucket(s.priority) !== "later") return "focused";
+  if (s.unread) return "focused";
+  if (s.hasContext) return "focused";
+  return "other";
+}
+
+/**
+ * Partition threads into the two tabs, preserving input order within each so a
+ * caller that pre-sorted by priority keeps that order inside Focused and Other.
+ */
+export function partitionByTab<T extends FocusSignals>(items: T[]): Record<InboxTab, T[]> {
+  const focused: T[] = [];
+  const other: T[] = [];
+  for (const item of items) (inboxTab(item) === "focused" ? focused : other).push(item);
+  return { focused, other };
+}
+
 // --- Next move (pure) -------------------------------------------------------
 
 export interface SuggestedAction {
