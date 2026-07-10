@@ -216,22 +216,6 @@ export function MeetingsCalendar({
         onFilter={setFilter}
         filterOpen={filterOpen}
         setFilterOpen={setFilterOpen}
-        onNewInstant={async () => {
-          const res = await fetch("/api/meetings/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: "Meeting" }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { roomCode: string };
-            router.push(`/meetings/${data.roomCode}`);
-          }
-        }}
-        onNewScheduled={() => {
-          setScheduleAt(null);
-          setScheduleOpen(true);
-        }}
-        onJoin={(code) => router.push(`/meetings/${code}`)}
       />
 
       <div className="grid gap-6 pb-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -299,7 +283,10 @@ export function MeetingsCalendar({
   );
 }
 
-// ── Toolbar (condensed lobby + calendar controls) ──────────────────────────
+// ── Toolbar (calendar view controls) ───────────────────────────────────────
+// New meeting + join-by-code live in the lobby above; the calendar toolbar
+// only navigates and filters. New meetings are still created from the calendar
+// by clicking an empty day/slot.
 function Toolbar({
   title,
   view,
@@ -311,9 +298,6 @@ function Toolbar({
   onFilter,
   filterOpen,
   setFilterOpen,
-  onNewInstant,
-  onNewScheduled,
-  onJoin,
 }: {
   title: string;
   view: CalendarView;
@@ -325,19 +309,12 @@ function Toolbar({
   onFilter: (f: CalendarFilter) => void;
   filterOpen: boolean;
   setFilterOpen: (v: boolean) => void;
-  onNewInstant: () => void;
-  onNewScheduled: () => void;
-  onJoin: (code: string) => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [code, setCode] = useState("");
-  const menuRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const activeFilters = filterCountActive(filter);
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
       if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
     }
     window.addEventListener("mousedown", onDown);
@@ -393,46 +370,6 @@ function Toolbar({
             </button>
             {filterOpen ? <FilterMenu filter={filter} onFilter={onFilter} /> : null}
           </div>
-
-          {/* New meeting */}
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className="flex items-center gap-1.5 rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-black hover:bg-[var(--gold-500)]"
-            >
-              <PlusIcon /> New meeting <CaretDown />
-            </button>
-            {menuOpen ? (
-              <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-60 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl">
-                <MenuItem title="Start an instant meeting" subtitle="Create a room and join now" onClick={() => { setMenuOpen(false); onNewInstant(); }} />
-                <div className="h-px bg-[var(--line)]" />
-                <MenuItem title="Schedule for later" subtitle="Set a time, agenda, and attendees" onClick={() => { setMenuOpen(false); onNewScheduled(); }} />
-              </div>
-            ) : null}
-          </div>
-
-          {/* Join by code */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const c = code.trim().toLowerCase().replace(/\s/g, "");
-              if (c) onJoin(c);
-            }}
-            className="hidden items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-2 py-1 focus-within:ring-2 focus-within:ring-[var(--gold-400)] sm:flex"
-          >
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Join code"
-              aria-label="Meeting code"
-              className="w-24 bg-transparent text-xs text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none"
-            />
-            <button type="submit" disabled={!code.trim()} className={`text-xs font-semibold ${code.trim() ? "text-[var(--gold-400)]" : "cursor-not-allowed text-[var(--fg-muted)]"}`}>
-              Join
-            </button>
-          </form>
         </div>
       </div>
     </div>
@@ -943,26 +880,11 @@ function IconBtn({ children, label, onClick, small }: { children: React.ReactNod
   );
 }
 
-function MenuItem({ title, subtitle, onClick }: { title: string; subtitle: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} role="menuitem" className="flex w-full flex-col items-start px-4 py-3 text-left transition-colors hover:bg-[var(--surface-2)]">
-      <span className="text-sm font-medium text-[var(--fg-primary)]">{title}</span>
-      <span className="text-xs text-[var(--fg-muted)]">{subtitle}</span>
-    </button>
-  );
-}
-
 function ChevronLeft() {
   return (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>);
 }
 function ChevronRight() {
   return (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>);
-}
-function PlusIcon() {
-  return (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>);
-}
-function CaretDown() {
-  return (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>);
 }
 function FilterIcon() {
   return (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>);
