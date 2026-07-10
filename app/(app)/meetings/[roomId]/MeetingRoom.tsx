@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, useTransition } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useCallback, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -126,6 +126,23 @@ function playChime(type: "join" | "leave") {
   } catch { /* AudioContext not available */ }
 }
 
+// ─── BodyPortal ───────────────────────────────────────────────────────────────
+
+// Renders children into <body>, escaping the app shell. The meeting page is
+// wrapped by app/(app)/template.tsx in `animate-fade-up`, whose keyframes finish
+// at `transform: translateY(0)` with fill-mode `both` — so a transform stays
+// applied forever. Any non-`none` transform makes that wrapper the containing
+// block for `position: fixed` descendants, which trapped the call overlay inside
+// the scrolling content pane and collapsed its height (invisible video tiles).
+// Portaling to <body> puts the overlay outside that transformed ancestor so
+// `fixed inset-0` resolves against the viewport and the call is truly full-screen.
+function BodyPortal({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted || typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
+
 // ─── FloatingMenu ─────────────────────────────────────────────────────────────
 
 // A popover anchored to a trigger button that ALWAYS stays inside the viewport.
@@ -234,17 +251,15 @@ function VideoTile({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = stream?.getVideoTracks()[0] ?? null;
-  // Whether the track is actually producing frames. `readyState`/`muted` change
-  // asynchronously (a camera warming up, a virtual cam that isn't streaming, a
-  // track that ends), so we track them via events and re-render.
-  const [trackLive, setTrackLive] = useState(false);
+  // Re-render when the track's lifecycle changes (ends / mutes / unmutes) so the
+  // placeholder appears/disappears in step with the real camera state.
+  const [, bump] = useReducer((n: number) => n + 1, 0);
 
   // Keep the <video> element ALWAYS mounted and (re)attach the stream whenever
-  // it changes. Previously the <video> was unmounted whenever we thought the
-  // camera was off, so when a track became live after mount — or the camera was
-  // toggled back on — a fresh <video> mounted but the [stream] effect never
-  // re-ran and srcObject was never set, leaving a black tile. Autoplay can also
-  // be blocked, so we call play() explicitly (joining is a user gesture).
+  // it changes. If the <video> is unmounted while the camera is "off", a fresh
+  // element re-mounts later with no srcObject and shows black; keeping it mounted
+  // avoids that. Autoplay can be blocked, so call play() explicitly (joining is a
+  // user gesture) and again on canplay once frames are ready.
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -253,28 +268,29 @@ function VideoTile({
   }, [stream]);
 
   useEffect(() => {
-    if (!track) { setTrackLive(false); return; }
-    const update = () => setTrackLive(track.readyState === "live" && !track.muted);
-    update();
-    track.addEventListener("ended", update);
-    track.addEventListener("mute", update);
-    track.addEventListener("unmute", update);
+    if (!track) return;
+    track.addEventListener("ended", bump);
+    track.addEventListener("mute", bump);
+    track.addEventListener("unmute", bump);
     return () => {
-      track.removeEventListener("ended", update);
-      track.removeEventListener("mute", update);
-      track.removeEventListener("unmute", update);
+      track.removeEventListener("ended", bump);
+      track.removeEventListener("mute", bump);
+      track.removeEventListener("unmute", bump);
     };
   }, [track]);
 
-  // `enabled` (the camera on/off toggle) has no event, so read it at render —
-  // the parent re-renders on toggle, which flips the placeholder immediately.
-  const hasVideo = !!track && track.enabled && trackLive;
+  // Show the video whenever there's an enabled, non-ended track — do NOT gate on
+  // `track.muted`, which can stay true on some cameras/virtual cams even while
+  // frames flow (that previously hid a working camera). The placeholder is only
+  // shown when there's genuinely no live video to display, and the <video>
+  // stays in the DOM underneath either way.
+  const hasVideo = !!track && track.enabled && track.readyState !== "ended";
 
   return (
     <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border border-[var(--line)] flex items-center justify-center ${large ? "w-full h-full" : "aspect-video"}`}>
       <video ref={videoRef} autoPlay playsInline muted={muted}
         onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-        className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "invisible"}`} />
+        className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
       {!hasVideo && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
           <div className="w-12 h-12 rounded-full bg-[var(--surface-3)] flex items-center justify-center text-lg font-semibold text-[var(--fg-primary)]">
@@ -1904,6 +1920,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   if (showGuestUpsell) {
     return (
+      <BodyPortal>
       <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
         <div className="w-full max-w-sm flex flex-col gap-6 text-center">
           <div className="flex flex-col gap-2">
@@ -1935,10 +1952,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           </div>
         </div>
       </div>
+      </BodyPortal>
     );
   }
 
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col">
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Video area */}
@@ -2080,6 +2099,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         </div>
       )}
     </div>
+    </BodyPortal>
   );
 }
 
