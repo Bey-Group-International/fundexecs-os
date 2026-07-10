@@ -42,7 +42,7 @@ export async function updateThesis(formData: FormData): Promise<void> {
     })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
-  revalidatePath(`${BUILD}/thesis`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 // Make one thesis active and deactivate every other thesis for the org.
@@ -62,7 +62,7 @@ export async function setActiveThesis(formData: FormData): Promise<void> {
     .update({ is_active: true })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
-  revalidatePath(`${BUILD}/thesis`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 // --- Entity ----------------------------------------------------------------
@@ -86,7 +86,7 @@ export async function updateEntity(formData: FormData): Promise<void> {
     })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
-  revalidatePath(`${BUILD}/entity`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 // --- Track Record ----------------------------------------------------------

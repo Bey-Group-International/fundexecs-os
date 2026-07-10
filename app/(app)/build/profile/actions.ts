@@ -3,8 +3,41 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { IDENTITY_WRITABLE_FIELDS } from "@/lib/firm-identity";
 
 export type ProfileSaveState = { error?: string; ok?: true };
+
+// Inline answer for the Firm Identity guided interview: writes a single
+// whitelisted `organizations` column. Unlike saveOrgProfile (which rewrites the
+// whole row), this touches only the one field the operator just answered, so a
+// partial answer never clears the rest of the profile. Empty input clears that
+// one field.
+export async function answerIdentityQuestion(
+  field: string,
+  value: string,
+): Promise<ProfileSaveState> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { error: "Not authenticated" };
+  if (!IDENTITY_WRITABLE_FIELDS.has(field)) return { error: "Unknown field" };
+
+  const trimmed = value.trim();
+  const update: Record<string, unknown> = {
+    [field]: trimmed || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update(update as never)
+    .eq("id", ctx.orgId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/build/profile");
+  revalidatePath("/settings");
+  return { ok: true };
+}
 
 // Persist edits to the organization profile. All fields are optional — an
 // empty string is coerced to null so the DB never stores stale placeholder

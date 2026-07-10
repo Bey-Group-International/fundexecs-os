@@ -517,6 +517,27 @@ body {
   animation: fxScrimIn 0.2s ease-out both;
 }
 
+/* Section flash — briefly highlights a Firm Identity section when the guided
+   interview jumps the operator to it, so the target is obvious after scroll. */
+@keyframes fxSectionFlash {
+  0% {
+    box-shadow: 0 0 0 0 rgb(var(--fx-gold-rgb) / 0);
+    background-color: rgb(var(--fx-gold-rgb) / 0);
+  }
+  25% {
+    box-shadow: 0 0 0 3px rgb(var(--fx-gold-rgb) / 0.35);
+    background-color: rgb(var(--fx-gold-rgb) / 0.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--fx-gold-rgb) / 0);
+    background-color: rgb(var(--fx-gold-rgb) / 0);
+  }
+}
+.fx-section-flash {
+  animation: fxSectionFlash 1.6s ease-out both;
+  border-radius: 1rem;
+}
+
 /* Quick-action FAB pulse aura. */
 .fx-fab {
   box-shadow:

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 
-const ENTITY = "/build/entity";
+// Entity editing now lives on the unified Firm Identity page (#entity section).
+const ENTITY = "/build/profile";
 
 const text = (raw: FormDataEntryValue | null): string | null => {
   const v = String(raw ?? "").trim();

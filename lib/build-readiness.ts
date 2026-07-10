@@ -75,6 +75,16 @@ export interface BuildReadiness {
 const has = (v: unknown): boolean =>
   v !== null && v !== undefined && (typeof v === "string" ? v.trim().length > 0 : true);
 
+// Profile, Thesis, Brand, and Entity are unified into the single Firm Identity
+// page (/build/profile); their readiness chips deep-link to that page's section
+// anchors. Every other module keeps its own /build/<key> route.
+const IDENTITY_HREF: Record<string, string> = {
+  profile: "/build/profile#identity",
+  thesis: "/build/profile#thesis",
+  brand: "/build/profile#brand",
+  entity: "/build/profile#entity",
+};
+
 function scoreModule(
   key: string,
   label: string,
@@ -85,8 +95,19 @@ function scoreModule(
   const score = total === 0 ? 0 : Math.round((earned / total) * 100);
   const doneCount = checks.filter((c) => c.done).length;
   const status: ModuleStatus = score === 0 ? "empty" : score === 100 ? "complete" : "started";
-  return { key, label, href: `/build/${key}`, score, status, doneCount, total: checks.length, checks };
+  const href = IDENTITY_HREF[key] ?? `/build/${key}`;
+  return { key, label, href, score, status, doneCount, total: checks.length, checks };
 }
+
+/** Roll several module statuses into one (for the unified Firm Identity tab). */
+export function combineStatuses(statuses: ModuleStatus[]): ModuleStatus {
+  if (statuses.every((s) => s === "complete")) return "complete";
+  if (statuses.every((s) => s === "empty")) return "empty";
+  return "started";
+}
+
+/** Module keys unified under the Build hub's "Firm Identity" tab (/build/profile). */
+export const IDENTITY_MODULE_KEYS = ["profile", "thesis", "brand", "entity"] as const;
 
 const STAGE_DEFS: Omit<ReadinessStage, "unlocked" | "current">[] = [
   { key: "setup", label: "Setting Up", threshold: 0, blurb: "Lay the foundation." },

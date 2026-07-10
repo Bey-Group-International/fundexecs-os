@@ -23,12 +23,12 @@ export const HUBS: HubDefinition[] = [
     key: "build",
     label: "Build",
     purpose:
-      "Build your firm's investor-facing identity — profile, thesis, materials, and team. Earn reads everything here to draft LP memos, score deal fit, and position you accurately in the ecosystem.",
+      "Build your firm's investor-facing identity — profile, thesis, brand, structure, materials, and team. Earn reads everything here to draft LP memos, score deal fit, and position you accurately in the ecosystem.",
     modules: [
-      { key: "profile", label: "Profile" },
-      { key: "thesis", label: "Thesis" },
-      { key: "brand", label: "Brand" },
-      { key: "entity", label: "Entity" },
+      // Firm Identity unifies the former Profile, Thesis, Brand, and Entity
+      // modules into one interactive page (/build/profile). The legacy
+      // /build/{thesis,brand,entity} routes redirect into its section anchors.
+      { key: "profile", label: "Firm Identity" },
       { key: "track_record", label: "Track Record" },
       { key: "team", label: "Team" },
       { key: "data_room", label: "Materials & Data Room" },

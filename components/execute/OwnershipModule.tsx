@@ -28,7 +28,7 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
         {header}
         <EmptyState
           note="No holders yet. Add fund commitments (Cap Table) or entity equity (Build › Entity) and they reconcile here into one ownership ledger."
-          href="/build/entity"
+          href="/build/profile#entity"
           cta="Build › Entity"
         />
       </div>
@@ -56,7 +56,7 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
         <Link href="/execute/cap_table" className="rounded-md border border-line px-2.5 py-1 text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
           → Fund cap table
         </Link>
-        <Link href="/build/entity" className="rounded-md border border-line px-2.5 py-1 text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
+        <Link href="/build/profile#entity" className="rounded-md border border-line px-2.5 py-1 text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
           → Entity ownership
         </Link>
       </div>

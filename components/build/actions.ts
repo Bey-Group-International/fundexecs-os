@@ -61,7 +61,7 @@ export async function createThesis(formData: FormData): Promise<void> {
     target_moic: num(formData.get("target_moic")),
     is_active: true,
   });
-  revalidatePath(`${BUILD}/thesis`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 export async function deleteThesis(formData: FormData): Promise<void> {
@@ -71,7 +71,7 @@ export async function deleteThesis(formData: FormData): Promise<void> {
   if (!id) return;
   const supabase = await createServerClient();
   await supabase.from("investment_theses").delete().eq("id", id).eq("organization_id", ctx.orgId);
-  revalidatePath(`${BUILD}/thesis`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 // --- Entity ----------------------------------------------------------------
@@ -91,7 +91,7 @@ export async function createEntity(formData: FormData): Promise<void> {
     notes: String(formData.get("notes") ?? "").trim() || null,
     created_by: ctx.userId,
   });
-  revalidatePath(`${BUILD}/entity`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 export async function deleteEntity(formData: FormData): Promise<void> {
@@ -101,7 +101,7 @@ export async function deleteEntity(formData: FormData): Promise<void> {
   if (!id) return;
   const supabase = await createServerClient();
   await supabase.from("entities").delete().eq("id", id).eq("organization_id", ctx.orgId);
-  revalidatePath(`${BUILD}/entity`);
+  revalidatePath(`${BUILD}/profile`);
 }
 
 // --- Track Record ----------------------------------------------------------

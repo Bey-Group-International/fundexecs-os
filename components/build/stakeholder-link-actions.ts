@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 
-const ENTITY = "/build/entity";
+// Entity editing now lives on the unified Firm Identity page (#entity section).
+const ENTITY = "/build/profile";
 
 // Link a cap-table stakeholder to an existing identity — a team member
 // (principal) or an investor/LP — so the firm cap table and people/LP records

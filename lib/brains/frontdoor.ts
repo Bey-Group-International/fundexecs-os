@@ -25,7 +25,7 @@ export const PATHS: Record<PathKey, FrontDoorPath> = {
     label: "Emerging fund manager",
     blurb: "Build your fund strategy, deck, LP list, and outreach engine.",
     actions: [
-      { label: "Build fund strategy", href: "/build/thesis" },
+      { label: "Build fund strategy", href: "/build/profile#thesis" },
       { label: "Open LP pipeline", href: "/source/lp_pipeline" },
       { label: "Ask Earn", href: "/workspace" },
     ],

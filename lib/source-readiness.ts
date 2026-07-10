@@ -242,7 +242,7 @@ export async function getSourceMomentum(orgId: string): Promise<SourceMomentum> 
     if (!nextAction) nextAction = { label, href, moduleLabel };
   };
   if (!hasMandate) {
-    set("Define your thesis so sourcing has a mandate", "/build/thesis", "Thesis");
+    set("Define your thesis so sourcing has a mandate", "/build/profile#thesis", "Thesis");
   } else if (investors.length === 0 && deals.length === 0) {
     set("Add your first LP or deal to start the funnel", "/source/lp_pipeline", "LP Pipeline");
   } else if (velocity.stalled > 0) {
