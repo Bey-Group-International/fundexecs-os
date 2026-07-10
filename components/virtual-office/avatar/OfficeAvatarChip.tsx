@@ -67,31 +67,82 @@ export function OfficeAvatarChip({
             role="presentation"
             onClick={() => setOpen(false)}
           >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-[3px]" />
+            {/* Full-screen two-pane studio: a large live HD preview on the left,
+                categorized controls on the right. Portaled to body so it clears
+                the floor's stacking context. Stacks on narrow screens. */}
             <div
-              className="relative flex max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-[380px] flex-col overflow-hidden rounded-xl border"
+              className="relative flex max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-[900px] flex-col overflow-hidden rounded-2xl border md:flex-row"
               style={{ borderColor: "rgba(201,168,76,0.35)", background: "#0a0806" }}
               role="dialog"
-              aria-label="Customize your character"
+              aria-label="Character studio"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #c9a84c, transparent)" }} />
-              <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: "rgba(201,168,76,0.18)" }}>
-                <span className="text-[11px] uppercase tracking-[0.22em]" style={{ color: "#c9a84c", fontFamily: "Georgia, serif" }}>
-                  Your character
+              {/* Left — big HD preview + identity + save */}
+              <div
+                className="relative flex shrink-0 flex-col items-center gap-4 border-b p-6 md:w-[300px] md:border-b-0 md:border-r"
+                style={{
+                  borderColor: "rgba(201,168,76,0.18)",
+                  background: "radial-gradient(120% 80% at 50% 15%, rgba(201,168,76,0.09), rgba(10,8,6,0) 60%)",
+                }}
+              >
+                <span className="self-start text-[11px] uppercase tracking-[0.22em]" style={{ color: "#c9a84c", fontFamily: "Georgia, serif" }}>
+                  Character studio
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  aria-label="Close"
-                  className="grid h-6 w-6 place-items-center rounded text-[13px] leading-none text-slate-400 transition-colors hover:text-slate-100"
-                  style={{ border: "1px solid rgba(201,168,76,0.3)" }}
+                <span
+                  className="mt-2 grid h-[232px] w-[232px] place-items-center overflow-hidden rounded-xl border"
+                  style={{ background: "#0c0a07", borderColor: "rgba(201,168,76,0.22)", boxShadow: "inset 0 0 40px rgba(0,0,0,0.55)" }}
                 >
-                  ✕
-                </button>
+                  <AvatarPreview spec={userAvatarSpec(draft)} size={224} />
+                </span>
+                <div className="flex flex-col items-center">
+                  <span className="text-lg font-semibold" style={{ color: "#f2ede2", fontFamily: "Georgia, serif" }}>
+                    {draft.displayName || "You"}
+                  </span>
+                  <span className="text-[12px]" style={{ color: "#c9a84c", fontFamily: "Georgia, serif" }}>
+                    {draft.roleLabel}
+                  </span>
+                </div>
+                <div className="mt-auto flex w-full gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="flex-1 rounded-md border py-2 text-[12px] uppercase tracking-[0.12em] text-slate-300 transition-colors hover:bg-white/[0.04]"
+                    style={{ borderColor: "rgba(255,255,255,0.12)", fontFamily: "Georgia, serif" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={save}
+                    disabled={saving}
+                    className="flex-1 rounded-md border py-2 text-[12px] uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: "rgba(201,168,76,0.14)", borderColor: "#c9a84c", color: "#c9a84c", fontFamily: "Georgia, serif" }}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
-                <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} bare />
+
+              {/* Right — controls */}
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex items-center justify-between border-b px-5 py-2.5" style={{ borderColor: "rgba(201,168,76,0.18)" }}>
+                  <span className="text-[11px] uppercase tracking-[0.22em]" style={{ color: "#c9a84c", fontFamily: "Georgia, serif" }}>
+                    Customize
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    aria-label="Close"
+                    className="grid h-6 w-6 place-items-center rounded text-[13px] leading-none text-slate-400 transition-colors hover:text-slate-100"
+                    style={{ border: "1px solid rgba(201,168,76,0.3)" }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-5">
+                  <UserCharacterSelector value={draft} onChange={setDraft} bare hidePreview />
+                </div>
               </div>
             </div>
           </div>,
