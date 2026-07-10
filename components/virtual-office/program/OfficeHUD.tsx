@@ -43,7 +43,7 @@ export function OfficeHUD({ currentRoom, presenceCount }: { currentRoom: string;
       </span>
     </Stat>,
     <Stat key="mode" label="Mode">{modeLabel}</Stat>,
-    <Stat key="wf" label="Workflow" grow>
+    <Stat key="wf" label="Workflow" grow={!!wf}>
       <span className="truncate" style={{ color: wf ? "#fde68a" : undefined }}>{wf ? wf.title : "None active"}</span>
     </Stat>,
     ...(wf
