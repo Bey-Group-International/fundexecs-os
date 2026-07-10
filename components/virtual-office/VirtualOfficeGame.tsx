@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent, type CSSProperties } from "react";
-import dynamic from "next/dynamic";
 import type Phaser from "phaser";
 import type { OfficeSceneInitData } from "./scenes/OfficeScene";
 import type { InteractiveObject, RoomAction, ZoneDef } from "./types";
@@ -72,11 +71,6 @@ export type RosterEntry = {
 
 const GAME_WIDTH = 900;
 const GAME_HEIGHT = 600;
-
-// Real-time 3D executives composited over the Phaser floor. three.js + the model
-// are heavy, so the layer is code-split and only loaded (client-only) when the
-// desktop floor mounts it.
-const Floor3DLayer = dynamic(() => import("./avatar/Floor3DLayer"), { ssr: false });
 
 /** The executive the player is standing next to (Gather-style proximity). */
 type NearbyAgent = { agentId: string; name: string; role: string; line: string; accent: string };
@@ -588,12 +582,6 @@ export function VirtualOfficeGame({
   const releaseMyDesk = useCallback(() => {
     releaseDesk();
     emitFloorActivity("presence", "You gave up your desk");
-  }, []);
-
-  // The 3D overlay reports when its WebGL context is live and models are loaded;
-  // the scene then hides the 2D figures (graceful 2D fallback otherwise).
-  const handle3DActive = useCallback((active: boolean) => {
-    gameRef.current?.events.emit("office:3d-active", active);
   }, []);
 
   // Two views: the default follow-cam and an overhead, zoomed-out whole-floor view.
@@ -1849,36 +1837,21 @@ export function VirtualOfficeGame({
             fills the floor column's full width and the viewport-capped height, so
             the office spans edge-to-edge and stands taller. Mobile keeps a 3:2
             aspect box in the scrollable stack. */}
-        {/* Relative wrapper: the Phaser mount box sizes it (in flow), and the 3D
-            overlay is an absolute sibling matching it 1:1. The Phaser div itself
-            keeps NO React children — Phaser appends its <canvas> imperatively, so
-            mixing React-managed children into the same node would break React's
-            reconciliation. */}
-        <div className="relative mx-auto" style={canvasCap ? undefined : { maxWidth: GAME_WIDTH * 1.5 }}>
-          <div
-            ref={containerRef}
-            style={
-              canvasCap
-                ? { width: "100%", height: canvasCap }
-                : { width: "100%", aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}` }
-            }
-            className="cursor-pointer"
-            onClick={() => {
-              const canvas = containerRef.current?.querySelector("canvas");
-              if (canvas) { canvas.focus(); setCanvasFocused(true); }
-            }}
-            onBlur={() => setCanvasFocused(false)}
-            onFocus={() => setCanvasFocused(true)}
-          />
-          {/* 3D executives composited over the Phaser canvas. Desktop-first HD;
-              pointer-events:none so click-to-walk still reaches the floor. A
-              WebGL failure falls back to the 2D figures automatically. */}
-          {!isTouch && (
-            <div className="pointer-events-none absolute inset-0 z-[5]">
-              <Floor3DLayer onActive={handle3DActive} />
-            </div>
-          )}
-        </div>
+        <div
+          ref={containerRef}
+          style={
+            canvasCap
+              ? { width: "100%", height: canvasCap }
+              : { width: "100%", aspectRatio: `${GAME_WIDTH} / ${GAME_HEIGHT}`, maxWidth: GAME_WIDTH * 1.5 }
+          }
+          className="mx-auto cursor-pointer"
+          onClick={() => {
+            const canvas = containerRef.current?.querySelector("canvas");
+            if (canvas) { canvas.focus(); setCanvasFocused(true); }
+          }}
+          onBlur={() => setCanvasFocused(false)}
+          onFocus={() => setCanvasFocused(true)}
+        />
 
         {/* Touch D-pad — mobile only; positioned above the in-canvas minimap */}
         {isTouch && <TouchDpad onMove={emitTouchMove} />}
