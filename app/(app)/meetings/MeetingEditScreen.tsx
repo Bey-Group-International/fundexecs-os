@@ -140,7 +140,9 @@ export function MeetingEditScreen({
   const [relatedRecordId, setRelatedRecordId] = useState(initial?.relatedRecordId ?? "");
   const [assignedCopilot, setAssignedCopilot] = useState(initial?.assignedCopilotAgent ?? "");
   const [attachments, setAttachments] = useState("");
-  const [meetingUrl, setMeetingUrl] = useState(initial?.meetingUrl ?? "");
+  // Preserved from initial (e.g. an imported external link) but not user-editable;
+  // the built-in FundExecs room is the video conference for meetings created here.
+  const [meetingUrl] = useState(initial?.meetingUrl ?? "");
   const [calendarVisibility, setCalendarVisibility] = useState(initial?.calendarVisibility ?? "organization");
   // An explicit null on edit means the meeting was saved with "No reminder" — a
   // deliberate non-default choice — so preserve it rather than coercing to 15.
@@ -150,10 +152,10 @@ export function MeetingEditScreen({
   const [syncEnabled, setSyncEnabled] = useState(initial?.externalCalendarSyncEnabled ?? false);
   const [syncProvider, setSyncProvider] = useState(initial?.externalCalendarProvider ?? "");
 
-  // Google-Calendar-style "Add video conferencing": the link row stays hidden
-  // behind a button until requested, mirroring GCal's "Add Google Meet" chip.
-  const [showLink, setShowLink] = useState(Boolean(initial?.meetingUrl));
-  const linkInputRef = useRef<HTMLInputElement>(null);
+  // Video conferencing is the built-in FundExecs room — no external service.
+  // `meetingUrl` is still carried through the payload so an externally-imported
+  // link (e.g. from a synced calendar event) isn't wiped on edit, but the form
+  // never asks the user to paste an external link.
 
   // Advanced options stay collapsed by default; auto-open on edit when the
   // meeting already carries advanced configuration so nothing looks lost.
@@ -462,29 +464,15 @@ export function MeetingEditScreen({
           <div className="grid gap-x-8 gap-y-1 md:grid-cols-[1fr_260px]">
             {/* Left — details */}
             <div className="flex flex-col">
-              {/* Video conferencing → reveals the meeting-link field. */}
+              {/* Video conferencing — the built-in FundExecs room. No external
+                  Meet/Zoom/Teams dependency; a secure room link is created on save. */}
               <Row icon={<IconVideo />}>
-                {showLink ? (
-                  <BareInput
-                    inputRef={linkInputRef}
-                    value={meetingUrl}
-                    onChange={setMeetingUrl}
-                    ariaLabel="Meeting link"
-                    placeholder="Paste a Google Meet, Zoom, or Teams link"
-                    full
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowLink(true);
-                      requestAnimationFrame(() => linkInputRef.current?.focus());
-                    }}
-                    className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]"
-                  >
-                    Add video conferencing
-                  </button>
-                )}
+                <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2">
+                  <p className="text-sm font-medium text-[var(--fg-primary)]">FundExecs video room</p>
+                  <p className="text-[11px] leading-snug text-[var(--fg-muted)]">
+                    A secure room link is created for this meeting when you save — no external conferencing service required.
+                  </p>
+                </div>
               </Row>
 
               <Row icon={<IconTarget />}>
