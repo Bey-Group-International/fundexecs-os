@@ -9,6 +9,7 @@ import {
   priorityBucket,
   inboxTab,
   quickReplies,
+  threadNudge,
   suggestedAction,
   type DigestThread,
 } from "@/lib/inbox/intelligence";
@@ -89,6 +90,12 @@ export default async function InboxPage(
   const cards: InboxCardData[] = views.map(({ thread, context, assignee }) => {
     const meta = channelMeta(thread.channel);
     const move = suggestedAction(thread);
+    // Follow-up nudge: hours since the last message drive the "waiting on you /
+    // gone cold" reminder. Computed here (force-dynamic render) so it reflects
+    // real elapsed time without shipping the clock to the client.
+    const lastMs = thread.last_message_at ? Date.parse(thread.last_message_at) : NaN;
+    const ageHours = Number.isNaN(lastMs) ? null : (Date.now() - lastMs) / 3_600_000;
+    const nudge = threadNudge({ status: thread.status, unread: thread.unread, ageHours });
     return {
       id: thread.id,
       channel: thread.channel,
@@ -127,6 +134,8 @@ export default async function InboxPage(
       // One-tap reply openers for the composer — pure/instant, computed here so
       // the client never imports the intelligence module.
       quickReplies: quickReplies({ category: thread.category, meetingAt: thread.meeting_at }),
+      // Follow-up nudge (or null) — a reminder pill on the card.
+      nudge,
       canShare: Boolean(context),
       shareTier: tierForAction("share_materials") as GateTier,
     };
