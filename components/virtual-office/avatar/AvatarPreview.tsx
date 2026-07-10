@@ -184,86 +184,129 @@ function shoulder(s: AvatarSpec): number {
 /** Shared head/hair/face block, offset by (ox, oy). Eyes open. */
 function drawHead(g: CanvasGraphics, s: AvatarSpec, ox: number, oy: number) {
   const skinLo = shade(s.skin, 0.82);
-  // Neck with an ambient-occlusion shadow just under the jaw.
-  g.fillStyle(shade(s.skin, 0.88), 1);
-  g.fillRect(ox - 1.8, oy - 9, 3.6, 3.6);
-  g.fillStyle(skinLo, 0.55);
-  g.fillRect(ox - 1.8, oy - 9, 3.6, 1.4);
-  // Ears
-  g.fillStyle(shade(s.skin, 0.94), 1);
-  g.fillEllipse(ox - 4.7, oy - 12.6, 2, 3.2);
-  g.fillEllipse(ox + 4.7, oy - 12.6, 2, 3.2);
-  // Defined face edge — a darker skin contour behind the head base so the jaw
-  // and cheeks read as a sculpted shape, not a soft blob.
-  g.fillStyle(shade(s.skin, 0.6), 0.9);
-  g.fillEllipse(ox, oy - 12.6, 10.4, 11.8);
-  // Head base
+  const iris = 0x4a3524;
+  // Neck + a soft jaw occlusion (feathered, not a hard band).
+  g.fillStyle(shade(s.skin, 0.9), 1);
+  g.fillRect(ox - 1.9, oy - 9.2, 3.8, 3.8);
+  g.fillStyle(skinLo, 0.4);
+  g.fillEllipse(ox, oy - 8.8, 4.2, 1.6);
+  // Ears with a subtle inner shadow.
+  g.fillStyle(shade(s.skin, 0.95), 1);
+  g.fillEllipse(ox - 4.6, oy - 12.6, 1.9, 3.1);
+  g.fillEllipse(ox + 4.6, oy - 12.6, 1.9, 3.1);
+  g.fillStyle(shade(s.skin, 0.7), 0.4);
+  g.fillEllipse(ox - 4.6, oy - 12.4, 0.9, 1.8);
+  g.fillEllipse(ox + 4.6, oy - 12.4, 0.9, 1.8);
+  // Head base — slightly narrower/taller for a natural face; soft contour behind.
+  g.fillStyle(shade(s.skin, 0.62), 0.85);
+  g.fillEllipse(ox, oy - 12.7, 9.6, 12.0);
   g.fillStyle(s.skin, 1);
-  g.fillEllipse(ox, oy - 13, 9.5, 11);
-  // Forehead highlight (top-lit) + jaw / right-cheek shading for volume.
-  g.fillStyle(shade(s.skin, 1.12), 0.5);
-  g.fillEllipse(ox - 1, oy - 15, 6, 4);
-  g.fillStyle(skinLo, 0.45);
-  g.fillEllipse(ox, oy - 9.6, 7, 3.4); // jaw
-  g.fillEllipse(ox + 2.9, oy - 12, 3.2, 6); // cheek
-  // Cheekbone contour — a crisp shadow under the cheek for facial structure.
-  g.fillStyle(shade(s.skin, 0.72), 0.4);
-  g.fillEllipse(ox + 2.6, oy - 10.8, 3, 1.5);
-  // Lit cheek plane on the key-light (left) side — rounder facial volume.
-  g.fillStyle(shade(s.skin, 1.16), 0.32);
-  g.fillEllipse(ox - 2.7, oy - 12.2, 3.4, 4.4);
+  g.fillEllipse(ox, oy - 13, 9.0, 11.4);
+  // Soft top-lit forehead + gentle, feathered jaw/cheek volume (low alpha).
+  g.fillStyle(shade(s.skin, 1.1), 0.4);
+  g.fillEllipse(ox - 0.6, oy - 15.6, 6.2, 4.6);
+  g.fillStyle(skinLo, 0.34);
+  g.fillEllipse(ox, oy - 9.8, 6.6, 3.6);
+  g.fillStyle(shade(s.skin, 0.76), 0.28);
+  g.fillEllipse(ox + 3.0, oy - 12.2, 2.8, 5.2); // shaded (right) cheek plane
+  g.fillStyle(shade(s.skin, 1.14), 0.26);
+  g.fillEllipse(ox - 2.9, oy - 12.4, 3.0, 4.6); // lit (left) cheek plane
+  // Cheekbone catch — subtle, not a hard smudge.
+  g.fillStyle(shade(s.skin, 1.12), 0.22);
+  g.fillEllipse(ox - 2.4, oy - 11.4, 1.8, 1.2);
   // Hair
   if (s.hairStyle !== "bald") {
-    // Crisp dark hair-edge silhouette behind the hair mass — a defined crown.
-    g.fillStyle(shade(s.hair, 0.55), 1);
-    g.fillEllipse(ox, oy - 15.9, 10.8, 8);
+    g.fillStyle(shade(s.hair, 0.5), 1);
+    g.fillEllipse(ox, oy - 16.1, 10.6, 8.0);
     g.fillStyle(s.hair, 1);
-    g.fillEllipse(ox, oy - 15.6, 10, 7.2);
-    g.fillRect(ox - 5, oy - 15.6, 10, 2.6);
+    g.fillEllipse(ox, oy - 15.8, 9.8, 7.2);
+    g.fillRect(ox - 4.9, oy - 15.8, 9.8, 2.6);
     // Sideburns framing the face.
-    g.fillEllipse(ox - 4.5, oy - 15, 1.6, 3.4);
-    g.fillEllipse(ox + 4.5, oy - 15, 1.6, 3.4);
+    g.fillEllipse(ox - 4.4, oy - 15, 1.5, 3.2);
+    g.fillEllipse(ox + 4.4, oy - 15, 1.5, 3.2);
     if (s.hairStyle === "textured") {
-      g.fillStyle(shade(s.hair, 1.35), 0.5);
-      g.fillEllipse(ox - 2.4, oy - 17.2, 4.2, 2.2);
-      g.fillStyle(shade(s.hair, 0.7), 0.4);
-      g.fillEllipse(ox + 2.6, oy - 15.6, 3, 2);
+      g.fillStyle(shade(s.hair, 1.4), 0.42);
+      g.fillEllipse(ox - 2.4, oy - 17.4, 4.2, 2.2);
+      g.fillStyle(shade(s.hair, 1.4), 0.42);
+      g.fillEllipse(ox + 1.6, oy - 17.8, 2.6, 1.6);
+      g.fillStyle(shade(s.hair, 0.7), 0.35);
+      g.fillEllipse(ox + 2.8, oy - 15.8, 2.8, 2.0);
     } else if (s.hairStyle === "tied") {
       g.fillStyle(s.hair, 1);
-      g.fillCircle(ox, oy - 18.6, 2.2); // top knot
-      g.fillStyle(shade(s.hair, 1.3), 0.4);
-      g.fillEllipse(ox - 1.6, oy - 17.4, 3, 1.5);
+      g.fillCircle(ox, oy - 18.8, 2.2); // top knot
+      g.fillStyle(shade(s.hair, 1.35), 0.42);
+      g.fillEllipse(ox - 1.6, oy - 17.6, 3, 1.5);
     } else {
-      g.fillStyle(shade(s.hair, 1.32), 0.5); // sheen
-      g.fillEllipse(ox - 2, oy - 17.4, 3.6, 1.7);
+      g.fillStyle(shade(s.hair, 1.42), 0.5); // sheen
+      g.fillEllipse(ox - 2.2, oy - 17.6, 4.0, 1.8);
     }
-    // Crisper hairline shadow where hair meets the forehead — a defined brow ridge.
-    g.fillStyle(shade(s.hair, 0.55), 0.55);
-    g.fillEllipse(ox, oy - 16.2, 8.8, 1.5);
+    // Clean, soft hairline arc (no hard band).
+    g.fillStyle(shade(s.hair, 0.55), 0.4);
+    g.fillEllipse(ox, oy - 16.3, 8.4, 1.4);
   }
-  // Eye-socket shadow — a soft band setting the eyes back into the skull.
+  const eyeY = oy - 12.5;
+  // Brows — thin, tapered, angled along the brow ridge (not floating bars).
+  g.fillStyle(shade(s.hair, 0.66), 0.95);
+  g.fillPoints(
+    [
+      { x: ox - 3.5, y: oy - 13.3 },
+      { x: ox - 0.9, y: oy - 13.9 },
+      { x: ox - 0.9, y: oy - 13.55 },
+      { x: ox - 3.5, y: oy - 12.95 },
+    ],
+    true,
+  );
+  g.fillPoints(
+    [
+      { x: ox + 3.5, y: oy - 13.3 },
+      { x: ox + 0.9, y: oy - 13.9 },
+      { x: ox + 0.9, y: oy - 13.55 },
+      { x: ox + 3.5, y: oy - 12.95 },
+    ],
+    true,
+  );
+  // Upper-lid soft shadow set into the socket (very subtle; kept off the bridge).
+  g.fillStyle(shade(s.skin, 0.76), 0.24);
+  g.fillEllipse(ox - 2.1, eyeY - 0.75, 2.2, 0.9);
+  g.fillEllipse(ox + 2.1, eyeY - 0.75, 2.2, 0.9);
+  // Eyes — almond whites, brown iris, pupil, one catchlight.
+  g.fillStyle(0xe9e2d4, 1);
+  g.fillEllipse(ox - 2, eyeY, 1.9, 1.05);
+  g.fillEllipse(ox + 2, eyeY, 1.9, 1.05);
+  g.fillStyle(iris, 1);
+  g.fillCircle(ox - 1.95, eyeY + 0.05, 0.62);
+  g.fillCircle(ox + 2.05, eyeY + 0.05, 0.62);
+  g.fillStyle(0x140f0b, 1);
+  g.fillCircle(ox - 1.95, eyeY + 0.05, 0.3);
+  g.fillCircle(ox + 2.05, eyeY + 0.05, 0.3);
+  g.fillStyle(0xfbf7ee, 0.9);
+  g.fillCircle(ox - 2.2, eyeY - 0.25, 0.2);
+  g.fillCircle(ox + 1.8, eyeY - 0.25, 0.2);
+  // Upper eyelid (lash) line — a thin dark arc over each eye.
+  g.lineStyle(0.45, 0x2a211a, 0.85);
+  g.beginPath();
+  g.arc(ox - 2, eyeY - 0.1, 1.5, 1.05 * Math.PI, 1.95 * Math.PI, false);
+  g.strokePath();
+  g.beginPath();
+  g.arc(ox + 2, eyeY - 0.1, 1.5, 1.05 * Math.PI, 1.95 * Math.PI, false);
+  g.strokePath();
+  // Nose — soft side shadow, tip highlight, faint nostrils. No bright stripe.
   g.fillStyle(shade(s.skin, 0.74), 0.4);
-  g.fillEllipse(ox - 2, oy - 12.9, 2.6, 1.6);
-  g.fillEllipse(ox + 2, oy - 12.9, 2.6, 1.6);
-  // Brows — bolder, darker and defined.
-  g.fillStyle(shade(s.hair, 0.6), 1);
-  g.fillRect(ox - 3.4, oy - 13.9, 2.7, 0.9);
-  g.fillRect(ox + 0.7, oy - 13.9, 2.7, 0.9);
-  // Eyes — open, deep-set with a crisp catchlight.
-  g.fillStyle(0x181310, 1);
-  g.fillEllipse(ox - 2, oy - 12.4, 1.6, 1.9);
-  g.fillEllipse(ox + 2, oy - 12.4, 1.6, 1.9);
-  g.fillStyle(0xf7f3ea, 0.95);
-  g.fillCircle(ox - 2.4, oy - 12.9, 0.45);
-  g.fillCircle(ox + 1.6, oy - 12.9, 0.45);
-  // Nose shadow to the shaded side + a defined nostril base.
-  g.fillStyle(skinLo, 0.5);
-  g.fillTriangle(ox + 0.3, oy - 12.4, ox + 0.3, oy - 10.6, ox + 1.4, oy - 10.8);
-  g.fillStyle(shade(s.skin, 0.62), 0.5);
-  g.fillEllipse(ox, oy - 10.4, 1.8, 0.8);
-  // Nose-bridge highlight — a defined, lit ridge.
-  g.fillStyle(shade(s.skin, 1.14), 0.35);
-  g.fillRect(ox - 0.5, oy - 13, 0.7, 2.6);
+  g.fillEllipse(ox + 0.55, oy - 11.2, 1.0, 2.3);
+  g.fillStyle(shade(s.skin, 1.1), 0.32);
+  g.fillEllipse(ox - 0.25, oy - 10.7, 0.9, 1.7);
+  g.fillStyle(shade(s.skin, 0.58), 0.5);
+  g.fillEllipse(ox - 0.7, oy - 10.1, 0.42, 0.34);
+  g.fillEllipse(ox + 0.7, oy - 10.1, 0.42, 0.34);
+  g.fillStyle(shade(s.skin, 1.12), 0.4);
+  g.fillEllipse(ox, oy - 10.35, 0.7, 0.5);
+  // Lips — upper lip a touch darker, soft lower-lip highlight, subtle seam.
+  g.fillStyle(shade(s.skin, 0.78), 0.55);
+  g.fillEllipse(ox, oy - 9.85, 2.4, 0.7);
+  g.fillStyle(shade(s.skin, 0.55), 0.5);
+  g.fillEllipse(ox, oy - 9.75, 2.1, 0.24);
+  g.fillStyle(shade(s.skin, 1.12), 0.4);
+  g.fillEllipse(ox, oy - 9.35, 1.7, 0.5);
   // Facial hair — hair-colored, under the mouth so lips read on top. Mirrors
   // ExecutiveAvatar._drawFacialHairFront exactly (same coordinates).
   const fh = s.facialHair ?? "none";
@@ -282,28 +325,22 @@ function drawHead(g: CanvasGraphics, s: AvatarSpec, ox: number, oy: number) {
     }
     if (fh === "beard" || fh === "mustache") {
       g.fillStyle(beardHair, 1);
-      g.fillEllipse(ox, oy - 10.7, 3.8, 1.2);
+      g.fillEllipse(ox, oy - 10.5, 3.6, 1.1);
     }
   }
-  // Mouth
-  g.fillStyle(shade(s.skin, 0.66), 0.6);
-  g.fillRect(ox - 1.5, oy - 10, 3, 0.7);
-  // Lower-lip highlight — a touch of life beneath the mouth.
-  g.fillStyle(shade(s.skin, 1.1), 0.35);
-  g.fillRect(ox - 1, oy - 9.4, 2, 0.45);
   // Eyewear — over the eyes. Mirrors ExecutiveAvatar._drawGlassesFront.
   if ((s.glasses ?? "none") !== "none") {
     const frame = 0x241f1b;
     g.fillStyle(0xbfe0f0, 0.12);
-    g.fillCircle(ox - 2, oy - 12.4, 1.7);
-    g.fillCircle(ox + 2, oy - 12.4, 1.7);
+    g.fillCircle(ox - 2, eyeY, 1.8);
+    g.fillCircle(ox + 2, eyeY, 1.8);
     g.lineStyle(0.7, frame, 0.95);
-    g.strokeCircle(ox - 2, oy - 12.4, 2.1);
-    g.strokeCircle(ox + 2, oy - 12.4, 2.1);
+    g.strokeCircle(ox - 2, eyeY, 2.1);
+    g.strokeCircle(ox + 2, eyeY, 2.1);
     g.fillStyle(frame, 0.9);
-    g.fillRect(ox - 0.3, oy - 12.7, 0.6, 0.5);
-    g.fillRect(ox - 4.9, oy - 12.7, 0.9, 0.4);
-    g.fillRect(ox + 4, oy - 12.7, 0.9, 0.4);
+    g.fillRect(ox - 0.3, eyeY - 0.3, 0.6, 0.5);
+    g.fillRect(ox - 4.9, eyeY - 0.3, 0.9, 0.4);
+    g.fillRect(ox + 4, eyeY - 0.3, 0.9, 0.4);
   }
 }
 
