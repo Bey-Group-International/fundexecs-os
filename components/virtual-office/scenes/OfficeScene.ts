@@ -40,7 +40,6 @@ import { loadScriptedAreas, AREA_STORE_EVENT } from "@/lib/office/areaStore";
 import { loadPrivateRooms, ROOM_PRIVACY_EVENT } from "@/lib/office/roomPrivacy";
 import { loadClaimedDesk, claimDesk, seatKey, DESK_CLAIM_EVENT } from "@/lib/office/deskClaim";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
-import { setFloorFrame, clearFloorFrame, type FloorChar } from "@/lib/office/floorFrame";
 import {
   createWallVisuals,
   createFurniture,
@@ -91,10 +90,6 @@ type NpcAvatarState = {
   path: Array<{ x: number; y: number }>;
   /** True while the agent is sitting at a desk (idle stance). */
   seated: boolean;
-  /** Hex accent (role color) — surfaced to the 3D overlay as a floor marker tint. */
-  accent: string;
-  /** Display name — surfaced to the 3D overlay. */
-  name: string;
 };
 
 type RoomOverlay = {
@@ -207,12 +202,6 @@ export class OfficeScene extends Phaser.Scene {
   private remotePlayers = new Map<string, RemoteAvatarState>();
   private npcAvatars = new Map<string, NpcAvatarState>();
   private moveSeq = 0;
-  // 3D overlay bridge — when the R3F layer confirms WebGL is live it flips this
-  // on, and the 2D vector figures are hidden so only the 3D models show (with a
-  // graceful 2D fallback if WebGL never comes up). Per-frame the scene publishes
-  // a character snapshot to the shared floorFrame store for the overlay to read.
-  private threeDActive = false;
-  private _floor3dLast = new Map<string, { x: number; y: number }>();
 
   private _interpFrame = 0;
 
@@ -603,13 +592,6 @@ export class OfficeScene extends Phaser.Scene {
       this._applyView();
     });
 
-    // The R3F overlay reports when it has a live WebGL context. Only then do we
-    // hide the 2D vector figures, so the floor degrades gracefully to 2D if the
-    // 3D layer never mounts or WebGL is unavailable.
-    this.game.events.on("office:3d-active", (active: boolean) => {
-      this.threeDActive = !!active;
-    });
-
     // Summon a waiting teammate into the meeting — set their lerp target to a
     // spot beside the host so they walk over into the proximity bubble.
     this.game.events.on("office:summon", (peerId: string) => {
@@ -659,101 +641,8 @@ export class OfficeScene extends Phaser.Scene {
     this._updateConvoRing(delta);
     this._updateRoster(delta);
     this._updateMinimap();
-    this._emitFloor3D();
-    this._applyBodyVisibility();
 
     this._interpFrame = (this._interpFrame + 1) % 2;
-  }
-
-  /**
-   * Publish a snapshot of every on-floor character (player, AI executives,
-   * remote humans) to the shared floorFrame store so the R3F overlay can place
-   * 3D models synced to Phaser. Cheap (~a dozen entries) and only runs while the
-   * 3D layer is active. `moving` is derived from the per-frame position delta so
-   * it stays decoupled from each character's own walk logic.
-   */
-  private _emitFloor3D() {
-    if (!this.threeDActive) return;
-    const cam = this.cameras.main;
-    const chars: FloorChar[] = [];
-    const seen = new Set<string>();
-
-    const norm = (f: Facing | AvatarFacing): FloorChar["facing"] =>
-      f === "up" || f === "left" || f === "right" ? f : "down";
-
-    const push = (
-      id: string,
-      x: number,
-      y: number,
-      facing: Facing | AvatarFacing,
-      seated: boolean,
-      accent: string,
-      name: string,
-      isPlayer: boolean,
-    ) => {
-      const last = this._floor3dLast.get(id);
-      const moving = last ? Math.hypot(x - last.x, y - last.y) > 0.35 : false;
-      this._floor3dLast.set(id, { x, y });
-      seen.add(id);
-      chars.push({ id, x, y, facing: norm(facing), moving, seated, accent, name, isPlayer });
-    };
-
-    // Operator
-    if (this.player) {
-      const body = this.player.body as Phaser.Physics.Arcade.Body | null;
-      const vx = body?.velocity.x ?? 0;
-      const vy = body?.velocity.y ?? 0;
-      const facing = Math.abs(vx) > 4 || Math.abs(vy) > 4 ? velocityToFacing(vx, vy) : "down";
-      push(
-        "__you__",
-        this.player.x,
-        this.player.y,
-        facing,
-        false,
-        this.myOfficeAvatar.accent,
-        this.myOfficeAvatar.displayName || "You",
-        true,
-      );
-    }
-
-    // AI executives + NPCs
-    for (const [id, s] of this.npcAvatars) {
-      push(id, s.sprite.x, s.sprite.y, s.facing, s.seated, s.accent, s.name, false);
-    }
-
-    // Remote humans
-    for (const [id, s] of this.remotePlayers) {
-      const hue = playerIdToHue(id);
-      const accent = `hsl(${hue},70%,60%)`;
-      push(id, s.sprite.x, s.sprite.y, s.facing, false, accent, s.label.text || "Guest", false);
-    }
-
-    // Drop stale last-position entries for despawned characters.
-    for (const k of this._floor3dLast.keys()) if (!seen.has(k)) this._floor3dLast.delete(k);
-
-    setFloorFrame(chars, {
-      scrollX: cam.scrollX,
-      scrollY: cam.scrollY,
-      zoom: cam.zoom,
-      w: cam.width,
-      h: cam.height,
-    });
-  }
-
-  /**
-   * While the 3D overlay is live, hide the 2D vector figures so only the 3D
-   * models show. Labels/status text stay (they're separate objects) and the
-   * invisible physics anchors are untouched, so movement/proximity are unchanged.
-   * When 3D is off this restores the player figure; NPC/remote bodies are
-   * re-shown by their own on-screen culling next frame.
-   */
-  private _applyBodyVisibility() {
-    const hide = this.threeDActive;
-    this.playerAvatar?.container.setVisible(!hide);
-    if (hide) {
-      for (const s of this.npcAvatars.values()) s.avatar.container.setVisible(false);
-      for (const s of this.remotePlayers.values()) s.avatar.container.setVisible(false);
-    }
   }
 
   // ── shutdown ─────────────────────────────────────────────────────────────────
@@ -765,8 +654,6 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("office:claim-desk");
     this.game.events.off("office:go-to-desk");
     this.game.events.off("office:set-view");
-    this.game.events.off("office:3d-active");
-    clearFloorFrame();
     this.game.events.off("office:summon");
     this.game.events.off("office:marketplace-listings", this._setMarketplaceStalls, this);
     for (const g of this.marketplaceStallGfx) g.destroy();
@@ -3198,7 +3085,6 @@ export class OfficeScene extends Phaser.Scene {
     this.npcAvatars.set(npcId, {
       sprite, avatar, label, targetX: x, targetY: y, facing, spriteKey,
       agentId, programState: "idle", statusText, path: [], seated: false,
-      accent: accentHex, name,
     });
   }
 

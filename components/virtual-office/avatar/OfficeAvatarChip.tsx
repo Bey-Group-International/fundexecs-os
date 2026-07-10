@@ -2,19 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import dynamic from "next/dynamic";
 import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
-
-// The 3D studio pulls in three.js + the model — load it only when the studio
-// opens (client-only; no SSR for WebGL).
-const Avatar3DStudio = dynamic(() => import("@/components/virtual-office/avatar/Avatar3DStudio"), {
-  ssr: false,
-  loading: () => (
-    <div className="grid h-full w-full place-items-center text-[10px]" style={{ color: "rgba(201,168,76,0.6)", fontFamily: "Georgia, serif" }}>
-      Loading 3D…
-    </div>
-  ),
-});
 import { UserCharacterSelector } from "@/components/virtual-office/avatar/UserCharacterSelector";
 import { userAvatarSpec, type UserAvatar } from "@/lib/office/userAvatar";
 import { saveOfficeAvatar } from "@/app/(app)/settings/actions";
@@ -102,10 +90,10 @@ export function OfficeAvatarChip({
                   Character studio
                 </span>
                 <span
-                  className="mt-2 block h-[232px] w-[232px] overflow-hidden rounded-xl border"
+                  className="mt-2 grid h-[232px] w-[232px] place-items-center overflow-hidden rounded-xl border"
                   style={{ background: "#0c0a07", borderColor: "rgba(201,168,76,0.22)", boxShadow: "inset 0 0 40px rgba(0,0,0,0.55)" }}
                 >
-                  <Avatar3DStudio accent={draft.accent} />
+                  <AvatarPreview spec={userAvatarSpec(draft)} size={224} />
                 </span>
                 <div className="flex flex-col items-center">
                   <span className="text-lg font-semibold" style={{ color: "#f2ede2", fontFamily: "Georgia, serif" }}>
