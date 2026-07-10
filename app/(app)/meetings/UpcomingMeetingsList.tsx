@@ -118,7 +118,14 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
   };
 }
 
-export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: UpcomingMeeting[] }) {
+export function UpcomingMeetingsList({
+  initialMeetings,
+  compact = false,
+}: {
+  initialMeetings: UpcomingMeeting[];
+  /** Rail variant: drop the centered max-width wrapper so it fits a sidebar. */
+  compact?: boolean;
+}) {
   const [meetings, setMeetings] = useState(initialMeetings);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -218,7 +225,7 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
   }).length;
 
   return (
-    <section className="mx-auto w-full max-w-2xl px-4">
+    <section className={compact ? "w-full" : "mx-auto w-full max-w-2xl px-4"}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
