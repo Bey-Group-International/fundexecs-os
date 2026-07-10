@@ -555,6 +555,28 @@ export async function assignThread(threadId: string, assigneeId: string | null):
   return { ok: true };
 }
 
+/**
+ * Star or unstar a thread — an operator-set flag that pins it in front of you
+ * independent of its triage score, and feeds the "Starred" saved view. One
+ * org-scoped update; RLS keeps it to the caller's org.
+ */
+export async function setThreadStar(threadId: string, starred: boolean): Promise<{ ok: boolean }> {
+  if (!threadId) return { ok: false };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false };
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("inbox_threads")
+    .update({ starred })
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId);
+  if (error) return { ok: false };
+
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
 export type BulkAction = "done" | "snooze" | "read";
 
 /**

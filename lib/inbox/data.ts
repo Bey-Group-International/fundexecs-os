@@ -39,6 +39,8 @@ export interface InboxThreadFilters {
   channel?: InboxChannel;
   // Only threads still marked unread.
   unreadOnly?: boolean;
+  // Only threads the operator has starred.
+  starredOnly?: boolean;
   // A principal id to restrict to that teammate's threads, or UNASSIGNED for
   // threads with no assignee.
   assignedTo?: string;
@@ -88,6 +90,7 @@ export async function getInboxThreads(
 
   if (filters.channel) query = query.eq("channel", filters.channel);
   if (filters.unreadOnly) query = query.eq("unread", true);
+  if (filters.starredOnly) query = query.eq("starred", true);
   if (filters.assignedTo === UNASSIGNED) query = query.is("assigned_to", null);
   else if (filters.assignedTo) query = query.eq("assigned_to", filters.assignedTo);
   const term = filters.q ? sanitizeForOr(filters.q) : "";

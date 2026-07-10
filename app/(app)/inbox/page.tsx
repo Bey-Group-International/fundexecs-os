@@ -37,7 +37,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default async function InboxPage(
   props: {
-    searchParams: Promise<{ q?: string; channel?: string; unread?: string; assigned?: string }>;
+    searchParams: Promise<{ q?: string; channel?: string; unread?: string; starred?: string; assigned?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -62,9 +62,12 @@ export default async function InboxPage(
     channel:
       channelParam && channelParam in INBOX_CHANNELS ? (channelParam as InboxChannel) : undefined,
     unreadOnly: searchParams.unread === "1",
+    starredOnly: searchParams.starred === "1",
     assignedTo,
   };
-  const hasFilters = Boolean(filters.q || filters.channel || filters.unreadOnly || filters.assignedTo);
+  const hasFilters = Boolean(
+    filters.q || filters.channel || filters.unreadOnly || filters.starredOnly || filters.assignedTo,
+  );
 
   const supabase = await createServerClient();
   // Wake any snoozed threads whose time has passed, so they reappear on this
@@ -107,6 +110,7 @@ export default async function InboxPage(
         hasContext: Boolean(context),
       }),
       unread: thread.unread,
+      starred: thread.starred,
       status: thread.status,
       snoozedUntil: thread.snoozed_until,
       meetingAt: thread.meeting_at,

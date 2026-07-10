@@ -1283,6 +1283,10 @@ export type InboxThread = Timestamps & {
   // 20260703220000): a Calendly scheduled-event URI, an email thread key. Null
   // for internally-created threads.
   external_id: string | null;
+  // Operator-set star/flag — pin a thread in front of you independent of its
+  // triage score; the "Starred" saved view filters on it (migration
+  // 20260710130000). Defaults false.
+  starred: boolean;
 };
 
 // One message within an inbox thread (migration 0038).
