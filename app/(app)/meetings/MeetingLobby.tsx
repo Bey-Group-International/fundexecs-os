@@ -126,6 +126,7 @@ export function MeetingLobby() {
                 <KeyboardIcon />
                 <input
                   type="text"
+                  aria-label="Meeting code"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
                   placeholder="Enter a meeting code"
