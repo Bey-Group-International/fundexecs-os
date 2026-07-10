@@ -25,6 +25,25 @@ import type { NetworkSearchResult } from "@/lib/network-search";
 
 type Tab = "network" | "search" | "circles";
 
+/** Adapt a roster person to the shape the warm-intro drafter expects. */
+function personToContact(p: ActiveNetworkPerson): NetworkSearchResult {
+  return {
+    id: p.id,
+    fullName: p.name,
+    title: p.role,
+    company: p.org,
+    location: null,
+    email: p.email,
+    linkedinUrl: null,
+    avatarUrl: null,
+    strengthScore: p.warmth,
+    strengthLabel: p.temperature ?? "cold",
+    connectedOn: null,
+    relevanceReason: p.nextAction ?? "",
+    introPath: p.introPath,
+  };
+}
+
 interface Circle {
   id: string;
   name: string;
@@ -179,7 +198,7 @@ export function NetworkModule({
       {/* Tab content */}
       {tab === "network" && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <ActiveRoster people={people} />
+          <ActiveRoster people={people} onSelect={(p) => setSelectedContact(personToContact(p))} />
           <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)]">
             <NetworkActivityFeed initialEvents={activityEvents} initialLive={liveCounts} />
           </div>

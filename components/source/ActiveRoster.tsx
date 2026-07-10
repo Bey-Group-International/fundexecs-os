@@ -45,7 +45,13 @@ function lastTouch(days: number | null): string {
 
 const PAGE = 40;
 
-export function ActiveRoster({ people }: { people: ActiveNetworkPerson[] }) {
+export function ActiveRoster({
+  people,
+  onSelect,
+}: {
+  people: ActiveNetworkPerson[];
+  onSelect?: (person: ActiveNetworkPerson) => void;
+}) {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(PAGE);
@@ -144,7 +150,7 @@ export function ActiveRoster({ people }: { people: ActiveNetworkPerson[] }) {
       ) : (
         <div className="flex flex-col divide-y divide-line/60 overflow-hidden rounded-2xl border border-line/80 bg-surface-1/40">
           {visible.map((p) => (
-            <PersonRow key={`${p.kind}:${p.id}`} person={p} />
+            <PersonRow key={`${p.kind}:${p.id}`} person={p} onSelect={onSelect} />
           ))}
         </div>
       )}
@@ -161,12 +167,36 @@ export function ActiveRoster({ people }: { people: ActiveNetworkPerson[] }) {
   );
 }
 
-function PersonRow({ person: p }: { person: ActiveNetworkPerson }) {
+function PersonRow({
+  person: p,
+  onSelect,
+}: {
+  person: ActiveNetworkPerson;
+  onSelect?: (person: ActiveNetworkPerson) => void;
+}) {
   const temp = p.temperature ? TEMP[p.temperature] : TEMP.cold;
   const subtitle = [p.role, p.org].filter(Boolean).join(" · ");
+  const clickable = !!onSelect;
 
   return (
-    <div className="group flex items-start gap-3 px-4 py-3 transition hover:bg-surface-2/40">
+    <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => onSelect(p) : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(p);
+              }
+            }
+          : undefined
+      }
+      className={`group flex items-start gap-3 px-4 py-3 transition hover:bg-surface-2/40 ${
+        clickable ? "fx-focus cursor-pointer" : ""
+      }`}
+    >
       {/* Avatar */}
       <div className="relative mt-0.5 shrink-0">
         <div className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-semibold text-fg-secondary">
