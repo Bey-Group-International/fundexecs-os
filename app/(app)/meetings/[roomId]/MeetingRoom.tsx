@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState, useCallback, useTransition } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
@@ -125,6 +126,103 @@ function playChime(type: "join" | "leave") {
   } catch { /* AudioContext not available */ }
 }
 
+// ─── FloatingMenu ─────────────────────────────────────────────────────────────
+
+// A popover anchored to a trigger button that ALWAYS stays inside the viewport.
+// The in-call controls live inside a `fixed inset-0` overlay, and their menus
+// used to open with `absolute bottom-full left-1/2 -translate-x-1/2` — which
+// bled off the top/side edges (a long camera list spilled straight off-screen).
+// This renders the menu in a portal on <body> with fixed, viewport-clamped
+// positioning, so no transformed/overflow-clipped ancestor can trap or cut it,
+// and the list scrolls when it's taller than the space available.
+function FloatingMenu({
+  open, anchorRef, onClose, children, minWidth = 220,
+}: {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  onClose: () => void;
+  children: React.ReactNode;
+  minWidth?: number;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({ position: "fixed", top: 0, left: 0, visibility: "hidden" });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      const anchor = anchorRef.current;
+      const panel = panelRef.current;
+      if (!anchor || !panel) return;
+      const a = anchor.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const margin = 8;
+      const gap = 8;
+      const pw = panel.offsetWidth;
+      const ph = panel.scrollHeight;
+      // Horizontal: center over the anchor, then clamp within the viewport.
+      let left = a.left + a.width / 2 - pw / 2;
+      left = Math.max(margin, Math.min(left, vw - pw - margin));
+      // Vertical: prefer opening above the anchor (it sits in a bottom bar);
+      // flip below when there isn't room, and cap height so it always fits.
+      const spaceAbove = a.top - gap - margin;
+      const spaceBelow = vh - a.bottom - gap - margin;
+      let top: number;
+      let maxHeight: number;
+      if (ph <= spaceAbove || spaceAbove >= spaceBelow) {
+        maxHeight = spaceAbove;
+        top = a.top - gap - Math.min(ph, maxHeight);
+      } else {
+        maxHeight = spaceBelow;
+        top = a.bottom + gap;
+      }
+      setStyle({
+        position: "fixed",
+        left,
+        top: Math.max(margin, top),
+        maxHeight: Math.max(120, maxHeight),
+        visibility: "visible",
+      });
+    };
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (panelRef.current?.contains(e.target as Node) || anchorRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose, anchorRef]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      style={{ minWidth, ...style }}
+      className="z-[9999] overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-1"
+      role="menu"
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 // ─── VideoTile ────────────────────────────────────────────────────────────────
 
 function VideoTile({
@@ -169,42 +267,34 @@ function VideoTile({
 function DeviceChevron({ kind, onSelect }: { kind: "audioinput" | "videoinput" | "audiooutput"; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [devs, setDevs] = useState<MediaDeviceInfo[]>([]);
-  const ref = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
 
   const openPicker = async () => {
     const all = await navigator.mediaDevices.enumerateDevices();
     setDevs(all.filter((d) => d.kind === kind && d.deviceId));
     setOpen(true);
   };
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
 
   return (
-    <div ref={ref} className="relative">
-      <button onClick={() => void openPicker()}
+    <>
+      <button ref={anchorRef} onClick={() => (open ? setOpen(false) : void openPicker())}
         className="flex items-center justify-center w-4 h-4 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors">
         <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
           <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
       </button>
-      {open && (
-        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-50 min-w-[200px] rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-1">
-          <p className="text-[10px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">
-            {kind === "audioinput" ? "Microphone" : kind === "videoinput" ? "Camera" : "Speaker"}
-          </p>
-          {devs.length === 0 ? <p className="text-xs text-[var(--fg-muted)] px-2 py-1">No devices found</p> : devs.map((d: MediaDeviceInfo) => (
-            <button key={d.deviceId} onClick={() => { onSelect(d.deviceId); setOpen(false); }}
-              className="w-full text-left text-xs text-[var(--fg-primary)] px-2 py-1.5 rounded-lg hover:bg-[var(--surface-3)] transition-colors truncate">
-              {d.label || `Device ${d.deviceId.slice(0, 6)}`}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      <FloatingMenu open={open} anchorRef={anchorRef} onClose={() => setOpen(false)}>
+        <p className="text-[10px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">
+          {kind === "audioinput" ? "Microphone" : kind === "videoinput" ? "Camera" : "Speaker"}
+        </p>
+        {devs.length === 0 ? <p className="text-xs text-[var(--fg-muted)] px-2 py-1">No devices found</p> : devs.map((d: MediaDeviceInfo) => (
+          <button key={d.deviceId} onClick={() => { onSelect(d.deviceId); setOpen(false); }}
+            className="w-full text-left text-xs text-[var(--fg-primary)] px-2 py-1.5 rounded-lg hover:bg-[var(--surface-3)] transition-colors truncate">
+            {d.label || `Device ${d.deviceId.slice(0, 6)}`}
+          </button>
+        ))}
+      </FloatingMenu>
+    </>
   );
 }
 
@@ -244,14 +334,7 @@ function ControlBar({
   const secs = String(duration % 60).padStart(2, "0");
   const [reactionOpen, setReactionOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const reactionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!reactionOpen) return;
-    const h = (e: MouseEvent) => { if (reactionRef.current && !reactionRef.current.contains(e.target as Node)) setReactionOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [reactionOpen]);
+  const reactionBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--surface-1)] shrink-0 gap-2">
@@ -288,22 +371,20 @@ function ControlBar({
           }`}>✋</button>
 
         {/* Reactions */}
-        <div ref={reactionRef} className="relative">
-          <button onClick={() => setReactionOpen((v: boolean) => !v)} title="Send reaction"
-            className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] flex items-center justify-center text-base transition-colors">
-            😊
-          </button>
-          {reactionOpen && (
-            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] shadow-xl p-2">
-              {REACTIONS.map((emoji) => (
-                <button key={emoji} onClick={() => { onReaction(emoji); setReactionOpen(false); }}
-                  className="w-8 h-8 flex items-center justify-center text-xl rounded-lg hover:bg-[var(--surface-3)] transition-colors">
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <button ref={reactionBtnRef} onClick={() => setReactionOpen((v: boolean) => !v)} title="Send reaction"
+          className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] flex items-center justify-center text-base transition-colors">
+          😊
+        </button>
+        <FloatingMenu open={reactionOpen} anchorRef={reactionBtnRef} onClose={() => setReactionOpen(false)} minWidth={0}>
+          <div className="flex gap-1">
+            {REACTIONS.map((emoji) => (
+              <button key={emoji} onClick={() => { onReaction(emoji); setReactionOpen(false); }}
+                className="w-8 h-8 flex items-center justify-center text-xl rounded-lg hover:bg-[var(--surface-3)] transition-colors">
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </FloatingMenu>
 
         {/* Layout toggle — hidden on mobile */}
         <span className="hidden sm:block">
