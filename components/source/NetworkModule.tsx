@@ -1,15 +1,48 @@
 "use client";
 
+// Network OS — the institutional relationship-capital workspace. The default
+// view is the operator's ACTIVE NETWORK: who is in the capital orbit right now,
+// ranked by warmth, alongside a live activity feed streaming from first-party
+// Source-hub data. Search and Syndicate Circles remain as focused tabs. There
+// is no imported address book — the network is populated from the Source engine.
+
 import { useState } from "react";
+import Link from "next/link";
 import { NetworkSearch } from "./NetworkSearch";
 import { AddContactPanel } from "./AddContactPanel";
-import { BackendConnectors } from "./BackendConnectors";
-import { LinkedInImportModal } from "./LinkedInImportModal";
-import { WarmIntroPanel } from "./WarmIntroPanel";
 import { SyndicateCircle } from "./SyndicateCircle";
+import { WarmIntroPanel } from "./WarmIntroPanel";
+import { ActiveRoster } from "./ActiveRoster";
+import { NetworkActivityFeed } from "./NetworkActivityFeed";
+import type {
+  ActiveNetworkPerson,
+  NetworkPulse,
+  NetworkActivityEvent,
+  NetworkLiveCounts,
+  Temperature,
+} from "@/lib/network-active";
 import type { NetworkSearchResult } from "@/lib/network-search";
 
-type Tab = "search" | "import" | "circles";
+type Tab = "network" | "search" | "circles";
+
+/** Adapt a roster person to the shape the warm-intro drafter expects. */
+function personToContact(p: ActiveNetworkPerson): NetworkSearchResult {
+  return {
+    id: p.id,
+    fullName: p.name,
+    title: p.role,
+    company: p.org,
+    location: null,
+    email: p.email,
+    linkedinUrl: null,
+    avatarUrl: null,
+    strengthScore: p.warmth,
+    strengthLabel: p.temperature ?? "cold",
+    connectedOn: null,
+    relevanceReason: p.nextAction ?? "",
+    introPath: p.introPath,
+  };
+}
 
 interface Circle {
   id: string;
@@ -24,17 +57,34 @@ interface Circle {
 interface Props {
   senderName: string;
   senderTitle?: string | null;
-  initialContacts?: number;
+  people: ActiveNetworkPerson[];
+  pulse: NetworkPulse;
+  activityEvents: NetworkActivityEvent[];
+  liveCounts: NetworkLiveCounts;
   circles?: Circle[];
 }
 
-export function NetworkModule({ senderName, senderTitle, initialContacts = 0, circles = [] }: Props) {
-  const [tab, setTab] = useState<Tab>("search");
-  const [showImport, setShowImport] = useState(false);
-  const [contactCount, setContactCount] = useState(initialContacts);
+const TEMP_BAR: Record<Temperature, { bg: string; label: string }> = {
+  committed: { bg: "bg-emerald-400", label: "Committed" },
+  active: { bg: "bg-accent-400", label: "Active" },
+  warm: { bg: "bg-gold-400", label: "Warm" },
+  cold: { bg: "bg-fg-muted/50", label: "Cold" },
+};
+
+export function NetworkModule({
+  senderName,
+  senderTitle,
+  people,
+  pulse,
+  activityEvents,
+  liveCounts,
+  circles = [],
+}: Props) {
+  const [tab, setTab] = useState<Tab>("network");
+  const [showAdd, setShowAdd] = useState(false);
+  const [addedCount, setAddedCount] = useState(0);
   const [selectedContact, setSelectedContact] = useState<NetworkSearchResult | null>(null);
   const [circleList, setCircleList] = useState<Circle[]>(circles);
-  const [importSuccess, setImportSuccess] = useState<number | null>(null);
 
   async function handleCreateCircle(
     name: string,
@@ -58,161 +108,108 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
     }
   }
 
-  const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    {
-      key: "search",
-      label: "Search Network",
-      icon: (
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-      ),
-    },
-    {
-      key: "import",
-      label: "Import",
-      icon: (
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-8-4-4m0 0L8 8m4-4v12" />
-        </svg>
-      ),
-    },
-    {
-      key: "circles",
-      label: "Circles",
-      icon: (
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-        </svg>
-      ),
-    },
+  const tempOrder: Temperature[] = ["committed", "active", "warm", "cold"];
+  const tempTotal = tempOrder.reduce((sum, t) => sum + pulse.temperature[t], 0) || 1;
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: "network", label: "Active Network" },
+    { key: "search", label: "Search" },
+    { key: "circles", label: "Circles" },
   ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Stats strip */}
-      <div className="flex items-center gap-6 rounded-xl border border-line bg-surface px-5 py-3">
-        <div>
-          <p className="text-2xl font-semibold text-fg">{contactCount.toLocaleString()}</p>
-          <p className="text-xs text-fg-muted">Contacts</p>
+      {/* Pulse — instrument panel */}
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Stat label="In your orbit" value={pulse.people} hint="people across every source" />
+        <Stat label="Engaged" value={pulse.engaged} hint="warm, active, or committed" accent="text-accent-300" />
+        <Stat label="Committed" value={pulse.committed} hint="capital relationships" accent="text-emerald-300" />
+        <div className="fx-stat flex flex-col justify-between">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">Temperature</p>
+          <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-surface-2">
+            {tempOrder.map((t) =>
+              pulse.temperature[t] > 0 ? (
+                <div
+                  key={t}
+                  className={TEMP_BAR[t].bg}
+                  style={{ width: `${(pulse.temperature[t] / tempTotal) * 100}%` }}
+                  title={`${TEMP_BAR[t].label}: ${pulse.temperature[t]}`}
+                />
+              ) : null,
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            {tempOrder.map((t) => (
+              <span key={t} className="flex items-center gap-1 text-[10px] text-fg-muted">
+                <span className={`h-1.5 w-1.5 rounded-full ${TEMP_BAR[t].bg}`} />
+                {pulse.temperature[t]}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="h-8 w-px bg-line" />
-        <div>
-          <p className="text-2xl font-semibold text-fg">{circleList.length}</p>
-          <p className="text-xs text-fg-muted">Circles</p>
-        </div>
-        <div className="h-8 w-px bg-line" />
-        <div className="flex-1" />
-        {contactCount === 0 && (
-          <button
-            onClick={() => setShowImport(true)}
-            className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 transition-colors"
-          >
-            Import LinkedIn network →
-          </button>
-        )}
       </div>
 
-      {/* Import success banner */}
-      {importSuccess !== null && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
-          <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          Successfully imported {importSuccess.toLocaleString()} contacts. Relationship scores will update shortly.
-          <button onClick={() => setImportSuccess(null)} className="ml-auto text-emerald-400/60 hover:text-emerald-400">×</button>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-line">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
-              tab === t.key
-                ? "border-accent text-fg font-medium"
-                : "border-transparent text-fg-muted hover:text-fg"
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-        <div className="ml-auto pb-1">
-          <button
-            onClick={() => setShowImport(true)}
-            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs text-fg-muted hover:text-fg hover:border-fg-muted/40 transition-colors flex items-center gap-1.5"
+      {/* Tabs + actions */}
+      <div className="flex flex-wrap items-center gap-3">
+        <nav className="fx-segment inline-flex font-mono text-xs uppercase tracking-wider">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-md px-3 py-1.5 transition ${
+                tab === t.key ? "bg-surface-2 text-fg-primary" : "text-fg-muted hover:text-fg-primary"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/settings"
+            className="hidden text-xs text-fg-muted transition hover:text-fg-primary sm:inline-flex sm:items-center sm:gap-1"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path d="M12 4v16m8-8H4" />
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
             </svg>
-            Import CSV
+            Connect sources
+          </Link>
+          <button onClick={() => setShowAdd((s) => !s)} className="fx-btn-secondary text-xs">
+            {showAdd ? "Close" : "+ Add contact"}
           </button>
         </div>
       </div>
 
-      {/* Tab content */}
-      <div>
-        {tab === "search" && (
-          <NetworkSearch
-            onSelectContact={(contact) => setSelectedContact(contact)}
-          />
-        )}
-
-        {tab === "import" && (
-          <div className="flex flex-col gap-6">
-            {/* Primary path: per-contact add through the adapter pipeline */}
-            <AddContactPanel onAdded={() => setContactCount((prev) => prev + 1)} />
-
-            {/* Backend connectors — primary sync path, credential-gated */}
-            <BackendConnectors />
-
-            {/* Fallback path: bulk CSV export upload */}
-            <div className="rounded-xl border border-line bg-surface p-6 flex flex-col gap-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0A66C2]/10">
-                  <svg className="h-6 w-6 text-[#0A66C2]" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-semibold text-fg">LinkedIn CSV export <span className="ml-1 rounded bg-fg-muted/15 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider text-fg-muted">Fallback</span></p>
-                  <p className="text-sm text-fg-muted">Bulk-import your LinkedIn data export when a backend connection isn&apos;t available</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowImport(true)}
-                className="rounded-lg bg-[#0A66C2] py-2.5 text-sm font-medium text-white hover:bg-[#0A66C2]/90 transition-colors"
-              >
-                Upload LinkedIn CSV Export
-              </button>
-              <p className="text-xs text-fg-muted">
-                We never access your LinkedIn account. Export is done directly from LinkedIn → Settings → Data Privacy → Get a copy of your data.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {tab === "circles" && (
-          <SyndicateCircle circles={circleList} onCreateCircle={handleCreateCircle} />
-        )}
-      </div>
-
-      {/* Modals */}
-      {showImport && (
-        <LinkedInImportModal
-          onClose={() => setShowImport(false)}
-          onImported={(count) => {
-            setContactCount((prev) => prev + count);
-            setImportSuccess(count);
-            setShowImport(false);
+      {/* Add-contact drawer */}
+      {showAdd && (
+        <AddContactPanel
+          onAdded={() => {
+            setAddedCount((c) => c + 1);
+            setShowAdd(false);
           }}
         />
       )}
+      {addedCount > 0 && !showAdd && (
+        <p className="text-xs text-emerald-300">
+          {addedCount} contact{addedCount === 1 ? "" : "s"} added — reload to see them ranked in your network.
+        </p>
+      )}
 
+      {/* Tab content */}
+      {tab === "network" && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <ActiveRoster people={people} onSelect={(p) => setSelectedContact(personToContact(p))} />
+          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)]">
+            <NetworkActivityFeed initialEvents={activityEvents} initialLive={liveCounts} />
+          </div>
+        </div>
+      )}
+
+      {tab === "search" && <NetworkSearch onSelectContact={(c) => setSelectedContact(c)} />}
+
+      {tab === "circles" && <SyndicateCircle circles={circleList} onCreateCircle={handleCreateCircle} />}
+
+      {/* Warm-intro drawer from search results */}
       {selectedContact && (
         <WarmIntroPanel
           contact={selectedContact}
@@ -221,6 +218,28 @@ export function NetworkModule({ senderName, senderTitle, initialContacts = 0, ci
           onClose={() => setSelectedContact(null)}
         />
       )}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  hint,
+  accent = "text-fg-primary",
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  accent?: string;
+}) {
+  return (
+    <div className="fx-stat">
+      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">{label}</p>
+      <p className={`mt-1 font-display text-2xl font-semibold tabular-nums ${accent}`}>
+        {value.toLocaleString()}
+      </p>
+      <p className="mt-0.5 text-[11px] text-fg-muted">{hint}</p>
     </div>
   );
 }
