@@ -289,7 +289,30 @@ export function createWallVisuals(scene: Phaser.Scene): Phaser.GameObjects.Graph
 
 // ── Furniture ────────────────────────────────────────────────────────────────
 
-export type FurniturePiece = { gfx: Phaser.GameObjects.Graphics; footY: number };
+// A placed furniture object (a pixel-sprite Image, or a flat vector Graphics for
+// rugs/glows/marketplace) plus its foot Y so the caller can dispose it. The
+// caller only ever calls `.gfx.destroy()`, so a GameObject is enough.
+export type FurniturePiece = { gfx: Phaser.GameObjects.GameObject; footY: number };
+
+/** Texture keys for the native institutional pixel furniture sprites. */
+export const FURNITURE_KEYS = [
+  "desk", "workdesk0", "workdesk1", "workdesk2", "chair", "console", "screens",
+  "shelf", "table", "safe", "reception", "coffee", "sofa", "plant", "lamp",
+] as const;
+
+/** Preload path for a furniture sprite key. */
+export function furnitureAsset(key: string): string {
+  return `/assets/fundexecs/office/props/${key}.png`;
+}
+
+/**
+ * Place a bottom-anchored pixel furniture sprite at its foot point, y-sorted so
+ * avatars occlude correctly. Origin (0.5, 1) puts the sprite's base at footY.
+ */
+function placeSprite(scene: Phaser.Scene, key: string, x: number, footY: number): FurniturePiece {
+  const img = scene.add.image(x, footY, key).setOrigin(0.5, 1).setDepth(yDepth(footY));
+  return { gfx: img, footY };
+}
 
 /**
  * Paint every department's furniture. Rugs are flat (below walls); solid pieces
@@ -336,35 +359,23 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
       }
       pieces.push({ gfx: glow, footY: -1 });
 
-      const body = scene.add.graphics().setDepth(yDepth(lfy));
-      drawLamp(body, lx, lfy, accent);
-      pieces.push({ gfx: body, footY: lfy });
+      pieces.push(placeSprite(scene, "lamp", lx, lfy));
     }
 
+    // Accent furniture — native institutional pixel sprites, bottom-anchored.
     for (const p of LAYOUT[room.key] ?? []) {
-      const x = ox + p.rx;
-      const footY = oy + p.ry;
-      const g = scene.add.graphics().setDepth(yDepth(footY));
-      drawPiece(g, p.type, x, footY, accent);
-      pieces.push({ gfx: g, footY });
+      pieces.push(placeSprite(scene, p.type, ox + p.rx, oy + p.ry));
     }
 
-    // Desk workstations: a chair drawn behind the seat (lower depth) and the
-    // desk + computer in front (higher depth, occluding the seated lap).
+    // Desk workstations: a chair behind the seat (lower depth) and the desk +
+    // computer in front (higher depth, occluding the seated lap). Vary the desk
+    // rig per station so a bank of workstations doesn't look cloned.
     (WORKSTATIONS[room.key] ?? []).forEach((w, i) => {
       const sx = ox + w.sx;
       const sy = oy + w.sy;
-
-      const chairFoot = sy + CHAIR_DY;
-      const chair = scene.add.graphics().setDepth(yDepth(chairFoot));
-      drawChair(chair, sx, chairFoot, accent);
-      pieces.push({ gfx: chair, footY: chairFoot });
-
-      const deskFoot = sy + DESK_DY;
-      const desk = scene.add.graphics().setDepth(yDepth(deskFoot));
-      // Vary the rig per desk so a bank of workstations doesn't look cloned.
-      drawWorkdesk(desk, sx, deskFoot, accent, (room.col + room.row + i) % 3);
-      pieces.push({ gfx: desk, footY: deskFoot });
+      pieces.push(placeSprite(scene, "chair", sx, sy + CHAIR_DY));
+      const variant = (room.col + room.row + i) % 3;
+      pieces.push(placeSprite(scene, `workdesk${variant}`, sx, sy + DESK_DY));
     });
   }
 
@@ -497,26 +508,6 @@ function drawStall(g: Phaser.GameObjects.Graphics, cx: number, fy: number, awnin
   g.fillRect(cx - 23, fy - 3, 46, 1.4);
 }
 
-/** An executive chair — the backrest rises behind the seated occupant. */
-function drawChair(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number) {
-  // Soft shadow under the chair base.
-  g.fillStyle(0x000000, 0.2);
-  g.fillEllipse(cx, fy + 3, 20, 6);
-  // Five-star base + post (mostly hidden behind the desk/occupant).
-  g.fillStyle(C.legDark, 1);
-  g.fillRect(cx - 1.4, fy - 2, 2.8, 5);
-  // Seat cushion.
-  g.fillStyle(0x2a3140, 1);
-  g.fillRoundedRect(cx - 8, fy - 4, 16, 5, 2);
-  // Backrest rising behind the occupant.
-  g.fillStyle(0x232a37, 1);
-  g.fillRoundedRect(cx - 8, fy - 17, 16, 14, 3);
-  g.fillStyle(shade(0x232a37, 1.4), 0.7);
-  g.fillRoundedRect(cx - 8, fy - 17, 16, 2.2, 3); // lit top of backrest
-  g.fillStyle(accent, 0.55);
-  g.fillRect(cx - 6.5, fy - 6, 13, 1); // accent trim
-}
-
 /** A slim floor lamp: weighted base, pole, warm shade, and a lit glow spill. */
 function drawLamp(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number) {
   // Contact shadow + weighted base.
@@ -535,76 +526,6 @@ function drawLamp(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent
   // Glow spilling from under the shade.
   g.fillStyle(accent, 0.5);
   g.fillEllipse(cx, fy - 33, 15, 5);
-}
-
-/** A single monitor seen from behind, at (mx) rising from the desk surface. */
-function deskMonitor(g: Phaser.GameObjects.Graphics, mx: number, surfaceY: number, accent: number, w = 14, h = 10) {
-  g.fillStyle(C.legDark, 1);
-  g.fillRect(mx - 1, surfaceY - 2, 2, 3); // stand
-  g.fillStyle(0x171b23, 1);
-  g.fillRoundedRect(mx - w / 2, surfaceY - h - 1, w, h, 1.5); // shell
-  g.fillStyle(shade(0x171b23, 1.5), 1);
-  g.fillRect(mx - w / 2, surfaceY - h - 1, w, 1.4);           // lit top edge
-  g.fillStyle(accent, 0.5);
-  g.fillRect(mx - w / 2 + 1, surfaceY - h - 2.3, w - 2, 1.3); // screen glow spill
-}
-
-/**
- * A desk with a computer, keyboard, mouse, and clutter. Monitors sit to the
- * occupant's side so they never cover the face; the desk front occludes the
- * lap. `variant` (0–2) varies the rig — single monitor, dual monitors, or a
- * laptop — and the monitor casts a soft light pool over the occupant so a
- * staffed desk reads as powered-on.
- */
-function drawWorkdesk(g: Phaser.GameObjects.Graphics, cx: number, fy: number, accent: number, variant = 0) {
-  box(g, cx, fy, 46, 7, 11, C.deskTop, C.deskFront);
-  const surfaceY = fy - 11 - 7; // top face of the desk
-
-  // Soft monitor light pool spilling up over the seated occupant.
-  g.fillStyle(accent, 0.06);
-  g.fillEllipse(cx - 6, surfaceY - 8, 44, 30);
-
-  if (variant === 2) {
-    // Laptop — low screen that stays below the occupant's face, offset left.
-    const lx = cx - 11;
-    g.fillStyle(0x171b23, 1);
-    g.fillRoundedRect(lx - 7, surfaceY - 5, 14, 5, 1);   // screen
-    g.fillStyle(accent, 0.5);
-    g.fillRect(lx - 6, surfaceY - 4.2, 12, 1.1);
-    g.fillStyle(0x2a3140, 1);
-    g.fillRoundedRect(lx - 7.5, surfaceY, 15, 2.4, 0.6); // base/keyboard
-  } else if (variant === 1) {
-    // Dual monitors, both to the occupant's side.
-    deskMonitor(g, cx - 18, surfaceY, accent, 13, 9);
-    deskMonitor(g, cx - 6, surfaceY, accent, 13, 9);
-    g.fillStyle(0x2a3140, 1);
-    g.fillRoundedRect(cx + 4, surfaceY + 1.4, 12, 2.6, 0.6); // keyboard
-  } else {
-    // Single side monitor + keyboard.
-    deskMonitor(g, cx - 13, surfaceY, accent);
-    g.fillStyle(0x2a3140, 1);
-    g.fillRoundedRect(cx - 3, surfaceY + 1.4, 13, 2.6, 0.6); // keyboard
-    g.fillCircle(cx + 14, surfaceY + 2.7, 1.2);              // mouse
-  }
-
-  // Desk clutter varies too: papers always; a mug, a desk phone, or a tiny
-  // succulent as the accent item.
-  g.fillStyle(0xe8eef5, 0.9);
-  g.fillRect(cx - 6, surfaceY + 0.6, 6, 4); // papers
-  if (variant === 0) {
-    g.fillStyle(shade(accent, 1.1), 1);
-    g.fillCircle(cx + 9, surfaceY - 0.8, 1.6); // mug
-  } else if (variant === 1) {
-    g.fillStyle(0x14532d, 1);
-    g.fillCircle(cx + 15, surfaceY - 1, 2);    // succulent
-    g.fillStyle(C.wood, 1);
-    g.fillRect(cx + 13.6, surfaceY - 0.4, 2.8, 2);
-  } else {
-    g.fillStyle(0x11151f, 1);
-    g.fillRoundedRect(cx + 12, surfaceY - 2, 5, 4, 0.8); // desk phone
-    g.fillStyle(shade(accent, 1.2), 0.9);
-    g.fillRect(cx + 12.6, surfaceY - 1.4, 3.8, 0.8);
-  }
 }
 
 /** A light-from-above extruded block: front face + top cap + soft shadow. */

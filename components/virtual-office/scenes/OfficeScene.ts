@@ -43,6 +43,8 @@ import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar }
 import {
   createWallVisuals,
   createFurniture,
+  FURNITURE_KEYS,
+  furnitureAsset,
   roomAccentColor,
   marketplaceStallAnchors,
   officeSeats,
@@ -393,6 +395,9 @@ export class OfficeScene extends Phaser.Scene {
     // Tilemap + tileset — replaces per-room PNG backgrounds
     this.load.tilemapTiledJSON("office-world", "/assets/fundexecs/office/maps/office-world.tmj");
     this.load.image("office-tiles", "/assets/fundexecs/office/tilesets/office-tiles.png");
+
+    // Native institutional pixel furniture sprites (desks, consoles, plants…).
+    for (const key of FURNITURE_KEYS) this.load.image(key, furnitureAsset(key));
 
     // Earnest Fundmaker sprite sheet (32×32 frames)
     const earnestMap = spriteFrameMaps.earnest;
