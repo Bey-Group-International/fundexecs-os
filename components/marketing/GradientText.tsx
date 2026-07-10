@@ -1,4 +1,4 @@
-import type { ElementType, ReactNode } from "react";
+import { createElement, type ElementType, type ReactNode } from "react";
 
 type GradientTextProps = {
   children: ReactNode;
@@ -20,11 +20,12 @@ export function GradientText({
   className = "",
   animate = true,
 }: GradientTextProps) {
-  return (
-    <Tag
-      className={`fx-text-gradient ${animate ? "animate-gradient-pan" : ""} ${className}`.trim()}
-    >
-      {children}
-    </Tag>
+  // createElement (not JSX) so the dynamic `as` tag isn't resolved against the
+  // global JSX.IntrinsicElements catalog — which @react-three/fiber augments
+  // with three.js elements whose children type is `never`.
+  return createElement(
+    Tag,
+    { className: `fx-text-gradient ${animate ? "animate-gradient-pan" : ""} ${className}`.trim() },
+    children,
   );
 }
