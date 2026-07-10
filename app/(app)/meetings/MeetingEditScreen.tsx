@@ -142,7 +142,11 @@ export function MeetingEditScreen({
   const [attachments, setAttachments] = useState("");
   const [meetingUrl, setMeetingUrl] = useState(initial?.meetingUrl ?? "");
   const [calendarVisibility, setCalendarVisibility] = useState(initial?.calendarVisibility ?? "organization");
-  const [reminderMinutes, setReminderMinutes] = useState(String(initial?.reminderMinutes ?? 15));
+  // An explicit null on edit means the meeting was saved with "No reminder" — a
+  // deliberate non-default choice — so preserve it rather than coercing to 15.
+  const [reminderMinutes, setReminderMinutes] = useState(
+    initial?.reminderMinutes === null ? "" : String(initial?.reminderMinutes ?? 15),
+  );
   const [syncEnabled, setSyncEnabled] = useState(initial?.externalCalendarSyncEnabled ?? false);
   const [syncProvider, setSyncProvider] = useState(initial?.externalCalendarProvider ?? "");
 
@@ -156,7 +160,8 @@ export function MeetingEditScreen({
           initial?.meetingUrl ||
           initial?.preparationRequirements ||
           initial?.externalCalendarSyncEnabled ||
-          (initial?.reminderMinutes != null && initial.reminderMinutes !== 15) ||
+          // null reminder = "No reminder", a deliberate non-default (default 15).
+          initial?.reminderMinutes !== 15 ||
           (initial?.calendarVisibility != null && initial.calendarVisibility !== "organization"),
       ),
   );
