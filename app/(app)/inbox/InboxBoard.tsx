@@ -16,6 +16,7 @@ import {
   replyToThread,
   draftThreadReply,
   assignThread,
+  setThreadStar,
   bulkThreadAction,
   snoozeThread,
   type ThreadActionResult,
@@ -64,6 +65,8 @@ export interface InboxCardData {
   // The Focused / Other tab this thread belongs to (resolved server-side).
   tab: "focused" | "other";
   unread: boolean;
+  // Operator-set star — pins the thread and feeds the "Starred" saved view.
+  starred: boolean;
   status: "open" | "snoozed" | "done";
   snoozedUntil: string | null;
   meetingAt: string | null;
@@ -418,6 +421,19 @@ function ThreadCard({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [assigning, startAssignTransition] = useTransition();
 
+  // Star toggle — optimistic so the pin flips instantly, reverting on failure.
+  const [starred, setStarred] = useState(card.starred);
+  const [starPending, startStarTransition] = useTransition();
+  const toggleStar = useCallback(() => {
+    const next = !starred;
+    setStarred(next);
+    startStarTransition(async () => {
+      const r = await setThreadStar(card.id, next);
+      if (r.ok) router.refresh();
+      else setStarred(!next);
+    });
+  }, [starred, card.id, router]);
+
   // Assign / reassign the thread to a teammate (empty value clears it).
   const onAssign = useCallback(
     (value: string) => {
@@ -549,9 +565,24 @@ function ThreadCard({
             {card.intent ? ` · ${card.intent}` : ""}
           </p>
         </div>
-        <span className="shrink-0 font-mono text-[10px] text-fg-muted" title="Triage priority">
-          {card.priority}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleStar}
+            disabled={starPending}
+            aria-pressed={starred}
+            aria-label={starred ? "Unstar thread" : "Star thread"}
+            title={starred ? "Starred — click to unstar" : "Star this thread"}
+            className={`text-sm leading-none transition disabled:opacity-50 ${
+              starred ? "text-gold-400" : "text-fg-muted hover:text-gold-400"
+            }`}
+          >
+            {starred ? "★" : "☆"}
+          </button>
+          <span className="font-mono text-[10px] text-fg-muted" title="Triage priority">
+            {card.priority}
+          </span>
+        </div>
       </div>
 
       {card.summary ? <p className="mt-2 line-clamp-2 text-sm text-fg-secondary">{card.summary}</p> : null}

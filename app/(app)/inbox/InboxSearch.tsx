@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
+import { SAVED_VIEWS, viewParams, activeView } from "@/lib/inbox/views";
 import type { Teammate } from "./actions";
 
 // Server-driven search + filter bar for the communications inbox. Writes q /
@@ -24,7 +25,7 @@ export function InboxSearch({ teammates }: { teammates: Teammate[] }) {
 
   // Push a changed param set to the URL, preserving the others. Empty values are
   // removed so the URL stays clean and filters clear cleanly.
-  function apply(next: { q?: string; channel?: string; unread?: string; assigned?: string }) {
+  function apply(next: { q?: string; channel?: string; unread?: string; starred?: string; assigned?: string }) {
     const sp = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
       if (value) sp.set(key, value);
@@ -47,8 +48,9 @@ export function InboxSearch({ teammates }: { teammates: Teammate[] }) {
   }, [q]);
 
   const channel = params.get("channel") ?? "";
-  const unread = params.get("unread") === "1";
   const assigned = params.get("assigned") ?? "";
+  // The active saved view (All / Unread / Starred), derived from the params.
+  const view = activeView({ unread: params.get("unread"), starred: params.get("starred") });
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -87,17 +89,27 @@ export function InboxSearch({ teammates }: { teammates: Teammate[] }) {
           </option>
         ))}
       </select>
-      <button
-        type="button"
-        onClick={() => apply({ unread: unread ? "" : "1" })}
-        className={`rounded-full border px-3 py-1.5 text-xs transition ${
-          unread
-            ? "border-gold-500 bg-gold-500/10 text-gold-300"
-            : "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-        }`}
-      >
-        Unread only
-      </button>
+      {/* Saved views — one-click read-state / star presets (single-choice). */}
+      <div className="flex items-center gap-1" role="group" aria-label="Saved views">
+        {SAVED_VIEWS.map((v) => {
+          const on = view === v.key;
+          return (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => apply(viewParams(v.key))}
+              aria-pressed={on}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                on
+                  ? "border-gold-500 bg-gold-500/10 text-gold-300"
+                  : "border-line text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+              }`}
+            >
+              {v.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
