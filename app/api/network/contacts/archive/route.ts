@@ -26,19 +26,30 @@ export async function POST(req: NextRequest) {
       from: (t: string) => {
         update: (v: Record<string, unknown>) => {
           eq: (c: string, v: string) => {
-            eq: (c: string, v: string) => Promise<{ error: { message: string } | null }>;
+            eq: (c: string, v: string) => {
+              select: (s?: string) => Promise<{
+                data: unknown[] | null;
+                error: { message: string } | null;
+              }>;
+            };
           };
         };
       };
     };
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("network_contacts")
       .update({ archived_at: new Date().toISOString() })
       .eq("id", contactId)
-      .eq("organization_id", auth.ctx.orgId);
+      .eq("organization_id", auth.ctx.orgId)
+      .select("id");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    // No row matched (wrong org, unknown id, or RLS block) — report honestly so
+    // the client doesn't show a false success and the row reappears on reload.
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Contact not found." }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -111,23 +111,27 @@ export function ActiveRoster({
   const [note, setNote] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // The roster minus anything archived this session — the basis for counts and
+  // filter options so they stay in step with the visible rows.
+  const livePeople = useMemo(() => people.filter((p) => !archived.has(p.id)), [people, archived]);
+
   const tempCounts = useMemo(() => {
-    const c: Record<TempFilter, number> = { all: people.length, committed: 0, active: 0, warm: 0, cold: 0 };
-    for (const p of people) if (p.temperature) c[p.temperature] += 1;
+    const c: Record<TempFilter, number> = { all: livePeople.length, committed: 0, active: 0, warm: 0, cold: 0 };
+    for (const p of livePeople) if (p.temperature) c[p.temperature] += 1;
     return c;
-  }, [people]);
+  }, [livePeople]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const p of people) if (p.category) set.add(p.category);
+    for (const p of livePeople) if (p.category) set.add(p.category);
     return [...set].sort();
-  }, [people]);
+  }, [livePeople]);
 
   const kinds = useMemo(() => {
     const set = new Set<PersonKind>();
-    for (const p of people) set.add(p.kind);
+    for (const p of livePeople) set.add(p.kind);
     return [...set];
-  }, [people]);
+  }, [livePeople]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -186,7 +190,9 @@ export function ActiveRoster({
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [filtered.length]);
+    // `shown` is included so the observer is recreated when the sentinel
+    // re-mounts after the window resets on a filter/sort change.
+  }, [filtered.length, shown]);
 
   // Close menus on any outside click.
   useEffect(() => {
@@ -270,9 +276,9 @@ export function ActiveRoster({
           <span className="font-display text-lg font-semibold tabular-nums text-fg-primary">
             {filtered.length.toLocaleString()}
           </span>{" "}
-          {filtered.length === people.length
+          {filtered.length === livePeople.length
             ? "in your active network"
-            : `of ${people.length.toLocaleString()} shown`}
+            : `of ${livePeople.length.toLocaleString()} shown`}
         </p>
 
         {/* Sort control */}
