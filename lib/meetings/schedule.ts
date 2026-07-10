@@ -237,6 +237,69 @@ export function wasEditedAfterSave(meeting: ScheduledMeetingShape): boolean {
   return new Date(meeting.updated_at).getTime() - new Date(meeting.locked_at).getTime() > 1000;
 }
 
+// ── Real-time countdown / live-window state ────────────────────────────────
+// Pure derivation of a meeting's position relative to "now" so the Upcoming
+// Meetings cards can tick live (countdown, "In Progress", "Ended") without a
+// server round-trip. The room lifecycle (started_at/ended_at) remains the
+// source of truth for *liveness*; this only reasons about the scheduled window.
+
+export type MeetingTimePhase = "upcoming" | "imminent" | "in_progress" | "ended";
+
+export interface MeetingTimeState {
+  phase: MeetingTimePhase;
+  /** Short human label, e.g. "in 12 min", "Starts now", "24 min left", "Ended". */
+  label: string;
+  /** Whole minutes until start (negative once started). */
+  minutesToStart: number;
+}
+
+const MINUTE = 60_000;
+
+/** Pluralize a whole-unit count: relativeUnits(1,"min") -> "1 min". */
+function relativeUnits(value: number, unit: "min" | "hour" | "day"): string {
+  const abbrev = unit === "min" ? "min" : unit === "hour" ? "hr" : "day";
+  return `${value} ${abbrev}${value === 1 ? "" : "s"}`;
+}
+
+/** Turn a signed millisecond gap into a compact "12 min" / "3 hrs" / "2 days". */
+function humanizeGap(ms: number): string {
+  const mins = Math.round(Math.abs(ms) / MINUTE);
+  if (mins < 60) return relativeUnits(Math.max(mins, 1), "min");
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return relativeUnits(hours, "hour");
+  return relativeUnits(Math.round(hours / 24), "day");
+}
+
+/**
+ * Derive the live scheduling state of a meeting relative to `now`.
+ * - `imminent` fires inside the last two minutes before start so the UI can
+ *   switch to an urgent "Starts now" affordance.
+ * - `in_progress` spans [start, start + duration).
+ */
+export function meetingTimeState(
+  scheduledAt: string | null | undefined,
+  durationMinutes: number | null | undefined,
+  now: number = Date.now(),
+): MeetingTimeState | null {
+  if (!scheduledAt) return null;
+  const start = new Date(scheduledAt).getTime();
+  if (!Number.isFinite(start)) return null;
+  const end = start + (durationMinutes ?? 60) * MINUTE;
+  const minutesToStart = Math.round((start - now) / MINUTE);
+
+  if (now >= end) {
+    return { phase: "ended", label: "Ended", minutesToStart };
+  }
+  if (now >= start) {
+    const left = humanizeGap(end - now);
+    return { phase: "in_progress", label: `${left} left`, minutesToStart };
+  }
+  if (start - now <= 2 * MINUTE) {
+    return { phase: "imminent", label: "Starts now", minutesToStart };
+  }
+  return { phase: "upcoming", label: `in ${humanizeGap(start - now)}`, minutesToStart };
+}
+
 export interface ConflictCandidate {
   id: string;
   title?: string | null;

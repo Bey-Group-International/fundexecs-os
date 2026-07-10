@@ -61,6 +61,15 @@ const MEETING_TYPE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+// Common institutional meeting lengths. "Custom" reveals an explicit end time.
+const DURATION_PRESETS = [
+  { minutes: 30, label: "30m" },
+  { minutes: 45, label: "45m" },
+  { minutes: 60, label: "1h" },
+  { minutes: 90, label: "1h 30m" },
+  { minutes: 120, label: "2h" },
+];
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -78,6 +87,17 @@ function addMinutesToTime(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
   const total = (h * 60 + m + minutes) % (24 * 60);
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
+}
+
+function formatEndCaption(startTime: string, endTime: string, timezone: string): string {
+  if (!/^\d{2}:\d{2}$/.test(endTime)) return "";
+  const [h, m] = endTime.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  const pretty = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const mins = durationMinutesFromTimes(startTime, endTime);
+  const dur = mins > 0 ? ` · ${mins} min` : "";
+  return `Ends ${pretty}${dur} · ${timezone}`;
 }
 
 export function MeetingEditScreen({
@@ -105,6 +125,9 @@ export function MeetingEditScreen({
   const [date, setDate] = useState(startParts.date);
   const [startTime, setStartTime] = useState(startParts.time);
   const [endTime, setEndTime] = useState(addMinutesToTime(startParts.time, initialDuration));
+  // "Custom" end time is only surfaced when the starting duration isn't one of
+  // the presets, keeping the common path down to a single tap.
+  const [customEnd, setCustomEnd] = useState(!DURATION_PRESETS.some((p) => p.minutes === initialDuration));
   const [timezone, setTimezone] = useState(initial?.timezone ?? browserTz);
   const [internalAttendees, setInternalAttendees] = useState(initial?.internalAttendees ?? "");
   const [externalGuests, setExternalGuests] = useState(initial?.externalGuests ?? "");
@@ -121,6 +144,19 @@ export function MeetingEditScreen({
   const [syncEnabled, setSyncEnabled] = useState(initial?.externalCalendarSyncEnabled ?? false);
   const [syncProvider, setSyncProvider] = useState(initial?.externalCalendarProvider ?? "");
 
+  // Advanced options stay collapsed by default; auto-open on edit when the
+  // meeting already carries advanced configuration so nothing looks lost.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    mode === "edit" &&
+      Boolean(
+        initial?.relatedRecordType ||
+          initial?.assignedCopilotAgent ||
+          initial?.meetingUrl ||
+          initial?.preparationRequirements ||
+          initial?.externalCalendarSyncEnabled,
+      ),
+  );
+
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [conflicts, setConflicts] = useState<Array<{ id: string; title: string; scheduledAt: string }>>([]);
   const [allowConflict, setAllowConflict] = useState(false);
@@ -128,6 +164,13 @@ export function MeetingEditScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<"save" | "draft" | null>(null);
   const [savedResult, setSavedResult] = useState<MeetingSaveResult | null>(null);
+
+  const activeDuration = durationMinutesFromTimes(startTime, endTime);
+
+  function chooseDuration(minutes: number) {
+    setCustomEnd(false);
+    setEndTime(addMinutesToTime(startTime, minutes));
+  }
 
   // Keep end time sensible when start moves past it.
   useEffect(() => {
@@ -289,14 +332,14 @@ export function MeetingEditScreen({
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 backdrop-blur-sm sm:items-start sm:p-6"
     >
-      <div className="flex h-full w-full max-w-2xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]">
+      <div className="flex h-full w-full max-w-xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
           <div>
             <h2 className="text-sm font-semibold text-[var(--fg-primary)]">
               {mode === "edit" ? "Edit meeting" : "Schedule meeting"}
             </h2>
-            <p className="text-xs text-[var(--fg-muted)]">Configure details, then save to lock into your calendar.</p>
+            <p className="text-xs text-[var(--fg-muted)]">Title, time, and attendees are all you need — the rest is optional.</p>
           </div>
           <button
             type="button"
@@ -313,6 +356,7 @@ export function MeetingEditScreen({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
           <div className="flex flex-col gap-6">
+            {/* Essentials — title + type */}
             <Section title="Overview">
               <TextField label="Meeting title" required value={title} onChange={setTitle} error={fieldErrors.title} placeholder="e.g. Q3 LP Review" />
               <SelectField
@@ -325,83 +369,150 @@ export function MeetingEditScreen({
               />
             </Section>
 
-            <Section title="Schedule">
+            {/* Essentials — when */}
+            <Section title="When">
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField label="Date" required type="date" value={date} onChange={setDate} error={fieldErrors.date} />
-                <TextField label="Time zone" required value={timezone} onChange={setTimezone} error={fieldErrors.timezone} />
                 <TextField label="Start time" required type="time" value={startTime} onChange={setStartTime} error={fieldErrors.startTime} />
-                <TextField label="End time" required type="time" value={endTime} onChange={setEndTime} error={fieldErrors.endTime} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel label="Duration" />
+                <div className="flex flex-wrap gap-1.5">
+                  {DURATION_PRESETS.map((p) => (
+                    <Chip
+                      key={p.minutes}
+                      active={!customEnd && activeDuration === p.minutes}
+                      onClick={() => chooseDuration(p.minutes)}
+                    >
+                      {p.label}
+                    </Chip>
+                  ))}
+                  <Chip active={customEnd} onClick={() => setCustomEnd(true)}>
+                    Custom
+                  </Chip>
+                </div>
+                {customEnd ? (
+                  <div className="mt-1.5">
+                    <TextField label="End time" required type="time" value={endTime} onChange={setEndTime} error={fieldErrors.endTime} />
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[var(--fg-muted)]">{formatEndCaption(startTime, endTime, timezone)}</p>
+                )}
+                {!customEnd && fieldErrors.endTime ? (
+                  <span className="text-[11px] text-[var(--status-danger)]">{fieldErrors.endTime}</span>
+                ) : null}
               </div>
             </Section>
 
-            <Section title="Participants">
+            {/* Essentials — attendees */}
+            <Section title="Attendees">
               <TextArea label="Internal attendees" value={internalAttendees} onChange={setInternalAttendees} hint="Names or emails, separated by commas or new lines." />
-              <TextArea label="External guests" value={externalGuests} onChange={setExternalGuests} hint="Guest emails, e.g. Jane Doe <jane@fund.com>." />
+              <TextArea label="External guests" value={externalGuests} onChange={setExternalGuests} hint="Guest emails, e.g. Jane Doe <jane@fund.com>. Guests are invited by email on save." />
             </Section>
 
-            <Section title="Context">
-              <TextArea label="Meeting objective" value={objective} onChange={setObjective} />
+            {/* Essentials — briefing */}
+            <Section title="Briefing">
+              <TextArea label="Objective" value={objective} onChange={setObjective} hint="What outcome does this meeting need to reach?" />
               <TextArea label="Agenda" value={agenda} onChange={setAgenda} />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SelectField
-                  label="Related record"
-                  value={relatedRecordType}
-                  onChange={setRelatedRecordType}
-                  options={[{ value: "", label: "None" }, ...RELATED_RECORD_TYPES.map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))]}
-                />
-                <TextField label="Record ID" value={relatedRecordId} onChange={setRelatedRecordId} placeholder="Optional record UUID" />
-                <SelectField
-                  label="Assigned copilot"
-                  value={assignedCopilot}
-                  onChange={setAssignedCopilot}
-                  options={[{ value: "", label: "None" }, ...AGENTS.map((a) => ({ value: a.key, label: a.name }))]}
-                />
-                <TextField label="Meeting link" value={meetingUrl} onChange={setMeetingUrl} placeholder="Optional external link" />
-              </div>
-              <TextArea label="Preparation requirements" value={preparationRequirements} onChange={setPreparationRequirements} />
-              <TextArea label="Attachments / linked documents" value={attachments} onChange={setAttachments} hint="One per line. Name <https://link> or a plain label." />
             </Section>
 
-            <Section title="Calendar & reminders">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SelectField
-                  label="Calendar visibility"
-                  value={calendarVisibility}
-                  onChange={setCalendarVisibility}
-                  options={CALENDAR_VISIBILITIES.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))}
-                />
-                <SelectField
-                  label="Reminder"
-                  value={reminderMinutes}
-                  onChange={setReminderMinutes}
-                  options={[
-                    { value: "", label: "No reminder" },
-                    { value: "5", label: "5 min before" },
-                    { value: "15", label: "15 min before" },
-                    { value: "30", label: "30 min before" },
-                    { value: "60", label: "1 hour before" },
-                    { value: "1440", label: "1 day before" },
-                  ]}
-                />
-              </div>
-              <label className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5">
-                <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="mt-0.5" />
-                <span className="text-xs text-[var(--fg-secondary)]">
-                  Sync to a third-party calendar after saving. The native FundExecs calendar always remains the source of truth.
+            {/* Advanced — collapsed by default */}
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-0)]/40">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left"
+                aria-expanded={advancedOpen}
+              >
+                <span className="flex flex-col">
+                  <span className="text-xs font-semibold text-[var(--fg-secondary)]">Advanced options</span>
+                  <span className="text-[11px] text-[var(--fg-muted)]">Time zone, deal linkage, copilot, reminders, external calendar sync</span>
                 </span>
-              </label>
-              {syncEnabled ? (
-                <SelectField
-                  label="Third-party provider"
-                  value={syncProvider}
-                  onChange={setSyncProvider}
-                  options={[
-                    { value: "", label: "Select provider" },
-                    ...EXTERNAL_CALENDAR_PROVIDERS.map((p) => ({ value: p, label: p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) })),
-                  ]}
-                />
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`shrink-0 text-[var(--fg-muted)] transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {advancedOpen ? (
+                <div className="flex flex-col gap-6 border-t border-[var(--line)] px-4 py-5">
+                  <Section title="Schedule">
+                    <TextField label="Time zone" required value={timezone} onChange={setTimezone} error={fieldErrors.timezone} />
+                  </Section>
+
+                  <Section title="Linkage & prep">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <SelectField
+                        label="Related record"
+                        value={relatedRecordType}
+                        onChange={setRelatedRecordType}
+                        options={[{ value: "", label: "None" }, ...RELATED_RECORD_TYPES.map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))]}
+                      />
+                      <TextField label="Record ID" value={relatedRecordId} onChange={setRelatedRecordId} placeholder="Optional record UUID" />
+                      <SelectField
+                        label="Assigned copilot"
+                        value={assignedCopilot}
+                        onChange={setAssignedCopilot}
+                        options={[{ value: "", label: "None" }, ...AGENTS.map((a) => ({ value: a.key, label: a.name }))]}
+                      />
+                      <TextField label="Meeting link" value={meetingUrl} onChange={setMeetingUrl} placeholder="Optional external link" />
+                    </div>
+                    <TextArea label="Preparation requirements" value={preparationRequirements} onChange={setPreparationRequirements} />
+                    <TextArea label="Attachments / linked documents" value={attachments} onChange={setAttachments} hint="One per line. Name <https://link> or a plain label." />
+                  </Section>
+
+                  <Section title="Calendar & reminders">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <SelectField
+                        label="Calendar visibility"
+                        value={calendarVisibility}
+                        onChange={setCalendarVisibility}
+                        options={CALENDAR_VISIBILITIES.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))}
+                      />
+                      <SelectField
+                        label="Reminder"
+                        value={reminderMinutes}
+                        onChange={setReminderMinutes}
+                        options={[
+                          { value: "", label: "No reminder" },
+                          { value: "5", label: "5 min before" },
+                          { value: "15", label: "15 min before" },
+                          { value: "30", label: "30 min before" },
+                          { value: "60", label: "1 hour before" },
+                          { value: "1440", label: "1 day before" },
+                        ]}
+                      />
+                    </div>
+                    <label className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5">
+                      <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="mt-0.5" />
+                      <span className="text-xs text-[var(--fg-secondary)]">
+                        Sync to a third-party calendar after saving. The native FundExecs calendar always remains the source of truth.
+                      </span>
+                    </label>
+                    {syncEnabled ? (
+                      <SelectField
+                        label="Third-party provider"
+                        value={syncProvider}
+                        onChange={setSyncProvider}
+                        options={[
+                          { value: "", label: "Select provider" },
+                          ...EXTERNAL_CALENDAR_PROVIDERS.map((p) => ({ value: p, label: p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) })),
+                        ]}
+                      />
+                    ) : null}
+                  </Section>
+                </div>
               ) : null}
-            </Section>
+            </div>
 
             {conflicts.length > 0 ? (
               <div className="rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3">
@@ -454,7 +565,7 @@ export function MeetingEditScreen({
                 disabled={busy !== null}
                 className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--gold-500)] disabled:opacity-50"
               >
-                {busy === "save" ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Meeting"}
+                {busy === "save" ? "Saving…" : mode === "edit" ? "Save Changes" : "Schedule Meeting"}
               </button>
             </>
           )}
@@ -470,6 +581,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">{title}</h3>
       {children}
     </section>
+  );
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+        active
+          ? "border-[var(--gold-400)] bg-[var(--gold-400)]/15 text-[var(--gold-400)]"
+          : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -50,9 +50,9 @@ export function MeetingLobby() {
         <div className="inline-flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-[var(--gold-400)]/10 border border-[var(--gold-400)]/20 mb-1 sm:mb-2 mx-auto">
           <VideoIcon />
         </div>
-        <h1 className="text-xl sm:text-2xl font-semibold text-[var(--fg-primary)]">Meeting</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-[var(--fg-primary)]">Meetings</h1>
         <p className="hidden sm:block text-sm text-[var(--fg-muted)] max-w-sm">
-          High-quality video meetings with AI-powered transcription, live notes, and action items.
+          Institutional-grade video rooms with live transcription, briefing notes, and tracked action items.
         </p>
       </div>
 
@@ -135,10 +135,10 @@ export function MeetingLobby() {
       <button
         type="button"
         onClick={() => setScheduleOpen(true)}
-        className="flex items-center gap-2 text-sm text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+        className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3.5 py-2 text-sm text-[var(--fg-secondary)] hover:border-[var(--gold-400)]/40 hover:text-[var(--fg-primary)] transition-colors"
       >
         <CalendarIcon />
-        Schedule a meeting
+        Schedule for later
       </button>
 
       {scheduleOpen && (
