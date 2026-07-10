@@ -27,6 +27,7 @@ import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { AgentRosterButton } from "./program/AgentRosterButton";
 import { AgencyKanban } from "./program/AgencyKanban";
 import { TeamFlowGraph } from "./program/TeamFlowGraph";
+import { DelegationDesigner } from "./program/DelegationDesigner";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
@@ -486,6 +487,7 @@ export function VirtualOfficeGame({
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [flowOpen, setFlowOpen] = useState(false);
+  const [designerOpen, setDesignerOpen] = useState(false);
   // The set of private rooms, mirrored into React state so the "Private" toggle
   // and any privacy-aware chrome re-render whenever a room is locked/unlocked.
   const [privateRooms, setPrivateRooms] = useState<Set<string>>(() => new Set());
@@ -1490,6 +1492,23 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">⌥</span>
           Flow
         </button>
+        {/* Delegation designer — no-code editor for the executive team (Design + Apply). */}
+        <button
+          type="button"
+          onClick={() => setDesignerOpen(true)}
+          title="Design the executive team (who Earn delegates to, model, approval gates)"
+          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          style={{
+            fontFamily: "Georgia, serif",
+            letterSpacing: "0.06em",
+            color: "#94a3b8",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <span className="opacity-60 text-[8px]">✦</span>
+          Design
+        </button>
         {/* Map editor — author the floor's WorkAdventure-style scripted areas.
             (⌘K opens the command palette; the directory has its own event entry.) */}
         <button
@@ -1728,6 +1747,7 @@ export function VirtualOfficeGame({
         {mapEditorOpen && <AreaMapEditor onClose={() => setMapEditorOpen(false)} />}
         {boardOpen && <AgencyKanban onClose={() => setBoardOpen(false)} />}
         {flowOpen && <TeamFlowGraph onClose={() => setFlowOpen(false)} />}
+        {designerOpen && <DelegationDesigner onClose={() => setDesignerOpen(false)} />}
 
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"

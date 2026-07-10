@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { RichText } from "@/components/RichText";
 import { text } from "@/lib/richtext";
-import { AGENT_BY_ID, roomLabel, type AgentId, type AgentState, type AuditEvent } from "./officeProgram";
+import { AGENT_BY_ID, roomLabel, RISK_TIERS, type AgentId, type AgentState, type AuditEvent } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 import {
   interactWithAgent,
@@ -13,6 +13,8 @@ import {
   getExecPrecedents,
 } from "./officeProgramStore";
 import { relativeTime } from "@/lib/office/floor-activity";
+import { useTeamConfig } from "./useTeamConfig";
+import { PROVIDER_LABELS, resolveExecConfig } from "@/lib/office/teamConfig";
 import {
   executiveSheet,
   deriveTraits,
@@ -82,6 +84,7 @@ export function AgentFloorInspector({
   onClose: () => void;
 }) {
   const s = useOfficeProgram();
+  const teamConfig = useTeamConfig();
   const [picking, setPicking] = useState(false);
   const rt = s.agents[agentId];
   const meta = AGENT_BY_ID[agentId];
@@ -109,6 +112,8 @@ export function AgentFloorInspector({
   // Memory (#62): the executive's shipped precedents — a live projection of the
   // audit trail (recomputed each render; the audit log is bounded). Newest-first.
   const precedents = getExecPrecedents(agentId).slice(0, 3);
+  // Applied team design (Delegation Designer): model + approval gate + on/off.
+  const ec = agentId === "earn" ? null : resolveExecConfig(agentId, teamConfig);
 
   const sm = STATE_META[rt.state] ?? STATE_META.idle;
   const hasOwns = !!rt.owns;
@@ -243,6 +248,26 @@ export function AgentFloorInspector({
             ))}
           </div>
         </div>
+
+        {/* Configuration — the applied team design (Delegation Designer). */}
+        {ec && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={EYEBROW}>Configuration</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, color: "rgba(255,248,220,0.7)" }}>
+              <span style={{ color: "rgba(255,248,220,0.45)" }}>Model</span>
+              <span style={{ marginLeft: "auto", color: meta.accent }}>{PROVIDER_LABELS[ec.provider]}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, color: "rgba(255,248,220,0.7)" }}>
+              <span style={{ color: "rgba(255,248,220,0.45)" }}>Approval gate</span>
+              <span style={{ marginLeft: "auto", color: ec.humanInLoop ? "#f59e0b" : "rgba(255,248,220,0.4)" }}>
+                {ec.humanInLoop ? `Human-in-loop · ${RISK_TIERS[ec.gateTier].short}+` : "Off"}
+              </span>
+            </div>
+            {!ec.enabled && (
+              <div style={{ fontSize: 9, color: "rgba(239,68,68,0.7)" }}>Off the delegable team — Earn won&apos;t route work here.</div>
+            )}
+          </div>
+        )}
 
         {/* Track record (#62 memory) — precedents this executive has shipped,
             a live projection of the audit trail. */}

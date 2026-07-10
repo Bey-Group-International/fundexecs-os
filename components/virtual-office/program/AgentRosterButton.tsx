@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState } from "react";
 import { PROGRAM_AGENTS, type AgentId, type AgentState } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
+import { useTeamConfig } from "./useTeamConfig";
+import { PROVIDER_LABELS, resolveExecConfig } from "@/lib/office/teamConfig";
 
 const STATUS_DOT: Record<AgentState, string> = {
   idle: "#64748b",
@@ -25,6 +27,7 @@ const STATUS_DOT: Record<AgentState, string> = {
 
 export function AgentRosterButton({ onInspect }: { onInspect: (id: AgentId) => void }) {
   const s = useOfficeProgram();
+  const teamConfig = useTeamConfig();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -94,6 +97,9 @@ export function AgentRosterButton({ onInspect }: { onInspect: (id: AgentId) => v
             {PROGRAM_AGENTS.map((a) => {
               const rt = s.agents[a.id];
               const state = rt?.state ?? "idle";
+              // Earn is the fixed command root, not a designable delegate.
+              const ec = a.id === "earn" ? null : resolveExecConfig(a.id, teamConfig);
+              const off = ec != null && !ec.enabled;
               return (
                 <button
                   key={a.id}
@@ -104,6 +110,7 @@ export function AgentRosterButton({ onInspect }: { onInspect: (id: AgentId) => v
                     setOpen(false);
                   }}
                   className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-white/[0.05]"
+                  style={{ opacity: off ? 0.45 : 1 }}
                 >
                   <span
                     className="shrink-0 rounded-full"
@@ -117,6 +124,16 @@ export function AgentRosterButton({ onInspect }: { onInspect: (id: AgentId) => v
                       {rt?.owns ?? a.role}
                     </span>
                   </span>
+                  {ec && (
+                    <span className="flex shrink-0 items-center gap-1">
+                      {ec.humanInLoop && <span title="Human-in-the-loop gate" style={{ fontSize: 8, color: "#f59e0b" }}>⛨</span>}
+                      {off ? (
+                        <span className="text-[8px]" style={{ color: "rgba(255,248,220,0.4)" }}>off</span>
+                      ) : (
+                        <span className="text-[8px]" style={{ color: "rgba(201,168,76,0.6)" }}>{PROVIDER_LABELS[ec.provider]}</span>
+                      )}
+                    </span>
+                  )}
                 </button>
               );
             })}
