@@ -150,6 +150,11 @@ export function MeetingEditScreen({
   const [syncEnabled, setSyncEnabled] = useState(initial?.externalCalendarSyncEnabled ?? false);
   const [syncProvider, setSyncProvider] = useState(initial?.externalCalendarProvider ?? "");
 
+  // Google-Calendar-style "Add video conferencing": the link row stays hidden
+  // behind a button until requested, mirroring GCal's "Add Google Meet" chip.
+  const [showLink, setShowLink] = useState(Boolean(initial?.meetingUrl));
+  const linkInputRef = useRef<HTMLInputElement>(null);
+
   // Advanced options stay collapsed by default; auto-open on edit when the
   // meeting already carries advanced configuration so nothing looks lost.
   const [advancedOpen, setAdvancedOpen] = useState(
@@ -341,246 +346,405 @@ export function MeetingEditScreen({
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 backdrop-blur-sm sm:items-start sm:p-6"
     >
-      <div className="flex h-full w-full max-w-xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
-          <div>
-            <h2 className="text-sm font-semibold text-[var(--fg-primary)]">
-              {mode === "edit" ? "Edit meeting" : "Schedule meeting"}
-            </h2>
-            <p className="text-xs text-[var(--fg-muted)]">Title, time, and attendees are all you need — the rest is optional.</p>
-          </div>
+      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]">
+        {/* Header — GCal keeps only Close (left) and a prominent Save (right). */}
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
           <button
             type="button"
             onClick={onClose}
-            className="text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+            className="rounded-full p-2 text-[var(--fg-muted)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]"
             aria-label="Close"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
+
+          <div className="flex items-center gap-2">
+            {savedResult ? (
+              <button
+                type="button"
+                onClick={() => onSaved(savedResult)}
+                className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-500)]"
+              >
+                Done
+              </button>
+            ) : (
+              <>
+                {mode === "create" ? (
+                  <button
+                    type="button"
+                    onClick={() => void submit(true)}
+                    disabled={busy !== null}
+                    className="rounded-full px-4 py-2 text-sm font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)] disabled:opacity-50"
+                  >
+                    {busy === "draft" ? "Saving…" : "Save draft"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void submit(false)}
+                  disabled={busy !== null}
+                  className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-500)] disabled:opacity-50"
+                >
+                  {busy === "save" ? "Saving…" : mode === "edit" ? "Save" : "Schedule"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-5">
-          <div className="flex flex-col gap-6">
-            {/* Essentials — title + type */}
-            <Section title="Overview">
-              <TextField label="Meeting title" required value={title} onChange={setTitle} error={fieldErrors.title} placeholder="e.g. Q3 LP Review" />
-              <SelectField
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+          {/* Borderless title — the GCal "Add title" input. */}
+          <div className="pl-0 sm:pl-11">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Add title"
+              aria-label="Meeting title"
+              className={`w-full border-0 border-b bg-transparent pb-1.5 text-2xl font-normal text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none ${
+                fieldErrors.title
+                  ? "border-[var(--status-danger)]"
+                  : "border-transparent focus:border-[var(--gold-400)]"
+              }`}
+            />
+            {fieldErrors.title ? <span className="text-[11px] text-[var(--status-danger)]">{fieldErrors.title}</span> : null}
+
+            {/* Meeting type as an inline pill directly under the title. */}
+            <div className="mt-3">
+              <BarePill
                 label="Meeting type"
-                required
                 value={meetingType}
                 onChange={setMeetingType}
                 error={fieldErrors.meetingType}
                 options={MEETING_TYPES.map((t) => ({ value: t, label: MEETING_TYPE_LABELS[t] ?? t }))}
               />
-            </Section>
+            </div>
+          </div>
 
-            {/* Essentials — when */}
-            <Section title="When">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <TextField label="Date" required type="date" value={date} onChange={setDate} error={fieldErrors.date} />
-                <TextField label="Start time" required type="time" value={startTime} onChange={setStartTime} error={fieldErrors.startTime} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel label="Duration" />
-                <div className="flex flex-wrap gap-1.5">
-                  {DURATION_PRESETS.map((p) => (
-                    <Chip
-                      key={p.minutes}
-                      active={!customEnd && activeDuration === p.minutes}
-                      onClick={() => chooseDuration(p.minutes)}
-                    >
-                      {p.label}
-                    </Chip>
-                  ))}
-                  <Chip active={customEnd} onClick={() => setCustomEnd(true)}>
-                    Custom
-                  </Chip>
-                </div>
-                {customEnd ? (
-                  <div className="mt-1.5">
-                    <TextField label="End time" required type="time" value={endTime} onChange={setEndTime} error={fieldErrors.endTime} />
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-[var(--fg-muted)]">{formatEndCaption(startTime, endTime, timezone)}</p>
-                )}
-                {!customEnd && fieldErrors.endTime ? (
-                  <span className="text-[11px] text-[var(--status-danger)]">{fieldErrors.endTime}</span>
-                ) : null}
-              </div>
-            </Section>
-
-            {/* Essentials — attendees */}
-            <Section title="Attendees">
-              <TextArea label="Internal attendees" value={internalAttendees} onChange={setInternalAttendees} hint="Names or emails, separated by commas or new lines." />
-              <TextArea label="External guests" value={externalGuests} onChange={setExternalGuests} hint="Guest emails, e.g. Jane Doe <jane@fund.com>. Guests are invited by email on save." />
-            </Section>
-
-            {/* Essentials — briefing */}
-            <Section title="Briefing">
-              <TextArea label="Objective" value={objective} onChange={setObjective} hint="What outcome does this meeting need to reach?" />
-              <TextArea label="Agenda" value={agenda} onChange={setAgenda} />
-            </Section>
-
-            {/* Advanced — collapsed by default */}
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-0)]/40">
+          {/* When — icon-led inline date/time row. */}
+          <Row icon={<IconClock />} className="mt-5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+              <BareInput type="date" value={date} onChange={setDate} ariaLabel="Date" error={Boolean(fieldErrors.date)} />
+              <BareInput type="time" value={startTime} onChange={setStartTime} ariaLabel="Start time" error={Boolean(fieldErrors.startTime)} />
+              <span className="text-sm text-[var(--fg-muted)]">to</span>
+              <BareInput type="time" value={endTime} onChange={setEndTime} ariaLabel="End time" error={Boolean(fieldErrors.endTime)} />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {DURATION_PRESETS.map((p) => (
+                <Chip key={p.minutes} active={!customEnd && activeDuration === p.minutes} onClick={() => chooseDuration(p.minutes)}>
+                  {p.label}
+                </Chip>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--fg-muted)]">
+              {formatEndCaption(startTime, endTime, timezone)}
+              {" · "}
               <button
                 type="button"
-                onClick={() => setAdvancedOpen((v) => !v)}
-                className="flex w-full items-center justify-between px-4 py-3 text-left"
-                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen(true)}
+                className="underline decoration-dotted underline-offset-2 hover:text-[var(--fg-secondary)]"
               >
-                <span className="flex flex-col">
-                  <span className="text-xs font-semibold text-[var(--fg-secondary)]">Advanced options</span>
-                  <span className="text-[11px] text-[var(--fg-muted)]">Time zone, deal linkage, copilot, reminders, external calendar sync</span>
-                </span>
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={`shrink-0 text-[var(--fg-muted)] transition-transform ${advancedOpen ? "rotate-180" : ""}`}
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
+                Time zone
               </button>
+            </p>
+            {(fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime) ? (
+              <span className="mt-1 block text-[11px] text-[var(--status-danger)]">
+                {fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime}
+              </span>
+            ) : null}
+          </Row>
 
-              {advancedOpen ? (
-                <div className="flex flex-col gap-6 border-t border-[var(--line)] px-4 py-5">
-                  <Section title="Schedule">
-                    <TextField label="Time zone" required value={timezone} onChange={setTimezone} error={fieldErrors.timezone} />
-                  </Section>
+          <Divider />
 
-                  <Section title="Linkage & prep">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <SelectField
-                        label="Related record"
-                        value={relatedRecordType}
-                        onChange={setRelatedRecordType}
-                        options={[{ value: "", label: "None" }, ...RELATED_RECORD_TYPES.map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))]}
-                      />
-                      <TextField label="Record ID" value={relatedRecordId} onChange={setRelatedRecordId} placeholder="Optional record UUID" />
-                      <SelectField
-                        label="Assigned copilot"
-                        value={assignedCopilot}
-                        onChange={setAssignedCopilot}
-                        options={[{ value: "", label: "None" }, ...AGENTS.map((a) => ({ value: a.key, label: a.name }))]}
-                      />
-                      <TextField label="Meeting link" value={meetingUrl} onChange={setMeetingUrl} placeholder="Optional external link" />
-                    </div>
-                    <TextArea label="Preparation requirements" value={preparationRequirements} onChange={setPreparationRequirements} />
-                    <TextArea label="Attachments / linked documents" value={attachments} onChange={setAttachments} hint="One per line. Name <https://link> or a plain label." />
-                  </Section>
+          {/* Two-column split: details (left) + guests (right), like GCal. */}
+          <div className="grid gap-x-8 gap-y-1 md:grid-cols-[1fr_260px]">
+            {/* Left — details */}
+            <div className="flex flex-col">
+              {/* Video conferencing → reveals the meeting-link field. */}
+              <Row icon={<IconVideo />}>
+                {showLink ? (
+                  <BareInput
+                    inputRef={linkInputRef}
+                    value={meetingUrl}
+                    onChange={setMeetingUrl}
+                    ariaLabel="Meeting link"
+                    placeholder="Paste a Google Meet, Zoom, or Teams link"
+                    full
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLink(true);
+                      requestAnimationFrame(() => linkInputRef.current?.focus());
+                    }}
+                    className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]"
+                  >
+                    Add video conferencing
+                  </button>
+                )}
+              </Row>
 
-                  <Section title="Calendar & reminders">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <SelectField
-                        label="Calendar visibility"
-                        value={calendarVisibility}
-                        onChange={setCalendarVisibility}
-                        options={CALENDAR_VISIBILITIES.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))}
-                      />
-                      <SelectField
-                        label="Reminder"
-                        value={reminderMinutes}
-                        onChange={setReminderMinutes}
-                        options={[
-                          { value: "", label: "No reminder" },
-                          { value: "5", label: "5 min before" },
-                          { value: "15", label: "15 min before" },
-                          { value: "30", label: "30 min before" },
-                          { value: "60", label: "1 hour before" },
-                          { value: "1440", label: "1 day before" },
-                        ]}
-                      />
-                    </div>
-                    <label className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5">
-                      <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="mt-0.5" />
-                      <span className="text-xs text-[var(--fg-secondary)]">
-                        Sync to a third-party calendar after saving. The native FundExecs calendar always remains the source of truth.
-                      </span>
-                    </label>
-                    {syncEnabled ? (
-                      <SelectField
-                        label="Third-party provider"
-                        value={syncProvider}
-                        onChange={setSyncProvider}
-                        options={[
-                          { value: "", label: "Select provider" },
-                          ...EXTERNAL_CALENDAR_PROVIDERS.map((p) => ({ value: p, label: p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) })),
-                        ]}
-                      />
-                    ) : null}
-                  </Section>
-                </div>
-              ) : null}
+              <Row icon={<IconTarget />}>
+                <BareTextArea value={objective} onChange={setObjective} placeholder="Objective — what outcome does this meeting need to reach?" />
+              </Row>
+
+              <Row icon={<IconNotes />}>
+                <BareTextArea value={agenda} onChange={setAgenda} placeholder="Add agenda / description" />
+              </Row>
+
+              <Row icon={<IconBell />}>
+                <BarePill
+                  label="Notification"
+                  value={reminderMinutes}
+                  onChange={setReminderMinutes}
+                  options={[
+                    { value: "", label: "No notification" },
+                    { value: "5", label: "5 minutes before" },
+                    { value: "15", label: "15 minutes before" },
+                    { value: "30", label: "30 minutes before" },
+                    { value: "60", label: "1 hour before" },
+                    { value: "1440", label: "1 day before" },
+                  ]}
+                />
+              </Row>
+
+              <Row icon={<IconLock />}>
+                <BarePill
+                  label="Visibility"
+                  value={calendarVisibility}
+                  onChange={setCalendarVisibility}
+                  options={CALENDAR_VISIBILITIES.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))}
+                />
+              </Row>
             </div>
 
-            {conflicts.length > 0 ? (
-              <div className="rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3">
-                <p className="text-xs font-medium text-[var(--fg-primary)]">Scheduling conflict</p>
-                <ul className="mt-1 list-disc pl-4 text-xs text-[var(--fg-muted)]">
-                  {conflicts.map((c) => (
-                    <li key={c.id}>{c.title} — {new Date(c.scheduledAt).toLocaleString()}</li>
-                  ))}
-                </ul>
-                <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
-                  <input type="checkbox" checked={allowConflict} onChange={(e) => setAllowConflict(e.target.checked)} />
-                  Save anyway
-                </label>
+            {/* Right — guests */}
+            <div className="flex flex-col gap-3 md:pl-2">
+              <h3 className="text-sm font-medium text-[var(--fg-primary)]">Guests</h3>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-[var(--fg-muted)]">Internal attendees</span>
+                <BareTextArea value={internalAttendees} onChange={setInternalAttendees} placeholder="Add people" rows={1} />
               </div>
-            ) : null}
-
-            {notice ? <p className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-xs text-[var(--fg-secondary)]">{notice}</p> : null}
-            {error ? <p className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">{error}</p> : null}
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-[var(--fg-muted)]">External guests</span>
+                <BareTextArea value={externalGuests} onChange={setExternalGuests} placeholder="Jane Doe <jane@fund.com>" rows={1} />
+                <span className="text-[11px] leading-snug text-[var(--fg-muted)]">Guests are invited by email on save.</span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--line)] px-5 py-4">
-          {savedResult ? (
+          <Divider />
+
+          {/* More options — collapsed by default (advanced fields). */}
+          <Row icon={<IconTune />} align="start">
             <button
               type="button"
-              onClick={() => onSaved(savedResult)}
-              className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--gold-500)]"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-left"
+              aria-expanded={advancedOpen}
             >
-              Done
-            </button>
-          ) : (
-            <>
-              <button type="button" onClick={onClose} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
-                Cancel
-              </button>
-              {mode === "create" ? (
-                <button
-                  type="button"
-                  onClick={() => void submit(true)}
-                  disabled={busy !== null}
-                  className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] disabled:opacity-50"
-                >
-                  {busy === "draft" ? "Saving…" : "Save as draft"}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void submit(false)}
-                disabled={busy !== null}
-                className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--gold-500)] disabled:opacity-50"
+              <span className="flex flex-col">
+                <span className="text-sm font-medium text-[var(--fg-primary)]">More options</span>
+                <span className="text-[11px] text-[var(--fg-muted)]">Time zone, deal linkage, copilot, prep, attachments, external calendar sync</span>
+              </span>
+              <svg
+                width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className={`shrink-0 text-[var(--fg-muted)] transition-transform ${advancedOpen ? "rotate-180" : ""}`}
               >
-                {busy === "save" ? "Saving…" : mode === "edit" ? "Save Changes" : "Schedule Meeting"}
-              </button>
-            </>
-          )}
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          </Row>
+
+          {advancedOpen ? (
+            <div className="pl-0 sm:pl-11">
+              <div className="flex flex-col gap-6 rounded-xl border border-[var(--line)] bg-[var(--surface-0)]/40 px-4 py-5">
+                <Section title="Schedule">
+                  <TextField label="Time zone" required value={timezone} onChange={setTimezone} error={fieldErrors.timezone} />
+                </Section>
+
+                <Section title="Linkage & prep">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SelectField
+                      label="Related record"
+                      value={relatedRecordType}
+                      onChange={setRelatedRecordType}
+                      options={[{ value: "", label: "None" }, ...RELATED_RECORD_TYPES.map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))]}
+                    />
+                    <TextField label="Record ID" value={relatedRecordId} onChange={setRelatedRecordId} placeholder="Optional record UUID" />
+                    <SelectField
+                      label="Assigned copilot"
+                      value={assignedCopilot}
+                      onChange={setAssignedCopilot}
+                      options={[{ value: "", label: "None" }, ...AGENTS.map((a) => ({ value: a.key, label: a.name }))]}
+                    />
+                  </div>
+                  <TextArea label="Preparation requirements" value={preparationRequirements} onChange={setPreparationRequirements} />
+                  <TextArea label="Attachments / linked documents" value={attachments} onChange={setAttachments} hint="One per line. Name <https://link> or a plain label." />
+                </Section>
+
+                <Section title="External calendar sync">
+                  <label className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5">
+                    <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="mt-0.5" />
+                    <span className="text-xs text-[var(--fg-secondary)]">
+                      Sync to a third-party calendar after saving. The native FundExecs calendar always remains the source of truth.
+                    </span>
+                  </label>
+                  {syncEnabled ? (
+                    <SelectField
+                      label="Third-party provider"
+                      value={syncProvider}
+                      onChange={setSyncProvider}
+                      options={[
+                        { value: "", label: "Select provider" },
+                        ...EXTERNAL_CALENDAR_PROVIDERS.map((p) => ({ value: p, label: p.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) })),
+                      ]}
+                    />
+                  ) : null}
+                </Section>
+              </div>
+            </div>
+          ) : null}
+
+          {conflicts.length > 0 ? (
+            <div className="mt-4 rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3 sm:ml-11">
+              <p className="text-xs font-medium text-[var(--fg-primary)]">Scheduling conflict</p>
+              <ul className="mt-1 list-disc pl-4 text-xs text-[var(--fg-muted)]">
+                {conflicts.map((c) => (
+                  <li key={c.id}>{c.title} — {new Date(c.scheduledAt).toLocaleString()}</li>
+                ))}
+              </ul>
+              <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
+                <input type="checkbox" checked={allowConflict} onChange={(e) => setAllowConflict(e.target.checked)} />
+                Save anyway
+              </label>
+            </div>
+          ) : null}
+
+          {notice ? <p className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-xs text-[var(--fg-secondary)] sm:ml-11">{notice}</p> : null}
+          {error ? <p className="mt-4 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
         </div>
       </div>
     </div>
+  );
+}
+
+/* A GCal detail row: a leading icon gutter + free-form content. */
+function Row({
+  icon,
+  children,
+  className = "",
+  align = "center",
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  align?: "center" | "start";
+}) {
+  return (
+    <div className={`flex gap-3 py-2 ${align === "start" ? "items-start" : "items-center"} ${className}`}>
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-[var(--fg-muted)]">{icon}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="my-2 h-px bg-[var(--line)] sm:ml-11" />;
+}
+
+/* Bare, chrome-light input used in the GCal-style rows. */
+function BareInput({
+  value,
+  onChange,
+  type = "text",
+  ariaLabel,
+  placeholder,
+  error,
+  full,
+  inputRef,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  ariaLabel: string;
+  placeholder?: string;
+  error?: boolean;
+  full?: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+}) {
+  return (
+    <input
+      ref={inputRef}
+      type={type}
+      value={value}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className={`rounded-lg border bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] ${
+        full ? "w-full" : ""
+      } ${error ? "border-[var(--status-danger)]" : "border-transparent hover:border-[var(--line)] focus:border-[var(--gold-400)]"}`}
+    />
+  );
+}
+
+/* Auto-growing bare textarea for objective / agenda / guests. */
+function BareTextArea({
+  value,
+  onChange,
+  placeholder,
+  rows = 2,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full resize-y rounded-lg border border-transparent bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] hover:border-[var(--line)] focus:border-[var(--gold-400)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
+    />
+  );
+}
+
+/* A compact select styled as a GCal-style pill (no floating label). */
+function BarePill({
+  label,
+  value,
+  onChange,
+  options,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+  error?: string;
+}) {
+  return (
+    <label className="inline-flex flex-col gap-1">
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+        className={`rounded-lg border bg-[var(--surface-0)] px-3 py-1.5 text-sm text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] ${
+          error ? "border-[var(--status-danger)]" : "border-transparent hover:border-[var(--line)] focus:border-[var(--gold-400)]"
+        }`}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      {error ? <span className="text-[11px] text-[var(--status-danger)]">{error}</span> : null}
+    </label>
   );
 }
 
@@ -608,6 +772,39 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       {children}
     </button>
   );
+}
+
+/* ── Row icons (GCal-style line icons) ─────────────────────────────────── */
+const svgProps = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+function IconClock() {
+  return (<svg {...svgProps}><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg>);
+}
+function IconVideo() {
+  return (<svg {...svgProps}><rect x="2" y="6" width="14" height="12" rx="2" /><path d="m16 10 6-3v10l-6-3" /></svg>);
+}
+function IconTarget() {
+  return (<svg {...svgProps}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" /></svg>);
+}
+function IconNotes() {
+  return (<svg {...svgProps}><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="14" y2="17" /></svg>);
+}
+function IconBell() {
+  return (<svg {...svgProps}><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>);
+}
+function IconLock() {
+  return (<svg {...svgProps}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>);
+}
+function IconTune() {
+  return (<svg {...svgProps}><line x1="4" y1="8" x2="20" y2="8" /><circle cx="10" cy="8" r="2" /><line x1="4" y1="16" x2="20" y2="16" /><circle cx="15" cy="16" r="2" /></svg>);
 }
 
 function FieldLabel({ label, required }: { label: string; required?: boolean }) {
