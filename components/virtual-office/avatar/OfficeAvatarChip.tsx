@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
 import { UserCharacterSelector } from "@/components/virtual-office/avatar/UserCharacterSelector";
 import { userAvatarSpec, type UserAvatar } from "@/lib/office/userAvatar";
@@ -25,9 +26,21 @@ export function OfficeAvatarChip({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<UserAvatar>(avatar);
   const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Portal target is only available after mount (client-only).
+  useEffect(() => setMounted(true), []);
 
   // Keep the working draft in sync when the committed avatar changes elsewhere.
   useEffect(() => setDraft(avatar), [avatar]);
+
+  // Close on Escape while the editor is open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const save = async () => {
     setSaving(true);
@@ -39,26 +52,59 @@ export function OfficeAvatarChip({
     }
   };
 
-  // The rail chip's editor is a tall (~560px) multi-section form. Anchoring it
-  // under a near-the-top trigger runs its bottom off the floor and behind the
-  // footer, so the compact variant opens as a viewport-CENTERED modal instead:
-  // fixed, clamped to the viewport on both axes, and scrolled internally — it
-  // can never bleed off-screen at any window size or wherever the chip wrapped.
-  // The non-compact (settings-style) variant keeps its inline anchored dropdown.
-  const positionClass = compact
-    ? "fixed left-1/2 top-1/2 z-40 w-[calc(100vw-1.5rem)] max-w-[360px] -translate-x-1/2 -translate-y-1/2"
-    : "absolute right-0 z-40 mt-2 w-max max-w-[340px]";
+  // The rail chip's editor is a tall (~560px) multi-section form. On the floor
+  // it opens as a proper modal — and is PORTALED to document.body so it escapes
+  // the floor's transformed stacking context. Anchoring it inline (or even as a
+  // `fixed` child of the rail) let the status strip and Phaser overlays bleed
+  // over it; a body-level portal renders above everything, clamped to the
+  // viewport and scrolled internally. Matches the map editor's contained-modal
+  // system. The non-compact (settings) variant keeps its inline dropdown.
+  const compactModal =
+    open && mounted
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-3"
+            role="presentation"
+            onClick={() => setOpen(false)}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+            <div
+              className="relative flex max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-[380px] flex-col overflow-hidden rounded-xl border"
+              style={{ borderColor: "rgba(201,168,76,0.35)", background: "#0a0806" }}
+              role="dialog"
+              aria-label="Customize your character"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #c9a84c, transparent)" }} />
+              <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: "rgba(201,168,76,0.18)" }}>
+                <span className="text-[11px] uppercase tracking-[0.22em]" style={{ color: "#c9a84c", fontFamily: "Georgia, serif" }}>
+                  Your character
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close"
+                  className="grid h-6 w-6 place-items-center rounded text-[13px] leading-none text-slate-400 transition-colors hover:text-slate-100"
+                  style={{ border: "1px solid rgba(201,168,76,0.3)" }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+                <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} bare />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
-  const selector = open ? (
+  // Settings-page (non-compact) inline anchored dropdown — unchanged.
+  const anchoredSelector = open ? (
     <>
-      <div
-        className={`fixed inset-0 z-30 ${compact ? "bg-black/55 backdrop-blur-[1px]" : ""}`}
-        onClick={() => setOpen(false)}
-      />
-      <div className={positionClass}>
-        <div
-          className={`overflow-y-auto overflow-x-hidden rounded-lg ${compact ? "max-h-[calc(100vh-4rem)]" : "max-h-[80vh]"}`}
-        >
+      <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+      <div className="absolute right-0 z-40 mt-2 w-max max-w-[340px]">
+        <div className="max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-lg">
           <UserCharacterSelector value={draft} onChange={setDraft} onSave={save} saving={saving} />
         </div>
       </div>
@@ -88,7 +134,7 @@ export function OfficeAvatarChip({
           <span className="max-w-[96px] truncate">{avatar.displayName}</span>
           <span aria-hidden className="text-[8px] opacity-70">{open ? "▴" : "▾"}</span>
         </button>
-        {selector}
+        {compactModal}
       </div>
     );
   }
@@ -114,7 +160,7 @@ export function OfficeAvatarChip({
           ▾
         </span>
       </button>
-      {selector}
+      {anchoredSelector}
     </div>
   );
 }

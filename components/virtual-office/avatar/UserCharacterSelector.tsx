@@ -161,11 +161,14 @@ export function UserCharacterSelector({
   onChange,
   onSave,
   saving,
+  bare = false,
 }: {
   value: UserAvatar;
   onChange: (next: UserAvatar) => void;
   onSave?: () => void;
   saving?: boolean;
+  /** Drop the panel's own border/background/padding when hosted in a modal shell. */
+  bare?: boolean;
 }) {
   const selectedAccent = value.accent;
   const preset = presentationDefaults(value.genderStyle);
@@ -176,8 +179,8 @@ export function UserCharacterSelector({
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-lg border p-4"
-      style={{ background: PANEL_BG, borderColor: BORDER }}
+      className={bare ? "flex flex-col gap-4" : "flex flex-col gap-4 rounded-lg border p-4"}
+      style={bare ? undefined : { background: PANEL_BG, borderColor: BORDER }}
     >
       {/* Live preview */}
       <div className="flex items-center gap-3">
