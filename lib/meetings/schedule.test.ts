@@ -164,6 +164,46 @@ describe("findConflicts", () => {
   });
 });
 
+describe("findConflicts — scoped to shared participants", () => {
+  const base = { scheduled_at: "2026-07-10T10:00:00.000Z", duration_minutes: 60 };
+  const overlap = ["2026-07-10T10:15:00.000Z", "2026-07-10T10:45:00.000Z"] as const;
+
+  it("ignores an overlap when no participant is shared", () => {
+    const candidates = [{ id: "a", ...base, host_id: "host-x", attendees: [{ email: "x@y.z" }] }];
+    expect(
+      findConflicts(candidates, overlap[0], overlap[1], { subjectHostId: "host-me", subjectEmails: ["me@fund.com"] }),
+    ).toEqual([]);
+  });
+
+  it("flags an overlap when the host is shared", () => {
+    const candidates = [{ id: "a", title: "Other", ...base, host_id: "host-me", attendees: [] }];
+    expect(
+      findConflicts(candidates, overlap[0], overlap[1], { subjectHostId: "host-me" }).map((c) => c.id),
+    ).toEqual(["a"]);
+  });
+
+  it("flags an overlap when an attendee email is shared (case-insensitive)", () => {
+    const candidates = [{ id: "a", ...base, host_id: "host-x", attendees: [{ email: "Shared@Fund.com" }] }];
+    expect(
+      findConflicts(candidates, overlap[0], overlap[1], { subjectHostId: "host-me", subjectEmails: ["shared@fund.com"] }).map((c) => c.id),
+    ).toEqual(["a"]);
+  });
+
+  it("matches the scheduler as a guest on another meeting via their email", () => {
+    const candidates = [{ id: "a", ...base, host_id: "host-x", attendees: [{ email: "me@fund.com" }] }];
+    expect(
+      findConflicts(candidates, overlap[0], overlap[1], { subjectHostId: "host-me", subjectEmails: ["me@fund.com"] }).map((c) => c.id),
+    ).toEqual(["a"]);
+  });
+
+  it("still ignores non-overlapping meetings even when a person is shared", () => {
+    const candidates = [{ id: "a", ...base, host_id: "host-me" }];
+    expect(
+      findConflicts(candidates, "2026-07-10T09:00:00.000Z", "2026-07-10T09:30:00.000Z", { subjectHostId: "host-me" }),
+    ).toEqual([]);
+  });
+});
+
 describe("nextExternalSyncStatus", () => {
   it("is not_connected without a provider", () => {
     expect(

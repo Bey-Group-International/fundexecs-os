@@ -83,18 +83,30 @@ export async function POST(req: NextRequest) {
     const supabase = await createServerClient();
 
     // Conflict detection against the internal calendar. Warn (409) unless the
-    // user explicitly chose to save anyway. Drafts never block on conflicts.
+    // user explicitly chose to save anyway. Drafts never block on conflicts. The
+    // conflict is scoped to a shared person (host or attendee), so unrelated
+    // meetings in the org don't false-alarm.
     let conflicts: ReturnType<typeof findConflicts> = [];
     if (!isDraft) {
+      // A candidate can only overlap [scheduledAt, endIso) if it starts within a
+      // max-meeting-length window before the end — bound the fetch accordingly
+      // (durations are capped at 480 min) instead of scanning all future rows.
+      const windowStart = new Date(new Date(scheduledAt).getTime() - 8 * 3600_000).toISOString();
       const { data: existing } = await supabase
         .from("live_meetings")
-        .select("id, title, scheduled_at, duration_minutes")
+        .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
         .eq("organization_id", auth.ctx.orgId)
         .is("deleted_at", null)
         .eq("is_draft", false)
         .neq("status", "ended")
-        .gte("scheduled_at", new Date(Date.now() - 24 * 3600_000).toISOString());
-      conflicts = findConflicts((existing ?? []) as ConflictCandidate[], scheduledAt, endIso, body.meetingId ?? null);
+        .gte("scheduled_at", windowStart)
+        .lt("scheduled_at", endIso)
+        .limit(200);
+      conflicts = findConflicts((existing ?? []) as ConflictCandidate[], scheduledAt, endIso, {
+        excludeId: body.meetingId ?? null,
+        subjectHostId: auth.ctx.userId,
+        subjectEmails: [auth.ctx.email, ...guestEmails(attendees)],
+      });
       if (conflicts.length > 0 && body.allowConflict !== true) {
         return NextResponse.json({ error: "Time conflicts with another meeting.", conflicts }, { status: 409 });
       }

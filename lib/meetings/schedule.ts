@@ -305,6 +305,9 @@ export interface ConflictCandidate {
   title?: string | null;
   scheduled_at?: string | null;
   duration_minutes?: number | null;
+  /** Host + attendees, used to scope a conflict to a shared person. */
+  host_id?: string | null;
+  attendees?: unknown;
 }
 
 export interface MeetingConflict {
@@ -313,31 +316,92 @@ export interface MeetingConflict {
   scheduledAt: string;
 }
 
+/** Lowercased, de-duped attendee emails from a meeting's attendees JSON. */
+function attendeeEmails(attendees: unknown): string[] {
+  if (!Array.isArray(attendees)) return [];
+  const out: string[] = [];
+  for (const a of attendees) {
+    const email = a && typeof a === "object" ? (a as { email?: unknown }).email : null;
+    if (typeof email === "string" && email.trim()) out.push(email.trim().toLowerCase());
+  }
+  return out;
+}
+
 /**
- * Detect internal-calendar meetings whose time window overlaps [startIso, endIso).
- * `excludeId` skips the meeting being edited.
+ * Build the set of identity keys for a meeting — its host and attendee emails —
+ * so two meetings can be compared for a shared person. Host ids and emails are
+ * namespaced (`u:` / `e:`) so a UUID can never collide with an email.
+ */
+export function meetingIdentityKeys(opts: {
+  hostId?: string | null;
+  emails?: Array<string | null | undefined>;
+}): Set<string> {
+  const keys = new Set<string>();
+  if (opts.hostId) keys.add(`u:${opts.hostId}`);
+  for (const e of opts.emails ?? []) {
+    if (e && e.trim()) keys.add(`e:${e.trim().toLowerCase()}`);
+  }
+  return keys;
+}
+
+export interface ConflictOptions {
+  /** Skip this meeting id (the one being scheduled/edited). */
+  excludeId?: string | null;
+  /**
+   * When provided, a time overlap only counts as a conflict if the candidate
+   * shares this host or one of these attendee emails — i.e. an actual person is
+   * double-booked. Omit both to fall back to a plain org-wide time overlap.
+   */
+  subjectHostId?: string | null;
+  subjectEmails?: Array<string | null | undefined>;
+}
+
+/**
+ * Detect meetings whose time window overlaps [startIso, endIso). When
+ * `subjectHostId`/`subjectEmails` are supplied, overlaps are scoped to meetings
+ * that share a participant with the meeting being scheduled; otherwise any time
+ * overlap is returned. `excludeId` skips the meeting being edited.
+ *
+ * A fourth string argument is still accepted as a shorthand for `excludeId` for
+ * backward compatibility.
  */
 export function findConflicts(
   candidates: ConflictCandidate[],
   startIso: string,
   endIso: string,
-  excludeId?: string | null,
+  options?: ConflictOptions | string | null,
 ): MeetingConflict[] {
+  const opts: ConflictOptions =
+    typeof options === "string" || options == null ? { excludeId: options ?? null } : options;
+
   const start = new Date(startIso).getTime();
   const end = new Date(endIso).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
 
+  const subjectKeys = meetingIdentityKeys({ hostId: opts.subjectHostId, emails: opts.subjectEmails });
+  const scoped = subjectKeys.size > 0;
+
   const conflicts: MeetingConflict[] = [];
   for (const c of candidates) {
     if (!c.scheduled_at) continue;
-    if (excludeId && c.id === excludeId) continue;
+    if (opts.excludeId && c.id === opts.excludeId) continue;
     const cStart = new Date(c.scheduled_at).getTime();
     if (!Number.isFinite(cStart)) continue;
     const cEnd = cStart + (c.duration_minutes ?? 60) * 60_000;
     // Overlap when neither ends before the other starts.
-    if (cStart < end && cEnd > start) {
-      conflicts.push({ id: c.id, title: c.title ?? "Meeting", scheduledAt: c.scheduled_at });
+    if (!(cStart < end && cEnd > start)) continue;
+
+    // Scoped mode: an overlap only conflicts if a person is on both meetings.
+    if (scoped) {
+      const candidateKeys = meetingIdentityKeys({ hostId: c.host_id, emails: attendeeEmails(c.attendees) });
+      let shares = false;
+      for (const k of candidateKeys) {
+        if (subjectKeys.has(k)) { shares = true; break; }
+      }
+      if (!shares) continue;
     }
+
+    conflicts.push({ id: c.id, title: c.title ?? "Meeting", scheduledAt: c.scheduled_at });
   }
   return conflicts;
 }

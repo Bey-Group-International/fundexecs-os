@@ -270,6 +270,7 @@ export function MeetingEditScreen({
         body: JSON.stringify(
           isExistingEdit
             ? {
+                allowConflict,
                 title: payload.title,
                 meetingType: payload.meetingType,
                 scheduledAt: localToIso(date, startTime, payload.timezone),

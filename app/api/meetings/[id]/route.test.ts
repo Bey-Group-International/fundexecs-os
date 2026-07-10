@@ -28,12 +28,48 @@ function req(body: unknown = {}) {
   });
 }
 
+// A chainable query stub. `maybeSingle` serves the prior-row load; `limit`
+// serves the conflict-candidate query — so one builder covers both reads.
+function makeBuilder(opts: { maybeSingle?: unknown; limit?: unknown } = {}) {
+  const b: Record<string, unknown> = {
+    select: () => b,
+    eq: () => b,
+    is: () => b,
+    neq: () => b,
+    gte: () => b,
+    lt: () => b,
+    order: () => b,
+    maybeSingle: async () => opts.maybeSingle ?? { data: null },
+    limit: async () => opts.limit ?? { data: [] },
+  };
+  return b;
+}
+
+const PRIOR_ROW = {
+  attendees: [],
+  room_code: "abc",
+  is_draft: false,
+  host_id: "u1",
+  scheduled_at: "2026-07-10T10:00:00.000Z",
+  duration_minutes: 60,
+};
+const OVERLAPPING_CANDIDATE = {
+  id: "other",
+  title: "Board",
+  scheduled_at: "2026-07-10T10:00:00.000Z",
+  duration_minutes: 60,
+  host_id: "u1", // shares the host with the meeting being rescheduled
+  attendees: [],
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   authMock.mockResolvedValue({
     ok: true,
     ctx: { orgId: "org1", userId: "u1", role: "owner", email: "u@test" },
   });
+  // Default: no prior row and no candidates, so conflict detection is skipped.
+  from.mockReturnValue(makeBuilder());
 });
 
 describe("/api/meetings/[id]", () => {
@@ -60,6 +96,42 @@ describe("/api/meetings/[id]", () => {
         syncMode: "pending_external",
       }),
     );
+  });
+
+  it("returns 409 when a reschedule conflicts with a shared meeting", async () => {
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: PRIOR_ROW }, limit: { data: [OVERLAPPING_CANDIDATE] } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-10T10:15:00.000Z", durationMinutes: 30 }), params);
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.conflicts.map((c: { id: string }) => c.id)).toEqual(["other"]);
+    expect(updateMeetingMock).not.toHaveBeenCalled();
+  });
+
+  it("saves a conflicting reschedule when allowConflict is set", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: PRIOR_ROW }, limit: { data: [OVERLAPPING_CANDIDATE] } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-10T10:15:00.000Z", durationMinutes: 30, allowConflict: true }), params);
+
+    expect(res.status).toBe(200);
+    expect(updateMeetingMock).toHaveBeenCalled();
+  });
+
+  it("does not flag a reschedule that overlaps an unrelated meeting", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(
+      makeBuilder({
+        maybeSingle: { data: PRIOR_ROW },
+        limit: { data: [{ ...OVERLAPPING_CANDIDATE, host_id: "someone-else", attendees: [{ email: "x@y.z" }] }] },
+      }),
+    );
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-10T10:15:00.000Z", durationMinutes: 30 }), params);
+
+    expect(res.status).toBe(200);
+    expect(updateMeetingMock).toHaveBeenCalled();
   });
 
   it("deletes meetings locally by default", async () => {

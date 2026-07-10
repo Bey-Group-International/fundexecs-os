@@ -3,7 +3,9 @@ import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { deleteMeetingLocal, updateMeeting } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
+import { findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -22,23 +24,50 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const body = await request.json().catch(() => ({}));
   const supabase = await createServerClient();
 
-  // Snapshot attendees + room before the edit so we can invite only guests that
-  // are newly added (avoids re-emailing everyone on every edit).
+  // Load the current row once: it drives both the newly-added-guest invite diff
+  // and conflict detection when the timing changes.
+  const { data: prior } = await supabase
+    .from("live_meetings")
+    .select("attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes")
+    .eq("id", id)
+    .eq("organization_id", auth.ctx.orgId)
+    .maybeSingle();
+
   const nextAttendees = Array.isArray(body.attendees) ? (body.attendees as MeetingAttendeeInput[]) : undefined;
-  let priorGuestEmails: Set<string> = new Set();
-  let roomCode = "";
-  let isDraft = false;
-  if (nextAttendees) {
-    const { data: prior } = await supabase
-      .from("live_meetings")
-      .select("attendees, room_code, is_draft")
-      .eq("id", id)
-      .eq("organization_id", auth.ctx.orgId)
-      .maybeSingle();
-    if (prior) {
-      priorGuestEmails = new Set(guestEmails((prior.attendees as MeetingAttendeeInput[] | null) ?? []));
-      roomCode = (prior.room_code as string | null) ?? "";
-      isDraft = (prior.is_draft as boolean | null) ?? false;
+  const priorGuestEmails = new Set(guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []));
+  const roomCode = (prior?.room_code as string | null) ?? "";
+  const isDraft = (prior?.is_draft as boolean | null) ?? false;
+
+  // Conflict detection on reschedule — mirrors the create path. Runs only when a
+  // real (non-draft) meeting's timing changes, is scoped to a shared person
+  // (host/attendee), and is skippable with allowConflict ("Save anyway").
+  const timingChanged = body.scheduledAt !== undefined || body.durationMinutes !== undefined;
+  if (prior && !isDraft && timingChanged) {
+    const startIso = (body.scheduledAt as string | undefined) ?? (prior.scheduled_at as string | null) ?? null;
+    if (startIso) {
+      const rawDuration = body.durationMinutes !== undefined ? Number(body.durationMinutes) : (prior.duration_minutes as number | null) ?? 60;
+      const duration = Math.min(480, Math.max(15, Number.isFinite(rawDuration) ? rawDuration : 60));
+      const endIso = new Date(new Date(startIso).getTime() + duration * 60_000).toISOString();
+      const windowStart = new Date(new Date(startIso).getTime() - 8 * 3600_000).toISOString();
+      const { data: candidates } = await supabase
+        .from("live_meetings")
+        .select("id, title, scheduled_at, duration_minutes, host_id, attendees")
+        .eq("organization_id", auth.ctx.orgId)
+        .is("deleted_at", null)
+        .eq("is_draft", false)
+        .neq("status", "ended")
+        .gte("scheduled_at", windowStart)
+        .lt("scheduled_at", endIso)
+        .limit(200);
+      const subjectAttendees = nextAttendees ?? (prior.attendees as MeetingAttendeeInput[] | null) ?? [];
+      const conflicts = findConflicts((candidates ?? []) as ConflictCandidate[], startIso, endIso, {
+        excludeId: id,
+        subjectHostId: (prior.host_id as string | null) ?? null,
+        subjectEmails: guestEmails(subjectAttendees),
+      });
+      if (conflicts.length > 0 && body.allowConflict !== true) {
+        return NextResponse.json({ error: "Time conflicts with another meeting.", conflicts }, { status: 409 });
+      }
     }
   }
 
@@ -86,7 +115,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         try {
           const { data: userData } = await supabase.auth.getUser();
           const sendResult = await sendMeetingInvites({
-            origin: request.nextUrl.origin,
+            // Canonical app URL so the emailed link is stable across hosts/proxies.
+            origin: SITE_URL,
             roomCode,
             title: body.title ? String(body.title) : "Meeting",
             senderName: userData.user?.email ?? "Someone",
