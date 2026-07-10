@@ -44,6 +44,8 @@ export interface ActiveNetworkPerson {
   committedAmount: number;
   lastContactAt: string | null;
   lastContactDays: number | null;
+  /** When this person entered the network (connected_on / created_at). */
+  addedAt: string | null;
   nextAction: string | null;
   nextActionTier: string | null;
   introducer: string | null;
@@ -145,6 +147,8 @@ interface ContactRow {
   strength_score: number | null;
   strength_label: string | null;
   strength_updated_at: string | null;
+  connected_on: string | null;
+  created_at: string | null;
   updated_at: string | null;
 }
 
@@ -156,6 +160,7 @@ interface DirectoryRow {
   role: string | null;
   type: string | null;
   status: string | null;
+  created_at: string | null;
   updated_at: string | null;
 }
 
@@ -167,7 +172,7 @@ async function loadContactPeople(
     const { data } = await client
       .from("network_contacts")
       .select(
-        "id, full_name, title, company, email, capital_role, strength_score, strength_label, strength_updated_at, updated_at",
+        "id, full_name, title, company, email, capital_role, strength_score, strength_label, strength_updated_at, connected_on, created_at, updated_at",
       )
       .eq("organization_id", orgId)
       .is("archived_at", null)
@@ -187,6 +192,7 @@ async function loadContactPeople(
         committedAmount: 0,
         lastContactAt: last,
         lastContactDays: last ? Math.floor((Date.now() - Date.parse(last)) / DAY_MS) : null,
+        addedAt: c.connected_on ?? c.created_at ?? null,
         nextAction: null,
         nextActionTier: null,
         introducer: null,
@@ -210,7 +216,7 @@ async function loadDirectoryPeople(
   try {
     const { data } = await client
       .from(table)
-      .select(`id, name, contact_name, contact_email, role, ${typeCol}, status, updated_at`)
+      .select(`id, name, contact_name, contact_email, role, ${typeCol}, status, created_at, updated_at`)
       .eq("organization_id", orgId)
       .is("archived_at", null)
       .order("updated_at", { ascending: false })
@@ -237,6 +243,7 @@ async function loadDirectoryPeople(
         committedAmount: 0,
         lastContactAt: last,
         lastContactDays: last ? days : null,
+        addedAt: (r.created_at as string | null) ?? null,
         nextAction: null,
         nextActionTier: null,
         introducer: null,
@@ -293,6 +300,7 @@ export async function loadActiveNetwork(
       committedAmount: e.committedAmount,
       lastContactAt: rel?.lastContactAt ?? null,
       lastContactDays: rel?.lastContactDays ?? null,
+      addedAt: (inv as { created_at?: string | null }).created_at ?? null,
       nextAction: rel?.topActionTitle ?? top?.label ?? null,
       nextActionTier: top?.tier != null ? String(top.tier) : null,
       introducer: e.introPath?.introducer ?? null,
