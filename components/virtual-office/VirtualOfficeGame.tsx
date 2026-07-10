@@ -1026,6 +1026,10 @@ export function VirtualOfficeGame({
           height: GAME_HEIGHT,
           backgroundColor: "#0f172a",
           parent: containerRef.current,
+          // Pixel-art rendering: nearest-neighbor sampling so the office tiles
+          // and character sprite sheets stay crisp at the camera's 2× zoom
+          // instead of being bilinear-blurred.
+          pixelArt: true,
           physics: {
             default: "arcade",
             arcade: { gravity: { x: 0, y: 0 }, debug: false },
