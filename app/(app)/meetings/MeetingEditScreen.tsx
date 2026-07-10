@@ -92,9 +92,11 @@ function addMinutesToTime(time: string, minutes: number): string {
 function formatEndCaption(startTime: string, endTime: string, timezone: string): string {
   if (!/^\d{2}:\d{2}$/.test(endTime)) return "";
   const [h, m] = endTime.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  const pretty = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  // Format the HH:mm wall clock directly. The timezone is a display label only;
+  // routing through Date here would just cancel out against the browser zone.
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = ((h + 11) % 12) + 1;
+  const pretty = `${h12}:${String(m).padStart(2, "0")} ${period}`;
   const mins = durationMinutesFromTimes(startTime, endTime);
   const dur = mins > 0 ? ` · ${mins} min` : "";
   return `Ends ${pretty}${dur} · ${timezone}`;
@@ -153,7 +155,9 @@ export function MeetingEditScreen({
           initial?.assignedCopilotAgent ||
           initial?.meetingUrl ||
           initial?.preparationRequirements ||
-          initial?.externalCalendarSyncEnabled,
+          initial?.externalCalendarSyncEnabled ||
+          (initial?.reminderMinutes != null && initial.reminderMinutes !== 15) ||
+          (initial?.calendarVisibility != null && initial.calendarVisibility !== "organization"),
       ),
   );
 
@@ -588,6 +592,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
         active

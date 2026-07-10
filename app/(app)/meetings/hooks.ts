@@ -91,12 +91,11 @@ export function useLivePresence(meetingIds: string[]): {
           const rec = (payload.new ?? payload.old) as
             | { meeting_id?: string; display_name?: string }
             | null;
-          if (
-            payload.eventType === "INSERT" &&
-            rec?.meeting_id &&
-            rec.display_name &&
-            idsRef.current.includes(rec.meeting_id)
-          ) {
+          // The org-read RLS policy means this channel receives participant
+          // events for every meeting in the org. Ignore anything outside the
+          // meetings we're tracking so unrelated churn doesn't refetch presence.
+          if (!rec?.meeting_id || !idsRef.current.includes(rec.meeting_id)) return;
+          if (payload.eventType === "INSERT" && rec.display_name) {
             setRecentJoins((prev) =>
               [{ name: rec.display_name!, meetingId: rec.meeting_id!, at: Date.now() }, ...prev].slice(0, 12),
             );
