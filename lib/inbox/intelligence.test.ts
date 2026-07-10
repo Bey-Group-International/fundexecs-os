@@ -4,6 +4,7 @@ import {
   PRIORITY_BUCKETS,
   inboxTab,
   partitionByTab,
+  quickReplies,
   suggestedAction,
   buildDigest,
   fallbackSummary,
@@ -98,6 +99,32 @@ describe("partitionByTab", () => {
     const { focused, other } = partitionByTab(items);
     expect(focused.map((i) => i.id)).toEqual(["a", "c"]);
     expect(other.map((i) => i.id)).toEqual(["b", "d"]);
+  });
+});
+
+describe("quickReplies", () => {
+  it("offers three short openers for every pillar", () => {
+    for (const category of ["messaging", "booking", "video", "signing", "finance"] as const) {
+      const chips = quickReplies({ category });
+      expect(chips).toHaveLength(3);
+      for (const chip of chips) {
+        expect(chip.trim().length).toBeGreaterThan(0);
+        expect(chip.length).toBeLessThanOrEqual(60); // stays a tappable chip, not a paragraph
+      }
+    }
+  });
+
+  it("shifts booking openers to confirm/reschedule once a time is on the table", () => {
+    const open = quickReplies({ category: "booking", meetingAt: null });
+    const scheduled = quickReplies({ category: "booking", meetingAt: "2026-07-01T15:00:00Z" });
+    expect(open).not.toEqual(scheduled);
+    expect(scheduled.join(" ").toLowerCase()).toMatch(/confirm|shift/);
+  });
+
+  it("returns a fresh array each call so a caller can't mutate the template", () => {
+    const a = quickReplies({ category: "messaging" });
+    a.push("mutated");
+    expect(quickReplies({ category: "messaging" })).toHaveLength(3);
   });
 });
 
