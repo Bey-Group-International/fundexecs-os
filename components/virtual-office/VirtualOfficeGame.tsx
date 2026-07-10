@@ -25,8 +25,6 @@ import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./progra
 import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
 import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { AgentRosterButton } from "./program/AgentRosterButton";
-import { AgencyKanban } from "./program/AgencyKanban";
-import { TeamFlowGraph } from "./program/TeamFlowGraph";
 import { DelegationDesigner } from "./program/DelegationDesigner";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
@@ -485,8 +483,6 @@ export function VirtualOfficeGame({
   // WorkAdventure-style scripted-area map editor (persists to localStorage; the
   // scene reacts to the store's change event and re-renders areas live).
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
-  const [boardOpen, setBoardOpen] = useState(false);
-  const [flowOpen, setFlowOpen] = useState(false);
   const [designerOpen, setDesignerOpen] = useState(false);
   // The set of private rooms, mirrored into React state so the "Private" toggle
   // and any privacy-aware chrome re-render whenever a room is locked/unlocked.
@@ -1458,40 +1454,6 @@ export function VirtualOfficeGame({
         {/* Team roster — inspect any executive from the top rail (pairs with the
             walk-up proximity trigger that opens the same inspector). */}
         <AgentRosterButton onInspect={setInspectAgentId} />
-        {/* Agency board — the floor's work by pipeline stage (live + shipped). */}
-        <button
-          type="button"
-          onClick={() => setBoardOpen(true)}
-          title="Agency board — work across the floor by stage"
-          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
-          style={{
-            fontFamily: "Georgia, serif",
-            letterSpacing: "0.06em",
-            color: "#94a3b8",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.05)",
-          }}
-        >
-          <span className="opacity-60 text-[8px]">▤</span>
-          Board
-        </button>
-        {/* Team flow — live delegation graph (Earn → assigned execs → owned work). */}
-        <button
-          type="button"
-          onClick={() => setFlowOpen(true)}
-          title="Team flow — the live delegation graph"
-          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
-          style={{
-            fontFamily: "Georgia, serif",
-            letterSpacing: "0.06em",
-            color: "#94a3b8",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.05)",
-          }}
-        >
-          <span className="opacity-60 text-[8px]">⌥</span>
-          Flow
-        </button>
         {/* Delegation designer — no-code editor for the executive team (Design + Apply). */}
         <button
           type="button"
@@ -1745,8 +1707,6 @@ export function VirtualOfficeGame({
 
         {/* Map editor — author scripted areas; the scene re-renders them live */}
         {mapEditorOpen && <AreaMapEditor onClose={() => setMapEditorOpen(false)} />}
-        {boardOpen && <AgencyKanban onClose={() => setBoardOpen(false)} />}
-        {flowOpen && <TeamFlowGraph onClose={() => setFlowOpen(false)} />}
         {designerOpen && <DelegationDesigner onClose={() => setDesignerOpen(false)} />}
 
         {/* Controls hint */}
