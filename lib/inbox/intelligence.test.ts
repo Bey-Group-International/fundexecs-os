@@ -2,12 +2,15 @@ import {
   computePriority,
   priorityBucket,
   PRIORITY_BUCKETS,
+  inboxTab,
+  partitionByTab,
   suggestedAction,
   buildDigest,
   fallbackSummary,
   fallbackDraft,
   draftReply,
   type DigestThread,
+  type FocusSignals,
 } from "./intelligence";
 
 describe("computePriority", () => {
@@ -63,6 +66,38 @@ describe("priorityBucket", () => {
     for (const key of ["now", "soon", "later"] as const) {
       expect(PRIORITY_BUCKETS[key].label).toBeTruthy();
     }
+  });
+});
+
+describe("inboxTab", () => {
+  const base: FocusSignals = { priority: 10, unread: false, hasContext: false };
+
+  it("focuses anything ranked above the 'later' bucket", () => {
+    expect(inboxTab({ ...base, priority: 66 })).toBe("focused"); // now
+    expect(inboxTab({ ...base, priority: 33 })).toBe("focused"); // soon
+  });
+
+  it("focuses an unread or in-context thread even when it ranks 'later'", () => {
+    expect(inboxTab({ ...base, priority: 10, unread: true })).toBe("focused");
+    expect(inboxTab({ ...base, priority: 10, hasContext: true })).toBe("focused");
+  });
+
+  it("routes the read, low-priority, unattached remainder to Other", () => {
+    expect(inboxTab({ priority: 10, unread: false, hasContext: false })).toBe("other");
+  });
+});
+
+describe("partitionByTab", () => {
+  it("splits into the two tabs and preserves input order within each", () => {
+    const items: (FocusSignals & { id: string })[] = [
+      { id: "a", priority: 80, unread: false, hasContext: false }, // focused (now)
+      { id: "b", priority: 5, unread: false, hasContext: false }, // other
+      { id: "c", priority: 5, unread: true, hasContext: false }, // focused (unread)
+      { id: "d", priority: 5, unread: false, hasContext: false }, // other
+    ];
+    const { focused, other } = partitionByTab(items);
+    expect(focused.map((i) => i.id)).toEqual(["a", "c"]);
+    expect(other.map((i) => i.id)).toEqual(["b", "d"]);
   });
 });
 

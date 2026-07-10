@@ -61,6 +61,8 @@ export interface InboxCardData {
   intent: string | null;
   priority: number;
   bucket: "now" | "soon" | "later";
+  // The Focused / Other tab this thread belongs to (resolved server-side).
+  tab: "focused" | "other";
   unread: boolean;
   status: "open" | "snoozed" | "done";
   snoozedUntil: string | null;
@@ -93,6 +95,9 @@ const FILTERS: { key: "all" | InboxCategory; label: string }[] = [
 
 export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teammates: Teammate[] }) {
   const router = useRouter();
+  // The Focused / Other split sits above the pillar filters — an instant,
+  // client-side facet like the pillar chips. Focused is the default view.
+  const [tab, setTab] = useState<"focused" | "other">("focused");
   const [filter, setFilter] = useState<"all" | InboxCategory>("all");
   const [clearing, startClearTransition] = useTransition();
   const [clearError, setClearError] = useState<string | null>(null);
@@ -127,8 +132,11 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
   }
 
   const visible = useMemo(
-    () => cards.filter((c) => c.status !== "done" && (filter === "all" || c.category === filter)),
-    [cards, filter],
+    () =>
+      cards.filter(
+        (c) => c.status !== "done" && c.tab === tab && (filter === "all" || c.category === filter),
+      ),
+    [cards, tab, filter],
   );
   // Snoozed threads leave the active board and sit in their own collapsible
   // section until their wake time returns them to open (autoUnsnoozeExpired).
@@ -152,15 +160,40 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
     [visible, selected, clearSelection, router],
   );
 
+  // Pillar-chip counts, scoped to the active tab so the numbers match the list.
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of cards) {
       if (c.status === "done" || c.status === "snoozed") continue;
+      if (c.tab !== tab) continue;
       m.set("all", (m.get("all") ?? 0) + 1);
       m.set(c.category, (m.get(c.category) ?? 0) + 1);
     }
     return m;
+  }, [cards, tab]);
+
+  // Tab badges count every active (open, non-snoozed) thread on each side,
+  // independent of the pillar filter so the split stays a stable headline.
+  const tabCounts = useMemo(() => {
+    let focused = 0;
+    let other = 0;
+    for (const c of cards) {
+      if (c.status === "done" || c.status === "snoozed") continue;
+      if (c.tab === "focused") focused += 1;
+      else other += 1;
+    }
+    return { focused, other };
   }, [cards]);
+
+  // Switching tabs drops any selection carried from the other side so the bulk
+  // bar's count always reflects what's actually visible.
+  const switchTab = useCallback(
+    (next: "focused" | "other") => {
+      setTab(next);
+      clearSelection();
+    },
+    [clearSelection],
+  );
 
   if (cards.length === 0) {
     return (
@@ -175,6 +208,37 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Focused / Other — the high-signal vs ambient split, above the pillars. */}
+      <div
+        role="tablist"
+        aria-label="Inbox focus"
+        className="flex items-center gap-0.5 self-start rounded-full border border-line bg-surface-1 p-0.5 text-xs"
+      >
+        {([
+          { key: "focused", label: "Focused" },
+          { key: "other", label: "Other" },
+        ] as const).map((t) => {
+          const on = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => switchTab(t.key)}
+              className={`rounded-full px-3.5 py-1 transition ${
+                on
+                  ? "bg-gold-500/15 text-gold-300"
+                  : "text-fg-secondary hover:text-fg-primary"
+              }`}
+            >
+              {t.label}
+              <span className="ml-1.5 font-mono text-[10px] text-fg-muted">{tabCounts[t.key]}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Pillar filters + Clear */}
       <div className="flex flex-wrap items-center gap-1.5">
         {FILTERS.map((f) => {
@@ -253,7 +317,22 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
       ) : null}
 
       {active.length === 0 ? (
-        <p className="px-1 py-6 text-sm text-fg-muted">Nothing here — inbox clear for this filter.</p>
+        <p className="px-1 py-6 text-sm text-fg-muted">
+          {tab === "focused" && filter === "all" && tabCounts.other > 0 ? (
+            <>
+              Focused is clear.{" "}
+              <button
+                type="button"
+                onClick={() => switchTab("other")}
+                className="text-gold-400 transition hover:underline"
+              >
+                See {tabCounts.other} in Other →
+              </button>
+            </>
+          ) : (
+            "Nothing here — inbox clear for this filter."
+          )}
+        </p>
       ) : (
         BUCKETS.map((bucket) => {
           const inBucket = active.filter((c) => c.bucket === bucket.key);

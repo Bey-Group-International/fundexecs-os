@@ -7,6 +7,7 @@ import { getInboxThreads, autoUnsnoozeExpired } from "@/lib/inbox/data";
 import {
   buildDigest,
   priorityBucket,
+  inboxTab,
   suggestedAction,
   type DigestThread,
 } from "@/lib/inbox/intelligence";
@@ -96,6 +97,14 @@ export default async function InboxPage(
       intent: thread.intent,
       priority: thread.priority,
       bucket: priorityBucket(thread.priority),
+      // Focused / Other split — high-signal vs ambient, from the same triage
+      // score plus unread / linked-context signals (resolved on the server so
+      // the client board never imports the intelligence module's AI SDK).
+      tab: inboxTab({
+        priority: thread.priority,
+        unread: thread.unread,
+        hasContext: Boolean(context),
+      }),
       unread: thread.unread,
       status: thread.status,
       snoozedUntil: thread.snoozed_until,
