@@ -3,6 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+// Monotonic counter for realtime channel names. Every useLivePresence
+// subscription gets a distinct channel so multiple consumers on the same page
+// (e.g. the calendar grid and the Upcoming list) — and any re-subscription —
+// never reuse an already-subscribed channel. Reusing one and then calling
+// `.on()` throws "cannot add postgres_changes callbacks ... after subscribe()".
+let presenceChannelSeq = 0;
+export function nextPresenceChannelName(): string {
+  presenceChannelSeq += 1;
+  return `meetings-presence-${presenceChannelSeq}`;
+}
+
 /**
  * A ticking clock for live countdowns. Re-renders the consumer every
  * `intervalMs` with a fresh `Date.now()`. One shared interval per hook usage;
@@ -83,7 +94,7 @@ export function useLivePresence(meetingIds: string[]): {
     void refresh();
 
     const channel = supabase
-      .channel("meetings-presence-live")
+      .channel(nextPresenceChannelName())
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meeting_participants" },
