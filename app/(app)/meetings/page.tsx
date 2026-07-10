@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { MeetingLobby } from "./MeetingLobby";
 import { MeetingsCalendar } from "./MeetingsCalendar";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
@@ -116,12 +117,17 @@ export default async function MeetingsPage() {
   const past = meetings.filter((m) => !m.is_draft && !upcoming.some((u) => u.id === m.id));
 
   return (
-    <MeetingsCalendar
-      initialMeetings={meetings as unknown as CalendarMeeting[]}
-      initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
-      initialPast={past as unknown as PastMeeting[]}
-      userId={userId}
-      orgId={ctx.orgId}
-    />
+    <div className="flex flex-col gap-8">
+      {/* Lobby — new meeting / join — stays at the top; the calendar is an
+          additional layer below it. */}
+      <MeetingLobby />
+      <MeetingsCalendar
+        initialMeetings={meetings as unknown as CalendarMeeting[]}
+        initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
+        initialPast={past as unknown as PastMeeting[]}
+        userId={userId}
+        orgId={ctx.orgId}
+      />
+    </div>
   );
 }

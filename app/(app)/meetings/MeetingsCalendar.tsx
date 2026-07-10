@@ -348,7 +348,7 @@ function Toolbar({
     <div className="sticky top-0 z-20 -mx-4 mb-6 flex flex-col gap-3 border-b border-[var(--line)] bg-[var(--surface-0)]/80 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--fg-primary)]">Meetings</h1>
+          <h2 className="text-lg font-semibold tracking-tight text-[var(--fg-primary)]">Calendar</h2>
         </div>
 
         {/* Date navigation */}
