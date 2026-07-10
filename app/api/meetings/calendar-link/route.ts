@@ -2,23 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, createMeeting } from "@/lib/meetings/service";
-
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-/** Format a Date as a Google Calendar datetime string: YYYYMMDDTHHmmssZ */
-function toGCalDate(d: Date): string {
-  return (
-    d.getUTCFullYear() +
-    pad2(d.getUTCMonth() + 1) +
-    pad2(d.getUTCDate()) +
-    "T" +
-    pad2(d.getUTCHours()) +
-    pad2(d.getUTCMinutes()) +
-    "00Z"
-  );
-}
+import { buildGoogleCalendarTemplateUrl } from "@/lib/meetings/google-calendar";
 
 export async function GET(req: NextRequest) {
   const auth = await requireOrgContext();
@@ -38,8 +22,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid startIso" }, { status: 400 });
   }
 
-  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
-
   const origin = req.nextUrl.origin;
   const supabase = await createServerClient();
   const meeting = await createMeeting(supabase, {
@@ -56,16 +38,12 @@ export async function GET(req: NextRequest) {
   const joinUrl = buildMeetingInviteUrl(origin, meeting.roomCode);
   const roomUrl = buildMeetingRoomUrl(origin, meeting.roomCode);
 
-  const details = `Join meeting: ${joinUrl}`;
-
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: title,
-    dates: `${toGCalDate(start)}/${toGCalDate(end)}`,
-    details,
+  const googleCalendarUrl = buildGoogleCalendarTemplateUrl({
+    title,
+    startIso: start.toISOString(),
+    durationMinutes,
+    details: `Join meeting: ${joinUrl}`,
   });
-
-  const googleCalendarUrl = `https://calendar.google.com/calendar/render?${params.toString()}`;
 
   return NextResponse.json({
     id: meeting.id,

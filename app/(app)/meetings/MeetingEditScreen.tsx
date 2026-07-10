@@ -13,6 +13,7 @@ import {
   localToIso,
   type FieldErrors,
 } from "@/lib/meetings/schedule";
+import { CALENDAR_DEFAULTS } from "@/lib/meetings/calendar-preferences";
 
 export interface MeetingEditInitial {
   meetingId?: string;
@@ -114,13 +115,18 @@ export function MeetingEditScreen({
   onSaved: (result: MeetingSaveResult) => void;
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const browserTz = useMemo(
-    () => (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC") || "UTC",
+  // Default to the institutional calendar zone (mirrors Google Calendar), while
+  // still honoring a meeting's own saved zone on edit.
+  const defaultTz = useMemo(
+    () =>
+      CALENDAR_DEFAULTS.timezone ||
+      (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC") ||
+      "UTC",
     [],
   );
 
   const startParts = isoToLocalParts(initial?.scheduledAt);
-  const initialDuration = initial?.durationMinutes ?? 60;
+  const initialDuration = initial?.durationMinutes ?? CALENDAR_DEFAULTS.defaultDurationMinutes;
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [meetingType, setMeetingType] = useState(initial?.meetingType ?? "internal_strategy");
@@ -130,7 +136,7 @@ export function MeetingEditScreen({
   // "Custom" end time is only surfaced when the starting duration isn't one of
   // the presets, keeping the common path down to a single tap.
   const [customEnd, setCustomEnd] = useState(!DURATION_PRESETS.some((p) => p.minutes === initialDuration));
-  const [timezone, setTimezone] = useState(initial?.timezone ?? browserTz);
+  const [timezone, setTimezone] = useState(initial?.timezone ?? defaultTz);
   const [internalAttendees, setInternalAttendees] = useState(initial?.internalAttendees ?? "");
   const [externalGuests, setExternalGuests] = useState(initial?.externalGuests ?? "");
   const [objective, setObjective] = useState(initial?.objective ?? "");

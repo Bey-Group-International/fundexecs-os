@@ -12,8 +12,23 @@ import {
   type MeetingTimePhase,
   type ExternalSyncStatus,
 } from "@/lib/meetings/schedule";
+import {
+  CALENDAR_DEFAULTS,
+  groupByDay,
+  formatClock,
+} from "@/lib/meetings/calendar-preferences";
+import { buildGoogleCalendarTemplateUrl } from "@/lib/meetings/google-calendar";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
 import { useNow, useLivePresence } from "./hooks";
+
+type RsvpResponse = "accepted" | "declined" | "tentative" | "needs_action";
+
+export interface MeetingAttendee {
+  name: string;
+  email?: string;
+  type?: "internal" | "external";
+  response?: RsvpResponse;
+}
 
 export interface UpcomingMeeting {
   id: string;
@@ -29,7 +44,7 @@ export interface UpcomingMeeting {
   meeting_type: string | null;
   priority: "low" | "normal" | "high" | "critical" | null;
   tags: string[] | null;
-  attendees: Array<{ name: string; email?: string; type?: "internal" | "external" }> | null;
+  attendees: MeetingAttendee[] | null;
   source: string | null;
   sync_status: string | null;
   source_event_id: string | null;
@@ -88,6 +103,55 @@ function copilotName(key: string | null): string | null {
   return AGENTS.find((a) => a.key === key)?.name ?? key;
 }
 
+const RSVP_TONE: Record<RsvpResponse, string> = {
+  accepted: "bg-emerald-400",
+  declined: "bg-[var(--status-danger)]",
+  tentative: "bg-[var(--status-warning,#f59e0b)]",
+  needs_action: "bg-[var(--fg-muted)]",
+};
+
+const RSVP_LABEL: Record<RsvpResponse, string> = {
+  accepted: "Accepted",
+  declined: "Declined",
+  tentative: "Tentative",
+  needs_action: "No response",
+};
+
+/** One-way "write to Google Calendar" link for a scheduled meeting. */
+function googleCalUrlFor(m: UpcomingMeeting): string | null {
+  if (!m.scheduled_at) return null;
+  const guests = (m.attendees ?? [])
+    .map((a) => a.email)
+    .filter((e): e is string => !!e && e.includes("@"));
+  return buildGoogleCalendarTemplateUrl({
+    title: m.title,
+    startIso: m.scheduled_at,
+    durationMinutes: m.duration_minutes,
+    details: m.meeting_url
+      ? `Join: ${m.meeting_url}`
+      : `FundExecs meeting room code: ${m.room_code}`,
+    location: m.location ?? m.meeting_url ?? undefined,
+    guests,
+  });
+}
+
+function AttendeeList({ attendees }: { attendees: MeetingAttendee[] }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {attendees.map((a, i) => (
+        <span
+          key={`${a.email ?? a.name}-${i}`}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]"
+          title={a.response ? RSVP_LABEL[a.response] : undefined}
+        >
+          {a.response ? <span className={`h-1.5 w-1.5 rounded-full ${RSVP_TONE[a.response]}`} /> : null}
+          {a.name || a.email}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
   const internal = (m.attendees ?? []).filter((a) => a.type === "internal");
   const external = (m.attendees ?? []).filter((a) => a.type !== "internal");
@@ -126,6 +190,7 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
   const [clearConfirm, setClearConfirm] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "agenda">("list");
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const now = useNow(1000);
@@ -235,6 +300,21 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-md border border-[var(--line)]">
+            {(["list", "agenda"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setViewMode(m)}
+                className={`px-2 py-1 text-xs capitalize transition-colors ${
+                  viewMode === m
+                    ? "bg-[var(--gold-400)]/15 text-[var(--gold-400)]"
+                    : "text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
           <button onClick={() => void refresh()} className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)]">
             Refresh
           </button>
@@ -266,6 +346,17 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
         </div>
       ) : null}
 
+      {viewMode === "agenda" && meetings.length > 0 ? (
+        <AgendaView
+          meetings={meetings}
+          now={now}
+          presence={presence}
+          onJoinRoomCode={(code) => `/meetings/${code}`}
+          onEdit={(id) => setEditingId(id)}
+        />
+      ) : null}
+
+      {viewMode === "list" ? (
       <div className="grid gap-2">
         {meetings.map((meeting) => {
           const status = deriveMeetingStatus(meeting, now);
@@ -329,11 +420,7 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
                       <StatusPill label={`${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`} />
                     ) : null}
                   </div>
-                  {meeting.attendees?.length ? (
-                    <p className="mt-2 max-w-xl truncate text-xs text-[var(--fg-muted)]">
-                      {meeting.attendees.map((a) => a.email ?? a.name).join(", ")}
-                    </p>
-                  ) : null}
+                  {meeting.attendees?.length ? <AttendeeList attendees={meeting.attendees} /> : null}
                 </div>
                 <Link
                   href={`/meetings/${meeting.room_code}`}
@@ -351,6 +438,9 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
                   {detailsId === meeting.id ? "Hide details" : "Open details"}
                 </ActionButton>
                 <ActionButton onClick={() => setEditingId(meeting.id)}>Edit meeting</ActionButton>
+                {googleCalUrlFor(meeting) ? (
+                  <ActionLink href={googleCalUrlFor(meeting)!}>Add to Google Calendar</ActionLink>
+                ) : null}
                 {syncStatus === "sync_failed" || syncStatus === "needs_resync" ? (
                   <ActionButton onClick={() => void retrySync(meeting.id)}>Retry sync</ActionButton>
                 ) : null}
@@ -374,6 +464,7 @@ export function UpcomingMeetingsList({ initialMeetings }: { initialMeetings: Upc
           );
         })}
       </div>
+      ) : null}
 
       {editingMeeting ? (
         <MeetingEditScreen
@@ -436,6 +527,108 @@ function ActionButton({ children, onClick, danger = false }: { children: React.R
     >
       {children}
     </button>
+  );
+}
+
+function ActionLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-muted)] transition hover:text-[var(--fg-primary)]"
+    >
+      {children}
+    </a>
+  );
+}
+
+/**
+ * Google-Calendar-style Agenda: meetings grouped into day buckets (Today /
+ * Tomorrow / weekday), each row showing the wall-clock start, live state, and
+ * quick actions. Times, grouping, and weekend visibility follow CALENDAR_DEFAULTS.
+ */
+function AgendaView({
+  meetings,
+  now,
+  presence,
+  onJoinRoomCode,
+  onEdit,
+}: {
+  meetings: UpcomingMeeting[];
+  now: number;
+  presence: Record<string, { count: number; names: string[] }>;
+  onJoinRoomCode: (code: string) => string;
+  onEdit: (id: string) => void;
+}) {
+  const groups = groupByDay(meetings, CALENDAR_DEFAULTS, now);
+  if (groups.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-1)] p-4 text-center text-sm text-[var(--fg-muted)]">
+        No timed meetings to show on the agenda.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-5">
+      {groups.map((group) => (
+        <div key={group.key}>
+          <h3 className="mb-2 flex items-baseline gap-2 border-b border-[var(--line)] pb-1.5">
+            <span className="text-sm font-semibold text-[var(--fg-primary)]">{group.heading}</span>
+            <span className="text-[11px] text-[var(--fg-muted)]">
+              {group.items.length} meeting{group.items.length === 1 ? "" : "s"}
+            </span>
+          </h3>
+          <div className="flex flex-col divide-y divide-[var(--line)]">
+            {group.items.map((m) => {
+              const ts = meetingTimeState(m.scheduled_at, m.duration_minutes, now);
+              const inRoom = presence[m.id]?.count ?? 0;
+              const live = inRoom > 0 || ts?.phase === "in_progress";
+              const gcal = googleCalUrlFor(m);
+              return (
+                <div key={m.id} className="flex items-center gap-3 py-2.5">
+                  <div className="w-16 shrink-0 text-right">
+                    <div className="text-xs font-medium text-[var(--fg-primary)]">
+                      {m.scheduled_at ? formatClock(m.scheduled_at) : "—"}
+                    </div>
+                    {m.duration_minutes ? <div className="text-[10px] text-[var(--fg-muted)]">{m.duration_minutes}m</div> : null}
+                  </div>
+                  <div className={`h-8 w-0.5 shrink-0 rounded-full ${live ? "bg-emerald-400" : "bg-[var(--gold-400)]/60"}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium text-[var(--fg-primary)]">{m.title}</p>
+                      {live ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-400">
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                          live
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="truncate text-[11px] text-[var(--fg-muted)]">
+                      {(m.meeting_type ?? "meeting").replace(/_/g, " ")}
+                      {m.attendees?.length ? ` · ${m.attendees.length} attendee${m.attendees.length === 1 ? "" : "s"}` : ""}
+                      {inRoom > 0 ? ` · ${inRoom} in room` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {gcal ? <ActionLink href={gcal}>＋ GCal</ActionLink> : null}
+                    <ActionButton onClick={() => onEdit(m.id)}>Edit</ActionButton>
+                    <Link
+                      href={onJoinRoomCode(m.room_code)}
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        live ? "bg-emerald-500/15 text-emerald-400" : "bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                      }`}
+                    >
+                      {live ? "Join live" : "Join"}
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
