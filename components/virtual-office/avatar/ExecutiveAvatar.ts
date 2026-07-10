@@ -748,76 +748,97 @@ export class ExecutiveAvatar {
       g.fillStyle(this._shade(s.hair, 0.55), 0.4);
       g.fillEllipse(ox, oy - 16.3, 8.4, 1.4);
     }
-    const eyeY = oy - 12.5;
+    const EX = 1.75;
+    const eyeY = oy - 12.55;
     // Brows — thin, tapered, angled along the brow ridge (not floating bars).
-    g.fillStyle(this._shade(s.hair, 0.66), 0.95);
+    g.fillStyle(this._shade(s.hair, 0.68), 0.95);
     g.fillPoints(
       [
-        { x: ox - 3.5, y: oy - 13.3 },
-        { x: ox - 0.9, y: oy - 13.9 },
-        { x: ox - 0.9, y: oy - 13.55 },
-        { x: ox - 3.5, y: oy - 12.95 },
+        { x: ox - 3.3, y: oy - 13.35 },
+        { x: ox - 0.85, y: oy - 13.95 },
+        { x: ox - 0.85, y: oy - 13.62 },
+        { x: ox - 3.3, y: oy - 13.02 },
       ],
       true,
     );
     g.fillPoints(
       [
-        { x: ox + 3.5, y: oy - 13.3 },
-        { x: ox + 0.9, y: oy - 13.9 },
-        { x: ox + 0.9, y: oy - 13.55 },
-        { x: ox + 3.5, y: oy - 12.95 },
+        { x: ox + 3.3, y: oy - 13.35 },
+        { x: ox + 0.85, y: oy - 13.95 },
+        { x: ox + 0.85, y: oy - 13.62 },
+        { x: ox + 3.3, y: oy - 13.02 },
       ],
       true,
     );
-    // Eyes — open (almond whites, brown iris, pupil, catchlight) or a thin
-    // closed line while blinking.
+    // Eyes — smaller/closer almond, iris+pupil, lids, tear-trough, catchlight;
+    // or a thin closed line while blinking.
     if (this.eyesClosed) {
       g.fillStyle(this._shade(s.skin, 0.55), 0.9);
-      g.fillRect(ox - 2.9, eyeY, 1.9, 0.7);
-      g.fillRect(ox + 1, eyeY, 1.9, 0.7);
+      g.fillRect(ox - EX - 0.8, eyeY - 0.05, 1.6, 0.55);
+      g.fillRect(ox + EX - 0.8, eyeY - 0.05, 1.6, 0.55);
     } else {
-      // Upper-lid soft shadow set into the socket (subtle; kept off the bridge).
-      g.fillStyle(this._shade(s.skin, 0.76), 0.24);
-      g.fillEllipse(ox - 2.1, eyeY - 0.75, 2.2, 0.9);
-      g.fillEllipse(ox + 2.1, eyeY - 0.75, 2.2, 0.9);
-      g.fillStyle(0xe9e2d4, 1);
-      g.fillEllipse(ox - 2, eyeY, 1.9, 1.05);
-      g.fillEllipse(ox + 2, eyeY, 1.9, 1.05);
+      g.fillStyle(this._shade(s.skin, 0.78), 0.22);
+      g.fillEllipse(ox - EX, eyeY - 0.7, 2.0, 0.8);
+      g.fillEllipse(ox + EX, eyeY - 0.7, 2.0, 0.8);
+      g.fillStyle(this._shade(s.skin, 0.82), 0.18);
+      g.fillEllipse(ox - EX, eyeY + 0.85, 1.7, 0.7);
+      g.fillEllipse(ox + EX, eyeY + 0.85, 1.7, 0.7);
+      g.fillStyle(0xece5d7, 1);
+      g.fillEllipse(ox - EX, eyeY, 1.62, 0.94);
+      g.fillEllipse(ox + EX, eyeY, 1.62, 0.94);
       g.fillStyle(iris, 1);
-      g.fillCircle(ox - 1.95, eyeY + 0.05, 0.62);
-      g.fillCircle(ox + 2.05, eyeY + 0.05, 0.62);
-      g.fillStyle(0x140f0b, 1);
-      g.fillCircle(ox - 1.95, eyeY + 0.05, 0.3);
-      g.fillCircle(ox + 2.05, eyeY + 0.05, 0.3);
-      g.fillStyle(0xfbf7ee, 0.9);
-      g.fillCircle(ox - 2.2, eyeY - 0.25, 0.2);
-      g.fillCircle(ox + 1.8, eyeY - 0.25, 0.2);
-      // Upper eyelid (lash) line — a thin dark arc over each eye.
-      g.lineStyle(0.45, 0x2a211a, 0.85);
+      g.fillCircle(ox - EX, eyeY + 0.05, 0.54);
+      g.fillCircle(ox + EX, eyeY + 0.05, 0.54);
+      g.fillStyle(this._shade(iris, 1.35), 0.5);
+      g.fillCircle(ox - EX - 0.12, eyeY - 0.08, 0.3);
+      g.fillCircle(ox + EX - 0.12, eyeY - 0.08, 0.3);
+      g.fillStyle(0x120d0a, 1);
+      g.fillCircle(ox - EX, eyeY + 0.05, 0.27);
+      g.fillCircle(ox + EX, eyeY + 0.05, 0.27);
+      g.fillStyle(0xfcf8f0, 0.92);
+      g.fillCircle(ox - EX - 0.2, eyeY - 0.22, 0.17);
+      g.fillCircle(ox + EX - 0.2, eyeY - 0.22, 0.17);
+      g.lineStyle(0.5, 0x241c15, 0.9);
       g.beginPath();
-      g.arc(ox - 2, eyeY - 0.1, 1.5, 1.05 * Math.PI, 1.95 * Math.PI, false);
+      g.arc(ox - EX, eyeY - 0.06, 1.32, 1.02 * Math.PI, 1.98 * Math.PI, false);
       g.strokePath();
       g.beginPath();
-      g.arc(ox + 2, eyeY - 0.1, 1.5, 1.05 * Math.PI, 1.95 * Math.PI, false);
+      g.arc(ox + EX, eyeY - 0.06, 1.32, 1.02 * Math.PI, 1.98 * Math.PI, false);
+      g.strokePath();
+      g.lineStyle(0.32, this._shade(s.skin, 0.62), 0.5);
+      g.beginPath();
+      g.arc(ox - EX, eyeY + 0.12, 1.26, 0.08 * Math.PI, 0.92 * Math.PI, false);
+      g.strokePath();
+      g.beginPath();
+      g.arc(ox + EX, eyeY + 0.12, 1.26, 0.08 * Math.PI, 0.92 * Math.PI, false);
       g.strokePath();
     }
-    // Nose — soft side shadow, tip highlight, faint nostrils. No bright stripe.
-    g.fillStyle(this._shade(s.skin, 0.74), 0.4);
-    g.fillEllipse(ox + 0.55, oy - 11.2, 1.0, 2.3);
-    g.fillStyle(this._shade(s.skin, 1.1), 0.32);
-    g.fillEllipse(ox - 0.25, oy - 10.7, 0.9, 1.7);
-    g.fillStyle(this._shade(s.skin, 0.58), 0.5);
-    g.fillEllipse(ox - 0.7, oy - 10.1, 0.42, 0.34);
-    g.fillEllipse(ox + 0.7, oy - 10.1, 0.42, 0.34);
-    g.fillStyle(this._shade(s.skin, 1.12), 0.4);
-    g.fillEllipse(ox, oy - 10.35, 0.7, 0.5);
-    // Lips — upper lip a touch darker, soft lower-lip highlight, subtle seam.
-    g.fillStyle(this._shade(s.skin, 0.78), 0.55);
-    g.fillEllipse(ox, oy - 9.85, 2.4, 0.7);
-    g.fillStyle(this._shade(s.skin, 0.55), 0.5);
-    g.fillEllipse(ox, oy - 9.75, 2.1, 0.24);
-    g.fillStyle(this._shade(s.skin, 1.12), 0.4);
-    g.fillEllipse(ox, oy - 9.35, 1.7, 0.5);
+    // Nose — bridge shadow down the shaded side, lit ridge, tip, wings/nostrils.
+    g.fillStyle(this._shade(s.skin, 0.8), 0.34);
+    g.fillEllipse(ox + 0.55, oy - 11.6, 0.72, 2.4);
+    g.fillStyle(this._shade(s.skin, 1.12), 0.3);
+    g.fillEllipse(ox - 0.5, oy - 11.4, 0.6, 2.0);
+    g.fillStyle(this._shade(s.skin, 1.12), 0.34);
+    g.fillEllipse(ox - 0.1, oy - 10.5, 0.95, 0.9);
+    g.fillStyle(this._shade(s.skin, 0.7), 0.4);
+    g.fillEllipse(ox - 0.05, oy - 10.15, 1.3, 0.55);
+    g.fillStyle(this._shade(s.skin, 0.55), 0.55);
+    g.fillEllipse(ox - 0.72, oy - 10.05, 0.4, 0.32);
+    g.fillEllipse(ox + 0.72, oy - 10.05, 0.4, 0.32);
+    // Lips — philtrum, upper/lower lip, seam, corner shadows.
+    g.fillStyle(this._shade(s.skin, 0.72), 0.28);
+    g.fillEllipse(ox, oy - 9.95, 0.42, 0.5);
+    g.fillStyle(this._shade(s.skin, 0.8), 0.5);
+    g.fillEllipse(ox, oy - 9.55, 2.5, 0.62);
+    g.fillStyle(this._shade(s.skin, 1.14), 0.42);
+    g.fillEllipse(ox, oy - 9.2, 1.9, 0.55);
+    g.lineStyle(0.4, this._shade(s.skin, 0.5), 0.55);
+    g.beginPath();
+    g.arc(ox, oy - 9.9, 1.4, 0.12 * Math.PI, 0.88 * Math.PI, false);
+    g.strokePath();
+    g.fillStyle(this._shade(s.skin, 0.55), 0.4);
+    g.fillEllipse(ox - 1.35, oy - 9.6, 0.4, 0.4);
+    g.fillEllipse(ox + 1.35, oy - 9.6, 0.4, 0.4);
     // Facial hair — over the lower face (full beard sits over the lips).
     this._drawFacialHairFront(g, s, ox, oy);
     // Eyewear — drawn last so the frames sit over the eyes.
