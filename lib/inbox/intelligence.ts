@@ -248,6 +248,66 @@ export function buildDigest(threads: DigestThread[]): InboxDigest {
   return { total: threads.length, open: open.length, unread, needsYou, byCategory, headline };
 }
 
+// --- Follow-up nudges (pure) ------------------------------------------------
+//
+// LinkedIn-style message nudges: a gentle, escalating reminder when a thread is
+// waiting on someone. Two kinds, derived from thread-level signals only (no
+// message-history lookup needed):
+//   * awaiting_you — an unread inbound has sat open past a day; the counterparty
+//     is waiting on your reply.
+//   * going_cold   — an open thread you've already read has been silent for
+//     days; a reminder to follow up or close it out.
+// Pure and driven off a passed-in age, so it unit-tests deterministically.
+
+export type NudgeKind = "awaiting_you" | "going_cold";
+
+export interface NudgeSignals {
+  status: "open" | "snoozed" | "done";
+  unread: boolean;
+  // Hours since the last message on the thread; null when it has never been
+  // messaged (nothing to nudge about).
+  ageHours: number | null;
+}
+
+export interface Nudge {
+  kind: NudgeKind;
+  label: string;
+  tone: "warn" | "muted";
+}
+
+// An unread inbound older than this (hours) means the counterparty is waiting.
+const NUDGE_AWAITING_AFTER_HOURS = 24;
+// An open, already-read thread quiet this long (hours) has gone cold.
+const NUDGE_COLD_AFTER_HOURS = 120; // 5 days
+
+// Round an age in hours to a short human duration: "20 hours", "1 day", "3 days".
+function nudgeDuration(hours: number): string {
+  if (hours < 24) {
+    const h = Math.max(1, Math.round(hours));
+    return `${h} hour${h === 1 ? "" : "s"}`;
+  }
+  const d = Math.round(hours / 24);
+  return `${d} day${d === 1 ? "" : "s"}`;
+}
+
+/**
+ * The follow-up nudge for a thread, or null when none applies. Only open threads
+ * nudge — a snoozed thread is deliberately parked, and a done thread is closed.
+ * An unread thread nudges toward your reply; a read-but-quiet thread nudges to
+ * follow up before it goes stale.
+ */
+export function threadNudge(s: NudgeSignals): Nudge | null {
+  if (s.status !== "open" || s.ageHours == null) return null;
+  if (s.unread) {
+    return s.ageHours >= NUDGE_AWAITING_AFTER_HOURS
+      ? { kind: "awaiting_you", label: `Waiting ${nudgeDuration(s.ageHours)} for your reply`, tone: "warn" }
+      : null;
+  }
+  return s.ageHours >= NUDGE_COLD_AFTER_HOURS
+    ? { kind: "going_cold", label: `Quiet for ${nudgeDuration(s.ageHours)} — follow up?`, tone: "muted" }
+    : null;
+}
+
 // --- AI summary (async, Claude-backed with deterministic fallback) ----------
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";

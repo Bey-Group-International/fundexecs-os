@@ -79,6 +79,8 @@ export interface InboxCardData {
   suggested: { action: ActionKind; label: string; tier: GateTier } | null;
   // One-tap smart-reply openers shown above the composer (server-computed).
   quickReplies: string[];
+  // Follow-up reminder pill (or null) — "waiting on you" / "gone cold".
+  nudge: { kind: "awaiting_you" | "going_cold"; label: string; tone: "warn" | "muted" } | null;
   canShare: boolean;
   shareTier: GateTier;
 }
@@ -586,6 +588,19 @@ function ThreadCard({
       </div>
 
       {card.summary ? <p className="mt-2 line-clamp-2 text-sm text-fg-secondary">{card.summary}</p> : null}
+
+      {card.nudge ? (
+        <p
+          className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+            card.nudge.tone === "warn"
+              ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
+              : "border-line text-fg-muted"
+          }`}
+          title="Follow-up reminder"
+        >
+          <span aria-hidden>⏰</span> {card.nudge.label}
+        </p>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
         {card.context ? (

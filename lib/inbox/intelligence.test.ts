@@ -5,6 +5,7 @@ import {
   inboxTab,
   partitionByTab,
   quickReplies,
+  threadNudge,
   suggestedAction,
   buildDigest,
   fallbackSummary,
@@ -125,6 +126,40 @@ describe("quickReplies", () => {
     const a = quickReplies({ category: "messaging" });
     a.push("mutated");
     expect(quickReplies({ category: "messaging" })).toHaveLength(3);
+  });
+});
+
+describe("threadNudge", () => {
+  it("nudges toward your reply once an unread inbound is over a day old", () => {
+    const n = threadNudge({ status: "open", unread: true, ageHours: 48 });
+    expect(n?.kind).toBe("awaiting_you");
+    expect(n?.label).toContain("2 days");
+    expect(n?.tone).toBe("warn");
+  });
+
+  it("does not nudge an unread thread that is still fresh", () => {
+    expect(threadNudge({ status: "open", unread: true, ageHours: 5 })).toBeNull();
+  });
+
+  it("nudges to follow up on an open, already-read thread gone quiet for days", () => {
+    const n = threadNudge({ status: "open", unread: false, ageHours: 168 });
+    expect(n?.kind).toBe("going_cold");
+    expect(n?.label).toContain("7 days");
+    expect(n?.tone).toBe("muted");
+  });
+
+  it("does not nudge a read thread that has only been quiet a few days", () => {
+    expect(threadNudge({ status: "open", unread: false, ageHours: 100 })).toBeNull();
+  });
+
+  it("never nudges snoozed or done threads, or ones never messaged", () => {
+    expect(threadNudge({ status: "snoozed", unread: true, ageHours: 1000 })).toBeNull();
+    expect(threadNudge({ status: "done", unread: true, ageHours: 1000 })).toBeNull();
+    expect(threadNudge({ status: "open", unread: true, ageHours: null })).toBeNull();
+  });
+
+  it("pluralizes the duration correctly at the day boundary", () => {
+    expect(threadNudge({ status: "open", unread: true, ageHours: 24 })?.label).toContain("1 day");
   });
 });
 
