@@ -17,7 +17,6 @@ import { MandateStrip } from "@/components/build/MandateStrip";
 import { RunRiskModule, RunStressTestModule } from "@/components/run/RunModules";
 import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
 import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
-import { LpIntelligenceLive } from "@/components/source/LpIntelligenceLive";
 import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
 import { PartnersLive } from "@/components/source/PartnersLiveServer";
 import { DealPipelineLive } from "@/components/source/DealPipelineLive";
@@ -48,12 +47,31 @@ import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
 import { ModuleDashboard } from "@/components/source/ModuleDashboard";
 import { AiSourcingPanel } from "@/components/source/AiSourcingPanel";
+import { SourceLiveHeader, type SourceStat } from "@/components/source/SourceLiveHeader";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { summarizeModule } from "@/lib/source-stats";
 import { sourceConfigFor, sourcingLive, sourcingEnrichmentEnabled } from "@/lib/source-ai";
 import { AGENT_BY_KEY } from "@/lib/agents";
 
 const HUB_KEYS: Hub[] = ["build", "source", "run", "execute"];
+
+/** Compact relative time for the Source live-header "last activity" stat. */
+function relativeAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "—";
+  const secs = Math.round((Date.now() - then) / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const mos = Math.round(days / 30);
+  if (mos < 12) return `${mos}mo ago`;
+  return `${Math.round(mos / 12)}y ago`;
+}
 
 // A module's data view, rendered identically whether the module is opened
 // standalone (/[hub]/[module]) or inside a session frame
@@ -180,6 +198,43 @@ export async function ModuleView({
   // carries the mandate alongside live conviction.
   const mandateStrip = hub.key === "source" ? <MandateStrip orgId={ctx.orgId} /> : null;
 
+  // Live KPI strip for the Source directories. Three cheap head-count queries
+  // (total, added-this-week, last activity) mirror the momentum stats the
+  // generic list path already computes; RLS scopes them to the caller's org.
+  // Powers the real-time SourceLiveHeader that fronts every Source pipeline.
+  async function sourceStats(table: string): Promise<SourceStat[]> {
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const t = table as "investors";
+    const [totalRes, weekRes, latestRes] = await Promise.all([
+      supabase.from(t).select("*", { count: "exact", head: true }).is("archived_at", null),
+      supabase
+        .from(t)
+        .select("*", { count: "exact", head: true })
+        .is("archived_at", null)
+        .gte("created_at", weekAgo),
+      supabase
+        .from(t)
+        .select("created_at")
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const total = totalRes.count ?? 0;
+    const week = weekRes.count ?? 0;
+    const last = (latestRes.data?.created_at as string | undefined) ?? null;
+    return [
+      { label: "Total", value: total.toLocaleString(), hint: "in this pipeline" },
+      {
+        label: "New · 7d",
+        value: week.toLocaleString(),
+        hint: "added this week",
+        accent: week > 0 ? "text-emerald-300" : undefined,
+      },
+      { label: "Last activity", value: relativeAgo(last), hint: "most recent add" },
+    ];
+  }
+
   // --- Run hub: derived evaluation modules + actionable lists --------------
   // Strategy, Risk, Stress Test, and Comms are synthesized from the live deal
   // working set (deals + underwriting + diligence). Diligence and Underwriting
@@ -288,9 +343,15 @@ export async function ModuleView({
   // instead of the generic table, while retaining AI sourcing and add-row forms.
   if (hub.key === "source" && mod.key === "lp_pipeline") {
     const aiCfg = sessionId ? null : sourceConfigFor(key);
+    const stats = await sourceStats("investors");
     return (
       <div>
         {mandateStrip}
+        <SourceLiveHeader
+          title="LP Pipeline"
+          subtitle="Prospective and committed allocators, scored by fit against your mandate and ranked by where they sit in your raise."
+          stats={stats}
+        />
         {aiCfg ? (
           <AiSourcingPanel
             hub={hub.key}
@@ -311,23 +372,17 @@ export async function ModuleView({
     );
   }
 
-  // LP Intelligence — the scored, tiered prioritization view over allocators.
-  // Complements the LP Pipeline CRM above: same investors, ranked by fit against
-  // the current mandate with an explainable per-LP breakdown.
-  if (hub.key === "source" && mod.key === "lp_intelligence") {
-    return (
-      <div>
-        {mandateStrip}
-        <LpIntelligenceLive />
-      </div>
-    );
-  }
-
   if (hub.key === "source" && mod.key === "providers") {
     const aiCfg = sessionId ? null : sourceConfigFor(key);
+    const stats = await sourceStats("service_providers");
     return (
       <div>
         {mandateStrip}
+        <SourceLiveHeader
+          title="Providers"
+          subtitle="Your legal, audit, fund-admin, and service bench — verified, tracked, and one step from outreach."
+          stats={stats}
+        />
         {aiCfg ? (
           <AiSourcingPanel
             hub={hub.key}
@@ -350,9 +405,15 @@ export async function ModuleView({
 
   if (hub.key === "source" && mod.key === "partners") {
     const aiCfg = sessionId ? null : sourceConfigFor(key);
+    const stats = await sourceStats("partners");
     return (
       <div>
         {mandateStrip}
+        <SourceLiveHeader
+          title="Partners"
+          subtitle="Co-GPs, operating partners, and advisors who extend your reach across the ecosystem."
+          stats={stats}
+        />
         {aiCfg ? (
           <AiSourcingPanel
             hub={hub.key}
@@ -375,9 +436,15 @@ export async function ModuleView({
 
   if (hub.key === "source" && mod.key === "deal_pipeline") {
     const aiCfg = sessionId ? null : sourceConfigFor(key);
+    const stats = await sourceStats("deals");
     return (
       <div>
         {mandateStrip}
+        <SourceLiveHeader
+          title="Deal Pipeline"
+          subtitle="Every opportunity in flight, from first look to close, scored against your thesis."
+          stats={stats}
+        />
         {aiCfg ? (
           <AiSourcingPanel
             hub={hub.key}
@@ -462,10 +529,18 @@ export async function ModuleView({
       );
     }
 
+    // Source-hub list modules (e.g. Debt & Hybrid) get the real-time institutional
+    // header with live momentum stats; other hubs keep the static module header.
+    const sourceGenericStats = hub.key === "source" ? await sourceStats(cfg.table) : null;
+
     return (
       <div>
         {mandateStrip}
-        <ModuleHeader title={mod.label} blurb={cfg.blurb} />
+        {hub.key === "source" ? (
+          <SourceLiveHeader title={mod.label} subtitle={cfg.blurb} stats={sourceGenericStats ?? []} />
+        ) : (
+          <ModuleHeader title={mod.label} blurb={cfg.blurb} />
+        )}
         {aiCfg ? (
           <AiSourcingPanel
             hub={hub.key}
@@ -476,7 +551,11 @@ export async function ModuleView({
             webEnrichment={sourcingEnrichmentEnabled()}
           />
         ) : null}
-        {summary ? <ModuleDashboard summary={summary} empty={rows.length === 0} /> : statBar}
+        {summary ? (
+          <ModuleDashboard summary={summary} empty={rows.length === 0} />
+        ) : hub.key === "source" ? null : (
+          statBar
+        )}
         {addConfig ? (
           <AddRowForm
             hub={hub.key}
