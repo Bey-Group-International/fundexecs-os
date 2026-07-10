@@ -81,8 +81,12 @@ export default async function HubLayout(
     }
   }
 
+  // The Build hub's Firm Identity page uses a two-column data-room layout, so
+  // the Build hub gets a wider canvas; the other hubs keep the focused width.
+  const containerWidth = hub.key === "build" ? "max-w-6xl" : "max-w-4xl";
+
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className={`mx-auto ${containerWidth}`}>
       <header className="mb-5">
         <div className="flex items-center gap-2.5">
           <span
