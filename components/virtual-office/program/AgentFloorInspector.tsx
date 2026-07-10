@@ -3,14 +3,16 @@
 import { useMemo, useState } from "react";
 import { RichText } from "@/components/RichText";
 import { text } from "@/lib/richtext";
-import { AGENT_BY_ID, roomLabel, type AgentId, type AgentState } from "./officeProgram";
+import { AGENT_BY_ID, roomLabel, type AgentId, type AgentState, type AuditEvent } from "./officeProgram";
 import { useOfficeProgram } from "./useOfficeProgram";
 import {
   interactWithAgent,
   requestAgentReview,
   reassignAgentTask,
   reassignmentTargets,
+  getExecPrecedents,
 } from "./officeProgramStore";
+import { relativeTime } from "@/lib/office/floor-activity";
 import {
   executiveSheet,
   deriveTraits,
@@ -22,6 +24,24 @@ import {
 } from "@/lib/office/characterSheet";
 
 const GOLD = "#c9a84c";
+
+// Shared section eyebrow (matches the inline style used across the panel).
+const EYEBROW: React.CSSProperties = {
+  fontSize: 8,
+  letterSpacing: "0.2em",
+  textTransform: "uppercase",
+  color: `${GOLD}aa`,
+  fontFamily: "Georgia,serif",
+};
+
+// Dot color per audit status, for the recent-activity trail.
+const AUDIT_STATUS_COLOR: Record<AuditEvent["status"], string> = {
+  info: "#94a3b8",
+  pending: "#f59e0b",
+  approved: "#c9a84c",
+  rejected: "#ef4444",
+  complete: "#22c55e",
+};
 
 const STATE_META: Record<AgentState, { label: string; color: string }> = {
   idle:                 { label: "Idle",              color: "#94a3b8" },
@@ -71,7 +91,24 @@ export function AgentFloorInspector({
     () => text(meta?.name ?? "").gradient([meta?.accent ?? "#c9a84c", "#f4f0e8"]).bold().build(),
     [meta?.name, meta?.accent],
   );
+
+  // Recent activity: this executive's own audit entries, newest-first.
+  const recentActivity = useMemo(
+    () => s.audit.filter((e) => e.actor === (meta?.name ?? "")).slice(-5).reverse(),
+    [s.audit, meta?.name],
+  );
+  // Current thinking: the executive's most recent spoken line on the floor.
+  const lastThought = useMemo(() => {
+    const mine = s.chat.filter((c) => c.author === (meta?.name ?? ""));
+    return mine.length ? mine[mine.length - 1] : null;
+  }, [s.chat, meta?.name]);
+
   if (!rt || !meta) return null;
+
+  const now = Date.now();
+  // Memory (#62): the executive's shipped precedents — a live projection of the
+  // audit trail (recomputed each render; the audit log is bounded). Newest-first.
+  const precedents = getExecPrecedents(agentId).slice(0, 3);
 
   const sm = STATE_META[rt.state] ?? STATE_META.idle;
   const hasOwns = !!rt.owns;
@@ -151,6 +188,17 @@ export function AgentFloorInspector({
           )}
         </div>
 
+        {/* Thinking — the executive's most recent line on the floor. */}
+        {lastThought && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={EYEBROW}>Thinking</div>
+            <div style={{ fontSize: 10, lineHeight: 1.5, fontStyle: "italic", color: "rgba(255,248,220,0.72)", borderLeft: `2px solid ${meta.accent}66`, paddingLeft: 8 }}>
+              “{lastThought.text}”
+              <span style={{ marginLeft: 6, fontStyle: "normal", fontSize: 8, color: "rgba(255,248,220,0.35)" }}>{relativeTime(lastThought.ts, now)}</span>
+            </div>
+          </div>
+        )}
+
         {/* Why this agent */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ fontSize: 8, letterSpacing: "0.2em", textTransform: "uppercase", color: `${GOLD}aa`, fontFamily: "Georgia,serif" }}>Why this agent?</div>
@@ -195,6 +243,35 @@ export function AgentFloorInspector({
             ))}
           </div>
         </div>
+
+        {/* Track record (#62 memory) — precedents this executive has shipped,
+            a live projection of the audit trail. */}
+        {precedents.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={EYEBROW}>Track record</div>
+            {precedents.map((p) => (
+              <div key={p.auditEventId} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, color: "rgba(255,248,220,0.7)" }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", flexShrink: 0, background: p.outcome === "complete" ? "#22c55e" : "#ef4444" }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.label}>{p.label}</span>
+                <span style={{ fontSize: 8, color: "rgba(255,248,220,0.35)", flexShrink: 0 }}>{relativeTime(p.ts, now)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Recent activity — this executive's own audit entries, newest-first. */}
+        {recentActivity.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={EYEBROW}>Recent activity</div>
+            {recentActivity.map((e) => (
+              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, color: "rgba(255,248,220,0.6)" }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", flexShrink: 0, background: AUDIT_STATUS_COLOR[e.status] }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={e.action}>{e.action}</span>
+                <span style={{ fontSize: 8, color: "rgba(255,248,220,0.35)", flexShrink: 0 }}>{relativeTime(e.ts, now)}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Reassign picker */}
         {picking && (

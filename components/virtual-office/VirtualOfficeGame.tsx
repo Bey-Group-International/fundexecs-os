@@ -24,6 +24,7 @@ import { MeetingPresenceGrid } from "./program/MeetingPresenceGrid";
 import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./program/officeProgramStore";
 import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
 import { AgentFloorInspector } from "./program/AgentFloorInspector";
+import { AgentRosterButton } from "./program/AgentRosterButton";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
@@ -1448,6 +1449,9 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">{overheadView ? "⤢" : "⤡"}</span>
           {overheadView ? "Overhead" : "Follow"}
         </button>
+        {/* Team roster — inspect any executive from the top rail (pairs with the
+            walk-up proximity trigger that opens the same inspector). */}
+        <AgentRosterButton onInspect={setInspectAgentId} />
         {/* Map editor — author the floor's WorkAdventure-style scripted areas.
             (⌘K opens the command palette; the directory has its own event entry.) */}
         <button
