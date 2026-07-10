@@ -3,6 +3,8 @@
     "@anthropic-ai/sdk": "^0.104.0",
     "@composio/core": "^0.13.1",
     "@mediapipe/selfie_segmentation": "^0.1.1675465747",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.12.0",
@@ -15,7 +17,8 @@
     "react-markdown": "^9.1.0",
     "remark-gfm": "^4.0.1",
     "resend": "^6.16.0",
-    "stripe": "^17.7.0"
+    "stripe": "^17.7.0",
+    "three": "^0.185.1"
   },
   "description": "An AI-native operating system for private-market participants.",
   "devDependencies": {
@@ -50,5 +53,8 @@
     "typecheck": "tsc --noEmit"
   },
   "version": "0.0.1",
-  "workspaces": [ "shared", "server" ]
+  "workspaces": [
+    "shared",
+    "server"
+  ]
 }
