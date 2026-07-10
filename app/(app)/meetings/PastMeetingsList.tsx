@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-interface LiveMeeting {
+export interface PastMeeting {
   id: string;
   room_code: string;
   title: string;
@@ -17,9 +17,13 @@ interface LiveMeeting {
   duration_minutes: number | null;
 }
 
+type LiveMeeting = PastMeeting;
+
 interface Props {
   initialMeetings: LiveMeeting[];
   userId: string;
+  /** Rail variant: drop the centered max-width wrapper and tighten spacing. */
+  compact?: boolean;
 }
 
 function formatDate(iso: string) {
@@ -96,7 +100,7 @@ function CopyRoomCode({ code }: { code: string }) {
   );
 }
 
-export function PastMeetingsList({ initialMeetings, userId }: Props) {
+export function PastMeetingsList({ initialMeetings, userId, compact = false }: Props) {
   const [meetings, setMeetings] = useState<LiveMeeting[]>(initialMeetings);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -194,7 +198,7 @@ export function PastMeetingsList({ initialMeetings, userId }: Props) {
   const hostedMeetings = meetings.filter((m) => m.host_id === userId);
 
   return (
-    <section className="max-w-2xl mx-auto w-full px-4">
+    <section className={compact ? "w-full" : "max-w-2xl mx-auto w-full px-4"}>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-[var(--fg-secondary)] uppercase tracking-wider">
           Past meetings
