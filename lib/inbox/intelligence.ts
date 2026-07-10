@@ -509,3 +509,94 @@ export function fallbackDraft(input: ThreadDigestInput): string {
   // Lead with the counterparty's name when known, keeping the body template-safe.
   return who === "there" ? base : base.replace(/^Thanks/, `Thanks, ${who}`);
 }
+
+// --- AI smart replies (async, Claude-backed with deterministic fallback) -----
+//
+// The one-tap opener chips above the composer. `quickReplies` (pure, above) gives
+// category templates that render instantly; this upgrades them to 2-3 short,
+// context-aware openers drawn from the actual thread — the Gmail/LinkedIn
+// smart-reply shape. Each is only a *seed* for the composer that the operator
+// edits and then sends (the send stays the gated Tier-2 move), so a reply chip is
+// always safe to generate. Degrades to the templates when no key / on error, so
+// the chips are identical in CI and preview.
+
+export interface ThreadReplyOptions {
+  replies: string[];
+  // True when Claude produced the openers; false for the deterministic templates.
+  live: boolean;
+}
+
+// Cap the model to a few short openers so the chip row stays glanceable.
+const MAX_SMART_REPLIES = 3;
+
+const SMART_REPLIES_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    replies: {
+      type: "array",
+      minItems: 1,
+      maxItems: MAX_SMART_REPLIES,
+      items: { type: "string" },
+      description:
+        "2-3 distinct, short openers (a few words up to one brief sentence) to START a reply to the counterparty's latest message. First person, professional, no salutation.",
+    },
+  },
+  required: ["replies"],
+} as const;
+
+/**
+ * Suggest 2-3 short, context-aware reply openers for a thread. Uses Claude when
+ * ANTHROPIC_API_KEY is present; otherwise returns the deterministic category
+ * templates so the chips still render offline / in CI. Never sends — the caller
+ * seeds the composer with the tapped opener and the operator sends it themselves.
+ */
+export async function smartReplies(input: ThreadDigestInput): Promise<ThreadReplyOptions> {
+  const fallback = quickReplies({ category: input.category });
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { replies: fallback, live: false };
+  try {
+    const anthropic = anthropicClient(apiKey);
+    const transcript = input.messages
+      .slice(-8)
+      .map((m) => `${m.direction === "inbound" ? input.counterparty ?? "Them" : "You"}: ${m.body}`)
+      .join("\n");
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 200,
+      system:
+        "You generate one-tap reply openers for a private-markets operator's inbox. Given one " +
+        "thread, propose 2-3 distinct, natural ways the operator could START a reply to the " +
+        "counterparty's latest message: concise (a few words up to one short sentence), " +
+        "professional, first person, no salutation. They seed a composer the operator then edits, " +
+        "so keep them safe — never invent facts, figures, dates, or commitments the thread lacks.",
+      output_config: { effort: "low", format: { type: "json_schema", schema: SMART_REPLIES_SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `Channel pillar: ${input.category}\nSubject: ${input.subject}\nCounterparty: ${input.counterparty ?? "Unknown"}\n\n${transcript}`,
+        },
+      ],
+    });
+    const text = message.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    if (!text) return { replies: fallback, live: false };
+    const raw = JSON.parse(text) as { replies?: unknown };
+    const replies = Array.isArray(raw.replies)
+      ? raw.replies
+          .filter((r): r is string => typeof r === "string")
+          .map((r) => r.trim())
+          .filter(Boolean)
+          .slice(0, MAX_SMART_REPLIES)
+      : [];
+    return replies.length ? { replies, live: true } : { replies: fallback, live: false };
+  } catch (err) {
+    if (isAnthropicTimeout(err)) {
+      console.warn("[inbox/intelligence] smart replies timed out — template fallback");
+    }
+    return { replies: fallback, live: false };
+  }
+}

@@ -15,6 +15,7 @@ import {
   getThreadMessages,
   replyToThread,
   draftThreadReply,
+  suggestSmartReplies,
   assignThread,
   setThreadStar,
   bulkThreadAction,
@@ -453,11 +454,26 @@ function ThreadCard({
   const [msgLoading, startMsgTransition] = useTransition();
   const [replyText, setReplyText] = useState("");
   const [drafting, startDraftTransition] = useTransition();
+  // AI-personalized reply openers, fetched once when the thread is opened. Null
+  // until they arrive; the template chips (card.quickReplies) show meanwhile, so
+  // the row is never empty and the upgrade is a silent swap.
+  const [aiReplies, setAiReplies] = useState<string[] | null>(null);
 
   const loadMessages = useCallback(() => {
     startMsgTransition(async () => {
       setMessages(await getThreadMessages(card.id));
     });
+  }, [card.id]);
+
+  // Progressive enhancement: replace the instant category templates with
+  // context-aware openers from the thread. Best-effort — on any failure or the
+  // deterministic fallback, we simply keep showing the templates.
+  const loadSmartReplies = useCallback(() => {
+    suggestSmartReplies(card.id)
+      .then((r) => {
+        if (r.ok && r.live && r.replies?.length) setAiReplies(r.replies);
+      })
+      .catch(() => {});
   }, [card.id]);
 
   // Draft a reply with Earn and drop it into the composer for review/edit. This
@@ -478,9 +494,11 @@ function ThreadCard({
     setExpanded((open) => {
       const next = !open;
       if (next && messages === null) loadMessages();
+      // Kick off the AI openers on first open, in parallel with the messages.
+      if (next && aiReplies === null) loadSmartReplies();
       return next;
     });
-  }, [messages, loadMessages]);
+  }, [messages, loadMessages, aiReplies, loadSmartReplies]);
 
   const sendReply = useCallback(() => {
     const body = replyText.trim();
@@ -685,21 +703,34 @@ function ThreadCard({
           {/* Inline composer — routes through the same gate as every outward move. */}
           <div className="mt-3 border-t border-line/60 pt-3">
             {/* One-tap smart replies — populate the composer for review; the
-                send is still the operator's gated move. Hidden once they type. */}
-            {card.quickReplies.length > 0 && !replyText.trim() ? (
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {card.quickReplies.map((qr) => (
-                  <button
-                    key={qr}
-                    type="button"
-                    onClick={() => setReplyText(qr)}
-                    className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary transition hover:-translate-y-px hover:border-gold-500 hover:text-fg-primary"
-                  >
-                    {qr}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+                send is still the operator's gated move. Hidden once they type.
+                Category templates show instantly; context-aware AI openers swap
+                in once suggestSmartReplies returns. */}
+            {(() => {
+              const chips = aiReplies ?? card.quickReplies;
+              if (chips.length === 0 || replyText.trim()) return null;
+              return (
+                <div className="mb-2">
+                  {aiReplies ? (
+                    <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-gold-400/80">
+                      ✦ Suggested for this thread
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-1.5">
+                    {chips.map((qr) => (
+                      <button
+                        key={qr}
+                        type="button"
+                        onClick={() => setReplyText(qr)}
+                        className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary transition hover:-translate-y-px hover:border-gold-500 hover:text-fg-primary"
+                      >
+                        {qr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <textarea
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
