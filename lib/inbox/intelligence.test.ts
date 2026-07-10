@@ -5,6 +5,7 @@ import {
   inboxTab,
   partitionByTab,
   quickReplies,
+  smartReplies,
   threadNudge,
   suggestedAction,
   buildDigest,
@@ -126,6 +127,41 @@ describe("quickReplies", () => {
     const a = quickReplies({ category: "messaging" });
     a.push("mutated");
     expect(quickReplies({ category: "messaging" })).toHaveLength(3);
+  });
+});
+
+describe("smartReplies", () => {
+  // Exercise the deterministic path (no API key): the chips must still render,
+  // falling back to the exact category templates quickReplies() would give.
+  const prevKey = process.env.ANTHROPIC_API_KEY;
+  beforeEach(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+  afterAll(() => {
+    if (prevKey !== undefined) process.env.ANTHROPIC_API_KEY = prevKey;
+  });
+
+  it("falls back to the category templates when no API key is configured", async () => {
+    const { replies, live } = await smartReplies({
+      subject: "Intro",
+      category: "messaging",
+      counterparty: "Dana",
+      messages: [{ direction: "inbound", body: "Hi there" }],
+    });
+    expect(live).toBe(false);
+    expect(replies).toEqual(quickReplies({ category: "messaging" }));
+  });
+
+  it("returns a non-empty opener set for every pillar in fallback", async () => {
+    for (const category of ["messaging", "booking", "video", "signing", "finance"] as const) {
+      const { replies } = await smartReplies({
+        subject: "s",
+        category,
+        counterparty: null,
+        messages: [],
+      });
+      expect(replies.length).toBeGreaterThan(0);
+    }
   });
 });
 

@@ -9,7 +9,7 @@ import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { recordDispatch } from "@/lib/integrations/log";
-import { computePriority, fallbackSummary, draftReply } from "@/lib/inbox/intelligence";
+import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type {
   AgentKey,
@@ -362,6 +362,56 @@ export async function draftThreadReply(threadId: string): Promise<DraftReplyResu
     messages: messages.map((m) => ({ direction: m.direction, author: m.author, body: m.body })),
   });
   return { ok: true, draft, live };
+}
+
+export interface SmartRepliesResult {
+  ok: boolean;
+  replies?: string[];
+  // True when Claude produced the openers; false for the deterministic templates.
+  live?: boolean;
+  error?: string;
+}
+
+/**
+ * Suggest a few short, context-aware reply openers for a thread's composer. Like
+ * draftThreadReply this is internal prep — it only returns chip text the operator
+ * taps to seed the composer, and never sends. The client shows the instant
+ * category templates first and swaps in these once they arrive.
+ */
+export async function suggestSmartReplies(threadId: string): Promise<SmartRepliesResult> {
+  if (!threadId) return { ok: false, error: "Missing thread." };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+
+  const { data: thread } = await supabase
+    .from("inbox_threads")
+    .select("subject, category, counterparty_name, counterparty_email")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("id", threadId)
+    .maybeSingle();
+  if (!thread) return { ok: false, error: "Thread not found." };
+  const t = thread as Pick<
+    InboxThread,
+    "subject" | "category" | "counterparty_name" | "counterparty_email"
+  >;
+
+  const { data: msgs } = await supabase
+    .from("inbox_messages")
+    .select("direction, author, body")
+    .eq("organization_id", auth.ctx.orgId)
+    .eq("thread_id", threadId)
+    .order("occurred_at", { ascending: true })
+    .limit(20);
+
+  const messages = (msgs as Pick<InboxMessage, "direction" | "author" | "body">[] | null) ?? [];
+  const { replies, live } = await smartReplies({
+    subject: t.subject,
+    category: t.category,
+    counterparty: t.counterparty_name ?? t.counterparty_email,
+    messages: messages.map((m) => ({ direction: m.direction, author: m.author, body: m.body })),
+  });
+  return { ok: true, replies, live };
 }
 
 /**
