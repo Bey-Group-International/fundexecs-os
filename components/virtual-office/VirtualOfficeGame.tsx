@@ -25,7 +25,6 @@ import { sceneBus, shutdownOfficeProgram, getOfficeProgramState } from "./progra
 import { AGENT_BY_ID, type AgentId } from "./program/officeProgram";
 import { AgentFloorInspector } from "./program/AgentFloorInspector";
 import { AgentRosterButton } from "./program/AgentRosterButton";
-import { DelegationDesigner } from "./program/DelegationDesigner";
 import { RichText } from "@/components/RichText";
 import { text, join } from "@/lib/richtext";
 import { AGENT_QUIPS } from "./program/agentQuips";
@@ -483,7 +482,6 @@ export function VirtualOfficeGame({
   // WorkAdventure-style scripted-area map editor (persists to localStorage; the
   // scene reacts to the store's change event and re-renders areas live).
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
-  const [designerOpen, setDesignerOpen] = useState(false);
   // The set of private rooms, mirrored into React state so the "Private" toggle
   // and any privacy-aware chrome re-render whenever a room is locked/unlocked.
   const [privateRooms, setPrivateRooms] = useState<Set<string>>(() => new Set());
@@ -1454,23 +1452,6 @@ export function VirtualOfficeGame({
         {/* Team roster — inspect any executive from the top rail (pairs with the
             walk-up proximity trigger that opens the same inspector). */}
         <AgentRosterButton onInspect={setInspectAgentId} />
-        {/* Delegation designer — no-code editor for the executive team (Design + Apply). */}
-        <button
-          type="button"
-          onClick={() => setDesignerOpen(true)}
-          title="Design the executive team (who Earn delegates to, model, approval gates)"
-          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
-          style={{
-            fontFamily: "Georgia, serif",
-            letterSpacing: "0.06em",
-            color: "#94a3b8",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.05)",
-          }}
-        >
-          <span className="opacity-60 text-[8px]">✦</span>
-          Design
-        </button>
         {/* Map editor — author the floor's WorkAdventure-style scripted areas.
             (⌘K opens the command palette; the directory has its own event entry.) */}
         <button
@@ -1707,7 +1688,6 @@ export function VirtualOfficeGame({
 
         {/* Map editor — author scripted areas; the scene re-renders them live */}
         {mapEditorOpen && <AreaMapEditor onClose={() => setMapEditorOpen(false)} />}
-        {designerOpen && <DelegationDesigner onClose={() => setDesignerOpen(false)} />}
 
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"
