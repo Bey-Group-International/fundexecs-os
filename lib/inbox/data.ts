@@ -6,6 +6,12 @@
 // read failure degrades to an empty list rather than breaking the page.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, InboxChannel, InboxThread } from "@/lib/supabase/database.types";
+import {
+  computePriority,
+  summarizeThread as defaultSummarize,
+  type ThreadDigestInput,
+  type ThreadSummary,
+} from "@/lib/inbox/intelligence";
 
 export interface ThreadContext {
   kind: "deal" | "investor";
@@ -167,4 +173,86 @@ function resolveContext(
     };
   }
   return null;
+}
+
+// Injectable seams for refreshThreadSummary — the summarizer defaults to the
+// Claude-backed helper (deterministic fallback when no API key), and the clock
+// is overridable so the age-driven priority refresh unit-tests deterministically.
+export interface RefreshSummaryDeps {
+  summarize?: (input: ThreadDigestInput) => Promise<ThreadSummary>;
+  now?: () => Date;
+}
+
+/**
+ * Recompute a thread's AI summary + intent from its recent messages, persist
+ * them, and refresh the triage priority with the freshly detected intent (so an
+ * urgent cue in the intent — "term sheet, sign today" — lifts the thread in the
+ * queue, via the same signal computePriority already reads).
+ *
+ * Called after an inbound message lands (see the webhook route), so there is one
+ * summarization per new message and the cached values survive reload. Fully
+ * best-effort: any read/write/model failure leaves the existing values untouched
+ * and never throws, so it can never break ingest.
+ */
+export async function refreshThreadSummary(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  threadId: string,
+  deps: RefreshSummaryDeps = {},
+): Promise<void> {
+  const summarize = deps.summarize ?? defaultSummarize;
+  const now = deps.now ?? (() => new Date());
+  try {
+    const { data: t, error } = await supabase
+      .from("inbox_threads")
+      .select(
+        "subject, category, counterparty_name, counterparty_email, deal_id, investor_id, unread, last_message_at",
+      )
+      .eq("organization_id", orgId)
+      .eq("id", threadId)
+      .maybeSingle();
+    if (error || !t) return;
+
+    const { data: msgs } = await supabase
+      .from("inbox_messages")
+      .select("direction, author, body")
+      .eq("organization_id", orgId)
+      .eq("thread_id", threadId)
+      .order("occurred_at", { ascending: true })
+      .limit(20);
+    const messages = (msgs ?? []).map((m) => ({
+      direction: m.direction as "inbound" | "outbound",
+      author: m.author,
+      body: m.body,
+    }));
+    // Nothing to summarize — leave the cached values (and priority) as they are.
+    if (!messages.length) return;
+
+    const { summary, intent } = await summarize({
+      subject: t.subject,
+      category: t.category,
+      counterparty: t.counterparty_name ?? t.counterparty_email,
+      messages,
+    });
+
+    // Recompute priority with the detected intent. Every other signal is already
+    // on the row, so this stays a pure re-scoring — no extra queries.
+    const lastMs = t.last_message_at ? Date.parse(t.last_message_at) : NaN;
+    const ageHours = Number.isNaN(lastMs) ? 0 : Math.max(0, (now().getTime() - lastMs) / 3_600_000);
+    const priority = computePriority({
+      category: t.category,
+      unread: t.unread,
+      hasContext: Boolean(t.deal_id || t.investor_id),
+      ageHours,
+      intent,
+    });
+
+    await supabase
+      .from("inbox_threads")
+      .update({ ai_summary: summary, intent, priority })
+      .eq("organization_id", orgId)
+      .eq("id", threadId);
+  } catch {
+    // Best-effort: a summary refresh must never surface as an ingest failure.
+  }
 }
