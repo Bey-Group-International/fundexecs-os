@@ -49,6 +49,15 @@ export async function POST(request: Request) {
     });
   }
 
+  // A fresh open (the /workspace composer) sends no session_id and must start
+  // clean — no workspace state from other areas folded into the reply. Detail
+  // only appears once the operator is inside an existing session or an
+  // automation run (both carry a session_id). This flag gates the always-on
+  // org-state injections below; prompt-triggered enrichments (relationship,
+  // sourcing, meeting) still respond to the current question regardless.
+  const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
+  const inSession = Boolean(sessionId);
+
   // Pre-flight credit gate: this route calls Claude directly, outside the
   // task engine's per-step spendCredits gate, so without this a single
   // authenticated seat could drive unbounded Anthropic spend by scripting
@@ -91,58 +100,65 @@ export async function POST(request: Request) {
   try {
     const supabase = await createServerClient();
 
-    const [dealsResult, diligenceResult, tasksResult, contactsResult] = await Promise.allSettled([
-      supabase
-        .from("deals")
-        .select("id, name, stage, asset_class, updated_at")
-        .eq("organization_id", orgId)
-        .not("stage", "in", '("closed","rejected")')
-        .order("updated_at", { ascending: false })
-        .limit(8),
-      supabase
-        .from("diligence_items")
-        .select("deal_id, id")
-        .eq("organization_id", orgId)
-        .eq("status", "open"),
-      supabase
-        .from("tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId)
-        .eq("status", "in_progress"),
-      supabase
-        .from("contacts")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId),
-    ]);
+    // Always-on workspace snapshot (active pipeline, running workflows, LP
+    // count). This is state carried in from OTHER areas of the product, so it
+    // only loads inside an existing session or automation — a fresh open must
+    // not be preloaded with the org's book before the operator has asked
+    // anything. Prompt-triggered enrichments below still run either way.
+    if (inSession) {
+      const [dealsResult, diligenceResult, tasksResult, contactsResult] = await Promise.allSettled([
+        supabase
+          .from("deals")
+          .select("id, name, stage, asset_class, updated_at")
+          .eq("organization_id", orgId)
+          .not("stage", "in", '("closed","rejected")')
+          .order("updated_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("diligence_items")
+          .select("deal_id, id")
+          .eq("organization_id", orgId)
+          .eq("status", "open"),
+        supabase
+          .from("tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId)
+          .eq("status", "in_progress"),
+        supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId),
+      ]);
 
-    // Active deals with open diligence counts
-    if (dealsResult.status === "fulfilled" && dealsResult.value.data?.length) {
-      const deals = dealsResult.value.data;
-      const countMap: Record<string, number> = {};
-      if (diligenceResult.status === "fulfilled" && diligenceResult.value.data) {
-        for (const item of diligenceResult.value.data) {
-          if (item.deal_id) countMap[item.deal_id] = (countMap[item.deal_id] ?? 0) + 1;
+      // Active deals with open diligence counts
+      if (dealsResult.status === "fulfilled" && dealsResult.value.data?.length) {
+        const deals = dealsResult.value.data;
+        const countMap: Record<string, number> = {};
+        if (diligenceResult.status === "fulfilled" && diligenceResult.value.data) {
+          for (const item of diligenceResult.value.data) {
+            if (item.deal_id) countMap[item.deal_id] = (countMap[item.deal_id] ?? 0) + 1;
+          }
         }
+        const activeDealsLines = deals.map((deal) => {
+          const openItems = deal.id && countMap[deal.id] ? ` · ${countMap[deal.id]} open items` : "";
+          const daysAgo = deal.updated_at
+            ? Math.round((Date.now() - new Date(deal.updated_at).getTime()) / 86400000)
+            : null;
+          const recency = daysAgo !== null ? ` · updated ${daysAgo}d ago` : "";
+          return `${deal.name} [${deal.stage}${deal.asset_class ? ` · ${deal.asset_class}` : ""}${openItems}${recency}]`;
+        });
+        liveContext += `Active pipeline (${deals.length}):\n${activeDealsLines.map((l) => `  - ${l}`).join("\n")}\n`;
       }
-      const activeDealsLines = deals.map((deal) => {
-        const openItems = deal.id && countMap[deal.id] ? ` · ${countMap[deal.id]} open items` : "";
-        const daysAgo = deal.updated_at
-          ? Math.round((Date.now() - new Date(deal.updated_at).getTime()) / 86400000)
-          : null;
-        const recency = daysAgo !== null ? ` · updated ${daysAgo}d ago` : "";
-        return `${deal.name} [${deal.stage}${deal.asset_class ? ` · ${deal.asset_class}` : ""}${openItems}${recency}]`;
-      });
-      liveContext += `Active pipeline (${deals.length}):\n${activeDealsLines.map((l) => `  - ${l}`).join("\n")}\n`;
-    }
 
-    if (tasksResult.status === "fulfilled") {
-      const count = (tasksResult.value as { count: number | null }).count;
-      if (count !== null) liveContext += `Running workflows: ${count}\n`;
-    }
+      if (tasksResult.status === "fulfilled") {
+        const count = (tasksResult.value as { count: number | null }).count;
+        if (count !== null) liveContext += `Running workflows: ${count}\n`;
+      }
 
-    if (contactsResult.status === "fulfilled") {
-      const count = (contactsResult.value as { count: number | null }).count;
-      if (count !== null) liveContext += `LP pipeline: ${count} contacts\n`;
+      if (contactsResult.status === "fulfilled") {
+        const count = (contactsResult.value as { count: number | null }).count;
+        if (count !== null) liveContext += `LP pipeline: ${count} contacts\n`;
+      }
     }
 
     // Relationship-aware context: when the ask is about people/network/intros,
@@ -193,27 +209,31 @@ export async function POST(request: Request) {
   }
 
   // --- Prior artifact context: last 5 completed deliverables so Earn can
-  //     reference prior work (memos, models, analyses) in its answers. ---
+  //     reference prior work (memos, models, analyses) in its answers. This is
+  //     work produced elsewhere in the org, so it only loads inside a session or
+  //     automation — a fresh open must not be seeded with prior deliverables. ---
   let priorArtifacts: string | undefined;
-  try {
-    const supabase = await createServerClient();
-    const { data: artifacts } = await supabase
-      .from("artifacts")
-      .select("title, artifact_type, content")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(5);
+  if (inSession) {
+    try {
+      const supabase = await createServerClient();
+      const { data: artifacts } = await supabase
+        .from("artifacts")
+        .select("title, artifact_type, content")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(5);
 
-    if (artifacts && artifacts.length > 0) {
-      priorArtifacts = artifacts
-        .map((a) => {
-          const preview = typeof a.content === "string" ? a.content.slice(0, 300) : "";
-          return `[${a.artifact_type}] ${a.title}${preview ? `: ${preview}…` : ""}`;
-        })
-        .join("\n");
+      if (artifacts && artifacts.length > 0) {
+        priorArtifacts = artifacts
+          .map((a) => {
+            const preview = typeof a.content === "string" ? a.content.slice(0, 300) : "";
+            return `[${a.artifact_type}] ${a.title}${preview ? `: ${preview}…` : ""}`;
+          })
+          .join("\n");
+      }
+    } catch {
+      // skip — best effort
     }
-  } catch {
-    // skip — best effort
   }
 
   // For sourcing/discovery asks ("source family offices near me"), load the
@@ -242,7 +262,6 @@ export async function POST(request: Request) {
   const priorContext = Array.isArray(prior)
     ? prior.filter((x: unknown) => x && typeof x === "object").slice(-30)
     : [];
-  const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
 
   // Pull edge context from the session row and append to liveContext if present.
   // `edge_context` is added by migration 20260702000011; cast to bypass stale
