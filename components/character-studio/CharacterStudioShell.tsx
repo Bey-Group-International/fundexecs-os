@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { virtualOfficeRoutes } from "@/lib/virtualOfficeRoutes";
-import { type UserAvatar, userAvatarSpec, parseUserAvatar } from "@/lib/office/userAvatar";
+import { type UserAvatar, userAvatarSpec } from "@/lib/office/userAvatar";
 import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
 import { saveOfficeAvatar } from "@/app/(app)/settings/actions";
 import {
@@ -20,8 +20,6 @@ const ENVIRONMENTS: { id: string; label: string; bg: string }[] = [
   { id: "office", label: "Virtual Office", bg: "radial-gradient(120% 90% at 50% 20%, #2a2418 0%, #12100b 78%)" },
   { id: "meeting", label: "Meeting room", bg: "radial-gradient(120% 90% at 50% 25%, #182430 0%, #0a0f14 78%)" },
 ];
-
-const DRAFT_KEY = "virtual-office:character-studio:draft";
 
 /** Deep-equal for the small, JSON-serializable UserAvatar. */
 function sameAvatar(a: UserAvatar, b: UserAvatar): boolean {
@@ -52,27 +50,12 @@ export function CharacterStudioShell({ initialAvatar }: { initialAvatar: UserAva
   const [, force] = useState(0);
   const rerender = () => force((n) => n + 1);
 
-  // Restore a local draft (survives refresh) once on mount, if it differs from
-  // what's persisted — so an interrupted edit isn't lost.
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(DRAFT_KEY);
-      const parsed = raw ? parseUserAvatar(JSON.parse(raw)) : null;
-      if (parsed && !sameAvatar(parsed, initialAvatar)) setDraft(parsed);
-    } catch {
-      /* ignore malformed local draft */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist the working draft locally on every change.
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    } catch {
-      /* quota / privacy mode — non-fatal */
-    }
-  }, [draft]);
+  // The working draft is kept in memory only. It is intentionally NOT persisted
+  // to localStorage: the avatar carries appearance/presentation fields, and
+  // writing those to client storage is both a CodeQL "clear-text storage of
+  // sensitive information" flag and against the spec's privacy stance. The seed
+  // comes from the server (published avatar) and Publish writes back to the
+  // account (user_metadata) — never to local clear-text storage.
 
   const commit = useCallback((next: UserAvatar) => {
     setDraft((cur) => {
