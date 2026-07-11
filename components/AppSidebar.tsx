@@ -43,25 +43,6 @@ interface GroupItem {
   name: string;
 }
 
-// Secondary destinations folded under "More". Kept intentionally lean: entries
-// that duplicate a hub module or another destination live where they belong and
-// are not repeated here. Notably "LP Report" is gone — Execute › Reporting is
-// the single reporting surface (/reports now redirects there); "Portfolio"
-// lives under Execute › Asset Management; "Virtual Office" is the /virtual-office
-// / dashboard surface; and "Capital Map" overlaps Graphs + Source › LP Pipeline.
-// "Search", "Marketplace", and "Meetings" were promoted to top-level rail
-// destinations; "Campaigns" moved into Run › Campaigns.
-const MORE_ITEMS: NavItem[] = [
-  { href: "/relationship", label: "Relationship Center" },
-  { href: "/prospecting", label: "Prospecting" },
-  { href: "/signals", label: "Intent Signals" },
-  { href: "/grid", label: "Execution Grid" },
-  { href: "/grid/review", label: "Routing Review" },
-  { href: "/activity", label: "Activity" },
-  { href: "/agenda", label: "Agenda" },
-  { href: "/graph", label: "Graphs" },
-];
-
 // Account menu, in display order. Items with a real destination are links;
 // Walkthrough has no href and instead re-opens the guided tour overlay.
 const ACCOUNT_ITEMS: { label: string; href?: string }[] = [
@@ -364,7 +345,6 @@ function SidebarPanel({
   isPlatformAdmin = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const [moreOpen, setMoreOpen] = useState(false);
   const [openHub, setOpenHub] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -469,14 +449,8 @@ function SidebarPanel({
           >
             Network
           </Link>
-          {/* Search · Marketplace · Meetings — promoted out of "More" into their
-              own top-level rail destinations, grouped just below Network. */}
-          <Link
-            href="/search"
-            className={navHrefActive(pathname, "/search") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Search
-          </Link>
+          {/* Marketplace · Meetings — top-level rail destinations, grouped just
+              below Network. */}
           <Link
             href="/marketplace"
             className={navHrefActive(pathname, "/marketplace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
@@ -489,38 +463,6 @@ function SidebarPanel({
           >
             Meetings
           </Link>
-
-          {/* More — secondary destinations expand on click */}
-          <button
-            type="button"
-            onClick={() => setMoreOpen((v) => !v)}
-            aria-expanded={moreOpen}
-            className={`${linkClass} w-full justify-between`}
-          >
-            <span className="flex items-center gap-2">
-              More
-            </span>
-            <span className="font-mono text-[10px] text-fg-muted transition-transform duration-150" style={{ transform: moreOpen ? "rotate(90deg)" : "rotate(0deg)" }}>
-              ▸
-            </span>
-          </button>
-          {moreOpen ? (
-            <div className="flex flex-col animate-fade-up">
-              {MORE_ITEMS.map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={`rounded-md px-2 py-1 pl-9 text-xs transition duration-150 ${
-                    navHrefActive(pathname, item.href)
-                      ? "text-gold-300 bg-gold-500/8"
-                      : "text-fg-secondary hover:bg-surface-2/80 hover:text-fg-primary"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <p className="mb-1.5 mt-5 px-2 font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted/70">
