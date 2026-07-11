@@ -50,6 +50,7 @@ import { ExecutiveDirectory } from "./ExecutiveDirectory";
 import { FloorCommandPalette } from "./FloorCommandPalette";
 import { FloorShortcuts } from "./FloorShortcuts";
 import { AreaMapEditor } from "./program/AreaMapEditor";
+import { FurnitureEditor } from "./program/FurnitureEditor";
 import { officeInviteUrl } from "@/lib/office/floor-link";
 import {
   loadPrivateRooms,
@@ -482,6 +483,7 @@ export function VirtualOfficeGame({
   // WorkAdventure-style scripted-area map editor (persists to localStorage; the
   // scene reacts to the store's change event and re-renders areas live).
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
+  const [furnitureEditorOpen, setFurnitureEditorOpen] = useState(false);
   // The set of private rooms, mirrored into React state so the "Private" toggle
   // and any privacy-aware chrome re-render whenever a room is locked/unlocked.
   const [privateRooms, setPrivateRooms] = useState<Set<string>>(() => new Set());
@@ -1475,6 +1477,23 @@ export function VirtualOfficeGame({
           <span className="opacity-60 text-[8px]">▧</span>
           Map editor
         </button>
+        {/* Space editor — place furniture on the floor; the scene re-renders live. */}
+        <button
+          type="button"
+          onClick={() => setFurnitureEditorOpen(true)}
+          title="Place furniture on the floor"
+          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] transition-all duration-150"
+          style={{
+            fontFamily: "Georgia, serif",
+            letterSpacing: "0.06em",
+            color: "#94a3b8",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <span className="opacity-60 text-[8px]">◱</span>
+          Furniture
+        </button>
         {/* Private room — Spot-style lock / knock-to-join for the current room */}
         {currentRoom && (
           <button
@@ -1693,6 +1712,8 @@ export function VirtualOfficeGame({
 
         {/* Map editor — author scripted areas; the scene re-renders them live */}
         {mapEditorOpen && <AreaMapEditor onClose={() => setMapEditorOpen(false)} />}
+        {/* Space editor — place furniture; the scene re-renders it live */}
+        {furnitureEditorOpen && <FurnitureEditor onClose={() => setFurnitureEditorOpen(false)} />}
 
         {/* Controls hint */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-2 text-[9px] pointer-events-none"

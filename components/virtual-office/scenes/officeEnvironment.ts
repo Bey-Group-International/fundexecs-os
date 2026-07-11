@@ -1,5 +1,7 @@
 import * as Phaser from "phaser";
 import { ROOMS, ROOM_W, ROOM_H, GRID_COLS, GRID_ROWS, TOTAL_ROWS, WORLD_W, WORLD_H, WALL_THICKNESS, DOOR_GAP } from "../types";
+import { type PieceType } from "@/lib/office/furnitureTypes";
+import { loadFurniturePlacements } from "@/lib/office/furnitureStore";
 
 /**
  * FundExecs OS — 2.5D office environment (rendering layer).
@@ -69,7 +71,6 @@ export function roomAccentColor(key: string): number {
   return ROOM_ACCENT[key] ?? C.gold;
 }
 
-type PieceType = "desk" | "screens" | "shelf" | "sofa" | "table" | "plant" | "safe" | "console" | "reception" | "coffee";
 type Piece = { type: PieceType; rx: number; ry: number };
 
 /**
@@ -311,6 +312,9 @@ export type FurniturePiece = { gfx: Phaser.GameObjects.Graphics; footY: number }
  */
 export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
   const pieces: FurniturePiece[] = [];
+  // Operator-placed furniture (Space editor), merged on top of the built-in
+  // LAYOUT per room. Room-relative coords, so this is a plain concatenation.
+  const placed = loadFurniturePlacements();
 
   for (const room of ROOMS) {
     const ox = room.col * ROOM_W;
@@ -358,7 +362,11 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
       pieces.push({ gfx: body, footY: lfy });
     }
 
-    for (const p of LAYOUT[room.key] ?? []) {
+    const roomPieces: Piece[] = [
+      ...(LAYOUT[room.key] ?? []),
+      ...placed.filter((pp) => pp.roomKey === room.key).map((pp) => ({ type: pp.type, rx: pp.x, ry: pp.y })),
+    ];
+    for (const p of roomPieces) {
       const x = ox + p.rx;
       const footY = oy + p.ry;
       const g = scene.add.graphics().setDepth(yDepth(footY));
