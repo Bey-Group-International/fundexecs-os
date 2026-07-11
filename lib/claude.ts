@@ -150,7 +150,6 @@ export function earnChatStream(args: {
   modelLabel: string;
   priorContext?: Array<{role: string; content: string} | string>;
   liveContext?: string;
-  sessionSummary?: string;
   priorArtifacts?: string;
   model?: string;
 }) {
@@ -175,9 +174,6 @@ export function earnChatStream(args: {
   if (args.liveContext) {
     systemContent += `\n\n## Live workspace state\n${args.liveContext}`;
   }
-  if (args.sessionSummary) {
-    systemContent += `\n\n## Prior session context\n${args.sessionSummary}`;
-  }
   if (args.priorArtifacts) {
     systemContent += `\n\n## Recent deliverables from prior workflows\n${args.priorArtifacts}`;
   }
@@ -194,20 +190,6 @@ export function earnChatStream(args: {
     ...effortConfig(streamModel, "low"),
     messages: [...history, { role: "user", content: args.body }],
   });
-}
-
-export async function summarizeSessionMessages(messages: Array<{role: string; content: string}>): Promise<string> {
-  if (messages.length === 0) return "";
-  const apiClient = anthropicClient(process.env.ANTHROPIC_API_KEY);
-  const truncated = messages.slice(-20); // last 20 messages max
-  const transcript = truncated.map(m => `${m.role}: ${m.content}`).join("\n");
-  const resp = await apiClient.messages.create({
-    model: process.env.CLAUDE_MODEL ?? "claude-haiku-4-5-20251001",
-    max_tokens: 300,
-    messages: [{ role: "user", content: `Summarize this conversation in 3-5 bullet points, focusing on decisions made, deals discussed, and actions taken:\n\n${transcript}` }],
-  });
-  const block = resp.content[0];
-  return block.type === "text" ? block.text : "";
 }
 
 const FOLLOWUPS_SCHEMA = {

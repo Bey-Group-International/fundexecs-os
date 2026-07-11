@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, prior_session_id, meeting_context } = await request.json().catch(() => ({ body: "" }));
+  const { body, model: requestedModel, prior, session_id, meeting_context } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -263,31 +263,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // Cross-session summary: if the client sent a prior_session_id, load its last
-  // messages and summarize them as context for this reply.
-  let sessionSummary: string | undefined;
-  const priorSessId = typeof prior_session_id === "string" && prior_session_id ? prior_session_id : null;
-  if (priorSessId) {
-    try {
-      const supabase = await createServerClient();
-      const { data: prevMsgs } = await supabase
-        .from("session_messages")
-        .select("role, content")
-        .eq("session_id", priorSessId)
-        .eq("organization_id", orgId)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (prevMsgs && prevMsgs.length > 0) {
-        const { summarizeSessionMessages } = await import("@/lib/claude");
-        sessionSummary = await summarizeSessionMessages(
-          prevMsgs.reverse().map((m) => ({ role: m.role as string, content: m.content as string }))
-        );
-      }
-    } catch {
-      // skip — best effort
-    }
-  }
-
   // Persist the turn pair when the chat happens inside a session, so it survives
   // a reload. Best-effort (RLS-gated insert); a failure never breaks the reply.
   async function persist(reply: string) {
@@ -303,7 +278,7 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
-  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, sessionSummary, priorArtifacts, model });
+  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, priorArtifacts, model });
 
   // No API key — stream the deterministic fallback as a single chunk (still
   // redacted, so no contact-like text can ever slip through).
