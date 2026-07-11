@@ -153,6 +153,59 @@ export function riskToInboxItem(
   };
 }
 
+// A meeting, reduced to what deciding "has it happened yet?" needs.
+export interface InboxMeeting {
+  title: string | null;
+  status: string | null;
+  scheduled_at: string | null;
+}
+
+// A pack title reads as a follow-up when it mentions "follow up" / "follow-up".
+const FOLLOWUP_PACK_RE = /follow[-\s]?up/i;
+
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Recover the meeting/deal name a pack is about by dropping the trailing
+// "… (Follow-Up|Walkthrough) Prep Pack" descriptor, so it can be matched against
+// live meetings by name (tasks carry no meeting link).
+function packSubject(title: string): string {
+  return normalizeName(title.replace(/[-–—]?\s*(follow[-\s]?up|walkthrough)?\s*prep\s*pack.*$/i, ""));
+}
+
+/**
+ * True when an awaiting-approval pack is a *follow-up* for a meeting that hasn't
+ * happened yet — a follow-up is owed only after the meeting, so it must not
+ * surface before it. Associates pack → meeting by name (either contains the
+ * other), then treats the meeting as still upcoming when it is not `ended` and
+ * has either no known time or a scheduled time still in the future. Prep /
+ * walkthrough packs (no "follow-up" in the title) are never suppressed, and a
+ * follow-up with no matching upcoming meeting is kept (surfaces once the meeting
+ * is over, or when we can't tie it to a live meeting at all).
+ */
+export function isPrematureFollowupPack(
+  taskTitle: string,
+  meetings: InboxMeeting[],
+  nowIso: string,
+): boolean {
+  if (!FOLLOWUP_PACK_RE.test(taskTitle)) return false;
+  const subject = packSubject(taskTitle);
+  if (!subject) return false;
+  const now = Date.parse(nowIso);
+  for (const m of meetings) {
+    if (!m.title) continue;
+    const name = normalizeName(m.title);
+    if (!name) continue;
+    if (!(subject.includes(name) || name.includes(subject))) continue;
+    const ended = m.status === "ended";
+    const scheduledMs = m.scheduled_at ? Date.parse(m.scheduled_at) : NaN;
+    const upcoming = !ended && (Number.isNaN(scheduledMs) || scheduledMs > now);
+    if (upcoming) return true;
+  }
+  return false;
+}
+
 /**
  * Pure roll-up: assemble the inbox from the run-conviction working set, the
  * awaiting-approval workflows, and today's date. No I/O — kept separate from the
@@ -162,11 +215,17 @@ export function buildInbox(
   deals: DealConviction[],
   awaitingApproval: Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[],
   todayIso: string,
+  meetings: InboxMeeting[] = [],
+  nowIso: string = `${todayIso}T00:00:00.000Z`,
 ): Inbox {
   const dealName = new Map<string, string>();
   for (const d of deals) dealName.set(d.deal.id, d.deal.name);
 
-  const needsApproval = awaitingApproval.map(workflowToApprovalItem);
+  // A follow-up pack for a meeting that hasn't happened yet is held back until
+  // the meeting is over — the work isn't discarded, just time-gated.
+  const needsApproval = awaitingApproval
+    .filter((t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso))
+    .map(workflowToApprovalItem);
 
   const overdueDiligence: InboxItem[] = [];
   for (const d of deals) {
@@ -222,6 +281,23 @@ async function fetchAwaitingApproval(
 }
 
 /**
+ * Fetch the org's meetings that could still make a follow-up premature: only
+ * the ones that have NOT ended (an ended meeting's follow-up is owed, so it
+ * never suppresses). Lightweight shape for the name/time gate in buildInbox.
+ */
+async function fetchUnfinishedMeetings(orgId: string): Promise<InboxMeeting[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("live_meetings")
+    .select("title, status, scheduled_at")
+    .eq("organization_id", orgId)
+    .is("deleted_at", null)
+    .neq("status", "ended")
+    .limit(200);
+  return (data ?? []) as InboxMeeting[];
+}
+
+/**
  * Build the operator's inbox for an org. Pulls the run-conviction working set
  * (deals, diligence, open risks, IC-ready stage) and the awaiting-approval
  * workflow queue in parallel, then hands off to the pure roll-up.
@@ -231,12 +307,14 @@ async function fetchAwaitingApproval(
  */
 export const getInbox = cache(async function getInbox(orgId: string): Promise<Inbox> {
   try {
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const [conviction, awaitingApproval] = await Promise.all([
+    const nowIso = new Date().toISOString();
+    const todayIso = nowIso.slice(0, 10);
+    const [conviction, awaitingApproval, meetings] = await Promise.all([
       getRunConviction(orgId),
       fetchAwaitingApproval(orgId),
+      fetchUnfinishedMeetings(orgId),
     ]);
-    return buildInbox(conviction.deals, awaitingApproval, todayIso);
+    return buildInbox(conviction.deals, awaitingApproval, todayIso, meetings, nowIso);
   } catch {
     return EMPTY_INBOX;
   }
