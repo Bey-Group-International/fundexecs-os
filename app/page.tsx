@@ -13,21 +13,25 @@ const OPERATING_LOOP = [
     step: "Build",
     body: "Establish the firm's foundation — profile, mandate, strategy, and readiness that every downstream workflow inherits.",
     signal: "Foundation set",
+    color: "#22d3ee",
   },
   {
     step: "Source",
     body: "Build and qualify pipeline — LP and deal flow, prospecting, and intent signals routed to the right executive.",
     signal: "Pipeline routed",
+    color: "#6366f1",
   },
   {
     step: "Run",
     body: "Diligence and underwriting — analysts parse documents, model deals, and flag risk before a decision is made.",
     signal: "Diligence cleared",
+    color: "#a855f7",
   },
   {
     step: "Execute",
     body: "Post-close capital operations — LP updates, capital calls, distributions, fund accounting, and reporting.",
     signal: "Capital in motion",
+    color: "#f59e0b",
   },
 ];
 
@@ -187,20 +191,58 @@ export default async function LandingPage(
             gate.
           </p>
         </div>
-        <div className="mt-8 grid gap-3 md:grid-cols-4">
+        <div className="mt-8 grid gap-4 md:grid-cols-4">
           {OPERATING_LOOP.map((item, index) => (
-            <div key={item.step} className="fx-card fx-card-hover p-5">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+            <div
+              key={item.step}
+              className="fx-card fx-card-hover group relative flex flex-col rounded-2xl p-5 transition-colors"
+            >
+              {/* Hub accent bar */}
+              <span
+                aria-hidden
+                className="absolute inset-x-0 top-0 h-[3px] rounded-t-2xl opacity-80"
+                style={{
+                  background: `linear-gradient(90deg, ${item.color}, transparent)`,
+                }}
+              />
+
+              {/* Lifecycle flow arrow into the next hub */}
+              {index < OPERATING_LOOP.length - 1 && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute right-[-14px] top-1/2 z-10 hidden -translate-y-1/2 text-lg text-fg-muted transition-colors group-hover:text-fg-secondary md:block"
+                >
+                  ›
+                </span>
+              )}
+
+              <div className="flex items-center gap-3">
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-mono text-sm font-semibold"
+                  style={{
+                    color: item.color,
+                    backgroundColor: `${item.color}1f`,
+                    boxShadow: `inset 0 0 0 1px ${item.color}40`,
+                  }}
+                >
                   0{index + 1}
                 </span>
-                <span className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
-                  Hub
-                </span>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-fg-primary">{item.step}</h3>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+                    Hub {index + 1} of {OPERATING_LOOP.length}
+                  </span>
+                </div>
               </div>
-              <h3 className="mt-4 text-lg font-semibold text-fg-primary">{item.step}</h3>
-              <p className="mt-2 text-sm text-fg-secondary">{item.body}</p>
-              <p className="mt-4 rounded-lg border border-line bg-surface-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+
+              <p className="mt-4 flex-1 text-sm text-fg-secondary">{item.body}</p>
+
+              <p className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
                 {item.signal}
               </p>
             </div>
@@ -246,12 +288,28 @@ export default async function LandingPage(
         </div>
       </section>
 
-      <footer className="border-t border-line px-4 py-6 sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-          <span className="font-mono text-xs text-fg-muted">FundExecs OS · Early Access</span>
-          <span className="font-mono text-xs text-fg-muted">
-            Build &gt; Source &gt; Run &gt; Execute
-          </span>
+      <footer className="border-t border-line px-4 py-8 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 sm:flex-row sm:justify-between">
+          <div className="flex flex-col items-center gap-1 text-center sm:items-start sm:text-left">
+            <span className="font-mono text-xs text-fg-muted">FundExecs OS · Early Access</span>
+            <span className="font-mono text-[11px] text-fg-muted">
+              Build &gt; Source &gt; Run &gt; Execute
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="rounded-md px-3 py-1.5 text-sm text-fg-secondary transition hover:text-fg-primary"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/login?mode=signup"
+              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+            >
+              Request access
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

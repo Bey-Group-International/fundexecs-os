@@ -1,14 +1,14 @@
 import Image from "next/image";
 import { AGENTS } from "@/lib/agents";
 import { GradientText } from "./GradientText";
-import { AccessGate } from "./AccessGate";
 import { Reveal } from "./Reveal";
 
 // "Meet Earn" reveal. An institutional orchestration diagram: Earn (the
 // associate/orchestrator) sits at the center as a portrait hub, with the full
 // 14-executive workforce ringed around it and faint delegation spokes running
 // out to each. Roster data is pulled LIVE from lib/agents.ts so the ring never
-// drifts from the seed catalog. An AccessGate CTA below is the invitation in.
+// drifts from the seed catalog. Sign-in / request-access live in the page header
+// and footer, so this section carries no CTA of its own.
 const EARN = AGENTS.find((a) => a.key === "associate");
 const TEAM = AGENTS.filter((a) => a.key !== "associate");
 
@@ -151,11 +151,6 @@ export function MeetEarnTeam() {
         <span aria-hidden>·</span>
         <span className="text-gold-300">Every move approved by you</span>
       </Reveal>
-
-      <AccessGate
-        title="Put the team to work"
-        subtitle="Sign in or request access to brief Earn, assign the workforce, and put the roster to work on your mandate."
-      />
     </section>
   );
 }
