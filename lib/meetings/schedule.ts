@@ -148,7 +148,12 @@ export function localToIso(date: string, time: string, timezone: string): string
   const [h, mi] = time.split(":").map(Number);
   // Instant that has these Y/M/D H:M numbers when read in UTC.
   const asUtc = Date.UTC(y, mo - 1, d, h, mi, 0, 0);
-  const offset = timezoneOffsetMs(new Date(asUtc), timezone);
+  // Two-pass offset resolution: the offset sampled at `asUtc` can differ from the
+  // offset at the actual resulting instant near a DST transition, so refine once
+  // at the candidate instant. This corrects the ~1h error for times scheduled
+  // within an hour of a spring-forward / fall-back boundary.
+  const firstOffset = timezoneOffsetMs(new Date(asUtc), timezone);
+  const offset = timezoneOffsetMs(new Date(asUtc - firstOffset), timezone);
   return new Date(asUtc - offset).toISOString();
 }
 
@@ -170,7 +175,10 @@ function timezoneOffsetMs(instant: Date, timezone: string): number {
     for (const p of parts) {
       if (p.type !== "literal") map[p.type] = Number(p.value);
     }
-    const asUtc = Date.UTC(map.year, map.month - 1, map.day, map.hour === 24 ? 0 : map.hour, map.minute, map.second);
+    // Some Intl implementations render midnight as hour "24"; pass it straight to
+    // Date.UTC, which normalizes 24:00 to 00:00 of the following day (mapping it to
+    // 0 without rolling the day would skew the offset by ~24h).
+    const asUtc = Date.UTC(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
     return asUtc - instant.getTime();
   } catch {
     return 0;
@@ -216,7 +224,7 @@ export function deriveMeetingStatus(
   if (meeting.scheduled_at) {
     const end = new Date(meeting.scheduled_at).getTime() + (meeting.duration_minutes ?? 60) * 60_000;
     if (end < now) {
-      return meeting.followup_status && meeting.followup_status !== "not_started"
+      return meeting.followup_status && meeting.followup_status !== "not_started" && meeting.followup_status !== "done"
         ? "Follow-Up Needed"
         : "Completed";
     }

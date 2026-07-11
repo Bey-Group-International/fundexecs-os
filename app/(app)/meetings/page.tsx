@@ -111,8 +111,15 @@ export default async function MeetingsPage() {
   const userId = ctx.userId;
   const meetings = await getMeetings(ctx.orgId, userId);
   const now = Date.now();
+  // "Upcoming" keys off the meeting's END, not its start — a meeting that's
+  // currently in progress (start passed, room not ended) belongs in Upcoming
+  // (where the live "In progress" state + presence render), not Past.
   const upcoming = meetings
-    .filter((m) => !m.is_draft && m.scheduled_at && new Date(m.scheduled_at).getTime() >= now && m.status !== "ended")
+    .filter((m) => {
+      if (m.is_draft || !m.scheduled_at || m.status === "ended") return false;
+      const end = new Date(m.scheduled_at).getTime() + (m.duration_minutes ?? 60) * 60_000;
+      return end >= now;
+    })
     .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
   const past = meetings.filter((m) => !m.is_draft && !upcoming.some((u) => u.id === m.id));
 

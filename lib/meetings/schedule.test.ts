@@ -55,6 +55,15 @@ describe("time helpers", () => {
     // 10:00 UTC stays 10:00 UTC.
     expect(localToIso("2026-07-10", "10:00", "UTC")).toBe("2026-07-10T10:00:00.000Z");
   });
+
+  it("resolves times correctly on both sides of a DST transition", () => {
+    // US spring-forward 2026: 02:00 EST jumps to 03:00 EDT on 2026-03-08.
+    // Before the transition the offset is -05:00 (EST); after, -04:00 (EDT).
+    expect(localToIso("2026-03-08", "01:30", "America/New_York")).toBe("2026-03-08T06:30:00.000Z"); // EST -5
+    expect(localToIso("2026-03-08", "03:30", "America/New_York")).toBe("2026-03-08T07:30:00.000Z"); // EDT -4
+    // Fall-back 2026: clocks go 02:00 EDT -> 01:00 EST on 2026-11-01.
+    expect(localToIso("2026-11-01", "03:00", "America/New_York")).toBe("2026-11-01T08:00:00.000Z"); // EST -5
+  });
 });
 
 describe("deriveMeetingStatus", () => {
@@ -90,6 +99,13 @@ describe("deriveMeetingStatus", () => {
   it("treats a passed end time as Completed even if the room never ended", () => {
     const later = new Date("2026-07-10T12:00:00.000Z").getTime();
     expect(deriveMeetingStatus({ ...base, status: "waiting" }, later)).toBe("Completed");
+  });
+
+  it("treats a passed end time with follow-up done as Completed, not Follow-Up Needed", () => {
+    const later = new Date("2026-07-10T12:00:00.000Z").getTime();
+    expect(deriveMeetingStatus({ ...base, status: "waiting", followup_status: "done" }, later)).toBe("Completed");
+    // …but an open follow-up on a passed-end meeting still needs follow-up.
+    expect(deriveMeetingStatus({ ...base, status: "waiting", followup_status: "draft" }, later)).toBe("Follow-Up Needed");
   });
 });
 

@@ -125,7 +125,13 @@ export function MeetingsCalendar({
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const now = useNow(1000);
-  const today = useMemo(() => startOfDay(new Date(now)), [now]);
+  // Coarsen the clock for the expensive re-derivations below. `now` ticks every
+  // second, but the grid filter and the "today" highlight only change at minute /
+  // day boundaries — keying their memos off the raw millisecond value re-filtered
+  // every meeting and rebuilt all 42 day cells once per second.
+  const dayStartMs = startOfDay(new Date(now)).getTime();
+  const nowMinuteMs = Math.floor(now / 60_000) * 60_000;
+  const today = useMemo(() => new Date(dayStartMs), [dayStartMs]);
 
   // ── Realtime refresh of the scheduled meetings that populate the grid ──────
   async function refresh() {
@@ -159,7 +165,7 @@ export function MeetingsCalendar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  const statusOf = useMemo(() => (m: CalendarMeeting) => deriveMeetingStatus(m, now), [now]);
+  const statusOf = useMemo(() => (m: CalendarMeeting) => deriveMeetingStatus(m, nowMinuteMs), [nowMinuteMs]);
 
   const visible = useMemo(
     () => applyCalendarFilter(meetings, filter, userId, statusOf),

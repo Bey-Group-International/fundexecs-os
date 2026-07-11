@@ -18,8 +18,8 @@ type SignalMsg =
   | { type: "join"; from: string; displayName: string }
   | { type: "leave"; from: string }
   | { type: "end"; from: string }
-  | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
-  | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit }
+  | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string }
+  | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string }
   | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit }
   | { type: "transcript"; from: string; speaker: string; text: string; ts: number }
   | { type: "chat"; from: string; displayName: string; text: string; ts: number }
@@ -908,6 +908,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  // Mirrors the user's intended camera state so the bandwidth-adaptation logic
+  // can restore video without clobbering a manual camera-off.
+  const camOnRef = useRef(true);
   const [shareOn, setShareOn] = useState(false);
   const [localName, setLocalName] = useState("You");
   const localNameRef = useRef("You");
@@ -923,6 +926,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const peersDataRef = useRef<Map<string, Peer>>(new Map());
   const myIdRef = useRef<string>(crypto.randomUUID());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // ICE candidates can arrive before the matching remote description is applied;
+  // buffer them per-peer and flush once setRemoteDescription resolves so early
+  // trickled candidates aren't dropped (which caused calls that never connected).
+  const pendingIceRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  // Ensures we broadcast our join / admit-request exactly once — the subscribe
+  // callback fires on every status transition (including reconnects), which
+  // would otherwise re-announce us and spawn duplicate offers.
+  const announcedRef = useRef(false);
 
   // Transcript
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
@@ -1011,9 +1022,41 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { localNameRef.current = localName; }, [localName]);
   useEffect(() => { peersDataRef.current = peers; }, [peers]);
 
+  // Teardown on unmount. If the user navigates away via client-side routing
+  // (browser back, a nav link, the guest "leave" link) instead of clicking
+  // Leave/End, this releases the camera + mic, closes every peer connection, and
+  // unsubscribes the realtime channel — otherwise the camera light stays on and
+  // the channel/peers leak after the room is gone. Reads only refs, so [] is safe.
+  useEffect(() => {
+    // These Map refs are created once and never reassigned, so capturing them
+    // here is equivalent to reading `.current` at cleanup and keeps the linter
+    // happy. Streams/channel/recognition refs ARE reassigned after join, so we
+    // read those live at teardown time.
+    const peerConnections = peersRef.current;
+    const pendingIce = pendingIceRef.current;
+    return () => {
+      try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
+      peerConnections.clear();
+      pendingIce.clear();
+      try { channelRef.current?.unsubscribe(); } catch { /* ignore */ }
+      if (recognitionRef.current) {
+        try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* ignore */ }
+      }
+      localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
+      previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
+    };
+  }, []);
+
   // ── createPeerConnection ─────────────────────────────────────────────────
 
   const createPeerConnection = useCallback((peerId: string): RTCPeerConnection => {
+    // Close any prior connection for this peer first — a duplicate `join`
+    // (reconnect / re-admit) would otherwise orphan the old RTCPeerConnection
+    // (a leak) and start a competing offer/answer cycle.
+    const prior = peersRef.current.get(peerId);
+    if (prior) { try { prior.close(); } catch { /* ignore */ } }
+    pendingIceRef.current.delete(peerId);
+
     const pc = new RTCPeerConnection(iceConfigRef.current);
 
     localStreamRef.current?.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
@@ -1045,6 +1088,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── handleSignal ─────────────────────────────────────────────────────────
 
+  // Upsert a peer's display name without disturbing its stream.
+  const setPeerName = useCallback((peerId: string, name: string) => {
+    setPeers((prev) => {
+      const ex = prev.get(peerId);
+      if (ex && ex.displayName === name) return prev;
+      const next = new Map<string, Peer>(prev);
+      next.set(peerId, { id: peerId, displayName: name, stream: ex?.stream ?? null });
+      return next;
+    });
+  }, []);
+
+  // Apply any ICE candidates buffered before the remote description was set.
+  const flushPendingIce = useCallback(async (peerId: string, pc: RTCPeerConnection) => {
+    const buf = pendingIceRef.current.get(peerId);
+    if (!buf || buf.length === 0) return;
+    pendingIceRef.current.delete(peerId);
+    for (const c of buf) { try { await pc.addIceCandidate(c); } catch { /* safe to ignore */ } }
+  }, []);
+
   const handleSignal = useCallback(async (msg: SignalMsg) => {
     const myId = myIdRef.current;
 
@@ -1060,7 +1122,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        sendSignalRef.current({ type: "offer", from: myId, to: msg.from, sdp: offer });
+        // Carry our name on the offer so the newcomer labels our tile correctly.
+        // Without it, a guest who joins after us only learns our identity via
+        // `ontrack`, which falls back to our raw UUID.
+        sendSignalRef.current({ type: "offer", from: myId, to: msg.from, sdp: offer, displayName: localNameRef.current });
       } catch (e) { console.warn("[WebRTC] offer", e); }
     }
 
@@ -1078,28 +1143,48 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       playChime("leave");
       peersRef.current.get(msg.from)?.close();
       peersRef.current.delete(msg.from);
+      pendingIceRef.current.delete(msg.from);
       setPeers((prev) => { const next = new Map<string, Peer>(prev); next.delete(msg.from); return next; });
+      // Drop the departed peer's transient UI state so a stale ✋ / emoji doesn't linger.
+      setRaisedHands((prev) => { if (!prev.has(msg.from)) return prev; const next = new Set(prev); next.delete(msg.from); return next; });
+      setReactions((prev) => { if (!(msg.from in prev)) return prev; const n = { ...prev }; delete n[msg.from]; return n; });
     }
 
     if (msg.type === "offer" && msg.to === myId) {
       let pc = peersRef.current.get(msg.from);
       if (!pc) pc = createPeerConnection(msg.from);
+      // Record the offerer's name (e.g. the host) so guests don't see a UUID.
+      if (msg.displayName) setPeerName(msg.from, msg.displayName);
       try {
         await pc.setRemoteDescription(msg.sdp);
+        await flushPendingIce(msg.from, pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer });
+        sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer, displayName: localNameRef.current });
       } catch (e) { console.warn("[WebRTC] answer", e); }
     }
 
     if (msg.type === "answer" && msg.to === myId) {
+      if (msg.displayName) setPeerName(msg.from, msg.displayName);
       const pc = peersRef.current.get(msg.from);
-      if (pc) { try { await pc.setRemoteDescription(msg.sdp); } catch (e) { console.warn("[WebRTC] setRemote", e); } }
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(msg.sdp);
+          await flushPendingIce(msg.from, pc);
+        } catch (e) { console.warn("[WebRTC] setRemote", e); }
+      }
     }
 
     if (msg.type === "ice" && msg.to === myId) {
       const pc = peersRef.current.get(msg.from);
-      if (pc) { try { await pc.addIceCandidate(msg.candidate); } catch { /* safe to ignore */ } }
+      // Only add once the remote description exists; otherwise buffer for flush.
+      if (pc && pc.remoteDescription) {
+        try { await pc.addIceCandidate(msg.candidate); } catch { /* safe to ignore */ }
+      } else {
+        const buf = pendingIceRef.current.get(msg.from) ?? [];
+        buf.push(msg.candidate);
+        pendingIceRef.current.set(msg.from, buf);
+      }
     }
 
     if (msg.type === "transcript" && msg.from !== myId) {
@@ -1158,9 +1243,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "walkthrough_step") {
-      setWalkthroughStepIndex(msg.stepIndex);
+      // The host sends -1 to signal "walkthrough ended"; map it back to null so
+      // the participant banner (which renders whenever the index !== null) clears
+      // instead of showing a broken "Step 0 of N" with an undefined title.
+      setWalkthroughStepIndex(msg.stepIndex < 0 ? null : msg.stepIndex);
     }
-  }, [createPeerConnection, router, clearWaitingTimers]);
+  }, [createPeerConnection, router, clearWaitingTimers, setPeerName, flushPendingIce]);
 
   // ── Detect host status on mount (pre-join screen label) ──────────────────
 
@@ -1317,7 +1405,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
     channel.on("broadcast", { event: "signal" }, ({ payload }: { payload: SignalMsg }) => { void handleSignal(payload); })
-      .subscribe(() => {
+      .subscribe((status) => {
+        // Only announce on a real subscription, and only once — the callback also
+        // fires for CHANNEL_ERROR / TIMED_OUT / CLOSED and again on reconnect.
+        if (status !== "SUBSCRIBED" || announcedRef.current) return;
+        announcedRef.current = true;
         if (hostFlag) {
           sendSignal({ type: "join", from: myIdRef.current, displayName: name });
         } else {
@@ -1492,7 +1584,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           return prev;
         }
         if (kbps >= OK_BW_KBPS && prev !== "normal") {
-          localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = true; });
+          // Only restore video the user actually wants on — don't silently
+          // re-enable a camera they deliberately turned off.
+          if (camOnRef.current) {
+            localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = true; });
+          }
           return "normal";
         }
         return prev;
@@ -1575,7 +1671,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const toggleCam = useCallback(() => {
     localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = !t.enabled; });
-    setCamOn((v) => !v);
+    setCamOn((v) => { camOnRef.current = !v; return !v; });
   }, []);
 
   const toggleScreen = useCallback(async () => {

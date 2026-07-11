@@ -283,7 +283,12 @@ export function UpcomingMeetingsList({
             (j) => j.meetingId === meeting.id && now - j.at < 45_000,
           );
           const copilot = copilotName(meeting.assigned_copilot_agent);
-          const syncStatus = (meeting.external_calendar_sync_status as ExternalSyncStatus) ?? "not_connected";
+          // `??` only guards null/undefined; an empty string or any value outside
+          // the enum (legacy/unknown DB states) would render "calendar: undefined".
+          // Validate membership so it always maps to a known label.
+          const rawSync = meeting.external_calendar_sync_status;
+          const syncStatus: ExternalSyncStatus =
+            rawSync && rawSync in EXTERNAL_SYNC_STATUS_LABELS ? (rawSync as ExternalSyncStatus) : "not_connected";
           const prep = meeting.preparation_status ?? "prep_needed";
           return (
             <div

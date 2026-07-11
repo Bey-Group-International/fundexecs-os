@@ -148,6 +148,12 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
       setMeetings(all.slice(0, 10));
     }
 
+    // Reconcile on mount so the client's user-scoped view replaces the org-wide
+    // SSR snapshot immediately (matching UpcomingMeetingsList) — otherwise the
+    // initial list showed other members' meetings until an unrelated realtime
+    // event happened to fire and narrow it.
+    void refresh();
+
     const channel = supabase
       .channel("past-meetings-live")
       .on(
