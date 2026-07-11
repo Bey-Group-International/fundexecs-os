@@ -10,24 +10,24 @@ import { WorkspacePreview } from "@/components/marketing/WorkspacePreview";
 
 const OPERATING_LOOP = [
   {
-    step: "Command",
-    body: "The operator gives Earn a private-market objective in plain language.",
-    signal: "Request analyzed",
+    step: "Build",
+    body: "Establish the firm's foundation — profile, mandate, strategy, and readiness that every downstream workflow inherits.",
+    signal: "Foundation set",
   },
   {
-    step: "Plan",
-    body: "Earn creates objectives, workstreams, agent assignments, and approval gates.",
-    signal: "Strategy ready",
+    step: "Source",
+    body: "Build and qualify pipeline — LP and deal flow, prospecting, and intent signals routed to the right executive.",
+    signal: "Pipeline routed",
+  },
+  {
+    step: "Run",
+    body: "Diligence and underwriting — analysts parse documents, model deals, and flag risk before a decision is made.",
+    signal: "Diligence cleared",
   },
   {
     step: "Execute",
-    body: "AI executives source, raise, diligence, document, and follow up across the operating campus.",
-    signal: "Agents assigned",
-  },
-  {
-    step: "Report",
-    body: "Outcomes collapse into the dashboard as targets, introductions, packages, and updates.",
-    signal: "Results delivered",
+    body: "Post-close capital operations — LP updates, capital calls, distributions, fund accounting, and reporting.",
+    signal: "Capital in motion",
   },
 ];
 
@@ -100,15 +100,13 @@ export default async function LandingPage(
             Private Markets Operating System
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
-            FundExecs OS is an{" "}
-            <GradientText as="span">autonomous executive team</GradientText> for
-            private markets.
+            The <GradientText as="span">AI-native operating system</GradientText>{" "}
+            for private-market operations.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-fg-secondary">
-            Brief Earn once and a 15-strong AI executive team goes to work —
-            raising capital, closing deals, and clearing diligence. What used to
-            take an analyst team days lands in minutes, with you approving every
-            move.
+            Deploy end-to-end workflows across the full lifecycle, powered by an
+            agentic executive layer that unifies fragmented deal, capital, and
+            relationship data into a single system of record.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <SpinBorderButton href="#meet-earn">
@@ -129,31 +127,33 @@ export default async function LandingPage(
 
       <div className="border-t border-line" />
 
-      {/* Social proof strip */}
+      {/* Social proof strip — one unified inline metric band */}
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <div className="rounded-2xl border border-line bg-surface-1 px-6 py-8">
-          <p className="text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted mb-6">
+        <div className="rounded-2xl border border-line bg-surface-1 px-6 py-7">
+          <p className="mb-6 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
             Built for operators who move capital at scale
           </p>
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="flex flex-col divide-y divide-line/70 sm:flex-row sm:divide-x sm:divide-y-0">
             <StatCounter
+              className="flex-1 px-4 py-3 sm:py-0"
               value={2}
               prefix="$"
               suffix="B+"
-              label="private-market deal flow tracked by early teams"
+              label="private-market deal flow tracked"
             />
             <StatCounter
+              className="flex-1 px-4 py-3 sm:py-0"
               value={4}
               suffix=" hubs"
-              label="replacing fragmented spreadsheets, email threads, and CRMs"
+              label="Build · Source · Run · Execute lifecycle"
             />
             <StatCounter
+              className="flex-1 px-4 py-3 sm:py-0"
               value={15}
-              suffix=" AI executives"
-              label="Earn plus 14 specialists across sourcing, capital, diligence, and execution"
+              label="AI executives — Earn + 14 specialists"
             />
           </div>
-          <blockquote className="mt-8 border-l-2 border-gold-500/40 pl-4 text-sm italic text-fg-secondary">
+          <blockquote className="mt-6 border-t border-line/60 pt-5 text-center text-sm italic text-fg-secondary">
             &ldquo;FundExecs OS gives our team an execution layer we couldn&rsquo;t afford to hire — Earn does in minutes what used to take a full analyst day.&rdquo;
             <cite className="mt-2 block not-italic font-mono text-[10px] uppercase tracking-wider text-fg-muted">
               Early-access fund operator
@@ -175,22 +175,29 @@ export default async function LandingPage(
       <section id="operating-model" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 scroll-mt-20">
         <div className="max-w-2xl">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
-            Operating model
+            Operating framework
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-            The operating model stays visible from objective to outcome.
+            One lifecycle, four hubs, every action accountable.
           </h2>
           <p className="mt-3 text-fg-secondary">
-            Each node and assignment shows how Earn structures analysis,
-            planning, approval, delegation, and delivery.
+            FundExecs OS runs the private-market lifecycle through four hubs —
+            Build, Source, Run, and Execute — with Earn routing work to the
+            right executive and holding every outbound action at an approval
+            gate.
           </p>
         </div>
         <div className="mt-8 grid gap-3 md:grid-cols-4">
           {OPERATING_LOOP.map((item, index) => (
             <div key={item.step} className="fx-card fx-card-hover p-5">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
-                0{index + 1}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+                  0{index + 1}
+                </span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+                  Hub
+                </span>
+              </div>
               <h3 className="mt-4 text-lg font-semibold text-fg-primary">{item.step}</h3>
               <p className="mt-2 text-sm text-fg-secondary">{item.body}</p>
               <p className="mt-4 rounded-lg border border-line bg-surface-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">

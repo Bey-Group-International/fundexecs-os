@@ -1,5 +1,6 @@
 import { AGENTS } from "@/lib/agents";
 import { AccessGate } from "./AccessGate";
+import { Reveal } from "./Reveal";
 
 // "Explore Workspace" reveal. A faithful static mock of the screen users land on
 // after login (app/(app)/workspace/page.tsx): the "Sessions" header, the AI
@@ -23,7 +24,7 @@ export function WorkspacePreview() {
       id="workspace-preview"
       className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6 sm:py-24"
     >
-      <div className="mx-auto max-w-2xl text-center">
+      <Reveal className="mx-auto max-w-2xl text-center">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
           The workspace
         </p>
@@ -34,9 +35,9 @@ export function WorkspacePreview() {
           Land in one command surface: an AI operating brief on what needs you,
           your live sessions, and Earn&rsquo;s composer ready for the next move.
         </p>
-      </div>
+      </Reveal>
 
-      <div className="mt-10">
+      <Reveal delayMs={120} className="mt-10">
         <div className="fx-glass mx-auto max-w-3xl p-4 sm:p-6">
           {/* Header */}
           <div className="mb-5">
@@ -56,7 +57,8 @@ export function WorkspacePreview() {
             />
             <div className="relative flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+                <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+                  <span className="animate-pulse inline-block h-1.5 w-1.5 rounded-full bg-gold-400" aria-hidden />
                   AI Operating Brief
                 </p>
                 <h4 className="mt-1 text-lg font-semibold tracking-tight text-fg-primary">
@@ -66,6 +68,12 @@ export function WorkspacePreview() {
                   <span className="font-medium text-fg-primary">Next:</span> Approve
                   the Q3 capital-call notice so Investor Relations can send it.
                 </p>
+                <div className="mt-3 h-1 w-full max-w-xs overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className="fx-progress-loop h-full rounded-full"
+                    style={{ backgroundColor: earnColor() }}
+                  />
+                </div>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <span
@@ -114,11 +122,15 @@ export function WorkspacePreview() {
           {/* Earn composer */}
           <div className="mt-6 border-t border-line/60 pt-4">
             <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-1/60 px-3 py-2.5">
-              <span className="flex-1 text-sm text-fg-muted">
-                Ask Earn to move something forward…
+              <span className="flex min-w-0 flex-1 items-center text-sm text-fg-muted">
+                <span className="fx-typewriter">Ask Earn to move something forward…</span>
+                <span
+                  className="fx-caret ml-0.5 inline-block h-4 w-px shrink-0 bg-fg-secondary"
+                  aria-hidden
+                />
               </span>
               <span
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-surface-0"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-surface-0"
                 style={{ backgroundColor: earnColor() }}
                 aria-hidden
               >
@@ -127,7 +139,7 @@ export function WorkspacePreview() {
             </div>
           </div>
         </div>
-      </div>
+      </Reveal>
 
       <AccessGate
         title="Open your live workspace"

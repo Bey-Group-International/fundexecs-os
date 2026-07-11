@@ -638,3 +638,124 @@ body {
     background: #fff !important;
   }
 }
+
+/* ==========================================================================
+   Landing motion — ambient life for the Meet Earn orchestration diagram and
+   the workspace preview. All effects here are decorative; the reduced-motion
+   guard at the bottom freezes them and restores a static, legible resting
+   state (full-width composer text, settled nodes).
+   ========================================================================== */
+
+/* Delegation pulse — a dash traveling from Earn out along each spoke. */
+.fx-spoke {
+  stroke-dasharray: 3 7;
+  animation: fxSpokeFlow 3s linear infinite;
+}
+@keyframes fxSpokeFlow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Executive node — a slow, subtle breathe so the ring feels alive at rest. */
+.fx-team-node {
+  animation: fxNodeBreathe 4.5s ease-in-out infinite;
+}
+@keyframes fxNodeBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Earn hub halo — a breathing accent ring behind the orchestrator portrait. */
+.fx-earn-halo {
+  animation: fxEarnHalo 3.6s ease-in-out infinite;
+}
+@keyframes fxEarnHalo {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.08);
+  }
+}
+
+/* Composer typewriter — types the placeholder, holds, clears, and repeats so
+   the workspace preview reads as a live input. Width is measured in ch and the
+   step count matches the character length set on the element. */
+.fx-typewriter {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  animation: fxTypewriter 7s steps(35, end) infinite;
+}
+@keyframes fxTypewriter {
+  0% {
+    width: 0;
+  }
+  40% {
+    width: 35ch;
+  }
+  70% {
+    width: 35ch;
+  }
+  100% {
+    width: 0;
+  }
+}
+
+/* Blinking caret at the end of the composer input. */
+.fx-caret {
+  animation: fxCaret 1.05s steps(1, end) infinite;
+}
+@keyframes fxCaret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Looping progress fill for the operating-brief "working" bar. */
+.fx-progress-loop {
+  animation: fxProgressLoop 3.2s ease-in-out infinite;
+}
+@keyframes fxProgressLoop {
+  0% {
+    width: 8%;
+  }
+  70% {
+    width: 92%;
+  }
+  100% {
+    width: 8%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-spoke,
+  .fx-team-node,
+  .fx-earn-halo,
+  .fx-typewriter,
+  .fx-caret,
+  .fx-progress-loop {
+    animation: none !important;
+  }
+  /* Restore a static, fully-legible resting state. */
+  .fx-typewriter {
+    width: auto !important;
+  }
+  .fx-progress-loop {
+    width: 66% !important;
+  }
+}
