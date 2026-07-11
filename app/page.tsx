@@ -105,9 +105,10 @@ export default async function LandingPage(
             private markets.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-fg-secondary">
-            Earn plans, delegates, monitors, and routes decisions while an AI
-            workforce sources deals, raises capital, conducts diligence, manages
-            relationships, and executes transactions.
+            Brief Earn once and a 15-strong AI executive team goes to work —
+            raising capital, closing deals, and clearing diligence. What used to
+            take an analyst team days lands in minutes, with you approving every
+            move.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <SpinBorderButton href="#meet-earn">
@@ -147,9 +148,9 @@ export default async function LandingPage(
               label="replacing fragmented spreadsheets, email threads, and CRMs"
             />
             <StatCounter
-              value={1}
-              suffix=" agent"
-              label="Earn plans, delegates, and delivers like a senior exec"
+              value={15}
+              suffix=" AI executives"
+              label="Earn plus 14 specialists across sourcing, capital, diligence, and execution"
             />
           </div>
           <blockquote className="mt-8 border-l-2 border-gold-500/40 pl-4 text-sm italic text-fg-secondary">

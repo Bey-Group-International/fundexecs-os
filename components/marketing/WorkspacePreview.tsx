@@ -1,39 +1,20 @@
 import { AGENTS } from "@/lib/agents";
 import { AccessGate } from "./AccessGate";
 
-// "Explore Workspace" reveal. A faithful static mock of the real command surface
-// (components/Workspace.tsx): the objective bar, live task rows with agent
-// progress, a pending approval gate, and the agent rail. It renders sample data
-// only — no live tasks — and an AccessGate CTA below invites the visitor into
-// their own authed workspace.
-const SAMPLE_TASKS = [
-  {
-    title: "Underwrite the Maple Street acquisition",
-    agentKey: "analyst",
-    hub: "run",
-    status: "running",
-    progress: 0.72,
-  },
-  {
-    title: "Draft the Q3 LP capital-call notice",
-    agentKey: "investor_relations",
-    hub: "execute",
-    status: "review",
-    progress: 1,
-  },
-  {
-    title: "Flag risks in the Northwind data room",
-    agentKey: "diligence",
-    hub: "run",
-    status: "running",
-    progress: 0.41,
-  },
+// "Explore Workspace" reveal. A faithful static mock of the screen users land on
+// after login (app/(app)/workspace/page.tsx): the "Sessions" header, the AI
+// Operating Brief card, the recent-session list, and Earn's composer docked at
+// the bottom. Sample data only — no live sessions — with an AccessGate CTA below
+// inviting the visitor into their own authed workspace.
+const SAMPLE_SESSIONS = [
+  { name: "Maple Street acquisition — underwrite", group: "Run · Diligence", color: "#22d3ee", when: "12m ago" },
+  { name: "Q3 LP capital call — draft & send", group: "Execute · Investor Relations", color: "#f59e0b", when: "1h ago" },
+  { name: "Founding Capital Circle outreach", group: "Source · Capital Raiser", color: "#ec4899", when: "3h ago" },
+  { name: "Northwind data room — risk flags", group: "Run · Diligence", color: "#ef4444", when: "yesterday" },
 ] as const;
 
-const RAIL = ["associate", "analyst", "diligence", "capital_raiser", "deal_sourcer"] as const;
-
-function agent(key: string) {
-  return AGENTS.find((a) => a.key === key);
+function earnColor() {
+  return AGENTS.find((a) => a.key === "associate")?.color ?? "#6366f1";
 }
 
 export function WorkspacePreview() {
@@ -47,122 +28,111 @@ export function WorkspacePreview() {
           The workspace
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          One command surface for the entire operating campus.
+          Every objective picks up where you left off.
         </h2>
         <p className="mt-3 text-fg-secondary">
-          Give Earn an objective; watch it route work to the right executive, run
-          the task, and hold every outbound action at an approval gate.
+          Land in one command surface: an AI operating brief on what needs you,
+          your live sessions, and Earn&rsquo;s composer ready for the next move.
         </p>
       </div>
 
       <div className="mt-10">
-        <div>
-          <div className="fx-glass mx-auto max-w-4xl p-4 sm:p-6">
-            <div className="grid gap-6 lg:grid-cols-[1fr_240px]">
-              {/* Command column */}
-              <div>
-                <div className="flex gap-2">
-                  <div className="flex flex-1 items-center rounded-md border border-line bg-surface-1/60 px-3 py-2 text-sm text-fg-muted">
-                    Underwrite the Maple Street acquisition…
-                  </div>
-                  <div
-                    className="flex items-center rounded-md px-4 py-2 text-sm font-medium text-surface-0"
-                    style={{ backgroundColor: agent("associate")?.color }}
-                  >
-                    Run
-                  </div>
-                </div>
+        <div className="fx-glass mx-auto max-w-3xl p-4 sm:p-6">
+          {/* Header */}
+          <div className="mb-5">
+            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+              FundExecs OS
+            </span>
+            <h3 className="mt-1 text-2xl font-semibold tracking-tight text-fg-primary">
+              Sessions
+            </h3>
+          </div>
 
-                <h3 className="mb-3 mt-6 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                  Tasks
-                </h3>
-                <div className="flex flex-col gap-2">
-                  {SAMPLE_TASKS.map((task) => {
-                    const a = agent(task.agentKey);
-                    return (
-                      <div
-                        key={task.title}
-                        className="rounded-lg border border-line bg-surface-1/40 p-4"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: a?.color }}
-                          />
-                          <span className="text-sm font-medium text-fg-primary">
-                            {task.title}
-                          </span>
-                          <span className="ml-auto rounded bg-surface-2 px-2 py-0.5 text-xs text-fg-secondary">
-                            {task.status}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center gap-3 text-xs text-fg-muted">
-                          <span>{a?.name}</span>
-                          <span className="capitalize">· {task.hub}</span>
-                          <div className="ml-auto h-1.5 w-24 overflow-hidden rounded bg-surface-2">
-                            <div
-                              className="h-full rounded"
-                              style={{
-                                width: `${Math.round(task.progress * 100)}%`,
-                                backgroundColor: a?.color,
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {task.status === "review" && (
-                          <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
-                            <span className="text-xs text-fg-secondary">
-                              Draft ready — awaiting your approval.
-                            </span>
-                            <div className="ml-auto flex gap-1.5">
-                              <span className="rounded bg-green-500/15 px-2 py-1 text-xs text-green-300">
-                                Approve
-                              </span>
-                              <span className="rounded bg-surface-2 px-2 py-1 text-xs text-fg-secondary">
-                                Regenerate
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+          {/* AI Operating Brief */}
+          <div className="fx-card relative overflow-hidden p-4">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgb(var(--fx-accent-rgb)/0.14),transparent_36%)]"
+            />
+            <div className="relative flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+                  AI Operating Brief
+                </p>
+                <h4 className="mt-1 text-lg font-semibold tracking-tight text-fg-primary">
+                  2 approvals waiting and the Maple Street model is ready to review.
+                </h4>
+                <p className="mt-1 text-xs leading-relaxed text-fg-secondary">
+                  <span className="font-medium text-fg-primary">Next:</span> Approve
+                  the Q3 capital-call notice so Investor Relations can send it.
+                </p>
               </div>
-
-              {/* Agent rail */}
-              <div>
-                <h3 className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                  Agents
-                </h3>
-                <div className="flex flex-col gap-1.5">
-                  {RAIL.map((key) => {
-                    const a = agent(key);
-                    if (!a) return null;
-                    return (
-                      <div
-                        key={key}
-                        className="flex items-center gap-2 rounded-md border border-line bg-surface-1/40 px-3 py-2 text-sm"
-                      >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: a.color }}
-                        />
-                        <span className="text-fg-primary">{a.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <span
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-surface-0"
+                  style={{ backgroundColor: earnColor() }}
+                >
+                  Start Earn
+                </span>
+                <span className="rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary">
+                  Focus composer
+                </span>
               </div>
             </div>
           </div>
-        </div>
 
-        <AccessGate
-          title="Open your live workspace"
-          subtitle="Sign in or request access to open your own command surface — real tasks, real approvals, your mandate."
-        />
+          {/* Recent sessions */}
+          <h4 className="mb-3 mt-6 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            Recent
+          </h4>
+          <div className="flex flex-col gap-1.5">
+            {SAMPLE_SESSIONS.map((s) => (
+              <div
+                key={s.name}
+                className="fx-card flex items-center gap-3 px-4 py-3"
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: s.color }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-fg-primary">
+                    {s.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-fg-muted">
+                    {s.group}
+                  </span>
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+                  {s.when}
+                </span>
+                <span className="shrink-0 font-mono text-fg-muted">→</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Earn composer */}
+          <div className="mt-6 border-t border-line/60 pt-4">
+            <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-1/60 px-3 py-2.5">
+              <span className="flex-1 text-sm text-fg-muted">
+                Ask Earn to move something forward…
+              </span>
+              <span
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-surface-0"
+                style={{ backgroundColor: earnColor() }}
+                aria-hidden
+              >
+                ↑
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <AccessGate
+        title="Open your live workspace"
+        subtitle="Sign in or request access to open your own command surface — real sessions, real approvals, your mandate."
+      />
     </section>
   );
 }
