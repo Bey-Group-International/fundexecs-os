@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { FloorOverlay } from "./FloorOverlay";
 import { FurniturePreview } from "./FurniturePreview";
+import { virtualOfficeRoutes } from "@/lib/virtualOfficeRoutes";
 import { ROOMS, ROOM_W, ROOM_H, WORLD_W, WORLD_H } from "@/components/virtual-office/types";
 import { PIECE_TYPES, PIECE_LABELS, type PieceType } from "@/lib/office/furnitureTypes";
 import type { PlacedPiece } from "@/lib/office/furniturePlacement";
@@ -109,6 +111,12 @@ export function FurnitureEditor({ onClose }: { onClose: () => void }) {
           >
             Clear placed furniture
           </button>
+          <Link
+            href={virtualOfficeRoutes.spaceEditor}
+            className="text-[10px] text-slate-400 underline-offset-2 transition-colors hover:text-[#c9a84c] hover:underline"
+          >
+            Open full Space Editor →
+          </Link>
           <button
             type="button"
             onClick={onClose}
