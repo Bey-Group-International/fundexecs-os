@@ -419,6 +419,14 @@ function SidebarPanel({
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
         {/* Top-level destinations */}
         <div className="flex flex-col gap-0.5">
+          {/* Dashboard — the Private Markets Command Center home base. Sits at
+              the very top of the rail as the operator's default landing surface. */}
+          <Link
+            href="/dashboard"
+            className={navHrefActive(pathname, "/dashboard") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+          >
+            Dashboard
+          </Link>
           <Link
             href="/workspace"
             className={navHrefActive(pathname, "/workspace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}

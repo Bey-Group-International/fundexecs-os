@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { AGENTS } from "@/lib/agents";
@@ -221,36 +222,57 @@ export default async function DashboardPage() {
 
   return (
     <div className="fx-ambient fx-blueprint mx-auto max-w-6xl">
-      <header className="fx-glass mb-6 flex flex-col gap-5 overflow-hidden p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between animate-fade-up">
+      <header className="fx-glass relative mb-6 overflow-hidden animate-fade-up">
         {/* Ambient right-side glow */}
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_80%_at_92%_10%,rgba(56,189,248,0.10),transparent_70%)]"
         />
-        <div className="relative">
-          <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-            <span
-              aria-hidden
-              className="h-4 w-[3px] rounded-full bg-gradient-to-b from-gold-300 to-gold-500 shadow-[0_0_6px_rgb(var(--fx-gold-rgb)/0.6)]"
-            />
-            Command Center
+
+        {/* Official program identity strip — brand mark, program name, and
+            live system status. Reads as the masthead of an institutional
+            operating dashboard rather than a marketing hero. */}
+        <div className="relative flex items-center justify-between gap-3 border-b border-line/60 px-5 py-2.5 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Logo as="span" variant="coin" />
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+              FundExecs OS
+            </span>
+            <span aria-hidden className="text-fg-muted/50">/</span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">
+              Command Center
+            </span>
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-status-success/30 bg-status-success/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-status-success">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-success opacity-60" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-status-success" />
+            </span>
+            <span className="hidden sm:inline">Systems operational</span>
+            <span className="sm:hidden">Live</span>
           </span>
-          <h1 className="mt-2.5 font-display text-3xl font-bold tracking-tight text-fg-primary sm:text-4xl">
-            Private Markets Command Center
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
-            Everything Earn produces, organized into a blue-lit operating surface for deal flow,
-            capital, approvals, and deliverables.
-          </p>
         </div>
-        <div className="relative flex shrink-0 flex-wrap items-center gap-2">
-          <Link
-            href="/workspace"
-            className="group relative overflow-hidden rounded-lg bg-gradient-to-r from-gold-400 to-gold-500 px-4 py-2 text-xs font-semibold text-surface-0 shadow-[0_8px_20px_-10px_rgb(var(--fx-gold-rgb)/0.8)] transition hover:from-gold-300 hover:to-gold-400 hover:shadow-[0_12px_28px_-10px_rgb(var(--fx-gold-rgb)/0.9)]"
-          >
-            <span aria-hidden className="absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-            New Session
-          </Link>
+
+        {/* Program masthead — title, mandate line, and primary action. */}
+        <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="relative">
+            <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary sm:text-4xl">
+              Private Markets Command Center
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
+              The official operating surface for the program — deal flow, capital,
+              approvals, and deliverables, unified in one governed view.
+            </p>
+          </div>
+          <div className="relative flex shrink-0 flex-wrap items-center gap-2">
+            <Link
+              href="/workspace"
+              className="group relative overflow-hidden rounded-lg bg-gradient-to-r from-gold-400 to-gold-500 px-4 py-2 text-xs font-semibold text-surface-0 shadow-[0_8px_20px_-10px_rgb(var(--fx-gold-rgb)/0.8)] transition hover:from-gold-300 hover:to-gold-400 hover:shadow-[0_12px_28px_-10px_rgb(var(--fx-gold-rgb)/0.9)]"
+            >
+              <span aria-hidden className="absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+              New Session
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -262,48 +284,6 @@ export default async function DashboardPage() {
       {/* Earn Initiative — self-authored Commands surfaced as finished decisions,
           with pre-run drafts, provenance, and blast-radius gates. */}
       <ProactiveSection orgId={ctx.orgId} />
-
-      {/* Entry into the Gather-style spatial office where Earn orchestrates the
-          executive team in real time. */}
-      <Link
-        href="/dashboard/office"
-        className="fx-neural-card group relative mb-6 flex items-center gap-4 p-5 transition-all duration-300"
-      >
-        {/* Right-side neural glow */}
-        <span
-          aria-hidden
-          className="absolute inset-0 bg-[radial-gradient(55%_130%_at_90%_50%,rgba(56,189,248,0.22),transparent_65%)] transition-opacity duration-300 group-hover:opacity-130"
-        />
-        {/* Live indicator bar */}
-        <span
-          aria-hidden
-          className="absolute left-0 top-1/4 bottom-1/4 w-[3px] rounded-r-full bg-gradient-to-b from-neural-300 to-neural-500 opacity-70 shadow-[0_0_8px_rgb(var(--fx-accent-rgb)/0.8)]"
-        />
-        <div className="relative min-w-0 flex-1 pl-2">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-neural-400">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neural-400 opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-neural-400" />
-              </span>
-              Live
-            </span>
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
-              Spatial office
-            </span>
-          </div>
-          <p className="mt-1.5 font-display text-lg font-bold text-fg-primary">
-            Enter the spatial office
-          </p>
-          <p className="mt-0.5 text-sm text-fg-muted">
-            Watch Earnest Fundmaker delegate across the Mandate, Relationship, Outbound, Diligence, and Capital
-            offices — executives execute in real time.
-          </p>
-        </div>
-        <span className="relative shrink-0 font-mono text-xl text-neural-400 transition-all duration-200 group-hover:translate-x-1 group-hover:text-neural-300">
-          →
-        </span>
-      </Link>
 
       <section className="mb-8">
         <SectionHeading>Operating workspaces</SectionHeading>
