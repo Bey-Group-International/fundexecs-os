@@ -10,8 +10,10 @@ import {
   dealToIcReadyItem,
   riskToInboxItem,
   buildInbox,
+  isPrematureFollowupPack,
   EMPTY_INBOX,
 } from "@/lib/inbox";
+import type { InboxMeeting } from "@/lib/inbox";
 import type { DealConviction } from "@/lib/run-conviction";
 import type { Deal, DiligenceItem, Task } from "@/lib/supabase/database.types";
 
@@ -203,5 +205,62 @@ describe("buildInbox", () => {
     const beta = deal("deal-2", "Project Beta");
     const inbox = buildInbox([conviction(beta, { stageKey: "building" })], [], TODAY);
     expect(isInboxEmpty(inbox)).toBe(true);
+  });
+
+  it("holds back a follow-up pack whose meeting is still upcoming, but keeps the prep pack", () => {
+    const meetings: InboxMeeting[] = [
+      { title: "BGI x Evolution Accelerator", status: "waiting", scheduled_at: "2026-06-25T15:00:00.000Z" },
+    ];
+    const inbox = buildInbox(
+      [],
+      [
+        task({ id: "t1", title: "BGI x Evolution Accelerator – FundExecs OS Walkthrough Prep Pack" }),
+        task({ id: "t2", title: "BGI x Evolution Accelerator Follow-Up Prep Pack" }),
+      ],
+      TODAY,
+      meetings,
+      `${TODAY}T00:00:00.000Z`,
+    );
+    expect(inbox.needsApproval).toHaveLength(1);
+    expect(inbox.needsApproval[0].id).toBe("approval:t1");
+  });
+});
+
+describe("isPrematureFollowupPack", () => {
+  const NOW = "2026-06-20T00:00:00.000Z";
+  const followup = "BGI x Evolution Accelerator Follow-Up Prep Pack";
+  const meeting = (over: Partial<InboxMeeting> = {}): InboxMeeting => ({
+    title: "BGI x Evolution Accelerator",
+    status: "waiting",
+    scheduled_at: "2026-06-25T15:00:00.000Z",
+    ...over,
+  });
+
+  it("suppresses a follow-up whose matching meeting is scheduled in the future", () => {
+    expect(isPrematureFollowupPack(followup, [meeting()], NOW)).toBe(true);
+  });
+
+  it("suppresses a follow-up whose matching meeting has no time and isn't ended", () => {
+    expect(isPrematureFollowupPack(followup, [meeting({ scheduled_at: null })], NOW)).toBe(true);
+  });
+
+  it("keeps a follow-up once its meeting has ended", () => {
+    expect(isPrematureFollowupPack(followup, [meeting({ status: "ended" })], NOW)).toBe(false);
+  });
+
+  it("keeps a follow-up once the scheduled time has passed", () => {
+    expect(
+      isPrematureFollowupPack(followup, [meeting({ scheduled_at: "2026-06-10T15:00:00.000Z" })], NOW),
+    ).toBe(false);
+  });
+
+  it("never suppresses a prep / walkthrough pack, even with an upcoming meeting", () => {
+    const prep = "BGI x Evolution Accelerator – FundExecs OS Walkthrough Prep Pack";
+    expect(isPrematureFollowupPack(prep, [meeting()], NOW)).toBe(false);
+  });
+
+  it("keeps a follow-up that matches no meeting", () => {
+    expect(isPrematureFollowupPack(followup, [meeting({ title: "Unrelated Deal" })], NOW)).toBe(false);
+    expect(isPrematureFollowupPack(followup, [], NOW)).toBe(false);
   });
 });
