@@ -436,6 +436,8 @@ function createMarketplaceHall(
   rug.fillRoundedRect(ox + 60, cy - 24, w - 120, 48, 10);
   rug.lineStyle(1, accent, 0.14);
   rug.strokeRoundedRect(ox + 60, cy - 24, w - 120, 48, 10);
+  rug.lineStyle(1, accent, 0.09);
+  rug.strokeRoundedRect(ox + 70, cy - 18, w - 140, 36, 7);
   pieces.push({ gfx: rug, footY: -1 });
 
   // Awninged stalls along the back wall (see MARKETPLACE_STALL_X).
@@ -445,8 +447,10 @@ function createMarketplaceHall(
     const fy = oy + MARKETPLACE_STALL_FY;
     const awning = awnings[i % awnings.length];
     const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
-    glow.fillStyle(awning, 0.04);
-    glow.fillEllipse(x, fy + 8, 62, 24);
+    for (let k = 3; k >= 1; k--) {
+      glow.fillStyle(awning, 0.02 * k);
+      glow.fillEllipse(x, fy + 8, 44 + k * 12, 16 + k * 5);
+    }
     pieces.push({ gfx: glow, footY: -1 });
 
     const g = scene.add.graphics().setDepth(yDepth(fy));
@@ -464,10 +468,12 @@ function createMarketplaceHall(
   for (const px of [ox + 168, ox + w - 168]) {
     const fy = oy + ROOM_H - 54;
     const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
-    for (let i = 3; i >= 1; i--) {
-      glow.fillStyle(accent, 0.03 * i);
-      glow.fillCircle(px, fy - 4, 16 + i * 11);
+    for (let i = 5; i >= 1; i--) {
+      glow.fillStyle(accent, 0.02 * i);
+      glow.fillCircle(px, fy - 4, 12 + i * 12);
     }
+    glow.fillStyle(shade(accent, 1.3), 0.14);
+    glow.fillCircle(px, fy - 4, 14);
     pieces.push({ gfx: glow, footY: -1 });
     const g = scene.add.graphics().setDepth(yDepth(fy));
     drawLamp(g, px, fy, accent);
@@ -482,11 +488,17 @@ function drawStall(g: Phaser.GameObjects.Graphics, cx: number, fy: number, awnin
   // Counter.
   box(g, cx, fy, 46, 7, 13, C.woodTop, C.wood);
   const sy = fy - 13 - 7; // counter surface
-  // Goods crates on the counter.
+  // Goods crates on the counter — grounded with a soft AO and a lit top.
   const goods = [0xef4444, 0xf59e0b, 0x22c55e, 0x38bdf8];
   for (let i = -1; i <= 1; i++) {
-    g.fillStyle(goods[(i + 1) % goods.length], 0.9);
-    g.fillRoundedRect(cx + i * 13 - 5, sy - 4, 10, 4, 1);
+    const gx = cx + i * 13 - 5;
+    const gc = goods[(i + 1) % goods.length];
+    g.fillStyle(0x000000, 0.18);
+    g.fillEllipse(gx + 5, sy + 0.2, 11, 2);
+    g.fillStyle(gc, 0.95);
+    g.fillRoundedRect(gx, sy - 4, 10, 4, 1);
+    g.fillStyle(shade(gc, 1.32), 0.6);
+    g.fillRect(gx + 1, sy - 3.6, 8, 0.9);
   }
   // Canopy posts.
   g.fillStyle(C.legDark, 1);
@@ -499,6 +511,15 @@ function drawStall(g: Phaser.GameObjects.Graphics, cx: number, fy: number, awnin
     { x: cx - 28, y: ay + 6 }, { x: cx + 28, y: ay + 6 },
     { x: cx + 32, y: ay }, { x: cx - 32, y: ay },
   ], true);
+  // Striped canopy — a few darker tonal bands across the awning.
+  g.fillStyle(shade(awning, 0.82), 0.85);
+  for (let k = -2; k <= 2; k += 2) {
+    const bx = cx + k * 11;
+    g.fillPoints([
+      { x: bx - 2.6, y: ay }, { x: bx + 2.4, y: ay },
+      { x: bx + 2.0, y: ay + 6 }, { x: bx - 3.0, y: ay + 6 },
+    ], true);
+  }
   g.fillStyle(shade(awning, 1.4), 0.8);
   g.fillPoints([
     { x: cx - 32, y: ay }, { x: cx + 32, y: ay },
