@@ -806,8 +806,16 @@ function EventDetail({
   const copilot = meeting.assigned_copilot_agent ? AGENTS.find((a) => a.key === meeting.assigned_copilot_agent)?.name ?? meeting.assigned_copilot_agent : null;
   const attendees = meeting.attendees ?? [];
 
-  function askEarn(prompt: string) {
-    window.dispatchEvent(new CustomEvent("earn:set-composer-prompt", { detail: { prompt } }));
+  // Open Earn with a clean one-liner and run it, carrying only the meeting id +
+  // mode as chatContext. The rich institutional context (deal financials, lead
+  // contacts, saved notes) is gathered and injected SERVER-SIDE from that id — it
+  // never travels through the browser. This is the same no-leak path the meetings
+  // list uses; the earlier `earn:set-composer-prompt` only pre-filled the composer
+  // and dropped the context, so prep/follow-up ran without any of it.
+  function runWithEarn(prompt: string, chatContext: { id: string; mode: "prep" | "followup" }) {
+    window.dispatchEvent(
+      new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend: true, chatContext } }),
+    );
     onClose();
   }
 
@@ -854,11 +862,18 @@ function EventDetail({
           </Link>
           <button onClick={onEdit} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">Edit</button>
           {meeting.status === "ended" ? (
-            <Link href={`/meetings/${meeting.room_code}/report`} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">View report</Link>
-          ) : null}
-          <button onClick={() => askEarn(`Prepare me for "${meeting.title}" and surface likely questions, risks, and next steps.`)} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
-            Prepare with Earn
-          </button>
+            <>
+              <Link href={`/meetings/${meeting.room_code}/report`} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">View report</Link>
+              {/* Follow-up belongs after the meeting — the ended state is exactly when it's owed. */}
+              <button onClick={() => runWithEarn(`Draft the follow-up for "${meeting.title}".`, { id: meeting.id, mode: "followup" })} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
+                Follow up with Earn
+              </button>
+            </>
+          ) : (
+            <button onClick={() => runWithEarn(`Prepare me for "${meeting.title}".`, { id: meeting.id, mode: "prep" })} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
+              Prepare with Earn
+            </button>
+          )}
         </div>
       </div>
     </div>
