@@ -12,7 +12,9 @@ import { MeetingCopilotConsole } from "@/app/(app)/meetings/MeetingCopilotConsol
 interface Peer { id: string; displayName: string; stream: MediaStream | null }
 interface TranscriptLine { id: string; speaker: string; text: string; ts: number; final: boolean }
 interface ChatMessage { id: string; from: string; displayName: string; text: string; ts: number }
-interface WaitingPeer { from: string; displayName: string }
+// `id` is the live_meeting_admissions row id (the host admits/denies by it);
+// `from` is the guest_key (the joiner's client id).
+interface WaitingPeer { id: string; from: string; displayName: string }
 
 type SignalMsg =
   | { type: "join"; from: string; displayName: string }
@@ -626,7 +628,7 @@ function WalkthroughPanel({
 
 function CopilotSidebar({
   transcript, notes, isUpdating, srStatus, participants, roomCode, meetingTitle,
-  chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, waitingPeers, onChatOpen,
+  chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatOpen,
   walkthroughStepIndex, walkthroughNudge, onWalkthroughStep, onWalkthroughNudgeDismiss,
 }: {
   transcript: TranscriptLine[]; notes: LiveNotesResult | null; isUpdating: boolean;
@@ -635,7 +637,7 @@ function CopilotSidebar({
   roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
   onSendChat: (text: string) => void; isHost: boolean;
   raisedHands: Set<string>; onKick: (id: string) => void;
-  onAdmit: (id: string) => void; onDeny: (id: string) => void;
+  onAdmit: (id: string) => void; onDeny: (id: string) => void; onAdmitAll: () => void;
   waitingPeers: WaitingPeer[]; onChatOpen: () => void;
   walkthroughStepIndex: number | null;
   walkthroughNudge: boolean;
@@ -797,12 +799,19 @@ function CopilotSidebar({
             {/* Waiting room (host only) */}
             {isHost && waitingPeers.length > 0 && (
               <div className="rounded-lg border border-[var(--gold-400)]/40 bg-[var(--gold-400)]/5 p-3 flex flex-col gap-2">
-                <p className="text-xs font-medium text-[var(--gold-400)] uppercase tracking-wide">Waiting to join</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-[var(--gold-400)] uppercase tracking-wide">
+                    Waiting to join{waitingPeers.length > 1 ? ` (${waitingPeers.length})` : ""}
+                  </p>
+                  {waitingPeers.length > 1 && (
+                    <button onClick={onAdmitAll} className="text-xs font-semibold text-[var(--status-success)] hover:underline">Admit all</button>
+                  )}
+                </div>
                 {waitingPeers.map((wp) => (
-                  <div key={wp.from} className="flex items-center gap-2">
+                  <div key={wp.id} className="flex items-center gap-2">
                     <span className="text-sm text-[var(--fg-primary)] flex-1 truncate">{wp.displayName}</span>
-                    <button onClick={() => onAdmit(wp.from)} className="text-xs font-medium text-[var(--status-success)] hover:underline">Admit</button>
-                    <button onClick={() => onDeny(wp.from)} className="text-xs font-medium text-[var(--status-danger)] hover:underline">Deny</button>
+                    <button onClick={() => onAdmit(wp.id)} className="text-xs font-medium text-[var(--status-success)] hover:underline">Admit</button>
+                    <button onClick={() => onDeny(wp.id)} className="text-xs font-medium text-[var(--status-danger)] hover:underline">Deny</button>
                   </div>
                 ))}
               </div>
@@ -1222,25 +1231,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       return;
     }
 
-    if (msg.type === "admit_request" && isHostRef.current) {
-      setWaitingPeers((prev) => prev.some((w) => w.from === msg.from) ? prev : [...prev, { from: msg.from, displayName: msg.displayName }]);
-    }
-
-    if (msg.type === "admit" && msg.target === myId) {
-      clearWaitingTimers();
-      setWaitingForAdmit(false);
-      setWaitingTimedOut(false);
-      setReady(true);
-      sendSignalRef.current({ type: "join", from: myId, displayName: localNameRef.current });
-    }
-
-    if (msg.type === "deny" && msg.target === myId) {
-      clearWaitingTimers();
-      setWaitingForAdmit(false);
-      channelRef.current?.unsubscribe();
-      localStreamRef.current?.getTracks().forEach((t) => t.stop());
-      router.push("/meetings");
-    }
+    // Waiting-room admission is now DB-backed (see the knock/admissions routes):
+    // a waiting guest never joins this signaling channel until admitted, so
+    // admit_request / admit / deny no longer travel over the WebRTC channel.
 
     if (msg.type === "walkthrough_step") {
       // The host sends -1 to signal "walkthrough ended"; map it back to null so
@@ -1298,63 +1291,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
 
-  const joinMeeting = useCallback(async () => {
-    setJoining(true);
-    const name = displayName.trim() || "Participant";
-    setLocalName(name);
-    localNameRef.current = name;
-
+  // The real join: acquire camera/mic, subscribe to the signaling channel, and
+  // announce ourselves. Called immediately for the host, and only AFTER the host
+  // admits for everyone else — so a waiting guest never opens a sending stream or
+  // touches the signaling channel until they're let in.
+  const enterRoom = useCallback(async (mId: string | null, name: string) => {
     try {
       const r = await fetch("/api/meetings/ice-servers");
       if (r.ok) { const { iceServers } = await r.json() as { iceServers: RTCIceServer[] }; iceConfigRef.current = { iceServers }; }
     } catch { /* keep fallback */ }
-
-    let mId: string | null = null;
-    let hostFlag = false;
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      // Org members resolve the meeting directly under RLS. Guests (and cross-org
-      // viewers) can't read live_meetings, so they fall back to the minimal
-      // public lookup by room code — which is what makes emailed invites joinable
-      // without an account.
-      const { data: existing } = await supabase
-        .from("live_meetings")
-        .select("id, status, host_id, title")
-        .eq("room_code", roomCode)
-        .maybeSingle();
-      const ex = existing as { id: string; status: string; host_id: string; title: string | null } | null;
-      if (ex) {
-        mId = ex.id;
-        if (ex.title) setMeetingTitle(ex.title);
-        if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
-        hostFlag = !!user && user.id === ex.host_id;
-      } else {
-        const pub = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
-        if (pub.ok) {
-          const d = await pub.json() as { id: string; title: string | null; status: string };
-          mId = d.id;
-          if (d.title) setMeetingTitle(d.title);
-          if (d.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
-        } else if (user) {
-          // Authenticated user opening a brand-new room by code → create it.
-          const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
-          if (res.ok) {
-            const d = await res.json() as { id: string; roomCode: string; hostId: string };
-            mId = d.id;
-            hostFlag = user.id === d.hostId;
-          }
-        }
-      }
-    } catch { /* proceed */ }
-
-    setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
 
     if (mId) {
       void (supabase.from("live_meetings") as any)
         .update({ started_at: new Date().toISOString() })
         .eq("id", mId)
         .is("started_at", null);
-
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         void supabase.from("live_meeting_participants").upsert(
@@ -1364,6 +1315,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
     }
 
+    // Release the local-only preview and acquire the real sending stream.
     previewStreamRef.current?.getTracks().forEach((t) => t.stop());
     previewStreamRef.current = null; setPreviewStream(null);
 
@@ -1374,23 +1326,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true,
       });
     } catch (err) {
-      const name = err instanceof Error ? err.name : "";
-      // A stale or now-unavailable device id (common with virtual cameras like
-      // OBS/EMEET that appear and disappear) makes the `exact` constraint throw
-      // OverconstrainedError — which would otherwise leave the user with a black
-      // tile. Retry once with unconstrained capture before giving up so the call
-      // still gets *a* camera + mic.
+      const errName = err instanceof Error ? err.name : "";
+      // Stale/unavailable exact device id (e.g. virtual cameras) → retry unconstrained.
       let recovered: MediaStream | null = null;
-      if ((name === "OverconstrainedError" || name === "NotFoundError") && (selectedCamId || selectedMicId)) {
+      if ((errName === "OverconstrainedError" || errName === "NotFoundError") && (selectedCamId || selectedMicId)) {
         try { recovered = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); }
         catch { recovered = null; }
       }
       if (recovered) {
         stream = recovered;
       } else {
-        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
           setMediaError("Camera and microphone access was denied. Click the camera icon in your browser's address bar to allow access, then rejoin.");
-        } else if (name === "NotFoundError") {
+        } else if (errName === "NotFoundError") {
           setMediaError("No camera or microphone found. Check that your devices are connected.");
         } else {
           setMediaError("Could not access camera/microphone. Check your device settings.");
@@ -1410,41 +1358,134 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // fires for CHANNEL_ERROR / TIMED_OUT / CLOSED and again on reconnect.
         if (status !== "SUBSCRIBED" || announcedRef.current) return;
         announcedRef.current = true;
-        if (hostFlag) {
-          sendSignal({ type: "join", from: myIdRef.current, displayName: name });
-        } else {
-          setWaitingForAdmit(true);
-          sendSignal({ type: "admit_request", from: myIdRef.current, displayName: name });
-        }
+        sendSignal({ type: "join", from: myIdRef.current, displayName: name });
       });
 
-    if (hostFlag) {
-      setReady(true);
-    } else {
-      // Non-host enters the waiting room
-      // 2-minute timeout
-      waitingTimerRef.current = setTimeout(() => {
-        setWaitingTimedOut(true);
-      }, 120_000);
+    clearWaitingTimers();
+    setWaitingForAdmit(false);
+    setWaitingTimedOut(false);
+    setReady(true);
+    setJoining(false);
+  }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers, selectedCamId, selectedMicId]);
 
-      // Poll every 10s for meeting ended. Uses the public lookup by room code so
-      // it works for guests too (who can't read live_meetings under RLS).
-      waitingPollRef.current = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
+  // Stable handle so the waiting-room poll can enter without re-creating itself.
+  const enterRoomRef = useRef(enterRoom);
+  useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
+
+  // ── joinMeeting ──────────────────────────────────────────────────────────
+  const joinMeeting = useCallback(async () => {
+    setJoining(true);
+    const name = displayName.trim() || "Participant";
+    setLocalName(name);
+    localNameRef.current = name;
+
+    // Resolve the meeting + whether we're the host.
+    let mId: string | null = null;
+    let hostFlag = false;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: existing } = await supabase
+        .from("live_meetings")
+        .select("id, status, host_id, title")
+        .eq("room_code", roomCode)
+        .maybeSingle();
+      const ex = existing as { id: string; status: string; host_id: string; title: string | null } | null;
+      if (ex) {
+        mId = ex.id;
+        if (ex.title) setMeetingTitle(ex.title);
+        if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
+        hostFlag = !!user && user.id === ex.host_id;
+      } else {
+        const pub = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
+        if (pub.ok) {
+          const d = await pub.json() as { id: string; title: string | null; status: string };
+          mId = d.id;
+          if (d.title) setMeetingTitle(d.title);
+          if (d.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
+        } else if (user) {
+          const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
           if (res.ok) {
-            const row = (await res.json()) as { status: string };
-            if (row.status === "ended") {
-              clearWaitingTimers();
-              router.push(`/meetings/${roomCode}/report`);
-            }
+            const d = await res.json() as { id: string; roomCode: string; hostId: string };
+            mId = d.id;
+            hostFlag = user.id === d.hostId;
           }
-        } catch { /* ignore */ }
-      }, 10_000);
+        }
+      }
+    } catch { /* proceed */ }
+
+    setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
+
+    // The host enters immediately; everyone else must be admitted first.
+    if (hostFlag) {
+      await enterRoom(mId, name);
+      return;
     }
 
+    // Non-host: knock (DB-backed) and wait. Camera/mic + signaling stay untouched
+    // until we're admitted, so an un-admitted guest never appears in the room.
+    const guestKey = myIdRef.current;
+    let status = "waiting";
+    try {
+      const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guestKey, displayName: name }),
+      });
+      if (res.ok) status = ((await res.json()) as { status?: string }).status ?? "waiting";
+    } catch { /* fall through to waiting */ }
+
+    if (status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
+    if (status === "denied") { router.push("/meetings"); return; }
+    if (status === "admitted") { await enterRoom(mId, name); return; }
+
+    // Still waiting — show the wait screen (keeps the local preview) and poll for
+    // the host's decision. Guests can't use Realtime, so we poll the knock route.
+    setWaitingForAdmit(true);
     setJoining(false);
-  }, [displayName, roomCode, supabase, handleSignal, sendSignal, clearWaitingTimers, router, selectedCamId, selectedMicId]);
+    waitingTimerRef.current = setTimeout(() => setWaitingTimedOut(true), 120_000);
+    waitingPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(guestKey)}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const row = (await res.json()) as { status: string };
+        if (row.status === "admitted") { clearWaitingTimers(); await enterRoomRef.current(mId, name); }
+        else if (row.status === "denied") { clearWaitingTimers(); router.push("/meetings"); }
+        else if (row.status === "ended") { clearWaitingTimers(); router.push(`/meetings/${roomCode}/report`); }
+      } catch { /* ignore */ }
+    }, 3000);
+  }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers]);
+
+  // ── Host: waiting-room admissions (DB-backed) ─────────────────────────────
+  // Load the pending knocks for this meeting and keep them live. Reads go under
+  // the org-read RLS policy; a per-meeting Realtime subscription refreshes the
+  // list the instant a guest knocks or a decision is written.
+  useEffect(() => {
+    if (!isHost || !ready || !meetingId) return;
+    let cancelled = false;
+
+    async function loadWaiting() {
+      const { data } = await (supabase as any)
+        .from("live_meeting_admissions")
+        .select("id, guest_key, display_name, status")
+        .eq("meeting_id", meetingId)
+        .eq("status", "waiting")
+        .order("created_at", { ascending: true });
+      if (cancelled) return;
+      const rows = (data ?? []) as Array<{ id: string; guest_key: string; display_name: string }>;
+      setWaitingPeers(rows.map((r) => ({ id: r.id, from: r.guest_key, displayName: r.display_name })));
+    }
+
+    void loadWaiting();
+    const channel = supabase
+      .channel(`admissions:${meetingId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "live_meeting_admissions", filter: `meeting_id=eq.${meetingId}` },
+        () => { void loadWaiting(); },
+      )
+      .subscribe();
+    return () => { cancelled = true; void supabase.removeChannel(channel); };
+  }, [isHost, ready, meetingId, supabase]);
 
   // Apply selected speaker on join
   useEffect(() => {
@@ -1774,15 +1815,35 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setPeers((prev) => { const next = new Map(prev); next.delete(peerId); return next; });
   }, [sendSignal]);
 
-  const admitPeer = useCallback((peerId: string) => {
-    sendSignal({ type: "admit", from: myIdRef.current, target: peerId });
-    setWaitingPeers((prev) => prev.filter((w) => w.from !== peerId));
-  }, [sendSignal]);
+  // Admit / deny write the decision through the host-only admissions route
+  // (service-role). The waiting guest's poll then picks up the new status and
+  // enters (or leaves). We optimistically drop the row locally; the realtime
+  // subscription reconciles the authoritative list.
+  const decideAdmission = useCallback(async (body: Record<string, unknown>) => {
+    if (!meetingId) return;
+    try {
+      await fetch(`/api/meetings/${meetingId}/admissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch { /* realtime will re-sync */ }
+  }, [meetingId]);
 
-  const denyPeer = useCallback((peerId: string) => {
-    sendSignal({ type: "deny", from: myIdRef.current, target: peerId });
-    setWaitingPeers((prev) => prev.filter((w) => w.from !== peerId));
-  }, [sendSignal]);
+  const admitPeer = useCallback((admissionId: string) => {
+    setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
+    void decideAdmission({ decision: "admit", admissionId });
+  }, [decideAdmission]);
+
+  const denyPeer = useCallback((admissionId: string) => {
+    setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
+    void decideAdmission({ decision: "deny", admissionId });
+  }, [decideAdmission]);
+
+  const admitAll = useCallback(() => {
+    setWaitingPeers([]);
+    void decideAdmission({ decision: "admit", all: true });
+  }, [decideAdmission]);
 
   const leaveMeeting = useCallback(() => {
     clearWaitingTimers();
@@ -1820,7 +1881,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   if (waitingForAdmit) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4 text-center">
-        <div className="w-full max-w-sm flex flex-col items-center gap-6">
+        <div className="w-full max-w-sm flex flex-col items-center gap-5">
+          {/* Meeting title + local camera preview while the guest waits. The
+              preview is the same local-only stream from the pre-join screen; no
+              media is sent to the room until the host admits them. */}
+          <div className="flex flex-col items-center gap-0.5">
+            <p className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Waiting room</p>
+            <h2 className="text-lg font-semibold text-[var(--fg-primary)]">{meetingTitle}</h2>
+          </div>
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-[var(--line)] shadow-sm">
+            {previewStream ? <PreviewVideo stream={previewStream} /> : (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--fg-muted)]">Camera off</div>
+            )}
+            <div className="absolute bottom-2 left-3 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
+              {(localName || displayName || "You")} (You)
+            </div>
+          </div>
           {waitingTimedOut ? (
             <>
               <div className="w-14 h-14 rounded-full bg-[var(--status-warning)]/15 flex items-center justify-center text-2xl">
@@ -2128,7 +2204,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               transcript={transcript} notes={notes} isUpdating={isUpdatingNotes}
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} onSendChat={sendChat} isHost={isHost}
-              raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer}
+              raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
               waitingPeers={waitingPeers}
               onChatOpen={() => { chatOpenRef.current = true; setChatUnread(0); }}
               walkthroughStepIndex={walkthroughStepIndex}
