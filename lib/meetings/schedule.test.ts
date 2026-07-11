@@ -4,6 +4,7 @@ import {
   durationMinutesFromTimes,
   localToIso,
   deriveMeetingStatus,
+  isPastMeeting,
   wasEditedAfterSave,
   findConflicts,
   nextExternalSyncStatus,
@@ -106,6 +107,35 @@ describe("deriveMeetingStatus", () => {
     expect(deriveMeetingStatus({ ...base, status: "waiting", followup_status: "done" }, later)).toBe("Completed");
     // …but an open follow-up on a passed-end meeting still needs follow-up.
     expect(deriveMeetingStatus({ ...base, status: "waiting", followup_status: "draft" }, later)).toBe("Follow-Up Needed");
+  });
+});
+
+describe("isPastMeeting", () => {
+  const now = new Date("2026-07-11T12:00:00.000Z").getTime();
+
+  it("keeps a future meeting OUT of Past (the reported bug)", () => {
+    expect(isPastMeeting({ status: "waiting", scheduled_at: "2026-07-12T10:00:00.000Z", duration_minutes: 60 }, now)).toBe(false);
+  });
+
+  it("keeps an in-progress meeting OUT of Past (end still ahead)", () => {
+    expect(isPastMeeting({ status: "active", scheduled_at: "2026-07-11T11:30:00.000Z", duration_minutes: 60 }, now)).toBe(false);
+  });
+
+  it("puts a meeting whose scheduled end has passed into Past", () => {
+    expect(isPastMeeting({ status: "waiting", scheduled_at: "2026-07-11T10:00:00.000Z", duration_minutes: 60 }, now)).toBe(true);
+  });
+
+  it("puts an ended room into Past regardless of time", () => {
+    expect(isPastMeeting({ status: "ended", scheduled_at: "2026-07-12T10:00:00.000Z", duration_minutes: 60 }, now)).toBe(true);
+  });
+
+  it("never lists a draft", () => {
+    expect(isPastMeeting({ status: "waiting", scheduled_at: "2026-07-10T10:00:00.000Z", duration_minutes: 60, is_draft: true }, now)).toBe(false);
+  });
+
+  it("treats an ad-hoc room with no scheduled time as Past only once ended", () => {
+    expect(isPastMeeting({ status: "active", scheduled_at: null }, now)).toBe(false);
+    expect(isPastMeeting({ status: "ended", scheduled_at: null }, now)).toBe(true);
   });
 });
 
