@@ -25,6 +25,26 @@ async function resolveMeeting(code: string) {
   return { supabase, meeting: data as { id: string; organization_id: string | null; status: string } | null };
 }
 
+// Teammate check: is the (signed-in) caller a member of the meeting's org? If so
+// they skip the waiting room — only external guests wait. Membership is read with
+// the service role (or the request client in local dev) to avoid RLS surprises,
+// keyed by the user resolved from the request's auth cookies.
+async function callerIsOrgMember(orgId: string | null, svc: SupabaseLike): Promise<boolean> {
+  if (!orgId) return false;
+  const authed = await createServerClient();
+  const { data: { user } } = await authed.auth.getUser();
+  if (!user) return false;
+  const { data } = await (svc as SupabaseLike)
+    .from("organization_members")
+    .select("organization_id")
+    .eq("principal_id", user.id)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  return !!data;
+}
+
+type SupabaseLike = { from: (table: string) => any };
+
 // POST — record (or look up) this guest's knock. Returns the current status.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
   const { roomCode } = await params;
@@ -40,7 +60,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (meeting.status === "ended") return NextResponse.json({ status: "ended" });
 
-  // Return the existing decision rather than clobbering it.
+  // Org teammates are auto-admitted; only external guests actually wait.
+  const isMember = await callerIsOrgMember(meeting.organization_id, supabase);
+
+  // Return the existing decision rather than clobbering it — but promote a
+  // still-waiting teammate (e.g. if their client knocked before we recognized
+  // them) so the host never has to admit their own team.
   const { data: existing } = await (supabase as any)
     .from("live_meeting_admissions")
     .select("id, status")
@@ -48,6 +73,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     .eq("guest_key", guestKey)
     .maybeSingle();
   if (existing) {
+    if (isMember && existing.status === "waiting") {
+      await (supabase as any)
+        .from("live_meeting_admissions")
+        .update({ status: "admitted", decided_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      return NextResponse.json({ admissionId: existing.id as string, status: "admitted" });
+    }
     return NextResponse.json({ admissionId: existing.id as string, status: existing.status as string });
   }
 
@@ -58,7 +90,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
       organization_id: meeting.organization_id,
       guest_key: guestKey,
       display_name: displayName,
-      status: "waiting",
+      status: isMember ? "admitted" : "waiting",
+      ...(isMember ? { decided_at: new Date().toISOString() } : {}),
     })
     .select("id, status")
     .maybeSingle();
