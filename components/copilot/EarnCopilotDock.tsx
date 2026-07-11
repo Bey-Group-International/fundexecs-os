@@ -40,6 +40,11 @@ const TIER_TONE: Record<number, string> = {
 
 const STORE_KEY = "earn-copilot-thread";
 
+// A reference the meetings surface passes to open Earn with server-side context.
+// Only the id + mode travel from the browser; the sensitive prep/follow-up
+// context is gathered and injected on the server (see /api/chat).
+type MeetingChatContext = { id: string; mode: "prep" | "followup" };
+
 // One turn in the in-dock conversation: the operator's message, or Earn's
 // routed plan in reply.
 type Turn =
@@ -165,7 +170,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // Conversational (ungated) answer: stream tokens from /api/chat straight into
   // the dock — the same seamless chat the workspace composer gets, on every
   // page. Verified Apollo contacts arrive appended in the same stream.
-  async function askChat(t: string) {
+  async function askChat(t: string, meetingContext?: MeetingChatContext) {
     const prior = buildPrior();
     setThread((prev) => [...prev, { role: "user", text: t }, { role: "earn", answer: "", streaming: true }]);
     setBody("");
@@ -174,7 +179,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: t, session_id: sessionId ?? undefined, prior }),
+        body: JSON.stringify({ body: t, session_id: sessionId ?? undefined, prior, meeting_context: meetingContext }),
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
       const reader = res.body.getReader();
@@ -197,13 +202,17 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // Run any prompt through Earn. Informational questions stream back a
   // conversational answer (ungated); work requests are planned into a gated
   // workflow. The intent classifier decides, so the same box does both.
-  function ask(text: string) {
+  //
+  // A meetingContext (from the meetings "Prepare"/"Follow up" buttons) always
+  // streams as chat: the visible message is a clean one-liner and the rich,
+  // sensitive context is injected server-side, never sent from the browser.
+  function ask(text: string, meetingContext?: MeetingChatContext) {
     const t = text.trim();
     if (!t || pending || chatting) return;
     setError(null);
     setLastAsk(t);
-    if (classifyIntent(t) === "chat") {
-      void askChat(t);
+    if (meetingContext || classifyIntent(t) === "chat") {
+      void askChat(t, meetingContext);
       return;
     }
     setThread((prev) => [...prev, { role: "user", text: t }]);
@@ -269,18 +278,21 @@ export function EarnCopilotDock({ name }: { name: string }) {
       }
     }
     function onExecContext(e: Event) {
-      const detail = (e as CustomEvent<{ execName?: string; prompt?: string; autoSend?: boolean }>).detail;
+      const detail = (e as CustomEvent<{ execName?: string; prompt?: string; autoSend?: boolean; chatContext?: MeetingChatContext }>).detail;
       setOpen(true);
       // Some senders open Earn with no pre-filled prompt (e.g. the in-office
       // "Ask Earn" whiteboard dispatches an empty detail). Never store a
       // non-string body — `body.trim()` in render would otherwise crash.
       const prompt = detail?.prompt ?? "";
+      const chatContext = detail?.chatContext;
       setBody(prompt);
       // Delegation from the office floor asks Earn to route the task straight
       // away (autoSend). Fire it through the latest `ask` via the ref so there's
       // no stale-closure risk; the small delay lets the dock finish opening.
+      // A chatContext (meeting prep/follow-up) carries the server-side context
+      // reference so only a clean one-liner is ever shown or stored client-side.
       if (detail?.autoSend && prompt.trim()) {
-        setTimeout(() => askRef.current(prompt), 80);
+        setTimeout(() => askRef.current(prompt, chatContext), 80);
       } else {
         setTimeout(() => inputRef.current?.focus(), 60);
       }

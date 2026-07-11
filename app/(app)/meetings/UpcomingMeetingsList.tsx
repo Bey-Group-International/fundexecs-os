@@ -212,37 +212,28 @@ export function UpcomingMeetingsList({
     setBusy(null);
   }
 
-  // Open the Earn dock with a prompt, optionally sending it immediately.
-  function openEarn(prompt: string, autoSend = true) {
-    window.dispatchEvent(new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend } }));
+  // Open the Earn dock with a clean, user-facing one-liner and run it. The rich
+  // institutional context (deal financials, lead contacts, saved notes) is NOT
+  // sent from here — only the meeting id + mode travel in `chatContext`, and the
+  // server gathers and injects the sensitive context into the model call. Nothing
+  // confidential is ever shown in the composer, persisted client-side, or exposed
+  // over the network to the browser.
+  function runWithEarn(prompt: string, chatContext: { id: string; mode: "prep" | "followup" }) {
+    window.dispatchEvent(
+      new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend: true, chatContext } }),
+    );
   }
 
-  // "Prepare with Earn": fetch a full-context institutional prep prompt (meeting +
-  // linked deal/fund) from the server and run it in Earn. Falls back to a generic
-  // prompt if the context can't be gathered so the button always does something.
-  async function prepareWithEarn(meeting: UpcomingMeeting) {
-    const fallback = `Prepare me for "${meeting.title}" and surface likely questions, risks, and next steps.`;
-    try {
-      const res = await fetch(`/api/meetings/${meeting.id}/prep`, { cache: "no-store" });
-      const prompt = res.ok ? ((await res.json()) as { prompt?: string }).prompt : null;
-      openEarn(prompt && prompt.trim() ? prompt : fallback);
-    } catch {
-      openEarn(fallback);
-    }
+  // "Prepare with Earn": Earn opens and streams a full institutional prep
+  // briefing; the operator sees only this clean line as their message.
+  function prepareWithEarn(meeting: UpcomingMeeting) {
+    runWithEarn(`Prepare me for "${meeting.title}".`, { id: meeting.id, mode: "prep" });
   }
 
-  // "Follow up": fetch a full-context institutional follow-up prompt (meeting +
-  // linked deal/fund + any captured meeting report) from the server and run it
-  // in Earn. Falls back to a generic prompt so the button always does something.
-  async function followUpWithEarn(meeting: UpcomingMeeting) {
-    const fallback = `Draft a follow-up for "${meeting.title}" with action items and approval-sensitive language.`;
-    try {
-      const res = await fetch(`/api/meetings/${meeting.id}/followup`, { cache: "no-store" });
-      const prompt = res.ok ? ((await res.json()) as { prompt?: string }).prompt : null;
-      openEarn(prompt && prompt.trim() ? prompt : fallback);
-    } catch {
-      openEarn(fallback);
-    }
+  // "Follow up": Earn opens and streams a full institutional follow-up (recap,
+  // owners/dates, approval-sensitive language); the operator sees only this line.
+  function followUpWithEarn(meeting: UpcomingMeeting) {
+    runWithEarn(`Draft the follow-up for "${meeting.title}".`, { id: meeting.id, mode: "followup" });
   }
 
   const editingMeeting = editingId ? meetings.find((m) => m.id === editingId) : null;
@@ -399,8 +390,8 @@ export function UpcomingMeetingsList({
                   <ActionButton onClick={() => void retrySync(meeting.id)}>Retry sync</ActionButton>
                 ) : null}
                 <ActionButton danger onClick={() => setDeleteId(meeting.id)}>Delete</ActionButton>
-                <ActionButton onClick={() => void prepareWithEarn(meeting)}>Prepare with Earn</ActionButton>
-                <ActionButton onClick={() => void followUpWithEarn(meeting)}>Follow up</ActionButton>
+                <ActionButton onClick={() => prepareWithEarn(meeting)}>Prepare with Earn</ActionButton>
+                <ActionButton onClick={() => followUpWithEarn(meeting)}>Follow up</ActionButton>
               </div>
 
               {detailsMeeting?.id === meeting.id ? <MeetingDetails meeting={meeting} /> : null}
