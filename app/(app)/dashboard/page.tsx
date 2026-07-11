@@ -9,9 +9,7 @@ import { SystemsOfRecord } from "@/components/dashboard/SystemsOfRecord";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
 import { StaleDealAlerts } from "@/components/dashboard/StaleDealAlerts";
-import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 import { FirstMissionCoach } from "@/components/dashboard/FirstMissionCoach";
-import { dashboardWorkspaces } from "@/lib/dashboard/config";
 import { buildCapitalMap } from "@/lib/capital-map";
 import { getBuildReadiness } from "@/lib/build-readiness";
 import {
@@ -282,7 +280,7 @@ export default async function DashboardPage() {
             <Logo as="span" variant="coin" />
             <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">FundExecs OS</span>
             <span aria-hidden className="text-fg-muted/50">/</span>
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">Command Center</span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">Dashboard</span>
           </div>
           <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-status-success/30 bg-status-success/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-status-success">
             <span className="relative flex h-1.5 w-1.5">
@@ -392,16 +390,6 @@ export default async function DashboardPage() {
           <span className="text-lg text-fg-muted">%</span>
         </span>
       </Link>
-
-      {/* Operating desks — the focused sub-dashboards, kept as navigation. */}
-      <section className="mt-8">
-        <SectionHeading>Operating desks</SectionHeading>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {dashboardWorkspaces.map((workspace) => (
-            <WorkspaceCard key={workspace.key} workspace={workspace} />
-          ))}
-        </div>
-      </section>
 
       {/* UX-01: First mission coaching — fires once when the org has no records. */}
       <FirstMissionCoach isFirstVisit={isFirstVisit} />
