@@ -4,8 +4,8 @@ import { AccessGate } from "./AccessGate";
 // "Explore Workspace" reveal. A faithful static mock of the real command surface
 // (components/Workspace.tsx): the objective bar, live task rows with agent
 // progress, a pending approval gate, and the agent rail. It renders sample data
-// only — no live tasks — and fades into the AccessGate so a visitor sees exactly
-// what they're being invited into without reaching the authed workspace.
+// only — no live tasks — and an AccessGate CTA below invites the visitor into
+// their own authed workspace.
 const SAMPLE_TASKS = [
   {
     title: "Underwrite the Maple Street acquisition",
@@ -55,11 +55,8 @@ export function WorkspacePreview() {
         </p>
       </div>
 
-      <div className="relative mt-10">
-        <div
-          aria-hidden
-          className="pointer-events-none select-none [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"
-        >
+      <div className="mt-10">
+        <div>
           <div className="fx-glass mx-auto max-w-4xl p-4 sm:p-6">
             <div className="grid gap-6 lg:grid-cols-[1fr_240px]">
               {/* Command column */}
@@ -162,7 +159,7 @@ export function WorkspacePreview() {
         </div>
 
         <AccessGate
-          title="Step into the live workspace"
+          title="Open your live workspace"
           subtitle="Sign in or request access to open your own command surface — real tasks, real approvals, your mandate."
         />
       </div>

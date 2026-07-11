@@ -3,10 +3,10 @@ import { GradientText } from "./GradientText";
 import { AccessGate } from "./AccessGate";
 
 // "Meet Earn" reveal. Earn (the associate/orchestrator) is featured as the
-// executive who runs the OS, with the full native workforce spread beneath as a
-// locked roster. Data is pulled live from lib/agents.ts so the card never drifts
-// from the real seed catalog. The roster fades into the AccessGate scrim, making
-// the section a preview a visitor can see but not enter without an account.
+// executive who runs the OS, with the full native workforce spread beneath as an
+// open roster. Data is pulled live from lib/agents.ts so the card never drifts
+// from the real seed catalog. An AccessGate CTA below the roster is the
+// invitation into the product.
 const EARN = AGENTS.find((a) => a.key === "associate");
 const TEAM = AGENTS.filter((a) => a.key !== "associate");
 
@@ -65,12 +65,9 @@ export function MeetEarnTeam() {
         </div>
       )}
 
-      {/* The locked roster */}
-      <div className="relative mt-6">
-        <div
-          aria-hidden
-          className="pointer-events-none select-none [mask-image:linear-gradient(to_bottom,black_55%,transparent)]"
-        >
+      {/* The full roster */}
+      <div className="mt-6">
+        <div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {TEAM.map((agent) => (
               <div key={agent.key} className="fx-card p-4">
@@ -101,7 +98,7 @@ export function MeetEarnTeam() {
         </div>
 
         <AccessGate
-          title="Meet the full executive team"
+          title="Put the team to work"
           subtitle="Sign in or request access to brief Earn, assign the workforce, and put the roster to work on your mandate."
         />
       </div>
