@@ -23,7 +23,7 @@ function rowBuilder(data: unknown) {
   return b;
 }
 
-function wire(tables: { live_meetings?: unknown; deals?: unknown; funds?: unknown }) {
+function wire(tables: { live_meetings?: unknown; deals?: unknown; funds?: unknown; principals?: unknown }) {
   from.mockImplementation((table: string) => rowBuilder((tables as Record<string, unknown>)[table] ?? null));
 }
 
@@ -47,6 +47,34 @@ describe("GET /api/meetings/[id]/prep", () => {
     expect(prompt).toContain("Atlas Logistics");
     expect(prompt).toContain("Fund III");
     expect(prompt).toContain("Jane");
+  });
+
+  it("enriches with the deal's lead principal when set", async () => {
+    wire({
+      live_meetings: { title: "Deal review", deal_id: "d1", related_fund_id: null, attendees: null },
+      deals: { name: "Atlas Logistics", fund_id: "f1", lead_principal: "p1" },
+      funds: { name: "Fund III" },
+      principals: { full_name: "Maria Chen", title: "managing_director", email: "maria@fundexecs.com" },
+    });
+    const res = await GET(req(), params);
+    expect(res.status).toBe(200);
+    const { prompt } = await res.json();
+    expect(prompt).toContain("DEAL LEAD");
+    expect(prompt).toContain("Maria Chen");
+    expect(prompt).toContain("Managing Director");
+    expect(prompt).toContain("maria@fundexecs.com");
+  });
+
+  it("omits the deal lead when the deal has no lead principal", async () => {
+    wire({
+      live_meetings: { title: "Deal review", deal_id: "d1", related_fund_id: null, attendees: null },
+      deals: { name: "Atlas Logistics", fund_id: "f1", lead_principal: null },
+      funds: { name: "Fund III" },
+    });
+    const res = await GET(req(), params);
+    const { prompt } = await res.json();
+    expect(prompt).toContain("Atlas Logistics");
+    expect(prompt).not.toContain("DEAL LEAD");
   });
 
   it("falls back to the deal's fund when the meeting has no fund pointer", async () => {

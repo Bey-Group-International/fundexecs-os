@@ -212,10 +212,6 @@ export function UpcomingMeetingsList({
     setBusy(null);
   }
 
-  function askEarn(prompt: string) {
-    window.dispatchEvent(new CustomEvent("earn:set-composer-prompt", { detail: { prompt } }));
-  }
-
   // Open the Earn dock with a prompt, optionally sending it immediately.
   function openEarn(prompt: string, autoSend = true) {
     window.dispatchEvent(new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend } }));
@@ -228,6 +224,20 @@ export function UpcomingMeetingsList({
     const fallback = `Prepare me for "${meeting.title}" and surface likely questions, risks, and next steps.`;
     try {
       const res = await fetch(`/api/meetings/${meeting.id}/prep`, { cache: "no-store" });
+      const prompt = res.ok ? ((await res.json()) as { prompt?: string }).prompt : null;
+      openEarn(prompt && prompt.trim() ? prompt : fallback);
+    } catch {
+      openEarn(fallback);
+    }
+  }
+
+  // "Follow up": fetch a full-context institutional follow-up prompt (meeting +
+  // linked deal/fund + any captured meeting report) from the server and run it
+  // in Earn. Falls back to a generic prompt so the button always does something.
+  async function followUpWithEarn(meeting: UpcomingMeeting) {
+    const fallback = `Draft a follow-up for "${meeting.title}" with action items and approval-sensitive language.`;
+    try {
+      const res = await fetch(`/api/meetings/${meeting.id}/followup`, { cache: "no-store" });
       const prompt = res.ok ? ((await res.json()) as { prompt?: string }).prompt : null;
       openEarn(prompt && prompt.trim() ? prompt : fallback);
     } catch {
@@ -390,7 +400,7 @@ export function UpcomingMeetingsList({
                 ) : null}
                 <ActionButton danger onClick={() => setDeleteId(meeting.id)}>Delete</ActionButton>
                 <ActionButton onClick={() => void prepareWithEarn(meeting)}>Prepare with Earn</ActionButton>
-                <ActionButton onClick={() => askEarn(`Draft a follow-up for "${meeting.title}" with action items and approval-sensitive language.`)}>Follow up</ActionButton>
+                <ActionButton onClick={() => void followUpWithEarn(meeting)}>Follow up</ActionButton>
               </div>
 
               {detailsMeeting?.id === meeting.id ? <MeetingDetails meeting={meeting} /> : null}
