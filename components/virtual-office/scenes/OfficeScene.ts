@@ -37,6 +37,7 @@ import { agentAvatarSpec, remoteAvatarSpec, vivify } from "../avatar/avatarPalet
 import { pantomimeForAgent } from "@/lib/office/characterSheet";
 import { areaAt, type ScriptedArea } from "@/lib/office/scriptedAreas";
 import { loadScriptedAreas, AREA_STORE_EVENT } from "@/lib/office/areaStore";
+import { FURNITURE_STORE_EVENT } from "@/lib/office/furnitureStore";
 import { loadPrivateRooms, ROOM_PRIVACY_EVENT } from "@/lib/office/roomPrivacy";
 import { loadClaimedDesk, claimDesk, seatKey, DESK_CLAIM_EVENT } from "@/lib/office/deskClaim";
 import { userAvatarSpec, parseUserAvatar, DEFAULT_USER_AVATAR, type UserAvatar } from "@/lib/office/userAvatar";
@@ -254,6 +255,7 @@ export class OfficeScene extends Phaser.Scene {
   // Floor graphics/labels for the areas, tracked so a live edit can rebuild them.
   private scriptedAreaMarkers: Phaser.GameObjects.GameObject[] = [];
   private _onAreasChanged?: () => void;
+  private _onFurnitureChanged?: () => void;
 
   // Interactive objects (press-X hotspots)
   private interactives: Array<{ obj: InteractiveObject; wx: number; wy: number; marker: Phaser.GameObjects.Text }> = [];
@@ -472,6 +474,8 @@ export class OfficeScene extends Phaser.Scene {
     // window; rebuild the areas + markers in place so changes show immediately.
     this._onAreasChanged = () => this._rebuildScriptedAreas();
     window.addEventListener(AREA_STORE_EVENT, this._onAreasChanged);
+    this._onFurnitureChanged = () => this._rebuildFurniture();
+    window.addEventListener(FURNITURE_STORE_EVENT, this._onFurnitureChanged);
     // Live marketplace stalls — React pushes public listings; each becomes a
     // signboard + press-X hotspot on a stall in the Marketplace hall.
     this.game.events.on("office:marketplace-listings", this._setMarketplaceStalls, this);
@@ -674,6 +678,8 @@ export class OfficeScene extends Phaser.Scene {
     this.game.events.off("program:approval-gate");
     if (this._onAreasChanged) window.removeEventListener(AREA_STORE_EVENT, this._onAreasChanged);
     this._onAreasChanged = undefined;
+    if (this._onFurnitureChanged) window.removeEventListener(FURNITURE_STORE_EVENT, this._onFurnitureChanged);
+    this._onFurnitureChanged = undefined;
     if (this._onRoomPrivacyChange) window.removeEventListener(ROOM_PRIVACY_EVENT, this._onRoomPrivacyChange);
     this._onRoomPrivacyChange = undefined;
     for (const m of this.scriptedAreaMarkers) m.destroy();
@@ -2384,6 +2390,12 @@ export class OfficeScene extends Phaser.Scene {
    * Reload the persisted areas and redraw their markers in place — invoked when
    * the map editor saves a change, so the floor reflects edits without a reload.
    */
+  /** Re-render all furniture (built-in + operator-placed) when the store changes. */
+  private _rebuildFurniture() {
+    for (const piece of this.furniture) piece.gfx.destroy();
+    this.furniture = createFurniture(this);
+  }
+
   private _rebuildScriptedAreas() {
     for (const m of this.scriptedAreaMarkers) m.destroy();
     this.scriptedAreaMarkers = [];
