@@ -5,6 +5,8 @@ import { GradientText } from "@/components/marketing/GradientText";
 import { SpinBorderButton } from "@/components/marketing/SpinBorderButton";
 import { StatCounter } from "@/components/marketing/StatCounter";
 import { FaqAccordion } from "@/components/marketing/FaqAccordion";
+import { MeetEarnTeam } from "@/components/marketing/MeetEarnTeam";
+import { WorkspacePreview } from "@/components/marketing/WorkspacePreview";
 
 const OPERATING_LOOP = [
   {
@@ -108,11 +110,11 @@ export default async function LandingPage(
             relationships, and executes transactions.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <SpinBorderButton href="/login?mode=signup">
+            <SpinBorderButton href="#meet-earn">
               Meet Earn
             </SpinBorderButton>
             <Link
-              href="#operating-model"
+              href="#workspace-preview"
               className="rounded-md border border-line px-5 py-2.5 text-sm text-fg-secondary transition hover:bg-surface-2"
             >
               Explore Workspace
@@ -158,6 +160,16 @@ export default async function LandingPage(
           </blockquote>
         </div>
       </section>
+
+      <div className="border-t border-line" />
+
+      <MeetEarnTeam />
+
+      <div className="border-t border-line" />
+
+      <WorkspacePreview />
+
+      <div className="border-t border-line" />
 
       <section id="operating-model" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 scroll-mt-20">
         <div className="max-w-2xl">
@@ -216,9 +228,9 @@ export default async function LandingPage(
           with one autonomous execution layer.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <SpinBorderButton href="/login?mode=signup">Meet Earn</SpinBorderButton>
+          <SpinBorderButton href="#meet-earn">Meet Earn</SpinBorderButton>
           <Link
-            href="#operating-model"
+            href="#workspace-preview"
             className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
           >
             Explore Workspace
