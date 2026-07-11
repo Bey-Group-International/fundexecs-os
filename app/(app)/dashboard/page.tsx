@@ -115,14 +115,16 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
         Capital &amp; LPs
       </SectionHeading>
 
-      <div className="grid grid-cols-3 gap-2.5">
-        <MiniStat label="Committed" value={compactUsd(data.committed)} />
-        <MiniStat label="Called" value={compactUsd(data.called)} />
-        <MiniStat label="Distributed" value={compactUsd(data.distributed)} />
+      {/* Capital deployment — how committed capital has been called and returned.
+          The committed / called headline dollars live in the KPI band above; this
+          panel shows deployment and the LP pipeline, not the same totals again. */}
+      <div className="flex items-baseline justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Capital deployed</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
+          {Math.round(calledPct)}% called · {Math.round(distPct)}% returned
+        </span>
       </div>
-
-      {/* Called / distributed against committed — a single capital-progress bar. */}
-      <div className="relative mt-4 h-2 overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
+      <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-500 to-gold-300 shadow-[0_0_10px_rgba(212,175,106,0.5)] transition-[width] duration-500"
           style={{ width: `${calledPct}%` }}
@@ -132,24 +134,29 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
           style={{ width: `${distPct}%` }}
         />
       </div>
-      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-        {data.dpi != null ? `${data.dpi.toFixed(2)}× DPI` : "DPI —"} · {data.investorCount} investor
-        {data.investorCount === 1 ? "" : "s"} · {data.fundCount} fund{data.fundCount === 1 ? "" : "s"}
-      </p>
 
-      {data.recentEvents.length > 0 ? (
-        <div className="mt-4 border-t border-line/60 pt-3">
-          <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted/70">Recent capital events</p>
+      {/* Figures the KPI band does not carry: returned capital, DPI, and LP counts. */}
+      <div className="mt-4 grid grid-cols-3 gap-2.5">
+        <MiniStat label="Distributed" value={compactUsd(data.distributed)} />
+        <MiniStat label="DPI" value={data.dpi != null ? `${data.dpi.toFixed(2)}×` : "—"} />
+        <MiniStat label="Investors" value={String(data.investorCount)} sub={`${data.fundCount} fund${data.fundCount === 1 ? "" : "s"}`} />
+      </div>
+
+      <div className="mt-4 border-t border-line/60 pt-3">
+        <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted/70">LP pipeline by stage</p>
+        {data.byStage.length === 0 ? (
+          <p className="text-sm text-fg-muted">No investors in the pipeline yet.</p>
+        ) : (
           <div className="flex flex-col gap-1.5">
-            {data.recentEvents.slice(0, 4).map((e) => (
-              <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate capitalize text-fg-secondary">{e.type.replace(/_/g, " ")}</span>
-                <span className="shrink-0 font-mono text-xs text-fg-primary">{compactUsd(e.amount)}</span>
+            {data.byStage.slice(0, 5).map((s) => (
+              <div key={s.stage} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate capitalize text-fg-secondary">{s.stage.replace(/_/g, " ")}</span>
+                <span className="shrink-0 font-mono text-xs text-fg-primary">{s.count}</span>
               </div>
             ))}
           </div>
-        </div>
-      ) : null}
+        )}
+      </div>
     </div>
   );
 }
@@ -167,28 +174,31 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
         Deals &amp; Portfolio
       </SectionHeading>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        <MiniStat label="Pipeline value" value={compactUsd(data.pipelineValue)} sub={`${data.dealCount} deal${data.dealCount === 1 ? "" : "s"}`} />
-        <MiniStat label="Portfolio NAV" value={compactUsd(data.portfolioNav)} sub={`${data.assetCount} asset${data.assetCount === 1 ? "" : "s"}`} />
+      {/* Deal funnel composition — the shape of the pipeline by stage. Pipeline
+          value and portfolio NAV are headline figures in the KPI band above, so
+          this panel shows the funnel and diligence posture, not the totals again. */}
+      <div className="flex items-baseline justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deal funnel</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
+          {data.dealCount} deal{data.dealCount === 1 ? "" : "s"} · {data.assetCount} asset{data.assetCount === 1 ? "" : "s"}
+        </span>
       </div>
-
-      {/* Pipeline shape bar + per-stage counts. */}
-      {data.dealCount > 0 ? (
-        <div className="mt-4 flex h-1.5 overflow-hidden rounded-full bg-surface-3/60">
-          {data.byStage.map(({ stage, count }) => {
-            const pct = (count / data.dealCount) * 100;
-            if (pct === 0) return null;
-            return (
-              <div
-                key={stage}
-                className="h-full transition-[width] duration-700"
-                style={{ width: `${pct}%`, backgroundColor: STAGE_COLORS[stage] }}
-                title={`${stage.replace("_", " ")}: ${count}`}
-              />
-            );
-          })}
-        </div>
-      ) : null}
+      <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-surface-3/60">
+        {data.dealCount > 0
+          ? data.byStage.map(({ stage, count }) => {
+              const pct = (count / data.dealCount) * 100;
+              if (pct === 0) return null;
+              return (
+                <div
+                  key={stage}
+                  className="h-full transition-[width] duration-700"
+                  style={{ width: `${pct}%`, backgroundColor: STAGE_COLORS[stage] }}
+                  title={`${stage.replace("_", " ")}: ${count}`}
+                />
+              );
+            })
+          : null}
+      </div>
       <div className="mt-3 grid grid-cols-5 gap-1.5">
         {data.byStage.map(({ stage, count }) => {
           const color = STAGE_COLORS[stage] ?? "#38bdf8";
@@ -207,23 +217,9 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
           );
         })}
       </div>
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <p className="mt-3 border-t border-line/60 pt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
         {data.diligenceOpen} diligence open · {data.icRecent} recent IC decision{data.icRecent === 1 ? "" : "s"}
       </p>
-
-      {data.recentMarks.length > 0 ? (
-        <div className="mt-4 border-t border-line/60 pt-3">
-          <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted/70">Latest valuation marks</p>
-          <div className="flex flex-col gap-1.5">
-            {data.recentMarks.slice(0, 4).map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate text-fg-secondary">{m.assetName}</span>
-                <span className="shrink-0 font-mono text-xs text-fg-primary">{compactUsd(m.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
