@@ -239,6 +239,25 @@ export function deriveMeetingStatus(
   return "Scheduled";
 }
 
+/**
+ * Whether a meeting belongs in the "Past" list: it has ended, OR its scheduled
+ * end time is already in the past. Future / in-progress meetings and drafts are
+ * NOT past — this mirrors the Upcoming partition so a meeting lands in exactly
+ * one list (an ad-hoc room with no scheduled time is only "past" once ended).
+ */
+export function isPastMeeting(
+  meeting: Pick<ScheduledMeetingShape, "status" | "scheduled_at" | "duration_minutes"> & { is_draft?: boolean | null },
+  now: number = Date.now(),
+): boolean {
+  if (meeting.is_draft) return false;
+  if (meeting.status === "ended") return true;
+  if (meeting.scheduled_at) {
+    const end = new Date(meeting.scheduled_at).getTime() + (meeting.duration_minutes ?? 60) * 60_000;
+    return end < now;
+  }
+  return false;
+}
+
 /** True when updated_at is meaningfully after locked_at (a deliberate edit). */
 export function wasEditedAfterSave(meeting: ScheduledMeetingShape): boolean {
   if (!meeting.locked_at || !meeting.updated_at) return false;

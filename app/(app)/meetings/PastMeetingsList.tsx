@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { isPastMeeting } from "@/lib/meetings/schedule";
 import { nextChannelName } from "./hooks";
 
 export interface PastMeeting {
@@ -16,6 +17,7 @@ export interface PastMeeting {
   ended_at: string | null;
   scheduled_at: string | null;
   duration_minutes: number | null;
+  is_draft?: boolean | null;
 }
 
 type LiveMeeting = PastMeeting;
@@ -117,11 +119,11 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
     async function refresh() {
       const { data: hosted } = await supabase
         .from("live_meetings")
-        .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes")
+        .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
         .eq("host_id", userId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(50);
 
       const { data: participantRows } = await supabase
         .from("live_meeting_participants")
@@ -136,16 +138,17 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
         if (nonHostedIds.length > 0) {
           const { data } = await supabase
             .from("live_meetings")
-            .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes")
+            .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
             .in("id", nonHostedIds)
             .is("deleted_at", null)
             .order("created_at", { ascending: false })
-            .limit(10);
+            .limit(50);
           participated = (data ?? []) as LiveMeeting[];
         }
       }
 
-      const all = [...(hosted ?? []), ...participated] as LiveMeeting[];
+      const now = Date.now();
+      const all = ([...(hosted ?? []), ...participated] as LiveMeeting[]).filter((m) => isPastMeeting(m, now));
       all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setMeetings(all.slice(0, 10));
     }
