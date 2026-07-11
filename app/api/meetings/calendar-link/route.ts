@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, createMeeting } from "@/lib/meetings/service";
+import { SITE_URL } from "@/lib/site";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -40,7 +41,9 @@ export async function GET(req: NextRequest) {
 
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
-  const origin = req.nextUrl.origin;
+  // Canonical app URL so the emailed / calendar join links resolve for
+  // recipients regardless of the proxy/preview host that served this request.
+  const origin = SITE_URL;
   const supabase = await createServerClient();
   const meeting = await createMeeting(supabase, {
     title,

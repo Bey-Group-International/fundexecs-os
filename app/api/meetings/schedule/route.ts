@@ -71,7 +71,10 @@ export async function POST(req: NextRequest) {
     const startTime = body.startTime || "09:00";
     const endTime = body.endTime || "10:00";
     const scheduledAt = localToIso(date, startTime, timezone);
-    const durationMinutes = Math.max(15, durationMinutesFromTimes(startTime, endTime) || 60);
+    // Clamp to the same [15, 480] range the persistence layer (cleanDuration)
+    // enforces, so conflict detection runs against the exact window that gets
+    // stored — otherwise the 409 check and the saved row could disagree.
+    const durationMinutes = Math.min(480, Math.max(15, durationMinutesFromTimes(startTime, endTime) || 60));
     const endIso = new Date(new Date(scheduledAt).getTime() + durationMinutes * 60_000).toISOString();
 
     const attendees = Array.isArray(body.attendees)

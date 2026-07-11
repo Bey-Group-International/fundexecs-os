@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, createMeeting } from "@/lib/meetings/service";
+import { SITE_URL } from "@/lib/site";
 
 export const runtime = "nodejs";
 
@@ -44,8 +45,10 @@ export async function POST(req: NextRequest) {
       hostId: meeting.hostId,
       scheduledAt: meeting.scheduledAt,
       durationMinutes: meeting.durationMinutes,
-      inviteUrl: buildMeetingInviteUrl(req.nextUrl.origin, meeting.roomCode),
-      roomUrl: buildMeetingRoomUrl(req.nextUrl.origin, meeting.roomCode),
+      // Canonical app URL so returned links are stable regardless of which
+      // host/proxy served the request (matches the schedule/invite routes).
+      inviteUrl: buildMeetingInviteUrl(SITE_URL, meeting.roomCode),
+      roomUrl: buildMeetingRoomUrl(SITE_URL, meeting.roomCode),
     });
   } catch (err) {
     console.error("[/api/meetings/create]", err);
