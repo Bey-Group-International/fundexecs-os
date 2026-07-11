@@ -330,10 +330,14 @@ export function createFurniture(scene: Phaser.Scene): FurniturePiece[] {
       const lx = ox + lamp.rx;
       const lfy = oy + lamp.ry;
       const glow = scene.add.graphics().setDepth(DEPTH_FLOOR_DECOR);
-      for (let i = 3; i >= 1; i--) {
-        glow.fillStyle(accent, 0.03 * i);
-        glow.fillCircle(lx, lfy - 4, 16 + i * 11);
+      // A broad, soft warm pool with a gentle multi-stop falloff + a brighter
+      // core, so the lamp lights the hardwood with a lived-in glow.
+      for (let i = 5; i >= 1; i--) {
+        glow.fillStyle(accent, 0.02 * i);
+        glow.fillCircle(lx, lfy - 4, 12 + i * 12);
       }
+      glow.fillStyle(shade(accent, 1.3), 0.14);
+      glow.fillCircle(lx, lfy - 4, 14);
       pieces.push({ gfx: glow, footY: -1 });
 
       const body = scene.add.graphics().setDepth(yDepth(lfy));
@@ -560,9 +564,12 @@ function drawWorkdesk(g: Phaser.GameObjects.Graphics, cx: number, fy: number, ac
   box(g, cx, fy, 46, 7, 11, C.deskTop, C.deskFront);
   const surfaceY = fy - 11 - 7; // top face of the desk
 
-  // Soft monitor light pool spilling up over the seated occupant.
-  g.fillStyle(accent, 0.06);
-  g.fillEllipse(cx - 6, surfaceY - 8, 44, 30);
+  // Soft monitor light pool spilling up over the seated occupant — a broad
+  // outer haze with a warmer inner glow for a powered-on screen feel.
+  g.fillStyle(accent, 0.04);
+  g.fillEllipse(cx - 6, surfaceY - 10, 54, 38);
+  g.fillStyle(accent, 0.07);
+  g.fillEllipse(cx - 6, surfaceY - 7, 40, 26);
 
   if (variant === 2) {
     // Laptop — low screen that stays below the occupant's face, offset left.
@@ -607,30 +614,46 @@ function drawWorkdesk(g: Phaser.GameObjects.Graphics, cx: number, fy: number, ac
   }
 }
 
-/** A light-from-above extruded block: front face + top cap + soft shadow. */
+/** A light-from-above extruded block: front face + top cap + soft shadow,
+ *  grounded with layered ambient occlusion and a faint polished-floor sheen. */
 function box(
   g: Phaser.GameObjects.Graphics,
   cx: number, footY: number, w: number, capDepth: number, height: number,
   topColor: number, frontColor: number,
 ) {
-  // Grounding contact shadow — deeper + offset to the shaded (right) side.
-  g.fillStyle(0x000000, 0.28);
+  const x0 = cx - w / 2;
+  // Grounding: a soft, wide ambient-occlusion halo beneath a deeper, tighter
+  // contact shadow (offset to the shaded/right side) — reads as real contact.
+  g.fillStyle(0x000000, 0.12);
+  g.fillEllipse(cx + w * 0.05, footY + 2.5, w * 1.28, capDepth * 1.2);
+  g.fillStyle(0x000000, 0.3);
   g.fillEllipse(cx + w * 0.06, footY + 1.5, w * 1.02, capDepth * 0.82);
+  // Faint polished-floor reflection: a short, downward-fading mirror of the
+  // front, so the hardwood reads as lightly reflective under the furniture.
+  for (let i = 0; i < 3; i++) {
+    g.fillStyle(shade(frontColor, 0.6), 0.13 - i * 0.04);
+    g.fillRect(x0 + 1.5, footY + 1 + i * 1.4, w - 3, 1.4);
+  }
   // Front face + a top-to-bottom darkening so the block has vertical form.
   g.fillStyle(frontColor, 1);
-  g.fillRect(cx - w / 2, footY - height, w, height);
+  g.fillRect(x0, footY - height, w, height);
   g.fillStyle(shade(frontColor, 0.7), 0.55);
-  g.fillRect(cx - w / 2, footY - height * 0.42, w, height * 0.42);
+  g.fillRect(x0, footY - height * 0.42, w, height * 0.42);
+  // A soft mid-height sheen band — a gentle sculpted highlight across the face.
+  g.fillStyle(shade(frontColor, 1.18), 0.26);
+  g.fillRect(x0, footY - height * 0.86, w, Math.max(1, height * 0.16));
   // Lit left edge + shadowed right edge give the front real side-lighting.
   g.fillStyle(shade(frontColor, 1.3), 0.6);
-  g.fillRect(cx - w / 2, footY - height, 1.4, height);
+  g.fillRect(x0, footY - height, 1.4, height);
   g.fillStyle(shade(frontColor, 0.5), 0.7);
   g.fillRect(cx + w / 2 - 1.4, footY - height, 1.4, height);
-  // Top cap (overhead-lit) with a bright front lip.
+  // Top cap (overhead-lit) with a bright front lip + a soft sheen streak.
   g.fillStyle(topColor, 1);
-  g.fillRect(cx - w / 2, footY - height - capDepth, w, capDepth);
+  g.fillRect(x0, footY - height - capDepth, w, capDepth);
   g.fillStyle(shade(topColor, 1.25), 0.8);
-  g.fillRect(cx - w / 2, footY - height - capDepth, w, 1.2);
+  g.fillRect(x0, footY - height - capDepth, w, 1.2);
+  g.fillStyle(shade(topColor, 1.5), 0.32);
+  g.fillRect(x0 + w * 0.14, footY - height - capDepth, w * 0.3, Math.max(1, capDepth * 0.5));
 }
 
 /** A small monitor sitting on a desktop, screen facing the viewer. */
