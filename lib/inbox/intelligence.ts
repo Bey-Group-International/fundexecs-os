@@ -256,7 +256,9 @@ export function buildDigest(threads: DigestThread[]): InboxDigest {
 //   * awaiting_you — an unread inbound has sat open past a day; the counterparty
 //     is waiting on your reply.
 //   * going_cold   — an open thread you've already read has been silent for
-//     days; a reminder to follow up or close it out.
+//     days; a reminder to follow up or close it out. Suppressed while a meeting
+//     is still upcoming — a follow-up belongs *after* the meeting, not before it,
+//     when the quiet is simply both sides waiting for the scheduled time.
 // Pure and driven off a passed-in age, so it unit-tests deterministically.
 
 export type NudgeKind = "awaiting_you" | "going_cold";
@@ -267,6 +269,11 @@ export interface NudgeSignals {
   // Hours since the last message on the thread; null when it has never been
   // messaged (nothing to nudge about).
   ageHours: number | null;
+  // True when the thread has a meeting scheduled in the future. A booking/video
+  // thread naturally goes quiet between "time's set" and the meeting itself, so
+  // that quiet must not read as "gone cold, follow up" — the follow-up is owed
+  // only once the meeting has actually happened.
+  meetingUpcoming?: boolean;
 }
 
 export interface Nudge {
@@ -294,15 +301,21 @@ function nudgeDuration(hours: number): string {
  * The follow-up nudge for a thread, or null when none applies. Only open threads
  * nudge — a snoozed thread is deliberately parked, and a done thread is closed.
  * An unread thread nudges toward your reply; a read-but-quiet thread nudges to
- * follow up before it goes stale.
+ * follow up before it goes stale — but not while a meeting is still ahead, since
+ * that follow-up is only owed once the meeting has taken place.
  */
 export function threadNudge(s: NudgeSignals): Nudge | null {
   if (s.status !== "open" || s.ageHours == null) return null;
   if (s.unread) {
+    // An unread inbound still owes a reply even with a meeting on the calendar —
+    // the counterparty sent something; the meeting doesn't answer it.
     return s.ageHours >= NUDGE_AWAITING_AFTER_HOURS
       ? { kind: "awaiting_you", label: `Waiting ${nudgeDuration(s.ageHours)} for your reply`, tone: "warn" }
       : null;
   }
+  // A read-but-quiet thread with a meeting still ahead isn't cold — both sides
+  // are just waiting for the scheduled time. Hold the follow-up until after.
+  if (s.meetingUpcoming) return null;
   return s.ageHours >= NUDGE_COLD_AFTER_HOURS
     ? { kind: "going_cold", label: `Quiet for ${nudgeDuration(s.ageHours)} — follow up?`, tone: "muted" }
     : null;

@@ -197,6 +197,26 @@ describe("threadNudge", () => {
   it("pluralizes the duration correctly at the day boundary", () => {
     expect(threadNudge({ status: "open", unread: true, ageHours: 24 })?.label).toContain("1 day");
   });
+
+  it("holds the follow-up nudge while a meeting is still upcoming", () => {
+    // Same quiet, read thread that would go cold — but a meeting is still ahead,
+    // so the follow-up is owed only after the meeting, not now.
+    expect(
+      threadNudge({ status: "open", unread: false, ageHours: 168, meetingUpcoming: true }),
+    ).toBeNull();
+  });
+
+  it("resumes the follow-up nudge once the meeting is in the past", () => {
+    const n = threadNudge({ status: "open", unread: false, ageHours: 168, meetingUpcoming: false });
+    expect(n?.kind).toBe("going_cold");
+  });
+
+  it("still nudges an unread reply even with a meeting upcoming", () => {
+    // The counterparty sent something unread; the scheduled meeting doesn't
+    // answer it, so the reply nudge stands.
+    const n = threadNudge({ status: "open", unread: true, ageHours: 48, meetingUpcoming: true });
+    expect(n?.kind).toBe("awaiting_you");
+  });
 });
 
 describe("suggestedAction", () => {
