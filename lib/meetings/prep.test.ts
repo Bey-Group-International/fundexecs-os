@@ -1,0 +1,64 @@
+import { buildPrepPrompt, formatMoney } from "./prep";
+
+describe("formatMoney", () => {
+  it("compacts to K / M / B", () => {
+    expect(formatMoney(900_000)).toBe("$900.0K");
+    expect(formatMoney(25_000_000)).toBe("$25.0M");
+    expect(formatMoney(1_500_000_000)).toBe("$1.5B");
+    expect(formatMoney(500)).toBe("$500");
+  });
+
+  it("honors a non-USD currency and guards nullish/NaN", () => {
+    expect(formatMoney(10_000_000, "EUR")).toBe("EUR 10.0M");
+    expect(formatMoney(null)).toBeNull();
+    expect(formatMoney(undefined)).toBeNull();
+    expect(formatMoney(Number.NaN)).toBeNull();
+  });
+});
+
+describe("buildPrepPrompt", () => {
+  it("embeds meeting, attendee, deal and fund context plus the section outline", () => {
+    const prompt = buildPrepPrompt({
+      meeting: {
+        title: "Project Atlas — LP Update",
+        meetingType: "lp_update",
+        priority: "high",
+        objective: "Secure a re-up commitment for Fund III",
+        agenda: "Performance, pipeline, terms",
+        attendees: [
+          { name: "Jane Doe", type: "external", email: "jane@lp.com" },
+          { name: "Sam Internal", type: "internal" },
+        ],
+        tags: ["LP", "re-up"],
+      },
+      deal: { name: "Atlas Logistics", stage: "diligence", assetClass: "Infrastructure", targetAmount: 25_000_000 },
+      fund: { name: "FundExecs Fund III", fundType: "fund", vintageYear: 2026, committedCapital: 250_000_000, currency: "USD" },
+    });
+
+    // Context is present with real names/figures.
+    expect(prompt).toContain("Project Atlas — LP Update");
+    expect(prompt).toContain("Secure a re-up commitment for Fund III");
+    expect(prompt).toContain("Jane Doe");
+    expect(prompt).toContain("Atlas Logistics");
+    expect(prompt).toContain("$25.0M");
+    expect(prompt).toContain("FundExecs Fund III");
+    expect(prompt).toContain("$250.0M");
+    // Titleized enum-ish values.
+    expect(prompt).toContain("Lp Update");
+    // The comprehensive outline is requested.
+    expect(prompt).toContain("Likely questions & objections");
+    expect(prompt).toContain("Follow-up plan");
+    expect(prompt).toContain("Gather before the meeting");
+  });
+
+  it("still returns a structured prompt with only a title (no empty headers)", () => {
+    const prompt = buildPrepPrompt({ meeting: { title: "Quick sync" } });
+    expect(prompt).toContain("Quick sync");
+    expect(prompt).toContain("institutional meeting-preparation analyst");
+    // No deal/fund blocks when there's no such context.
+    expect(prompt).not.toContain("DEAL\n");
+    expect(prompt).not.toContain("FUND / VEHICLE");
+    // Attendees block omitted when there are none.
+    expect(prompt).not.toContain("ATTENDEES");
+  });
+});

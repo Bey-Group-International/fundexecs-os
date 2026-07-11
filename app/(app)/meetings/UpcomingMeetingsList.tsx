@@ -216,6 +216,25 @@ export function UpcomingMeetingsList({
     window.dispatchEvent(new CustomEvent("earn:set-composer-prompt", { detail: { prompt } }));
   }
 
+  // Open the Earn dock with a prompt, optionally sending it immediately.
+  function openEarn(prompt: string, autoSend = true) {
+    window.dispatchEvent(new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend } }));
+  }
+
+  // "Prepare with Earn": fetch a full-context institutional prep prompt (meeting +
+  // linked deal/fund) from the server and run it in Earn. Falls back to a generic
+  // prompt if the context can't be gathered so the button always does something.
+  async function prepareWithEarn(meeting: UpcomingMeeting) {
+    const fallback = `Prepare me for "${meeting.title}" and surface likely questions, risks, and next steps.`;
+    try {
+      const res = await fetch(`/api/meetings/${meeting.id}/prep`, { cache: "no-store" });
+      const prompt = res.ok ? ((await res.json()) as { prompt?: string }).prompt : null;
+      openEarn(prompt && prompt.trim() ? prompt : fallback);
+    } catch {
+      openEarn(fallback);
+    }
+  }
+
   const editingMeeting = editingId ? meetings.find((m) => m.id === editingId) : null;
   const detailsMeeting = detailsId ? meetings.find((m) => m.id === detailsId) : null;
 
@@ -370,7 +389,7 @@ export function UpcomingMeetingsList({
                   <ActionButton onClick={() => void retrySync(meeting.id)}>Retry sync</ActionButton>
                 ) : null}
                 <ActionButton danger onClick={() => setDeleteId(meeting.id)}>Delete</ActionButton>
-                <ActionButton onClick={() => askEarn(`Prepare me for "${meeting.title}" and surface likely questions, risks, and next steps.`)}>Prepare with Earn</ActionButton>
+                <ActionButton onClick={() => void prepareWithEarn(meeting)}>Prepare with Earn</ActionButton>
                 <ActionButton onClick={() => askEarn(`Draft a follow-up for "${meeting.title}" with action items and approval-sensitive language.`)}>Follow up</ActionButton>
               </div>
 
