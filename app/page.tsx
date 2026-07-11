@@ -278,12 +278,17 @@ export default async function LandingPage(
           with one autonomous execution layer.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <SpinBorderButton href="#meet-earn">Meet Earn</SpinBorderButton>
           <Link
-            href="#workspace-preview"
-            className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2"
+            href="/login"
+            className="rounded-md border border-line px-6 py-3 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
           >
-            Explore Workspace
+            Sign in
+          </Link>
+          <Link
+            href="/login?mode=signup"
+            className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
+          >
+            Request access
           </Link>
         </div>
       </section>
