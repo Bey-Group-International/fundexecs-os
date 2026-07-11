@@ -1,12 +1,11 @@
 import { AGENTS } from "@/lib/agents";
-import { AccessGate } from "./AccessGate";
 import { Reveal } from "./Reveal";
 
 // "Explore Workspace" reveal. A faithful static mock of the screen users land on
 // after login (app/(app)/workspace/page.tsx): the "Sessions" header, the AI
 // Operating Brief card, the recent-session list, and Earn's composer docked at
-// the bottom. Sample data only — no live sessions — with an AccessGate CTA below
-// inviting the visitor into their own authed workspace.
+// the bottom. Sample data only — no live sessions. Sign-in / request-access live
+// in the page header and footer, so this section carries no CTA of its own.
 const SAMPLE_SESSIONS = [
   { name: "Maple Street acquisition — underwrite", group: "Run · Diligence", color: "#22d3ee", when: "12m ago" },
   { name: "Q3 LP capital call — draft & send", group: "Execute · Investor Relations", color: "#f59e0b", when: "1h ago" },
@@ -140,11 +139,6 @@ export function WorkspacePreview() {
           </div>
         </div>
       </Reveal>
-
-      <AccessGate
-        title="Open your live workspace"
-        subtitle="Sign in or request access to open your own command surface — real sessions, real approvals, your mandate."
-      />
     </section>
   );
 }
