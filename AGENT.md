@@ -580,6 +580,31 @@ Deployed, monitoring               →  live, observability active
              |  gated SEND on approve; add Build (term-drift) + Run (stale-mark) triggers;
              |  connect a live Carta Composio toolkit; graduate high-confidence Execute
              |  signals to background push.
+
+2026-07-11  |  Landing gate → unlock  |  Public landing CTAs now open in-page previews.
+             |  Built: app/page.tsx repoints "Meet Earn" → #meet-earn and "Explore
+             |  Workspace" → #workspace-preview (hero + footer) instead of jumping to
+             |  signup / #operating-model. Three new components/marketing/*:
+             |  - MeetEarnTeam: Earn (the associate/orchestrator) featured as a hero card,
+             |    then the full 14-executive roster, pulled LIVE from lib/agents.ts so the
+             |    card never drifts from the seed catalog.
+             |  - WorkspacePreview: a static mock mirroring components/Workspace.tsx
+             |    (objective bar, task rows w/ agent progress, an approval gate, agent rail);
+             |    sample data only, no live tasks.
+             |  - AccessGate: the shared Sign in (/login) / Request access (/login?mode=signup)
+             |    CTA panel; Request access is the sole signup path.
+             |  Two-step history: first shipped GATED (PR #823, merged) — previews sealed
+             |  behind a bottom fade-mask + absolute lock scrim with pointer-events-none;
+             |  then UNLOCKED (PR #825, merged) — dropped the mask/scrim so both previews are
+             |  fully visible and interactive, and AccessGate became an in-flow invitation
+             |  rather than a lock. Marketing stays public; auth is the entry, not a wall.
+             |  Decision: reveal the product in-page (roster + workspace) and treat Sign in /
+             |  Request access as the invitation, not a gate over the content. Styling reuses
+             |  the fx-* tokens (fx-card, fx-glass, gold accents, surface ramp).
+             |  Confidence: tsc --noEmit + eslint clean on changed files; dev-server render
+             |  (HTTP 200) verified; Vercel preview deployed green on both PRs.
+             |  Next: if we want landing-page "memory" in the product itself, add a returning-
+             |  visitor touch (recall last section / dismissed gate / signed-in shortcut).
 ```
 
 ---
