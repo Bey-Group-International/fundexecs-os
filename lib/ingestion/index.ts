@@ -15,3 +15,15 @@ export type { ExtractedEntity, ExtractInput } from "@/lib/ingestion/extract";
 export { normalizeEntities } from "@/lib/ingestion/normalize";
 export { parseRobots, isAllowed, crawlDelayFor } from "@/lib/ingestion/robots";
 export type { RobotsPolicy } from "@/lib/ingestion/robots";
+export {
+  parseDealListings,
+  parseListingsSmart,
+  marketplaceForUrl,
+  listingToDealRow,
+  formatListingNotes,
+  parseMoney,
+  parsePercent,
+  extractFinancials,
+  MARKETPLACES,
+} from "@/lib/ingestion/deal-listings";
+export type { DealListing, MarketplaceKey, ParseListingsInput } from "@/lib/ingestion/deal-listings";
