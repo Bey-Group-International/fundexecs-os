@@ -233,11 +233,22 @@ export function createWallVisuals(scene: Phaser.Scene): Phaser.GameObjects.Graph
   const EXT = 11;
   const hWall = (x: number, y: number, w: number) => {
     if (w <= 0) return;
-    // Downward-facing wall front (the visible height toward the viewer), with a
-    // top-to-bottom darkening and a grounded contact shadow beneath it.
-    g.fillStyle(C.wallFace, 1); g.fillRect(x, y + W, w, EXT);
-    g.fillStyle(C.wallExtrude, 0.85); g.fillRect(x, y + W + EXT * 0.5, w, EXT * 0.5);
-    g.fillStyle(0x000000, 0.2); g.fillRect(x, y + W + EXT, w, 4);
+    const fy = y + W; // top of the downward-facing wall front
+    // Downward-facing wall front (the visible height toward the viewer) with a
+    // top-to-bottom darkening for vertical form.
+    g.fillStyle(C.wallFace, 1); g.fillRect(x, fy, w, EXT);
+    g.fillStyle(C.wallExtrude, 0.85); g.fillRect(x, fy + EXT * 0.5, w, EXT * 0.5);
+    // Paneling seams — faint recessed dividers on a global 64px grid so the
+    // wainscoting lines up across door-split segments.
+    g.fillStyle(shade(C.wallFace, 0.55), 0.55);
+    for (let px = Math.ceil(x / 64) * 64; px < x + w; px += 64) g.fillRect(px, fy + 1, 1, EXT - 3);
+    // Dado / picture rail — a thin warm gold trim line across the wall.
+    g.fillStyle(C.gold, 0.3); g.fillRect(x, fy + 2.5, w, 1);
+    g.fillStyle(shade(C.gold, 1.35), 0.18); g.fillRect(x, fy + 2, w, 0.6);
+    // Baseboard — a lighter warm band where the wall meets the floor.
+    g.fillStyle(shade(C.wallCap, 1.12), 0.85); g.fillRect(x, fy + EXT - 2, w, 2);
+    // Grounded contact shadow beneath the wall.
+    g.fillStyle(0x000000, 0.2); g.fillRect(x, fy + EXT, w, 4);
     // Body + lit cap (top plane catching the overhead light).
     g.fillStyle(C.wallFace, 1); g.fillRect(x, y + 2.5, w, W - 2.5);
     g.fillStyle(C.wallCap, 1); g.fillRect(x, y, w, 2.5);
@@ -250,6 +261,8 @@ export function createWallVisuals(scene: Phaser.Scene): Phaser.GameObjects.Graph
     g.fillStyle(C.wallFace, 1); g.fillRect(x + 2.5, y, W - 5.5, h);
     g.fillStyle(C.wallCap, 1); g.fillRect(x, y, 2.5, h); // left edge catches light
     g.fillStyle(shade(C.wallCap, 1.2), 0.7); g.fillRect(x, y, 1, h);
+    // A faint gold channel down the lit edge ties the runs to the rail trim.
+    g.fillStyle(C.gold, 0.12); g.fillRect(x + 1, y, 0.6, h);
   };
 
   // Perimeter
