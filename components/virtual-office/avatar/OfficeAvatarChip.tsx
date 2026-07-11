@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
 import { UserCharacterSelector } from "@/components/virtual-office/avatar/UserCharacterSelector";
 import { userAvatarSpec, type UserAvatar } from "@/lib/office/userAvatar";
 import { saveOfficeAvatar } from "@/app/(app)/settings/actions";
+import { virtualOfficeRoutes } from "@/lib/virtualOfficeRoutes";
 
 /**
  * The operator's own Executive Floor identity, shown as a chip in the office
@@ -122,6 +124,12 @@ export function OfficeAvatarChip({
                     {saving ? "Saving…" : "Save"}
                   </button>
                 </div>
+                <Link
+                  href={virtualOfficeRoutes.characterStudio}
+                  className="mt-2 block text-center text-[11px] text-slate-400 underline-offset-2 transition-colors hover:text-[#c9a84c] hover:underline"
+                >
+                  Open full Character Studio →
+                </Link>
               </div>
 
               {/* Right — controls */}
