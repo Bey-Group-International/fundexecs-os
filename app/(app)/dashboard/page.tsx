@@ -3,45 +3,27 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import { AGENTS } from "@/lib/agents";
-import type { Task, Deal, Asset, Artifact, AgentKey } from "@/lib/supabase/database.types";
-import { SessionsSection } from "./SessionsSection";
+import type { Deal, Approval } from "@/lib/supabase/database.types";
 import { MissionControl } from "@/components/dashboard/MissionControl";
-import { StatTile } from "@/components/dashboard/StatTile";
+import { SystemsOfRecord } from "@/components/dashboard/SystemsOfRecord";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { HottestCapital, PendingGates } from "./CapitalSignals";
-import { Outbox } from "./Outbox";
-import type { Session, SessionGroup, Approval, DispatchLog } from "@/lib/supabase/database.types";
-import { ArtifactCard } from "@/components/ArtifactViewer";
-import { buildCapitalMap } from "@/lib/capital-map";
-import { getBuildReadiness } from "@/lib/build-readiness";
-import { getInboxThreads } from "@/lib/inbox/data";
-import { buildDigest, priorityBucket, type DigestThread } from "@/lib/inbox/intelligence";
-import { channelMeta } from "@/lib/inbox/channels";
-import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { StaleDealAlerts } from "@/components/dashboard/StaleDealAlerts";
 import { WorkspaceCard } from "@/components/dashboard/WorkspaceCard";
 import { FirstMissionCoach } from "@/components/dashboard/FirstMissionCoach";
-import { StaleDealAlerts } from "@/components/dashboard/StaleDealAlerts";
-import { ProactiveSection } from "./ProactiveSection";
+import { dashboardWorkspaces } from "@/lib/dashboard/config";
+import { buildCapitalMap } from "@/lib/capital-map";
+import { getBuildReadiness } from "@/lib/build-readiness";
 import {
-  DeleteWorkflowBtn,
-  ClearWorkflowsBtn,
-  DeleteDealBtn,
-  ClearDealsBtn,
-  DeleteArtifactBtn,
-  ClearArtifactsBtn,
-} from "./DashboardDeleteControls";
+  getInstitutionalDashboard,
+  type KpiMetric,
+  type CapitalPanelData,
+  type PortfolioPanelData,
+} from "@/lib/dashboard/institutional";
 
 export const dynamic = "force-dynamic";
 
-const AGENT_GROUPS: { label: string; keys: AgentKey[] }[] = [
-  { label: "Research", keys: ["analyst", "diligence"] },
-  { label: "Workflow", keys: ["associate", "investor_relations"] },
-  { label: "Execution", keys: ["portfolio_ops", "fund_admin"] },
-];
-
-const ACTIVE = new Set(["pending", "in_progress", "awaiting_approval", "blocked"]);
 const DEAL_STAGES = ["sourced", "screening", "diligence", "ic_review", "closing"] as const;
-
 const STAGE_COLORS: Record<string, string> = {
   sourced: "#38bdf8",
   screening: "#6366f1",
@@ -50,42 +32,21 @@ const STAGE_COLORS: Record<string, string> = {
   closing: "#5FB87A",
 };
 
-function compactUsd(n: number | null): string | null {
-  if (!n || n <= 0) return null;
+const KPI_TONE: Record<KpiMetric["tone"], string> = {
+  gold: "text-gold-300",
+  neural: "text-neural-300",
+  success: "text-status-success",
+  muted: "text-fg-muted",
+};
+
+function compactUsd(n: number | null): string {
+  if (!n || n <= 0) return "$0";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n);
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="fx-card fx-card-hover fx-stat-shimmer group relative overflow-hidden p-4 animate-fade-up">
-      {/* Top-edge gold hairline brightens on hover */}
-      <span
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/55 to-transparent transition-opacity duration-300 group-hover:via-gold-300/80"
-      />
-      {/* Bottom neural sweep on hover */}
-      <span
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-neural-400/30 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-      />
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">{label}</p>
-      <p className="mt-2 font-display text-[2.1rem] font-bold leading-none tracking-tight text-fg-primary transition-colors duration-200 group-hover:text-white">
-        {value}
-      </p>
-      {/* Ghost watermark number — subtle depth */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute bottom-1.5 right-3 select-none font-display text-[2rem] font-bold leading-none text-gold-400/6 transition-colors duration-300 group-hover:text-gold-400/12"
-      >
-        {value}
-      </span>
-    </div>
-  );
 }
 
 // Standardized section heading — glowing left bar, bold mono label, optional action.
@@ -107,79 +68,185 @@ function SectionHeading({
   );
 }
 
+function KpiTile({ kpi, delay }: { kpi: KpiMetric; delay: number }) {
+  return (
+    <Link
+      href={kpi.href}
+      className="fx-card fx-card-hover fx-stat-shimmer group relative overflow-hidden p-4 animate-fade-up"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/55 to-transparent transition-opacity duration-300 group-hover:via-gold-300/80"
+      />
+      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-muted">{kpi.label}</p>
+      <p className={`mt-2 font-display text-[1.75rem] font-bold leading-none tracking-tight ${KPI_TONE[kpi.tone]} transition-colors duration-200`}>
+        {kpi.value}
+      </p>
+      {kpi.sub ? (
+        <p className="mt-1.5 truncate font-mono text-[10px] uppercase tracking-wider text-fg-muted/80">
+          {kpi.sub}
+        </p>
+      ) : null}
+    </Link>
+  );
+}
+
+function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-line/70 bg-surface-2/40 px-3 py-2.5">
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-fg-muted">{label}</p>
+      <p className="mt-1 font-display text-lg font-bold leading-none tracking-tight text-fg-primary">{value}</p>
+      {sub ? <p className="mt-1 truncate text-[10px] text-fg-muted">{sub}</p> : null}
+    </div>
+  );
+}
+
+function CapitalPanel({ data }: { data: CapitalPanelData }) {
+  const calledPct = data.committed > 0 ? Math.min(100, (data.called / data.committed) * 100) : 0;
+  const distPct = data.committed > 0 ? Math.min(100, (data.distributed / data.committed) * 100) : 0;
+  return (
+    <div className="fx-card p-5">
+      <SectionHeading
+        action={
+          <Link href="/source/lp_pipeline" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+            LP pipeline →
+          </Link>
+        }
+      >
+        Capital &amp; LPs
+      </SectionHeading>
+
+      <div className="grid grid-cols-3 gap-2.5">
+        <MiniStat label="Committed" value={compactUsd(data.committed)} />
+        <MiniStat label="Called" value={compactUsd(data.called)} />
+        <MiniStat label="Distributed" value={compactUsd(data.distributed)} />
+      </div>
+
+      {/* Called / distributed against committed — a single capital-progress bar. */}
+      <div className="relative mt-4 h-2 overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-500 to-gold-300 shadow-[0_0_10px_rgba(212,175,106,0.5)] transition-[width] duration-500"
+          style={{ width: `${calledPct}%` }}
+        />
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-status-success/80 transition-[width] duration-500"
+          style={{ width: `${distPct}%` }}
+        />
+      </div>
+      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        {data.dpi != null ? `${data.dpi.toFixed(2)}× DPI` : "DPI —"} · {data.investorCount} investor
+        {data.investorCount === 1 ? "" : "s"} · {data.fundCount} fund{data.fundCount === 1 ? "" : "s"}
+      </p>
+
+      {data.recentEvents.length > 0 ? (
+        <div className="mt-4 border-t border-line/60 pt-3">
+          <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted/70">Recent capital events</p>
+          <div className="flex flex-col gap-1.5">
+            {data.recentEvents.slice(0, 4).map((e) => (
+              <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate capitalize text-fg-secondary">{e.type.replace(/_/g, " ")}</span>
+                <span className="shrink-0 font-mono text-xs text-fg-primary">{compactUsd(e.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
+  return (
+    <div className="fx-card p-5">
+      <SectionHeading
+        action={
+          <Link href="/source/deal_pipeline" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+            Deal pipeline →
+          </Link>
+        }
+      >
+        Deals &amp; Portfolio
+      </SectionHeading>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <MiniStat label="Pipeline value" value={compactUsd(data.pipelineValue)} sub={`${data.dealCount} deal${data.dealCount === 1 ? "" : "s"}`} />
+        <MiniStat label="Portfolio NAV" value={compactUsd(data.portfolioNav)} sub={`${data.assetCount} asset${data.assetCount === 1 ? "" : "s"}`} />
+      </div>
+
+      {/* Pipeline shape bar + per-stage counts. */}
+      {data.dealCount > 0 ? (
+        <div className="mt-4 flex h-1.5 overflow-hidden rounded-full bg-surface-3/60">
+          {data.byStage.map(({ stage, count }) => {
+            const pct = (count / data.dealCount) * 100;
+            if (pct === 0) return null;
+            return (
+              <div
+                key={stage}
+                className="h-full transition-[width] duration-700"
+                style={{ width: `${pct}%`, backgroundColor: STAGE_COLORS[stage] }}
+                title={`${stage.replace("_", " ")}: ${count}`}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+      <div className="mt-3 grid grid-cols-5 gap-1.5">
+        {data.byStage.map(({ stage, count }) => {
+          const color = STAGE_COLORS[stage] ?? "#38bdf8";
+          return (
+            <div key={stage} className="rounded-md border border-line/60 bg-surface-2/40 px-1.5 py-2 text-center">
+              <p
+                className="font-display text-lg font-bold leading-none tracking-tight"
+                style={{ color: count > 0 ? color : undefined }}
+              >
+                {count}
+              </p>
+              <p className="mt-1 font-mono text-[8px] uppercase tracking-wide text-fg-muted">
+                {stage.replace("_", " ")}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        {data.diligenceOpen} diligence open · {data.icRecent} recent IC decision{data.icRecent === 1 ? "" : "s"}
+      </p>
+
+      {data.recentMarks.length > 0 ? (
+        <div className="mt-4 border-t border-line/60 pt-3">
+          <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted/70">Latest valuation marks</p>
+          <div className="flex flex-col gap-1.5">
+            {data.recentMarks.slice(0, 4).map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate text-fg-secondary">{m.assetName}</span>
+                <span className="shrink-0 font-mono text-xs text-fg-primary">{compactUsd(m.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default async function DashboardPage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = await createServerClient();
-  const [
-    allTasksRes,
-    workflowsRes,
-    dealsRes,
-    assetsRes,
-    artifactsRes,
-    sessionsRes,
-    groupsRes,
-    pendingGatesRes,
-    dispatchLogRes,
-    capitalMap,
-    readiness,
-    inboxViews,
-  ] = await Promise.all([
-    supabase.from("tasks").select("*"),
-    supabase
-      .from("tasks")
-      .select("*")
-      .is("parent_task_id", null)
-      .order("created_at", { ascending: false })
-      .limit(6),
-    supabase.from("deals").select("*").is("archived_at", null).order("created_at", { ascending: false }).limit(8),
-    supabase.from("assets").select("*").order("created_at", { ascending: false }).limit(8),
-    supabase.from("artifacts").select("*").order("created_at", { ascending: false }).limit(6),
-    supabase.from("sessions").select("*").order("created_at", { ascending: false }).limit(30),
-    supabase.from("session_groups").select("*").order("created_at", { ascending: true }),
-    supabase
-      .from("approvals")
-      .select("*")
-      .eq("decision", "pending")
-      .order("created_at", { ascending: false })
-      .limit(5),
-    // The dispatch audit log — most-recent first for the Outbox.
-    supabase
-      .from("dispatch_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(8),
-    // The Capital Map is already org-scoped via RLS and pre-sorted hottest-first.
+  const [dashboard, capitalMap, readiness, pendingGatesRes, dealsRes] = await Promise.all([
+    getInstitutionalDashboard(supabase, ctx.orgId),
     buildCapitalMap(supabase),
-    // Build-hub foundation readiness — surfaced here so progress is visible
-    // from the Command Center, not just inside the Build hub.
     getBuildReadiness(ctx.orgId),
-    // Unified Inbox threads — surfaced as a digest so the Command Center shows
-    // what's waiting on the operator, not just what Earn produced.
-    getInboxThreads(supabase),
+    supabase.from("approvals").select("*").eq("decision", "pending").order("created_at", { ascending: false }).limit(5),
+    supabase.from("deals").select("*").is("archived_at", null).order("created_at", { ascending: false }).limit(30),
   ]);
 
-  const tasks = (allTasksRes.data ?? []) as Task[];
-  const workflows = (workflowsRes.data ?? []) as Task[];
-  const deals = (dealsRes.data ?? []) as Deal[];
-  const assets = (assetsRes.data ?? []) as Asset[];
-  const artifacts = (artifactsRes.data ?? []) as Artifact[];
-  const sessions = (sessionsRes.data ?? []) as Session[];
-  const sessionGroups = (groupsRes.data ?? []) as SessionGroup[];
   const pendingGates = (pendingGatesRes.data ?? []) as Approval[];
-  const dispatches = (dispatchLogRes.data ?? []) as DispatchLog[];
-  // Top 5 investors by warmth — the entries arrive pre-sorted hottest-first.
+  const deals = (dealsRes.data ?? []) as Deal[];
   const hottestCapital = capitalMap.slice(0, 5);
-
-  const stepsCompleted = tasks.filter((t) => t.parent_task_id && t.status === "completed").length;
-  const workload = new Map<AgentKey, number>();
-  for (const t of tasks) {
-    if (ACTIVE.has(t.status)) workload.set(t.assigned_agent, (workload.get(t.assigned_agent) ?? 0) + 1);
-  }
-  const dealByStage = new Map<string, number>();
-  for (const d of deals) dealByStage.set(d.stage, (dealByStage.get(d.stage) ?? 0) + 1);
 
   const now = Date.now();
   const staleDeals = deals
@@ -199,49 +266,23 @@ export default async function DashboardPage() {
     .filter((d) => d.daysStale >= 14)
     .sort((a, b) => b.daysStale - a.daysStale);
 
-  // Unified Inbox digest + the few threads that actually need attention today.
-  const inboxDigest = buildDigest(
-    inboxViews.map(({ thread }): DigestThread => ({
-      category: thread.category,
-      status: thread.status,
-      unread: thread.unread,
-      priority: thread.priority,
-    })),
-  );
-  const inboxTop = inboxViews
-    .filter(({ thread }) => thread.status === "open")
-    .slice(0, 4)
-    .map(({ thread, context }) => ({
-      id: thread.id,
-      subject: thread.subject,
-      counterparty: thread.counterparty_name ?? thread.counterparty_email ?? "Unknown",
-      icon: channelMeta(thread.channel).icon,
-      bucket: priorityBucket(thread.priority),
-      contextName: context?.name ?? null,
-    }));
+  const isFirstVisit = dashboard.portfolio.dealCount === 0 && dashboard.capital.investorCount === 0;
 
   return (
     <div className="fx-ambient fx-blueprint mx-auto max-w-6xl">
       <header className="fx-glass relative mb-6 overflow-hidden animate-fade-up">
-        {/* Ambient right-side glow */}
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_80%_at_92%_10%,rgba(56,189,248,0.10),transparent_70%)]"
         />
 
-        {/* Official program identity strip — brand mark, program name, and
-            live system status. Reads as the masthead of an institutional
-            operating dashboard rather than a marketing hero. */}
+        {/* Official program identity strip. */}
         <div className="relative flex items-center justify-between gap-3 border-b border-line/60 px-5 py-2.5 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <Logo as="span" variant="coin" />
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
-              FundExecs OS
-            </span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">FundExecs OS</span>
             <span aria-hidden className="text-fg-muted/50">/</span>
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">
-              Command Center
-            </span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">Command Center</span>
           </div>
           <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-status-success/30 bg-status-success/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-status-success">
             <span className="relative flex h-1.5 w-1.5">
@@ -253,15 +294,15 @@ export default async function DashboardPage() {
           </span>
         </div>
 
-        {/* Program masthead — title, mandate line, and primary action. */}
+        {/* Program masthead. */}
         <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="relative">
             <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary sm:text-4xl">
               Private Markets Command Center
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">
-              The official operating surface for the program — deal flow, capital,
-              approvals, and deliverables, unified in one governed view.
+              The institutional dashboard for the program — every live system of record and
+              all activity across capital, deals, portfolio, and operations in one governed view.
             </p>
           </div>
           <div className="relative flex shrink-0 flex-wrap items-center gap-2">
@@ -276,40 +317,62 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* Mission control — each hub's headline signal + next-best action. */}
-      <div className="mb-6">
-        <MissionControl orgId={ctx.orgId} />
-      </div>
+      {/* Headline instrument row — the program's vital metrics. */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {dashboard.kpis.map((kpi, i) => (
+          <KpiTile key={kpi.key} kpi={kpi} delay={i * 50} />
+        ))}
+      </section>
 
-      {/* Earn Initiative — self-authored Commands surfaced as finished decisions,
-          with pre-run drafts, provenance, and blast-radius gates. */}
-      <ProactiveSection orgId={ctx.orgId} />
+      {/* Systems of record — the whole operating estate at a glance. */}
+      <section className="mt-8">
+        <SectionHeading>Systems of record</SectionHeading>
+        <SystemsOfRecord systems={dashboard.systems} />
+      </section>
 
-      <section className="mb-8">
-        <SectionHeading>Operating workspaces</SectionHeading>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {dashboardWorkspaces.map((workspace) => (
-            <WorkspaceCard key={workspace.key} workspace={workspace} />
-          ))}
+      {/* Anchor panels — the two pillars the program runs on. */}
+      <section className="mt-8 grid gap-6 lg:grid-cols-2">
+        <CapitalPanel data={dashboard.capital} />
+        <PortfolioPanel data={dashboard.portfolio} />
+      </section>
+
+      {/* Live activity + what needs the operator. */}
+      <section className="mt-8 grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <SectionHeading
+            action={
+              <Link href="/activity" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+                Full activity →
+              </Link>
+            }
+          >
+            Live activity
+          </SectionHeading>
+          <ActivityFeed items={dashboard.activity} />
+        </div>
+        <div className="flex flex-col gap-6">
+          <PendingGates approvals={pendingGates} />
+          <HottestCapital entries={hottestCapital} />
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Workflows" value={workflows.length} delay={0} />
-        <StatTile label="Deliverables" value={stepsCompleted} delay={60} />
-        <StatTile label="Deals in pipeline" value={deals.length} delay={120} />
-        <StatTile label="Portfolio assets" value={assets.length} delay={180} />
+      {staleDeals.length > 0 ? (
+        <section className="mt-8">
+          <StaleDealAlerts deals={staleDeals} />
+        </section>
+      ) : null}
+
+      {/* Hub standings — where each operating hub stands and the next best move. */}
+      <section className="mt-8">
+        <SectionHeading>Hub standings</SectionHeading>
+        <MissionControl orgId={ctx.orgId} />
       </section>
 
-      <Link
-        href="/build"
-        className="fx-card fx-card-hover mt-3 flex items-center gap-4 p-4"
-      >
+      {/* Investor readiness — foundation progress, always visible. */}
+      <Link href="/build" className="fx-card fx-card-hover mt-4 flex items-center gap-4 p-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
-              Investor Readiness
-            </span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Investor Readiness</span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
               {readiness.stage.label}
             </span>
@@ -321,9 +384,7 @@ export default async function DashboardPage() {
             />
           </div>
           <p className="mt-2 truncate text-xs text-fg-muted">
-            {readiness.nextAction
-              ? `Next: ${readiness.nextAction.label} →`
-              : "Foundation complete — fundraising-ready."}
+            {readiness.nextAction ? `Next: ${readiness.nextAction.label} →` : "Foundation complete — fundraising-ready."}
           </p>
         </div>
         <span className="font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -332,254 +393,18 @@ export default async function DashboardPage() {
         </span>
       </Link>
 
-      {staleDeals.length > 0 && (
-        <section className="mt-8">
-          <StaleDealAlerts deals={staleDeals} />
-        </section>
-      )}
-
-      <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <HottestCapital entries={hottestCapital} />
-        <PendingGates approvals={pendingGates} />
-      </section>
-
+      {/* Operating desks — the focused sub-dashboards, kept as navigation. */}
       <section className="mt-8">
-        <SectionHeading
-          action={
-            <Link href="/inbox" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
-              Open inbox →
-            </Link>
-          }
-        >
-          Unified Inbox
-        </SectionHeading>
-        {inboxTop.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            Booking, messaging, and video threads land in your{" "}
-            <Link href="/inbox" className="text-gold-400 hover:underline">
-              unified inbox
-            </Link>
-            , triaged and ranked. Nothing waiting right now.
-          </p>
-        ) : (
-          <div className="fx-card p-4">
-            <p className="mb-3 text-sm text-fg-secondary">{inboxDigest.headline}</p>
-            <div className="flex flex-col gap-2">
-              {inboxTop.map((t) => (
-                <Link
-                  key={t.id}
-                  href="/inbox"
-                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-surface-2"
-                >
-                  <span className="font-mono text-base leading-none text-gold-400">{t.icon}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-fg-primary">{t.subject}</span>
-                    <span className="block truncate text-[11px] text-fg-muted">
-                      {t.counterparty}
-                      {t.contextName ? ` · ${t.contextName}` : ""}
-                    </span>
-                  </span>
-                  <span
-                    className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${
-                      t.bucket === "now"
-                        ? "text-status-success"
-                        : t.bucket === "soon"
-                          ? "text-gold-400"
-                          : "text-fg-muted"
-                    }`}
-                  >
-                    {t.bucket}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      <Outbox rows={dispatches} />
-
-      <SessionsSection sessions={sessions} groups={sessionGroups} />
-
-      <section className="mt-8">
-        <SectionHeading>AI Agent Workforce</SectionHeading>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {AGENT_GROUPS.map((group) => (
-            <div key={group.label} className="fx-card p-4">
-              <p className="mb-3.5 font-mono text-[10px] uppercase tracking-widest text-gold-400">
-                {group.label}
-              </p>
-              <div className="flex flex-col gap-3">
-                {group.keys.map((key) => {
-                  const agent = AGENTS.find((a) => a.key === key)!;
-                  const count = workload.get(key) ?? 0;
-                  const active = count > 0;
-                  return (
-                    <div key={key} className="flex items-center gap-2.5">
-                      {/* Status dot with live glow ring when active */}
-                      <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
-                        {active && (
-                          <span
-                            className="absolute inset-0 rounded-full animate-ping opacity-60"
-                            style={{ backgroundColor: agent.color }}
-                          />
-                        )}
-                        <span
-                          className="relative h-2.5 w-2.5 rounded-full"
-                          style={{
-                            backgroundColor: agent.color,
-                            boxShadow: active ? `0 0 10px ${agent.color}` : "none",
-                            opacity: active ? 1 : 0.35,
-                          }}
-                        />
-                      </span>
-                      <span className={`text-sm ${active ? "text-fg-primary font-medium" : "text-fg-secondary"}`}>
-                        {agent.name}
-                      </span>
-                      <span
-                        className={`ml-auto font-mono text-[10px] tabular-nums ${active ? "text-gold-300" : "text-fg-muted"}`}
-                      >
-                        {active ? `${count} active` : "idle"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+        <SectionHeading>Operating desks</SectionHeading>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {dashboardWorkspaces.map((workspace) => (
+            <WorkspaceCard key={workspace.key} workspace={workspace} />
           ))}
         </div>
       </section>
 
-      <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div>
-          <SectionHeading action={workflows.length > 0 ? <ClearWorkflowsBtn /> : undefined}>Recent workflows</SectionHeading>
-          <div className="flex flex-col gap-2">
-            {workflows.length === 0 ? (
-              <p className="text-sm text-fg-muted">
-                None yet —{" "}
-                <Link href="/workspace" className="text-gold-400 hover:underline">
-                  run one in Earn
-                </Link>
-                .
-              </p>
-            ) : null}
-            {workflows.map((w) => (
-              <div
-                key={w.id}
-                className="fx-card fx-card-hover flex items-center gap-2 px-3 py-2.5"
-              >
-                <span className="truncate text-sm text-fg-primary">{w.title}</span>
-                <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                  {w.hub} · {w.status}
-                </span>
-                <DeleteWorkflowBtn id={w.id} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <SectionHeading action={deals.length > 0 ? <ClearDealsBtn /> : undefined}>Deal pipeline</SectionHeading>
-          {/* Horizontal pipeline shape bar */}
-          {deals.length > 0 ? (
-            <div className="mb-3 flex h-1.5 overflow-hidden rounded-full bg-surface-3/60">
-              {DEAL_STAGES.map((stage) => {
-                const count = dealByStage.get(stage) ?? 0;
-                const pct = (count / deals.length) * 100;
-                if (pct === 0) return null;
-                return (
-                  <div
-                    key={stage}
-                    className="h-full transition-[width] duration-700"
-                    style={{ width: `${pct}%`, backgroundColor: STAGE_COLORS[stage] }}
-                    title={`${stage.replace("_", " ")}: ${count}`}
-                  />
-                );
-              })}
-            </div>
-          ) : null}
-          <div className="grid grid-cols-5 gap-1.5">
-            {DEAL_STAGES.map((stage) => {
-              const count = dealByStage.get(stage) ?? 0;
-              const color = STAGE_COLORS[stage] ?? "#38bdf8";
-              return (
-                <div
-                  key={stage}
-                  className="fx-stage-pill group"
-                  style={{ "--fx-stage-color": color } as React.CSSProperties}
-                >
-                  <p
-                    className="font-display text-xl font-bold leading-none tracking-tight transition-colors duration-200"
-                    style={{ color: count > 0 ? color : undefined }}
-                  >
-                    {count}
-                  </p>
-                  <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-fg-muted">
-                    {stage.replace("_", " ")}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-          {deals.length === 0 ? (
-            <p className="mt-3 text-xs text-fg-muted">
-              Deals created by Source-hub workflows appear here.
-            </p>
-          ) : (
-            <div className="mt-3 flex flex-col gap-2">
-              {deals.slice(0, 5).map((d) => {
-                const detail = [d.asset_class, d.geography, compactUsd(d.target_amount)]
-                  .filter(Boolean)
-                  .join(" · ");
-                return (
-                  <div key={d.id} className="flex items-center gap-2 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-fg-primary">{d.name}</span>
-                      {detail ? (
-                        <span className="block truncate text-[11px] text-fg-muted">{detail}</span>
-                      ) : null}
-                    </div>
-                    <span className="shrink-0 font-mono text-[10px] text-fg-muted">{d.stage}</span>
-                    <DeleteDealBtn id={d.id} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <SectionHeading action={artifacts.length > 0 ? <ClearArtifactsBtn /> : undefined}>Latest deliverables</SectionHeading>
-        {artifacts.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            Every workflow step now produces a first-class artifact — IC memos,
-            models, risk reports. They land here as Earn runs.
-          </p>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {artifacts.map((a) => (
-              <div key={a.id} className="relative">
-                <ArtifactCard
-                  id={a.id}
-                  title={a.title}
-                  content={a.content}
-                  artifact_type={a.artifact_type}
-                  agent={a.agent ?? undefined}
-                  created_at={a.created_at ?? undefined}
-                  compact
-                />
-                <div className="absolute right-2 top-2">
-                  <DeleteArtifactBtn id={a.id} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* UX-01: First mission coaching — fires once when org has no workflows. */}
-      <FirstMissionCoach isFirstVisit={workflows.length === 0} />
+      {/* UX-01: First mission coaching — fires once when the org has no records. */}
+      <FirstMissionCoach isFirstVisit={isFirstVisit} />
     </div>
   );
 }
