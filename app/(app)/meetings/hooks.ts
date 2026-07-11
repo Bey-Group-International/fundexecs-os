@@ -14,6 +14,16 @@ export function nextPresenceChannelName(): string {
   return `meetings-presence-${presenceChannelSeq}`;
 }
 
+// Same idea for the postgres_changes subscriptions in the meeting lists/calendar:
+// the same list can be mounted twice at once (e.g. Upcoming on the landing AND
+// inside the calendar overlay's rail). Give each mount a distinct channel name so
+// they don't collide on a shared Supabase channel.
+let listChannelSeq = 0;
+export function nextChannelName(prefix: string): string {
+  listChannelSeq += 1;
+  return `${prefix}-${listChannelSeq}`;
+}
+
 /**
  * A ticking clock for live countdowns. Re-renders the consumer every
  * `intervalMs` with a fresh `Date.now()`. One shared interval per hook usage;

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { nextChannelName } from "./hooks";
 
 export interface PastMeeting {
   id: string;
@@ -107,6 +108,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
+  const [channelName] = useState(() => nextChannelName("past-meetings"));
 
   // Live updates
   useEffect(() => {
@@ -155,7 +157,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
     void refresh();
 
     const channel = supabase
-      .channel("past-meetings-live")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meetings" },
@@ -164,7 +166,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
       .subscribe();
 
     return () => { void supabase.removeChannel(channel); };
-  }, [userId]);
+  }, [userId, channelName]);
 
   async function softHide(id: string) {
     setBusy(id);
