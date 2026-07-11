@@ -186,9 +186,6 @@ export default function Copilot({
   // The id of the chat turn whose "Compare models" run is in flight, so its
   // button disables while the side-by-side fills in.
   const [comparingTurnId, setComparingTurnId] = useState<string | null>(null);
-  // The most recent OTHER session's id — passed to /api/chat so the server can
-  // load and summarise it as cross-session context.
-  const [priorSessionId, setPriorSessionId] = useState<string | null>(null);
   // The plan streamed into the canvas while a task is being drafted, before the
   // real (gated) workflow lands.
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
@@ -281,25 +278,6 @@ export default function Copilot({
       });
    
   }, [sessionId]);
-
-  // Fetch the most recent OTHER session so the API route can load its messages
-  // as cross-session context.
-  useEffect(() => {
-    if (!orgId) return;
-    const supabase = createClient();
-    const query = supabase
-      .from("sessions")
-      .select("id")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(5);
-    query.then(({ data }) => {
-      if (!data) return;
-      const other = data.find((s) => s.id !== sessionId);
-      if (other) setPriorSessionId(other.id as string);
-    });
-   
-  }, [orgId, sessionId]);
 
   const activeModel = EARN_MODELS.find((m) => m.key === model) ?? EARN_MODELS[0];
   const activeMode = EARN_MODES.find((m) => m.key === mode) ?? EARN_MODES[0];
@@ -609,7 +587,6 @@ export default function Copilot({
           model,
           prior,
           ...(sessionId ? { session_id: sessionId } : {}),
-          ...(priorSessionId ? { prior_session_id: priorSessionId } : {}),
         }),
         signal: controller.signal,
       });
