@@ -39,7 +39,7 @@ import {
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
-import { useNow, useLivePresence, type RoomPresence } from "./hooks";
+import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
 
 const CAL_SELECT =
   "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status";
@@ -123,6 +123,7 @@ export function MeetingsCalendar({
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [channelName] = useState(() => nextChannelName("calendar-meetings"));
 
   const now = useNow(1000);
   // Coarsen the clock for the expensive re-derivations below. `now` ticks every
@@ -155,7 +156,7 @@ export function MeetingsCalendar({
       refreshTimer.current = setTimeout(() => void refresh(), 350);
     }
     const channel = supabase
-      .channel("calendar-meetings-live")
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "live_meetings" }, () => scheduleRefresh())
       .subscribe();
     return () => {

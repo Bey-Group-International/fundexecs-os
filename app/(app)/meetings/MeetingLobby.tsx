@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MeetingEditScreen } from "./MeetingEditScreen";
 
-export function MeetingLobby() {
+export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void } = {}) {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -110,10 +110,13 @@ export function MeetingLobby() {
                   <MenuItem
                     icon={<CalendarIcon />}
                     title="Schedule for later"
-                    subtitle="Set a time, agenda, and attendees"
+                    subtitle="Open the calendar to pick a time"
                     onClick={() => {
                       setMenuOpen(false);
-                      setScheduleOpen(true);
+                      // On the Meetings page this opens the full calendar; falls
+                      // back to the inline schedule form when used standalone.
+                      if (onScheduleLater) onScheduleLater();
+                      else setScheduleOpen(true);
                     }}
                   />
                 </div>

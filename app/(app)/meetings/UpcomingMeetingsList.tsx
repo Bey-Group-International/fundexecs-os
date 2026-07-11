@@ -13,7 +13,7 @@ import {
   type ExternalSyncStatus,
 } from "@/lib/meetings/schedule";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
-import { useNow, useLivePresence } from "./hooks";
+import { useNow, useLivePresence, nextChannelName } from "./hooks";
 
 export interface UpcomingMeeting {
   id: string;
@@ -134,6 +134,9 @@ export function UpcomingMeetingsList({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Distinct per mount so a second instance (e.g. inside the calendar overlay)
+  // doesn't collide on a shared realtime channel.
+  const [channelName] = useState(() => nextChannelName("upcoming-meetings"));
 
   const now = useNow(1000);
   const meetingIds = useMemo(() => meetings.map((m) => m.id), [meetings]);
@@ -158,7 +161,7 @@ export function UpcomingMeetingsList({
     }
 
     const channel = supabase
-      .channel("upcoming-meetings-live")
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "live_meetings" }, () => {
         scheduleRefresh();
       })
@@ -167,7 +170,7 @@ export function UpcomingMeetingsList({
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [channelName]);
 
   async function deleteMeeting(id: string) {
     setBusy(id);

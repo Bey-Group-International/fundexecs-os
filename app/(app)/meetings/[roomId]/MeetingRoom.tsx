@@ -1382,6 +1382,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Resolve the meeting + whether we're the host.
     let mId: string | null = null;
     let hostFlag = false;
+    // A signed-in member of the meeting's org can read the row under RLS (guests
+    // and other orgs cannot), so a successful RLS read == "teammate". Teammates
+    // skip the waiting room and enter directly, just like the host.
+    let isOrgMember = false;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: existing } = await supabase
@@ -1395,6 +1399,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (ex.title) setMeetingTitle(ex.title);
         if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
         hostFlag = !!user && user.id === ex.host_id;
+        isOrgMember = !!user;
       } else {
         const pub = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
         if (pub.ok) {
@@ -1415,8 +1420,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
 
-    // The host enters immediately; everyone else must be admitted first.
-    if (hostFlag) {
+    // The host and org teammates enter immediately; only external guests wait.
+    if (hostFlag || isOrgMember) {
       await enterRoom(mId, name);
       return;
     }
