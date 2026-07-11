@@ -379,6 +379,13 @@ function drawFrontArms(g: CanvasGraphics, s: AvatarSpec, swing: number) {
   g.fillStyle(s.skin, 1);
   g.fillCircle(-6.4, 6 + swing * 0.4, 1.7);
   g.fillCircle(6.4, 6 - swing * 0.4, 1.7);
+  // Shirt cuffs peeking from the sleeves + a small cuff button at each wrist.
+  g.fillStyle(shade(s.shirt, 1.02), 0.95);
+  g.fillRect(-8, 4.4 + swing * 0.4, 3.2, 0.9);
+  g.fillRect(4.8, 4.4 - swing * 0.4, 3.2, 0.9);
+  g.fillStyle(shade(s.suit, 0.45), 1);
+  g.fillCircle(-6.4, 5.5 + swing * 0.4, 0.33);
+  g.fillCircle(6.4, 5.5 - swing * 0.4, 0.33);
 }
 
 /** Front view (facing down / toward the viewer), idle. */
@@ -483,6 +490,19 @@ function drawFront(g: CanvasGraphics, s: AvatarSpec) {
   g.moveTo(3.0, -5.6);
   g.lineTo(2.1, 0.6);
   g.strokePath();
+  // Breast-pocket welt above the pocket square — a crisp tailored seam.
+  g.lineStyle(0.5, shade(s.suit, 0.55), 0.85);
+  g.beginPath();
+  g.moveTo(-4.9, -2.7);
+  g.lineTo(-3.0, -2.7);
+  g.strokePath();
+  // Blazer buttons down the center closure, below the tie tip.
+  g.fillStyle(shade(s.suit, 0.45), 1);
+  g.fillCircle(0, 5.0, 0.5);
+  g.fillCircle(0, 6.4, 0.46);
+  g.fillStyle(shade(s.suit, 1.5), 0.6);
+  g.fillCircle(-0.16, 4.85, 0.18);
+  g.fillCircle(-0.15, 6.26, 0.16);
   // Pocket square — a small folded accent on the left chest (vivid accent).
   g.fillStyle(shade(acc, 1.1), 0.98);
   g.fillTriangle(-4.6, -2.2, -3.2, -2.2, -3.9, -3.6);
