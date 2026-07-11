@@ -92,10 +92,18 @@ export default async function InboxPage(
     const move = suggestedAction(thread);
     // Follow-up nudge: hours since the last message drive the "waiting on you /
     // gone cold" reminder. Computed here (force-dynamic render) so it reflects
-    // real elapsed time without shipping the clock to the client.
+    // real elapsed time without shipping the clock to the client. A meeting still
+    // ahead suppresses the "follow up" nudge — that's owed only after the meeting.
     const lastMs = thread.last_message_at ? Date.parse(thread.last_message_at) : NaN;
     const ageHours = Number.isNaN(lastMs) ? null : (Date.now() - lastMs) / 3_600_000;
-    const nudge = threadNudge({ status: thread.status, unread: thread.unread, ageHours });
+    const meetingMs = thread.meeting_at ? Date.parse(thread.meeting_at) : NaN;
+    const meetingUpcoming = !Number.isNaN(meetingMs) && meetingMs > Date.now();
+    const nudge = threadNudge({
+      status: thread.status,
+      unread: thread.unread,
+      ageHours,
+      meetingUpcoming,
+    });
     return {
       id: thread.id,
       channel: thread.channel,
