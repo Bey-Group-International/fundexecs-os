@@ -11,7 +11,7 @@
 //
 // All writes are best-effort by contract: on any failure they return
 // { ok: false } instead of throwing, so the floor degrades gracefully to its
-// in-memory behavior and /command-center never breaks.
+// in-memory behavior and /virtual-office never breaks.
 
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";

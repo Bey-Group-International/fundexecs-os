@@ -1,9 +1,12 @@
 // lib/office/floor-link.ts
 // Canonical builder for Executive Floor invite links. Every room has its own
-// stable, shareable link (`/command-center?room=<key>`); a video-meeting link
+// stable, shareable link (`/virtual-office?room=<key>`); a video-meeting link
 // adds `&meet=1` so opening it drops the invitee into the host's room and
 // auto-opens the video dock. Shared by the client (copy-link / roster) and the
-// server (invite email) so the two never drift.
+// server (invite email) so the two never drift. The path comes from the
+// centralized route table so the Command Center → Virtual Office rename can't
+// leave invite URLs pointing at the old (redirecting) path.
+import { virtualOfficeRoutes } from "@/lib/virtualOfficeRoutes";
 
 export type FloorLinkOptions = {
   /** Target room key — the invitee is teleported here on arrival. */
@@ -32,7 +35,7 @@ export function officeInvitePath(opts: FloorLinkOptions = {}): string {
   if (opts.deal) params.set("deal", opts.deal);
   if (opts.invite) params.set("invite", opts.invite);
   const qs = params.toString();
-  return `/command-center${qs ? `?${qs}` : ""}`;
+  return `${virtualOfficeRoutes.root}${qs ? `?${qs}` : ""}`;
 }
 
 /** A fully-qualified office invite URL for a given origin. */

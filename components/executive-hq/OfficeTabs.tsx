@@ -177,7 +177,7 @@ export function OfficeTabs() {
             // Best-effort read-hydrate: seed the archive with this org's
             // persisted workflows. Swallow everything — guest / no-Supabase /
             // empty-table paths return nothing and behave exactly as before,
-            // so /command-center renders identically without a backend.
+            // so /virtual-office renders identically without a backend.
             loadOfficeWorkflows()
               .then((rows) => {
                 if (!rows || rows.length === 0) return;

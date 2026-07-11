@@ -47,7 +47,7 @@ interface GroupItem {
 // that duplicate a hub module or another destination live where they belong and
 // are not repeated here. Notably "LP Report" is gone — Execute › Reporting is
 // the single reporting surface (/reports now redirects there); "Portfolio"
-// lives under Execute › Asset Management; "Command Center" is the /command-center
+// lives under Execute › Asset Management; "Virtual Office" is the /virtual-office
 // / dashboard surface; and "Capital Map" overlaps Graphs + Source › LP Pipeline.
 // "Search", "Marketplace", and "Meetings" were promoted to top-level rail
 // destinations; "Campaigns" moved into Run › Campaigns.
@@ -413,7 +413,7 @@ function SidebarPanel({
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-500/30 to-transparent"
         />
-        <Logo href="/command-center" variant="coin-wordmark" />
+        <Logo href="/virtual-office" variant="coin-wordmark" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
@@ -443,8 +443,8 @@ function SidebarPanel({
               Floor (the spatial office world where Earn orchestrates the
               executive team). Sits between Automations and Inbox. */}
           <Link
-            href="/command-center"
-            className={navHrefActive(pathname, "/command-center") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+            href="/virtual-office"
+            className={navHrefActive(pathname, "/virtual-office") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
             Virtual Office
           </Link>
