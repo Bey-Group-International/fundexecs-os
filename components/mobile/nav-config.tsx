@@ -41,7 +41,7 @@ export interface TabItem {
 // Four primary tabs + a "More" trigger. The quick-action FAB sits in the
 // notch between Earn and Deals (rendered separately).
 export const TABS: TabItem[] = [
-  { key: "home", label: "Home", href: "/home", icon: HomeIcon, match: ["/home", "/dashboard", "/command-center"] },
+  { key: "home", label: "Home", href: "/home", icon: HomeIcon, match: ["/home", "/dashboard", "/virtual-office"] },
   { key: "earn", label: "Earn", href: "/earn", icon: EarnIcon, match: ["/earn", "/workspace", "/sessions", "/session", "/automations"] },
   { key: "deals", label: "Deals", href: "/deals/feed", icon: DealsIcon, match: ["/deals", "/run", "/deal/", "/portfolio"] },
   { key: "network", label: "Network", href: "/network", icon: NetworkIcon, match: ["/network", "/source", "/relationship", "/prospecting", "/investor"] },
@@ -89,7 +89,7 @@ export const MORE_GROUPS: MoreGroup[] = [
     heading: "Workspace",
     items: [
       { key: "approvals", label: "Approvals", href: "/approvals", icon: ShieldIcon, desc: "Swipe to decide sign-offs" },
-      { key: "command-center", label: "Command Center", href: "/command-center", icon: HomeIcon, desc: "The AI executive floor" },
+      { key: "virtual-office", label: "Virtual Office", href: "/virtual-office", icon: HomeIcon, desc: "The AI executive floor" },
       { key: "workflows", label: "Workflows", href: "/automations", icon: TaskIcon, desc: "Active & automated work" },
       { key: "activity", label: "Activity", href: "/activity", icon: SparkIcon, desc: "What agents have been doing" },
       { key: "meetings", label: "Meetings", href: "/meetings", icon: CalendarIcon, desc: "Calls, notes & scheduling" },

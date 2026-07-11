@@ -83,7 +83,7 @@ export const CRAWLER_DISALLOW: readonly string[] = [
   "/workspace",
   "/home",
   "/dashboard",
-  "/command-center",
+  "/virtual-office",
   "/earn",
   "/inbox",
   "/activity",
