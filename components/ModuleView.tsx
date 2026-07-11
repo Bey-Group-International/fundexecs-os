@@ -47,6 +47,7 @@ import AddRowForm from "@/components/AddRowForm";
 import ModuleTable from "@/components/ModuleTable";
 import { ModuleDashboard } from "@/components/source/ModuleDashboard";
 import { AiSourcingPanel } from "@/components/source/AiSourcingPanel";
+import { DealListingImport } from "@/components/source/DealListingImport";
 import { SourceLiveHeader, type SourceStat } from "@/components/source/SourceLiveHeader";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { summarizeModule } from "@/lib/source-stats";
@@ -455,6 +456,7 @@ export async function ModuleView({
             webEnrichment={sourcingEnrichmentEnabled()}
           />
         ) : null}
+        {aiCfg ? <DealListingImport hub={hub.key} module={mod.key} /> : null}
         <AddRowForm
           hub={hub.key}
           module={mod.key}
