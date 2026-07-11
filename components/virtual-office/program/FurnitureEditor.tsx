@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { FloorOverlay } from "./FloorOverlay";
+import { FurniturePreview } from "./FurniturePreview";
 import { ROOMS, ROOM_W, ROOM_H, WORLD_W, WORLD_H } from "@/components/virtual-office/types";
 import { PIECE_TYPES, PIECE_LABELS, type PieceType } from "@/lib/office/furnitureTypes";
 import type { PlacedPiece } from "@/lib/office/furniturePlacement";
@@ -18,7 +19,10 @@ const labelCls = "mb-0.5 block text-[8px] uppercase tracking-[0.16em] text-slate
 // Rooms an operator can place into. The wide Marketplace hall is bespoke
 // (drawn separately) and room-relative coords don't map cleanly to it, so it's
 // excluded from placement for now (shown on the map for context only).
-const EDIT_ROOM_KEYS = new Set(ROOMS.filter((r) => r.key !== "marketplace").map((r) => r.key));
+const EDIT_ROOMS = ROOMS.filter((r) => r.key !== "marketplace");
+const EDIT_ROOM_KEYS = new Set(EDIT_ROOMS.map((r) => r.key));
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 type World = { x: number; y: number };
 
@@ -68,6 +72,11 @@ export function FurnitureEditor({ onClose }: { onClose: () => void }) {
     commit(pieces.map((p) => (p.id === id ? { ...p, roomKey: loc.roomKey, x: loc.x, y: loc.y } : p)));
   };
 
+  /** Patch a single field on a placed piece (type / room / x / y). */
+  const updatePiece = (id: string, patch: Partial<Pick<PlacedPiece, "type" | "roomKey" | "x" | "y">>) => {
+    commit(pieces.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  };
+
   const removeSelected = () => {
     if (!selected) return;
     const next = pieces.filter((p) => p.id !== selected.id);
@@ -111,7 +120,7 @@ export function FurnitureEditor({ onClose }: { onClose: () => void }) {
         </div>
       }
     >
-      {/* Palette — pick the piece to place */}
+      {/* Palette — pick the piece to place (rendered exactly as it draws on the floor) */}
       <div className="space-y-1.5">
         <span className={labelCls}>Palette — pick a piece</span>
         <div className="grid grid-cols-3 gap-1.5">
@@ -122,14 +131,19 @@ export function FurnitureEditor({ onClose }: { onClose: () => void }) {
                 key={t}
                 type="button"
                 onClick={() => setArmed(t)}
-                className="truncate rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors"
+                className="flex flex-col items-center gap-1 rounded-md border px-1.5 pb-1 pt-1.5 transition-colors"
                 style={{
                   borderColor: active ? `${GOLD}80` : "rgba(255,255,255,0.08)",
                   background: active ? `${GOLD}14` : "rgba(255,255,255,0.02)",
-                  color: active ? GOLD : "#cbd2dc",
                 }}
               >
-                {PIECE_LABELS[t]}
+                <FurniturePreview type={t} width={58} height={40} accent={active ? 0xc9a84c : 0x8fa2bd} />
+                <span
+                  className="w-full truncate text-center text-[10px]"
+                  style={{ color: active ? GOLD : "#cbd2dc" }}
+                >
+                  {PIECE_LABELS[t]}
+                </span>
               </button>
             );
           })}
@@ -146,6 +160,15 @@ export function FurnitureEditor({ onClose }: { onClose: () => void }) {
         onMove={movePiece}
       />
 
+      {/* Property editor — fine-tune the selected piece */}
+      {selected && (
+        <PiecePropertyEditor
+          piece={selected}
+          onChange={(patch) => updatePiece(selected.id, patch)}
+          onRemove={removeSelected}
+        />
+      )}
+
       {/* Placed list */}
       <div className="space-y-1.5">
         <span className={labelCls}>Placed furniture ({pieces.length})</span>
@@ -161,33 +184,130 @@ export function FurnitureEditor({ onClose }: { onClose: () => void }) {
                 key={p.id}
                 type="button"
                 onClick={() => setSelectedId(p.id)}
-                className="flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors"
+                className="flex w-full items-center gap-2 rounded-md border px-2 py-1 text-left transition-colors"
                 style={{
                   borderColor: active ? `${GOLD}80` : "rgba(255,255,255,0.08)",
                   background: active ? `${GOLD}14` : "rgba(255,255,255,0.02)",
                 }}
               >
+                <span className="shrink-0" style={{ opacity: 0.9 }}>
+                  <FurniturePreview type={p.type} width={34} height={26} accent={active ? 0xc9a84c : 0x8fa2bd} />
+                </span>
                 <span className="truncate text-[12px] text-slate-100">{PIECE_LABELS[p.type]}</span>
-                <span className="shrink-0 text-[9px] uppercase tracking-wider text-slate-500">{room?.label ?? p.roomKey}</span>
+                <span className="ml-auto shrink-0 text-[9px] uppercase tracking-wider text-slate-500">{room?.label ?? p.roomKey}</span>
               </button>
             );
           })}
         </div>
       </div>
-
-      {selected && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={removeSelected}
-            className="rounded border px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors"
-            style={{ borderColor: "#ef444455", color: "#ef4444" }}
-          >
-            Remove piece
-          </button>
-        </div>
-      )}
     </FloorOverlay>
+  );
+}
+
+// ── Per-piece property editor ─────────────────────────────────────────────────
+
+const fieldCls =
+  "w-full rounded border bg-transparent px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-[#c9a84c80]";
+const fieldStyle = { borderColor: "rgba(255,255,255,0.12)" } as const;
+
+/**
+ * Fine-tune a placed piece: swap its type, move it to another room, or nudge
+ * its exact room-relative x/y. Every edit commits through the store, so the
+ * live floor and the minimap update together.
+ */
+function PiecePropertyEditor({
+  piece,
+  onChange,
+  onRemove,
+}: {
+  piece: PlacedPiece;
+  onChange: (patch: Partial<Pick<PlacedPiece, "type" | "roomKey" | "x" | "y">>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className="space-y-2 rounded-md border p-2.5"
+      style={{ borderColor: `${GOLD}33`, background: "rgba(201,168,76,0.05)" }}
+    >
+      <div className="flex items-center justify-between">
+        <span className={labelCls} style={{ marginBottom: 0 }}>
+          Selected piece
+        </span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded border px-2 py-0.5 text-[9px] uppercase tracking-wider transition-colors hover:bg-[#ef444414]"
+          style={{ borderColor: "#ef444455", color: "#ef4444" }}
+        >
+          Remove
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2.5">
+        <span
+          className="shrink-0 rounded"
+          style={{ background: "#0c0a07", border: "1px solid rgba(255,255,255,0.06)" }}
+        >
+          <FurniturePreview type={piece.type} width={66} height={48} />
+        </span>
+        <div className="grid flex-1 grid-cols-2 gap-2">
+          <label className="col-span-2 block">
+            <span className={labelCls}>Type</span>
+            <select
+              className={fieldCls}
+              style={fieldStyle}
+              value={piece.type}
+              onChange={(e) => onChange({ type: e.target.value as PieceType })}
+            >
+              {PIECE_TYPES.map((t) => (
+                <option key={t} value={t} style={{ background: "#12100c" }}>
+                  {PIECE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="col-span-2 block">
+            <span className={labelCls}>Room</span>
+            <select
+              className={fieldCls}
+              style={fieldStyle}
+              value={piece.roomKey}
+              onChange={(e) => onChange({ roomKey: e.target.value })}
+            >
+              {EDIT_ROOMS.map((r) => (
+                <option key={r.key} value={r.key} style={{ background: "#12100c" }}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelCls}>X (0–{ROOM_W})</span>
+            <input
+              type="number"
+              className={fieldCls}
+              style={fieldStyle}
+              min={0}
+              max={ROOM_W}
+              value={piece.x}
+              onChange={(e) => onChange({ x: clamp(Math.round(Number(e.target.value) || 0), 0, ROOM_W) })}
+            />
+          </label>
+          <label className="block">
+            <span className={labelCls}>Y (0–{ROOM_H})</span>
+            <input
+              type="number"
+              className={fieldCls}
+              style={fieldStyle}
+              min={0}
+              max={ROOM_H}
+              value={piece.y}
+              onChange={(e) => onChange({ y: clamp(Math.round(Number(e.target.value) || 0), 0, ROOM_H) })}
+            />
+          </label>
+        </div>
+      </div>
+    </div>
   );
 }
 
