@@ -1,18 +1,22 @@
-// Institutional meeting-prep prompt builder.
+// Institutional meeting follow-up prompt builder.
 //
-// "Prepare with Earn" gathers the meeting plus its linked deal / fund and asks
-// Earn for a rigorous, fund-manager-grade preparation pack. Keeping the prompt
-// construction here (pure, no I/O) makes it unit-testable and keeps the route
-// thin. Only sections with real data are included, so an under-specified meeting
-// produces a shorter — but still structured — brief rather than empty headers.
+// "Follow up with Earn" gathers the just-completed meeting plus its linked deal /
+// fund and (optionally) the saved report notes, then asks Earn for a rigorous,
+// fund-manager-grade POST-MEETING follow-up pack. Keeping the prompt construction
+// here (pure, no I/O) makes it unit-testable and keeps the route thin. Only
+// sections with real data are included, so an under-specified meeting produces a
+// shorter — but still structured — brief rather than empty headers.
+//
+// Deliberately self-contained: it does NOT import from prep.ts so the two
+// features can evolve independently.
 
-export interface PrepAttendee {
+export interface FollowupAttendee {
   name: string;
   email?: string | null;
   type?: "internal" | "external" | string | null;
 }
 
-export interface PrepMeeting {
+export interface FollowupMeeting {
   title: string;
   meetingType?: string | null;
   priority?: string | null;
@@ -21,14 +25,10 @@ export interface PrepMeeting {
   durationMinutes?: number | null;
   objective?: string | null;
   agenda?: string | null;
-  preparationRequirements?: string | null;
-  description?: string | null;
-  location?: string | null;
-  tags?: string[] | null;
-  attendees?: PrepAttendee[] | null;
+  attendees?: FollowupAttendee[] | null;
 }
 
-export interface PrepDeal {
+export interface FollowupDeal {
   name: string;
   stage?: string | null;
   assetClass?: string | null;
@@ -38,13 +38,7 @@ export interface PrepDeal {
   notes?: string | null;
 }
 
-export interface PrepPrincipal {
-  name?: string | null;
-  title?: string | null;
-  email?: string | null;
-}
-
-export interface PrepFund {
+export interface FollowupFund {
   name: string;
   fundType?: string | null;
   vintageYear?: number | null;
@@ -53,6 +47,13 @@ export interface PrepFund {
   calledCapital?: number | null;
   distributedCapital?: number | null;
   currency?: string | null;
+}
+
+/** Captured artifacts from a saved post-meeting report, if one exists. */
+export interface FollowupNotes {
+  summary?: string | null;
+  actionItems?: string[] | null;
+  keyPoints?: string[] | null;
 }
 
 function clean(v: string | null | undefined): string | null {
@@ -95,7 +96,7 @@ function formatWhen(iso: string | null | undefined, timezone: string | null | un
   return `${when}${dur}`;
 }
 
-function attendeeLines(attendees: PrepAttendee[] | null | undefined): string | null {
+function attendeeLines(attendees: FollowupAttendee[] | null | undefined): string | null {
   if (!attendees || attendees.length === 0) return null;
   const lines = attendees
     .map((a) => {
@@ -110,6 +111,12 @@ function attendeeLines(attendees: PrepAttendee[] | null | undefined): string | n
   return lines.length ? lines.join("\n") : null;
 }
 
+function bulletList(items: string[] | null | undefined): string | null {
+  if (!items || items.length === 0) return null;
+  const lines = items.map((i) => clean(i)).filter(Boolean).map((i) => `  - ${i}`);
+  return lines.length ? lines.join("\n") : null;
+}
+
 function section(title: string, rows: Array<[string, string | null]>): string | null {
   const present = rows.filter(([, v]) => clean(v));
   if (present.length === 0) return null;
@@ -117,23 +124,24 @@ function section(title: string, rows: Array<[string, string | null]>): string | 
 }
 
 /**
- * Compose the full institutional prep prompt. Returns a single string suitable
- * for handing to Earn (the copilot).
+ * Compose the full institutional post-meeting follow-up prompt. Returns a single
+ * string suitable for handing to Earn (the copilot).
  */
-export function buildPrepPrompt(input: {
-  meeting: PrepMeeting;
-  deal?: PrepDeal | null;
-  dealLead?: PrepPrincipal | null;
-  fund?: PrepFund | null;
+export function buildFollowupPrompt(input: {
+  meeting: FollowupMeeting;
+  deal?: FollowupDeal | null;
+  fund?: FollowupFund | null;
+  notes?: FollowupNotes | null;
 }): string {
-  const { meeting, deal, dealLead, fund } = input;
+  const { meeting, deal, fund, notes } = input;
 
   const blocks: string[] = [];
 
   blocks.push(
-    "You are Earn, an institutional meeting-preparation analyst for a fund manager. " +
-      "Using the context below, produce a rigorous, decision-oriented preparation pack in an institutional tone " +
-      "(suitable for LPs, deal teams, and advisors). Be specific and concise; use the actual names and figures provided.",
+    "You are Earn, an institutional analyst for a fund manager. The meeting below has just concluded. " +
+      "Using the context and any captured notes provided, produce a rigorous, decision-oriented POST-MEETING follow-up pack " +
+      "in an institutional tone (suitable for LPs, deal teams, advisors, and — where relevant — regulatory review). " +
+      "Be specific and concise; use the actual names and figures provided and do not invent facts that are not supported by the context.",
   );
 
   const meetingBlock = section("MEETING", [
@@ -141,12 +149,8 @@ export function buildPrepPrompt(input: {
     ["Type", titleCase(meeting.meetingType)],
     ["Priority", titleCase(meeting.priority)],
     ["When", formatWhen(meeting.scheduledAt, meeting.timezone, meeting.durationMinutes)],
-    ["Location", clean(meeting.location)],
     ["Objective", clean(meeting.objective)],
     ["Agenda", clean(meeting.agenda)],
-    ["Prep notes", clean(meeting.preparationRequirements)],
-    ["Description", clean(meeting.description)],
-    ["Tags", meeting.tags && meeting.tags.length ? meeting.tags.join(", ") : null],
   ]);
   if (meetingBlock) blocks.push(meetingBlock);
 
@@ -166,15 +170,6 @@ export function buildPrepPrompt(input: {
     if (dealBlock) blocks.push(dealBlock);
   }
 
-  if (dealLead) {
-    const leadBlock = section("DEAL LEAD", [
-      ["Name", clean(dealLead.name)],
-      ["Title", titleCase(dealLead.title)],
-      ["Email", clean(dealLead.email)],
-    ]);
-    if (leadBlock) blocks.push(leadBlock);
-  }
-
   if (fund) {
     const cur = clean(fund.currency) ?? "USD";
     const fundBlock = section("FUND / VEHICLE", [
@@ -189,21 +184,28 @@ export function buildPrepPrompt(input: {
     if (fundBlock) blocks.push(fundBlock);
   }
 
+  if (notes) {
+    const summary = clean(notes.summary);
+    if (summary) blocks.push(`CAPTURED SUMMARY\n${summary}`);
+    const keyPoints = bulletList(notes.keyPoints);
+    if (keyPoints) blocks.push(`CAPTURED KEY POINTS\n${keyPoints}`);
+    const actionItems = bulletList(notes.actionItems);
+    if (actionItems) blocks.push(`CAPTURED ACTION ITEMS\n${actionItems}`);
+  }
+
   blocks.push(
     [
-      "Produce the following, each as a short, skimmable section. Omit a section only if there is truly nothing useful to say.",
-      "1. Counterparty & attendee background — who they are, what they likely care about, and their probable posture.",
-      "2. Deal / fund context that matters for THIS conversation.",
-      "3. Objective & the specific outcome to secure.",
-      "4. Recommended agenda / flow with rough time allocation.",
-      "5. Likely questions & objections — each with a crisp, credible answer.",
-      "6. Risks & watch-items to manage, and how to defuse them.",
-      "7. Talking points & positioning (institutional tone, numbers where relevant).",
-      "8. Materials & data to bring or have on hand.",
-      "9. The decision(s) to secure and how to close toward them.",
-      "10. Follow-up plan — owners and next steps.",
+      "Produce the following, each as a short, skimmable section. Omit a section only if there is truly nothing useful to say; do not emit empty headers.",
+      "1. Recap — a concise summary of what was discussed and where things stand.",
+      "2. Decisions made — the concrete decisions reached, stated unambiguously.",
+      "3. Action items — a table of owner, item, and due date; be explicit about who owns what and by when.",
+      "4. Risks & watch-items — open issues, dependencies, and anything to monitor, with how to manage each.",
+      "5. Approval-sensitive language — flag any statements, commitments, or figures that require compliance, LP, or regulatory review, with suggested wording appropriate for LP/regulatory contexts.",
+      "6. CRM / next-step updates — the fields, stages, and records to update in the CRM as a result of this meeting.",
+      "7. Follow-up email — a ready-to-send draft (greeting, brief recap, decisions, numbered action items with owners and dates, and a professional sign-off).",
+      "8. Proposed next meeting — a recommended purpose, timing, and required attendees.",
       "",
-      "End with a short 'Gather before the meeting' list of anything missing from the context above that I should confirm.",
+      "End with a short 'Confirm before sending' list of anything ambiguous in the context above that I should verify before acting.",
     ].join("\n"),
   );
 

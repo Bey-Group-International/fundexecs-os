@@ -1,4 +1,4 @@
-import { buildPrepPrompt, formatMoney } from "./prep";
+import { buildFollowupPrompt, formatMoney } from "./followup";
 
 describe("formatMoney", () => {
   it("compacts to K / M / B", () => {
@@ -16,9 +16,9 @@ describe("formatMoney", () => {
   });
 });
 
-describe("buildPrepPrompt", () => {
-  it("embeds meeting, attendee, deal and fund context plus the section outline", () => {
-    const prompt = buildPrepPrompt({
+describe("buildFollowupPrompt", () => {
+  it("embeds meeting, attendee, deal, fund and captured notes plus the follow-up outline", () => {
+    const prompt = buildFollowupPrompt({
       meeting: {
         title: "Project Atlas — LP Update",
         meetingType: "lp_update",
@@ -29,11 +29,14 @@ describe("buildPrepPrompt", () => {
           { name: "Jane Doe", type: "external", email: "jane@lp.com" },
           { name: "Sam Internal", type: "internal" },
         ],
-        tags: ["LP", "re-up"],
       },
       deal: { name: "Atlas Logistics", stage: "diligence", assetClass: "Infrastructure", targetAmount: 25_000_000 },
-      dealLead: { name: "Maria Chen", title: "managing_director", email: "maria@fundexecs.com" },
       fund: { name: "FundExecs Fund III", fundType: "fund", vintageYear: 2026, committedCapital: 250_000_000, currency: "USD" },
+      notes: {
+        summary: "LP is supportive and signaled intent to re-up.",
+        actionItems: ["Sam: Send updated deck by Friday"],
+        keyPoints: ["Performance ahead of plan"],
+      },
     });
 
     // Context is present with real names/figures.
@@ -44,38 +47,45 @@ describe("buildPrepPrompt", () => {
     expect(prompt).toContain("$25.0M");
     expect(prompt).toContain("FundExecs Fund III");
     expect(prompt).toContain("$250.0M");
-    // Deal lead (principal) context is rendered with name + titleized role.
-    expect(prompt).toContain("DEAL LEAD");
-    expect(prompt).toContain("Maria Chen");
-    expect(prompt).toContain("Managing Director");
-    expect(prompt).toContain("maria@fundexecs.com");
     // Titleized enum-ish values.
     expect(prompt).toContain("Lp Update");
-    // The comprehensive outline is requested.
-    expect(prompt).toContain("Likely questions & objections");
-    expect(prompt).toContain("Follow-up plan");
-    expect(prompt).toContain("Gather before the meeting");
+    // Captured report notes.
+    expect(prompt).toContain("LP is supportive and signaled intent to re-up.");
+    expect(prompt).toContain("Sam: Send updated deck by Friday");
+    expect(prompt).toContain("Performance ahead of plan");
+    // The post-meeting outline is requested.
+    expect(prompt).toContain("Decisions made");
+    expect(prompt).toContain("Action items");
+    expect(prompt).toContain("Risks & watch-items");
+    expect(prompt).toContain("Approval-sensitive language");
+    expect(prompt).toContain("CRM / next-step updates");
+    expect(prompt).toContain("Follow-up email");
+    expect(prompt).toContain("Proposed next meeting");
+    expect(prompt).toContain("Confirm before sending");
   });
 
   it("still returns a structured prompt with only a title (no empty headers)", () => {
-    const prompt = buildPrepPrompt({ meeting: { title: "Quick sync" } });
+    const prompt = buildFollowupPrompt({ meeting: { title: "Quick sync" } });
     expect(prompt).toContain("Quick sync");
-    expect(prompt).toContain("institutional meeting-preparation analyst");
-    // No deal/fund blocks when there's no such context.
+    expect(prompt).toContain("institutional analyst for a fund manager");
+    // No deal/fund/notes blocks when there's no such context.
     expect(prompt).not.toContain("DEAL\n");
     expect(prompt).not.toContain("FUND / VEHICLE");
+    expect(prompt).not.toContain("CAPTURED SUMMARY");
+    expect(prompt).not.toContain("CAPTURED KEY POINTS");
+    expect(prompt).not.toContain("CAPTURED ACTION ITEMS");
     // Attendees block omitted when there are none.
     expect(prompt).not.toContain("ATTENDEES");
-    // No deal-lead block when there's no principal.
-    expect(prompt).not.toContain("DEAL LEAD");
   });
 
-  it("omits the DEAL LEAD block when no principal is provided but a deal is", () => {
-    const prompt = buildPrepPrompt({
-      meeting: { title: "Deal review" },
-      deal: { name: "Atlas Logistics", stage: "diligence" },
+  it("omits captured-notes headers when the report has no usable content", () => {
+    const prompt = buildFollowupPrompt({
+      meeting: { title: "Debrief" },
+      notes: { summary: "  ", actionItems: [], keyPoints: null },
     });
-    expect(prompt).toContain("Atlas Logistics");
-    expect(prompt).not.toContain("DEAL LEAD");
+    expect(prompt).toContain("Debrief");
+    expect(prompt).not.toContain("CAPTURED SUMMARY");
+    expect(prompt).not.toContain("CAPTURED ACTION ITEMS");
+    expect(prompt).not.toContain("CAPTURED KEY POINTS");
   });
 });
