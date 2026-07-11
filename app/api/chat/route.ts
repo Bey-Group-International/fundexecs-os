@@ -8,6 +8,7 @@ import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversation
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { buildContactAppendix, detectSourcingIntent } from "@/lib/chat-enrichment";
 import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize";
+import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, prior_session_id } = await request.json().catch(() => ({ body: "" }));
+  const { body, model: requestedModel, prior, session_id, prior_session_id, meeting_context } = await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -61,9 +62,21 @@ export async function POST(request: Request) {
     });
   }
 
+  // A meeting prep/follow-up request: the client sends only a clean one-liner and
+  // this reference; the rich, sensitive context is gathered server-side below and
+  // injected into the model call — it is never returned to the browser.
+  const meetingCtx =
+    meeting_context && typeof meeting_context === "object" &&
+    typeof (meeting_context as { id?: unknown }).id === "string" &&
+    ((meeting_context as { mode?: unknown }).mode === "prep" || (meeting_context as { mode?: unknown }).mode === "followup")
+      ? (meeting_context as { id: string; mode: "prep" | "followup" })
+      : null;
+
   // --- Model routing: route simple queries to a faster/cheaper model ---
   const wordCount = body.trim().split(/\s+/).length;
-  const isSimple = wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
+  // A meeting prep/follow-up briefing is substantive work — keep it off the fast
+  // path even though the visible one-liner is short.
+  const isSimple = !meetingCtx && wordCount < 15 && !body.match(/draft|memo|analysis|report|summarize|compare/i);
   const model = isSimple
     ? "claude-haiku-4-5-20251001"
     : (requestedModel ?? process.env.CLAUDE_MODEL ?? "claude-sonnet-4-6");
@@ -159,6 +172,24 @@ export async function POST(request: Request) {
     }
   } catch {
     // proceed without live context
+  }
+
+  // --- Meeting prep / follow-up context (server-side injection) ---
+  // Gather the meeting + its linked deal/fund/lead (and, for follow-up, any saved
+  // report) and fold the composed institutional context into liveContext. This is
+  // the whole point of the no-leak design: the sensitive material reaches the
+  // model here but never the client. Org-scoped and best-effort.
+  if (meetingCtx) {
+    try {
+      const supabase = await createServerClient();
+      const block =
+        meetingCtx.mode === "prep"
+          ? await loadMeetingPrepContext(supabase, orgId, meetingCtx.id)
+          : await loadMeetingFollowupContext(supabase, orgId, meetingCtx.id);
+      if (block) liveContext = liveContext ? `${liveContext}\n\n${block}` : block;
+    } catch {
+      // Non-fatal — Earn still answers the one-liner without the enriched context.
+    }
   }
 
   // --- Prior artifact context: last 5 completed deliverables so Earn can
