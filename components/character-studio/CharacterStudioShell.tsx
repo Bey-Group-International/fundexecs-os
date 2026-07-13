@@ -169,6 +169,16 @@ export function CharacterStudioShell({ initialAvatar }: { initialAvatar: UserAva
       <div className="flex min-h-0 flex-1">
         {/* Left — section navigation */}
         <nav className="w-[168px] shrink-0 overflow-y-auto border-r border-line/60 p-2">
+          <Link
+            href={virtualOfficeRoutes.characterStudioFromPhoto}
+            className="mb-1.5 flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-[12px] transition-colors hover:bg-white/[0.04]"
+            style={{ borderColor: `${GOLD}55`, color: GOLD }}
+          >
+            <span className="w-4 text-center text-[13px]" aria-hidden>
+              ⎙
+            </span>
+            Create from photo
+          </Link>
           {STUDIO_SECTIONS.map((s) => {
             const active = s.id === section;
             return (
