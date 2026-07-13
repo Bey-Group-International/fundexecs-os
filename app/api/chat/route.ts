@@ -111,7 +111,10 @@ export async function POST(request: Request) {
           .from("deals")
           .select("id, name, stage, asset_class, updated_at")
           .eq("organization_id", orgId)
-          .not("stage", "in", '("closed","rejected")')
+          // Exclude terminal deals. Values must be real deal_stage enum members —
+          // "closed"/"rejected" aren't, and Postgres rejects them ("invalid input
+          // value for enum deal_stage"). Matches home/page.tsx's filter.
+          .not("stage", "in", "(exited,passed,dead)")
           .order("updated_at", { ascending: false })
           .limit(8),
         supabase
