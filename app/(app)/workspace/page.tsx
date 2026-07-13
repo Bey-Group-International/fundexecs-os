@@ -70,7 +70,9 @@ export default async function SessionsPage({
       .from("deals")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", ctx.orgId)
-      .not("stage", "in", '("closed","rejected")'),
+      // Exclude terminal deals with real deal_stage enum members — "closed"/
+      // "rejected" aren't in the enum and make Postgres reject the query.
+      .not("stage", "in", "(exited,passed,dead)"),
     supabase
       .from("investors")
       .select("id", { count: "exact", head: true })
