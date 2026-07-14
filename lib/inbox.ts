@@ -332,3 +332,30 @@ export async function getInboxCount(orgId: string): Promise<number> {
     return 0;
   }
 }
+
+/**
+ * The number of approvals the operator actually sees in the inbox's Needs
+ * Approval list — i.e. `buildInbox().needsApproval.length`: deduped by title and
+ * with premature follow-up packs suppressed until their meeting has happened.
+ *
+ * The sidebar badge uses this so its number matches the list. A raw
+ * `awaiting_approval` tasks count (what the badge used before) over-counts, since
+ * it applies neither the title-dedup nor the follow-up suppression — that
+ * mismatch is exactly why the badge read "2" while the list showed one item.
+ * Lighter than `getInbox` (no run-conviction), so it's cheap to call in the shell
+ * layout on every page.
+ */
+export async function getApprovalsCount(orgId: string): Promise<number> {
+  try {
+    const nowIso = new Date().toISOString();
+    const [awaitingApproval, meetings] = await Promise.all([
+      fetchAwaitingApproval(orgId),
+      fetchUnfinishedMeetings(orgId),
+    ]);
+    return awaitingApproval.filter(
+      (t) => !isPrematureFollowupPack(t.title ?? "", meetings, nowIso),
+    ).length;
+  } catch {
+    return 0;
+  }
+}
