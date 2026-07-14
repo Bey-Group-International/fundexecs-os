@@ -6,6 +6,7 @@ import { vivify } from "./avatarPalette";
 const OUTLINE = 0x0a0a0d;
 import type { AgentState } from "../program/officeProgram";
 import type { WorkPantomime } from "@/lib/office/characterSheet";
+import { AvatarAnimator } from "@/lib/office/avatarAnim/player";
 
 export type AvatarFacing = "down" | "up" | "left" | "right";
 
@@ -90,7 +91,10 @@ export class ExecutiveAvatar {
   private walkPhase = 0;
   private workPhase = 0;
   private thinkPhase = Math.random() * Math.PI * 2;
-  private bobPhase = Math.random() * Math.PI * 2;
+  // Keyframe-engine driven idle motion (breathing). Replaces the ad-hoc sine
+  // bob with an eased, hand-authored clip (see lib/office/avatarAnim); seeded to
+  // a random phase in the constructor so a room never breathes in unison.
+  private animator = new AvatarAnimator("idleBreathe");
   private lastPoseKey = "";
   // Blink: staggered so a room of executives never blinks in unison.
   private blinkTimer = 1200 + Math.random() * 4200;
@@ -99,6 +103,8 @@ export class ExecutiveAvatar {
   constructor(scene: Phaser.Scene, x: number, y: number, spec: AvatarSpec, depth = 8) {
     this.scene = scene;
     this.spec = spec;
+    // Desync the shared breathing loop so figures don't inhale in lockstep.
+    this.animator.update(Math.random() * 4200);
 
     // Soft, layered ground shadow — three stacked ellipses fake a penumbra and
     // ground the figure in the 2.5D floor (deeper + slightly offset from the light).
@@ -237,10 +243,11 @@ export class ExecutiveAvatar {
       return;
     }
 
-    // Subtle breathing bob — transform only, no redraw.
-    this.bobPhase += dt;
-    const bob = Math.sin(this.bobPhase * 1.6) * 0.4;
-    this.body.setY(bob);
+    // Subtle breathing bob — transform only, no redraw. Driven by the keyframe
+    // engine's looping "idleBreathe" clip (eased inhale/hold/exhale) rather than
+    // a bare sine, so the motion reads as breath, not a metronome.
+    this.animator.update(delta);
+    this.body.setY(this.animator.sample().breatheY ?? 0);
 
     // Redraw-based work gestures advance a discrete step: brisk keystrokes for
     // typing, a slower sway for presenting, a gentle page-bob for reviewing —
