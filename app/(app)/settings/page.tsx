@@ -11,6 +11,8 @@ import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
 import { OrgSecretsPanel, type SecretKeyGroup } from "./OrgSecretsPanel";
 import { listOrgSecrets } from "./secrets-actions";
+import { McpServersPanel } from "./McpServersPanel";
+import { listMcpServers } from "./mcp-actions";
 import { DigestPreferences } from "./DigestPreferences";
 import { loadDigestPrefs } from "./digest-actions";
 import { ApiKeys, type ApiKeyView } from "./ApiKeys";
@@ -60,6 +62,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "get-the-os", label: "Get the OS" },
   { id: "mandates", label: "AI Permissions" },
   { id: "integrations", label: "Integrations" },
+  { id: "mcp", label: "MCP servers" },
   { id: "digest", label: "Digest" },
   { id: "api", label: "API keys" },
   { id: "audit", label: "Audit export" },
@@ -137,6 +140,10 @@ export default async function SettingsPage() {
 
   // Per-org, per-channel delivery prefs for the Act-now Radar digest.
   const { prefs: digestPrefs } = await loadDigestPrefs();
+
+  // The org's registered custom MCP servers (masked — never the token). Rendered
+  // in the Integrations section below.
+  const mcpServers = await listMcpServers();
 
   const labelFor = (kind: string) =>
     TIER_2_ACTIONS.find((a) => a.kind === kind)?.label ?? kind;
@@ -326,6 +333,20 @@ export default async function SettingsPage() {
                 groups={secretKeyGroups}
                 vaultReady={vaultConfigured()}
               />
+            </div>
+
+            {/* Custom MCP servers — a per-org registry of remote (HTTP / SSE)
+                Model Context Protocol servers. Registry-only for now: the
+                connection details are stored (token encrypted in the vault) so
+                the workspace has them on file. */}
+            <div id="mcp" className="mt-6 scroll-mt-6">
+              <h3 className="mb-1 text-sm font-medium text-fg-primary">Custom MCP servers</h3>
+              <p className="mb-3 text-xs leading-snug text-fg-muted">
+                Register remote Model Context Protocol servers (streamable HTTP or SSE) for your
+                organization. Connection details are stored here and any bearer token is encrypted
+                at rest; owners and admins can manage the list.
+              </p>
+              <McpServersPanel servers={mcpServers} vaultReady={vaultConfigured()} />
             </div>
           </Section>
 
