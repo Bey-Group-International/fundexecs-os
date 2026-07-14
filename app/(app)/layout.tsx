@@ -204,7 +204,12 @@ export default async function AppLayout({
           <div className="print:hidden">
             <GlobalTopBar
               balance={balance}
-              messagesUnread={messagesUnread ?? 0}
+              // Mailbox mirrors the sidebar Inbox badge: unread messages + the
+              // suppression-aware approvals count. Including approvals here (not
+              // just messagesUnread) keeps the SSR value equal to what
+              // getAlertCounts polls, so the badge doesn't jump/false-shake on
+              // the first poll after load.
+              messagesUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
               dealsUnread={dealsUnread ?? 0}
             />
             <MatchToast alert={matchAlert} />

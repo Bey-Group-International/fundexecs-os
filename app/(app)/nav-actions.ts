@@ -8,6 +8,7 @@
 // and this stays as the initial-load + fallback fetch.
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { getApprovalsCount } from "@/lib/inbox";
 
 export interface AlertCounts {
   // Unread messages — capital/LP, partners, providers + email/chat/booking/video
@@ -34,19 +35,17 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       .eq("unread", true)
       .eq("status", "open");
 
-  const [messagesRes, dealsRes, approvalsRes] = await Promise.all([
+  const [messagesRes, dealsRes, approvals] = await Promise.all([
     base().neq("channel", "deal_share"),
     base().eq("channel", "deal_share"),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId)
-      .is("parent_task_id", null)
-      .eq("status", "awaiting_approval"),
+    // Suppression-aware approvals count — the same number the inbox's Needs
+    // Approval list and the sidebar badge show (deduped, premature follow-up
+    // packs held back). A raw awaiting_approval count over-counts.
+    getApprovalsCount(orgId),
   ]);
 
   return {
-    messages: (messagesRes.count ?? 0) + (approvalsRes.count ?? 0),
+    messages: (messagesRes.count ?? 0) + approvals,
     deals: dealsRes.count ?? 0,
   };
 }
