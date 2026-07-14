@@ -9,6 +9,7 @@ import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { buildContactAppendix, detectSourcingIntent } from "@/lib/chat-enrichment";
 import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize";
 import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
+import { getActiveMandateRow, mandateContextBlock } from "@/lib/mandates";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -188,6 +189,17 @@ export async function POST(request: Request) {
 
     if (needsWebSearch) {
       liveContext += "\n[Web search recommended for this query — live data not fetched]\n";
+    }
+
+    // Standing mandate: fold the operator's scope, guardrails, and blast-radius
+    // limits into Earn's context so every reply respects the delegation's
+    // constraints — not just in-session, since guardrails apply to all advice.
+    // Best-effort; a miss or empty mandate simply adds nothing.
+    try {
+      const mandateBlock = mandateContextBlock(await getActiveMandateRow(supabase, orgId));
+      if (mandateBlock) liveContext += `\n${mandateBlock}\n`;
+    } catch {
+      // Mandate context is an enhancement — never block the reply.
     }
   } catch {
     // proceed without live context

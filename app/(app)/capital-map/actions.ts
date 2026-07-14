@@ -84,7 +84,11 @@ export async function queueNextAction(
   // Tier 1 is always free and Tier 3 always gated — the gate enforces both
   // regardless of what any mandate claims.
   const mandate = await getActiveMandate(supabase, orgId);
-  const decision = gateDecision(action, mandate);
+  // Pass the investor's contact domain so a mandate's do-not-contact blast-radius
+  // rule can revoke a pre-authorized auto-send to a forbidden counterparty.
+  const decision = gateDecision(action, mandate, undefined, {
+    targetDomain: investor.contact_email ?? undefined,
+  });
 
   const title = `${label} — ${investor.name}`;
   const { data: task, error } = await supabase

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionKind, GateTier } from "@/lib/gates";
+import type { ActionKind, BlastRadius, GateTier } from "@/lib/gates";
 import { MANDATE_ACTION_OPTIONS } from "@/lib/mandate-options";
 import { saveMandate } from "@/app/(app)/settings/mandate/actions";
 
@@ -10,6 +10,12 @@ interface MandateEditorProps {
   autoApprove: ActionKind[];
   // The active mandate's autonomy ceiling (1 = draft only, 2 = act within mandate).
   autonomyCeiling: GateTier;
+  // Free-text scope: which hubs, counterparty classes, deal sizes this covers.
+  scope?: string;
+  // Ordered list of free-text guardrails Earn must respect.
+  guardrails?: string[];
+  // Hard limits on Earn's automated footprint.
+  blastRadius?: BlastRadius;
 }
 
 const CEILING_OPTIONS: { value: 1 | 2; label: string; hint: string }[] = [
@@ -25,7 +31,13 @@ const CEILING_OPTIONS: { value: 1 | 2; label: string; hint: string }[] = [
   },
 ];
 
-export function MandateEditor({ autoApprove, autonomyCeiling }: MandateEditorProps) {
+export function MandateEditor({
+  autoApprove,
+  autonomyCeiling,
+  scope = "",
+  guardrails = [],
+  blastRadius = {},
+}: MandateEditorProps) {
   const [selected, setSelected] = useState<Set<ActionKind>>(new Set(autoApprove));
   // The DB caps the ceiling at 2; clamp the seed defensively for the radios.
   const [ceiling, setCeiling] = useState<1 | 2>(autonomyCeiling >= 2 ? 2 : 1);
@@ -174,6 +186,87 @@ export function MandateEditor({ autoApprove, autonomyCeiling }: MandateEditorPro
             );
           })}
         </div>
+      </section>
+
+      {/* Scope — free-text description of what the mandate covers */}
+      <section>
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">Scope</h3>
+        <p className="mt-1 text-sm text-fg-secondary">
+          What this mandate covers — which hubs, counterparty classes, and deal sizes. Earn keeps
+          its work inside this scope.
+        </p>
+        <textarea
+          name="scope"
+          defaultValue={scope}
+          rows={2}
+          placeholder="e.g. Sourcing and LP outreach for value-add multifamily, $5–25M checks, US Sun Belt."
+          className="mt-3 w-full rounded-xl border border-line bg-surface-1 px-3.5 py-2.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none"
+        />
+      </section>
+
+      {/* Guardrails — free-text constraints Earn must respect */}
+      <section>
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">Guardrails</h3>
+        <p className="mt-1 text-sm text-fg-secondary">
+          Explicit constraints Earn must respect during execution — one per line. These are folded
+          into Earn&apos;s context on every reply.
+        </p>
+        <textarea
+          name="guardrails"
+          defaultValue={guardrails.join("\n")}
+          rows={4}
+          placeholder={"Never contact a counterparty before I review the draft.\nAlways disclose we are an LP, not a direct buyer."}
+          className="mt-3 w-full rounded-xl border border-line bg-surface-1 px-3.5 py-2.5 text-sm leading-relaxed text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none"
+        />
+      </section>
+
+      {/* Blast radius — hard limits on the automated footprint */}
+      <section>
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+          Blast-radius limits
+        </h3>
+        <p className="mt-1 text-sm text-fg-secondary">
+          Hard ceilings on Earn&apos;s automated footprint. A pre-authorized action that would breach
+          one of these still falls back to your sign-off.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-fg-secondary">Max automated sends / day</span>
+            <input
+              type="number"
+              name="max_outreach_per_day"
+              min={0}
+              step={1}
+              defaultValue={blastRadius.maxOutreachPerDay ?? ""}
+              placeholder="e.g. 25"
+              className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-fg-secondary">Max $ per action</span>
+            <input
+              type="number"
+              name="max_dollar_per_action"
+              min={0}
+              step={1000}
+              defaultValue={blastRadius.maxDollarPerAction ?? ""}
+              placeholder="e.g. 50000"
+              className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none"
+            />
+          </label>
+        </div>
+        <label className="mt-3 flex flex-col gap-1">
+          <span className="text-xs font-medium text-fg-secondary">
+            Do-not-contact domains (one per line)
+          </span>
+          <textarea
+            name="forbidden_domains"
+            defaultValue={(blastRadius.forbiddenDomains ?? []).join("\n")}
+            rows={2}
+            placeholder={"competitor.com\nblacklisted-fund.com"}
+            className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none"
+          />
+        </label>
       </section>
 
       {/* Tier 1 — always-on informational note */}

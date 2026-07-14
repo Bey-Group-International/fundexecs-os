@@ -9,7 +9,7 @@
 // unit-testable in isolation. The catalog is filtered through the gate layer's
 // `tierForAction`, so it can never drift out of sync with `lib/gates.ts`: if a
 // kind below were ever reclassified, it would simply fall out of the catalog.
-import { tierForAction, type ActionKind } from "@/lib/gates";
+import { tierForAction, type ActionKind, type BlastRadius } from "@/lib/gates";
 
 export interface MandateActionOption {
   kind: ActionKind;
@@ -92,4 +92,77 @@ export function sanitizeMandateActions(submitted: readonly string[]): ActionKind
     }
   }
   return result;
+}
+
+// Guardrails and forbidden domains are entered as free text, one per line. Cap
+// the per-entry length and the total count so a paste can't bloat the row or the
+// context we inject into Earn.
+const MAX_GUARDRAIL_LEN = 240;
+const MAX_GUARDRAILS = 25;
+const MAX_DOMAINS = 50;
+
+/**
+ * Turn a newline-delimited block of guardrail text into a clean, deduplicated
+ * list of `{ rule }` objects for the `guardrails` jsonb column: trim each line,
+ * drop blanks, truncate to `MAX_GUARDRAIL_LEN`, and cap at `MAX_GUARDRAILS`.
+ */
+export function sanitizeGuardrails(raw: string): Array<{ rule: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ rule: string }> = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const rule = line.trim().slice(0, MAX_GUARDRAIL_LEN);
+    if (!rule || seen.has(rule)) continue;
+    seen.add(rule);
+    out.push({ rule });
+    if (out.length >= MAX_GUARDRAILS) break;
+  }
+  return out;
+}
+
+// Reduce a newline/comma-delimited block of domains to a clean, lowercased,
+// deduplicated list (protocol/www/path stripped), capped at `MAX_DOMAINS`.
+function sanitizeForbiddenDomains(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const token of raw.split(/[\s,]+/)) {
+    const d = token
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/.*$/, "");
+    if (!d || seen.has(d)) continue;
+    seen.add(d);
+    out.push(d);
+    if (out.length >= MAX_DOMAINS) break;
+  }
+  return out;
+}
+
+// Coerce a submitted numeric field to a non-negative integer, or undefined when
+// blank/garbage (an absent limit is not a constraint).
+function positiveIntOrUndefined(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.trunc(n);
+}
+
+/**
+ * Build a structured `BlastRadius` from the editor's raw form fields. Blank or
+ * invalid fields are simply omitted, so an empty form yields an empty (all-limits-
+ * absent) blast radius rather than spurious zero-ceilings.
+ */
+export function parseBlastRadiusForm(fields: {
+  maxOutreachPerDay?: unknown;
+  maxDollarPerAction?: unknown;
+  forbiddenDomains?: string;
+}): BlastRadius {
+  const br: BlastRadius = {};
+  const outreach = positiveIntOrUndefined(fields.maxOutreachPerDay);
+  if (outreach != null) br.maxOutreachPerDay = outreach;
+  const dollar = positiveIntOrUndefined(fields.maxDollarPerAction);
+  if (dollar != null) br.maxDollarPerAction = dollar;
+  const domains = sanitizeForbiddenDomains(fields.forbiddenDomains ?? "");
+  if (domains.length) br.forbiddenDomains = domains;
+  return br;
 }
