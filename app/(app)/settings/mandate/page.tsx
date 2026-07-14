@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import { getActiveMandate } from "@/lib/mandates";
+import { getActiveMandateRow, parseGuardrails, parseBlastRadius } from "@/lib/mandates";
+import type { GateTier } from "@/lib/gates";
+import { isMandateActionKind } from "@/lib/mandate-options";
 import { MandateEditor } from "@/components/mandate/MandateEditor";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +17,14 @@ export default async function MandatePage() {
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = await createServerClient();
-  const mandate = await getActiveMandate(supabase, ctx.orgId);
+  const row = await getActiveMandateRow(supabase, ctx.orgId);
+
+  // Seed the editor from the stored row. auto_approve is a plain string[] in the
+  // DB; narrow it to the toggleable Tier-2 kinds the editor understands.
+  const autoApprove = (row?.auto_approve ?? []).filter(isMandateActionKind);
+  const autonomyCeiling = (Math.min(2, Math.max(1, row?.autonomy_ceiling ?? 1)) as GateTier);
+  const guardrails = parseGuardrails(row?.guardrails);
+  const blastRadius = parseBlastRadius(row?.blast_radius_rules);
 
   return (
     <div className="mx-auto max-w-xl">
@@ -34,8 +43,11 @@ export default async function MandatePage() {
       </header>
 
       <MandateEditor
-        autoApprove={mandate?.autoApprove ?? []}
-        autonomyCeiling={mandate?.autonomyCeiling ?? 1}
+        autoApprove={autoApprove}
+        autonomyCeiling={autonomyCeiling}
+        scope={row?.scope ?? ""}
+        guardrails={guardrails}
+        blastRadius={blastRadius}
       />
     </div>
   );

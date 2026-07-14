@@ -125,6 +125,23 @@ export const TIER_DESCRIPTION: Record<GateTier, string> = {
   3: "Creates a binding or capital obligation. Always requires you — never delegable.",
 };
 
+// Blast-radius rules are the hard ceilings on Earn's automated footprint. Unlike
+// `autoApprove` (which RELAXES the gate), blast-radius rules only ever TIGHTEN it:
+// a pre-authorized Tier-2 send still falls back to the human gate when it would
+// breach one of these limits. All fields are optional — an absent limit is not a
+// constraint.
+export interface BlastRadius {
+  // Max number of automated Tier-2 sends allowed per day. Once reached, further
+  // pre-authorized sends fall back to sign-off.
+  maxOutreachPerDay?: number;
+  // Dollar ceiling for a single automated action. An action carrying a larger
+  // figure loses its auto-approve bypass.
+  maxDollarPerAction?: number;
+  // Counterparty domains Earn may never auto-contact (a do-not-contact list).
+  // Matched case-insensitively against the target's domain and its subdomains.
+  forbiddenDomains?: string[];
+}
+
 // A Mandate is the operator's standing delegation to Earn. It can lift specific
 // Tier-2 actions to auto-execution within an autonomy ceiling. A ceiling of 3 is
 // intentionally impossible to honor: Tier 3 is never delegable.
@@ -133,6 +150,91 @@ export interface Mandate {
   autoApprove: ActionKind[];
   // The highest tier this mandate may auto-execute. Clamped to 2 in practice.
   autonomyCeiling: GateTier;
+  // Free-text constraints Earn must respect during execution (e.g. "Never contact
+  // a counterparty before I review the draft"). These are advisory to the gate —
+  // they are injected into Earn's context, not machine-enforced — so they are not
+  // consulted by `gateDecision`. Optional; absent on legacy callers.
+  guardrails?: string[];
+  // Hard limits on the automated footprint, enforced by `gateDecision` when the
+  // action's `GateContext` supplies the relevant figure. Optional.
+  blastRadius?: BlastRadius;
+}
+
+// The concrete particulars of the action being gated, used to enforce
+// blast-radius rules. Everything is optional: a check only fires when both the
+// rule and its corresponding context value are present, so omitting context
+// simply skips blast-radius enforcement (identical to the pre-blast-radius gate).
+export interface GateContext {
+  // The counterparty domain (or email) this action would reach. Used against
+  // `blastRadius.forbiddenDomains`.
+  targetDomain?: string;
+  // The capital/dollar figure this action carries. Used against
+  // `blastRadius.maxDollarPerAction`.
+  dollarAmount?: number;
+  // The count of automated Tier-2 sends already made today. Used against
+  // `blastRadius.maxOutreachPerDay`.
+  sendsToday?: number;
+}
+
+// Reduce a raw domain or email to a bare, comparable hostname: lowercase, no
+// protocol, no `www.`, no path, and the local part of an email dropped.
+function normalizeDomain(raw: string): string {
+  let d = raw.trim().toLowerCase();
+  const at = d.lastIndexOf("@");
+  if (at !== -1) d = d.slice(at + 1);
+  d = d.replace(/^https?:\/\//, "").replace(/^www\./, "");
+  const slash = d.indexOf("/");
+  if (slash !== -1) d = d.slice(0, slash);
+  return d;
+}
+
+// True when `target` is `forbidden` or a subdomain of it (a.example.com matches
+// example.com). Both are normalized first.
+function domainForbidden(target: string, forbidden: string): boolean {
+  const t = normalizeDomain(target);
+  const f = normalizeDomain(forbidden);
+  if (!t || !f) return false;
+  return t === f || t.endsWith(`.${f}`);
+}
+
+/**
+ * The blast-radius breach (if any) that revokes a pre-authorized action's
+ * auto-approve bypass, as an operator-facing reason. Returns null when no rule is
+ * breached — including when the mandate carries no blast-radius rules or the
+ * context supplies no figure to check. Pure and side-effect free.
+ */
+export function blastRadiusBreach(
+  blastRadius?: BlastRadius,
+  context?: GateContext,
+): string | null {
+  if (!blastRadius || !context) return null;
+
+  if (context.targetDomain && blastRadius.forbiddenDomains?.length) {
+    const hit = blastRadius.forbiddenDomains.find((d) =>
+      domainForbidden(context.targetDomain as string, d),
+    );
+    if (hit) {
+      return `Blast-radius rule: ${normalizeDomain(context.targetDomain)} is on your do-not-contact list — sign-off required.`;
+    }
+  }
+
+  if (
+    blastRadius.maxDollarPerAction != null &&
+    context.dollarAmount != null &&
+    context.dollarAmount > blastRadius.maxDollarPerAction
+  ) {
+    return `Blast-radius rule: $${context.dollarAmount.toLocaleString("en-US")} exceeds your $${blastRadius.maxDollarPerAction.toLocaleString("en-US")} per-action ceiling — sign-off required.`;
+  }
+
+  if (
+    blastRadius.maxOutreachPerDay != null &&
+    context.sendsToday != null &&
+    context.sendsToday >= blastRadius.maxOutreachPerDay
+  ) {
+    return `Blast-radius rule: daily automated-send cap of ${blastRadius.maxOutreachPerDay} reached — sign-off required.`;
+  }
+
+  return null;
 }
 
 export interface GateDecision {
@@ -160,8 +262,20 @@ export interface Backing {
  * product behind it is verifiable. Unverified, weakly-grounded output cannot
  * ride the auto-approve bypass to a counterparty — it falls back to the human
  * gate. Internal (Tier 1) work is unaffected; Tier 3 is always gated anyway.
+ *
+ * Blast-radius layer: even a verified, pre-authorized Tier-2 action falls back to
+ * the human gate when it would breach one of the mandate's hard footprint limits
+ * (forbidden domain, per-action dollar ceiling, daily send cap). Blast-radius
+ * rules only ever tighten — they never relax the gate — and are checked only when
+ * `context` supplies the relevant figure, so omitting `context` preserves the
+ * exact pre-blast-radius behavior.
  */
-export function gateDecision(action: ActionKind, mandate?: Mandate, backing?: Backing): GateDecision {
+export function gateDecision(
+  action: ActionKind,
+  mandate?: Mandate,
+  backing?: Backing,
+  context?: GateContext,
+): GateDecision {
   const tier = tierForAction(action);
 
   if (tier === 1) {
@@ -187,6 +301,13 @@ export function gateDecision(action: ActionKind, mandate?: Mandate, backing?: Ba
       requiresApproval: true,
       reason: "Unverified, weakly-grounded output — sign-off required before it reaches a counterparty.",
     };
+  }
+
+  if (preAuthorized) {
+    const breach = blastRadiusBreach(mandate?.blastRadius, context);
+    if (breach) {
+      return { tier, requiresApproval: true, reason: breach };
+    }
   }
 
   return preAuthorized

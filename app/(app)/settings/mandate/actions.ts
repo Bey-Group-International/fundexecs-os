@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireOrgContext } from "@/lib/auth";
-import { sanitizeMandateActions } from "@/lib/mandate-options";
+import {
+  sanitizeMandateActions,
+  sanitizeGuardrails,
+  parseBlastRadiusForm,
+} from "@/lib/mandate-options";
+import { blastRadiusToRules } from "@/lib/mandates";
 
 // The standing mandate's display name when this editor creates one. The editor
 // tunes a single, always-present delegation rather than naming bespoke mandates.
@@ -39,6 +44,19 @@ export async function saveMandate(formData: FormData): Promise<void> {
     ? Math.min(2, Math.max(1, Math.trunc(rawCeiling)))
     : 1;
 
+  // Scope, guardrails, and blast-radius limits round out the standing mandate.
+  // Guardrails and forbidden domains are free text; sanitize/cap them before
+  // persisting. Blast radius is stored as the normalized `{type,value}[]` jsonb.
+  const scope = String(formData.get("scope") ?? "").trim() || null;
+  const guardrails = sanitizeGuardrails(String(formData.get("guardrails") ?? ""));
+  const blastRadiusRules = blastRadiusToRules(
+    parseBlastRadiusForm({
+      maxOutreachPerDay: formData.get("max_outreach_per_day"),
+      maxDollarPerAction: formData.get("max_dollar_per_action"),
+      forbiddenDomains: String(formData.get("forbidden_domains") ?? ""),
+    }),
+  );
+
   const supabase = await createServerClient();
 
   // Find the org's most-recent active mandate to update in place.
@@ -57,6 +75,9 @@ export async function saveMandate(formData: FormData): Promise<void> {
       .update({
         auto_approve: autoApprove,
         autonomy_ceiling: autonomyCeiling,
+        scope,
+        guardrails,
+        blast_radius_rules: blastRadiusRules,
         is_active: true,
       })
       .eq("id", existing.id)
@@ -67,6 +88,9 @@ export async function saveMandate(formData: FormData): Promise<void> {
       name: STANDING_MANDATE_NAME,
       auto_approve: autoApprove,
       autonomy_ceiling: autonomyCeiling,
+      scope,
+      guardrails,
+      blast_radius_rules: blastRadiusRules,
       is_active: true,
       created_by: userId,
     });

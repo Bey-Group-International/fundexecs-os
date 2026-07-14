@@ -98,7 +98,11 @@ async function performThreadAction(
   const backing = opts.backingArtifact
     ? { verifiable: isVerifiable(opts.backingArtifact) }
     : undefined;
-  const decision = gateDecision(action, mandate, backing);
+  // Give the gate the counterparty this action would reach so a mandate's
+  // do-not-contact blast-radius rule can revoke a pre-authorized auto-send.
+  const decision = gateDecision(action, mandate, backing, {
+    targetDomain: t.counterparty_email ?? undefined,
+  });
   const agent = AGENT_FOR_INBOX_ACTION[action] ?? "investor_relations";
   const who = t.counterparty_name ?? t.counterparty_email ?? t.subject;
   const title = `${ACTION_LABEL[action] ?? action.replace(/_/g, " ")} — ${who}`;
