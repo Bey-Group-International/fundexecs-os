@@ -18,6 +18,7 @@ import {
   setSessionUnread,
 } from "@/app/(app)/sessions/actions";
 import { getWalletBalance } from "@/lib/wallet";
+import { getApprovalsCount } from "@/lib/inbox";
 import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
 import { createServerClient } from "@/lib/supabase/server";
 import { ActiveSessionProvider } from "@/components/session/active-session";
@@ -57,7 +58,7 @@ export default async function AppLayout({
     { count: dealsUnread },
     { data: matchAlertRow },
     buildStatuses,
-    { count: approvalsCount },
+    approvalsCount,
     { data: orgRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
@@ -102,12 +103,10 @@ export default async function AppLayout({
       getBuildReadiness(ctx.orgId)
         .then((r) => r.statuses)
         .catch(() => null as Record<string, ModuleStatus> | null),
-      supabase
-        .from("tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", ctx.orgId)
-        .is("parent_task_id", null)
-        .eq("status", "awaiting_approval"),
+      // Suppression-aware approvals count — matches the inbox's Needs Approval
+      // list (deduped, premature follow-up packs held back). A raw tasks count
+      // here over-counted, which is why the badge read "2" beside a one-item list.
+      getApprovalsCount(ctx.orgId),
       supabase
         .from("organizations")
         .select("setup_hidden")
