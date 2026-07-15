@@ -7,6 +7,11 @@ const OUTLINE = 0x0a0a0d;
 import type { AgentState } from "../program/officeProgram";
 import type { WorkPantomime } from "@/lib/office/characterSheet";
 import { AvatarAnimator } from "@/lib/office/avatarAnim/player";
+import { CLIPS } from "@/lib/office/avatarAnim/clips";
+import { sampleClip } from "@/lib/office/avatarAnim/sampler";
+
+/** One-shot reaction gestures the scene triggers on workflow events. */
+export type AvatarGesture = "wave" | "nod" | "celebrate";
 
 export type AvatarFacing = "down" | "up" | "left" | "right";
 
@@ -90,11 +95,16 @@ export class ExecutiveAvatar {
 
   private walkPhase = 0;
   private workPhase = 0;
-  private thinkPhase = Math.random() * Math.PI * 2;
+  // Thinking-dot clock, in ms — samples the engine's looping "think" clip.
+  private thinkPhase = Math.random() * CLIPS.think.durationMs;
   // Keyframe-engine driven idle motion (breathing). Replaces the ad-hoc sine
   // bob with an eased, hand-authored clip (see lib/office/avatarAnim); seeded to
   // a random phase in the constructor so a room never breathes in unison.
   private animator = new AvatarAnimator("idleBreathe");
+  // A transient one-shot gesture overlay (wave / nod / celebrate) the scene
+  // triggers on workflow events. Additive over the idle breathing; cleared when
+  // the clip finishes. Null when no reaction is playing.
+  private gesture: AvatarAnimator | null = null;
   private lastPoseKey = "";
   // Blink: staggered so a room of executives never blinks in unison.
   private blinkTimer = 1200 + Math.random() * 4200;
@@ -247,7 +257,18 @@ export class ExecutiveAvatar {
     // engine's looping "idleBreathe" clip (eased inhale/hold/exhale) rather than
     // a bare sine, so the motion reads as breath, not a metronome.
     this.animator.update(delta);
-    this.body.setY(this.animator.sample().breatheY ?? 0);
+    let bodyY = this.animator.sample().breatheY ?? 0;
+
+    // Overlay a one-shot reaction gesture, if any, as an additive vertical
+    // bounce/dip (celebrate pops up via `bounce`; nod dips via `headTilt`).
+    // Transform-only, so it composes with breathing and never redraws.
+    if (this.gesture) {
+      this.gesture.update(delta);
+      const g = this.gesture.sample();
+      bodyY += (g.bounce ?? 0) + (g.headTilt ?? 0) * 0.16;
+      if (this.gesture.isFinished()) this.gesture = null;
+    }
+    this.body.setY(bodyY);
 
     // Redraw-based work gestures advance a discrete step: brisk keystrokes for
     // typing, a slower sway for presenting, a gentle page-bob for reviewing —
@@ -260,10 +281,11 @@ export class ExecutiveAvatar {
       if (key !== this.lastPoseKey) this._redraw();
     }
 
-    // "Thinking" pulse while analyzing — transform-only on the dots.
+    // "Thinking" pulse while analyzing — transform-only on the dots, driven by
+    // the engine's eased "think" clip instead of a raw sine.
     if (this.think.visible) {
-      this.thinkPhase += dt * 3.4;
-      const p = (Math.sin(this.thinkPhase) + 1) / 2; // 0..1
+      this.thinkPhase += delta;
+      const p = sampleClip(CLIPS.think, this.thinkPhase).thinkPulse ?? 0; // 0..1
       this.think.setAlpha(0.35 + p * 0.6).setScale(0.8 + p * 0.35);
     }
   }
@@ -273,6 +295,17 @@ export class ExecutiveAvatar {
    * clicked/addressed, so the executive visibly registers the interaction.
    * Scale is safe: the scene drives position/depth each frame but never scale.
    */
+  /**
+   * Play a one-shot reaction gesture (wave / nod / celebrate) driven by the
+   * keyframe engine — the office's "avatars react to real work" cue. Additive
+   * over idle breathing (a vertical bounce/dip), so it never disturbs the pose
+   * or the walk cycle. Suppressed under reduced motion.
+   */
+  playGesture(name: AvatarGesture) {
+    if (ExecutiveAvatar.reducedMotion) return;
+    this.gesture = new AvatarAnimator(name);
+  }
+
   react() {
     if (ExecutiveAvatar.reducedMotion) return;
     this.scene.tweens.killTweensOf(this.container);
