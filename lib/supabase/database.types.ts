@@ -1697,6 +1697,27 @@ export type OrgSecret = Timestamps & {
   created_by: string | null;
 };
 
+// A registered custom MCP (Model Context Protocol) server (migration
+// 20260714120000). A per-org registry entry for a remote (HTTP / SSE) MCP
+// server. The optional bearer token is AES-256-GCM encrypted at rest exactly
+// like org_secrets (token_ciphertext/token_iv/token_auth_tag, all base64) with
+// a masked token_last4 for display; null token columns mean the server needs no
+// auth. Registry-only — nothing consumes this at runtime yet.
+export type McpServer = Timestamps & {
+  id: string;
+  organization_id: string;
+  name: string;
+  transport: "http" | "sse";
+  url: string;
+  auth_header: string;
+  token_ciphertext: string | null;
+  token_iv: string | null;
+  token_auth_tag: string | null;
+  token_last4: string | null;
+  enabled: boolean;
+  created_by: string | null;
+};
+
 // An outbound webhook subscription (migration 20260704010000). The signing
 // secret is AES-256-GCM encrypted like org_secrets; `cursor_at` is the
 // delivery high-water mark and `consecutive_failures` drives auto-disable.
@@ -2602,6 +2623,7 @@ export type Database = {
       processed_stripe_events: TableShape<ProcessedStripeEvent>;
       api_keys: TableShape<ApiKey>;
       org_secrets: TableShape<OrgSecret>;
+      mcp_servers: TableShape<McpServer>;
       webhook_endpoints: TableShape<WebhookEndpoint>;
       deal_shares: TableShape<DealShare>;
       deal_share_recipients: TableShape<DealShareRecipient>;
