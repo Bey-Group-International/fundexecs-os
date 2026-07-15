@@ -57,6 +57,10 @@ import {
 
 // ─── Room label overlay ────────────────────────────────────────────────────────
 
+/** Productive work states whose return to idle reads as "task completed" — the
+ *  trigger for an avatar's one-shot celebrate gesture. */
+const PRODUCTIVE_STATES = new Set<AgentState>(["working", "reviewing", "collaborating"]);
+
 type RoomZone = { zone: Phaser.GameObjects.Zone; key: string; label: string };
 
 type RemoteAvatarState = {
@@ -1518,6 +1522,11 @@ export class OfficeScene extends Phaser.Scene {
       (agentId: AgentId, state: AgentState, label: string) => {
         const npc = this.npcAvatars.get(`agent:${agentId}`);
         if (!npc) return;
+        // Completion cue: finishing productive work (working / reviewing /
+        // collaborating) and returning to idle plays a one-shot celebrate — the
+        // avatar visibly reacts to real work, keyframe-driven.
+        const wasProductive = PRODUCTIVE_STATES.has(npc.programState);
+        if (wasProductive && state === "idle") npc.avatar.playGesture("celebrate");
         npc.programState = state;
         npc.statusText.setText(this._shortStatus(state, label));
         // Action-aware pantomime: derive the on-floor work motion from this
@@ -1553,6 +1562,8 @@ export class OfficeScene extends Phaser.Scene {
       if (!from || !to) return;
       const peer = Boolean(fromAgentId) && fromAgentId !== "earn";
       this._animateTaskHandoff(from.sprite.x, from.sprite.y - 12, to.sprite.x, to.sprite.y - 12, peer);
+      // The receiving agent nods to acknowledge the incoming task.
+      to.avatar.playGesture("nod");
     });
 
     // On-floor approval gate — a pulsing banner in the room where the
