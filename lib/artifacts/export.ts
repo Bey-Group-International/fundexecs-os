@@ -8,12 +8,19 @@
 // anything it doesn't understand it degrades to escaped plain text rather than
 // throwing.
 
-export type ExportFormat = "rtf" | "html" | "md";
+// The text formats are pure string transforms with no dependency (this file).
+// The binary formats (docx / pdf) are rendered in lib/artifacts/export-binary.ts,
+// which owns the `docx` / `pdf-lib` deps and reuses the parser exported below.
+export type TextExportFormat = "rtf" | "html" | "md";
+export type BinaryExportFormat = "docx" | "pdf";
+export type ExportFormat = TextExportFormat | BinaryExportFormat;
 
 export const EXPORT_CONTENT_TYPES: Record<ExportFormat, string> = {
   rtf: "application/rtf",
   html: "text/html; charset=utf-8",
   md: "text/markdown; charset=utf-8",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf: "application/pdf",
 };
 
 export function exportExtension(f: ExportFormat): string {
@@ -21,7 +28,12 @@ export function exportExtension(f: ExportFormat): string {
 }
 
 export function isExportFormat(v: string): v is ExportFormat {
-  return v === "rtf" || v === "html" || v === "md";
+  return v === "rtf" || v === "html" || v === "md" || v === "docx" || v === "pdf";
+}
+
+/** Binary formats are rendered asynchronously to a byte buffer, not a string. */
+export function isBinaryFormat(f: ExportFormat): f is BinaryExportFormat {
+  return f === "docx" || f === "pdf";
 }
 
 // ---------------------------------------------------------------------------
@@ -31,7 +43,7 @@ export function isExportFormat(v: string): v is ExportFormat {
 // We classify each line into a small set of block tokens. Inline styling
 // (bold / italic / code) is resolved separately, per line, into spans.
 
-type Block =
+export type Block =
   | { kind: "heading"; level: 1 | 2 | 3; text: string }
   | { kind: "bullet"; text: string }
   | { kind: "paragraph"; text: string }
@@ -43,7 +55,7 @@ type Block =
 // can't turn an export into a denial-of-service. Well past any real artifact.
 const MAX_INPUT = 2_000_000;
 
-function parseBlocks(markdown: string): Block[] {
+export function parseBlocks(markdown: string): Block[] {
   const src =
     typeof markdown === "string"
       ? markdown.length > MAX_INPUT
@@ -146,9 +158,9 @@ function parseBlocks(markdown: string): Block[] {
 // spans. Single-pass character scan — no regex backtracking, and any unmatched
 // marker is treated as literal text so unbalanced `**` never throws or hangs.
 
-type Span = { text: string; bold?: boolean; italic?: boolean; code?: boolean };
+export type Span = { text: string; bold?: boolean; italic?: boolean; code?: boolean };
 
-function parseInline(text: string): Span[] {
+export function parseInline(text: string): Span[] {
   const spans: Span[] = [];
   const s = text;
   const n = s.length;
@@ -454,7 +466,7 @@ export function renderMarkdownToRtf(markdown: string, title?: string): string {
 // Dispatch
 // ---------------------------------------------------------------------------
 
-export function renderArtifact(format: ExportFormat, content: string, title?: string): string {
+export function renderArtifact(format: TextExportFormat, content: string, title?: string): string {
   const src = typeof content === "string" ? content : "";
   switch (format) {
     case "rtf":

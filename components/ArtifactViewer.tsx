@@ -217,19 +217,32 @@ function downloadArtifact(content: string, title: string, artifactType?: Artifac
   URL.revokeObjectURL(url);
 }
 
+// Server-side export formats — each hits GET /api/artifacts/:id/export?format=:fmt,
+// a cookie-authed, org-scoped attachment download (plain <a href> works).
+const EXPORT_FORMATS: ReadonlyArray<{ fmt: string; label: string }> = [
+  { fmt: "docx", label: "Word (.docx)" },
+  { fmt: "pdf", label: "PDF (.pdf)" },
+  { fmt: "rtf", label: "Rich text (.rtf)" },
+  { fmt: "html", label: "Web page (.html)" },
+  { fmt: "md", label: "Markdown (.md)" },
+];
+
 // Shared toolbar for per-artifact actions: copy to clipboard, download, expand.
 function ArtifactActions({
+  id,
   content,
   title,
   artifactType,
   onExpand,
 }: {
+  id?: string;
   content: string;
   title: string;
   artifactType?: ArtifactType;
   onExpand?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const btn =
     "rounded-md border border-line/70 bg-surface-0/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary";
   return (
@@ -249,9 +262,42 @@ function ArtifactActions({
       >
         {copied ? "Copied" : "Copy"}
       </button>
-      <button type="button" onClick={() => downloadArtifact(content, title, artifactType)} className={btn}>
-        Download
-      </button>
+      {id ? (
+        <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDownloadOpen(false); }}>
+          <button
+            type="button"
+            onClick={() => setDownloadOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={downloadOpen}
+            className={btn}
+          >
+            Download ▾
+          </button>
+          {downloadOpen ? (
+            <div
+              role="menu"
+              className="absolute right-0 top-7 z-50 w-40 rounded-lg border border-line bg-surface-1 p-1 shadow-xl"
+            >
+              {EXPORT_FORMATS.map(({ fmt, label }) => (
+                <a
+                  key={fmt}
+                  role="menuitem"
+                  href={`/api/artifacts/${id}/export?format=${fmt}`}
+                  download
+                  onClick={() => setDownloadOpen(false)}
+                  className="block rounded-md px-2 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                >
+                  {label}
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <button type="button" onClick={() => downloadArtifact(content, title, artifactType)} className={btn}>
+          Download
+        </button>
+      )}
       {onExpand ? (
         <button type="button" onClick={onExpand} className={btn}>
           Expand ⤢
@@ -593,6 +639,7 @@ export function ArtifactInline({
     <div className="group/artifact mt-2 overflow-hidden rounded-lg border border-line bg-surface-0 px-4 py-3">
       <div className="mb-2 flex items-center justify-end opacity-0 transition group-hover/artifact:opacity-100 focus-within:opacity-100">
         <ArtifactActions
+          id={id}
           content={content}
           title={fileTitle}
           artifactType={artifactType}
@@ -632,7 +679,7 @@ export function ArtifactInline({
           onClose={() => setModalOpen(false)}
           annotation={id && orgId ? { entityId: id, orgId } : undefined}
           toolbar={
-            <ArtifactActions content={content} title={fileTitle} artifactType={artifactType} />
+            <ArtifactActions id={id} content={content} title={fileTitle} artifactType={artifactType} />
           }
         />
       )}

@@ -9,6 +9,7 @@ import {
   parseBlastRadiusForm,
 } from "@/lib/mandate-options";
 import { blastRadiusToRules } from "@/lib/mandates";
+import { parseScreeningCriteria } from "@/lib/skills/screening-criteria";
 
 // The standing mandate's display name when this editor creates one. The editor
 // tunes a single, always-present delegation rather than naming bespoke mandates.
@@ -57,6 +58,36 @@ export async function saveMandate(formData: FormData): Promise<void> {
     }),
   );
 
+  // Structured screening criteria. Chip fields arrive as comma-joined strings;
+  // number fields as raw strings. Build a raw object and let parseScreeningCriteria
+  // keep only well-typed values — it returns null when nothing valid survives,
+  // which is a valid jsonb value to store.
+  const toList = (raw: unknown): string[] =>
+    String(raw ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  const toNumber = (raw: unknown): number | undefined => {
+    const n = parseFloat(String(raw ?? ""));
+    return Number.isNaN(n) ? undefined : n;
+  };
+  const rawCriteria = {
+    sectors: toList(formData.get("criteria_sectors")),
+    geographies: toList(formData.get("criteria_geographies")),
+    transactionTypes: toList(formData.get("criteria_transactionTypes")),
+    exclusions: toList(formData.get("criteria_exclusions")),
+    minRevenue: toNumber(formData.get("criteria_minRevenue")),
+    maxRevenue: toNumber(formData.get("criteria_maxRevenue")),
+    minEbitda: toNumber(formData.get("criteria_minEbitda")),
+    maxEbitda: toNumber(formData.get("criteria_maxEbitda")),
+    maxEnterpriseValue: toNumber(formData.get("criteria_maxEnterpriseValue")),
+  };
+  // parseScreeningCriteria yields a lean typed object (or null); it stores
+  // directly as the `Record<string, unknown> | null` jsonb column.
+  const screening_criteria = parseScreeningCriteria(rawCriteria) as
+    | Record<string, unknown>
+    | null;
+
   const supabase = await createServerClient();
 
   // Find the org's most-recent active mandate to update in place.
@@ -78,6 +109,7 @@ export async function saveMandate(formData: FormData): Promise<void> {
         scope,
         guardrails,
         blast_radius_rules: blastRadiusRules,
+        screening_criteria,
         is_active: true,
       })
       .eq("id", existing.id)
@@ -91,6 +123,7 @@ export async function saveMandate(formData: FormData): Promise<void> {
       scope,
       guardrails,
       blast_radius_rules: blastRadiusRules,
+      screening_criteria,
       is_active: true,
       created_by: userId,
     });
