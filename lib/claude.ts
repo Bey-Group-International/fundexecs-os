@@ -20,6 +20,9 @@ import {
   type TargetEngine,
   type Executive,
 } from "@/lib/intelligence";
+import { runInference, inferenceConfigured } from "@/lib/inference/gateway";
+import { runInferenceLogged } from "@/lib/inference/logged";
+import type { InferenceCapability } from "@/lib/inference/types";
 
 // Default to Sonnet 4.6 for institutional-quality deliverables.
 // Override with CLAUDE_MODEL env var (e.g. claude-opus-4-8 or claude-haiku-4-5-20251001).
@@ -96,6 +99,64 @@ export function copilotLive(): boolean {
 function client(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   return apiKey ? anthropicClient(apiKey) : null;
+}
+
+// When true, free-text generation routes through the provider-agnostic inference
+// gateway (lib/inference/*) instead of calling Anthropic directly — and each call
+// is recorded in the inference_runs ledger. OFF by default: the direct Anthropic
+// path below is byte-for-byte unchanged, and it remains the fallback whenever the
+// gateway is disabled or degraded. This is the seam that lets a non-Anthropic
+// provider serve the workflow without touching call sites.
+const CLAUDE_VIA_GATEWAY = process.env.CLAUDE_VIA_GATEWAY_ENABLED === "true";
+
+/** Org/session context for a gateway call, so its telemetry is attributable. */
+export interface GatewayCallContext {
+  orgId?: string | null;
+  actorId?: string | null;
+  sessionId?: string | null;
+  workflowTaskId?: string | null;
+}
+
+/**
+ * Try the inference gateway for a plain text completion. Returns the text when the
+ * gateway is ENABLED, configured, and returns a usable result; otherwise null, so
+ * the caller runs its existing direct-Anthropic path unchanged. Records telemetry
+ * to inference_runs when an orgId is available; never throws. Only suitable for
+ * free-text calls — structured (JSON-schema tool) calls stay on the direct path.
+ */
+export async function tryGatewayText(opts: {
+  system: string;
+  prompt: string;
+  capability: InferenceCapability;
+  maxTokens: number;
+  purpose: string;
+  ctx?: GatewayCallContext;
+}): Promise<string | null> {
+  if (!CLAUDE_VIA_GATEWAY || !inferenceConfigured()) return null;
+  try {
+    const req = {
+      system: opts.system,
+      messages: [{ role: "user" as const, content: opts.prompt }],
+      capability: opts.capability,
+      maxTokens: opts.maxTokens,
+    };
+    const orgId = opts.ctx?.orgId;
+    const result = orgId
+      ? await runInferenceLogged(
+          {
+            orgId,
+            actorId: opts.ctx?.actorId ?? null,
+            purpose: opts.purpose,
+            sessionId: opts.ctx?.sessionId ?? null,
+            workflowTaskId: opts.ctx?.workflowTaskId ?? null,
+          },
+          req,
+        )
+      : await runInference(req);
+    return result.ok && result.text ? result.text : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -490,9 +551,9 @@ export async function executeStep(args: {
   priorOutputs: string[];
   orgContext?: string;
   documentMode?: boolean;
+  /** Optional org/session context so a gateway-routed run is attributable. */
+  ctx?: GatewayCallContext;
 }): Promise<string> {
-  const anthropic = client();
-  if (!anthropic) return fallbackStepOutput(args);
   const agentName = AGENTS.find((a) => a.key === args.agent)?.name ?? args.agent;
   // Inject the institutional framework for heavy deliverables (IC memo, LP
   // update, risk memo, model) so the output follows the expected structure and
@@ -503,6 +564,28 @@ export async function executeStep(args: {
     (args.orgContext ? `\n\nFirm context:\n${args.orgContext}` : "") +
     (args.documentMode ? `\n\nProduce a structured document with clear headings and bullet points. Use specific numbers and names from the firm context above where available.` : "") +
     (framework ?? "");
+  const userContent =
+    `Workflow: ${args.workflowTitle}\n` +
+    `Your step: ${args.stepTitle} — ${args.stepDescription}\n\n` +
+    `Context from earlier steps:\n${args.priorOutputs.join("\n\n") || "(none)"}\n\n` +
+    `Produce your deliverable for this step concisely.`;
+
+  // Free-text deliverable → try the gateway first (when enabled + configured);
+  // this is the one call that routes through the provider-agnostic path and lands
+  // in the inference_runs ledger. On disabled/degraded it returns null and the
+  // existing direct-Anthropic path below runs unchanged.
+  const routed = await tryGatewayText({
+    system: systemPrompt,
+    prompt: userContent,
+    capability: "financial_reasoning",
+    maxTokens: 1400,
+    purpose: `step:${args.agent}`,
+    ctx: args.ctx,
+  });
+  if (routed) return routed;
+
+  const anthropic = client();
+  if (!anthropic) return fallbackStepOutput(args);
   try {
     const message = await anthropic.messages.create({
       model: MODEL,
@@ -510,16 +593,7 @@ export async function executeStep(args: {
       ...(modelSupportsEffort(MODEL) ? { thinking: { type: "adaptive" as const } } : {}),
       ...effortConfig(MODEL, "medium"),
       system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content:
-            `Workflow: ${args.workflowTitle}\n` +
-            `Your step: ${args.stepTitle} — ${args.stepDescription}\n\n` +
-            `Context from earlier steps:\n${args.priorOutputs.join("\n\n") || "(none)"}\n\n` +
-            `Produce your deliverable for this step concisely.`,
-        },
-      ],
+      messages: [{ role: "user", content: userContent }],
     });
     return textOf(message) || fallbackStepOutput(args);
   } catch (err) {
