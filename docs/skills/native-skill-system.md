@@ -12,18 +12,18 @@ Earn engine, gates, mandates, artifacts, or audit — it consumes them.
 
 ## 1. Feature-state matrix (the pieces this program needs)
 
-| Capability | State | Evidence |
-|---|---|---|
-| Earn orchestrator / workflow engine / task graph | **ACTIVE** | `lib/engine.ts`, `lib/claude.ts` (plan → parent/child `tasks`) |
-| Agent registry (15 execution agents) | **ACTIVE** | `lib/agents.ts` (`AgentKey`) |
-| Approval gates (Tier 1/2/3) | **ACTIVE** | `lib/gates.ts` + `approvals` table |
-| Mandates / autonomy | **ACTIVE** | `lib/mandates.ts`, `lib/autonomy.ts` |
-| Artifacts + provenance + immutable audit | **ACTIVE** | `artifacts`, `attestations`, `audit_log`, `brain_runs` |
-| **Native skill runtime (versioned packages, I/O schemas, policy, evaluation)** | **ABSENT → BUILT (seed)** | no `/skills`, `skill.yaml`, `skill_runs` existed — this increment adds them |
-| **Operational executive team (IC / Risk & Compliance / Legal & Closing; bounded domains, ceilings, prohibited actions)** | **ABSENT → BUILT** | roster was 15 marketing-leaning agents; `lib/executive-team.ts` was an unreconciled parallel vocab |
-| Provider-agnostic inference gateway | **ABSENT / cosmetic** | all calls go through `lib/anthropic-client.ts`; "model switching" only injects a persona hint (`lib/earn-conversation.ts`) |
-| Artifact formats DOCX/PDF/PPTX | **ABSENT** | markdown/text only; `lib/xlsx.ts` is a *reader*; no gen libs in `package.json` |
-| **Phase-0 "invented metrics"** | **DEFECT — OUTSTANDING** | `app/page.tsx:141-158` hard-codes "$2B+ deal flow tracked" (invented AUM) + `StatCounter`s render **0** on first paint; fabricated testimonial `:160-165` |
+|                                                        Capability                                                        |           State           |                                                                         Evidence                                                                          |
+|--------------------------------------------------------------------------------------------------------------------------|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Earn orchestrator / workflow engine / task graph                                                                         | **ACTIVE**                | `lib/engine.ts`, `lib/claude.ts` (plan → parent/child `tasks`)                                                                                            |
+| Agent registry (15 execution agents)                                                                                     | **ACTIVE**                | `lib/agents.ts` (`AgentKey`)                                                                                                                              |
+| Approval gates (Tier 1/2/3)                                                                                              | **ACTIVE**                | `lib/gates.ts` + `approvals` table                                                                                                                        |
+| Mandates / autonomy                                                                                                      | **ACTIVE**                | `lib/mandates.ts`, `lib/autonomy.ts`                                                                                                                      |
+| Artifacts + provenance + immutable audit                                                                                 | **ACTIVE**                | `artifacts`, `attestations`, `audit_log`, `brain_runs`                                                                                                    |
+| **Native skill runtime (versioned packages, I/O schemas, policy, evaluation)**                                           | **ABSENT → BUILT (seed)** | no `/skills`, `skill.yaml`, `skill_runs` existed — this increment adds them                                                                               |
+| **Operational executive team (IC / Risk & Compliance / Legal & Closing; bounded domains, ceilings, prohibited actions)** | **ABSENT → BUILT**        | roster was 15 marketing-leaning agents; `lib/executive-team.ts` was an unreconciled parallel vocab                                                        |
+| Provider-agnostic inference gateway                                                                                      | **ABSENT / cosmetic**     | all calls go through `lib/anthropic-client.ts`; "model switching" only injects a persona hint (`lib/earn-conversation.ts`)                                |
+| Artifact formats DOCX/PDF/PPTX                                                                                           | **ABSENT**                | markdown/text only; `lib/xlsx.ts` is a *reader*; no gen libs in `package.json`                                                                            |
+| **Phase-0 "invented metrics"**                                                                                           | **DEFECT — OUTSTANDING**  | `app/page.tsx:141-158` hard-codes "$2B+ deal flow tracked" (invented AUM) + `StatCounter`s render **0** on first paint; fabricated testimonial `:160-165` |
 
 ## 2. Gap analysis
 
@@ -38,20 +38,20 @@ the executive allowed to run it, and nothing persists a validated, provenanced
 ## 3. Target architecture (this slice)
 
 ```
-  Objective ── Earn (lib/engine.ts, unchanged) ── assigns Executive + Skill
-                                   │
-                                   ▼
-        ┌──────────────── lib/skills/runner.ts ────────────────┐
-        │  authorize (executive may run skill?)                │  ← lib/executives/registry.ts
-        │  validate INPUT  (lib/skills/validate.ts)            │  ← /skills/<id>/input.schema.json
-        │  run deterministic CORE (lib/skills/catalog/*)       │  ← facts / assumptions / calculations
-        │  validate OUTPUT                                     │  ← /skills/<id>/output.schema.json
-        │  resolve approval tier (lib/gates.ts)               │  ← Tier 3 never delegable
-        │  persist skill_run + audit event                    │  ← skill_runs, audit_log
-        └──────────────────────────────────────────────────────┘
-                                   ▼
-                    SkillResult { structured, sources, confidence,
-                      completeness, missingData, approvalTier, requiresApproval }
+Objective ── Earn (lib/engine.ts, unchanged) ── assigns Executive + Skill
+                                 │
+                                 ▼
+      ┌──────────────── lib/skills/runner.ts ────────────────┐
+      │  authorize (executive may run skill?)                │  ← lib/executives/registry.ts
+      │  validate INPUT  (lib/skills/validate.ts)            │  ← /skills/<id>/input.schema.json
+      │  run deterministic CORE (lib/skills/catalog/*)       │  ← facts / assumptions / calculations
+      │  validate OUTPUT                                     │  ← /skills/<id>/output.schema.json
+      │  resolve approval tier (lib/gates.ts)               │  ← Tier 3 never delegable
+      │  persist skill_run + audit event                    │  ← skill_runs, audit_log
+      └──────────────────────────────────────────────────────┘
+                                 ▼
+                  SkillResult { structured, sources, confidence,
+                    completeness, missingData, approvalTier, requiresApproval }
 ```
 
 **Boundary discipline:** `executeSkillCore` is pure (no I/O) → the whole
@@ -139,7 +139,7 @@ new; nothing existing was modified.
    skill emits a downloadable artifact with retained version + source refs.
 5. **Session workspace evidence.** Objective: render live `skill_runs` + validation
    + sources in the split-pane so work is visibly, testably happening (not agent
-   theater). Reuse: realtime on `skill_runs`, `components/session/*`.
+     theater). Reuse: realtime on `skill_runs`, `components/session/*`.
 6. **Phase-0 stabilization (OUTSTANDING non-negotiable).** Remove the invented
    "$2B+ deal flow tracked" figure + fabricated testimonial (`app/page.tsx:141-165`)
    and make counters show only verifiable values, never 0-on-hydration

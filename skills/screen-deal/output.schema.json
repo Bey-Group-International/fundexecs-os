@@ -1,21 +1,54 @@
 {
-  "type": "object",
-  "required": ["verdict", "mandateFit", "preliminaryValuation", "recommendedAction"],
   "properties": {
-    "verdict": { "type": "string", "enum": ["pass", "watch", "fail"] },
-    "mandateFit": {
-      "type": "object",
-      "required": ["overall"],
-      "properties": {
-        "overall": { "type": "number", "minimum": 0, "maximum": 100 }
-      }
+    "diligencePriorities": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
-    "exclusionHits": { "type": "array", "items": { "type": "string" } },
-    "preliminaryValuation": { "type": "object" },
-    "leverageConsideration": { "type": "string" },
-    "keyRisks": { "type": "array", "items": { "type": "string" } },
-    "missingFields": { "type": "array", "items": { "type": "string" } },
-    "diligencePriorities": { "type": "array", "items": { "type": "string" } },
-    "recommendedAction": { "type": "string" }
-  }
+    "exclusionHits": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "leverageConsideration": {
+      "type": "string"
+    },
+    "mandateFit": {
+      "properties": {
+        "overall": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "overall" ],
+      "type": "object"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "preliminaryValuation": {
+      "type": "object"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "verdict": {
+      "enum": [ "pass", "watch", "fail" ],
+      "type": "string"
+    }
+  },
+  "required": [ "verdict", "mandateFit", "preliminaryValuation", "recommendedAction" ],
+  "type": "object"
 }

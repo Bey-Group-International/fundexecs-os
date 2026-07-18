@@ -1,24 +1,24 @@
 {
   "description": "A clean mandate-fit buyout that should screen PASS with an 8.0x EV/EBITDA multiple.",
   "input": {
-    "mandate": {
-      "sectors": ["industrials", "manufacturing"],
-      "geographies": ["north america"],
-      "minRevenue": 20,
-      "maxRevenue": 200,
-      "minEbitda": 3,
-      "maxEbitda": 40,
-      "exclusions": ["gambling", "tobacco"]
-    },
     "deal": {
       "companyName": "Acme Widgets",
-      "sector": "Manufacturing",
-      "geography": "North America",
-      "revenue": 80,
       "ebitda": 12,
       "enterpriseValue": 96,
+      "geography": "North America",
       "ownership": "Founder-owned",
+      "revenue": 80,
+      "sector": "Manufacturing",
       "transactionType": "Buyout"
+    },
+    "mandate": {
+      "exclusions": [ "gambling", "tobacco" ],
+      "geographies": [ "north america" ],
+      "maxEbitda": 40,
+      "maxRevenue": 200,
+      "minEbitda": 3,
+      "minRevenue": 20,
+      "sectors": [ "industrials", "manufacturing" ]
     }
   }
 }

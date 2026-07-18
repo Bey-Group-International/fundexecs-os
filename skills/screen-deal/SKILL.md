@@ -13,15 +13,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-| | |
-|---|---|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Risk** | low |
-| **Executives** | Analyst · Investment Committee · Diligence |
-| **Inputs** | `mandate` (criteria) + `deal` (at minimum `companyName`) |
-| **Outputs** | `verdict`, `mandateFit`, `preliminaryValuation`, `keyRisks`, `missingFields`, `diligencePriorities`, `recommendedAction` |
-| **Artifacts** | `analysis` |
-| **Downstream** | `returns`, `dd-checklist`, `ic-memo` |
+|                   |                                                                                                                          |
+|-------------------|--------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                        |
+| **Risk**          | low                                                                                                                      |
+| **Executives**    | Analyst · Investment Committee · Diligence                                                                               |
+| **Inputs**        | `mandate` (criteria) + `deal` (at minimum `companyName`)                                                                 |
+| **Outputs**       | `verdict`, `mandateFit`, `preliminaryValuation`, `keyRisks`, `missingFields`, `diligencePriorities`, `recommendedAction` |
+| **Artifacts**     | `analysis`                                                                                                               |
+| **Downstream**    | `returns`, `dd-checklist`, `ic-memo`                                                                                     |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
