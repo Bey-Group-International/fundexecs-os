@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, MandateRow } from "@/lib/supabase/database.types";
 import type { ActionKind, BlastRadius, GateTier, Mandate } from "@/lib/gates";
+import { parseScreeningCriteria, type ScreeningCriteria } from "@/lib/skills/screening-criteria";
 
 type Client = SupabaseClient<Database>;
 
@@ -159,4 +160,30 @@ export async function getActiveMandateRow(
     .limit(1)
     .maybeSingle();
   return data ?? undefined;
+}
+
+/**
+ * The active mandate's STRUCTURED screening criteria (mandates.screening_criteria),
+ * parsed defensively, or null when there is no active mandate or no usable criteria.
+ * This is the machine-readable input the screening/sourcing skills consume — it is
+ * kept separate from `getActiveMandate` (the gate-layer shape) so legacy gate paths
+ * stay byte-for-byte unchanged. Best-effort: null on any read error, never throws.
+ */
+export async function getActiveScreeningCriteria(
+  supabase: Client,
+  orgId?: string,
+): Promise<ScreeningCriteria | null> {
+  void orgId;
+  try {
+    const { data } = await supabase
+      .from("mandates")
+      .select("screening_criteria")
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return parseScreeningCriteria((data as { screening_criteria?: unknown } | null)?.screening_criteria ?? null);
+  } catch {
+    return null;
+  }
 }

@@ -19,6 +19,7 @@ const RULES: Array<{ skillId: string; pattern: RegExp }> = [
   { skillId: "ic-memo", pattern: /\b(ic[-\s]?memo|investment[-\s]committee\s+memo|ic\s+pre[-\s]?read|pre[-\s]?read)\b/i },
   { skillId: "dd-checklist", pattern: /\b(diligence\s+(checklist|request\s+list|list)|dd[-\s]?checklist|due[-\s]diligence\s+(list|checklist))\b/i },
   { skillId: "returns", pattern: /\b(returns?\s+(case|analysis|model)|lbo|irr|moic)\b/i },
+  { skillId: "source-deals", pattern: /\b(source\s+(deals?|targets?)|sourcing\s+(list|targets?)|rank\s+(the\s+)?(candidate|target)s?|target\s+shortlist)\b/i },
   { skillId: "screen-deal", pattern: /\b(screen(ing)?|mandate[-\s]?fit|qualify\s+(the\s+)?(deal|opportunity))\b/i },
 ];
 
