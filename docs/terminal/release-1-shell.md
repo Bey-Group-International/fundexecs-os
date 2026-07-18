@@ -16,6 +16,7 @@ sits on them.
 ## What landed
 
 ### 1. Pane-tree model — `lib/terminal/layout.ts` (pure, tested)
+
 A binary-ish tree: `SplitPane` nodes divide space (row/column) among children with
 fractional sizes; `LeafPane` nodes are the visible panes (pane type + bound entity
 + the command that opened them). Every operation — `openPane`, `splitPane`,
@@ -25,20 +26,21 @@ and the whole thing is validated without a DOM.
 
 Load-bearing details, all tested:
 - **Close collapses** a single-child split back to the leaf; closing the last pane
-  yields an empty layout; focus follows sensibly.
+yields an empty layout; focus follows sensibly.
 - **Resize honors a floor** (`MIN_PANE_FRACTION`) *even after renormalization* —
-  `clampSizes` lifts panes below the floor and borrows proportionally from panes
-  with room, so a pane can never be dragged to zero (and lost).
+`clampSizes` lifts panes below the floor and borrows proportionally from panes
+with room, so a pane can never be dragged to zero (and lost).
 - **Serialization is version-guarded + total.** `deserializeLayout` tolerates
-  anything — null, garbage, wrong shapes, unknown pane types (→ `blank`), a
-  dangling focus id (→ repaired), a persisted single-child split (→ collapsed),
-  and any `layout_version` it doesn't recognize (→ empty). A stored layout can
-  never crash the shell.
+anything — null, garbage, wrong shapes, unknown pane types (→ `blank`), a
+dangling focus id (→ repaired), a persisted single-child split (→ collapsed),
+and any `layout_version` it doesn't recognize (→ empty). A stored layout can
+never crash the shell.
 - **Presets** (`defaultLayoutForPreset`) seed deterministic starting arrangements
-  for deal underwriting, fundraising, IR, portfolio monitoring, market
-  intelligence, and an executive brief.
+for deal underwriting, fundraising, IR, portfolio monitoring, market
+intelligence, and an executive brief.
 
 ### 2. Command → plan resolver — `lib/terminal/dispatch.ts` (pure, tested)
+
 `planCommand(raw)` turns command-bar text into a `CommandPlan`: which pane it
 opens, how it is authorized (via `classifySideEffect`), a human-readable summary,
 and the approval/non-delegable flags. Both the client bar and the server action
@@ -48,6 +50,7 @@ disagree. Navigation → read-only pane (Tier 1); analysis → analysis workspac
 **capital-binding staying Tier-3 human-non-delegable**.
 
 ### 3. Persistence — `lib/terminal/store.ts` (server-only, best-effort)
+
 - `logCommandRun` appends to `command_runs` — the audit/observability spine
   (mirrors `persistInferenceRun` / `persistSkillRun`).
 - `loadTerminalWorkspace` / `saveTerminalLayout` round-trip the principal's
@@ -59,6 +62,7 @@ DB types, so (like `lib/inference/store.ts`) reached via a narrow unknown-cast.
 Every path is best-effort: on failure it returns null and never throws.
 
 ### 4. Route + actions — `app/(app)/terminal/`
+
 - `page.tsx` — flag-guarded (redirects `/home` when off), authed, seeds a preset
   or loads the saved layout, renders the shell.
 - `actions.ts` — `recordCommandRun` and `persistLayout`. **Authorization is
@@ -67,6 +71,7 @@ Every path is best-effort: on failure it returns null and never throws.
   `pending_approval` — the terminal never records a gated action as executed.
 
 ### 5. UI — `components/terminal/`
+
 - `TerminalShell` — reducer over the pane tree; resizable splits with draggable
   dividers; debounced layout persistence.
 - `CommandBar` — live plan preview (tier chip + summary) as you type; Enter
@@ -106,3 +111,4 @@ typecheck + eslint clean, production build passes.
 - Execution wiring: route Tier-1 workflow commands to the engine, and Tier-2/3
   commands into the existing approval queue.
 - Workspace presets surfaced in the UI (open/save/share named workspaces).
+
