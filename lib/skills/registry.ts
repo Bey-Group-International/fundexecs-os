@@ -35,6 +35,13 @@ import { investorProfile } from "./catalog/investor-profile";
 import { raisePipeline } from "./catalog/raise-pipeline";
 import { commitmentTracker } from "./catalog/commitment-tracker";
 import { teaser } from "./catalog/teaser";
+import { lbo } from "./catalog/lbo";
+import { threeStatement } from "./catalog/three-statement";
+import { modelAudit } from "./catalog/model-audit";
+import { ddPrep } from "./catalog/dd-prep";
+import { auditStatement } from "./catalog/audit-statement";
+import { sectorResearch } from "./catalog/sector-research";
+import { cim } from "./catalog/cim";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -74,6 +81,18 @@ const SKILLS: Record<string, SkillDefinition> = {
   [commitmentTracker.manifest.id]: commitmentTracker as SkillDefinition,
   // Communications (draft-only; never distributes or publishes externally).
   [teaser.manifest.id]: teaser as SkillDefinition,
+  // Analyst modeling (compute from supplied assumptions; never invent a figure).
+  [lbo.manifest.id]: lbo as SkillDefinition,
+  [threeStatement.manifest.id]: threeStatement as SkillDefinition,
+  [modelAudit.manifest.id]: modelAudit as SkillDefinition,
+  // Diligence prep (sequence a workplan; never performs diligence or sends requests).
+  [ddPrep.manifest.id]: ddPrep as SkillDefinition,
+  // Fund admin audit support (tie-out; never issues an opinion or signs off).
+  [auditStatement.manifest.id]: auditStatement as SkillDefinition,
+  // Research (organize supplied findings + grade sources; never fabricates market data).
+  [sectorResearch.manifest.id]: sectorResearch as SkillDefinition,
+  // Communications CIM (draft-only; never invents financials or distributes).
+  [cim.manifest.id]: cim as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

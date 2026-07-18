@@ -1,0 +1,30 @@
+{
+  "description": "A supplied model audited for internal consistency: Gross margin at 150% is flagged as an error, the balance-sheet check fails, and negative cash is a red flag; the skill flags them for the analyst and never re-computes a corrected figure.",
+  "input": {
+    "checks": [ {
+      "label": "Assets = Liabilities + Equity",
+      "lhs": 1000,
+      "rhs": 940,
+      "tolerance": 1
+    } ],
+    "lineItems": [ {
+      "kind": "revenue",
+      "label": "Revenue",
+      "min": 0,
+      "value": 500
+    }, {
+      "kind": "cash",
+      "label": "Cash",
+      "value": -25
+    } ],
+    "ratios": [ {
+      "kind": "margin",
+      "label": "Gross margin",
+      "value": 1.5
+    }, {
+      "kind": "growth",
+      "label": "YoY growth",
+      "value": 0.35
+    } ]
+  }
+}

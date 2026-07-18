@@ -1,0 +1,13 @@
+{
+  "description": "A five-year LBO: $100M EBITDA in at 10x with $600M debt, exiting at 12x with $100M of debt paid down — ~$400M equity in, ~$700M out, MOIC ~1.75x, IRR ~11.8%.",
+  "input": {
+    "annualDebtPaydown": 100,
+    "debtAmount": 600,
+    "ebitdaGrowthRate": 0,
+    "entryEbitda": 100,
+    "entryMultiple": 10,
+    "exitMultiple": 12,
+    "holdYears": 5,
+    "transactionFeesPct": 0
+  }
+}

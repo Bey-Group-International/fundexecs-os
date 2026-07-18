@@ -1,0 +1,82 @@
+# skills/dd-prep/evaluation.yaml
+# Golden evaluation cases for the Diligence Prep Workplan. These are the
+# acceptance fixtures a production skill must pass — standard workplan coverage,
+# focus-area prioritization, supplied-item merge (facts vs. template assumptions),
+# coverage-gap surfacing, and no fabricated phases without a timeline. Exercised
+# by lib/skills/catalog/dd-prep.test.ts.
+cases:
+  - name: standard_workplan_default
+    input:
+      deal:
+        name: Acme Co
+    expect:
+      workstreamCount: 8
+      workstreamsInOrder: [Commercial, Financial, Legal, Tax, Technology, HR & Org, Operations, ESG]
+      highPriorityCount: 0
+      mediumPriority: [Financial]
+      standardPriority: [Operations]
+      flagsMissing: [focusAreas, knownItems, timelineWeeks]
+
+  - name: focus_area_bumps_to_high
+    input:
+      deal:
+        name: SaaS Co
+      focusAreas: [technology]
+    expect:
+      highPriority: [Technology]
+      mediumPriority: [Legal]
+
+  - name: supplied_known_item_merged_as_fact
+    input:
+      deal:
+        name: Acme Co
+      knownItems:
+        - workstream: financial
+          item: Quality of earnings review
+          status: in_progress
+          owner: Dana
+    expect:
+      itemStatus:
+        Financial: { Quality of earnings review: in_progress }
+      itemOwner:
+        Financial: { Quality of earnings review: Dana }
+      statusKind: fact
+      dedupedNotDuplicated: true
+
+  - name: template_default_status_is_assumption
+    input:
+      deal:
+        name: Acme Co
+    expect:
+      templateStatus: not_started
+      templateStatusKind: assumption
+      anyFactSource: false
+
+  - name: focus_area_not_represented_is_coverage_gap
+    input:
+      deal:
+        name: Acme Co
+      focusAreas: [insurance]
+    expect:
+      coverageGapContains: insurance
+
+  - name: no_timeline_no_fabricated_phase
+    input:
+      deal:
+        name: Acme Co
+      focusAreas: [technology]
+    expect:
+      allPhasesNull: true
+      flagsMissing: [timelineWeeks]
+
+  - name: timeline_phases_by_priority
+    input:
+      deal:
+        name: Acme Co
+      focusAreas: [technology]
+      timelineWeeks: 8
+    expect:
+      phase:
+        Technology: 1
+        Financial: 2
+        Operations: 3

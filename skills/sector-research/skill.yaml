@@ -1,0 +1,57 @@
+# skills/sector-research/skill.yaml
+# Authoring spec for the Sector Research Brief skill. The machine-readable manifest
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/sector-research.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: sector-research
+name: Sector Research Brief
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - research
+
+supported_entity_types: [sector, research, market_map]
+
+required_inputs:
+  - sector
+
+optional_inputs:
+  - findings
+
+outputs:
+  - sector
+  - sections           # [{ category, findings: [{ claim, source, grade }] }] by category
+  - sourcedCount
+  - unsourcedCount
+  - unsupportedClaims  # claims supplied with no source (flagged, not invented)
+  - sourceQuality      # grade distribution + coarse majority grade (a calculation)
+  - recommendedAction
+  - missingContext     # material context absent (flagged, not invented)
+
+artifact_types: [analysis]
+data_permissions: [company:read]
+tools: []
+
+approval_tier: 1           # internal — organizes a provided research set into a brief
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [market-map, source-deals]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

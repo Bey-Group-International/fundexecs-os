@@ -1,0 +1,33 @@
+# skills/model-audit/policy.yaml
+# Execution + governance policy for Model Audit. Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Runs within an approved mandate.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - analyst
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - model:read
+  - deal:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Audits ONLY the figures the caller supplies (line items, checks, ratios); it never invents or fabricates model figures.
+  - It reviews supplied numbers and NEVER re-computes a corrected model or invents a "right" number — it flags anomalies for the analyst to fix.
+  - An empty model returns empty findings plus the note "No model supplied — this skill audits a provided model; it does not fabricate figures."
+  - Every supplied value is a fact; every pass/fail verdict is a labelled calculation; no finding carries a corrected value.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream: []

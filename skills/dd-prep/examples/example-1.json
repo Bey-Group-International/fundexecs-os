@@ -1,0 +1,23 @@
+{
+  "description": "An 8-week software buyout: Technology prioritized as a focus area, two known items merged (a completed QoE and an in-progress cyber review), phased across the timeline.",
+  "input": {
+    "deal": {
+      "dealType": "Buyout",
+      "name": "Northwind SaaS",
+      "sector": "Enterprise SaaS"
+    },
+    "focusAreas": [ "technology" ],
+    "knownItems": [ {
+      "item": "Quality of earnings review",
+      "owner": "Dana Okoro",
+      "status": "complete",
+      "workstream": "financial"
+    }, {
+      "item": "Cybersecurity posture review",
+      "owner": "Priya Shah",
+      "status": "in_progress",
+      "workstream": "technology"
+    } ],
+    "timelineWeeks": 8
+  }
+}

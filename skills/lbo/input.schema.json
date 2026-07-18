@@ -1,0 +1,38 @@
+{
+  "properties": {
+    "annualDebtPaydown": {
+      "type": "number"
+    },
+    "debtAmount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "ebitdaGrowthRate": {
+      "type": "number"
+    },
+    "entryEbitda": {
+      "type": "number"
+    },
+    "entryMultiple": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "exitMultiple": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "holdYears": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "leverageMultiple": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "transactionFeesPct": {
+      "type": "number"
+    }
+  },
+  "required": [],
+  "type": "object"
+}

@@ -1,0 +1,68 @@
+{
+  "properties": {
+    "coverageGaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "highPriorityCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "totalItems": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "workstreams": {
+      "items": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "item": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [ "not_started", "in_progress", "complete" ],
+                  "type": "string"
+                }
+              },
+              "required": [ "item", "status" ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "phase": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "priority": {
+            "enum": [ "high", "medium", "standard" ],
+            "type": "string"
+          },
+          "workstream": {
+            "type": "string"
+          }
+        },
+        "required": [ "workstream", "priority", "items" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "workstreams", "totalItems", "highPriorityCount", "coverageGaps", "recommendedAction" ],
+  "type": "object"
+}

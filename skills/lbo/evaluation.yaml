@@ -1,0 +1,74 @@
+# skills/lbo/evaluation.yaml
+# Golden evaluation cases for the LBO Returns Model skill. These are the
+# acceptance fixtures a production skill must pass — LBO math correctness,
+# missing-required-input handling (flagged not invented, MOIC null), assumption
+# labelling of conservative defaults, debtAmount precedence, and the
+# non-positive-entry-equity guard. Exercised by lib/skills/catalog/lbo.test.ts.
+cases:
+  - name: clean_lbo_math
+    input:
+      entryEbitda: 100
+      entryMultiple: 10
+      debtAmount: 600
+      holdYears: 5
+      exitMultiple: 12
+      ebitdaGrowthRate: 0
+      annualDebtPaydown: 100
+      transactionFeesPct: 0
+    expect:
+      entryEV: 1000
+      debt: 600
+      entryEquity: 400
+      exitEV: 1200
+      exitEquity: 700
+      moic: 1.75
+      irr: 0.1184
+
+  - name: missing_required_flags_not_invents
+    input:
+      entryMultiple: 10
+      holdYears: 5
+      debtAmount: 500
+    expect:
+      moic: null
+      irr: null
+      entryEV: null
+      flagsMissing: [Entry EBITDA]
+      neverInvents: true
+
+  - name: defaulted_exit_multiple_labelled_assumption
+    input:
+      entryEbitda: 100
+      entryMultiple: 10
+      debtAmount: 500
+      holdYears: 5
+    expect:
+      exitEV: 1000
+      exitEquity: 500
+      moic: 1
+      assumptionLabelled: true
+      assumptionContains: no multiple expansion
+
+  - name: debt_amount_precedence
+    input:
+      entryEbitda: 100
+      entryMultiple: 10
+      leverageMultiple: 8
+      debtAmount: 600
+      holdYears: 5
+      exitMultiple: 10
+    expect:
+      debt: 600
+      entryEquity: 400
+
+  - name: non_positive_entry_equity_null_returns
+    input:
+      entryEbitda: 100
+      entryMultiple: 10
+      debtAmount: 1200
+      holdYears: 5
+      exitMultiple: 10
+    expect:
+      entryEquity: -200
+      moic: null
+      irr: null

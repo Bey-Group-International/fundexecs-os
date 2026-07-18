@@ -1,0 +1,25 @@
+{
+  "description": "A fully-supplied deal drafts a complete anonymized CIM outline: executive summary, company overview, market overview, products & services, financial summary (as-supplied figures and historical rows), management (names withheld), and transaction overview — for review before any distribution.",
+  "input": {
+    "anonymize": true,
+    "deal": {
+      "codename": "Project Atlas",
+      "description": "A vertical SaaS platform for logistics operators. Rapidly scaling ARR with strong net revenue retention.",
+      "ebitda": 12,
+      "growthRate": 35,
+      "historicalFinancials": [
+        { "year": 2023, "revenue": 30, "ebitda": 6 },
+        { "year": 2024, "revenue": 40, "ebitda": 9 }
+      ],
+      "management": [
+        { "name": "Jane Doe", "role": "CEO" },
+        { "name": "John Roe", "role": "CFO" }
+      ],
+      "marketNotes": "Large, fragmented logistics software TAM growing double digits.",
+      "products": [ "Dispatch automation", "Fleet analytics", "Carrier marketplace" ],
+      "revenue": 50,
+      "sector": "Industrial Software",
+      "transactionAsk": "Majority recapitalization to fund M&A and international expansion."
+    }
+  }
+}

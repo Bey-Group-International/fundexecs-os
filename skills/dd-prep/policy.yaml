@@ -1,0 +1,36 @@
+# skills/dd-prep/policy.yaml
+# Execution + governance policy for the Diligence Prep Workplan. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Prepares a workplan.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). Maps to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - diligence
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - deal:read
+
+# Actions the skill may NEVER take, even to prepare. Issuing a diligence request
+# to a counterparty is a Tier-2 action (send_diligence_request) and is out of scope.
+prohibited_actions:
+  - send_diligence_request
+  - send_outreach
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - This skill PREPARES a sequenced workplan only; it never performs diligence, draws conclusions, or sends a request.
+  - Supplied known-item status and owner are labelled facts; template items default to not_started, labelled an assumption.
+  - Supplied known items are merged and deduped by workstream + item; no supplied item is ever dropped.
+  - Without a timeline, phase is left null and no due date is fabricated.
+  - Coverage gaps (unstarted workstreams, focus areas not represented) and missing planning context are flagged, never invented.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - dd-checklist
+  - ic-memo

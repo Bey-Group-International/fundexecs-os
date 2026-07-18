@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "required": [ "sector" ],
+  "properties": {
+    "sector": {
+      "type": "string",
+      "minLength": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [ "claim", "category" ],
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "enum": [ "driver", "risk", "trend", "player", "sizing" ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [ "primary", "secondary", "expert", "news", "unknown" ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "description": "An audit tie-out of four statement lines against their supporting schedules at a $100 materiality threshold: Cash ties, AR carries a $250 variance beyond materiality, Investments has no support (unsupported, never assumed equal), and Accrued expenses tie within materiality. Prepared for the auditor's review only.",
+  "input": {
+    "materialityThreshold": 100,
+    "statementLines": [ {
+      "label": "Cash",
+      "schedule": "GL 1000",
+      "statementValue": 10000,
+      "supportValue": 10000
+    }, {
+      "label": "Accounts receivable",
+      "schedule": "AR aging",
+      "statementValue": 5250,
+      "supportValue": 5000
+    }, {
+      "label": "Investments",
+      "schedule": "Investment roll-forward",
+      "statementValue": 750000
+    }, {
+      "label": "Accrued expenses",
+      "schedule": "Accrual schedule",
+      "statementValue": 1980,
+      "supportValue": 2000
+    } ]
+  }
+}

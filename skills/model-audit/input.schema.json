@@ -1,0 +1,73 @@
+{
+  "properties": {
+    "checks": {
+      "items": {
+        "properties": {
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "lhs": {
+            "type": "number"
+          },
+          "rhs": {
+            "type": "number"
+          },
+          "tolerance": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "label", "lhs", "rhs" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "lineItems": {
+      "items": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "max": {
+            "type": "number"
+          },
+          "min": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [ "label", "value" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "ratios": {
+      "items": {
+        "properties": {
+          "kind": {
+            "enum": [ "margin", "growth", "multiple", "rate" ],
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [ "label", "value" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "type": "object"
+}

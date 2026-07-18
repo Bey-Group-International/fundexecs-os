@@ -1,0 +1,55 @@
+{
+  "properties": {
+    "checkedCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "errorCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "failedCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "findings": {
+      "items": {
+        "properties": {
+          "area": {
+            "enum": [ "lineItem", "check", "ratio" ],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [ "info", "warning", "error" ],
+            "type": "string"
+          }
+        },
+        "required": [ "area", "label", "severity", "message" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "passedCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "warningCount": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "findings", "checkedCount", "passedCount", "failedCount", "errorCount", "warningCount", "summary", "recommendedAction" ],
+  "type": "object"
+}

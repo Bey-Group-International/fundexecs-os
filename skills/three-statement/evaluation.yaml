@@ -1,0 +1,88 @@
+# skills/three-statement/evaluation.yaml
+# Golden evaluation cases for the Three-Statement Projection skill. These are the
+# acceptance fixtures a production skill must pass — the balance-sheet tie-out
+# (balanceCheck ≈ 0 every year), missing-driver handling (flagged not invented),
+# fact/assumption/calculation labelling, the derived equity plug, and the
+# supplied-but-unbalanced opening balance sheet flag. Exercised by
+# lib/skills/catalog/three-statement.test.ts.
+cases:
+  - name: full_model_ties_out
+    input:
+      years: 5
+      baseRevenue: 1000
+      revenueGrowth: 0.1
+      ebitdaMargin: 0.2
+      daPctOfRevenue: 0.05
+      taxRate: 0.25
+      capexPctOfRevenue: 0.06
+      nwcPctOfRevenue: 0.1
+      beginningCash: 100
+      beginningPPE: 500
+      beginningDebt: 200
+    expect:
+      balances: true
+      balanceCheckEveryYear: 0
+      year1Revenue: 1100
+      year1NetIncome: 123.75
+      derivedOpeningEquity: 500
+
+  - name: missing_driver_flags_not_invents
+    input:
+      baseRevenue: 1000
+      revenueGrowth: 0.1
+      daPctOfRevenue: 0.05
+      taxRate: 0.25
+      capexPctOfRevenue: 0.06
+      nwcPctOfRevenue: 0.1
+    expect:
+      projection: []
+      balances: false
+      missingInputsContains: EBITDA margin
+      neverInvents: true
+
+  - name: supplied_driver_is_a_fact
+    input:
+      baseRevenue: 1000
+      revenueGrowth: 0.1
+      ebitdaMargin: 0.2
+      daPctOfRevenue: 0.05
+      taxRate: 0.25
+      capexPctOfRevenue: 0.06
+      nwcPctOfRevenue: 0.1
+    expect:
+      baseRevenueLabelledFact: true
+      projectedLineItemsLabelledCalculation: true
+
+  - name: derived_equity_plug_labelled_assumption
+    input:
+      baseRevenue: 1000
+      revenueGrowth: 0.1
+      ebitdaMargin: 0.2
+      daPctOfRevenue: 0.05
+      taxRate: 0.25
+      capexPctOfRevenue: 0.06
+      nwcPctOfRevenue: 0.1
+      beginningCash: 100
+      beginningPPE: 500
+      beginningDebt: 200
+    expect:
+      plugLabelled: assumption
+      plugValue: 500
+
+  - name: supplied_unbalanced_opening_bs_flagged
+    input:
+      baseRevenue: 1000
+      revenueGrowth: 0.1
+      ebitdaMargin: 0.2
+      daPctOfRevenue: 0.05
+      taxRate: 0.25
+      capexPctOfRevenue: 0.06
+      nwcPctOfRevenue: 0.1
+      beginningCash: 100
+      beginningPPE: 500
+      beginningDebt: 200
+      beginningEquity: 999
+    expect:
+      balances: false
+      flagsOpeningImbalance: true
+      neverSilentlyAdjusts: true
