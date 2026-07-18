@@ -109,6 +109,12 @@ export class ExecutiveAvatar {
   // presenting arm as real limb motion (see _drawFrontArms), redrawn only when
   // the quantized value changes so a floor of avatars stays cheap.
   private _limbAmt = 0;
+  // Live wave state: while a `wave` one-shot plays on a front-facing figure the
+  // near arm is drawn raised and oscillating (real limb motion). `_waving` gates
+  // the raised-arm draw; raise/swing are the quantized engine channels.
+  private _waving = false;
+  private _waveRaise = 0;
+  private _waveSwing = 0;
   private lastPoseKey = "";
   // Blink: staggered so a room of executives never blinks in unison.
   private blinkTimer = 1200 + Math.random() * 4200;
@@ -273,10 +279,33 @@ export class ExecutiveAvatar {
     // bounce/dip (celebrate pops up via `bounce`; nod dips via `headTilt`).
     // Transform-only, so it composes with breathing and never redraws.
     if (this.gesture) {
+      const isWave = this.gesture.current === "wave";
       this.gesture.update(delta);
       const g = this.gesture.sample();
       bodyY += (g.bounce ?? 0) + (g.headTilt ?? 0) * 0.16;
-      if (this.gesture.isFinished()) this.gesture = null;
+      // A `wave` on a front-facing figure raises and oscillates the near arm as
+      // real limb motion. Quantize the raise/swing channels and redraw only on
+      // change; other facings just get the additive bounce above.
+      if (isWave && this.facing === "down") {
+        const raise = Math.round((g.gestureRaise ?? 0) / 0.15) * 0.15;
+        const sw = Math.round((g.armSwing ?? 0) / 0.15) * 0.15;
+        if (!this._waving || raise !== this._waveRaise || sw !== this._waveSwing) {
+          this._waving = true;
+          this._waveRaise = raise;
+          this._waveSwing = sw;
+          this._redraw();
+        }
+      }
+      if (this.gesture.isFinished()) {
+        this.gesture = null;
+        if (this._waving) {
+          // Wave over — drop the raised arm and redraw the resting pose once.
+          this._waving = false;
+          this._waveRaise = 0;
+          this._waveSwing = 0;
+          this._redraw();
+        }
+      }
     }
     this.body.setPosition(bodyX, bodyY);
 
@@ -336,6 +365,12 @@ export class ExecutiveAvatar {
       targets: this.container, scaleX: 1.13, scaleY: 1.13,
       duration: 130, yoyo: true, ease: "Back.easeOut",
     });
+    // A standing, front-facing executive waves back when addressed — a visible
+    // greeting, real limb motion via the wave clip. Skipped while walking,
+    // seated, or facing away (no near arm to raise), and for the coin mascot.
+    if (!this.walking && !this.seated && !this.spec.coin && this.facing === "down") {
+      this.playGesture("wave");
+    }
   }
 
   /** Advance the blink timer; toggle the eyes and redraw on transition. */
@@ -759,6 +794,32 @@ export class ExecutiveAvatar {
       g.fillCircle(6.4, 6, 1.7);
       return;
     }
+    // Waving — the near (left) arm lifts beside the head and the hand
+    // oscillates, driven by the engine's gestureRaise (lift) + armSwing (wave).
+    if (this._waving) {
+      const r = this._waveRaise;
+      const w = this._waveSwing;
+      const handX = -8.5 + w * 1.8;
+      const handY = -6 - r * 13;
+      g.fillStyle(sleeve, 1);
+      g.fillRoundedRect(-8.4, -6, 3, 6, 1.5); // upper arm rising from the shoulder
+      g.fillRoundedRect(handX - 1.5, handY, 3, 9 + r * 3, 1.5); // forearm up to the hand
+      g.fillStyle(this._shade(s.suit, 0.6), 0.8);
+      g.fillRect(handX - 1.4, handY, 0.7, 8); // inner-sleeve seam
+      g.fillStyle(s.skin, 1);
+      g.fillCircle(handX, handY - 1, 1.9); // waving hand
+      // Far (right) arm rests at the side.
+      g.fillStyle(sleeve, 1);
+      g.fillRoundedRect(4.8, -5, 3.2, 11, 1.6);
+      g.fillStyle(this._shade(s.suit, 0.6), 0.8);
+      g.fillRect(4.6, -4.5, 0.8, 10);
+      g.fillStyle(s.skin, 1);
+      g.fillCircle(6.4, 6, 1.7);
+      g.fillStyle(this._shade(s.shirt, 1.02), 0.95);
+      g.fillRect(4.8, 4.4, 3.2, 0.9);
+      return;
+    }
+
     // Walk / idle — arms at the sides, swinging opposite the legs.
     g.fillStyle(sleeve, 1);
     g.fillRoundedRect(-8, -5 + swing * 0.4, 3.2, 11, 1.6);
