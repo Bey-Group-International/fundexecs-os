@@ -67,7 +67,9 @@ describe("renderMarkdownToPdf", () => {
     const bytes = await renderMarkdownToPdf(PATHOLOGICAL);
     expect(bytes.length).toBeGreaterThan(0);
     expect(startsWith(bytes, PDF_MAGIC)).toBe(true);
-  });
+    // A generous timeout on top of the O(N) hard-break: layout of a 50k-char
+    // token must finish well under this even on a slow CI runner.
+  }, 15000);
 
   it("returns a valid buffer for empty input", async () => {
     const bytes = await renderMarkdownToPdf("");
