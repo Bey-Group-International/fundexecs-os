@@ -1,0 +1,55 @@
+# skills/dd-checklist/evaluation.yaml
+# Golden evaluation cases for the Diligence Request List. These are the acceptance
+# fixtures a production skill must pass — full workstream coverage, additive
+# rule-based tailoring, missing-context handling (flagged not invented), and the
+# workstream filter. Exercised by lib/skills/catalog/dd-checklist.test.ts.
+cases:
+  - name: full_default_checklist
+    input:
+      deal:
+        companyName: Acme Co
+    expect:
+      workstreamCount: 16
+      highPriority: [financial, commercial, legal, tax]
+      tailoredFor: []
+      flagsMissing: [sector, transactionType, dealSize]
+
+  - name: software_sector_tailors_tech_and_cyber
+    input:
+      deal:
+        companyName: Northwind SaaS
+        sector: Enterprise SaaS
+        transactionType: Buyout
+        dealSize: 120
+    expect:
+      addsRequest:
+        technology: Code ownership & open-source license audit
+        cybersecurity: SOC 2 / security posture review
+      elevatedToHigh: [technology, cybersecurity]
+
+  - name: carve_out_adds_tsa
+    input:
+      deal:
+        companyName: Divested Unit
+        transactionType: Carve-out
+    expect:
+      addsRequest:
+        operational: TSA scope and standalone cost analysis
+      elevatedToHigh: [operational]
+
+  - name: regulated_sector_adds_regulatory
+    input:
+      deal:
+        companyName: HealthCo
+        sector: Healthcare Services
+    expect:
+      elevatedToHigh: [regulatory]
+      regulatoryItemsAdded: true
+
+  - name: workstream_filter_respected
+    input:
+      deal:
+        companyName: Acme Co
+      workstreams: [legal, financial, tax]
+    expect:
+      workstreamKeysInOrder: [financial, legal, tax]

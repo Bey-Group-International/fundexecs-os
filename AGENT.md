@@ -703,6 +703,39 @@ Deployed, monitoring               →  live, observability active
              |  backlog). Additive, no default behavior change.
              |  Confidence: Tested by typecheck/eslint/Jest (15 new tests; 3077 total
              |  green, no regressions); app not run live (no local env).
+
+2026-07-18  |  Priority-1 deal skills + session-attached runner + evidence UI  |
+             |  The §22 acceptance chain (screen→returns→dd-checklist→ic-memo) + the
+             |  safe "skills run in a workflow, visible in the UI" wiring.
+             |  - Three new deterministic skills, built IN PARALLEL by three backend
+             |    subagents then integrated centrally: `returns` (LBO: MOIC/IRR +
+             |    bear/base/bull sensitivities; null unless entryEbitda+entryMultiple
+             |    present; defaults labelled assumptions), `dd-checklist` (16-workstream
+             |    request list, rule-tailored; only PREPARES — Tier-2 send prohibited),
+             |    `ic-memo` (12-section pre-read from structured deal data; ADVISORY,
+             |    missing data → open item, never a fabricated fact). Each is a full
+             |    /skills/<id>/ package + pure core + golden tests, registered in
+             |    lib/skills/registry.ts; a generalized catalog-consistency test guards
+             |    all four (manifest≡on-disk schemas, executives permitted, valid tier).
+             |  - Wiring: audit found a blind mid-loop auto-trigger would have to run
+             |    skills on FABRICATED input (mandates table has no screening criteria;
+             |    workflows have no structured deal fields mid-run) — violating "never
+             |    invent financial values". So instead of editing the sacred engine loop:
+             |    engine-bridge.ts (pure, tested detectSkillForStep — the seam for future
+             |    planner step-tagging); session-run.ts runSkillAttached (runs a skill on
+             |    EXPLICIT structured input, writes its output as a normal artifact +
+             |    skill_run linked to the session/workflow, emits artifact.created);
+             |    app/(app)/sessions/skill-actions.ts runSkillInSession (org-scoped,
+             |    permission-checked server entry point). NO engine.ts change.
+             |  - Session-evidence UI: components/session/SkillRunFeed.tsx (mirrors
+             |    BrainFeed), mounted on the session page — renders each skill_run with
+             |    gate tier, confidence/completeness, the provenance breakdown
+             |    (facts/assumptions/calculations/generated), and flagged missing data.
+             |  - Artifacts: PHASED per operator call — phase 1 = skills persist a
+             |    markdown artifact through the existing system (no new dep); DOCX/PDF
+             |    render module is phase 2 (documented in docs/skills/deal-suite.md).
+             |  Confidence: Tested by typecheck/eslint/Jest (62 new tests; 3139 total
+             |  green, no regressions); live session render not exercised (no local env).
 ```
 
 ---

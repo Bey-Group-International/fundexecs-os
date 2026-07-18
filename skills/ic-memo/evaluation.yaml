@@ -1,0 +1,63 @@
+# skills/ic-memo/evaluation.yaml
+# Golden evaluation cases for the IC Memorandum (Pre-Read). These are the
+# acceptance fixtures a production skill must pass — full-memo assembly, open-item
+# handling (flagged not invented), the preliminary/advisory recommendation, and
+# the guardrail that this skill PREPARES but never DECIDES. Exercised by
+# lib/skills/catalog/ic-memo.test.ts.
+cases:
+  - name: full_data_assembles_complete_memo
+    input:
+      deal:
+        companyName: Acme Widgets
+        sector: Manufacturing
+        geography: North America
+        transactionType: Buyout
+      thesis: Consolidate a fragmented components market and expand margins.
+      screen:
+        verdict: pass
+        overall: 82
+        keyRisks: [Customer concentration, Cyclical end-markets]
+      returns:
+        moic: 2.8
+        irrPct: 24
+        entryEv: 96
+        exitEv: 210
+      market: Growing at 6% CAGR with no dominant incumbent.
+      mitigants: [Long-term contracts, Diversified backlog]
+      recommendation: Advance to full IC review with a confirmatory diligence budget.
+    expect:
+      completeness: 1
+      missingSections: []
+      recommendationIsPreliminary: true
+
+  - name: bare_input_flags_open_items_never_invents
+    input:
+      deal:
+        companyName: Mystery Co
+    expect:
+      returnsSectionOpen: true
+      marketSectionOpen: true
+      neverInvents: true
+      openItemsInclude: [Returns pending — run the returns skill.]
+
+  - name: verdict_derives_neutral_recommendation
+    input:
+      deal:
+        companyName: Acme
+      screen:
+        verdict: pass
+    expect:
+      recommendation: Advance to full IC review
+      recommendationIsPreliminary: true
+      recommendationIsDecision: false
+
+  - name: risks_without_mitigants_flags_pending
+    input:
+      deal:
+        companyName: Acme
+      screen:
+        verdict: watch
+        keyRisks: [Regulatory exposure]
+    expect:
+      mitigantsSectionOpen: true
+      openItemsInclude: [Mitigants pending]

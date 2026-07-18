@@ -1,0 +1,63 @@
+# skills/ic-memo/skill.yaml
+# Authoring spec for the IC Memorandum (Pre-Read) skill. The machine-readable
+# manifest the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/ic-memo.ts; this YAML is the human-facing contract and must
+# stay consistent with it.
+id: ic-memo
+name: IC Memorandum (Pre-Read)
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - investment_committee
+
+supported_entity_types: [deal, company, ic_memo]
+
+required_inputs:
+  - deal.companyName
+
+optional_inputs:
+  - thesis
+  - screen            # verdict / overall / keyRisks (typically from screen-deal)
+  - returns           # moic / irrPct / entryEv / exitEv (typically from returns)
+  - market
+  - mitigants
+  - recommendation
+
+outputs:
+  - sections          # ordered [{heading, body, status}]
+  - recommendation    # preliminary, advisory — never a decision
+  - openItems
+  - conditionsPrecedent
+  - missingSections
+  - completeness      # 0-1 fraction of sections complete
+
+artifact_types: [ic_memo]
+data_permissions: [deal:read, ic_memo:read]
+tools: []
+
+approval_tier: 1           # internal, reversible pre-read assembly
+risk_classification: low
+execution_timeout_ms: 20000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - submit_term_sheet
+  - sign_document
+  - move_capital
+  - capital_call
+  - distribute_report
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

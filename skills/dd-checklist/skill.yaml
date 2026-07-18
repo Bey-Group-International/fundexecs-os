@@ -1,0 +1,59 @@
+# skills/dd-checklist/skill.yaml
+# Authoring spec for the Diligence Request List skill. The machine-readable
+# manifest the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/dd-checklist.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: dd-checklist
+name: Diligence Request List
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+
+supported_entity_types: [deal, company, diligence_request]
+
+required_inputs:
+  - deal.companyName
+
+optional_inputs:
+  - deal.sector
+  - deal.transactionType
+  - deal.dealSize
+  - workstreams
+
+outputs:
+  - workstreams        # [{ key, label, priority, requests[] }]
+  - totalRequests
+  - tailoredFor        # which tailoring rules fired
+  - missingContext     # material context absent (flagged, not invented)
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [deal:read]
+tools: []
+
+approval_tier: 1           # internal — PREPARES the request list, never sends it
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [dd-prep, ic-memo]
+
+# Sending the request OUT is a separate Tier-2 action (send_diligence_request),
+# prohibited here — this skill only assembles the list.
+prohibited_actions:
+  - send_diligence_request
+  - send_outreach
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

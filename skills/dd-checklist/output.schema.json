@@ -1,0 +1,50 @@
+{
+  "properties": {
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "tailoredFor": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "totalRequests": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "workstreams": {
+      "items": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "priority": {
+            "enum": [ "high", "medium" ],
+            "type": "string"
+          },
+          "requests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "key", "label", "priority", "requests" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "workstreams", "totalRequests", "recommendedAction" ],
+  "type": "object"
+}

@@ -1,0 +1,73 @@
+{
+  "properties": {
+    "assumptionsUsed": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "entryEquity": {
+      "type": "number"
+    },
+    "entryEv": {
+      "type": "number"
+    },
+    "exitEbitda": {
+      "type": "number"
+    },
+    "exitEquity": {
+      "type": "number"
+    },
+    "exitEv": {
+      "type": "number"
+    },
+    "irrPct": {
+      "type": "number"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "moic": {
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "remainingDebt": {
+      "type": "number"
+    },
+    "sensitivities": {
+      "items": {
+        "properties": {
+          "exitMultiple": {
+            "type": "number"
+          },
+          "irrPct": {
+            "type": "number"
+          },
+          "moic": {
+            "type": "number"
+          },
+          "scenario": {
+            "enum": [ "bear", "base", "bull" ],
+            "type": "string"
+          }
+        },
+        "required": [ "scenario", "exitMultiple" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "moic", "irrPct", "sensitivities", "recommendedAction" ],
+  "type": "object"
+}
