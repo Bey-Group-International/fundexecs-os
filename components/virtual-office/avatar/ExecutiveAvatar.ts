@@ -77,6 +77,13 @@ export class ExecutiveAvatar {
   private shadow: Phaser.GameObjects.Graphics;
   private rim: Phaser.GameObjects.Arc;
   private aura: Phaser.GameObjects.Arc;
+  // The drawn figure. `body` is the Graphics everything is painted into; it now
+  // lives inside `figure`, an inner Container that carries the whole-figure
+  // transforms (breathing / lean / bounce, and hover dim). Keeping these on the
+  // container — not `body` — lets later PRs split the figure into independently
+  // transformable limb objects (base / arms / torso / head) that all ride the
+  // same figure transform while rotating on their own pivots.
+  private figure: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Graphics;
   private think: Phaser.GameObjects.Graphics;
 
@@ -149,6 +156,10 @@ export class ExecutiveAvatar {
       .setVisible(false);
 
     this.body = scene.add.graphics();
+    // Inner figure container — wraps the body (and, in later PRs, the split
+    // limb objects). Whole-figure motion is applied here so the body's local
+    // draw coordinates never move.
+    this.figure = scene.add.container(0, 0, [this.body]);
 
     // "Thinking" pulse — three dots floating above the head, ACE-style
     // presence cue shown only while analyzing.
@@ -159,7 +170,7 @@ export class ExecutiveAvatar {
     this.think.fillCircle(3, 0, 1.1);
 
     this.container = scene.add.container(x, y, [
-      this.shadow, this.rim, this.aura, this.body, this.think,
+      this.shadow, this.rim, this.aura, this.figure, this.think,
     ]);
     this.container.setDepth(depth);
 
@@ -232,8 +243,8 @@ export class ExecutiveAvatar {
     this.container.setSize(24, 44);
     this.container.setInteractive({ useHandCursor: true });
     this.container.on("pointerdown", onClick);
-    this.container.on("pointerover", () => { this.body.setAlpha(0.82); this.rim.setVisible(true); });
-    this.container.on("pointerout", () => { this.body.setAlpha(1); this._applyAura(); });
+    this.container.on("pointerover", () => { this.figure.setAlpha(0.82); this.rim.setVisible(true); });
+    this.container.on("pointerout", () => { this.figure.setAlpha(1); this._applyAura(); });
   }
 
   /** Per-frame animation: advance the walk/work cycle or breathe while idle. */
@@ -249,7 +260,7 @@ export class ExecutiveAvatar {
       const step = Math.floor(this.walkPhase) % 4;
       const key = this._poseKey(step, -1);
       if (key !== this.lastPoseKey) this._redraw();
-      this.body.setPosition(0, 0);
+      this.figure.setPosition(0, 0);
       return;
     }
 
@@ -258,7 +269,7 @@ export class ExecutiveAvatar {
     // (breathing bob, typing keystrokes, thinking-dot pulse). The thinking
     // dots remain visible at a fixed alpha/scale.
     if (ExecutiveAvatar.reducedMotion) {
-      this.body.setPosition(0, 0);
+      this.figure.setPosition(0, 0);
       if (this.think.visible) this.think.setAlpha(0.9).setScale(1);
       return;
     }
@@ -307,7 +318,7 @@ export class ExecutiveAvatar {
         }
       }
     }
-    this.body.setPosition(bodyX, bodyY);
+    this.figure.setPosition(bodyX, bodyY);
 
     // Redraw-based work gestures advance a discrete step: brisk keystrokes for
     // typing, a slower sway for presenting, a gentle page-bob for reviewing —
