@@ -16,11 +16,11 @@ TypeScript `SkillDefinition` with a **pure deterministic core**, registered in
 `lib/skills/registry.ts`. None invents financial values — missing inputs are
 flagged, assumptions/calculations are labelled and separated in `sources`.
 
-| Skill | Executives | What it does | Never |
-|---|---|---|---|
-| `returns` | Analyst · IC | First-pass LBO: entry/exit EV, equity, MOIC, IRR, bear/base/bull sensitivities | fabricates a figure — MOIC/IRR are null unless `entryEbitda` + `entryMultiple` present; defaults (hold 5y, exit=entry, CAGR 0, flat debt) are labelled assumptions |
-| `dd-checklist` | Diligence | 16-workstream diligence request list, rule-tailored by sector / carve-out / regulation | sends anything — it *prepares* the list (Tier-2 send is prohibited) |
-| `ic-memo` | IC | Assembles a 12-section IC pre-read from structured deal data (screen + returns) | *decides* — the recommendation is advisory; missing data becomes an open item, not a fabricated fact |
+|     Skill      |  Executives  |                                      What it does                                      |                                                                               Never                                                                                |
+|----------------|--------------|----------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `returns`      | Analyst · IC | First-pass LBO: entry/exit EV, equity, MOIC, IRR, bear/base/bull sensitivities         | fabricates a figure — MOIC/IRR are null unless `entryEbitda` + `entryMultiple` present; defaults (hold 5y, exit=entry, CAGR 0, flat debt) are labelled assumptions |
+| `dd-checklist` | Diligence    | 16-workstream diligence request list, rule-tailored by sector / carve-out / regulation | sends anything — it *prepares* the list (Tier-2 send is prohibited)                                                                                                |
+| `ic-memo`      | IC           | Assembles a 12-section IC pre-read from structured deal data (screen + returns)        | *decides* — the recommendation is advisory; missing data becomes an open item, not a fabricated fact                                                               |
 
 Together with `screen-deal`, these cover the §22 acceptance chain: **teaser →
 screen → returns → diligence checklist → IC pre-read**.

@@ -16,15 +16,15 @@ audit event.
 
 ## Contract
 
-|                   |                                                                                                             |
-|-------------------|-------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible pre-read assembly                                                                  |
-| **Risk**          | low                                                                                                         |
-| **Executives**    | Investment Committee                                                                                        |
+|                   |                                                                                                                     |
+|-------------------|---------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible pre-read assembly                                                                          |
+| **Risk**          | low                                                                                                                 |
+| **Executives**    | Investment Committee                                                                                                |
 | **Inputs**        | `deal` (at minimum `companyName`) + optional `thesis`, `screen`, `returns`, `market`, `mitigants`, `recommendation` |
-| **Outputs**       | `sections`, `recommendation`, `openItems`, `conditionsPrecedent`, `missingSections`, `completeness`         |
-| **Artifacts**     | `ic_memo`                                                                                                    |
-| **Downstream**    | none — this is a leaf assembly step                                                                         |
+| **Outputs**       | `sections`, `recommendation`, `openItems`, `conditionsPrecedent`, `missingSections`, `completeness`                 |
+| **Artifacts**     | `ic_memo`                                                                                                           |
+| **Downstream**    | none — this is a leaf assembly step                                                                                 |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

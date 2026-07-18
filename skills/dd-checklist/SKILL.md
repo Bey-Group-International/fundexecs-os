@@ -13,15 +13,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                  |
-|-------------------|----------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal; PREPARES the request list, never sends it                          |
-| **Risk**          | low                                                                              |
-| **Executives**    | Diligence                                                                        |
-| **Inputs**        | `deal` (at minimum `companyName`) + optional `workstreams` filter               |
+|                   |                                                                                      |
+|-------------------|--------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal; PREPARES the request list, never sends it                              |
+| **Risk**          | low                                                                                  |
+| **Executives**    | Diligence                                                                            |
+| **Inputs**        | `deal` (at minimum `companyName`) + optional `workstreams` filter                    |
 | **Outputs**       | `workstreams`, `totalRequests`, `tailoredFor`, `missingContext`, `recommendedAction` |
-| **Artifacts**     | `analysis`                                                                       |
-| **Downstream**    | `dd-prep`, `ic-memo`                                                             |
+| **Artifacts**     | `analysis`                                                                           |
+| **Downstream**    | `dd-prep`, `ic-memo`                                                                 |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

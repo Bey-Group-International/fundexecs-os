@@ -1,17 +1,17 @@
 {
   "description": "A leveraged buyout that returns 2.0x MOIC / 14.9% IRR over a 5-year hold at a flat 10.0x exit.",
   "input": {
+    "assumptions": {
+      "annualDebtPaydown": 10,
+      "ebitdaCagr": 0,
+      "exitMultiple": 10,
+      "holdYears": 5
+    },
     "deal": {
       "companyName": "LevCo",
       "entryEbitda": 10,
       "entryMultiple": 10,
       "netDebt": 50
-    },
-    "assumptions": {
-      "holdYears": 5,
-      "exitMultiple": 10,
-      "ebitdaCagr": 0,
-      "annualDebtPaydown": 10
     }
   }
 }

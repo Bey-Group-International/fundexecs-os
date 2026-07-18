@@ -1,73 +1,73 @@
 {
-  "type": "object",
-  "required": [ "moic", "irrPct", "sensitivities", "recommendedAction" ],
   "properties": {
-    "entryEv": {
-      "type": "number"
+    "assumptionsUsed": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "entryEquity": {
+      "type": "number"
+    },
+    "entryEv": {
       "type": "number"
     },
     "exitEbitda": {
       "type": "number"
     },
-    "exitEv": {
-      "type": "number"
-    },
     "exitEquity": {
       "type": "number"
     },
-    "moic": {
+    "exitEv": {
       "type": "number"
     },
     "irrPct": {
       "type": "number"
     },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "moic": {
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
     "remainingDebt": {
       "type": "number"
     },
     "sensitivities": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [ "scenario", "exitMultiple" ],
         "properties": {
-          "scenario": {
-            "type": "string",
-            "enum": [ "bear", "base", "bull" ]
-          },
           "exitMultiple": {
+            "type": "number"
+          },
+          "irrPct": {
             "type": "number"
           },
           "moic": {
             "type": "number"
           },
-          "irrPct": {
-            "type": "number"
+          "scenario": {
+            "enum": [ "bear", "base", "bull" ],
+            "type": "string"
           }
-        }
-      }
-    },
-    "assumptionsUsed": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "keyRisks": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "missingFields": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "recommendedAction": {
-      "type": "string"
+        },
+        "required": [ "scenario", "exitMultiple" ],
+        "type": "object"
+      },
+      "type": "array"
     }
-  }
+  },
+  "required": [ "moic", "irrPct", "sensitivities", "recommendedAction" ],
+  "type": "object"
 }

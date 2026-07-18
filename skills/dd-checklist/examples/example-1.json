@@ -3,9 +3,9 @@
   "input": {
     "deal": {
       "companyName": "Northwind SaaS",
+      "dealSize": 120,
       "sector": "Enterprise SaaS",
-      "transactionType": "Carve-out",
-      "dealSize": 120
+      "transactionType": "Carve-out"
     }
   }
 }
