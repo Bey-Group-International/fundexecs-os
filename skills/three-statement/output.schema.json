@@ -1,0 +1,66 @@
+{
+  "properties": {
+    "balances": {
+      "type": "boolean"
+    },
+    "missingInputs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "projection": {
+      "items": {
+        "properties": {
+          "balanceCheck": {
+            "type": "number"
+          },
+          "cash": {
+            "type": "number"
+          },
+          "debt": {
+            "type": "number"
+          },
+          "ebit": {
+            "type": "number"
+          },
+          "ebitda": {
+            "type": "number"
+          },
+          "equity": {
+            "type": "number"
+          },
+          "fcf": {
+            "type": "number"
+          },
+          "netIncome": {
+            "type": "number"
+          },
+          "nwc": {
+            "type": "number"
+          },
+          "ppe": {
+            "type": "number"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [ "year", "revenue", "ebitda", "ebit", "netIncome", "fcf", "cash", "ppe", "nwc", "debt", "equity", "balanceCheck" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "years": {
+      "type": "integer"
+    }
+  },
+  "required": [ "years", "projection", "balances", "missingInputs", "recommendedAction" ],
+  "type": "object"
+}

@@ -1,0 +1,43 @@
+{
+  "properties": {
+    "anonymized": {
+      "type": "boolean"
+    },
+    "disclaimer": {
+      "type": "string"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "complete", "placeholder" ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [ "key", "title", "body", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "sections", "anonymized", "missingFields", "disclaimer", "recommendedAction" ],
+  "type": "object"
+}

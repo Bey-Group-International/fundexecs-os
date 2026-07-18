@@ -1,0 +1,40 @@
+# skills/audit-statement/policy.yaml
+# Execution + governance policy for Audit Statement Tie-Out. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible PREPARATION of audit support for review.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - fund_admin
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - fund:read
+  - capital_activity:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Issuing an audit
+# opinion / signing off is the external auditor's; posting entries, closing a
+# period, and moving capital are separate, gated actions — this skill only prepares
+# the tie-out support for review.
+prohibited_actions:
+  - post_journal_entry
+  - close_period
+  - move_capital
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Ties out ONLY the statement lines the caller supplies; it never invents or fabricates balances.
+  - A line with no supporting value is flagged "unsupported" with a null variance — it is NEVER assumed to equal the statement value.
+  - An empty statement-line set returns an empty tie-out plus the note "No statement lines supplied — this skill ties out provided lines against support; it does not fabricate balances."
+  - Every provided figure is a fact; every computed variance is a calculation; a defaulted materiality threshold is a labelled assumption.
+  - This skill PREPARES audit support for review; it never issues an audit opinion, never signs off, and never posts an entry.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - nav-review
+  - close-period

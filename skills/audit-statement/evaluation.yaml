@@ -1,0 +1,79 @@
+# skills/audit-statement/evaluation.yaml
+# Golden evaluation cases for Audit Statement Tie-Out. These are the acceptance
+# fixtures a production skill must pass — variance correctness, tied-within-
+# materiality vs variance-beyond-it, missing-support handling (flagged unsupported
+# not assumed equal, variance null), the never-fabricate guardrail (empty set
+# returns empty tie-out with a note), and the preparation-only guardrail.
+# Exercised by lib/skills/catalog/audit-statement.test.ts.
+cases:
+  - name: line_ties_exactly
+    input:
+      statementLines:
+        - label: Cash
+          statementValue: 10000
+          supportValue: 10000
+          schedule: GL 1000
+    expect:
+      status: tied
+      variance: 0
+      tiedCount: 1
+      totalAbsVariance: 0
+
+  - name: variance_beyond_materiality
+    input:
+      statementLines:
+        - label: AR
+          statementValue: 5250
+          supportValue: 5000
+          schedule: AR aging
+    expect:
+      status: variance
+      variance: 250
+      varianceCount: 1
+      totalAbsVariance: 250
+
+  - name: threshold_respected
+    input:
+      materialityThreshold: 100
+      statementLines:
+        - label: Prepaid
+          statementValue: 1005
+          supportValue: 1000
+        - label: Accruals
+          statementValue: 2000
+          supportValue: 1800
+    expect:
+      tiedCount: 1
+      varianceCount: 1
+      totalAbsVariance: 205
+      thresholdIsFact: true
+
+  - name: missing_support_flags_not_assumes
+    input:
+      statementLines:
+        - label: Investments
+          statementValue: 750000
+    expect:
+      status: unsupported
+      variance: null
+      supportValue: null
+      unsupportedCount: 1
+      neverInvents: true
+
+  - name: empty_lines_never_fabricates
+    input:
+      statementLines: []
+    expect:
+      tieOuts: []
+      missingContext: "No statement lines supplied — this skill ties out provided lines against support; it does not fabricate balances."
+      neverInvents: true
+
+  - name: preparation_only_never_opines
+    input:
+      statementLines:
+        - label: Cash
+          statementValue: 100
+          supportValue: 100
+    expect:
+      recommendedActionContains: does not issue an audit opinion
+      neverOpinesOrSigns: true

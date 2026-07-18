@@ -1,0 +1,45 @@
+{
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "debt": {
+      "type": "number"
+    },
+    "entryEV": {
+      "type": "number"
+    },
+    "entryEquity": {
+      "type": "number"
+    },
+    "exitEV": {
+      "type": "number"
+    },
+    "exitEbitda": {
+      "type": "number"
+    },
+    "exitEquity": {
+      "type": "number"
+    },
+    "irr": {
+      "type": "number"
+    },
+    "missingInputs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "moic": {
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    }
+  },
+  "required": [ "assumptions", "missingInputs", "recommendedAction" ],
+  "type": "object"
+}

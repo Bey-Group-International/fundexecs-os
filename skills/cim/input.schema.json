@@ -1,0 +1,78 @@
+{
+  "properties": {
+    "anonymize": {
+      "type": "boolean"
+    },
+    "deal": {
+      "properties": {
+        "codename": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "ebitda": {
+          "type": "number"
+        },
+        "growthRate": {
+          "type": "number"
+        },
+        "historicalFinancials": {
+          "items": {
+            "properties": {
+              "ebitda": {
+                "type": "number"
+              },
+              "revenue": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "year": {
+                "type": "number"
+              }
+            },
+            "required": [ "year" ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "management": {
+          "items": {
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "marketNotes": {
+          "type": "string"
+        },
+        "products": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "revenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sector": {
+          "type": "string"
+        },
+        "transactionAsk": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [ "deal" ],
+  "type": "object"
+}

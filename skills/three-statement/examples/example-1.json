@@ -1,0 +1,16 @@
+{
+  "description": "A five-year three-statement projection from $1,000 base revenue growing 10%/yr at a 20% EBITDA margin. Opening equity is omitted, so it is derived as a balancing plug ($500) and the balance sheet ties out every year (assets = liabilities + equity, balanceCheck = 0).",
+  "input": {
+    "baseRevenue": 1000,
+    "beginningCash": 100,
+    "beginningDebt": 200,
+    "beginningPPE": 500,
+    "capexPctOfRevenue": 0.06,
+    "daPctOfRevenue": 0.05,
+    "ebitdaMargin": 0.2,
+    "nwcPctOfRevenue": 0.1,
+    "revenueGrowth": 0.1,
+    "taxRate": 0.25,
+    "years": 5
+  }
+}

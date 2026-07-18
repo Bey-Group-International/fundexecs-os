@@ -837,6 +837,46 @@ Deployed, monitoring               →  live, observability active
              |  artifact DOCX/PDF, and the inference-gateway inference_runs ledger.
              |  Confidence: Tested by typecheck/eslint/Jest (72 new golden tests; 3501 total
              |  green, no regressions). Pure backend — no app/components changes.
+
+2026-07-18  |  Catalog completion — Analyst modeling + Diligence + Fund Admin +
+             |  Research + Comms  |  Seven more governed deterministic skills, built
+             |  IN PARALLEL (seven backend subagents) then integrated centrally.
+             |  Registry now holds 35 skills and THE ANTICIPATED CATALOG IS COMPLETE:
+             |  every skill id referenced by any executive's allowedSkills is now
+             |  backed by a real tested skill (verified 35 registered = 35 anticipated,
+             |  0 missing).
+             |  - Analyst modeling — compute from supplied assumptions, never invent:
+             |    `lbo` (sources&uses/exit equity/MOIC/IRR; missing required input ->
+             |    null + flagged, never guessed), `three-statement` (simplified IS/CF/BS
+             |    that TIES OUT every year — balanced by construction via a held-constant
+             |    debt + equity plug; unbalanced opening BS flagged), `model-audit`
+             |    (rules-grid over a supplied model -> severity findings; never emits a
+             |    corrected number).
+             |  - Diligence — `dd-prep`: a sequenced/prioritized diligence WORKPLAN
+             |    (8 workstreams) distinct from dd-checklist; never diligences or sends.
+             |  - Fund Admin — `audit-statement`: ties supplied statement lines to
+             |    supporting schedules -> variances/unsupported; never opines or signs off;
+             |    missing support is unsupported, never assumed equal.
+             |  - Research — `sector-research`: organizes a supplied research set + grades
+             |    source quality; every claim needs a supplied source, unsourced flagged,
+             |    never emitted as a fact; never fabricates market data.
+             |  - Communications — `cim`: a CIM draft OUTLINE (7 sections) from supplied
+             |    facts; financialSummary uses only supplied figures, with none it is a
+             |    flagged placeholder and NO fact source carries an invented number
+             |    (directly tested); draft-only, distribution stays gated.
+             |  Epistemics enforced throughout: supplied -> fact, derived -> calculation,
+             |  defaulted (no-expansion, held-constant debt, equity plug, materiality,
+             |  template status) -> assumption; nothing fabricated, missing input flagged.
+             |  Each is a full /skills/<id>/ package + pure core + golden tests, registered
+             |  in lib/skills/registry.ts and permitted by the executive whose allowedSkills
+             |  already anticipated its id. The generalized catalog-consistency test now
+             |  auto-covers all 35 skills.
+             |  The native skill catalog is now FEATURE-COMPLETE. Remaining work is
+             |  infrastructural, not new skills: mid-loop engine auto-invocation, artifact
+             |  DOCX/PDF phase 2, and the inference-gateway inference_runs ledger + routing
+             |  lib/claude.ts through it (+ real OpenAI/Google adapters).
+             |  Confidence: Tested by typecheck/eslint/Jest (122 new tests; 3623 total
+             |  green, no regressions). Pure backend — no app/components changes.
 ```
 
 ---

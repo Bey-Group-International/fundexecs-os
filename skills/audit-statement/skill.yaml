@@ -1,0 +1,61 @@
+# skills/audit-statement/skill.yaml
+# Authoring spec for the Audit Statement Tie-Out skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/audit-statement.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: audit-statement
+name: Audit Statement Tie-Out
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - fund_admin
+
+supported_entity_types: [fund, capital_activity, financial_model]
+
+required_inputs: []
+
+optional_inputs:
+  - statementLines
+  - materialityThreshold
+
+outputs:
+  - tieOuts            # each line tied out: variance + status (tied | variance | unsupported)
+  - tiedCount          # lines that tie within materiality
+  - varianceCount      # lines with a variance beyond materiality
+  - unsupportedCount   # lines with no supporting value (never assumed equal)
+  - totalAbsVariance   # Σ|variance| over supported lines
+  - recommendedAction
+  - missingContext
+
+artifact_types: [analysis]
+data_permissions: [fund:read, capital_activity:read]
+tools: []
+
+approval_tier: 1           # internal, reversible preparation of audit support
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+  - financial_reasoning
+
+allowed_downstream_skills: [nav-review, close-period]
+
+# Actions this skill may NEVER take, even to prepare. It PREPARES audit support for
+# review; issuing an opinion, signing off, posting entries, closing a period, and
+# moving capital belong to the external auditor / a human.
+prohibited_actions:
+  - post_journal_entry
+  - close_period
+  - move_capital
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

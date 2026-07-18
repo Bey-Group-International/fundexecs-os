@@ -1,0 +1,57 @@
+# skills/model-audit/skill.yaml
+# Authoring spec for the Model Audit skill. The machine-readable manifest that the
+# runtime loads is the TypeScript SkillDefinition in lib/skills/catalog/model-audit.ts;
+# this YAML is the human-facing contract and must stay consistent with it.
+id: model-audit
+name: Model Audit
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - analyst
+
+supported_entity_types: [model, deal, company]
+
+required_inputs: []
+
+optional_inputs:
+  - lineItems
+  - checks
+  - ratios
+
+outputs:
+  - findings           # flagged anomalies with area, label, severity, message
+  - checkedCount
+  - passedCount
+  - failedCount
+  - errorCount
+  - warningCount
+  - summary
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [model:read, deal:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

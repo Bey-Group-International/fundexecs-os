@@ -1,0 +1,66 @@
+# skills/model-audit/evaluation.yaml
+# Golden evaluation cases for Model Audit. These are the acceptance fixtures a
+# production skill must pass — anomaly detection (implausible ratio, failed check),
+# the clean-model pass path, and the never-fabricate guardrail (empty model returns
+# empty findings with a note, and no corrected number is ever emitted). Exercised by
+# lib/skills/catalog/model-audit.test.ts.
+cases:
+  - name: margin_over_100pct_is_error
+    input:
+      ratios:
+        - label: Gross margin
+          value: 1.5
+          kind: margin
+    expect:
+      errorCount: 1
+      severity: error
+
+  - name: failed_check_beyond_tolerance
+    input:
+      checks:
+        - label: Assets = Liabilities + Equity
+          lhs: 100
+          rhs: 90
+          tolerance: 1
+    expect:
+      failedCount: 1
+      severity: error
+
+  - name: clean_model_no_findings
+    input:
+      lineItems:
+        - label: Revenue
+          value: 100
+          min: 0
+          max: 200
+          kind: revenue
+      checks:
+        - label: Balance
+          lhs: 50
+          rhs: 50
+      ratios:
+        - label: EBITDA margin
+          value: 0.25
+          kind: margin
+    expect:
+      findings: []
+      passedCount: 3
+      failedCount: 0
+
+  - name: empty_model_never_fabricates
+    input: {}
+    expect:
+      findings: []
+      checkedCount: 0
+      summary: "No model supplied — this skill audits a provided model; it does not fabricate figures."
+      neverInvents: true
+
+  - name: negative_revenue_is_error
+    input:
+      lineItems:
+        - label: Revenue
+          value: -10
+          kind: revenue
+    expect:
+      severity: error
+      neverInvents: true

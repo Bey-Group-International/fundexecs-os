@@ -1,0 +1,55 @@
+# skills/cim/skill.yaml
+# Authoring spec for the CIM Outline (Draft) skill. The machine-readable manifest
+# that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/cim.ts; this YAML is the human-facing contract and must stay
+# consistent with it.
+id: cim
+name: CIM Outline (Draft)
+version: 1.0.0
+owner: fundexecs
+hub: build
+
+applicable_executives:
+  - communications
+
+supported_entity_types: [deal, company, cim]
+
+required_inputs:
+  - deal
+
+optional_inputs:
+  - anonymize            # default true — codename only, management names withheld
+
+outputs:
+  - sections             # executiveSummary, companyOverview, marketOverview, productsServices, financialSummary, management, transactionOverview
+  - anonymized           # whether the CIM is anonymized
+  - missingFields        # section keys that fell back to flagged placeholders
+  - disclaimer           # fixed confidentiality/not-an-offer/as-supplied notice
+  - recommendedAction
+
+artifact_types: [document]
+data_permissions: [deal:read, company:read]
+tools: []
+
+approval_tier: 1           # internal DRAFT — distribution is a separate, gated action
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - distribute_report
+  - share_materials
+  - send_outreach
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

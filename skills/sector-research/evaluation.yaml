@@ -1,0 +1,65 @@
+# skills/sector-research/evaluation.yaml
+# Golden evaluation cases for the Sector Research Brief. These are the acceptance
+# fixtures a production skill must pass — grouping findings by category, treating a
+# sourced claim as a fact carrying its ref, flagging an unsourced claim as
+# unsupported (never a fact), grading source quality by sourceType, and the
+# empty-set guardrail (no market data fabricated). Exercised by
+# lib/skills/catalog/sector-research.test.ts.
+cases:
+  - name: groups_findings_by_category
+    input:
+      sector: Payments
+      findings:
+        - { claim: Real-time rails are expanding, category: driver, source: Fed report 2026, sourceType: primary }
+        - { claim: Interchange caps loom, category: risk, source: Reg brief, sourceType: secondary }
+        - { claim: Embedded finance is accelerating, category: trend, source: Analyst note, sourceType: expert }
+        - { claim: Stripe leads acquiring, category: player, source: S-1, sourceType: primary }
+    expect:
+      sectionOrder: [driver, risk, trend, player]
+      sourcedCount: 4
+      unsourcedCount: 0
+
+  - name: sourced_claim_is_a_fact_with_ref
+    input:
+      sector: SaaS
+      findings:
+        - { claim: ARR growth is decelerating, category: trend, source: 10-K 2026, sourceType: primary }
+    expect:
+      factClaim: ARR growth is decelerating
+      factRef: 10-K 2026
+      grade: A
+
+  - name: unsourced_claim_flagged_not_a_fact
+    input:
+      sector: Insurtech
+      findings:
+        - { claim: Market will double by 2030, category: sizing }
+        - { claim: Loss ratios improving, category: driver, source: Actuarial memo, sourceType: primary }
+    expect:
+      unsupportedClaims: [Market will double by 2030]
+      unsourcedCount: 1
+      sourcedCount: 1
+      neverInvents: true
+
+  - name: grades_source_quality_by_sourceType
+    input:
+      sector: Logistics
+      findings:
+        - { claim: primary claim, category: driver, source: s1, sourceType: primary }
+        - { claim: expert claim, category: driver, source: s2, sourceType: expert }
+        - { claim: secondary claim, category: risk, source: s3, sourceType: secondary }
+        - { claim: news claim, category: trend, source: s4, sourceType: news }
+        - { claim: no-type claim, category: sizing, source: s6 }
+    expect:
+      grades: { primary claim: A, expert claim: B, secondary claim: C, news claim: C, no-type claim: D }
+
+  - name: empty_finding_set_yields_empty_brief
+    input:
+      sector: Space Economy
+      findings: []
+    expect:
+      sections: []
+      sourcedCount: 0
+      unsourcedCount: 0
+      missingContext: "No findings supplied — this skill organizes provided research; it does not fabricate market data."
+      neverInvents: true

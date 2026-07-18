@@ -1,0 +1,37 @@
+# skills/cim/policy.yaml
+# Execution + governance policy for CIM Outline (Draft). Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal DRAFT. Distribution of the CIM is separate and gated.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - communications
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - deal:read
+  - company:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Publishing,
+# distributing, or sharing a CIM are all Tier-2 and out of scope here.
+prohibited_actions:
+  - distribute_report
+  - share_materials
+  - send_outreach
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Assembles a CIM DRAFT outline from caller-SUPPLIED facts only; it NEVER publishes, distributes, or shares.
+  - NEVER invents a financial figure — with no supplied revenue/EBITDA/growth/historical rows, financialSummary becomes a flagged placeholder "[Financial summary to be provided]", never a fabricated number.
+  - Every supplied figure is a fact source; connective/framing and the standard confidentiality/disclaimer language are generated sources.
+  - A section with no supplied content falls back to a flagged placeholder recorded in missingFields, never fabricated content.
+  - Anonymized by default — the deal is named by codename only and management names are withheld (roles kept); no real company name is emitted.
+  - Carries a fixed disclaimer that the CIM is a confidential draft, not an offer, and figures are as-supplied/unverified.
+  - Output must validate against output.schema.json before it is persisted.
+
+# Distribution of the finished CIM is a gated action — not a downstream skill here.
+downstream: []

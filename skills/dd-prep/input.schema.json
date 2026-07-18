@@ -1,0 +1,56 @@
+{
+  "properties": {
+    "deal": {
+      "properties": {
+        "dealType": {
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sector": {
+          "type": "string"
+        }
+      },
+      "required": [ "name" ],
+      "type": "object"
+    },
+    "focusAreas": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "knownItems": {
+      "items": {
+        "properties": {
+          "item": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "not_started", "in_progress", "complete" ],
+            "type": "string"
+          },
+          "workstream": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [ "workstream", "item" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "timelineWeeks": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "deal" ],
+  "type": "object"
+}

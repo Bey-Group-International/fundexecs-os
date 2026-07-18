@@ -1,0 +1,31 @@
+{
+  "properties": {
+    "materialityThreshold": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "statementLines": {
+      "items": {
+        "properties": {
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "statementValue": {
+            "type": "number"
+          },
+          "supportValue": {
+            "type": "number"
+          }
+        },
+        "required": [ "label", "statementValue" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "type": "object"
+}

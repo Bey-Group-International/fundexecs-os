@@ -1,0 +1,65 @@
+{
+  "properties": {
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "properties": {
+                "claim": {
+                  "type": "string"
+                },
+                "grade": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [ "claim", "grade" ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [ "category", "findings" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "sector": {
+      "type": "string"
+    },
+    "sourceQuality": {
+      "type": "string"
+    },
+    "sourcedCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "unsourcedCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "unsupportedClaims": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "sector", "sections", "sourcedCount", "unsourcedCount", "unsupportedClaims", "sourceQuality", "recommendedAction" ],
+  "type": "object"
+}

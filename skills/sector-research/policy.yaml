@@ -1,0 +1,34 @@
+# skills/sector-research/policy.yaml
+# Execution + governance policy for the Sector Research Brief. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Organizes a provided research set.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). Maps to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - research
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - company:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - This skill organizes a body of research the caller supplies into a sector brief — it NEVER researches the sector, sizes the market, or invents facts, figures, or market data.
+  - Every material claim must carry a supplied source; a claim WITH a source is a fact carrying its ref, a claim WITHOUT a source is surfaced but flagged unsupported and emitted as a generated item — never a fact, and no source is ever invented.
+  - An empty finding set yields an empty brief plus the missing-context note "No findings supplied — this skill organizes provided research; it does not fabricate market data."
+  - Source quality is graded from the supplied sourceType (primary A, expert B, secondary/news C, unknown/absent D); a claim with no source is grade D and flagged.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - market-map
+  - source-deals

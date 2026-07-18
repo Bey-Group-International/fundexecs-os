@@ -1,0 +1,61 @@
+# skills/dd-prep/skill.yaml
+# Authoring spec for the Diligence Prep Workplan skill. The machine-readable
+# manifest the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/dd-prep.ts; this YAML is the human-facing contract and must
+# stay consistent with it.
+id: dd-prep
+name: Diligence Prep Workplan
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - diligence
+
+supported_entity_types: [deal, company, diligence_request]
+
+required_inputs:
+  - deal.name
+
+optional_inputs:
+  - deal.sector
+  - deal.dealType
+  - focusAreas
+  - knownItems
+  - timelineWeeks
+
+outputs:
+  - workstreams        # [{ workstream, priority, phase, items[] }]
+  - totalItems
+  - highPriorityCount
+  - coverageGaps       # unstarted workstreams + focus areas not represented
+  - recommendedAction
+  - missingContext     # material planning context absent (flagged, not invented)
+
+artifact_types: [analysis]
+data_permissions: [deal:read]
+tools: []
+
+approval_tier: 1           # internal — PREPARES the plan, never performs or sends
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [dd-checklist, ic-memo]
+
+# Sending a diligence request OUT is a separate Tier-2 action
+# (send_diligence_request), prohibited here — this skill only sequences the plan.
+prohibited_actions:
+  - send_diligence_request
+  - send_outreach
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

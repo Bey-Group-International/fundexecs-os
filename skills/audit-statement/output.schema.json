@@ -1,0 +1,57 @@
+{
+  "properties": {
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "tieOuts": {
+      "items": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "statementValue": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "supportValue": {
+            "type": "number"
+          },
+          "variance": {
+            "type": "number"
+          }
+        },
+        "required": [ "label", "statementValue", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tiedCount": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalAbsVariance": {
+      "type": "number"
+    },
+    "unsupportedCount": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "varianceCount": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [ "tieOuts", "tiedCount", "varianceCount", "unsupportedCount", "totalAbsVariance", "recommendedAction" ],
+  "type": "object"
+}

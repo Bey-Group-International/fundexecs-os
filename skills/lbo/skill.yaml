@@ -1,0 +1,68 @@
+# skills/lbo/skill.yaml
+# Authoring spec for the LBO Returns Model skill. The machine-readable manifest
+# that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/lbo.ts; this YAML is the human-facing contract and must stay
+# consistent with it.
+id: lbo
+name: LBO Returns Model
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - analyst
+
+supported_entity_types: [deal, company, financial_model]
+
+required_inputs: []
+
+optional_inputs:
+  - entryEbitda
+  - entryMultiple
+  - leverageMultiple
+  - debtAmount
+  - holdYears
+  - exitMultiple
+  - ebitdaGrowthRate
+  - annualDebtPaydown
+  - transactionFeesPct
+
+outputs:
+  - entryEV
+  - entryEquity
+  - debt
+  - exitEbitda
+  - exitEV
+  - exitEquity
+  - moic
+  - irr
+  - assumptions
+  - missingInputs
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [deal:read, financial_model:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [returns, ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

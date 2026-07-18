@@ -1,0 +1,25 @@
+{
+  "description": "A supplied payments research set organized into driver / risk / sizing sections; the sourced claims carry their refs, and one unsourced sizing claim is flagged as unsupported.",
+  "input": {
+    "findings": [ {
+      "category": "driver",
+      "claim": "Real-time payment rails are expanding across North America",
+      "source": "Federal Reserve FedNow report 2026",
+      "sourceType": "primary"
+    }, {
+      "category": "risk",
+      "claim": "Interchange fee caps are under regulatory review",
+      "source": "Regulatory affairs brief",
+      "sourceType": "secondary"
+    }, {
+      "category": "trend",
+      "claim": "Embedded finance adoption is accelerating among SMBs",
+      "source": "Sector analyst note",
+      "sourceType": "expert"
+    }, {
+      "category": "sizing",
+      "claim": "The addressable market will double by 2030"
+    } ],
+    "sector": "Payments"
+  }
+}

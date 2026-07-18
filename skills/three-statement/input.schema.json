@@ -1,0 +1,44 @@
+{
+  "properties": {
+    "baseRevenue": {
+      "type": "number"
+    },
+    "beginningCash": {
+      "type": "number"
+    },
+    "beginningDebt": {
+      "type": "number"
+    },
+    "beginningEquity": {
+      "type": "number"
+    },
+    "beginningPPE": {
+      "type": "number"
+    },
+    "capexPctOfRevenue": {
+      "type": "number"
+    },
+    "daPctOfRevenue": {
+      "type": "number"
+    },
+    "ebitdaMargin": {
+      "type": "number"
+    },
+    "nwcPctOfRevenue": {
+      "type": "number"
+    },
+    "revenueGrowth": {
+      "type": "number"
+    },
+    "taxRate": {
+      "type": "number"
+    },
+    "years": {
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [ ],
+  "type": "object"
+}
