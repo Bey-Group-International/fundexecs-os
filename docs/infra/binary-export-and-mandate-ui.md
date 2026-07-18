@@ -81,3 +81,4 @@ this workstream — the UI reuses existing components/patterns throughout.
 - Route `lib/claude.ts` through the inference gateway (+ `runInferenceLogged`) and
   real OpenAI/Google adapters — the last backend seam.
 - Optional: richer PDF layout (tables, page numbers) if artifact bodies grow tables.
+
