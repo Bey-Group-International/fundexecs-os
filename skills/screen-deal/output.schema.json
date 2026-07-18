@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["verdict", "mandateFit", "preliminaryValuation", "recommendedAction"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["pass", "watch", "fail"] },
+    "mandateFit": {
+      "type": "object",
+      "required": ["overall"],
+      "properties": {
+        "overall": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "exclusionHits": { "type": "array", "items": { "type": "string" } },
+    "preliminaryValuation": { "type": "object" },
+    "leverageConsideration": { "type": "string" },
+    "keyRisks": { "type": "array", "items": { "type": "string" } },
+    "missingFields": { "type": "array", "items": { "type": "string" } },
+    "diligencePriorities": { "type": "array", "items": { "type": "string" } },
+    "recommendedAction": { "type": "string" }
+  }
+}

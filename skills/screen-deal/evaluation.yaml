@@ -1,0 +1,73 @@
+# skills/screen-deal/evaluation.yaml
+# Golden evaluation cases for Deal Screening. These are the acceptance fixtures a
+# production skill must pass — verdict correctness, missing-data handling (flagged
+# not invented), assumption labelling, and valuation math. Exercised by
+# lib/skills/catalog/screen-deal.test.ts.
+cases:
+  - name: clean_fit_passes
+    input:
+      mandate:
+        sectors: [industrials, manufacturing]
+        geographies: [north america]
+        minRevenue: 20
+        maxRevenue: 200
+        minEbitda: 3
+        maxEbitda: 40
+        exclusions: [gambling, tobacco]
+      deal:
+        companyName: Acme Widgets
+        sector: Manufacturing
+        geography: North America
+        revenue: 80
+        ebitda: 12
+        enterpriseValue: 96
+        ownership: Founder-owned
+        transactionType: Buyout
+    expect:
+      verdict: pass
+      evEbitdaMultiple: 8
+      valuationComputable: true
+
+  - name: exclusion_hit_fails
+    input:
+      mandate:
+        sectors: [consumer]
+        exclusions: [tobacco]
+      deal:
+        companyName: SmokeCo
+        sector: Tobacco
+        revenue: 50
+        ebitda: 10
+    expect:
+      verdict: fail
+      exclusionHit: tobacco
+
+  - name: missing_data_watches_and_flags
+    input:
+      mandate:
+        sectors: [software]
+        minRevenue: 10
+      deal:
+        companyName: Mystery SaaS
+        sector: Software
+    expect:
+      verdict: watch
+      valuationComputable: false
+      flagsMissing: [Revenue, EBITDA, Enterprise value]
+      neverInvents: true
+
+  - name: out_of_band_size_fails
+    input:
+      mandate:
+        sectors: [software]
+        minRevenue: 100
+        maxRevenue: 500
+      deal:
+        companyName: TinyCo
+        sector: Software
+        geography: EU
+        revenue: 5
+        ebitda: 1
+        enterpriseValue: 10
+    expect:
+      verdict: fail
