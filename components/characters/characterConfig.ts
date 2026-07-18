@@ -311,6 +311,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     approvedActions: allowedActions,
     auditBehavior: "Audit workflow creation and process automation recommendations.",
     workspaceHref: "/virtual-office",
+    spriteSheet: "/assets/fundexecs/characters/master-workflow/master-workflow.png",
     frameMapKind: "executive",
     fallbackInitials: "MW",
     themeColor: "#be123c",

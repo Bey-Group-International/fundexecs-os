@@ -9,20 +9,32 @@ import { Reveal } from "./Reveal";
 // out to each. Roster data is pulled LIVE from lib/agents.ts so the ring never
 // drifts from the seed catalog. Sign-in / request-access live in the page header
 // and footer, so this section carries no CTA of its own.
-const EARN = AGENTS.find((a) => a.key === "associate");
 const TEAM = AGENTS.filter((a) => a.key !== "associate");
 
 const EARN_PHOTO = "/assets/fundexecs/characters/earnest-fundmaker/high-def.png";
+const AGENT_CHARACTER_SLUG: Record<string, string> = {
+  analyst: "capital-raiser",
+  investor_relations: "investor-relations",
+  portfolio_ops: "automater",
+  diligence: "workflow-instructor",
+  fund_admin: "legal-admin",
+  executive_advisor: "executive-advisor",
+  capital_raiser: "capital-raiser",
+  capital_connector: "capital-connector",
+  deal_sourcer: "deal-sourcer",
+  rainmaker: "rainmaker",
+  lead_generator: "lead-generator",
+  pr_director: "pr-director",
+  seo_disruptor: "seo-disruptor",
+  curator: "curator",
+};
+
 // Radius of the executive ring, as a percentage of the (square) diagram box.
 const RING_RADIUS = 42;
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+function characterSprite(agentKey: string) {
+  const slug = AGENT_CHARACTER_SLUG[agentKey] ?? "master-workflow";
+  return `/assets/fundexecs/characters/${slug}/sprite.png`;
 }
 
 // Position each executive evenly around the ring, starting at the top (−90°).
@@ -124,10 +136,21 @@ export function MeetEarnTeam() {
             title={agent.role}
           >
             <span
-              className="fx-team-node flex h-11 w-11 items-center justify-center rounded-full text-xs font-semibold text-surface-0 shadow-md ring-2 ring-surface-0 sm:h-14 sm:w-14 sm:text-sm"
-              style={{ backgroundColor: agent.color, animationDelay: `${(i % 7) * 0.6}s` }}
+              className="fx-team-node relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-surface-0 shadow-md ring-2 ring-surface-0 sm:h-16 sm:w-16"
+              style={{
+                background: `radial-gradient(circle at 50% 35%, ${agent.color}44, rgba(3,7,18,0.96) 70%)`,
+                animationDelay: `${(i % 7) * 0.6}s`,
+              }}
             >
-              {initials(agent.name)}
+              <span aria-hidden className="absolute inset-1 rounded-full border border-white/10" />
+              <Image
+                src={characterSprite(agent.key)}
+                alt=""
+                width={64}
+                height={64}
+                className="relative h-[92%] w-[92%] object-contain"
+                style={{ imageRendering: "pixelated" }}
+              />
             </span>
             <span className="mt-1 hidden max-w-[84px] text-center text-[10px] font-medium leading-tight text-fg-secondary sm:block">
               {agent.name}

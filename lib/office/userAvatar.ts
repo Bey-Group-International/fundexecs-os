@@ -151,9 +151,13 @@ export function presentationDefaults(g: UserAvatar["genderStyle"]): { hairStyle:
 /** Private-market operator roles a user can present as. */
 export const ROLE_LABELS: string[] = [
   "Managing Partner",
+  "Operating Partner",
+  "Capital Partner",
   "Principal",
   "Associate",
   "Analyst",
+  "Deal Lead",
+  "CFO",
   "Investor Relations",
   "Advisor",
   "Operator",
@@ -197,6 +201,8 @@ export const AVATAR_PRESETS: AvatarPreset[] = [
   { id: "analyst",    label: "The Analyst",    genderStyle: "neutral", wardrobe: "slate",    accent: "#4aa3d6", skin: "#ffdbb0", hair: "#6b4a2f", hairStyle: "short",    build: "slim"    },
   { id: "diplomat",   label: "The Diplomat",   genderStyle: "female",  wardrobe: "dove",     accent: "#7d4a8f", skin: "#8d5524", hair: "#2b2320", hairStyle: "tied",     build: "regular" },
   { id: "founder",    label: "The Founder",    genderStyle: "male",    wardrobe: "midnight", accent: "#b87333", skin: "#d9a066", hair: "#3a2a1a", hairStyle: "textured", build: "broad"   },
+  { id: "steward",    label: "The Steward",    genderStyle: "neutral", wardrobe: "ink",      accent: "#64748b", skin: "#f7d9bf", hair: "#8a8a8a", hairStyle: "short",    build: "regular" },
+  { id: "builder",    label: "The Builder",    genderStyle: "female",  wardrobe: "olive",    accent: "#3f7d4f", skin: "#a9713f", hair: "#1a1a1a", hairStyle: "textured", build: "regular" },
 ];
 
 /** Apply a preset's look to an avatar, preserving its display name and role. */

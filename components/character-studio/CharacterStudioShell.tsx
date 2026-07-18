@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { virtualOfficeRoutes } from "@/lib/virtualOfficeRoutes";
 import { type UserAvatar, userAvatarSpec } from "@/lib/office/userAvatar";
 import { AvatarPreview } from "@/components/virtual-office/avatar/AvatarPreview";
@@ -13,6 +14,7 @@ import {
 } from "./CharacterStudioInspector";
 
 const GOLD = "#c9a84c";
+const CUSTOMIZABLE_PACK = "/assets/fundexecs/character-packs/customizables/studio-pack.png";
 
 /** Preview backdrops — set dressing behind the figure, not a live environment. */
 const ENVIRONMENTS: { id: string; label: string; bg: string }[] = [
@@ -251,6 +253,26 @@ export function CharacterStudioShell({ initialAvatar }: { initialAvatar: UserAva
             >
               +
             </button>
+          </div>
+
+          <div className="relative mt-1 h-24 w-full max-w-[440px] overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+            <Image
+              src={CUSTOMIZABLE_PACK}
+              alt="16-bit customizable executive character pack"
+              fill
+              sizes="440px"
+              className="object-cover opacity-90"
+              priority
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/78 via-black/28 to-transparent" />
+            <div className="absolute left-3 top-3 max-w-[220px]">
+              <div className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: GOLD }}>
+                16-bit Studio Pack
+              </div>
+              <div className="mt-1 text-[12px] font-semibold text-slate-100" style={{ fontFamily: "Georgia, serif" }}>
+                Institutional operator bases, wardrobes, and role accents.
+              </div>
+            </div>
           </div>
         </div>
 

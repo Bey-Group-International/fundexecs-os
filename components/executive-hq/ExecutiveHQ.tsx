@@ -81,7 +81,7 @@ const E: Record<string, ExecData> = {
   seoDisruptor:      { id:"seo-disruptor",       name:"Market Authority",    shortName:"Authority",    sprite:"/assets/fundexecs/characters/seo-disruptor/sprite.png",       themeColor:"#f97316", href:"/dashboard/marketing",       bobDelay:"0.6s", wanderDelay:"1.1s", hint:"Firm visibility up",       walkDuration:"10.5s"},
   curator:           { id:"curator",             name:"Content Lead",        shortName:"Content",      sprite:"/assets/fundexecs/characters/curator/sprite.png",             themeColor:"#f97316", href:"/dashboard/marketing",       bobDelay:"0.9s", wanderDelay:"3.0s", hint:"Thought piece drafted",    walkDuration:"11.5s"},
   investorRelations: { id:"investor-relations",  name:"Investor Relations",  shortName:"IR",           sprite:"/assets/fundexecs/characters/investor-relations/sprite.png",  themeColor:"#f59e0b", href:"/dashboard/investor-relations",bobDelay:"0.3s",wanderDelay:"0.6s", hint:"LP update ready",          walkDuration:"12.5s"},
-  officeManager:     { id:"office-manager",      name:"Office Manager",      shortName:"Manager",      sprite:"/assets/fundexecs/characters/office-manager/sprite.svg",      themeColor:"#94a3b8", href:"/dashboard",                 bobDelay:"0.1s", wanderDelay:"0.2s", hint:"All systems operational",  walkDuration:"9s"  },
+  officeManager:     { id:"office-manager",      name:"Office Manager",      shortName:"Manager",      sprite:"/assets/fundexecs/characters/office-manager/sprite.png",      themeColor:"#94a3b8", href:"/dashboard",                 bobDelay:"0.1s", wanderDelay:"0.2s", hint:"All systems operational",  walkDuration:"9s"  },
 };
 
 const ROOMS: RoomData[] = [
@@ -226,7 +226,14 @@ function ExecAvatar({
           animation: isWorking ? "exec-badge-pulse 1.8s ease-in-out infinite" : undefined,
         }}
       >
-        <span style={{
+        <span aria-hidden style={{
+          position: "absolute",
+          inset: 3,
+          borderRadius: "50%",
+          background: `radial-gradient(circle at 50% 30%, ${exec.themeColor}26 0%, rgba(0,0,0,0.05) 62%)`,
+        }} />
+        <span aria-hidden style={{
+          position: "absolute",
           fontFamily: "Georgia, 'Times New Roman', serif",
           fontSize,
           fontWeight: 600,
@@ -234,9 +241,27 @@ function ExecAvatar({
           letterSpacing: "0.04em",
           userSelect: "none",
           lineHeight: 1,
+          opacity: 0.22,
         }}>
           {initials}
         </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={exec.sprite}
+          alt=""
+          width={size}
+          height={size}
+          style={{
+            position: "relative",
+            zIndex: 1,
+            width: Math.round(size * 0.86),
+            height: Math.round(size * 0.86),
+            objectFit: "contain",
+            imageRendering: "pixelated",
+            filter: `drop-shadow(0 3px 8px ${exec.themeColor}66) drop-shadow(0 1px 1px rgba(0,0,0,0.85))`,
+          }}
+          draggable={false}
+        />
         {/* Status dot */}
         <span style={{
           position: "absolute",
@@ -249,6 +274,7 @@ function ExecAvatar({
           border: "1.5px solid rgba(8,6,4,0.9)",
           boxShadow: dotGlow,
           animation: isWorking ? "exec-dot-pulse 1.2s ease-in-out infinite" : undefined,
+          zIndex: 2,
         }} />
       </button>
 
@@ -717,15 +743,31 @@ const PANEL_BG = "linear-gradient(180deg, rgba(12,10,7,0.92) 0%, rgba(8,6,4,0.95
 function InspectorHeaderAvatar({ exec, size = 40 }: { exec: ExecData; size?: number }) {
   return (
     <div style={{
+      position: "relative",
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
       border: `1.5px solid ${exec.themeColor}aa`,
       background: `radial-gradient(circle at 40% 35%, ${exec.themeColor}22 0%, rgba(8,6,4,0.85) 70%)`,
       boxShadow: `0 0 14px ${exec.themeColor}33`,
-      display: "flex", alignItems: "center", justifyContent: "center",
+      display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
       fontFamily: "Georgia,serif", fontWeight: 600, color: exec.themeColor,
       fontSize: Math.round(size * 0.34),
     }}>
-      {getInitials(exec.name)}
+      <span aria-hidden style={{ position: "absolute", opacity: 0.2 }}>{getInitials(exec.name)}</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={exec.sprite}
+        alt=""
+        width={size}
+        height={size}
+        style={{
+          position: "relative",
+          width: Math.round(size * 0.88),
+          height: Math.round(size * 0.88),
+          objectFit: "contain",
+          imageRendering: "pixelated",
+        }}
+        draggable={false}
+      />
     </div>
   );
 }

@@ -18,6 +18,12 @@ const SIZE_CLASS = {
   lg: "h-24 w-24",
 };
 
+const SIZE_PIXELS = {
+  sm: 48,
+  md: 64,
+  lg: 96,
+};
+
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -55,14 +61,18 @@ export function ExecutiveSprite({
   }, [animation.fps, animation.frames.length, hasSprite, reducedMotion]);
 
   const frame = animation.frames[frameIndex] ?? animation.frames[0] ?? 0;
+  const displaySize = SIZE_PIXELS[size];
+  const spriteScale = displaySize / frameMap.frameHeight;
   const spriteStyle = useMemo<CSSProperties>(
     () => ({
       backgroundImage: character.spriteSheet ? `url(${character.spriteSheet})` : undefined,
-      backgroundPosition: `-${frame * frameMap.frameWidth * frameMap.scale}px -${
-        animation.row * frameMap.frameHeight * frameMap.scale
-      }px`,
+      backgroundPosition: `-${frame * frameMap.frameWidth}px -${animation.row * frameMap.frameHeight}px`,
       backgroundSize: "auto",
       imageRendering: "pixelated",
+      width: frameMap.frameWidth,
+      height: frameMap.frameHeight,
+      transform: `scale(${spriteScale})`,
+      transformOrigin: "center bottom",
     }),
     [
       animation.row,
@@ -70,16 +80,17 @@ export function ExecutiveSprite({
       frame,
       frameMap.frameHeight,
       frameMap.frameWidth,
-      frameMap.scale,
+      spriteScale,
     ],
   );
 
   const body = hasSprite ? (
     <span
       aria-hidden
-      className={`${SIZE_CLASS[size]} block shrink-0 bg-no-repeat`}
-      style={spriteStyle}
-    />
+      className={`${SIZE_CLASS[size]} relative grid shrink-0 place-items-end justify-items-center overflow-visible`}
+    >
+      <span className="block bg-no-repeat" style={spriteStyle} />
+    </span>
   ) : (
     <span
       aria-hidden
