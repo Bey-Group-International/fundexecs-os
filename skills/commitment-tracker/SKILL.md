@@ -11,15 +11,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-|                   |                                                                                                                            |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                                          |
-| **Risk**          | low                                                                                                                        |
-| **Executives**    | Capital Formation                                                                                                          |
-| **Inputs**        | `targetClose?`, `hardCap?`, `commitments?` (a supplied set to track)                                                        |
+|                   |                                                                                                                                                                                  |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                                                                |
+| **Risk**          | low                                                                                                                                                                              |
+| **Executives**    | Capital Formation                                                                                                                                                                |
+| **Inputs**        | `targetClose?`, `hardCap?`, `commitments?` (a supplied set to track)                                                                                                             |
 | **Outputs**       | `byInvestor`, `totalCommitted`, `bindingCommitted`, `totalInvestors`, `remainingToTarget`, `pctOfTarget`, `targetClose`, `overSubscribed`, `recommendedAction`, `missingContext` |
-| **Artifacts**     | `analysis`                                                                                                                  |
-| **Downstream**    | — (none; a capital call or funding is a human Tier-3 action, never seeded here)                                             |
+| **Artifacts**     | `analysis`                                                                                                                                                                       |
+| **Downstream**    | — (none; a capital call or funding is a human Tier-3 action, never seeded here)                                                                                                  |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
@@ -55,3 +55,4 @@ Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 - **`overSubscribed`** = true when a `hardCap` is supplied and `totalCommitted` exceeds
   it; over-subscription is flagged prominently, and scale-back is left as a human
   decision.
+

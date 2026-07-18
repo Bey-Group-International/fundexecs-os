@@ -1,24 +1,24 @@
 {
   "description": "A supplied LP commitment set rolled up against a $100M target with a $110M hard cap; Alpha LP is signed, Gamma LP is soft-circled, and Delta LP has no amount yet (counted but flagged).",
   "input": {
-    "targetClose": 100000000,
-    "hardCap": 110000000,
     "commitments": [ {
-      "investor": "Alpha Pension",
       "amount": 50000000,
-      "status": "signed",
-      "closeDate": "2026-06-30"
+      "closeDate": "2026-06-30",
+      "investor": "Alpha Pension",
+      "status": "signed"
     }, {
-      "investor": "Beta Endowment",
       "amount": 30000000,
+      "investor": "Beta Endowment",
       "status": "committed"
     }, {
-      "investor": "Gamma Family Office",
       "amount": 15000000,
+      "investor": "Gamma Family Office",
       "status": "soft_circle"
     }, {
       "investor": "Delta Fund of Funds",
       "status": "soft_circle"
-    } ]
+    } ],
+    "hardCap": 110000000,
+    "targetClose": 100000000
   }
 }

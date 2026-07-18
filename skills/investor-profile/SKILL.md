@@ -11,15 +11,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-|                   |                                                                                          |
-|-------------------|------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                        |
-| **Risk**          | low                                                                                      |
-| **Executives**    | Investor Relations, Capital Formation                                                    |
-| **Inputs**        | `investor` (known facts) + optional `fundCriteria` (targeting)                           |
+|                   |                                                                                             |
+|-------------------|---------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                           |
+| **Risk**          | low                                                                                         |
+| **Executives**    | Investor Relations, Capital Formation                                                       |
+| **Inputs**        | `investor` (known facts) + optional `fundCriteria` (targeting)                              |
 | **Outputs**       | `profile`, `fitSignals`, `fitScore`, `missingFields`, `suggestedNextStep`, `missingContext` |
-| **Artifacts**     | `analysis`                                                                               |
-| **Downstream**    | `raise-pipeline`, `commitment-tracker`                                                   |
+| **Artifacts**     | `analysis`                                                                                  |
+| **Downstream**    | `raise-pipeline`, `commitment-tracker`                                                      |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

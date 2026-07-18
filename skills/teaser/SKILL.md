@@ -11,15 +11,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-|                   |                                                                                            |
-|-------------------|--------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal DRAFT (distribution is a separate, gated action)                              |
-| **Risk**          | low                                                                                        |
-| **Executives**    | Communications                                                                             |
-| **Inputs**        | `deal` (supplied facts) + `anonymize` (default true)                                        |
-| **Outputs**       | `sections`, `anonymized`, `missingFields`, `disclaimer`, `recommendedAction`               |
-| **Artifacts**     | `document`                                                                                  |
-| **Downstream**    | none — distributing/sending/sharing the teaser is Tier-2 and prohibited here               |
+|                   |                                                                              |
+|-------------------|------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal DRAFT (distribution is a separate, gated action)                |
+| **Risk**          | low                                                                          |
+| **Executives**    | Communications                                                               |
+| **Inputs**        | `deal` (supplied facts) + `anonymize` (default true)                         |
+| **Outputs**       | `sections`, `anonymized`, `missingFields`, `disclaimer`, `recommendedAction` |
+| **Artifacts**     | `document`                                                                   |
+| **Downstream**    | none — distributing/sending/sharing the teaser is Tier-2 and prohibited here |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

@@ -12,15 +12,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-|                   |                                                                                                           |
-|-------------------|-----------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                         |
-| **Risk**          | low                                                                                                       |
-| **Executives**    | Capital Formation                                                                                         |
-| **Inputs**        | `raiseTarget` (optional) + `prospects` (a supplied set of LPs, each with a stage and optional ticket/prob) |
+|                   |                                                                                                                                                        |
+|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                                      |
+| **Risk**          | low                                                                                                                                                    |
+| **Executives**    | Capital Formation                                                                                                                                      |
+| **Inputs**        | `raiseTarget` (optional) + `prospects` (a supplied set of LPs, each with a stage and optional ticket/prob)                                             |
 | **Outputs**       | `byStage`, `totalProspects`, `weightedExpected`, `committedAmount`, `coveragePct`, `gapToTarget`, `raiseTarget`, `recommendedAction`, `missingContext` |
-| **Artifacts**     | `analysis`                                                                                                 |
-| **Downstream**    | —                                                                                                         |
+| **Artifacts**     | `analysis`                                                                                                                                             |
+| **Downstream**    | —                                                                                                                                                      |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
@@ -60,3 +60,4 @@ Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 - **Coverage** — when a `raiseTarget` is supplied, `coveragePct` =
   round(`weightedExpected` / `raiseTarget` × 100) and `gapToTarget` =
   max(0, `raiseTarget − weightedExpected`). Both are `null` when no target is set.
+

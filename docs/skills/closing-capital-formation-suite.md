@@ -17,25 +17,25 @@ anticipated. Every operational executive now has at least one native skill.
 Both prepare/track work for review. Neither signs, executes a document, or marks a
 deal closed — signing/closing is a Tier-3 human action the manifests prohibit.
 
-| Skill | Prepares | Never |
-|---|---|---|
+|        Skill        |                                                   Prepares                                                   |                                           Never                                            |
+|---------------------|--------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
 | `closing-checklist` | 8 canonical closing tasks (3 critical) merged with supplied completion status → readiness % + blocking items | signs, executes, or auto-closes — always routes to a human for final closing authorization |
-| `deal-tracker` | Rolls a supplied milestone set into status counts, at-risk items, overall status, next actions | fabricates milestones — an empty set returns an empty tracker with a note |
+| `deal-tracker`      | Rolls a supplied milestone set into status counts, at-risk items, overall status, next actions               | fabricates milestones — an empty set returns an empty tracker with a note                  |
 
 ## Capital Formation (`capital_formation`) + IR — profile, pipeline, track
 
 None binds capital, issues a capital call, or moves money — those are prohibited.
 
-| Skill | Computes | Never |
-|---|---|---|
-| `investor-profile` | Structures a supplied LP's facts, scores fit (ticket/sector/geography) against fund criteria, flags gaps | invents AUM, wealth, mandate, PEP status, or preferences — missing fields are flagged |
-| `raise-pipeline` | Aggregates supplied prospects by raise stage → probability-weighted expected commitments, coverage vs target | fabricates prospects/commitments — weighting is a labelled calculation; a target with no prospects is flagged |
-| `commitment-tracker` | Tracks supplied commitments vs target close: total committed, remaining, per-investor %, over-subscription | binds capital or calls capital — it tracks supplied records; a missing amount is flagged, never assumed 0 |
+|        Skill         |                                                   Computes                                                   |                                                     Never                                                     |
+|----------------------|--------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `investor-profile`   | Structures a supplied LP's facts, scores fit (ticket/sector/geography) against fund criteria, flags gaps     | invents AUM, wealth, mandate, PEP status, or preferences — missing fields are flagged                         |
+| `raise-pipeline`     | Aggregates supplied prospects by raise stage → probability-weighted expected commitments, coverage vs target | fabricates prospects/commitments — weighting is a labelled calculation; a target with no prospects is flagged |
+| `commitment-tracker` | Tracks supplied commitments vs target close: total committed, remaining, per-investor %, over-subscription   | binds capital or calls capital — it tracks supplied records; a missing amount is flagged, never assumed 0     |
 
 ## Communications (`communications`) — draft-only
 
-| Skill | Assembles | Never |
-|---|---|---|
+|  Skill   |                                                           Assembles                                                           |                                                                        Never                                                                        |
+|----------|-------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | `teaser` | A one-page anonymized deal teaser **draft** from supplied facts; connective prose labelled `generated`, every figure a `fact` | invents a financial figure or distributes — with no financials supplied the section is a flagged placeholder, and distribution stays a gated action |
 
 The teaser guardrail is load-bearing and directly tested: with no revenue/EBITDA

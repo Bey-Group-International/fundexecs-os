@@ -1,25 +1,19 @@
 {
   "description": "A closing-readiness check for an acquisition: KYC/AML and legal opinions are reported complete, a regulatory-approval condition precedent is still blocking, so the deal is not yet ready to schedule a close.",
   "input": {
+    "completedItems": [ "KYC / AML cleared", "Legal opinions delivered" ],
+    "conditionsPrecedent": [ {
+      "blocking": true,
+      "label": "Regulatory approval received",
+      "satisfied": false
+    }, {
+      "blocking": false,
+      "label": "Landlord consent obtained",
+      "satisfied": true
+    } ],
     "deal": {
       "name": "Project Atlas",
       "type": "acquisition"
-    },
-    "completedItems": [
-      "KYC / AML cleared",
-      "Legal opinions delivered"
-    ],
-    "conditionsPrecedent": [
-      {
-        "label": "Regulatory approval received",
-        "satisfied": false,
-        "blocking": true
-      },
-      {
-        "label": "Landlord consent obtained",
-        "satisfied": true,
-        "blocking": false
-      }
-    ]
+    }
   }
 }

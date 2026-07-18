@@ -6,32 +6,27 @@
       "stage": "signing",
       "targetCloseDate": "2026-09-30"
     },
-    "milestones": [
-      {
-        "label": "CP checklist",
-        "status": "done",
-        "owner": "Legal",
-        "dueDate": "2026-08-01"
-      },
-      {
-        "label": "Disclosure schedules",
-        "status": "in_progress",
-        "owner": "Legal",
-        "dueDate": "2026-09-01"
-      },
-      {
-        "label": "Escrow agreement",
-        "status": "blocked",
-        "owner": "Finance",
-        "dueDate": "2026-09-10"
-      },
-      {
-        "label": "Regulatory approval",
-        "status": "in_progress",
-        "owner": "Compliance",
-        "dueDate": "2026-09-20",
-        "critical": true
-      }
-    ]
+    "milestones": [ {
+      "dueDate": "2026-08-01",
+      "label": "CP checklist",
+      "owner": "Legal",
+      "status": "done"
+    }, {
+      "dueDate": "2026-09-01",
+      "label": "Disclosure schedules",
+      "owner": "Legal",
+      "status": "in_progress"
+    }, {
+      "dueDate": "2026-09-10",
+      "label": "Escrow agreement",
+      "owner": "Finance",
+      "status": "blocked"
+    }, {
+      "critical": true,
+      "dueDate": "2026-09-20",
+      "label": "Regulatory approval",
+      "owner": "Compliance",
+      "status": "in_progress"
+    } ]
   }
 }
