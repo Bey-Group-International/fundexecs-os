@@ -15,22 +15,24 @@ React shell + command bar UI are the next increments.
 ## What landed
 
 ### 1. Unified action & safety contract — `lib/terminal/action-contract.ts`
+
 The terminal does **not** fork the gate model. It projects the spec's **ten
 side-effect levels** onto the existing **three gate tiers** (`lib/gates.ts`) so that
 commands, agents, API keys, and extensions all resolve authorization through the
 same primitive:
 
-| Levels | Tier | Approval |
-|---|---|---|
-| read-only, local-draft, internal-write, capital-analysis | 1 | none (immediate) |
-| external-communication, external-data-write, compliance-sensitive, destructive | 2 | operator (unless a mandate pre-authorizes) |
-| **capital-binding, transaction-execution** | **3** | **human, non-delegable — always** |
+|                                     Levels                                     | Tier  |                  Approval                  |
+|--------------------------------------------------------------------------------|-------|--------------------------------------------|
+| read-only, local-draft, internal-write, capital-analysis                       | 1     | none (immediate)                           |
+| external-communication, external-data-write, compliance-sensitive, destructive | 2     | operator (unless a mandate pre-authorizes) |
+| **capital-binding, transaction-execution**                                     | **3** | **human, non-delegable — always**          |
 
 The Tier-3 invariant is **re-asserted in code** (`classifySideEffect`): no table
 edit, mandate, or extension manifest can lower a capital-binding action below
 non-delegable human approval — for any actor. Pure + fully tested.
 
 ### 2. Command language — `lib/terminal/types.ts`, `commands/registry.ts`, `parse.ts`
+
 - A typed `CommandDefinition` (verb, aliases, args, required scopes, agent owner,
   side-effect level, dry-run) — mirrors `SkillManifest`.
 - An initial **command catalog** (~40 commands) across navigation (`DEAL`, `FUND`,
@@ -43,16 +45,18 @@ non-delegable human approval — for any actor. Pure + fully tested.
   preserved, and a null return for non-commands (the "ask earn" NL fallback).
 
 ### 3. Persistence — migration `20260718200000_terminal_core.sql`
+
 Four org-scoped tables, member-read / writer-write RLS, `updated_at` triggers,
 idempotent:
 - `terminal_workspaces` — named workspace presets per user/org (shared or private).
 - `terminal_layouts` — the serialized pane tree (jsonb, versioned).
 - `saved_commands` — a user's saved + recent commands.
 - `command_runs` — an **append-only** command-execution ledger (verb, resolved
-  side-effect level + gate tier, dry-run, status) — the terminal's observability
-  spine, mirroring `skill_runs` / `inference_runs`.
+side-effect level + gate tier, dry-run, status) — the terminal's observability
+spine, mirroring `skill_runs` / `inference_runs`.
 
 ### 4. Flag — `lib/terminal/config.ts`
+
 `TERMINAL_ENABLED` (default off). Nothing in the terminal path runs for a user until
 it is on.
 
@@ -78,3 +82,4 @@ it is on.
 - The command bar (extend `CommandPalette`) that parses → previews the plan →
   dispatches through the action contract, writing `command_runs`.
 - Pane adapters over the existing war rooms / capital-map / portfolio / Copilot.
+
