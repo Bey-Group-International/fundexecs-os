@@ -974,6 +974,32 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Tested by typecheck/eslint/Jest (binary magic-byte + format
              |  tests; 3676 total green, no regressions). Backend + UI; new deps docx +
              |  pdf-lib; no new migration.
+
+2026-07-18  |  Route lib/claude.ts free-text generation through the inference
+             |  gateway (flagged + fallback)  |  The last backend seam of the provider-
+             |  abstraction workstream. executeStep (the workflow's free-text deliverable
+             |  generator) can now run through the provider-agnostic gateway instead of
+             |  calling Anthropic directly, recording each call in the inference_runs
+             |  ledger. Behind CLAUDE_VIA_GATEWAY_ENABLED, default OFF: with the flag off
+             |  the direct-Anthropic path is byte-for-byte unchanged, and it stays the
+             |  guaranteed fallback whenever the gateway is disabled/degraded.
+             |  - lib/claude.ts: tryGatewayText({system,prompt,capability,maxTokens,
+             |    purpose,ctx}) returns text when gateway enabled+configured+ok, else null
+             |    so the caller runs the existing path; logs via runInferenceLogged when an
+             |    orgId is present. executeStep tries it first, then falls to
+             |    anthropic.messages.create, then the deterministic stub. Never throws.
+             |  - lib/engine.ts threads org/session/workflow ctx into executeStep so a
+             |    routed run is attributable in inference_runs.
+             |  Only executeStep routes: the other claude.ts calls (generatePlan/Plans,
+             |  generateClarifyingQuestions, earnFollowups, extract*) depend on Anthropic's
+             |  JSON-schema tool (structured outputs) the gateway does not expose yet, so
+             |  they stay direct until the gateway grows a structured-output capability;
+             |  earnChatStream stays direct (gateway is request/response, not a stream).
+             |  This removes the hard Anthropic coupling on the highest-volume LLM call
+             |  and lets a non-Anthropic provider serve the workflow without touching call
+             |  sites — only real OpenAI/Google adapters remain to make it multi-provider.
+             |  Confidence: Tested by typecheck/eslint/Jest (flag-off default asserted;
+             |  3678 total green, no regressions). Backend only; no migration, no new deps.
 ```
 
 ---

@@ -1,4 +1,4 @@
-import { normalizePlans, generatePlans, effortConfig, type AgentPlan } from "@/lib/claude";
+import { normalizePlans, generatePlans, effortConfig, tryGatewayText, executeStep, type AgentPlan } from "@/lib/claude";
 
 // output_config.effort 400s on Haiku 4.5 / Sonnet 4.5 but output_config.format
 // (structured outputs) is supported on Haiku 4.5 — effortConfig must gate only
@@ -101,6 +101,39 @@ describe("generatePlans (no API key)", () => {
       const plans = await generatePlans("Build the diligence pack and prep the IC memo");
       expect(plans).toHaveLength(1);
       expect(plans[0].steps.length).toBeGreaterThan(0);
+    } finally {
+      if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+});
+
+describe("gateway routing (CLAUDE_VIA_GATEWAY_ENABLED, default off)", () => {
+  it("tryGatewayText returns null when the flag is off — callers use the direct path", async () => {
+    // The flag is read at module load; in the test env it is unset (off), so the
+    // gateway is never consulted and every caller falls through to Anthropic.
+    const text = await tryGatewayText({
+      system: "s",
+      prompt: "p",
+      capability: "financial_reasoning",
+      maxTokens: 100,
+      purpose: "test",
+    });
+    expect(text).toBeNull();
+  });
+
+  it("executeStep is unchanged when the flag is off and no API key is set (deterministic fallback)", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      const out = await executeStep({
+        workflowTitle: "Test Workflow",
+        agent: "analyst",
+        stepTitle: "Draft a summary",
+        stepDescription: "Summarize the opportunity",
+        priorOutputs: [],
+      });
+      expect(typeof out).toBe("string");
+      expect(out.length).toBeGreaterThan(0);
     } finally {
       if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
     }

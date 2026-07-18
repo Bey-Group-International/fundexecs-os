@@ -911,6 +911,14 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
           priorOutputs,
           orgContext,
           documentMode: stepIntent === "draft_document",
+          // Attribution for a gateway-routed run (CLAUDE_VIA_GATEWAY_ENABLED) so
+          // its telemetry lands in inference_runs against this workflow.
+          ctx: {
+            orgId: ctx.orgId,
+            actorId: ctx.actorId,
+            sessionId: workflow.session_id ?? null,
+            workflowTaskId: workflow.id,
+          },
         });
         // Observe: auto-retry with rerouting if output quality falls below
         // threshold. Only fires in "auto" mode — semi/manual pass through.
