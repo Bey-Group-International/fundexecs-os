@@ -24,18 +24,18 @@ data sensitivity, region, context size, tier/cost preference), **not a model**.
 The gateway routes over the available providers and returns text + telemetry.
 
 ```
-  runInference({ capability, sensitivity, region, contextTokens, preferTier, … })
-        │
-        ▼
-  router.selectRoute(policy, routableProviders)   ← pure, tested
-        │   hard filters: available · capability · restricted→private/region ·
-        │                 region · context window · cost ceiling
-        │   ranking: preferred tier → sensitivity-aware tier bias → cost → context
-        ▼
-  provider.complete(modelId, req)   ← anthropic (live); openai/google/local = add an adapter
-        │
-        ▼
-  InferenceResult { text, provider, model, usage{in,out}, latencyMs, degraded }
+runInference({ capability, sensitivity, region, contextTokens, preferTier, … })
+      │
+      ▼
+router.selectRoute(policy, routableProviders)   ← pure, tested
+      │   hard filters: available · capability · restricted→private/region ·
+      │                 region · context window · cost ceiling
+      │   ranking: preferred tier → sensitivity-aware tier bias → cost → context
+      ▼
+provider.complete(modelId, req)   ← anthropic (live); openai/google/local = add an adapter
+      │
+      ▼
+InferenceResult { text, provider, model, usage{in,out}, latencyMs, degraded }
 ```
 
 - `lib/inference/types.ts` — capabilities, `ModelSpec`, request/result, the
