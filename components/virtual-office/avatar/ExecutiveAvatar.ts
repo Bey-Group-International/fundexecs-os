@@ -85,6 +85,12 @@ export class ExecutiveAvatar {
   // same figure transform while rotating on their own pivots.
   private figure: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Graphics;
+  // The head as its own Graphics, so it can rotate about the neck (real
+  // headTilt / nod) instead of the whole figure bouncing. Currently peeled out
+  // for the FRONT facing only (drawn on top of `body`, pivoted at the neck);
+  // profile / back / seated still draw the head into `body`, so `head` is left
+  // empty for them. Later PRs peel those too.
+  private head: Phaser.GameObjects.Graphics;
   private think: Phaser.GameObjects.Graphics;
 
   private facing: AvatarFacing = "down";
@@ -156,10 +162,14 @@ export class ExecutiveAvatar {
       .setVisible(false);
 
     this.body = scene.add.graphics();
-    // Inner figure container — wraps the body (and, in later PRs, the split
-    // limb objects). Whole-figure motion is applied here so the body's local
-    // draw coordinates never move.
-    this.figure = scene.add.container(0, 0, [this.body]);
+    // The head rides above the body and pivots at the neck (figure y ≈ −8).
+    // Drawn in body-local coords shifted up by +8 so its local origin sits at
+    // the neck, letting setRotation tilt the head about the neck.
+    this.head = scene.add.graphics().setPosition(0, -8);
+    // Inner figure container — wraps the body + head (and, in later PRs, the
+    // other split limb objects). Whole-figure motion is applied here so the
+    // limbs' local draw coordinates never move.
+    this.figure = scene.add.container(0, 0, [this.body, this.head]);
 
     // "Thinking" pulse — three dots floating above the head, ACE-style
     // presence cue shown only while analyzing.
@@ -286,14 +296,16 @@ export class ExecutiveAvatar {
     let bodyY = s.breatheY ?? 0;
     const bodyX = s.leanX ?? 0;
 
-    // Overlay a one-shot reaction gesture, if any, as an additive vertical
-    // bounce/dip (celebrate pops up via `bounce`; nod dips via `headTilt`).
-    // Transform-only, so it composes with breathing and never redraws.
+    // Overlay a one-shot reaction gesture, if any. `celebrate` pops the whole
+    // figure up via `bounce`; `nod` tilts the head via `headTilt`. Transform-only,
+    // so it composes with breathing and never redraws.
+    let gestureHeadTilt = 0;
     if (this.gesture) {
       const isWave = this.gesture.current === "wave";
       this.gesture.update(delta);
       const g = this.gesture.sample();
-      bodyY += (g.bounce ?? 0) + (g.headTilt ?? 0) * 0.16;
+      bodyY += g.bounce ?? 0;
+      gestureHeadTilt = g.headTilt ?? 0;
       // A `wave` on a front-facing figure raises and oscillates the near arm as
       // real limb motion. Quantize the raise/swing channels and redraw only on
       // change; other facings just get the additive bounce above.
@@ -318,6 +330,19 @@ export class ExecutiveAvatar {
         }
       }
     }
+
+    // Head tilt — the review clip's gentle sway (`s.headTilt`) plus any nod
+    // gesture. A front-facing figure has its head peeled into a separate object,
+    // so we rotate it for real about the neck pivot; every other facing draws the
+    // head into `body`, so the tilt reads as a small additive dip instead.
+    const headTiltDeg = (s.headTilt ?? 0) + gestureHeadTilt;
+    if (this.facing === "down") {
+      this.head.setRotation((headTiltDeg * Math.PI) / 180);
+    } else {
+      this.head.setRotation(0);
+      bodyY += headTiltDeg * 0.16;
+    }
+
     this.figure.setPosition(bodyX, bodyY);
 
     // Redraw-based work gestures advance a discrete step: brisk keystrokes for
@@ -546,6 +571,10 @@ export class ExecutiveAvatar {
     this.lastPoseKey = this._poseKey(step, workStep);
     const g = this.body;
     g.clear();
+    // The head is a separate object peeled out for front facing (real headTilt
+    // rotation). Cleared every redraw; only the front branch fills it, so every
+    // other facing/pose leaves it empty and draws its head into `body` as before.
+    this.head.clear();
 
     // Earn renders as the gold-coin mascot — its own full pose set.
     if (this.spec.coin) { this._redrawCoin(g, step); return; }
@@ -564,7 +593,7 @@ export class ExecutiveAvatar {
     if (this.facing === "up") this._drawBack(g, s, swing);
     else if (this.facing === "left") this._drawProfile(g, s, swing, -1, arm, workStep);
     else if (this.facing === "right") this._drawProfile(g, s, swing, 1, arm, workStep);
-    else this._drawFront(g, s, swing, arm, workStep);
+    else { this._drawFront(g, s, swing, arm, workStep); this._drawHead(this.head, s, 0, 8); }
 
     if (this._showProp()) this._drawProp(g, s);
   }
@@ -764,7 +793,8 @@ export class ExecutiveAvatar {
     g.fillStyle(this._shade(acc, 1.18), 1);
     g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
 
-    this._drawHead(g, s, 0, 0);
+    // Head is drawn into the separate `head` object (see _redraw) so it can
+    // rotate about the neck — not painted into the body here.
   }
 
   /** Front-view arm variants keyed to the work animation. */
