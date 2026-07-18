@@ -13,6 +13,7 @@ import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/li
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type {
   AgentKey,
+  Hub,
   InboxCategory,
   InboxChannel,
   InboxMessage,
@@ -889,16 +890,20 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = await createServerClient();
+  // No hub filter here: the inbox surfaces awaiting-approval tasks from every hub
+  // (source/run/build/execute), so constraining to hub='source' silently failed
+  // to dismiss anything else (e.g. the execute-hub meeting prep packs) and the
+  // UI reported "Failed to dismiss". Org + id + awaiting_approval scope it safely.
   const { data, error } = await supabase
     .from("tasks")
     .update({ status: "cancelled" })
     .eq("organization_id", auth.ctx.orgId)
     .eq("id", taskId)
-    .eq("hub", "source")
     .eq("status", "awaiting_approval")
-    .select("id");
+    .select("id, hub");
   if (error) { console.error("[dismissApprovalTask]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
+  const taskHub = (data[0] as { hub: Hub | null }).hub;
   const { error: approvalErr } = await supabase.from("approvals")
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
@@ -917,7 +922,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     .eq("organization_id", auth.ctx.orgId)
     .eq("parent_task_id", taskId)
     .eq("status", "awaiting_approval")
-    .select("id");
+    .select("id, hub");
   if (subtasks?.length) {
     const subtaskIds = subtasks.map((r) => r.id);
     const { error: subtaskApprovalErr } = await supabase.from("approvals")
@@ -936,12 +941,12 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
         .eq("organization_id", auth.ctx.orgId).in("id", subtaskIds);
     } else {
       const { error: subtaskEventErr } = await supabase.from("task_events").insert(
-        subtaskIds.map((task_id) => ({
+        subtasks.map((r) => ({
           organization_id: auth.ctx.orgId,
-          task_id,
+          task_id: r.id,
           event_type: "task.cancelled",
           agent: null,
-          hub: "source",
+          hub: (r as { hub: Hub | null }).hub,
           payload: { reason: "dismissed_from_inbox", parent_task_id: taskId } as Json,
         })),
       );
@@ -953,7 +958,7 @@ export async function dismissApprovalTask(taskId: string): Promise<{ ok: boolean
     task_id: taskId,
     event_type: "task.cancelled",
     agent: null,
-    hub: "source",
+    hub: taskHub,
     payload: { reason: "dismissed_from_inbox" } as Json,
   });
   if (eventErr) console.error("[dismissApprovalTask] task_events", eventErr.message);
@@ -969,17 +974,21 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = await createServerClient();
+  // No hub filter: the inbox lists awaiting-approval tasks across all hubs, so
+  // constraining to hub='source' left non-source items (run/build/execute)
+  // undismissable. Org + awaiting_approval + the caller-supplied visible IDs
+  // scope it safely.
   const { data, error } = await supabase
     .from("tasks")
     .update({ status: "cancelled" })
     .eq("organization_id", auth.ctx.orgId)
-    .eq("hub", "source")
     .eq("status", "awaiting_approval")
     .in("id", taskIds)
-    .select("id");
+    .select("id, hub");
   if (error) { console.error("[dismissAllApprovalTasks]", error.message); return { ok: false }; }
   if (!data?.length) return { ok: false };
   const cancelledIds = data.map((r) => r.id);
+  const hubById = new Map(data.map((r) => [r.id, (r as { hub: Hub | null }).hub]));
   const { error: approvalErr } = await supabase.from("approvals")
     .update({ decision: "rejected" })
     .eq("organization_id", auth.ctx.orgId)
@@ -998,7 +1007,7 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
     .eq("organization_id", auth.ctx.orgId)
     .in("parent_task_id", cancelledIds)
     .eq("status", "awaiting_approval")
-    .select("id, parent_task_id");
+    .select("id, parent_task_id, hub");
   if (subtasks?.length) {
     const subtaskIds = subtasks.map((r) => r.id);
     const { error: subtaskApprovalErr } = await supabase.from("approvals")
@@ -1013,15 +1022,14 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
       await supabase.from("tasks").update({ status: "awaiting_approval" })
         .eq("organization_id", auth.ctx.orgId).in("id", subtaskIds);
     } else {
-      const parentById = new Map(subtasks.map((r) => [r.id, r.parent_task_id ?? null]));
       const { error: subtaskEventErr } = await supabase.from("task_events").insert(
-        subtaskIds.map((task_id) => ({
+        subtasks.map((r) => ({
           organization_id: auth.ctx.orgId,
-          task_id,
+          task_id: r.id,
           event_type: "task.cancelled",
           agent: null,
-          hub: "source",
-          payload: { reason: "dismissed_from_inbox", parent_task_id: parentById.get(task_id) } as Json,
+          hub: (r as { hub: Hub | null }).hub,
+          payload: { reason: "dismissed_from_inbox", parent_task_id: r.parent_task_id ?? null } as Json,
         })),
       );
       if (subtaskEventErr) console.error("[dismissAllApprovalTasks] subtask task_events", subtaskEventErr.message);
@@ -1033,7 +1041,7 @@ export async function dismissAllApprovalTasks(taskIds: string[]): Promise<{ ok: 
       task_id,
       event_type: "task.cancelled",
       agent: null,
-      hub: "source",
+      hub: hubById.get(task_id) ?? null,
       payload: { reason: "dismissed_from_inbox" } as Json,
     })),
   );
