@@ -1,0 +1,93 @@
+{
+  "properties": {
+    "deal": {
+      "properties": {
+        "askingPrice": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "companyName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "ebitda": {
+          "type": "number"
+        },
+        "enterpriseValue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "geography": {
+          "type": "string"
+        },
+        "ownership": {
+          "type": "string"
+        },
+        "revenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sector": {
+          "type": "string"
+        },
+        "transactionType": {
+          "type": "string"
+        }
+      },
+      "required": [ "companyName" ],
+      "type": "object"
+    },
+    "mandate": {
+      "properties": {
+        "exclusions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "geographies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "maxEbitda": {
+          "type": "number"
+        },
+        "maxEnterpriseValue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "maxRevenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "minEbitda": {
+          "type": "number"
+        },
+        "minRevenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sectors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "transactionTypes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [ "mandate", "deal" ],
+  "type": "object"
+}

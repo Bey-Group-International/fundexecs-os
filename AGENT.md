@@ -637,6 +637,43 @@ Deployed, monitoring               →  live, observability active
              |  panel, live proactive-trigger wiring, MCP binding, async ask, DB-type regen.
              |  Confidence: Tested by typecheck/eslint/Jest (93 new tests; 3031 total
              |  green, no regressions); live DB/auth flow not exercised (no local Supabase).
+
+2026-07-18  |  Native Skill System + Operational Executive Team  |  A governed,
+             |  versioned, testable unit of work — the Phase-1 kernel backbone.
+             |  Audit finding: the execution SUBSTRATE (engine, gates, mandates,
+             |  artifacts, audit, sessions) is mature, but there was NO first-class
+             |  "skill" (no /skills, skill.yaml, or skill_runs) and NO operational
+             |  executive governance model (roster was 15 marketing-leaning agents;
+             |  lib/executive-team.ts was an unreconciled parallel vocab). Built exactly
+             |  those two gaps, additively.
+             |  - lib/skills/*: SkillManifest/SkillDefinition types; a dependency-free
+             |    JSON-Schema-subset validator; a registry; a runtime (runner.ts) whose
+             |    pure executeSkillCore path is: authorize (executive may run skill?) →
+             |    validate INPUT → run deterministic core → validate OUTPUT → resolve
+             |    approval tier (Tier 3 never delegable) → SkillResult; runSkill adds
+             |    skill_runs persistence + an immutable audit event. Reference skill
+             |    screen-deal (deterministic core: pass/watch/fail, computed EV/EBITDA as
+             |    a CALCULATION, leverage as a labelled ASSUMPTION, missing data FLAGGED
+             |    never invented) + its /skills/screen-deal/ authoring package (SKILL.md,
+             |    skill.yaml, policy.yaml, evaluation.yaml, JSON schemas, example), kept
+             |    consistent with the TS manifest by a test.
+             |  - lib/executives/registry.ts: operational executive team keyed to the
+             |    existing AgentKey spine (no enum/type churn), ACTIVATING the missing
+             |    Investment Committee / Risk & Compliance / Legal & Closing roles, each
+             |    with a bounded domain, allowed skills, data scope, approval CEILING
+             |    (<=2), prohibited actions, handoffs, review standard.
+             |  - migration 20260718140000_skill_runs (org-scoped, canonical RLS,
+             |    realtime): the accountable run ledger — validated I/O, sources
+             |    (fact/assumption/calculation/generated), approval tier, provider/model.
+             |  Decision: reuse gates/audit/agents/mandates wholesale; the skill runtime
+             |  is the smallest coherent Phase-1 kernel the rest of the program (returns,
+             |  dd-checklist, ic-memo; the inference gateway; artifact formats) builds on.
+             |  NO engine changes — engine↔skill wiring is a flagged follow-on.
+             |  Deferred (backlog in docs/skills): provider-agnostic inference gateway,
+             |  skill↔engine wiring, priority-1 deal skills, DOCX/PDF artifacts, session
+             |  evidence UI, and the OUTSTANDING Phase-0 fix of the invented "$2B+" metric.
+             |  Confidence: Tested by typecheck/eslint/Jest (31 new tests; 3062 total
+             |  green, no regressions); live DB/auth flow not exercised (no local Supabase).
 ```
 
 ---
