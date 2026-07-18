@@ -1,0 +1,38 @@
+# skills/capital-call/policy.yaml
+# Execution + governance policy for the Capital Call Notice. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — PREPARING the draft is internal, reversible work.
+risk_classification: moderate
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). Maps to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - investor_relations
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - fund:read
+  - investor:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Issuing a capital
+# call and moving capital are Tier-3 — never delegable; sending is Tier-2.
+prohibited_actions:
+  - capital_call
+  - move_capital
+  - distribute_report
+  - send_reply
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - The skill PREPARES a draft notice; it NEVER moves capital and NEVER sends.
+  - Issuing the capital call is a Tier-3, capital-binding action requiring explicit human authorization — never performed here.
+  - Wiring / bank details are NEVER auto-populated — the Wiring Instructions section is always an open placeholder the fund admin must supply.
+  - A missing input becomes an open item / flagged field — never a fabricated figure.
+  - The call amount is a fact when provided, a calculation when derived, and null (flagged) when neither.
+  - Output must validate against output.schema.json before it is persisted.
+
+# This draft-preparation is a leaf step — it seeds no downstream skill.
+downstream: []

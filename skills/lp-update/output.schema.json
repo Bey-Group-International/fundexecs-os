@@ -1,0 +1,51 @@
+{
+  "properties": {
+    "completeness": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "openItems": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "heading": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "complete", "open" ],
+            "type": "string"
+          }
+        },
+        "required": [ "heading", "body", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "statedMetrics": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "sections", "statedMetrics", "openItems", "missingFields", "completeness", "recommendedAction" ],
+  "type": "object"
+}

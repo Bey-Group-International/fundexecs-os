@@ -1,0 +1,65 @@
+# skills/capital-call/skill.yaml
+# Authoring spec for the Capital Call Notice skill. The machine-readable manifest
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/capital-call.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: capital-call
+name: Capital Call Notice
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - investor_relations
+
+supported_entity_types: [fund, investor, capital_activity]
+
+required_inputs:
+  - fundName
+
+optional_inputs:
+  - investorName
+  - callNumber
+  - callPercent          # 0-100, percentage of commitment being called
+  - totalCommitment
+  - callAmount           # explicit; else derived from commitment × percent
+  - dueDate
+  - purpose
+
+outputs:
+  - callAmount           # provided (fact), derived (calculation), or null
+  - noticeDraft          # {heading, body} assembled from the complete sections
+  - sections             # ordered [{heading, body, status}]
+  - missingFields
+  - openItems
+  - recommendedAction    # draft-only; issuing the call is Tier-3 / human
+
+artifact_types: [memo]
+data_permissions: [fund:read, investor:read]
+tools: []
+
+approval_tier: 1           # Tier 1 — PREPARING the draft is internal work product
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+# This skill PREPARES a notice only. Moving capital, issuing the call, and sending
+# are Tier-3 / external actions — explicitly prohibited here.
+prohibited_actions:
+  - capital_call
+  - move_capital
+  - distribute_report
+  - send_reply
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

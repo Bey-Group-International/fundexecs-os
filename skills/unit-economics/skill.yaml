@@ -1,0 +1,60 @@
+# skills/unit-economics/skill.yaml
+# Authoring spec for the Unit Economics skill. The machine-readable manifest that
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/unit-economics.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: unit-economics
+name: Unit Economics
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - analyst
+
+supported_entity_types: [company, deal, financial_model]
+
+required_inputs:
+  - companyName
+
+optional_inputs:
+  - arpu               # annual average revenue per user, $
+  - cac                # customer acquisition cost, $
+  - grossMarginPct     # gross margin, percent (0–100)
+  - churnRatePct       # annual churn, percent (0–100)
+
+outputs:
+  - annualGrossProfitPerUser
+  - ltv                # lifetime value, $
+  - ltvCacRatio        # LTV / CAC (x)
+  - paybackMonths      # CAC payback, months
+  - band               # healthy / watch / unhealthy
+  - missingFields
+  - keyRisks
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [company:read, financial_model:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

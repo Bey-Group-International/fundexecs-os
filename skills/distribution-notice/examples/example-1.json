@@ -1,0 +1,13 @@
+{
+  "description": "A fully-specified distribution that assembles a DRAFT notice with all six sections complete and no open items. The draft is for operator review only — it never moves capital and never sends.",
+  "input": {
+    "distributionAmount": 1250000,
+    "distributionNumber": 3,
+    "distributionType": "profit",
+    "fundName": "Meridian Growth Fund II",
+    "investorName": "Cedar LP",
+    "paymentDate": "2026-07-15",
+    "recordDate": "2026-06-30",
+    "sourceProceeds": "Partial realization of Portfolio Co. A"
+  }
+}

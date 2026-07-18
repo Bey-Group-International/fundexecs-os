@@ -1,0 +1,27 @@
+{
+  "properties": {
+    "impliedValuation": {
+      "type": "object"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "multiples": {
+      "type": "object"
+    },
+    "recommendedAction": {
+      "type": "string"
+    }
+  },
+  "required": [ "multiples", "impliedValuation", "recommendedAction" ],
+  "type": "object"
+}

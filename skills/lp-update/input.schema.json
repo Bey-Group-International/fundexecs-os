@@ -1,0 +1,39 @@
+{
+  "properties": {
+    "capitalActivity": {
+      "type": "string"
+    },
+    "dpi": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "fundName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "highlights": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "nav": {
+      "type": "number"
+    },
+    "netIrrPct": {
+      "type": "number"
+    },
+    "period": {
+      "type": "string"
+    },
+    "portfolioNotes": {
+      "type": "string"
+    },
+    "tvpi": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "fundName" ],
+  "type": "object"
+}

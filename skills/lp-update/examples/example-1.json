@@ -1,0 +1,14 @@
+{
+  "description": "A fully-populated quarterly LP update draft — every section complete, all four performance metrics stated as provided, prepared for review (never distributed).",
+  "input": {
+    "fundName": "Meridian Fund II",
+    "period": "Q2 2026",
+    "nav": 420,
+    "dpi": 0.6,
+    "tvpi": 1.8,
+    "netIrrPct": 19,
+    "highlights": [ "Portfolio company A closed a Series C", "Two new platform investments" ],
+    "portfolioNotes": "Overall portfolio tracking to plan.",
+    "capitalActivity": "One capital call of $25m; no distributions this quarter."
+  }
+}

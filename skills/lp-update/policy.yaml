@@ -1,0 +1,36 @@
+# skills/lp-update/policy.yaml
+# Execution + governance policy for the Quarterly LP Update. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible DRAFT. Not a distribution.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). Maps to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - investor_relations
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - fund:read
+  - lp_update:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). External
+# distribution of the letter is a Tier-2, human-gated action — never done here.
+prohibited_actions:
+  - distribute_report
+  - send_reply
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - The skill PREPARES a DRAFT letter for review; it NEVER distributes it to LPs.
+  - External distribution is a Tier-2 human action and is prohibited here.
+  - A missing performance metric becomes an open item ("Pending — confirm from fund admin"); it is never a fabricated figure.
+  - Only the performance metrics actually provided are stated; nothing is invented.
+  - Provided figures are facts; the Outlook placeholder is generated.
+  - Output must validate against output.schema.json before it is persisted.
+
+# This draft assembly is a leaf step — it seeds no downstream skill.
+downstream: []

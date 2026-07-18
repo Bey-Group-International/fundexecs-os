@@ -736,6 +736,26 @@ Deployed, monitoring               →  live, observability active
              |    render module is phase 2 (documented in docs/skills/deal-suite.md).
              |  Confidence: Tested by typecheck/eslint/Jest (62 new tests; 3139 total
              |  green, no regressions); live session render not exercised (no local env).
+
+2026-07-18  |  Phase 2-3 skills: financial analysis + capital/LP ops  |  Six more
+             |  governed deterministic skills, built IN PARALLEL (six backend subagents)
+             |  then integrated centrally. Registry now holds 10 skills.
+             |  - Phase 2 (Analyst): `comps` (comparable multiples → implied EV/equity +
+             |    range; thin-set flagged), `dcf` (projected FCF/PV/terminal/EV/equity/
+             |    per-share + WACC/terminal sensitivities; hard guard discount>terminal),
+             |    `unit-economics` (LTV, LTV/CAC, payback, health band; churn-0 guarded).
+             |  - Phase 3 (Investor Relations, DRAFT-ONLY): `capital-call`, `lp-update`,
+             |    `distribution-notice` — each PREPARES a draft notice/letter and never
+             |    sends or moves capital (Tier-2/Tier-3 stay human); amounts/dates/wiring
+             |    never fabricated (missing → open item; wiring always a placeholder).
+             |  Each is a full /skills/<id>/ package + pure core + golden tests, registered
+             |  in lib/skills/registry.ts and permitted by the executive whose allowedSkills
+             |  already anticipated its id. The generalized catalog-consistency test now
+             |  auto-covers all 10 skills (manifest≡schemas, executives permitted, tier
+             |  valid). No new wiring — the runtime, session-attached runner, and evidence
+             |  panel already handle any registered skill.
+             |  Confidence: Tested by typecheck/eslint/Jest (~91 new tests; 3230 total
+             |  green, no regressions). Pure backend — no app/components changes.
 ```
 
 ---

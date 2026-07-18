@@ -1,0 +1,61 @@
+# skills/comps/skill.yaml
+# Authoring spec for the Comparable Company Analysis skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/comps.ts; this YAML is the human-facing contract and must
+# stay consistent with it.
+id: comps
+name: Comparable Company Analysis
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - analyst
+
+supported_entity_types: [deal, company, financial_model]
+
+required_inputs:
+  - subject.companyName
+  - comparables
+
+optional_inputs:
+  - subject.ebitda
+  - subject.revenue
+  - subject.netIncome
+  - comparables[].evEbitda
+  - comparables[].evRevenue
+  - comparables[].peRatio
+
+outputs:
+  - multiples          # per-multiple {count, median, mean, min, max} or null
+  - impliedValuation   # implied EV / equity + EV range
+  - missingFields
+  - keyRisks
+  - recommendedAction
+
+artifact_types: [analysis, model]
+data_permissions: [deal:read, company:read, financial_model:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [ic-memo]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

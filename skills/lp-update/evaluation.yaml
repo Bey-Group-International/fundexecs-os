@@ -1,0 +1,50 @@
+# skills/lp-update/evaluation.yaml
+# Golden evaluation cases for the Quarterly LP Update. These are the acceptance
+# fixtures a production skill must pass — full-draft assembly, metric handling
+# (stated when provided, flagged not invented when absent), and the guardrail that
+# this skill PREPARES a DRAFT but never DISTRIBUTES it. Exercised by
+# lib/skills/catalog/lp-update.test.ts.
+cases:
+  - name: full_data_assembles_complete_draft
+    input:
+      fundName: Meridian Fund II
+      period: Q2 2026
+      nav: 420
+      dpi: 0.6
+      tvpi: 1.8
+      netIrrPct: 19
+      highlights: [Portfolio company A closed a Series C, Two new platform investments]
+      portfolioNotes: Overall portfolio tracking to plan.
+      capitalActivity: One capital call of $25m; no distributions this quarter.
+    expect:
+      completeness: 1
+      missingFields: []
+      statedMetrics: [NAV, DPI, TVPI, Net IRR]
+      preparesDraftNeverDistributes: true
+
+  - name: no_metrics_flags_performance_pending_never_invents
+    input:
+      fundName: Fund I
+    expect:
+      performanceSectionOpen: true
+      statedMetrics: []
+      neverInvents: true
+      openItemsInclude: [Performance metrics pending — confirm from fund admin.]
+
+  - name: partial_metrics_stated_only_as_provided
+    input:
+      fundName: Fund I
+      dpi: 0.5
+      tvpi: 1.6
+    expect:
+      performanceSectionOpen: false
+      statedMetrics: [DPI, TVPI]
+
+  - name: highlights_without_capital_activity_flags_pending
+    input:
+      fundName: Fund I
+      highlights: [Exit of Company X at 3.2x]
+    expect:
+      portfolioHighlightsSectionOpen: false
+      capitalActivitySectionOpen: true
+      openItemsInclude: [Capital Activity]

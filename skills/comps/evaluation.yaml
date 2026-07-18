@@ -1,0 +1,64 @@
+# skills/comps/evaluation.yaml
+# Golden evaluation cases for Comparable Company Analysis. These are the acceptance
+# fixtures a production skill must pass — statistic correctness, implied-valuation
+# math, missing-data handling (flagged not invented), and thin-set risk surfacing.
+# Exercised by lib/skills/catalog/comps.test.ts.
+cases:
+  - name: clean_triangulation
+    input:
+      subject:
+        companyName: TargetCo
+        ebitda: 20
+        revenue: 100
+        netIncome: 10
+      comparables:
+        - { name: Alpha, evEbitda: 8, evRevenue: 2, peRatio: 15 }
+        - { name: Beta, evEbitda: 10, evRevenue: 3, peRatio: 18 }
+        - { name: Gamma, evEbitda: 12, evRevenue: 2.5, peRatio: 20 }
+    expect:
+      medianEvEbitda: 10
+      medianEvRevenue: 2.5
+      medianPeRatio: 18
+      impliedEvFromEbitda: 200
+      impliedEvFromRevenue: 250
+      impliedEquityFromPe: 180
+      evRangeLow: 200
+      evRangeHigh: 250
+
+  - name: even_count_median_averages_middle_two
+    input:
+      subject:
+        companyName: EvenCo
+        ebitda: 10
+      comparables:
+        - { name: A, evEbitda: 6 }
+        - { name: B, evEbitda: 8 }
+        - { name: C, evEbitda: 10 }
+        - { name: D, evEbitda: 12 }
+    expect:
+      medianEvEbitda: 9
+      impliedEvFromEbitda: 90
+
+  - name: missing_data_flags_not_invents
+    input:
+      subject:
+        companyName: Mystery Co
+      comparables:
+        - { name: OnlyPeer, evEbitda: 8 }
+    expect:
+      impliedEvFromEbitda: null
+      impliedEvFromRevenue: null
+      impliedEquityFromPe: null
+      flagsMissing: [Subject EBITDA, Subject revenue, Subject net income, EV/Revenue comparables, P/E comparables]
+      neverInvents: true
+
+  - name: thin_set_risk_surfaced
+    input:
+      subject:
+        companyName: ThinCo
+        ebitda: 20
+      comparables:
+        - { name: A, evEbitda: 8 }
+        - { name: B, evEbitda: 10 }
+    expect:
+      keyRisk: Thin comparable set (<3) — treat as indicative

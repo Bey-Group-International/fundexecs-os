@@ -1,0 +1,37 @@
+{
+  "properties": {
+    "annualGrossProfitPerUser": {
+      "type": "number"
+    },
+    "band": {
+      "enum": [ "healthy", "watch", "unhealthy" ],
+      "type": "string"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ltv": {
+      "type": "number"
+    },
+    "ltvCacRatio": {
+      "type": "number"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "paybackMonths": {
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    }
+  },
+  "required": [ "ltvCacRatio", "band", "missingFields", "keyRisks", "recommendedAction" ],
+  "type": "object"
+}

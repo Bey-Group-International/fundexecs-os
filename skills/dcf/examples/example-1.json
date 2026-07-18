@@ -1,0 +1,13 @@
+{
+  "description": "A five-year DCF at a 10% WACC and 2% terminal growth: ~$1,170.8M enterprise value, ~$970.8M equity, ~$9.71 per share on 100M shares and $200M net debt.",
+  "input": {
+    "baseFcf": 100,
+    "companyName": "FlowCo",
+    "discountRate": 0.1,
+    "fcfGrowth": 0,
+    "netDebt": 200,
+    "projectionYears": 5,
+    "sharesOutstanding": 100,
+    "terminalGrowth": 0.02
+  }
+}
