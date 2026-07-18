@@ -1000,6 +1000,41 @@ Deployed, monitoring               →  live, observability active
              |  sites — only real OpenAI/Google adapters remain to make it multi-provider.
              |  Confidence: Tested by typecheck/eslint/Jest (flag-off default asserted;
              |  3678 total green, no regressions). Backend only; no migration, no new deps.
+
+2026-07-18  |  Private Markets Terminal + Extension Platform — Phase 0 audit
+             |  (docs only)  |  Mandatory repository/product audit before any terminal
+             |  production code. Ran SIX parallel read-only Explore agents across
+             |  identity/access, shell/orchestration/approvals, entities/CRM/search,
+             |  financial/portfolio/fund-admin, intelligence/signals/providers, and
+             |  integrations/extensibility; synthesized centrally into six deliverables:
+             |  docs/audits/FUNDEXECS_FEATURE_MATRIX.md, FUNDEXECS_TERMINAL_GAP_AUDIT.md,
+             |  GLOOMBERB_PATTERN_ADOPTION_MATRIX.md;
+             |  docs/architecture/PRIVATE_MARKETS_TERMINAL_ARCHITECTURE.md,
+             |  EXTENSION_PLATFORM_ARCHITECTURE.md;
+             |  docs/implementation/TERMINAL_IMPLEMENTATION_PLAN.md.
+             |  Key findings: the platform is mature (229 migrations) and MOST terminal
+             |  substance already exists — entities/war-rooms, 3-tier gates + mandates +
+             |  autonomy, skills runtime, engine write-back, financial metric engines,
+             |  intelligence-core schema, ELEVEN reusable registry seams (skills, inference
+             |  router, intelligence provider registry, integrations adapters, MCP registry,
+             |  vault, gate tiers, API scopes...), a Cmd-K palette (nav-only), and a strong
+             |  mobile shell. Genuine green-field: (1) the multi-pane/dockable terminal
+             |  shell, (2) an executable command LANGUAGE/registry on the existing palette,
+             |  (3) the extension manifest/lifecycle/sandbox. Genuine ACTIVATION: watchlists
+             |  (schema exists but inert), alert evaluation (stub) + delivery (missing),
+             |  intelligence-core flags (dark), gateway adoption (~40 files still hard-code
+             |  Anthropic). Concrete financial gaps: true XIRR (only MOIC^(1/y) proxies),
+             |  exposure-dimension aggregation, covenant register, provenance-in-cockpit.
+             |  Disposition taxonomy per capability: REUSE / ACTIVATE / BUILD / EXTENSION /
+             |  DEFER. Sequenced Release 1-6 with additive RLS-scoped migrations, flag-gated
+             |  default-off, action/safety contract mapping 10 side-effect levels onto the
+             |  existing 3 gate tiers (capital-binding always Tier-3 non-delegable, for
+             |  users/agents/API keys/extensions alike). Gloomberb used as PATTERN
+             |  inspiration only — no code vendored, no runtime dependency, read-only
+             |  off-by-default interop deferred to an extension.
+             |  Confidence: Documentation deliverable (no code); grounded in an evidence-
+             |  backed six-agent inventory with cited file paths. No production code, no
+             |  migration, no test change this increment.
 ```
 
 ---
