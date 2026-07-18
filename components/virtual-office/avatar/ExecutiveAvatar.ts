@@ -76,6 +76,13 @@ export class ExecutiveAvatar {
    */
   private static readonly WALK_ARM_SWING = 0.12;
 
+  /**
+   * Peak shoulder rotation (radians) of the resting arms as the figure breathes
+   * while idle — a barely-there ~1° sway coupled to `breatheY`, so a standing
+   * executive has a trace of life without drifting from the institutional read.
+   */
+  private static readonly IDLE_ARM_SWAY = 0.05;
+
   readonly container: Phaser.GameObjects.Container;
 
   private scene: Phaser.Scene;
@@ -310,6 +317,7 @@ export class ExecutiveAvatar {
         const swing = Math.sin(this.walkPhase * Math.PI / 2) * ExecutiveAvatar.WALK_ARM_SWING;
         this.armNear.setRotation(swing);
         this.armFar.setRotation(-swing);
+        this.torso.setScale(1); // no idle breathing during the walk cycle
       }
       return;
     }
@@ -320,6 +328,9 @@ export class ExecutiveAvatar {
     // dots remain visible at a fixed alpha/scale.
     if (ExecutiveAvatar.reducedMotion) {
       this.figure.setPosition(0, 0);
+      this.torso.setScale(1);
+      this.armNear.setRotation(0);
+      this.armFar.setRotation(0);
       if (this.think.visible) this.think.setAlpha(0.9).setScale(1);
       return;
     }
@@ -384,6 +395,19 @@ export class ExecutiveAvatar {
     }
 
     this.figure.setPosition(bodyX, bodyY);
+
+    // Idle life (front): the torso breathes with a small upright scale and the
+    // resting arms sway a touch off the shoulders, both coupled to the breath.
+    // `breatheScale` is only authored on the idle clip, so this is scale 1 for the
+    // work poses; the peeled arms exist only in the idle/walk rest pose, so the
+    // sway is invisible during work/wave. At rest (breatheY 0 / breatheScale 1)
+    // this is rotation 0 / scale 1, so a fresh idle figure stays pixel-identical.
+    if (this.facing === "down") {
+      this.torso.setScale(s.breatheScale ?? 1);
+      const sway = (s.breatheY ?? 0) * ExecutiveAvatar.IDLE_ARM_SWAY;
+      this.armNear.setRotation(sway);
+      this.armFar.setRotation(-sway);
+    }
 
     // Redraw-based work gestures advance a discrete step: brisk keystrokes for
     // typing, a slower sway for presenting, a gentle page-bob for reviewing —
