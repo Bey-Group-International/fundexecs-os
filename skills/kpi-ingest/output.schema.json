@@ -1,0 +1,64 @@
+{
+  "properties": {
+    "kpiCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingKpis": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "normalized": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "on_track", "off_track", "no_target", "unknown" ],
+            "type": "string"
+          },
+          "target": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          },
+          "variance": {
+            "type": "number"
+          }
+        },
+        "required": [ "name", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "offTrackCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "onTrackCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    }
+  },
+  "required": [ "normalized", "kpiCount", "onTrackCount", "offTrackCount", "recommendedAction" ],
+  "type": "object"
+}

@@ -1,0 +1,69 @@
+# skills/reconcile/evaluation.yaml
+# Golden evaluation cases for Account Reconciliation. These are the acceptance
+# fixtures a production skill must pass — difference correctness, break detection
+# (unmatched items + amount mismatches), missing-balance handling (flagged not
+# invented, difference null), and the preparation-only guardrail. Exercised by
+# lib/skills/catalog/reconcile.test.ts.
+cases:
+  - name: clean_reconciliation_ties
+    input:
+      accountName: Operating — Chase 1234
+      statementBalance: 10000
+      ledgerBalance: 10000
+      transactions:
+        - description: Capital contribution
+          statementAmount: 500
+          ledgerAmount: 500
+          matched: true
+    expect:
+      difference: 0
+      reconciled: true
+      breaksCount: 0
+      totalUnexplained: 0
+      matchedCount: 1
+      unmatchedCount: 0
+
+  - name: difference_and_breaks_detected
+    input:
+      accountName: Operating
+      statementBalance: 10500
+      ledgerBalance: 10000
+      transactions:
+        - description: Wire in
+          statementAmount: 500
+          ledgerAmount: 500
+          matched: true
+        - description: Bank fee
+          statementAmount: -25
+          ledgerAmount: 0
+          matched: true
+        - description: Outstanding check
+          statementAmount: 0
+          ledgerAmount: 100
+          matched: false
+    expect:
+      difference: 500
+      reconciled: false
+      breaksCount: 2
+      totalUnexplained: -125
+      matchedCount: 2
+      unmatchedCount: 1
+      keyRiskContains: Statement and ledger do not tie
+
+  - name: missing_balance_flags_not_invents
+    input:
+      accountName: Mystery
+      statementBalance: 5000
+    expect:
+      difference: null
+      reconciled: false
+      flagsMissing: [Ledger balance]
+      neverInvents: true
+
+  - name: preparation_only_never_posts
+    input:
+      statementBalance: 100
+      ledgerBalance: 90
+    expect:
+      recommendedActionContains: separate authorized action
+      neverPostsOrCloses: true

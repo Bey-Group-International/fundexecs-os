@@ -1,0 +1,64 @@
+# skills/nav-review/skill.yaml
+# Authoring spec for the NAV Tie-Out Review skill. The machine-readable manifest
+# that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/nav-review.ts; this YAML is the human-facing contract and
+# must stay consistent with it (asserted by lib/skills/catalog/nav-review.test.ts).
+id: nav-review
+name: NAV Tie-Out Review
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - fund_admin
+
+supported_entity_types: [fund, nav, period]
+
+required_inputs:
+  - fundName
+
+optional_inputs:
+  - priorNav
+  - contributions
+  - distributions
+  - realizedGainLoss
+  - unrealizedGainLoss
+  - fees
+  - expenses
+  - reportedNav
+
+outputs:
+  - computedNav        # roll-forward result, or null when prior NAV is missing
+  - tieOutDifference   # reportedNav − computedNav, or null
+  - tiesOut            # |difference| < 0.01
+  - rollForward        # ordered, signed roll-forward lines
+  - missingFields
+  - keyRisks
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [fund:read, nav:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis — prepares a tie-out for review
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [lp-update]
+
+prohibited_actions:
+  - post_journal_entry
+  - distribute_report
+  - move_capital
+  - close_period
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

@@ -1,0 +1,36 @@
+{
+  "properties": {
+    "accountName": {
+      "type": "string"
+    },
+    "ledgerBalance": {
+      "type": "number"
+    },
+    "statementBalance": {
+      "type": "number"
+    },
+    "transactions": {
+      "items": {
+        "properties": {
+          "description": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "ledgerAmount": {
+            "type": "number"
+          },
+          "matched": {
+            "type": "boolean"
+          },
+          "statementAmount": {
+            "type": "number"
+          }
+        },
+        "required": [ "description" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "type": "object"
+}

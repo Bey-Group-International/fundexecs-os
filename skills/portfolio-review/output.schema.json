@@ -1,0 +1,65 @@
+{
+  "properties": {
+    "breaches": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "covenantChecks": {
+      "items": {
+        "properties": {
+          "actual": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "pass", "breach", "unknown" ],
+            "type": "string"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "type": {
+            "enum": [ "min", "max" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "ebitdaVariance": {
+      "type": "number"
+    },
+    "ebitdaVariancePct": {
+      "type": "number"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "revenueVariance": {
+      "type": "number"
+    },
+    "revenueVariancePct": {
+      "type": "number"
+    }
+  },
+  "required": [ "covenantChecks", "breaches", "recommendedAction" ],
+  "type": "object"
+}

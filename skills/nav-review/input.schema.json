@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "contributions": {
+      "type": "number"
+    },
+    "distributions": {
+      "type": "number"
+    },
+    "expenses": {
+      "type": "number"
+    },
+    "fees": {
+      "type": "number"
+    },
+    "fundName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "priorNav": {
+      "type": "number"
+    },
+    "realizedGainLoss": {
+      "type": "number"
+    },
+    "reportedNav": {
+      "type": "number"
+    },
+    "unrealizedGainLoss": {
+      "type": "number"
+    }
+  },
+  "required": [ "fundName" ],
+  "type": "object"
+}

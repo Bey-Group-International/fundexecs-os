@@ -1,0 +1,66 @@
+# skills/nav-review/evaluation.yaml
+# Golden evaluation cases for NAV Tie-Out Review. These are the acceptance
+# fixtures a production skill must pass — roll-forward math, tie-out correctness,
+# missing prior/reported NAV handling (flagged not invented), and assumption
+# labelling for defaulted components. Exercised by
+# lib/skills/catalog/nav-review.test.ts.
+cases:
+  - name: clean_roll_forward_ties_out
+    input:
+      fundName: Meridian Fund II
+      priorNav: 1000
+      contributions: 200
+      distributions: 50
+      realizedGainLoss: 30
+      unrealizedGainLoss: 40
+      fees: 10
+      expenses: 5
+      reportedNav: 1205
+    expect:
+      computedNav: 1205
+      tieOutDifference: 0
+      tiesOut: true
+
+  - name: variance_does_not_tie_out
+    input:
+      fundName: Meridian Fund II
+      priorNav: 1000
+      contributions: 200
+      reportedNav: 1210
+    expect:
+      computedNav: 1200
+      tieOutDifference: 10
+      tiesOut: false
+      keyRisk: Reported NAV does not tie to the roll-forward
+
+  - name: missing_prior_nav_flags_and_returns_null
+    input:
+      fundName: Orphan Fund
+      contributions: 100
+      reportedNav: 500
+    expect:
+      computedNav: null
+      tieOutDifference: null
+      tiesOut: false
+      flagsMissing: [Prior NAV]
+      neverInvents: true
+
+  - name: absent_components_assumed_zero_but_labelled
+    input:
+      fundName: Sparse Fund
+      priorNav: 1000
+    expect:
+      computedNav: 1000
+      assumptionsLabelled: true
+      assumptionCount: 6
+
+  - name: missing_reported_nav_is_open_item
+    input:
+      fundName: Pending Fund
+      priorNav: 1000
+      contributions: 50
+    expect:
+      computedNav: 1050
+      tieOutDifference: null
+      tiesOut: false
+      flagsMissing: [Reported NAV]

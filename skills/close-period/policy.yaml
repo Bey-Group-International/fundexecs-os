@@ -1,0 +1,38 @@
+# skills/close-period/policy.yaml
+# Execution + governance policy for the Period-Close Checklist. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — PREPARING the checklist is internal, reversible work.
+risk_classification: moderate
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). Maps to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - fund_admin
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - fund:read
+  - period:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Closing/locking a
+# period, reopening it, and posting into a closed period are Tier-3 — never
+# delegable; posting a journal entry is a separate ledger action, not this skill's.
+prohibited_actions:
+  - close_period
+  - post_to_closed_period
+  - reopen_period
+  - post_journal_entry
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - The skill PREPARES a close-readiness checklist; it NEVER closes, reopens, or posts to the period.
+  - Actually closing/locking the period is a Tier-3, books-locking action requiring explicit human authorization — never performed here.
+  - The eight canonical checklist items are a standard template (generated), not facts about the period.
+  - A task is complete only when the operator marks its canonical key done; unknown keys are ignored.
+  - A missing input (e.g. periodEnd) is flagged in missingFields — never invented.
+  - Output must validate against output.schema.json before it is persisted.
+
+# This checklist-preparation is a leaf step — it seeds no downstream skill.
+downstream: []

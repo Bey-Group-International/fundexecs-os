@@ -1,0 +1,30 @@
+{
+  "description": "A portfolio company's quarterly KPIs — ARR beats target (on track), churn beats target (on track, lower-better), and gross margin has no target reported.",
+  "input": {
+    "companyName": "Acme Widgets",
+    "kpis": [
+      {
+        "name": "ARR",
+        "value": 12,
+        "unit": "$M",
+        "period": "Q2-2026",
+        "target": 10,
+        "direction": "higher_better"
+      },
+      {
+        "name": "Net churn",
+        "value": 3,
+        "unit": "%",
+        "period": "Q2-2026",
+        "target": 5,
+        "direction": "lower_better"
+      },
+      {
+        "name": "Gross margin",
+        "value": 68,
+        "unit": "%",
+        "period": "Q2-2026"
+      }
+    ]
+  }
+}

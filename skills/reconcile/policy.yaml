@@ -1,0 +1,38 @@
+# skills/reconcile/policy.yaml
+# Execution + governance policy for Account Reconciliation. Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible PREPARATION for review.
+risk_classification: moderate
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - fund_admin
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - fund:read
+  - capital_activity:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Posting a journal
+# entry, force-posting into a closed period, and closing a period are separate,
+# gated actions — this skill only prepares the reconciliation for review.
+prohibited_actions:
+  - post_journal_entry
+  - post_to_closed_period
+  - close_period
+  - move_capital
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Never fabricate a balance or an amount; a missing balance is flagged and the difference is null.
+  - The difference is computed only when both the statement balance and the ledger balance are present.
+  - Every provided figure is a fact; every computed figure (difference, variances, total unexplained) is a calculation.
+  - This skill PREPARES a reconciliation for operator review; it never posts a journal entry and never closes a period.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - nav-review
+  - close-period

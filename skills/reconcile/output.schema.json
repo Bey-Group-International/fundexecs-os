@@ -1,0 +1,59 @@
+{
+  "properties": {
+    "breaks": {
+      "items": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "ledgerAmount": {
+            "type": "number"
+          },
+          "statementAmount": {
+            "type": "number"
+          },
+          "variance": {
+            "type": "number"
+          }
+        },
+        "required": [ "description", "variance" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "difference": {
+      "type": "number"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "matchedCount": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "reconciled": {
+      "type": "boolean"
+    },
+    "totalUnexplained": {
+      "type": "number"
+    },
+    "unmatchedCount": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [ "difference", "reconciled", "breaks", "totalUnexplained", "matchedCount", "unmatchedCount", "recommendedAction" ],
+  "type": "object"
+}

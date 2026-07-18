@@ -17,6 +17,12 @@ import { unitEconomics } from "./catalog/unit-economics";
 import { capitalCall } from "./catalog/capital-call";
 import { lpUpdate } from "./catalog/lp-update";
 import { distributionNotice } from "./catalog/distribution-notice";
+import { reconcile } from "./catalog/reconcile";
+import { navReview } from "./catalog/nav-review";
+import { closePeriod } from "./catalog/close-period";
+import { portfolioReview } from "./catalog/portfolio-review";
+import { valueCreation } from "./catalog/value-creation";
+import { kpiIngest } from "./catalog/kpi-ingest";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -31,6 +37,14 @@ const SKILLS: Record<string, SkillDefinition> = {
   [capitalCall.manifest.id]: capitalCall as SkillDefinition,
   [lpUpdate.manifest.id]: lpUpdate as SkillDefinition,
   [distributionNotice.manifest.id]: distributionNotice as SkillDefinition,
+  // Phase 4 — fund administration (prepare-only; post/close/NAV-approval stay human).
+  [reconcile.manifest.id]: reconcile as SkillDefinition,
+  [navReview.manifest.id]: navReview as SkillDefinition,
+  [closePeriod.manifest.id]: closePeriod as SkillDefinition,
+  // Phase 5 — portfolio operations.
+  [portfolioReview.manifest.id]: portfolioReview as SkillDefinition,
+  [valueCreation.manifest.id]: valueCreation as SkillDefinition,
+  [kpiIngest.manifest.id]: kpiIngest as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

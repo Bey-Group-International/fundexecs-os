@@ -1,0 +1,63 @@
+# skills/portfolio-review/skill.yaml
+# Authoring spec for the Portfolio Company Review skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/portfolio-review.ts; this YAML is the human-facing contract
+# and must stay consistent with it.
+id: portfolio-review
+name: Portfolio Company Review
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - portfolio_ops
+
+supported_entity_types: [portfolio_company, company, financial_report]
+
+required_inputs:
+  - companyName
+
+optional_inputs:
+  - period
+  - budgetRevenue
+  - actualRevenue
+  - budgetEbitda
+  - actualEbitda
+  - covenants
+
+outputs:
+  - revenueVariance
+  - revenueVariancePct
+  - ebitdaVariance
+  - ebitdaVariancePct
+  - covenantChecks     # per-covenant threshold, actual, type, and pass/breach/unknown status
+  - breaches           # names of covenants in breach
+  - missingFields
+  - keyRisks
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [portfolio_company:read, financial_report:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+
+allowed_downstream_skills: [value-creation]
+
+prohibited_actions:
+  - distribute_report
+  - move_capital
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

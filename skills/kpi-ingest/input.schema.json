@@ -1,0 +1,39 @@
+{
+  "properties": {
+    "companyName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "kpis": {
+      "items": {
+        "properties": {
+          "direction": {
+            "enum": [ "higher_better", "lower_better" ],
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "target": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "companyName" ],
+  "type": "object"
+}

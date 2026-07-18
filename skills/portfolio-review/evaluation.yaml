@@ -1,0 +1,75 @@
+# skills/portfolio-review/evaluation.yaml
+# Golden evaluation cases for the Portfolio Company Review skill. These are the
+# acceptance fixtures a production skill must pass — variance math correctness,
+# missing-data handling (flagged not invented), covenant compliance on both min
+# and max covenants, and material-shortfall risk surfacing. Exercised by
+# lib/skills/catalog/portfolio-review.test.ts.
+cases:
+  - name: clean_variance_and_covenants
+    input:
+      companyName: Portco One
+      period: Q2 2026
+      budgetRevenue: 100
+      actualRevenue: 105
+      budgetEbitda: 20
+      actualEbitda: 21
+      covenants:
+        - { name: Min DSCR, threshold: 1.2, actual: 1.5, type: min }
+        - { name: Max Leverage, threshold: 4.0, actual: 3.5, type: max }
+    expect:
+      revenueVariance: 5
+      revenueVariancePct: 5
+      ebitdaVariance: 1
+      ebitdaVariancePct: 5
+      covenantStatuses: [pass, pass]
+      breaches: []
+      keyRisks: []
+
+  - name: covenant_breach_min_and_max
+    input:
+      companyName: Portco Two
+      period: Q2 2026
+      budgetRevenue: 100
+      actualRevenue: 98
+      budgetEbitda: 20
+      actualEbitda: 19
+      covenants:
+        - { name: Min DSCR, threshold: 1.2, actual: 1.0, type: min }
+        - { name: Max Leverage, threshold: 4.0, actual: 5.0, type: max }
+    expect:
+      covenantStatuses: [breach, breach]
+      breaches: [Min DSCR, Max Leverage]
+      recommendedActionContains: Escalate covenant breach
+
+  - name: material_budget_shortfall
+    input:
+      companyName: Portco Three
+      budgetRevenue: 100
+      actualRevenue: 90
+      budgetEbitda: 20
+      actualEbitda: 15
+    expect:
+      revenueVariancePct: -10
+      ebitdaVariancePct: -25
+      keyRiskContains: below budget
+      recommendedActionContains: Investigate the budget shortfall
+
+  - name: missing_data_flags_not_invents
+    input:
+      companyName: Mystery Portco
+    expect:
+      revenueVariance: null
+      ebitdaVariance: null
+      flagsMissing: [Period, Budget revenue, Actual revenue, Budget EBITDA, Actual EBITDA]
+      neverInvents: true
+      covenantChecksCount: 0
+
+  - name: covenant_missing_data_is_unknown
+    input:
+      companyName: Portco Four
+      covenants:
+        - { name: Interest Cover, type: min }
+    expect:
+      covenantStatuses: [unknown]
+      breaches: []
+      neverInvents: true

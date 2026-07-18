@@ -1,0 +1,45 @@
+{
+  "properties": {
+    "computedNav": {
+      "type": "number"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "rollForward": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "component": {
+            "type": "string"
+          }
+        },
+        "required": [ "component", "amount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tieOutDifference": {
+      "type": "number"
+    },
+    "tiesOut": {
+      "type": "boolean"
+    }
+  },
+  "required": [ "computedNav", "tieOutDifference", "tiesOut", "rollForward", "recommendedAction" ],
+  "type": "object"
+}

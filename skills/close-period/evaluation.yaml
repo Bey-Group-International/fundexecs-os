@@ -1,0 +1,44 @@
+# skills/close-period/evaluation.yaml
+# Golden evaluation cases for the Period-Close Checklist. These are the acceptance
+# fixtures a production skill must pass — canonical checklist assembly, readiness
+# math, missing-data handling (flagged not invented), and the Tier-3 close
+# guardrail. Exercised by lib/skills/catalog/close-period.test.ts.
+cases:
+  - name: empty_input_all_open
+    input:
+      fundName: Fund I
+    expect:
+      totalTasks: 8
+      completeCount: 0
+      readiness: 0
+      allOpen: true
+      flagsMissing: [periodEnd]
+
+  - name: partial_complete_rounds_readiness
+    input:
+      fundName: Meridian Fund II, L.P.
+      periodEnd: 2026-06-30
+      tasksComplete: [bank_recs, accruals, capital_activity]
+    expect:
+      completeCount: 3
+      readiness: 0.38          # round(3/8, 2)
+      recommendedAction: Resolve open items before requesting close
+
+  - name: fully_ready_but_never_closes
+    input:
+      fundName: Fund III
+      periodEnd: 2026-06-30
+      tasksComplete: [bank_recs, accruals, capital_activity, fee_calc, nav_tieout, lp_statements, subdoc_updates, investor_reporting]
+    expect:
+      completeCount: 8
+      readiness: 1
+      # Even fully ready, the skill only recommends REQUESTING close.
+      closeIsTier3HumanAction: true
+
+  - name: unknown_keys_ignored
+    input:
+      fundName: Fund V
+      tasksComplete: [bank_recs, not_a_real_task]
+    expect:
+      completeCount: 1
+      totalTasks: 8
