@@ -1,0 +1,36 @@
+# skills/portfolio-review/policy.yaml
+# Execution + governance policy for the Portfolio Company Review skill. Enforced
+# by the runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Runs within an approved mandate.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - portfolio_ops
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - portfolio_company:read
+  - financial_report:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - distribute_report
+  - move_capital
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Never fabricate a financial value; a missing input is flagged in missingFields, not invented.
+  - A variance is computed only when both budget and actual are present, else null; the variance % is null when budget is zero.
+  - A covenant status is pass or breach only when threshold, actual, and type are all present; otherwise it is unknown.
+  - Every provided figure is a fact; every computed figure (variance, variance %, covenant status) is a calculation.
+  - The review is advisory analysis — it never distributes a report, moves capital, or signs a document.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - value-creation

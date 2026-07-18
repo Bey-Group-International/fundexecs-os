@@ -1,0 +1,53 @@
+{
+  "properties": {
+    "checklist": {
+      "items": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "complete", "open" ],
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          }
+        },
+        "required": [ "key", "task", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "completeCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "openTasks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "readiness": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "totalTasks": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "checklist", "readiness", "completeCount", "totalTasks", "openTasks", "missingFields", "recommendedAction" ],
+  "type": "object"
+}

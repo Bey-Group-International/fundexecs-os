@@ -1,0 +1,61 @@
+# skills/close-period/skill.yaml
+# Authoring spec for the Period-Close Checklist skill. The machine-readable
+# manifest the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/close-period.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: close-period
+name: Period-Close Checklist
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - fund_admin
+
+supported_entity_types: [fund, period, close_checklist]
+
+required_inputs:
+  - fundName
+
+optional_inputs:
+  - periodEnd
+  - tasksComplete        # canonical task keys the operator marks done
+
+outputs:
+  - checklist            # ordered [{key, task, status}] over the canonical tasks
+  - readiness            # round(completeCount / totalTasks, 2)
+  - completeCount
+  - totalTasks
+  - openTasks            # labels of the still-open tasks
+  - missingFields
+  - recommendedAction    # checklist-only; closing the period is Tier-3 / human
+
+artifact_types: [analysis]
+data_permissions: [fund:read, period:read]
+tools: []
+
+approval_tier: 1           # Tier 1 — PREPARING the checklist is internal, reversible work
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+# This skill PREPARES a close-readiness checklist only. Actually closing/locking
+# the period, reopening it, or posting are books-locking Tier-3 actions — never
+# delegable, explicitly prohibited here.
+prohibited_actions:
+  - close_period
+  - post_to_closed_period
+  - reopen_period
+  - post_journal_entry
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

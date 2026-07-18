@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "fundName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "periodEnd": {
+      "type": "string"
+    },
+    "tasksComplete": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "fundName" ],
+  "type": "object"
+}

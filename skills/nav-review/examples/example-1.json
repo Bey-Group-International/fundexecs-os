@@ -1,0 +1,14 @@
+{
+  "description": "A clean single-period NAV roll-forward that ties out: 1000 prior NAV rolls forward through contributions, distributions, gains, fees, and expenses to a computed NAV of 1205, matching the administrator's reported NAV (difference 0).",
+  "input": {
+    "contributions": 200,
+    "distributions": 50,
+    "expenses": 5,
+    "fees": 10,
+    "fundName": "Meridian Fund II",
+    "priorNav": 1000,
+    "realizedGainLoss": 30,
+    "reportedNav": 1205,
+    "unrealizedGainLoss": 40
+  }
+}

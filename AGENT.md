@@ -756,6 +756,27 @@ Deployed, monitoring               →  live, observability active
              |  panel already handle any registered skill.
              |  Confidence: Tested by typecheck/eslint/Jest (~91 new tests; 3230 total
              |  green, no regressions). Pure backend — no app/components changes.
+
+2026-07-18  |  Phase 4-5 skills: fund administration + portfolio operations  |  Six
+             |  more governed deterministic skills, built IN PARALLEL (six backend
+             |  subagents) then integrated centrally. Registry now holds 16 skills.
+             |  - Phase 4 (Fund Admin, prepare-only — never posts/closes/moves/approves):
+             |    `reconcile` (statement↔ledger difference + break detection),
+             |    `nav-review` (NAV roll-forward tie-out; prior NAV anchor, absent flows
+             |    labelled assumptions), `close-period` (8-task close-readiness checklist;
+             |    closing the period is Tier-3 human, prohibited).
+             |  - Phase 5 (Portfolio Ops): `portfolio-review` (budget-to-actual variance +
+             |    covenant checks), `value-creation` (EBITDA bridge, gap-to-target, ranked
+             |    initiatives, 100-day plan), `kpi-ingest` (KPI normalization vs target).
+             |  Each is a full /skills/<id>/ package + pure core + golden tests, registered
+             |  in lib/skills/registry.ts and permitted by the executive whose allowedSkills
+             |  already anticipated its id. The generalized catalog-consistency test now
+             |  auto-covers all 16 skills. No new wiring.
+             |  Catalog (16): screen-deal, returns, dd-checklist, ic-memo, comps, dcf,
+             |  unit-economics, capital-call, lp-update, distribution-notice, reconcile,
+             |  nav-review, close-period, portfolio-review, value-creation, kpi-ingest.
+             |  Confidence: Tested by typecheck/eslint/Jest (78 new tests; 3308 total
+             |  green, no regressions). Pure backend — no app/components changes.
 ```
 
 ---

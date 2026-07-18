@@ -1,0 +1,22 @@
+{
+  "description": "A clean Q2 2026 portfolio review: revenue +5% and EBITDA +5% versus budget, with both the min-DSCR and max-leverage covenants passing.",
+  "input": {
+    "actualEbitda": 21,
+    "actualRevenue": 105,
+    "budgetEbitda": 20,
+    "budgetRevenue": 100,
+    "companyName": "Portco One",
+    "covenants": [ {
+      "actual": 1.5,
+      "name": "Min DSCR",
+      "threshold": 1.2,
+      "type": "min"
+    }, {
+      "actual": 3.5,
+      "name": "Max Leverage",
+      "threshold": 4.0,
+      "type": "max"
+    } ],
+    "period": "Q2 2026"
+  }
+}

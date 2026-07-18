@@ -1,0 +1,65 @@
+# skills/reconcile/skill.yaml
+# Authoring spec for the Account Reconciliation skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/reconcile.ts; this YAML is the human-facing contract and must
+# stay consistent with it.
+id: reconcile
+name: Account Reconciliation
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - fund_admin
+
+supported_entity_types: [fund, capital_activity, financial_model]
+
+required_inputs: []
+
+optional_inputs:
+  - accountName
+  - statementBalance
+  - ledgerBalance
+  - transactions
+
+outputs:
+  - difference          # statementBalance − ledgerBalance, or null when a balance is missing
+  - reconciled          # true when the difference is exactly 0
+  - breaks              # unmatched items + amount mismatches, each with a variance
+  - totalUnexplained    # sum of break variances
+  - matchedCount
+  - unmatchedCount
+  - missingFields
+  - keyRisks
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [fund:read, capital_activity:read]
+tools: []
+
+approval_tier: 1           # internal, reversible preparation
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+  - financial_reasoning
+
+allowed_downstream_skills: [nav-review, close-period]
+
+# Actions this skill may NEVER take, even to prepare. It PREPARES a reconciliation
+# for review; posting entries and closing/force-posting a period are separate,
+# gated actions.
+prohibited_actions:
+  - post_journal_entry
+  - post_to_closed_period
+  - close_period
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

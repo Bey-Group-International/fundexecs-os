@@ -1,0 +1,48 @@
+{
+  "properties": {
+    "actualEbitda": {
+      "type": "number"
+    },
+    "actualRevenue": {
+      "type": "number"
+    },
+    "budgetEbitda": {
+      "type": "number"
+    },
+    "budgetRevenue": {
+      "type": "number"
+    },
+    "companyName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "covenants": {
+      "items": {
+        "properties": {
+          "actual": {
+            "type": "number"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "type": {
+            "enum": [ "min", "max" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "period": {
+      "type": "string"
+    }
+  },
+  "required": [ "companyName" ],
+  "type": "object"
+}

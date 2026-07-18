@@ -1,0 +1,69 @@
+{
+  "properties": {
+    "bridgedEbitda": {
+      "type": "number"
+    },
+    "ebitdaBridge": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "step": {
+            "type": "string"
+          }
+        },
+        "required": [ "step" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gapToTarget": {
+      "type": "number"
+    },
+    "hundredDayPlan": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "rankedInitiatives": {
+      "items": {
+        "properties": {
+          "ebitdaImpact": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "timelineMonths": {
+            "type": "number"
+          },
+          "workstream": {
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    }
+  },
+  "required": [ "ebitdaBridge", "rankedInitiatives", "hundredDayPlan", "missingFields", "keyRisks", "recommendedAction" ],
+  "type": "object"
+}

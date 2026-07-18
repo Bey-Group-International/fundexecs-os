@@ -1,0 +1,60 @@
+# skills/value-creation/skill.yaml
+# Authoring spec for the Value-Creation Plan skill. The machine-readable manifest
+# that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/value-creation.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: value-creation
+name: Value-Creation Plan
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - portfolio_ops
+
+supported_entity_types: [company, portfolio_company, value_creation_plan]
+
+required_inputs:
+  - companyName
+
+optional_inputs:
+  - currentEbitda
+  - targetEbitda
+  - initiatives
+
+outputs:
+  - bridgedEbitda      # currentEbitda + Σ initiative impact
+  - gapToTarget        # targetEbitda − bridgedEbitda
+  - ebitdaBridge       # ordered Current → initiatives → Bridged
+  - rankedInitiatives  # by EBITDA impact desc, missing impact last
+  - hundredDayPlan     # initiatives realisable in <=3 months
+  - missingFields
+  - keyRisks
+  - recommendedAction
+
+artifact_types: [analysis, memo]
+data_permissions: [company:read, value_creation_plan:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - financial_reasoning
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - distribute_report
+  - move_capital
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

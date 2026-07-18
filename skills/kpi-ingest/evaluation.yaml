@@ -1,0 +1,69 @@
+# skills/kpi-ingest/evaluation.yaml
+# Golden evaluation cases for KPI Ingestion & Normalization. These are the
+# acceptance fixtures a production skill must pass — status derivation from the
+# value/target pair and direction, variance math, missing-value handling (flagged
+# not invented), and count consistency. Exercised by
+# lib/skills/catalog/kpi-ingest.test.ts.
+cases:
+  - name: higher_better_on_track_with_variance
+    input:
+      companyName: Acme Widgets
+      kpis:
+        - name: ARR
+          value: 12
+          unit: $M
+          period: Q2-2026
+          target: 10
+          direction: higher_better
+    expect:
+      kpiCount: 1
+      onTrackCount: 1
+      offTrackCount: 0
+      variance: 2
+      status: on_track
+
+  - name: lower_better_polarity
+    input:
+      companyName: Acme
+      kpis:
+        - name: Churn
+          value: 3
+          target: 5
+          direction: lower_better
+        - name: CAC
+          value: 8
+          target: 5
+          direction: lower_better
+    expect:
+      onTrackCount: 1
+      offTrackCount: 1
+
+  - name: missing_value_flags_and_never_invents
+    input:
+      companyName: Mystery Co
+      kpis:
+        - name: EBITDA margin
+          target: 20
+    expect:
+      status: unknown
+      valueNull: true
+      flagsMissing: [EBITDA margin]
+      neverInvents: true
+
+  - name: no_target_when_target_absent
+    input:
+      companyName: Acme
+      kpis:
+        - name: Headcount
+          value: 42
+    expect:
+      status: no_target
+      onTrackCount: 0
+      offTrackCount: 0
+
+  - name: missing_required_kpis_flagged
+    input:
+      companyName: Acme
+    expect:
+      kpiCount: 0
+      flagsMissingFields: [kpis]

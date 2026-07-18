@@ -1,0 +1,71 @@
+# skills/value-creation/evaluation.yaml
+# Golden evaluation cases for the Value-Creation Plan. These are the acceptance
+# fixtures a production skill must pass — EBITDA bridge math, gap-to-target,
+# initiative ranking, 100-day plan derivation, and missing-data handling (flagged
+# not invented). Exercised by lib/skills/catalog/value-creation.test.ts.
+cases:
+  - name: bridge_and_gap_computed
+    input:
+      companyName: Portfolio Co
+      currentEbitda: 100
+      targetEbitda: 150
+      initiatives:
+        - name: Pricing
+          ebitdaImpact: 20
+          workstream: Commercial
+          timelineMonths: 2
+        - name: Procurement
+          ebitdaImpact: 15
+          workstream: Operations
+          timelineMonths: 6
+    expect:
+      bridgedEbitda: 135
+      gapToTarget: 15
+      hundredDayPlan: [Pricing]
+
+  - name: missing_impact_treated_as_zero_and_flagged
+    input:
+      companyName: Portfolio Co
+      currentEbitda: 100
+      initiatives:
+        - name: No-number
+          workstream: Ops
+    expect:
+      bridgedEbitda: 100
+      flagsMissing: ['Initiative "No-number" EBITDA impact (treated as 0)']
+      neverInvents: true
+
+  - name: ranking_orders_by_impact_missing_last
+    input:
+      companyName: Portfolio Co
+      currentEbitda: 100
+      initiatives:
+        - name: Small
+          ebitdaImpact: 3
+        - name: Unknown
+        - name: Big
+          ebitdaImpact: 30
+    expect:
+      rankedInitiatives: [Big, Small, Unknown]
+
+  - name: gap_not_closed_surfaces_risk
+    input:
+      companyName: Portfolio Co
+      currentEbitda: 100
+      targetEbitda: 200
+      initiatives:
+        - name: Modest
+          ebitdaImpact: 10
+    expect:
+      gapToTarget: 90
+      keyRisk: Initiatives do not close the EBITDA gap (90 remaining)
+
+  - name: missing_current_ebitda_leaves_bridge_null
+    input:
+      companyName: Portfolio Co
+      initiatives:
+        - name: X
+          ebitdaImpact: 5
+    expect:
+      bridgedEbitda: null
+      flagsMissing: [Current EBITDA, Target EBITDA]

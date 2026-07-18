@@ -1,0 +1,60 @@
+# skills/kpi-ingest/skill.yaml
+# Authoring spec for the KPI Ingestion & Normalization skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/kpi-ingest.ts; this YAML is the human-facing contract and
+# must stay consistent with it (asserted by lib/skills/skill-package.test.ts).
+id: kpi-ingest
+name: KPI Ingestion & Normalization
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - portfolio_ops
+
+supported_entity_types: [company, portfolio_company, kpi]
+
+required_inputs:
+  - companyName
+  - kpis
+
+optional_inputs:
+  - kpis[].value
+  - kpis[].unit
+  - kpis[].period
+  - kpis[].target
+  - kpis[].direction
+
+outputs:
+  - normalized         # per-KPI { name, value, unit, period, target, variance, status }
+  - kpiCount
+  - onTrackCount
+  - offTrackCount
+  - missingKpis
+  - missingFields
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [company:read, kpi:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [portfolio-review]
+
+prohibited_actions:
+  - distribute_report
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

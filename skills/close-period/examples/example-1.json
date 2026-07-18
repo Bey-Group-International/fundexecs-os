@@ -1,0 +1,8 @@
+{
+  "description": "A mid-close checklist: three of eight tasks marked done, so readiness is 0.38 and five items remain open. The skill only PREPARES this checklist — closing the period is a Tier-3 human action.",
+  "input": {
+    "fundName": "Meridian Fund II, L.P.",
+    "periodEnd": "2026-06-30",
+    "tasksComplete": [ "bank_recs", "accruals", "capital_activity" ]
+  }
+}

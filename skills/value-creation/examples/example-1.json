@@ -1,0 +1,19 @@
+{
+  "description": "A portfolio company whose two initiatives bridge EBITDA from 100 to 135 against a 150 target, leaving a 15 gap; the 2-month pricing initiative lands in the 100-day plan.",
+  "input": {
+    "companyName": "Portfolio Co",
+    "currentEbitda": 100,
+    "initiatives": [ {
+      "ebitdaImpact": 20,
+      "name": "Pricing",
+      "timelineMonths": 2,
+      "workstream": "Commercial"
+    }, {
+      "ebitdaImpact": 15,
+      "name": "Procurement",
+      "timelineMonths": 6,
+      "workstream": "Operations"
+    } ],
+    "targetEbitda": 150
+  }
+}
