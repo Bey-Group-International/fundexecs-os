@@ -23,6 +23,12 @@ import { closePeriod } from "./catalog/close-period";
 import { portfolioReview } from "./catalog/portfolio-review";
 import { valueCreation } from "./catalog/value-creation";
 import { kpiIngest } from "./catalog/kpi-ingest";
+import { sourceDeals } from "./catalog/source-deals";
+import { buyerList } from "./catalog/buyer-list";
+import { marketMap } from "./catalog/market-map";
+import { kycScreen } from "./catalog/kyc-screen";
+import { policyCheck } from "./catalog/policy-check";
+import { riskRegister } from "./catalog/risk-register";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -45,6 +51,14 @@ const SKILLS: Record<string, SkillDefinition> = {
   [portfolioReview.manifest.id]: portfolioReview as SkillDefinition,
   [valueCreation.manifest.id]: valueCreation as SkillDefinition,
   [kpiIngest.manifest.id]: kpiIngest as SkillDefinition,
+  // Source intelligence (rank supplied sets; never fabricate companies/buyers).
+  [sourceDeals.manifest.id]: sourceDeals as SkillDefinition,
+  [buyerList.manifest.id]: buyerList as SkillDefinition,
+  [marketMap.manifest.id]: marketMap as SkillDefinition,
+  // Risk & compliance (screen + escalate; never the final determination).
+  [kycScreen.manifest.id]: kycScreen as SkillDefinition,
+  [policyCheck.manifest.id]: policyCheck as SkillDefinition,
+  [riskRegister.manifest.id]: riskRegister as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

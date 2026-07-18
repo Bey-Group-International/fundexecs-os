@@ -1,0 +1,60 @@
+{
+  "properties": {
+    "action": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "context": {
+      "properties": {
+        "counterpartyDomain": {
+          "type": "string"
+        },
+        "dollarAmount": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "jurisdiction": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "policies": {
+      "items": {
+        "properties": {
+          "forbiddenDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "jurisdictions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "maxDollar": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "restricted": {
+            "type": "boolean"
+          },
+          "rule": {
+            "type": "string"
+          }
+        },
+        "required": [ "name", "rule" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "action" ],
+  "type": "object"
+}

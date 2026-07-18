@@ -1,0 +1,75 @@
+{
+  "properties": {
+    "candidates": {
+      "items": {
+        "properties": {
+          "ebitda": {
+            "type": "number"
+          },
+          "geography": {
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "ownership": {
+            "type": "string"
+          },
+          "revenue": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "sector": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "mandate": {
+      "properties": {
+        "exclusions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "geographies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "maxEbitda": {
+          "type": "number"
+        },
+        "maxRevenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "minEbitda": {
+          "type": "number"
+        },
+        "minRevenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sectors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [ "mandate" ],
+  "type": "object"
+}

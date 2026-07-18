@@ -1,0 +1,29 @@
+{
+  "description": "A supplied candidate set ranked against a software mandate; BestFit Co tops the list, SmokeCo is excluded and ranked last.",
+  "input": {
+    "candidates": [ {
+      "geography": "EU",
+      "name": "MidFit Co",
+      "revenue": 40,
+      "sector": "Software",
+      "source": "crm"
+    }, {
+      "geography": "North America",
+      "name": "BestFit Co",
+      "revenue": 50,
+      "sector": "Software",
+      "source": "crm"
+    }, {
+      "name": "SmokeCo",
+      "sector": "Tobacco",
+      "source": "broker"
+    } ],
+    "mandate": {
+      "exclusions": [ "tobacco" ],
+      "geographies": [ "north america" ],
+      "maxRevenue": 100,
+      "minRevenue": 10,
+      "sectors": [ "software" ]
+    }
+  }
+}

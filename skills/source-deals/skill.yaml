@@ -1,0 +1,55 @@
+# skills/source-deals/skill.yaml
+# Authoring spec for the Deal Sourcing (Rank Candidates) skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/source-deals.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: source-deals
+name: Deal Sourcing (Rank Candidates)
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - deal_sourcer
+
+supported_entity_types: [mandate, company, deal]
+
+required_inputs:
+  - mandate
+
+optional_inputs:
+  - candidates
+
+outputs:
+  - ranked             # candidates scored + sorted by mandate fit (excluded last)
+  - topTargets         # names of top 5 non-excluded by fitScore
+  - excludedCount
+  - candidateCount
+  - missingContext
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [company:read, deal:read, mandate:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [screen-deal]
+
+prohibited_actions:
+  - send_outreach
+  - send_intro_request
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

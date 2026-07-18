@@ -1,0 +1,34 @@
+# skills/buyer-list/policy.yaml
+# Execution + governance policy for Buyer List (Rank Acquirers). Enforced by the
+# runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Ranks a supplied set within an approved mandate.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - deal_sourcer
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - company:read
+  - buyer:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - send_outreach
+  - share_materials
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Ranks only the buyer set the caller supplies — it NEVER invents or sources buyers.
+  - An empty buyer set returns an empty ranking plus the missingContext note "No buyers supplied — this skill ranks a provided buyer set; it does not fabricate buyers."
+  - Every provided field is labelled a fact; every fitScore is labelled a calculation.
+  - The ranking is advisory analysis — it never authorizes outreach or any counterparty-facing action.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream: []

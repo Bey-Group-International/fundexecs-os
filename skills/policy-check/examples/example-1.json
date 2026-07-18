@@ -1,0 +1,24 @@
+{
+  "description": "A payment over the spend cap with a forbidden counterparty domain — both are FLAGGED as restricted for a compliance/legal officer to review. The check does not authorize the action.",
+  "input": {
+    "action": "approve payment to counterparty",
+    "context": {
+      "counterpartyDomain": "badactor.com",
+      "dollarAmount": 500000,
+      "jurisdiction": "US"
+    },
+    "policies": [ {
+      "maxDollar": 250000,
+      "name": "Spend cap",
+      "rule": "Single payments over 250k require compliance sign-off"
+    }, {
+      "forbiddenDomains": [ "badactor.com", "shell.io" ],
+      "name": "Blocked counterparties",
+      "rule": "No dealings with blocked counterparty domains"
+    }, {
+      "jurisdictions": [ "US", "EU" ],
+      "name": "Jurisdiction allowlist",
+      "rule": "US and EU counterparties only"
+    } ]
+  }
+}

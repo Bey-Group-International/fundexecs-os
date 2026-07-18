@@ -1,0 +1,58 @@
+# skills/market-map/evaluation.yaml
+# Golden evaluation cases for the Market Map. These are the acceptance fixtures a
+# production skill must pass — grouping a provided set by segment, count-descending
+# ordering, unsegmented handling (flagged not invented), and the empty-set guardrail
+# (no companies fabricated). Exercised by lib/skills/catalog/market-map.test.ts.
+cases:
+  - name: groups_provided_set_by_segment
+    input:
+      sector: Payments
+      geography: North America
+      companies:
+        - { name: Alpha, segment: Acquiring }
+        - { name: Beta, segment: Issuing }
+        - { name: Gamma, segment: Acquiring }
+        - { name: Delta, segment: Acquiring }
+    expect:
+      totalCompanies: 4
+      segmentCount: 2
+      topSegment: Acquiring
+      topSegmentCount: 3
+
+  - name: sorts_segments_by_count_desc
+    input:
+      sector: SaaS
+      companies:
+        - { name: A, segment: Small }
+        - { name: B, segment: Big }
+        - { name: C, segment: Big }
+        - { name: D, segment: Big }
+        - { name: E, segment: Mid }
+        - { name: F, segment: Mid }
+    expect:
+      segmentOrder: [Big, Mid, Small]
+      segmentCounts: [3, 2, 1]
+
+  - name: unsegmented_companies_flagged_not_invented
+    input:
+      sector: Logistics
+      companies:
+        - { name: Segd, segment: Freight }
+        - { name: Loose1 }
+        - { name: Loose2 }
+    expect:
+      unsegmented: [Loose1, Loose2]
+      flagsMissing: true
+      neverInvents: true
+
+  - name: empty_company_set_yields_empty_map
+    input:
+      sector: Insurtech
+      geography: EU
+      companies: []
+    expect:
+      segments: []
+      totalCompanies: 0
+      segmentCount: 0
+      missingContext: "No companies supplied — this skill maps a provided company set; it does not research or fabricate companies."
+      neverInvents: true

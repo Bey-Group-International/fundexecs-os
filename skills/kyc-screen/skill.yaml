@@ -1,0 +1,65 @@
+# skills/kyc-screen/skill.yaml
+# Authoring spec for the KYC / AML Screening skill. The machine-readable manifest
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/kyc-screen.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+#
+# GUARDRAIL: this skill is SCREENING SUPPORT only. It NEVER approves onboarding
+# and NEVER makes a final compliance determination — it routes exceptions to a
+# compliance officer, who owns the final call.
+id: kyc-screen
+name: KYC / AML Screening
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - risk_compliance
+
+supported_entity_types: [subject, investor, counterparty]
+
+required_inputs:
+  - subjectName
+
+optional_inputs:
+  - subjectType
+  - documents          # [{type, present, expiresAt}]
+  - checks             # [{name, result: pass|fail|pending}]
+  - pepFlag
+  - sanctionsHit
+
+outputs:
+  - screeningStatus    # clear_for_review | incomplete | escalate  (NEVER approved)
+  - documentCompleteness
+  - missingDocuments
+  - expiringDocuments
+  - failedChecks
+  - escalationReasons
+  - missingFields
+  - recommendedAction  # always defers the final determination to a compliance officer
+
+artifact_types: [risk_report]
+data_permissions: [subject:read, screening:read]
+tools: []
+
+approval_tier: 1           # internal, reversible screening support
+risk_classification: elevated
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [policy-check]
+
+prohibited_actions:
+  - sign_document
+  - execute_subdoc
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

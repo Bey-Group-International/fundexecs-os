@@ -1,0 +1,75 @@
+# skills/buyer-list/evaluation.yaml
+# Golden evaluation cases for Buyer List (Rank Acquirers). These are the acceptance
+# fixtures a production skill must pass — ranking correctness (fitScore desc), the
+# never-fabricate guardrail (empty set -> empty ranking + missingContext note),
+# fact/calculation labelling, and byType counting. Exercised by
+# lib/skills/catalog/buyer-list.test.ts.
+cases:
+  - name: ranks_supplied_set_by_fit_desc
+    input:
+      company:
+        name: TargetCo
+        sector: Industrials
+        geography: North America
+      buyers:
+        - name: OffSector Sponsor
+          type: sponsor
+          sector: Consumer
+          geography: EU
+        - name: Perfect Strategic
+          type: strategic
+          sector: Industrials
+          geography: North America
+        - name: Capitalized Sponsor
+          type: sponsor
+          sector: Industrials
+          geography: North America
+          aum: 5000
+    expect:
+      sortedByFitDescending: true
+      topBuyer: Perfect Strategic
+      topBuyerFitScore: 100
+      buyerCount: 3
+
+  - name: empty_buyer_set_never_fabricates
+    input:
+      company:
+        name: Orphan Co
+        sector: Software
+      buyers: []
+    expect:
+      rankedIsEmpty: true
+      buyerCount: 0
+      missingContext: "No buyers supplied — this skill ranks a provided buyer set; it does not fabricate buyers."
+      neverInvents: true
+
+  - name: omitted_buyers_treated_as_empty
+    input:
+      company:
+        name: Orphan Co
+    expect:
+      rankedIsEmpty: true
+      missingContext: "No buyers supplied — this skill ranks a provided buyer set; it does not fabricate buyers."
+
+  - name: counts_by_type
+    input:
+      company:
+        name: TargetCo
+      buyers:
+        - name: A
+          type: strategic
+        - name: B
+          type: financial
+          aum: 100
+        - name: C
+          type: sponsor
+          aum: 200
+        - name: D
+          type: sponsor
+        - name: E
+    expect:
+      byType:
+        strategic: 1
+        financial: 1
+        sponsor: 2
+        unknown: 1

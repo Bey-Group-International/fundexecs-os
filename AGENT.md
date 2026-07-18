@@ -777,6 +777,29 @@ Deployed, monitoring               →  live, observability active
              |  nav-review, close-period, portfolio-review, value-creation, kpi-ingest.
              |  Confidence: Tested by typecheck/eslint/Jest (78 new tests; 3308 total
              |  green, no regressions). Pure backend — no app/components changes.
+
+2026-07-18  |  Source intelligence + Risk & Compliance skills  |  Six more governed
+             |  deterministic skills, built IN PARALLEL (six backend subagents) then
+             |  integrated centrally. Registry now holds 22 skills — the full operational
+             |  executive bench is now skill-backed.
+             |  - Source (Deal Sourcing / Research) — RANK a supplied set, NEVER fabricate
+             |    companies: `source-deals` (rank candidates vs mandate), `buyer-list`
+             |    (rank acquirers for a sale), `market-map` (segment a supplied company
+             |    set). Empty input → empty result + explicit "does not fabricate" note.
+             |  - Risk & Compliance — SCREEN + ESCALATE, never the final determination:
+             |    `kyc-screen` (rules-grid; status is clear_for_review/incomplete/escalate,
+             |    NEVER "approved" — a compliance officer decides), `policy-check` (evaluate
+             |    supplied policies → ok/review/restricted; defers the call), `risk-register`
+             |    (score a supplied risk set; never invents risks).
+             |  Each is a full /skills/<id>/ package + pure core + golden tests, registered
+             |  in lib/skills/registry.ts and permitted by the executive whose allowedSkills
+             |  already anticipated its id. (Integration fix: the source-deals agent omitted
+             |  SKILL.md; the generalized catalog-consistency test caught it, added it.)
+             |  Catalog (22) spans deal / financial / capital-LP / fund-admin / portfolio /
+             |  source / risk-compliance — covering Analyst, Diligence, IC, IR, Fund Admin,
+             |  Portfolio Ops, Deal Sourcing, Research, Risk & Compliance.
+             |  Confidence: Tested by typecheck/eslint/Jest (91 new tests; 3399 total
+             |  green, no regressions). Pure backend — no app/components changes.
 ```
 
 ---

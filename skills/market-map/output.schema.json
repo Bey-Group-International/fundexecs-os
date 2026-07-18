@@ -1,0 +1,51 @@
+{
+  "properties": {
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "segmentCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "segments": {
+      "items": {
+        "properties": {
+          "companies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "count": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "segment": {
+            "type": "string"
+          }
+        },
+        "required": [ "segment", "companies", "count" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "totalCompanies": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "unsegmented": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "segments", "totalCompanies", "segmentCount", "recommendedAction" ],
+  "type": "object"
+}

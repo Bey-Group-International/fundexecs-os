@@ -1,0 +1,42 @@
+{
+  "properties": {
+    "entityName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "risks": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "impact": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "number"
+          },
+          "likelihood": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "number"
+          },
+          "mitigation": {
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "entityName" ],
+  "type": "object"
+}

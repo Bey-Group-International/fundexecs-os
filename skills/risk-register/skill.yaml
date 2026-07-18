@@ -1,0 +1,56 @@
+# skills/risk-register/skill.yaml
+# Authoring spec for the Risk Register skill. The machine-readable manifest that
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/risk-register.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: risk-register
+name: Risk Register
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - risk_compliance
+
+supported_entity_types: [fund, portfolio_company, company]
+
+required_inputs:
+  - entityName
+
+optional_inputs:
+  - risks
+
+outputs:
+  - register           # each risk scored + severity + gaps, ranked by score
+  - highCount
+  - mediumCount
+  - lowCount
+  - unmitigatedCount
+  - riskCount
+  - missingFields
+  - recommendedAction
+
+artifact_types: [risk_report]
+data_permissions: [risk:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - distribute_report
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

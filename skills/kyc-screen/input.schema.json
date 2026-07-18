@@ -1,0 +1,56 @@
+{
+  "properties": {
+    "checks": {
+      "items": {
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "result": {
+            "enum": [ "pass", "fail", "pending" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "documents": {
+      "items": {
+        "properties": {
+          "expiresAt": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "type": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [ "type" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "pepFlag": {
+      "type": "boolean"
+    },
+    "sanctionsHit": {
+      "type": "boolean"
+    },
+    "subjectName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "subjectType": {
+      "enum": [ "individual", "entity" ],
+      "type": "string"
+    }
+  },
+  "required": [ "subjectName" ],
+  "type": "object"
+}

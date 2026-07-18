@@ -1,0 +1,58 @@
+# skills/buyer-list/skill.yaml
+# Authoring spec for the Buyer List (Rank Acquirers) skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/buyer-list.ts; this YAML is the human-facing contract and
+# must stay consistent with it (asserted by lib/skills/skill-package.test.ts).
+id: buyer-list
+name: Buyer List (Rank Acquirers)
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - deal_sourcer
+
+supported_entity_types: [company, buyer]
+
+required_inputs:
+  - company.name
+
+optional_inputs:
+  - company.sector
+  - company.geography
+  - company.ebitda
+  - buyers
+
+outputs:
+  - ranked             # supplied buyers, ranked by fitScore desc
+  - byType             # counts: strategic / financial / sponsor / unknown
+  - topBuyers          # top 5 names by fitScore
+  - buyerCount
+  - missingContext
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [company:read, buyer:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - send_outreach
+  - share_materials
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

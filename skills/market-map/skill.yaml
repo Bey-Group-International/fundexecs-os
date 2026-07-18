@@ -1,0 +1,56 @@
+# skills/market-map/skill.yaml
+# Authoring spec for the Market Map skill. The machine-readable manifest the
+# runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/market-map.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: market-map
+name: Market Map
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - research
+
+supported_entity_types: [company, sector, market_map]
+
+required_inputs:
+  - sector
+
+optional_inputs:
+  - geography
+  - companies
+
+outputs:
+  - segments           # [{ segment, companies[], count }] sorted by count desc
+  - totalCompanies
+  - segmentCount
+  - unsegmented        # provided companies with no segment (flagged, not invented)
+  - missingContext     # material context absent (flagged, not invented)
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [company:read]
+tools: []
+
+approval_tier: 1           # internal — organizes a provided company set into segments
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [source-deals]
+
+prohibited_actions:
+  - send_outreach
+  - distribute_report
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

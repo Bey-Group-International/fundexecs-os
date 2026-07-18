@@ -1,0 +1,56 @@
+# skills/policy-check/skill.yaml
+# Authoring spec for the Policy & Restricted-Action Check skill. The machine-readable
+# manifest that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/policy-check.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: policy-check
+name: Policy & Restricted-Action Check
+version: 1.0.0
+owner: fundexecs
+hub: run
+
+applicable_executives:
+  - risk_compliance
+
+supported_entity_types: [action, policy]
+
+required_inputs:
+  - action
+
+optional_inputs:
+  - context
+  - policies
+
+outputs:
+  - flags                # per-policy: ok | review | restricted + reason
+  - restrictedCount
+  - reviewCount
+  - requiresEscalation
+  - missingContext
+  - recommendedAction    # always defers the final call to a compliance/legal officer
+
+artifact_types: [risk_report, analysis]
+data_permissions: [policy:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis (a SUPPORT check)
+risk_classification: elevated
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - submit_term_sheet
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

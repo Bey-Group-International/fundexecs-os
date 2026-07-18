@@ -1,0 +1,30 @@
+# skills/risk-register/policy.yaml
+# Execution + governance policy for the Risk Register. Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible analysis.
+risk_classification: moderate
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - risk_compliance
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - risk:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - distribute_report
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Never fabricate a risk; the register scores only the risks that are supplied.
+  - An empty risk set yields an empty register with an explicit note, never an invented one.
+  - Every provided field is a fact; every score is a calculation; gaps are flagged, not filled in.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream: []
