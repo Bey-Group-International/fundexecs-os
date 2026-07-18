@@ -1,0 +1,37 @@
+{
+  "properties": {
+    "commitments": {
+      "items": {
+        "properties": {
+          "amount": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "closeDate": {
+            "type": "string"
+          },
+          "investor": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "soft_circle", "committed", "signed", "funded" ],
+            "type": "string"
+          }
+        },
+        "required": [ "investor" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "hardCap": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "targetClose": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "type": "object"
+}

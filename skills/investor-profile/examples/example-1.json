@@ -1,0 +1,20 @@
+{
+  "description": "A supplied family-office LP profiled against a software / North America fund. All dimensions score fit and the profile is complete, so the next step routes to Capital Formation for targeting.",
+  "input": {
+    "fundCriteria": {
+      "minTicket": 5,
+      "targetGeographies": [ "north america" ],
+      "targetSectors": [ "software" ]
+    },
+    "investor": {
+      "aum": 800,
+      "geographiesOfInterest": [ "north america" ],
+      "name": "Evergreen Family Office",
+      "priorCommitments": 3,
+      "relationshipOwner": "J. Okafor",
+      "sectorsOfInterest": [ "software" ],
+      "type": "family_office",
+      "typicalTicket": 10
+    }
+  }
+}

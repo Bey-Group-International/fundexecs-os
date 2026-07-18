@@ -1,0 +1,67 @@
+{
+  "properties": {
+    "bindingCommitted": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "byInvestor": {
+      "items": {
+        "properties": {
+          "amount": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "investor": {
+            "type": "string"
+          },
+          "pctOfTotal": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "status": {
+            "enum": [ "soft_circle", "committed", "signed", "funded" ],
+            "type": "string"
+          }
+        },
+        "required": [ "investor", "pctOfTotal" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "overSubscribed": {
+      "type": "boolean"
+    },
+    "pctOfTarget": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "remainingToTarget": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "targetClose": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "totalCommitted": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "totalInvestors": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "byInvestor", "totalCommitted", "bindingCommitted", "totalInvestors", "overSubscribed", "recommendedAction" ],
+  "type": "object"
+}

@@ -1,0 +1,36 @@
+# skills/deal-tracker/policy.yaml
+# Execution + governance policy for Deal Tracker. Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Runs within an approved mandate.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - legal_closing
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - deal:read
+  - document:read
+  - data_room:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - sign_document
+  - execute_subdoc
+  - move_capital
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Rolls up ONLY the milestone set the caller supplies; it never invents or fabricates milestones or dates.
+  - An empty milestone set returns an empty roll-up plus the note "No milestones supplied — this skill tracks a provided milestone set; it does not fabricate milestones."
+  - Every supplied milestone field (label/owner/dueDate) is a fact; a defaulted status is a labelled assumption; completionPct is a labelled calculation; missing data is flagged, not invented.
+  - Milestones that are blocked, or critical and not done, are flagged at risk and drive next actions.
+  - It organizes a status snapshot only — it never advances the deal, signs a document, or moves capital.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - closing-checklist

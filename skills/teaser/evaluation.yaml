@@ -1,0 +1,67 @@
+# skills/teaser/evaluation.yaml
+# Golden evaluation cases for Deal Teaser (Draft). These are the acceptance
+# fixtures a production skill must pass — full-teaser assembly, the never-fabricate
+# guardrail (missing financials become a flagged placeholder, never a number),
+# fact vs generated labelling, anonymization, and the review-before-distribution
+# recommendation. Exercised by lib/skills/catalog/teaser.test.ts.
+cases:
+  - name: full_teaser_all_sections_complete
+    input:
+      deal:
+        codename: Project Atlas
+        sector: Industrial Software
+        geography: North America
+        description: A vertical SaaS platform for logistics operators. Rapidly scaling ARR.
+        revenue: 50
+        ebitda: 12
+        growthRate: 35
+        askType: majority
+        investmentHighlights: [Sticky enterprise base, Category-leading NRR]
+        useOfProceeds: Fund M&A and international expansion
+    expect:
+      sectionKeys: [headline, businessOverview, financialHighlights, investmentHighlights, process]
+      allComplete: true
+      missingFields: []
+
+  - name: missing_financials_placeholder_never_fabricated
+    input:
+      deal:
+        codename: Project Bare
+        sector: Healthcare
+    expect:
+      financialHighlightsStatus: placeholder
+      financialHighlightsBody: "[Financials to be provided]"
+      neverInvents: true
+
+  - name: supplied_revenue_is_a_fact
+    input:
+      deal:
+        codename: Project Atlas
+        revenue: 50
+    expect:
+      revenueSourceKind: fact
+      revenueValue: 50
+
+  - name: process_prose_is_generated
+    input:
+      deal:
+        codename: Project Atlas
+    expect:
+      processSourceKind: generated
+
+  - name: anonymized_by_default_uses_codename
+    input:
+      deal:
+        codename: Project Atlas
+        sector: Industrial Software
+    expect:
+      anonymized: true
+      headlineContains: Project Atlas
+
+  - name: recommends_review_before_distribution
+    input:
+      deal:
+        codename: Project Thin
+    expect:
+      recommendedActionContains: [review, distribution]
+      placeholderCount: 3

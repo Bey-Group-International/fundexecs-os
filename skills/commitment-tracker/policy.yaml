@@ -1,0 +1,39 @@
+# skills/commitment-tracker/policy.yaml
+# Execution + governance policy for Commitment Tracker. Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible roll-up. Runs within an approved mandate.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - capital_formation
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - fund:read
+  - investor:read
+  - commitment:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). This skill TRACKS
+# supplied records; binding, calling, or moving capital is a human Tier-3 action.
+prohibited_actions:
+  - capital_call
+  - move_capital
+  - sign_document
+  - execute_subdoc
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Tracks ONLY the commitment set the caller supplies; it never invents or fabricates commitments.
+  - It NEVER binds capital, issues a capital call, or moves money — those are human Tier-3 actions, prohibited here.
+  - An empty commitment set returns an empty roll-up plus the note "No commitments supplied — this skill tracks a provided commitment set; it does not fabricate commitments."
+  - A commitment with no amount is counted but flagged in missingContext and excluded from every sum — never silently assumed to be zero.
+  - Every supplied amount/status is a fact; every total, percentage, and remaining-to-target is a labelled calculation.
+  - When no target close is supplied, remainingToTarget and pctOfTarget are null and the gap is flagged, never assumed.
+  - Over-subscription past a supplied hard cap is detected and flagged prominently; scale-back is a human decision.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream: []

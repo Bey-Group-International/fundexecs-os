@@ -1,0 +1,56 @@
+# skills/investor-profile/skill.yaml
+# Authoring spec for the Investor Profile skill. The machine-readable manifest that
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/investor-profile.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: investor-profile
+name: Investor Profile
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - investor_relations
+  - capital_formation
+
+supported_entity_types: [investor, lp, contact]
+
+required_inputs:
+  - investor
+
+optional_inputs:
+  - fundCriteria
+
+outputs:
+  - profile            # organized known investor facts (nullable fields stay null)
+  - fitSignals         # {dimension, status, note} for ticket / sector / geography
+  - fitScore           # average of KNOWN dimension fits (0–100)
+  - missingFields      # important-but-absent fields, surfaced not filled
+  - suggestedNextStep  # complete-profile prompt, or route to Capital Formation
+  - missingContext
+
+artifact_types: [analysis]
+data_permissions: [investor:read, lp:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [raise-pipeline, commitment-tracker]
+
+prohibited_actions:
+  - send_outreach
+  - send_intro_request
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

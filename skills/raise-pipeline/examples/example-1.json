@@ -1,0 +1,24 @@
+{
+  "description": "A supplied LP prospect set rolled up against a 1000 raise target; weighted expected commitments and coverage are labelled calculations, stage-default probabilities are assumptions.",
+  "input": {
+    "prospects": [ {
+      "expectedTicket": 200,
+      "name": "Evergreen Endowment",
+      "probability": 1,
+      "stage": "committed"
+    }, {
+      "expectedTicket": 300,
+      "name": "Harbor Pension",
+      "probability": 0.6,
+      "stage": "diligence"
+    }, {
+      "expectedTicket": 150,
+      "name": "Cedar Family Office",
+      "stage": "meeting"
+    }, {
+      "name": "Northwind Fund of Funds",
+      "stage": "contacted"
+    } ],
+    "raiseTarget": 1000
+  }
+}

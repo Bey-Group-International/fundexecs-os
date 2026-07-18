@@ -1,0 +1,34 @@
+# skills/closing-checklist/policy.yaml
+# Execution + governance policy for Closing Checklist. Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Prepares readiness for a human to review.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - legal_closing
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - deal:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Closing and signing
+# are Tier-3, human-only actions — this skill only assesses readiness.
+prohibited_actions:
+  - sign_document
+  - execute_subdoc
+  - submit_term_sheet
+  - move_capital
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Merges a fixed canonical closing checklist with the caller's SUPPLIED completion status; it never marks an item done unless the caller reports it done.
+  - Never marks the deal closed, signs, or executes — closing and signing remain a human, Tier-3 action.
+  - readinessPct is a labelled calculation; every supplied completion fact is a labelled fact; missing data is flagged, not invented.
+  - An unsatisfied blocking condition precedent (and any open critical canonical task) surfaces as a blocking item.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream: []

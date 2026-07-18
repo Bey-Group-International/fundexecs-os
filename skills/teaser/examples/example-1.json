@@ -1,0 +1,18 @@
+{
+  "description": "A fully-supplied deal drafts a complete one-page anonymized teaser: headline, business overview, financial highlights (as-supplied figures), investment highlights, and a neutral process line — for review before any distribution.",
+  "input": {
+    "anonymize": true,
+    "deal": {
+      "askType": "majority",
+      "codename": "Project Atlas",
+      "description": "A vertical SaaS platform for logistics operators. Rapidly scaling ARR with strong net revenue retention.",
+      "ebitda": 12,
+      "geography": "North America",
+      "growthRate": 35,
+      "investmentHighlights": [ "Sticky enterprise base", "Category-leading NRR", "Large untapped TAM" ],
+      "revenue": 50,
+      "sector": "Industrial Software",
+      "useOfProceeds": "Fund M&A and international expansion"
+    }
+  }
+}

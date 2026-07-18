@@ -1,0 +1,61 @@
+# skills/commitment-tracker/skill.yaml
+# Authoring spec for the Commitment Tracker skill. The machine-readable manifest that
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/commitment-tracker.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: commitment-tracker
+name: Commitment Tracker
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - capital_formation
+
+supported_entity_types: [fund, investor, commitment]
+
+required_inputs: []
+
+optional_inputs:
+  - targetClose
+  - hardCap
+  - commitments
+
+outputs:
+  - byInvestor          # per-investor allocation: amount, pctOfTotal, status (sorted by amount desc)
+  - totalCommitted      # Σ supplied amounts (all statuses)
+  - bindingCommitted    # Σ amounts where status ∈ {signed, funded}
+  - totalInvestors
+  - remainingToTarget   # max(0, targetClose − totalCommitted), or null when no target
+  - pctOfTarget         # totalCommitted / targetClose, or null when no target
+  - targetClose
+  - overSubscribed      # true when hardCap supplied and totalCommitted > hardCap
+  - recommendedAction
+  - missingContext
+
+artifact_types: [analysis]
+data_permissions: [fund:read, investor:read, commitment:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - capital_call
+  - move_capital
+  - sign_document
+  - execute_subdoc
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

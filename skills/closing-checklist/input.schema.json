@@ -1,0 +1,44 @@
+{
+  "properties": {
+    "completedItems": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "conditionsPrecedent": {
+      "items": {
+        "properties": {
+          "blocking": {
+            "type": "boolean"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "satisfied": {
+            "type": "boolean"
+          }
+        },
+        "required": [ "label" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "deal": {
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [ "name" ],
+      "type": "object"
+    }
+  },
+  "required": [ "deal" ],
+  "type": "object"
+}

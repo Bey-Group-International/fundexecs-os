@@ -1,0 +1,62 @@
+{
+  "properties": {
+    "blockingItems": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "doneItems": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "items": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "done", "open" ],
+            "type": "string"
+          }
+        },
+        "required": [ "key", "label", "category", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "openItems": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "readinessPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "totalItems": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "items", "readinessPct", "openItems", "blockingItems", "totalItems", "doneItems", "recommendedAction" ],
+  "type": "object"
+}

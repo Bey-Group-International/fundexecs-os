@@ -1,0 +1,70 @@
+{
+  "properties": {
+    "atRisk": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "byStatus": {
+      "type": "object"
+    },
+    "completionPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "nextActions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "overallStatus": {
+      "type": "string"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "totalMilestones": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "tracked": {
+      "items": {
+        "properties": {
+          "atRisk": {
+            "type": "boolean"
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "not_started", "in_progress", "blocked", "done" ],
+            "type": "string"
+          }
+        },
+        "required": [ "label", "status", "critical", "atRisk" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "tracked", "byStatus", "atRisk", "overallStatus", "completionPct", "totalMilestones", "nextActions", "recommendedAction" ],
+  "type": "object"
+}

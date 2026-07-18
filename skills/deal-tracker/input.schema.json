@@ -1,0 +1,48 @@
+{
+  "properties": {
+    "deal": {
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "targetCloseDate": {
+          "type": "string"
+        }
+      },
+      "required": [ "name" ],
+      "type": "object"
+    },
+    "milestones": {
+      "items": {
+        "properties": {
+          "critical": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "not_started", "in_progress", "blocked", "done" ],
+            "type": "string"
+          }
+        },
+        "required": [ "label" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "deal" ],
+  "type": "object"
+}
