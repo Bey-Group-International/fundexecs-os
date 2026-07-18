@@ -1,0 +1,59 @@
+# skills/closing-checklist/skill.yaml
+# Authoring spec for the Closing Checklist skill. The machine-readable manifest that
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/closing-checklist.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: closing-checklist
+name: Closing Checklist
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - legal_closing
+
+supported_entity_types: [deal]
+
+required_inputs:
+  - deal
+
+optional_inputs:
+  - completedItems
+  - conditionsPrecedent
+
+outputs:
+  - items              # canonical closing tasks + supplied CPs, each with a status
+  - readinessPct       # done / total * 100 (a calculation)
+  - openItems          # labels still open
+  - blockingItems      # unsatisfied blocking CPs + open critical tasks
+  - totalItems
+  - doneItems
+  - recommendedAction
+  - missingContext
+
+artifact_types: [analysis]
+data_permissions: [deal:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis — PREPARES readiness for review
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - sign_document
+  - execute_subdoc
+  - submit_term_sheet
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

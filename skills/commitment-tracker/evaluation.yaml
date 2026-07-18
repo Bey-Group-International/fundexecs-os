@@ -1,0 +1,77 @@
+# skills/commitment-tracker/evaluation.yaml
+# Golden evaluation cases for Commitment Tracker. These are the acceptance fixtures a
+# production skill must pass — roll-up + allocation correctness, the never-fabricate
+# guardrail (empty set returns an empty roll-up with a note), the missing-amount flag
+# (counted, flagged, never assumed zero), over-hard-cap detection, no-target handling,
+# and fact/calculation labelling. Exercised by
+# lib/skills/catalog/commitment-tracker.test.ts.
+cases:
+  - name: rolls_up_supplied_set_with_allocation
+    input:
+      targetClose: 100
+      commitments:
+        - investor: Beta LP
+          amount: 25
+          status: committed
+        - investor: Alpha LP
+          amount: 50
+          status: signed
+        - investor: Gamma LP
+          amount: 25
+          status: soft_circle
+    expect:
+      totalCommitted: 100
+      bindingCommitted: 50
+      topInvestor: Alpha LP
+      pctOfTarget: 100
+      remainingToTarget: 0
+
+  - name: empty_commitments_never_fabricates
+    input:
+      commitments: []
+    expect:
+      byInvestor: []
+      totalCommitted: 0
+      totalInvestors: 0
+      missingContext: "No commitments supplied — this skill tracks a provided commitment set; it does not fabricate commitments."
+      neverInvents: true
+
+  - name: missing_amount_counted_flagged_not_assumed
+    input:
+      commitments:
+        - investor: Alpha LP
+          amount: 60
+          status: committed
+        - investor: Blind LP
+          status: soft_circle
+    expect:
+      totalInvestors: 2
+      totalCommitted: 60
+      flagsMissingAmount: Blind LP
+      neverAssumesZero: true
+
+  - name: over_hard_cap_detected_and_flagged
+    input:
+      hardCap: 100
+      commitments:
+        - investor: Alpha LP
+          amount: 80
+          status: signed
+        - investor: Beta LP
+          amount: 50
+          status: committed
+    expect:
+      overSubscribed: true
+      flagsOverSubscribed: true
+      neverBindsCapital: true
+
+  - name: no_target_close_remaining_is_null
+    input:
+      commitments:
+        - investor: Alpha LP
+          amount: 40
+          status: committed
+    expect:
+      remainingToTarget: null
+      pctOfTarget: null
+      flagsMissingTarget: true

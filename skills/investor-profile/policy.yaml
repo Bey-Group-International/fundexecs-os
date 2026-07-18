@@ -1,0 +1,39 @@
+# skills/investor-profile/policy.yaml
+# Execution + governance policy for Investor Profile. Enforced by the runtime
+# (lib/skills/runner.ts) and the executive registry (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible. Runs within an approved mandate.
+risk_classification: low
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - investor_relations
+  - capital_formation
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - investor:read
+  - lp:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions). Outreach to an LP
+# is a separate Tier-2 action — this skill only prepares a profile for review.
+prohibited_actions:
+  - send_outreach
+  - send_intro_request
+  - sign_document
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - Organizes ONLY the investor data the caller supplies; it never invents AUM, wealth, mandate, PEP status, or preferences.
+  - Missing important fields are surfaced in missingFields, never fabricated or inferred.
+  - Every supplied investor field is a fact; fitScore and ticketBand are labelled calculations.
+  - ticketBand is derived only from a supplied typical ticket; absent → null and flagged.
+  - fitScore averages only KNOWN dimensions; a silent dimension is excluded, never penalised.
+  - suggestedNextStep never executes outreach (a prohibited Tier-2 action) — it prompts to complete or route the profile.
+  - Output must validate against output.schema.json before it is persisted.
+
+# The follow-on this skill's output may seed (all still gated by the runtime).
+downstream:
+  - raise-pipeline
+  - commitment-tracker

@@ -1,0 +1,72 @@
+{
+  "properties": {
+    "fitScore": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "fitSignals": {
+      "items": {
+        "properties": {
+          "dimension": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "fit", "partial", "miss", "unknown" ],
+            "type": "string"
+          }
+        },
+        "required": [ "dimension", "status", "note" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "profile": {
+      "properties": {
+        "aum": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "priorCommitments": {
+          "type": "number"
+        },
+        "relationshipOwner": {
+          "type": "string"
+        },
+        "ticketBand": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "typicalTicket": {
+          "type": "number"
+        }
+      },
+      "required": [ "name" ],
+      "type": "object"
+    },
+    "suggestedNextStep": {
+      "type": "string"
+    }
+  },
+  "required": [ "profile", "fitSignals", "fitScore", "missingFields", "suggestedNextStep" ],
+  "type": "object"
+}

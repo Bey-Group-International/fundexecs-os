@@ -1,0 +1,79 @@
+# skills/raise-pipeline/evaluation.yaml
+# Golden evaluation cases for Raise Pipeline. These are the acceptance fixtures a
+# production skill must pass — roll-up correctness, the never-fabricate guardrail
+# (empty set returns an empty roll-up with a note), fact/assumption/calculation
+# labelling, and coverage-vs-target handling. Exercised by
+# lib/skills/catalog/raise-pipeline.test.ts.
+cases:
+  - name: rolls_up_supplied_prospects_by_stage
+    input:
+      raiseTarget: 1000
+      prospects:
+        - name: LP A
+          stage: committed
+          expectedTicket: 200
+          probability: 1
+        - name: LP B
+          stage: diligence
+          expectedTicket: 300
+          probability: 0.6
+        - name: LP C
+          stage: diligence
+          expectedTicket: 100
+          probability: 0.5
+        - name: LP D
+          stage: contacted
+          expectedTicket: 50
+          probability: 0.2
+    expect:
+      totalProspects: 4
+      byStageOrder: [contacted, diligence, committed]
+      diligenceExpectedAmount: 400
+
+  - name: empty_prospects_never_fabricates
+    input:
+      raiseTarget: 500
+      prospects: []
+    expect:
+      byStage: []
+      totalProspects: 0
+      weightedExpected: 0
+      missingContext: "No prospects supplied — this skill aggregates a provided prospect set; it does not fabricate prospects."
+      neverInvents: true
+
+  - name: defaulted_probability_is_an_assumption
+    input:
+      prospects:
+        - name: LP X
+          stage: meeting
+          expectedTicket: 100
+    expect:
+      defaultedProbabilityKind: assumption
+      weightedExpected: 30
+      flagsDefaultApplied: true
+
+  - name: supplied_ticket_is_a_fact_committed_is_a_calculation
+    input:
+      prospects:
+        - name: LP A
+          stage: committed
+          expectedTicket: 200
+        - name: LP B
+          stage: committed
+          expectedTicket: 150
+    expect:
+      committedAmount: 350
+      committedKind: calculation
+      suppliedTicketKind: fact
+
+  - name: no_target_yields_null_coverage_flagged
+    input:
+      prospects:
+        - name: LP A
+          stage: committed
+          expectedTicket: 200
+          probability: 1
+    expect:
+      coveragePct: null
+      gapToTarget: null
+      flagsNoTarget: true

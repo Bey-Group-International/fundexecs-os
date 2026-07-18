@@ -29,6 +29,12 @@ import { marketMap } from "./catalog/market-map";
 import { kycScreen } from "./catalog/kyc-screen";
 import { policyCheck } from "./catalog/policy-check";
 import { riskRegister } from "./catalog/risk-register";
+import { closingChecklist } from "./catalog/closing-checklist";
+import { dealTracker } from "./catalog/deal-tracker";
+import { investorProfile } from "./catalog/investor-profile";
+import { raisePipeline } from "./catalog/raise-pipeline";
+import { commitmentTracker } from "./catalog/commitment-tracker";
+import { teaser } from "./catalog/teaser";
 
 const SKILLS: Record<string, SkillDefinition> = {
   [screenDeal.manifest.id]: screenDeal as SkillDefinition,
@@ -59,6 +65,15 @@ const SKILLS: Record<string, SkillDefinition> = {
   [kycScreen.manifest.id]: kycScreen as SkillDefinition,
   [policyCheck.manifest.id]: policyCheck as SkillDefinition,
   [riskRegister.manifest.id]: riskRegister as SkillDefinition,
+  // Legal & closing (coordinate + track; never signs, executes, or auto-closes).
+  [closingChecklist.manifest.id]: closingChecklist as SkillDefinition,
+  [dealTracker.manifest.id]: dealTracker as SkillDefinition,
+  // Capital formation & IR (profile, pipeline, track; never binds or calls capital).
+  [investorProfile.manifest.id]: investorProfile as SkillDefinition,
+  [raisePipeline.manifest.id]: raisePipeline as SkillDefinition,
+  [commitmentTracker.manifest.id]: commitmentTracker as SkillDefinition,
+  // Communications (draft-only; never distributes or publishes externally).
+  [teaser.manifest.id]: teaser as SkillDefinition,
 };
 
 export function getSkill(id: string): SkillDefinition | null {

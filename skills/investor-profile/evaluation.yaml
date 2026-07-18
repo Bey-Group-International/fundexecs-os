@@ -1,0 +1,55 @@
+# skills/investor-profile/evaluation.yaml
+# Golden evaluation cases for Investor Profile. These are the acceptance fixtures a
+# production skill must pass — profile assembly and fit scoring, the never-fabricate
+# guardrail (missing fields flagged, not invented), ticketBand nullability, and
+# fact/calculation labelling. Exercised by
+# lib/skills/catalog/investor-profile.test.ts.
+cases:
+  - name: full_profile_scores_fit
+    input:
+      investor:
+        name: Evergreen Family Office
+        type: family_office
+        aum: 800
+        typicalTicket: 10
+        sectorsOfInterest: [software]
+        geographiesOfInterest: [north america]
+        priorCommitments: 3
+        relationshipOwner: J. Okafor
+      fundCriteria:
+        minTicket: 5
+        targetSectors: [software]
+        targetGeographies: [north america]
+    expect:
+      fitScore: 100
+      ticketBand: 5-25M
+      missingFields: []
+
+  - name: missing_fields_flagged_never_fabricated
+    input:
+      investor:
+        name: Mystery LP
+    expect:
+      missingFields: [type, aum, typicalTicket, sectorsOfInterest, geographiesOfInterest, priorCommitments, relationshipOwner]
+      neverInvents: true
+
+  - name: ticket_band_null_without_ticket
+    input:
+      investor:
+        name: NoTicket LP
+        type: pension
+    expect:
+      ticketBand: null
+      flagsMissingTicket: true
+
+  - name: silent_dimensions_excluded_from_scoring
+    input:
+      investor:
+        name: Ticket-Only LP
+        typicalTicket: 8
+      fundCriteria:
+        minTicket: 5
+    expect:
+      fitScore: 100
+      ticketStatus: fit
+      sectorStatus: unknown

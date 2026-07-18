@@ -1,0 +1,61 @@
+# skills/raise-pipeline/skill.yaml
+# Authoring spec for the Raise Pipeline skill. The machine-readable manifest that
+# the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/raise-pipeline.ts; this YAML is the human-facing contract and
+# must stay consistent with it.
+id: raise-pipeline
+name: Raise Pipeline
+version: 1.0.0
+owner: fundexecs
+hub: source
+
+applicable_executives:
+  - capital_formation
+
+supported_entity_types: [lp, fund, raise]
+
+required_inputs: []
+
+optional_inputs:
+  - raiseTarget
+  - prospects
+
+outputs:
+  - byStage            # per-stage count + supplied expected $ (present stages, canonical order)
+  - totalProspects
+  - weightedExpected   # Σ expectedTicket × probability across non-passed prospects (calculation)
+  - committedAmount    # Σ expectedTicket where stage = committed (calculation, not binding)
+  - coveragePct        # weightedExpected / raiseTarget × 100 (null when no target)
+  - gapToTarget        # max(0, raiseTarget − weightedExpected) (null when no target)
+  - raiseTarget
+  - recommendedAction
+  - missingContext
+
+artifact_types: [analysis]
+data_permissions: [lp:read, fund:read, raise:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+  - financial_reasoning
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - send_outreach
+  - send_intro_request
+  - sign_document
+  - capital_call
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

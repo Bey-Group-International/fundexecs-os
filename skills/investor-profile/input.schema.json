@@ -1,0 +1,67 @@
+{
+  "properties": {
+    "fundCriteria": {
+      "properties": {
+        "minTicket": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "targetGeographies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "targetSectors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "investor": {
+      "properties": {
+        "aum": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "geographiesOfInterest": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "priorCommitments": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "relationshipOwner": {
+          "type": "string"
+        },
+        "sectorsOfInterest": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        },
+        "typicalTicket": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "name" ],
+      "type": "object"
+    }
+  },
+  "required": [ "investor" ],
+  "type": "object"
+}

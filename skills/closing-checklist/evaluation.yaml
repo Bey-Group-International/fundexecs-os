@@ -1,0 +1,64 @@
+# skills/closing-checklist/evaluation.yaml
+# Golden evaluation cases for Closing Checklist. These are the acceptance fixtures a
+# production skill must pass — merging the canonical checklist with supplied status,
+# the never-fabricate guardrail (nothing done unless reported), blocking-CP handling,
+# readiness as a calculation, and the Tier-3 human-close boundary. Exercised by
+# lib/skills/catalog/closing-checklist.test.ts.
+cases:
+  - name: merges_supplied_status_and_computes_readiness
+    input:
+      deal:
+        name: Project Atlas
+        type: acquisition
+      completedItems:
+        - KYC / AML cleared
+        - Legal opinions delivered
+    expect:
+      totalItems: 8
+      doneItems: 2
+      readinessPct: 25
+      readinessIsCalculation: true
+
+  - name: no_status_supplied_all_open_never_fabricates
+    input:
+      deal:
+        name: Project Blank
+    expect:
+      doneItems: 0
+      readinessPct: 0
+      allOpen: true
+      neverInvents: true
+
+  - name: unsatisfied_blocking_cp_surfaces_as_blocking_item
+    input:
+      deal:
+        name: Project CP
+      conditionsPrecedent:
+        - label: Regulatory approval received
+          satisfied: false
+          blocking: true
+        - label: Landlord consent obtained
+          satisfied: true
+          blocking: true
+    expect:
+      blockingItem: Regulatory approval received
+      recommendedActionMentions: before scheduling close
+
+  - name: all_complete_routes_to_human_never_auto_closes
+    input:
+      deal:
+        name: Project Done
+      completedItems:
+        - Signed purchase agreement / subscription documents executed
+        - Funds flow memo confirmed
+        - KYC / AML cleared
+        - Board & IC approvals recorded
+        - Disclosure schedules finalized
+        - Closing conditions satisfied
+        - Legal opinions delivered
+        - Post-closing filings prepared
+    expect:
+      readinessPct: 100
+      blockingItems: []
+      recommendedActionMentions: route to a human for final closing authorization
+      neverAutoCloses: true

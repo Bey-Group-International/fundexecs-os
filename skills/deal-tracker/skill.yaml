@@ -1,0 +1,57 @@
+# skills/deal-tracker/skill.yaml
+# Authoring spec for the Deal Tracker skill. The machine-readable manifest that the
+# runtime loads is the TypeScript SkillDefinition in lib/skills/catalog/deal-tracker.ts;
+# this YAML is the human-facing contract and must stay consistent with it.
+id: deal-tracker
+name: Deal Tracker
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - legal_closing
+
+supported_entity_types: [deal, document, data_room]
+
+required_inputs:
+  - deal
+
+optional_inputs:
+  - milestones
+
+outputs:
+  - tracked           # supplied milestones with normalized status + atRisk flag
+  - byStatus          # counts per status
+  - atRisk            # labels of at-risk milestones
+  - overallStatus     # on_track | at_risk | not_started | complete
+  - completionPct     # done / total, a labelled calculation
+  - totalMilestones
+  - nextActions       # concrete action per at-risk item (capped)
+  - missingContext
+  - recommendedAction
+
+artifact_types: [analysis]
+data_permissions: [deal:read, document:read, data_room:read]
+tools: []
+
+approval_tier: 1           # internal, reversible analysis
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: [closing-checklist]
+
+prohibited_actions:
+  - sign_document
+  - execute_subdoc
+  - move_capital
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

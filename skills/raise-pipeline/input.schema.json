@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "prospects": {
+      "items": {
+        "properties": {
+          "expectedTicket": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "stage": {
+            "enum": [ "identified", "contacted", "meeting", "diligence", "committed", "passed" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name", "stage" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "raiseTarget": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "type": "object"
+}

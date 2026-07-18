@@ -800,6 +800,43 @@ Deployed, monitoring               →  live, observability active
              |  Portfolio Ops, Deal Sourcing, Research, Risk & Compliance.
              |  Confidence: Tested by typecheck/eslint/Jest (91 new tests; 3399 total
              |  green, no regressions). Pure backend — no app/components changes.
+
+2026-07-18  |  Legal & Closing + Capital Formation + Communications skills  |  Six more
+             |  governed deterministic skills, built IN PARALLEL (six backend subagents)
+             |  then integrated centrally. Registry now holds 28 skills — EVERY operational
+             |  executive now carries at least one native skill (this batch activated the
+             |  three that had none: Legal & Closing, Capital Formation, Communications).
+             |  - Legal & Closing — coordinate + track, NEVER sign/close: `closing-checklist`
+             |    (canonical closing tasks + supplied status → readiness % + blocking items;
+             |    always routes to a human for final closing authorization), `deal-tracker`
+             |    (roll a supplied milestone set into status/at-risk/next-actions; empty set
+             |    → empty tracker + note, never fabricates milestones).
+             |  - Capital Formation / IR — profile, pipeline, track, NEVER bind/call capital:
+             |    `investor-profile` (structure a supplied LP's facts + fit vs criteria;
+             |    never invents AUM/wealth/mandate/PEP — gaps flagged), `raise-pipeline`
+             |    (aggregate supplied prospects by stage → probability-weighted expected vs
+             |    target; weighting a labelled calculation), `commitment-tracker` (track
+             |    supplied commitments vs target close; a missing amount is flagged, never
+             |    assumed 0; binding/calling capital is prohibited).
+             |  - Communications — draft-only: `teaser` (one-page anonymized deal-teaser
+             |    DRAFT from supplied facts; every figure a fact, connective prose labelled
+             |    generated; with no financials the section is a flagged placeholder and NO
+             |    fact source carries an invented number — directly tested; distribution
+             |    stays a gated action).
+             |  Epistemics enforced throughout: supplied → fact, derived → calculation,
+             |  defaulted → assumption; nothing fabricated, missing input flagged. Each is a
+             |  full /skills/<id>/ package + pure core + golden tests, registered in
+             |  lib/skills/registry.ts and permitted by the executive whose allowedSkills
+             |  already anticipated its id. The generalized catalog-consistency test now
+             |  auto-covers all 28 skills. No wiring beyond registration.
+             |  Catalog (28) adds legal-closing / capital-formation / communications to the
+             |  prior deal / financial / capital-LP / fund-admin / portfolio / source /
+             |  risk-compliance families.
+             |  Remaining backlog: Analyst modeling (lbo, three-statement, model-audit),
+             |  dd-prep, audit-statement, sector-research, cim; plus engine auto-invocation,
+             |  artifact DOCX/PDF, and the inference-gateway inference_runs ledger.
+             |  Confidence: Tested by typecheck/eslint/Jest (72 new golden tests; 3501 total
+             |  green, no regressions). Pure backend — no app/components changes.
 ```
 
 ---

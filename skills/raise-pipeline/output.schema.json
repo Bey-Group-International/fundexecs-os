@@ -1,0 +1,60 @@
+{
+  "properties": {
+    "byStage": {
+      "items": {
+        "properties": {
+          "count": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "expectedAmount": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "stage": {
+            "enum": [ "identified", "contacted", "meeting", "diligence", "committed", "passed" ],
+            "type": "string"
+          }
+        },
+        "required": [ "stage", "count", "expectedAmount" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "committedAmount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "coveragePct": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "gapToTarget": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "raiseTarget": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "totalProspects": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "weightedExpected": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "byStage", "totalProspects", "weightedExpected", "committedAmount", "recommendedAction" ],
+  "type": "object"
+}

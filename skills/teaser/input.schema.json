@@ -1,0 +1,48 @@
+{
+  "properties": {
+    "anonymize": {
+      "type": "boolean"
+    },
+    "deal": {
+      "properties": {
+        "askType": {
+          "type": "string"
+        },
+        "codename": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "ebitda": {
+          "type": "number"
+        },
+        "geography": {
+          "type": "string"
+        },
+        "growthRate": {
+          "type": "number"
+        },
+        "investmentHighlights": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "revenue": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sector": {
+          "type": "string"
+        },
+        "useOfProceeds": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [ "deal" ],
+  "type": "object"
+}

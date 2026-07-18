@@ -1,0 +1,32 @@
+{
+  "description": "A signing-stage deal with a supplied milestone set rolled up into a status snapshot: one done, two in progress, a blocked escrow item flagged at risk, and a critical regulatory approval not yet done.",
+  "input": {
+    "deal": {
+      "name": "Project Atlas",
+      "stage": "signing",
+      "targetCloseDate": "2026-09-30"
+    },
+    "milestones": [ {
+      "dueDate": "2026-08-01",
+      "label": "CP checklist",
+      "owner": "Legal",
+      "status": "done"
+    }, {
+      "dueDate": "2026-09-01",
+      "label": "Disclosure schedules",
+      "owner": "Legal",
+      "status": "in_progress"
+    }, {
+      "dueDate": "2026-09-10",
+      "label": "Escrow agreement",
+      "owner": "Finance",
+      "status": "blocked"
+    }, {
+      "critical": true,
+      "dueDate": "2026-09-20",
+      "label": "Regulatory approval",
+      "owner": "Compliance",
+      "status": "in_progress"
+    } ]
+  }
+}
