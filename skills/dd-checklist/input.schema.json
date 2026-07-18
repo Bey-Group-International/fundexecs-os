@@ -1,0 +1,32 @@
+{
+  "properties": {
+    "deal": {
+      "properties": {
+        "companyName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "dealSize": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sector": {
+          "type": "string"
+        },
+        "transactionType": {
+          "type": "string"
+        }
+      },
+      "required": [ "companyName" ],
+      "type": "object"
+    },
+    "workstreams": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "deal" ],
+  "type": "object"
+}

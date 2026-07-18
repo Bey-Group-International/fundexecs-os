@@ -1,0 +1,26 @@
+{
+  "description": "A fully-populated pre-read assembled from screen-deal + returns output — every section complete, recommendation preliminary/advisory.",
+  "input": {
+    "deal": {
+      "companyName": "Acme Widgets",
+      "geography": "North America",
+      "sector": "Manufacturing",
+      "transactionType": "Buyout"
+    },
+    "market": "Growing at 6% CAGR with no dominant incumbent.",
+    "mitigants": [ "Long-term contracts", "Diversified backlog" ],
+    "recommendation": "Advance to full IC review with a confirmatory diligence budget.",
+    "returns": {
+      "entryEv": 96,
+      "exitEv": 210,
+      "irrPct": 24,
+      "moic": 2.8
+    },
+    "screen": {
+      "keyRisks": [ "Customer concentration", "Cyclical end-markets" ],
+      "overall": 82,
+      "verdict": "pass"
+    },
+    "thesis": "Consolidate a fragmented components market and expand margins."
+  }
+}

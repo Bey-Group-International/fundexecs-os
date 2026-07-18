@@ -1,0 +1,11 @@
+{
+  "description": "A software carve-out: all 16 workstreams, with software/security and TSA/standalone items added by tailoring.",
+  "input": {
+    "deal": {
+      "companyName": "Northwind SaaS",
+      "sector": "Enterprise SaaS",
+      "transactionType": "Carve-out",
+      "dealSize": 120
+    }
+  }
+}

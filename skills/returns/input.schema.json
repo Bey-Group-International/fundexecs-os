@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "required": [ "deal" ],
+  "properties": {
+    "deal": {
+      "type": "object",
+      "required": [ "companyName" ],
+      "properties": {
+        "companyName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entryEbitda": {
+          "type": "number"
+        },
+        "entryMultiple": {
+          "type": "number",
+          "minimum": 0
+        },
+        "netDebt": {
+          "type": "number"
+        },
+        "equityContribution": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "properties": {
+        "holdYears": {
+          "type": "number",
+          "minimum": 0
+        },
+        "exitMultiple": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ebitdaCagr": {
+          "type": "number"
+        },
+        "annualDebtPaydown": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

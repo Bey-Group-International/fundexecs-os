@@ -8,6 +8,8 @@ import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { loadSessionMessages, toChatTurns } from "@/lib/session-messages";
 import Copilot from "@/components/Copilot";
 import BrainFeed from "@/components/session/BrainFeed";
+import SkillRunFeed from "@/components/session/SkillRunFeed";
+import { listSkillRunsForSession } from "@/lib/skills/store";
 import type { BrainRun } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,10 @@ export default async function SessionHome(props: { params: Promise<{ id: string 
     .order("created_at", { ascending: false })
     .limit(50);
 
+  // Governed skill runs for this session — the "Skills at work" evidence panel.
+  // Best-effort: any read failure degrades to an empty feed.
+  const skillRuns = await listSkillRunsForSession(supabase, ctx.orgId, params.id).catch(() => []);
+
   return (
     <>
       <Copilot
@@ -45,6 +51,7 @@ export default async function SessionHome(props: { params: Promise<{ id: string 
         integrations={getActiveIntegrations(connected)}
         initialChat={chat}
       />
+      <SkillRunFeed runs={skillRuns} />
       <BrainFeed runs={(brainRuns ?? []) as BrainRun[]} />
     </>
   );

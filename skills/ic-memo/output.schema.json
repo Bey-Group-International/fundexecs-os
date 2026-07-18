@@ -1,0 +1,51 @@
+{
+  "properties": {
+    "completeness": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "conditionsPrecedent": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingSections": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "openItems": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendation": {
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "heading": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "complete", "open" ],
+            "type": "string"
+          }
+        },
+        "required": [ "heading", "body", "status" ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "sections", "recommendation", "openItems", "conditionsPrecedent", "missingSections", "completeness" ],
+  "type": "object"
+}

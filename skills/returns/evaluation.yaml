@@ -1,0 +1,61 @@
+# skills/returns/evaluation.yaml
+# Golden evaluation cases for the Preliminary Returns Case. These are the
+# acceptance fixtures a production skill must pass — MOIC/IRR math correctness,
+# missing-data handling (flagged not invented), assumption labelling, and
+# sensitivity ordering. Exercised by lib/skills/catalog/returns.test.ts.
+cases:
+  - name: clean_lbo_math
+    input:
+      deal:
+        companyName: LevCo
+        entryEbitda: 10
+        entryMultiple: 10
+        netDebt: 50
+      assumptions:
+        holdYears: 5
+        exitMultiple: 10
+        ebitdaCagr: 0
+        annualDebtPaydown: 10
+    expect:
+      entryEv: 100
+      entryEquity: 50
+      remainingDebt: 0
+      exitEquity: 100
+      moic: 2
+      irrPct: 14.9
+
+  - name: missing_data_flags_not_invents
+    input:
+      deal:
+        companyName: Mystery Co
+    expect:
+      moic: null
+      irrPct: null
+      entryEv: null
+      flagsMissing: [Entry EBITDA, Entry multiple]
+      neverInvents: true
+      sensitivitiesCount: 0
+
+  - name: defaults_labelled_as_assumptions
+    input:
+      deal:
+        companyName: BareCo
+        entryEbitda: 10
+        entryMultiple: 9
+    expect:
+      assumptionsUsedAtLeast: 4
+      assumptionLabelled: true
+
+  - name: sensitivities_bull_gt_base_gt_bear
+    input:
+      deal:
+        companyName: SensCo
+        entryEbitda: 15
+        entryMultiple: 9
+        netDebt: 60
+      assumptions:
+        holdYears: 5
+        exitMultiple: 9
+    expect:
+      scenarios: [bear, base, bull]
+      ordering: bull > base > bear
