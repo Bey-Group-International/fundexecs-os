@@ -6,6 +6,7 @@ import { findDueOrgsForScan, scanOrgRadarSignals } from "@/lib/radar-scan";
 import { runSlaEscalations } from "@/lib/sla-cron";
 import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outbound";
 import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
+import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -167,6 +168,18 @@ export async function GET(request: Request) {
     console.error("proactive_sweep failed", e);
   }
 
+  // Native Intelligence sync (surface-on-open, opt-in): ingest each workspace's
+  // connected provider feed(s) into canonical observations + assessments. Gated
+  // behind INTELLIGENCE_CORE_ENABLED (the function no-ops when off) and
+  // best-effort like every block above — a provider outage never aborts the
+  // sweep, and previously-stored intelligence stays available regardless.
+  let intelligence = { orgs: 0, fetched: 0, persisted: 0, assessed: 0 };
+  try {
+    intelligence = await runIntelligenceSyncAllOrgs(supabase, { maxOrgs: MAX_PER_SWEEP });
+  } catch (e) {
+    console.error("intelligence_sync failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -182,6 +195,7 @@ export async function GET(request: Request) {
         webhooksDelivered: webhooks.delivered,
         webhooksFailed: webhooks.failed,
         proactiveSurfaced: proactive.surfaced,
+        intelligenceAssessed: intelligence.assessed,
       },
       startedAt: now,
     });

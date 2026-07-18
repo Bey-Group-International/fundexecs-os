@@ -605,6 +605,38 @@ Deployed, monitoring               →  live, observability active
              |  (HTTP 200) verified; Vercel preview deployed green on both PRs.
              |  Next: if we want landing-page "memory" in the product itself, add a returning-
              |  visitor touch (recall last section / dismissed gate / signed-in shortcut).
+
+2026-07-18  |  Native Intelligence Layer + Signal Bureau connector  |  Canonical
+             |  intelligence records + an optional external feed, feeding Earn's
+             |  existing loop — not a parallel intelligence app.
+             |  Audit finding: the intelligence MACHINERY (signals, gates, routing,
+             |  PMI sources, provenance, proactive pipeline) is mature, but the
+             |  canonical RECORD layer (observations/entities/exposures/assessments/
+             |  watchlists/provider-connections) was ABSENT. Built exactly that gap.
+             |  Layer A (native, owned): migration 20260718120000_intelligence_core
+             |  (8 tables, organization_id tenancy, canonical helper RLS,
+             |  set_updated_at, observations+assessments on realtime); lib/intelligence/*
+             |  — provider-neutral types + IntelligenceProvider seam; a multi-dimensional,
+             |  workspace-configurable, VERSIONED relevance engine where trust
+             |  (evidence/freshness/confidence/calibration) only ever DISCOUNTS and
+             |  every dimension stays visible (score_breakdown); pure entity resolution;
+             |  a routing matrix onto the 15 AgentKeys + gate tiers that can NEVER emit
+             |  a Tier-3 follow-on; dedup by content hash; ingest/sweep/store/connections/
+             |  assess; flags (core-gated). Layer B (optional, removable): the
+             |  signal-bureau connector — quarantined sb.signals.v1 schema, an
+             |  anti-corruption adapter (normalizes timestamps/trajectory/evidence,
+             |  preserves raw payload, tolerates additive drift), a resilient REST client
+             |  (timeout/backoff/jitter/retry-after), and the provider impl (REST live;
+             |  MCP + ask declared, flag-gated, degrade gracefully). Wiring: one
+             |  best-effort, flag-gated block in /api/cron; secrets via the AES-256-GCM
+             |  vault; signal-bridge maps actionable assessments into the proactive loop.
+             |  Decision: reuse gates/mandates/engine/vault/RLS/cron wholesale and
+             |  build ONLY the missing canonical layer + connector — additive, no active
+             |  system duplicated, FundExecs fully works with the provider disabled.
+             |  Deferred (backlog in docs/intelligence): UI drawer/hub sections/provider
+             |  panel, live proactive-trigger wiring, MCP binding, async ask, DB-type regen.
+             |  Confidence: Tested by typecheck/eslint/Jest (93 new tests; 3031 total
+             |  green, no regressions); live DB/auth flow not exercised (no local Supabase).
 ```
 
 ---
