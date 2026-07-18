@@ -5,13 +5,17 @@ import {
   EXPORT_CONTENT_TYPES,
   exportExtension,
   isExportFormat,
+  isBinaryFormat,
   renderArtifact,
 } from "@/lib/artifacts/export";
+import { renderArtifactBinary } from "@/lib/artifacts/export-binary";
 
-// GET /api/artifacts/[id]/export?format=rtf|html|md — render an artifact's
-// markdown `content` into a downloadable document. Org-scoped via
-// requireOrgContext() + an explicit organization_id filter (defense-in-depth
-// alongside RLS) so an artifact can never be exported across orgs.
+// GET /api/artifacts/[id]/export?format=rtf|html|md|docx|pdf — render an
+// artifact's markdown `content` into a downloadable document. Text formats
+// (rtf/html/md) are pure string transforms; binary formats (docx/pdf) are
+// rendered to a byte buffer. Org-scoped via requireOrgContext() + an explicit
+// organization_id filter (defense-in-depth alongside RLS) so an artifact can
+// never be exported across orgs.
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -38,20 +42,26 @@ export async function GET(
     return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   }
 
-  const body = renderArtifact(format, artifact.content ?? "", artifact.title ?? undefined);
+  const content = artifact.content ?? "";
+  const title = artifact.title ?? undefined;
 
   const slug =
     (artifact.title ?? "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "artifact";
-  const filename = `${slug}.${exportExtension(format)}`;
+  const headers = {
+    "Content-Type": EXPORT_CONTENT_TYPES[format],
+    "Content-Disposition": `attachment; filename="${slug}.${exportExtension(format)}"`,
+  };
 
-  return new NextResponse(body, {
-    status: 200,
-    headers: {
-      "Content-Type": EXPORT_CONTENT_TYPES[format],
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  });
+  if (isBinaryFormat(format)) {
+    const bytes = await renderArtifactBinary(format, content, title);
+    // Hand the exact byte range to the response as an ArrayBuffer (a valid
+    // BodyInit) so the buffer's backing store can never leak trailing bytes.
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return new NextResponse(buffer, { status: 200, headers });
+  }
+
+  return new NextResponse(renderArtifact(format, content, title), { status: 200, headers });
 }

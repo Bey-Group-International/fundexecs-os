@@ -2,6 +2,7 @@ import {
   EXPORT_CONTENT_TYPES,
   exportExtension,
   isExportFormat,
+  isBinaryFormat,
   renderArtifact,
   renderMarkdownToHtml,
   renderMarkdownToRtf,
@@ -28,20 +29,36 @@ describe("format helpers", () => {
     expect(isExportFormat("rtf")).toBe(true);
     expect(isExportFormat("html")).toBe(true);
     expect(isExportFormat("md")).toBe(true);
-    expect(isExportFormat("pdf")).toBe(false);
+    expect(isExportFormat("docx")).toBe(true);
+    expect(isExportFormat("pdf")).toBe(true);
+    expect(isExportFormat("exe")).toBe(false);
     expect(isExportFormat("")).toBe(false);
+  });
+
+  it("isBinaryFormat distinguishes the byte-buffer formats", () => {
+    expect(isBinaryFormat("docx")).toBe(true);
+    expect(isBinaryFormat("pdf")).toBe(true);
+    expect(isBinaryFormat("rtf")).toBe(false);
+    expect(isBinaryFormat("html")).toBe(false);
+    expect(isBinaryFormat("md")).toBe(false);
   });
 
   it("exportExtension maps each format", () => {
     expect(exportExtension("rtf")).toBe("rtf");
     expect(exportExtension("html")).toBe("html");
     expect(exportExtension("md")).toBe("md");
+    expect(exportExtension("docx")).toBe("docx");
+    expect(exportExtension("pdf")).toBe("pdf");
   });
 
   it("EXPORT_CONTENT_TYPES are correct", () => {
     expect(EXPORT_CONTENT_TYPES.rtf).toBe("application/rtf");
     expect(EXPORT_CONTENT_TYPES.html).toBe("text/html; charset=utf-8");
     expect(EXPORT_CONTENT_TYPES.md).toBe("text/markdown; charset=utf-8");
+    expect(EXPORT_CONTENT_TYPES.docx).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(EXPORT_CONTENT_TYPES.pdf).toBe("application/pdf");
   });
 });
 

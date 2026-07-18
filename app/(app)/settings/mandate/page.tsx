@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getActiveMandateRow, parseGuardrails, parseBlastRadius } from "@/lib/mandates";
 import type { GateTier } from "@/lib/gates";
 import { isMandateActionKind } from "@/lib/mandate-options";
+import { parseScreeningCriteria } from "@/lib/skills/screening-criteria";
 import { MandateEditor } from "@/components/mandate/MandateEditor";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export default async function MandatePage() {
   const autonomyCeiling = (Math.min(2, Math.max(1, row?.autonomy_ceiling ?? 1)) as GateTier);
   const guardrails = parseGuardrails(row?.guardrails);
   const blastRadius = parseBlastRadius(row?.blast_radius_rules);
+  const criteria = parseScreeningCriteria(row?.screening_criteria ?? null);
 
   return (
     <div className="mx-auto max-w-xl">
@@ -48,6 +50,7 @@ export default async function MandatePage() {
         scope={row?.scope ?? ""}
         guardrails={guardrails}
         blastRadius={blastRadius}
+        criteria={criteria}
       />
     </div>
   );

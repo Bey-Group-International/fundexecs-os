@@ -941,6 +941,39 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Tested by typecheck/eslint/Jest (21 new tests; 3666 total
              |  green, no regressions). Backend + one additive migration + one download
              |  route; no UI/component changes.
+
+2026-07-18  |  Binary DOCX/PDF export + front-end surfaces  |  Made two recent
+             |  backend slices usable end to end. Built partly in parallel (three
+             |  subagents: binary renderers, download menu, criteria editor) then
+             |  integrated centrally. FIRST front-end change of this workstream —
+             |  reuses existing components/patterns throughout.
+             |  - Binary export: new deps docx ^9.7.1 + pdf-lib ^1.17.1 (pure-JS,
+             |    server-side, no headless browser). lib/artifacts/export-binary.ts —
+             |    renderMarkdownToDocx (real Word doc: title/H1-3/bullets/blockquote/
+             |    code/hr + inline runs) and renderMarkdownToPdf (real PDF: paged, page-
+             |    break cursor, per-span fonts, WinAnsi sanitize so StandardFonts never
+             |    throw, O(N) word-wrap, try/catch fallback to a minimal valid PDF).
+             |    Reuses the exported parseBlocks/parseInline from export.ts (no dup
+             |    markdown logic). export.ts ExportFormat now includes docx/pdf +
+             |    isBinaryFormat; renderArtifact stays the sync text path. Route
+             |    /api/artifacts/[id]/export?format=rtf|html|md|docx|pdf returns binary
+             |    as an ArrayBuffer (valid BodyInit) with the right content type.
+             |  - Download menu: components/ArtifactViewer.tsx ArtifactActions gains an
+             |    id prop + a bespoke Download dropdown (one <a download> per format),
+             |    threaded from both ArtifactInline sites; keeps the Blob fallback when
+             |    id is absent. Cookie auth → plain links download.
+             |  - Mandate criteria editor: components/mandate/CriteriaEditor.tsx (chip
+             |    inputs for sectors/geographies/transactionTypes/exclusions + numeric
+             |    band inputs), wired into MandateEditor + the settings page (reads/parses
+             |    the column) + saveMandate (writes screening_criteria on update+insert)
+             |    + getActiveMandateRow selects it. Closes the loop: operator authors
+             |    structured criteria in the UI -> persists -> getActiveScreeningCriteria
+             |    feeds the engine's skill planner (behind SKILL_AUTOINVOKE_ENABLED).
+             |  Remaining: route lib/claude.ts through the inference gateway + real
+             |  OpenAI/Google adapters (the last backend seam).
+             |  Confidence: Tested by typecheck/eslint/Jest (binary magic-byte + format
+             |  tests; 3676 total green, no regressions). Backend + UI; new deps docx +
+             |  pdf-lib; no new migration.
 ```
 
 ---

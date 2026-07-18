@@ -150,11 +150,11 @@ export async function getActiveMandate(
 export async function getActiveMandateRow(
   supabase: Client,
   orgId?: string,
-): Promise<Pick<MandateRow, "auto_approve" | "autonomy_ceiling" | "scope" | "guardrails" | "blast_radius_rules"> | undefined> {
+): Promise<Pick<MandateRow, "auto_approve" | "autonomy_ceiling" | "scope" | "guardrails" | "blast_radius_rules" | "screening_criteria"> | undefined> {
   void orgId;
   const { data } = await supabase
     .from("mandates")
-    .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules")
+    .select("auto_approve, autonomy_ceiling, scope, guardrails, blast_radius_rules, screening_criteria")
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(1)

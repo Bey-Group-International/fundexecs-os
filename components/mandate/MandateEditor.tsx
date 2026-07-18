@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { ActionKind, BlastRadius, GateTier } from "@/lib/gates";
 import { MANDATE_ACTION_OPTIONS } from "@/lib/mandate-options";
 import { saveMandate } from "@/app/(app)/settings/mandate/actions";
+import type { ScreeningCriteria } from "@/lib/skills/screening-criteria";
+import { CriteriaEditor } from "@/components/mandate/CriteriaEditor";
 
 interface MandateEditorProps {
   // The Tier-2 kinds currently pre-authorized by the active mandate.
@@ -16,6 +18,8 @@ interface MandateEditorProps {
   guardrails?: string[];
   // Hard limits on Earn's automated footprint.
   blastRadius?: BlastRadius;
+  // The active mandate's structured screening criteria consumed by skills.
+  criteria?: ScreeningCriteria | null;
 }
 
 const CEILING_OPTIONS: { value: 1 | 2; label: string; hint: string }[] = [
@@ -37,6 +41,7 @@ export function MandateEditor({
   scope = "",
   guardrails = [],
   blastRadius = {},
+  criteria = null,
 }: MandateEditorProps) {
   const [selected, setSelected] = useState<Set<ActionKind>>(new Set(autoApprove));
   // The DB caps the ceiling at 2; clamp the seed defensively for the radios.
@@ -268,6 +273,9 @@ export function MandateEditor({
           />
         </label>
       </section>
+
+      {/* Structured screening criteria consumed by the screening/sourcing skills */}
+      <CriteriaEditor initial={criteria ?? null} />
 
       {/* Tier 1 — always-on informational note */}
       <section className="rounded-xl border border-line bg-surface-1 p-4">
