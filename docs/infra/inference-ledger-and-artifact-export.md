@@ -73,3 +73,4 @@ elsewhere.
   `runInferenceLogged`); real OpenAI/Google provider adapters.
 - Binary `.docx`/`.pdf` export via an approved dependency, behind `renderArtifact`.
 - A download affordance in the artifact UI (this slice ships the backend route).
+
