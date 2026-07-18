@@ -62,3 +62,4 @@ with no key), no regressions.
 - Real OpenAI / Google provider adapters behind the gateway registry (the routing
   is now provider-agnostic; only the adapters are Anthropic-only today).
 - Stream support in the gateway to route `earnChatStream`.
+
