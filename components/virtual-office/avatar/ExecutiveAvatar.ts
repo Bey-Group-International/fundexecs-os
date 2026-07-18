@@ -105,6 +105,10 @@ export class ExecutiveAvatar {
   // triggers on workflow events. Additive over the idle breathing; cleared when
   // the clip finishes. Null when no reaction is playing.
   private gesture: AvatarAnimator | null = null;
+  // Engine-driven continuous limb amount (−1..1), quantized. Drives the raised
+  // presenting arm as real limb motion (see _drawFrontArms), redrawn only when
+  // the quantized value changes so a floor of avatars stays cheap.
+  private _limbAmt = 0;
   private lastPoseKey = "";
   // Blink: staggered so a room of executives never blinks in unison.
   private blinkTimer = 1200 + Math.random() * 4200;
@@ -281,10 +285,22 @@ export class ExecutiveAvatar {
     // so a working executive keeps moving instead of freezing in one pose.
     const rate = this._gestureRate();
     if (rate > 0) {
-      this.workPhase += dt * rate;
-      const wstep = Math.floor(this.workPhase) % 2;
-      const key = this._poseKey(-1, wstep);
-      if (key !== this.lastPoseKey) this._redraw();
+      if (this.animState === "presenting") {
+        // Presenting drives the raised arm continuously from the engine's
+        // armSwing channel (real limb motion). Quantize to 0.2 steps and redraw
+        // only when it changes, so the hand sways smoothly but stays cheap.
+        const target = Math.round(((s.armSwing ?? 0) * 4) / 0.2) * 0.2;
+        if (target !== this._limbAmt) {
+          this._limbAmt = target;
+          this._redraw();
+        }
+      } else {
+        // Typing / reviewing keep their discrete keystroke / page-bob beat.
+        this.workPhase += dt * rate;
+        const wstep = Math.floor(this.workPhase) % 2;
+        const key = this._poseKey(-1, wstep);
+        if (key !== this.lastPoseKey) this._redraw();
+      }
     }
 
     // "Thinking" pulse while analyzing — transform-only on the dots, driven by
@@ -731,8 +747,10 @@ export class ExecutiveAvatar {
       return;
     }
     if (arm === "present") {
-      // One arm raised outward, swaying with the point being made.
-      const ph = workStep === 1 ? -1.4 : 0; // hand lifts on the gesture beat
+      // One arm raised outward, swaying with the point being made. The raised
+      // hand's height tracks the engine's armSwing channel (`_limbAmt`, −1..1)
+      // continuously — real limb motion, eased — instead of a discrete beat.
+      const ph = this._limbAmt * -1.6;
       g.fillStyle(sleeve, 1);
       g.fillRoundedRect(-8.4, -6.5 + ph * 0.5, 3, 8, 1.5); // raised
       g.fillRoundedRect(4.8, -5, 3.2, 11, 1.6);
