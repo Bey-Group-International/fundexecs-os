@@ -7,7 +7,7 @@ const OUTLINE = 0x0a0a0d;
 import type { AgentState } from "../program/officeProgram";
 import type { WorkPantomime } from "@/lib/office/characterSheet";
 import { AvatarAnimator } from "@/lib/office/avatarAnim/player";
-import { CLIPS } from "@/lib/office/avatarAnim/clips";
+import { CLIPS, type ClipName } from "@/lib/office/avatarAnim/clips";
 import { sampleClip } from "@/lib/office/avatarAnim/sampler";
 
 /** One-shot reaction gestures the scene triggers on workflow events. */
@@ -239,7 +239,7 @@ export class ExecutiveAvatar {
       const step = Math.floor(this.walkPhase) % 4;
       const key = this._poseKey(step, -1);
       if (key !== this.lastPoseKey) this._redraw();
-      this.body.setY(0);
+      this.body.setPosition(0, 0);
       return;
     }
 
@@ -248,16 +248,22 @@ export class ExecutiveAvatar {
     // (breathing bob, typing keystrokes, thinking-dot pulse). The thinking
     // dots remain visible at a fixed alpha/scale.
     if (ExecutiveAvatar.reducedMotion) {
-      this.body.setY(0);
+      this.body.setPosition(0, 0);
       if (this.think.visible) this.think.setAlpha(0.9).setScale(1);
       return;
     }
 
-    // Subtle breathing bob — transform only, no redraw. Driven by the keyframe
-    // engine's looping "idleBreathe" clip (eased inhale/hold/exhale) rather than
-    // a bare sine, so the motion reads as breath, not a metronome.
+    // Idle + work motion is keyframe-engine driven. The animator plays the clip
+    // for the current activity (breathe when idle; a slow sway when presenting,
+    // a page-bob when reviewing, a keystroke bob when typing) and cross-fades on
+    // change. We apply its body-level channels — `breatheY` (vertical) and
+    // `leanX` (horizontal sway) — as transforms; the discrete arm-pose redraw
+    // below still animates the limbs. All transform-only, so no per-frame redraw.
+    this.animator.play(this._activeClip());
     this.animator.update(delta);
-    let bodyY = this.animator.sample().breatheY ?? 0;
+    const s = this.animator.sample();
+    let bodyY = s.breatheY ?? 0;
+    const bodyX = s.leanX ?? 0;
 
     // Overlay a one-shot reaction gesture, if any, as an additive vertical
     // bounce/dip (celebrate pops up via `bounce`; nod dips via `headTilt`).
@@ -268,7 +274,7 @@ export class ExecutiveAvatar {
       bodyY += (g.bounce ?? 0) + (g.headTilt ?? 0) * 0.16;
       if (this.gesture.isFinished()) this.gesture = null;
     }
-    this.body.setY(bodyY);
+    this.body.setPosition(bodyX, bodyY);
 
     // Redraw-based work gestures advance a discrete step: brisk keystrokes for
     // typing, a slower sway for presenting, a gentle page-bob for reviewing —
@@ -364,6 +370,21 @@ export class ExecutiveAvatar {
       case "reviewing_docs":  return "review";
       case "presenting":      return "present";
       default:                return "idle";
+    }
+  }
+
+  /**
+   * The keyframe clip whose body-level channels (breatheY / leanX) drive the
+   * figure right now: a presenting sway, a reviewing page-bob, a typing bob, or
+   * the calm idle breathe. Limb poses still come from the arm-mode redraw; this
+   * only shapes the transform-level motion the animator plays.
+   */
+  private _activeClip(): ClipName {
+    switch (this._armMode()) {
+      case "present": return "present";
+      case "type":    return "type";
+      case "review":  return "review";
+      default:        return "idleBreathe";
     }
   }
 
