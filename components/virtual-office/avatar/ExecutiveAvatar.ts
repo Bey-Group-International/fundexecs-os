@@ -91,6 +91,13 @@ export class ExecutiveAvatar {
   // profile / back / seated still draw the head into `body`, so `head` is left
   // empty for them. Later PRs peel those too.
   private head: Phaser.GameObjects.Graphics;
+  // The blazer/shirt/tie trunk as its own Graphics, layered above `body` (which
+  // now carries only the legs/feet/outline and the arms) and below `head`. It
+  // stays upright — never rotated — so the directional suit gradient always reads
+  // top-lit; the legs in `body` can later swing on their own without skewing it.
+  // Peeled for the FRONT facing only; other facings still paint the trunk into
+  // `body`, so `torso` is left empty for them. Later PRs peel those too.
+  private torso: Phaser.GameObjects.Graphics;
   private think: Phaser.GameObjects.Graphics;
 
   private facing: AvatarFacing = "down";
@@ -166,10 +173,14 @@ export class ExecutiveAvatar {
     // Drawn in body-local coords shifted up by +8 so its local origin sits at
     // the neck, letting setRotation tilt the head about the neck.
     this.head = scene.add.graphics().setPosition(0, -8);
-    // Inner figure container — wraps the body + head (and, in later PRs, the
-    // other split limb objects). Whole-figure motion is applied here so the
-    // limbs' local draw coordinates never move.
-    this.figure = scene.add.container(0, 0, [this.body, this.head]);
+    // The trunk rides above the body (legs/arms) and below the head, upright at
+    // the figure origin — never rotated, so its suit gradient stays top-lit.
+    this.torso = scene.add.graphics();
+    // Inner figure container — wraps the body + torso + head (and, in later PRs,
+    // the other split limb objects). Whole-figure motion is applied here so the
+    // limbs' local draw coordinates never move. Child order is the paint order:
+    // body (legs/feet/outline/arms) → torso → head.
+    this.figure = scene.add.container(0, 0, [this.body, this.torso, this.head]);
 
     // "Thinking" pulse — three dots floating above the head, ACE-style
     // presence cue shown only while analyzing.
@@ -571,10 +582,12 @@ export class ExecutiveAvatar {
     this.lastPoseKey = this._poseKey(step, workStep);
     const g = this.body;
     g.clear();
-    // The head is a separate object peeled out for front facing (real headTilt
-    // rotation). Cleared every redraw; only the front branch fills it, so every
-    // other facing/pose leaves it empty and draws its head into `body` as before.
+    // The head and trunk are separate objects peeled out for front facing (the
+    // head so it can rotate about the neck; the trunk so it stays upright above
+    // the moving legs). Cleared every redraw; only the front branch fills them,
+    // so every other facing/pose leaves them empty and paints into `body`.
     this.head.clear();
+    this.torso.clear();
 
     // Earn renders as the gold-coin mascot — its own full pose set.
     if (this.spec.coin) { this._redrawCoin(g, step); return; }
@@ -593,9 +606,16 @@ export class ExecutiveAvatar {
     if (this.facing === "up") this._drawBack(g, s, swing);
     else if (this.facing === "left") this._drawProfile(g, s, swing, -1, arm, workStep);
     else if (this.facing === "right") this._drawProfile(g, s, swing, 1, arm, workStep);
-    else { this._drawFront(g, s, swing, arm, workStep); this._drawHead(this.head, s, 0, 8); }
+    else {
+      this._drawFront(g, s, swing, arm, workStep);
+      this._drawFrontTorso(this.torso, s);
+      this._drawHead(this.head, s, 0, 8);
+    }
 
-    if (this._showProp()) this._drawProp(g, s);
+    // Carried prop sits above the trunk. For the front facing the trunk is its
+    // own object, so paint the prop into it (above the blazer, below the head);
+    // every other facing still draws the prop into `body` as before.
+    if (this._showProp()) this._drawProp(this.facing === "down" ? this.torso : g, s);
   }
 
   /** Shoulder half-width for the torso top, by build. */
@@ -701,7 +721,6 @@ export class ExecutiveAvatar {
   /** Front view (facing down / toward the viewer). */
   private _drawFront(g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number, arm: ArmMode, workStep: number) {
     const sw = this._shoulder(s);
-    const acc = vivify(s.accent);
 
     // Bold outline — a crisp dark silhouette behind the figure for a sharp,
     // premium read (torso, head, legs, shoes; arms omitted so work poses stay
@@ -736,6 +755,23 @@ export class ExecutiveAvatar {
 
     // Arms — pose depends on the work animation.
     this._drawFrontArms(g, s, swing, arm, workStep);
+
+    // Torso (blazer/shirt/tie) is drawn into the separate upright `torso` object
+    // (see _redraw), layered above these arms — not painted into the body here.
+
+    // Head is drawn into the separate `head` object (see _redraw) so it can
+    // rotate about the neck — not painted into the body here.
+  }
+
+  /**
+   * The front trunk — tapered blazer, shirt V, lapels, buttons, pocket square,
+   * and tie. Painted into its own upright `torso` object (never rotated) so the
+   * directional suit gradient stays top-lit while the legs/arms in `body` move.
+   * Static geometry: depends only on the spec, so it's drawn once per redraw.
+   */
+  private _drawFrontTorso(g: Phaser.GameObjects.Graphics, s: AvatarSpec) {
+    const sw = this._shoulder(s);
+    const acc = vivify(s.accent);
 
     // Torso — tapered blazer with a directional gradient (lit upper-left →
     // deeper waist) for real volume.
@@ -792,9 +828,6 @@ export class ExecutiveAvatar {
     g.fillTriangle(-0.4, -4.6, 0.4, -4.6, 0, 3.4);
     g.fillStyle(this._shade(acc, 1.18), 1);
     g.fillTriangle(-1.3, -5.2, 1.3, -5.2, 0, -3);
-
-    // Head is drawn into the separate `head` object (see _redraw) so it can
-    // rotate about the neck — not painted into the body here.
   }
 
   /** Front-view arm variants keyed to the work animation. */
