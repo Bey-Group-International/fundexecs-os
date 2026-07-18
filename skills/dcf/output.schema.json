@@ -1,0 +1,81 @@
+{
+  "properties": {
+    "assumptionsUsed": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "cashFlows": {
+      "items": {
+        "properties": {
+          "fcf": {
+            "type": "number"
+          },
+          "pv": {
+            "type": "number"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [ "year", "fcf", "pv" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "enterpriseValue": {
+      "type": "number"
+    },
+    "equityValue": {
+      "type": "number"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "perShare": {
+      "type": "number"
+    },
+    "pvExplicit": {
+      "type": "number"
+    },
+    "pvTerminal": {
+      "type": "number"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "sensitivities": {
+      "items": {
+        "properties": {
+          "enterpriseValue": {
+            "type": "number"
+          },
+          "param": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [ "param", "value" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "terminalValue": {
+      "type": "number"
+    }
+  },
+  "required": [ "enterpriseValue", "cashFlows", "sensitivities", "recommendedAction" ],
+  "type": "object"
+}

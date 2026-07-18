@@ -1,0 +1,62 @@
+# skills/lp-update/skill.yaml
+# Authoring spec for the Quarterly LP Update skill. The machine-readable manifest
+# that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/lp-update.ts; this YAML is the human-facing contract and must
+# stay consistent with it.
+id: lp-update
+name: Quarterly LP Update
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - investor_relations
+
+supported_entity_types: [fund, lp_update]
+
+required_inputs:
+  - fundName
+
+optional_inputs:
+  - period
+  - nav
+  - dpi
+  - tvpi
+  - netIrrPct
+  - highlights
+  - portfolioNotes
+  - capitalActivity
+
+outputs:
+  - sections          # ordered [{heading, body, status}]
+  - statedMetrics     # names of the performance metrics actually provided
+  - openItems
+  - missingFields
+  - completeness      # 0-1 fraction of sections complete
+  - recommendedAction
+
+artifact_types: [lp_update]
+data_permissions: [fund:read, lp_update:read]
+tools: []
+
+approval_tier: 1           # internal, reversible DRAFT assembly — never distributed
+risk_classification: low
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - distribute_report
+  - send_reply
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

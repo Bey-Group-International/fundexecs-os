@@ -1,0 +1,11 @@
+{
+  "description": "A capital call DRAFT with an explicit amount, due date, and purpose — every section complete except Wiring Instructions, which is ALWAYS an open placeholder the fund admin must supply. Preparing this notice never moves capital and never sends.",
+  "input": {
+    "callAmount": 250000,
+    "callNumber": 3,
+    "dueDate": "2026-08-01",
+    "fundName": "Meridian Growth Fund II",
+    "investorName": "Evergreen Pension LP",
+    "purpose": "Fund the acquisition of Portfolio Company C and related transaction costs."
+  }
+}

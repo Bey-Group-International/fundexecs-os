@@ -1,0 +1,33 @@
+{
+  "properties": {
+    "baseFcf": {
+      "type": "number"
+    },
+    "companyName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "discountRate": {
+      "type": "number"
+    },
+    "fcfGrowth": {
+      "type": "number"
+    },
+    "netDebt": {
+      "type": "number"
+    },
+    "projectionYears": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "sharesOutstanding": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "terminalGrowth": {
+      "type": "number"
+    }
+  },
+  "required": [ "companyName" ],
+  "type": "object"
+}

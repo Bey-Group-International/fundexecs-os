@@ -1,0 +1,51 @@
+{
+  "properties": {
+    "comparables": {
+      "items": {
+        "properties": {
+          "evEbitda": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "evRevenue": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "peRatio": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "subject": {
+      "properties": {
+        "companyName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ebitda": {
+          "type": "number"
+        },
+        "netIncome": {
+          "type": "number"
+        },
+        "revenue": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "companyName" ],
+      "type": "object"
+    }
+  },
+  "required": [ "subject", "comparables" ],
+  "type": "object"
+}

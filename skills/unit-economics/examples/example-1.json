@@ -1,0 +1,10 @@
+{
+  "description": "A SaaS company with healthy unit economics — 3.2x LTV/CAC and an 18.8-month CAC payback at 80% gross margin and 20% annual churn.",
+  "input": {
+    "arpu": 1200,
+    "cac": 1500,
+    "churnRatePct": 20,
+    "companyName": "HealthySaaS",
+    "grossMarginPct": 80
+  }
+}

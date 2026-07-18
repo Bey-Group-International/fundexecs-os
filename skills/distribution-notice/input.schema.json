@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "distributionAmount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "distributionNumber": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "distributionType": {
+      "enum": [ "return_of_capital", "profit", "dividend" ],
+      "type": "string"
+    },
+    "fundName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "investorName": {
+      "type": "string"
+    },
+    "paymentDate": {
+      "type": "string"
+    },
+    "recordDate": {
+      "type": "string"
+    },
+    "sourceProceeds": {
+      "type": "string"
+    }
+  },
+  "required": [ "fundName" ],
+  "type": "object"
+}

@@ -1,0 +1,36 @@
+{
+  "properties": {
+    "callAmount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "callNumber": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "callPercent": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "dueDate": {
+      "type": "string"
+    },
+    "fundName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "investorName": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "totalCommitment": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "fundName" ],
+  "type": "object"
+}

@@ -1,0 +1,62 @@
+# skills/distribution-notice/skill.yaml
+# Authoring spec for the Distribution Notice skill. The machine-readable manifest
+# that the runtime loads is the TypeScript SkillDefinition in
+# lib/skills/catalog/distribution-notice.ts; this YAML is the human-facing
+# contract and must stay consistent with it (asserted by
+# lib/skills/skill-package.test.ts).
+id: distribution-notice
+name: Distribution Notice
+version: 1.0.0
+owner: fundexecs
+hub: execute
+
+applicable_executives:
+  - investor_relations
+
+supported_entity_types: [fund, investor, distribution]
+
+required_inputs:
+  - fundName
+  - distributionAmount
+
+optional_inputs:
+  - investorName
+  - distributionNumber
+  - distributionType
+  - recordDate
+  - paymentDate
+  - sourceProceeds
+
+outputs:
+  - noticeDraft        # { heading, body } assembled from the complete sections
+  - sections           # ordered [{ heading, body, status }]
+  - missingFields
+  - openItems
+  - recommendedAction
+
+artifact_types: [memo]
+data_permissions: [fund:read, investor:read, distribution:read]
+tools: []
+
+approval_tier: 1           # PREPARATION only — assembles a draft, never releases
+risk_classification: moderate
+execution_timeout_ms: 15000
+retry_policy:
+  max_attempts: 1
+  backoff_ms: 0
+
+provider_capabilities:
+  - structured_extraction
+
+allowed_downstream_skills: []
+
+prohibited_actions:
+  - move_capital
+  - distribute_report
+  - send_reply
+  - sign_document
+
+input_schema: input.schema.json
+output_schema: output.schema.json
+policy: policy.yaml
+evaluation: evaluation.yaml

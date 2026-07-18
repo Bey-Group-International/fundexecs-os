@@ -1,0 +1,70 @@
+# skills/dcf/evaluation.yaml
+# Golden evaluation cases for the Discounted Cash Flow skill. These are the
+# acceptance fixtures a production skill must pass — DCF math correctness,
+# missing-data handling (flagged not invented), the terminal-growth guard,
+# assumption labelling, and sensitivity behaviour. Exercised by
+# lib/skills/catalog/dcf.test.ts.
+cases:
+  - name: clean_dcf_math
+    input:
+      companyName: FlowCo
+      baseFcf: 100
+      projectionYears: 5
+      fcfGrowth: 0
+      discountRate: 0.1
+      terminalGrowth: 0.02
+      netDebt: 200
+      sharesOutstanding: 100
+    expect:
+      pvExplicit: 379.1
+      terminalValue: 1275
+      pvTerminal: 791.7
+      enterpriseValue: 1170.8
+      equityValue: 970.8
+      perShare: 9.71
+
+  - name: missing_data_flags_not_invents
+    input:
+      companyName: Mystery Co
+    expect:
+      enterpriseValue: null
+      equityValue: null
+      perShare: null
+      flagsMissing: [Base FCF, Discount rate (WACC), Shares outstanding]
+      neverInvents: true
+      cashFlowsCount: 0
+      sensitivitiesCount: 0
+
+  - name: terminal_growth_guard
+    input:
+      companyName: GuardCo
+      baseFcf: 100
+      discountRate: 0.02
+      terminalGrowth: 0.02
+    expect:
+      enterpriseValue: null
+      terminalValue: null
+      keyRiskContains: Discount rate must exceed terminal growth
+      cashFlowsCount: 5
+
+  - name: defaults_labelled_as_assumptions
+    input:
+      companyName: BareCo
+      baseFcf: 100
+      discountRate: 0.1
+    expect:
+      assumptionsUsedAtLeast: 4
+      assumptionLabelled: true
+      enterpriseValueNotNull: true
+
+  - name: sensitivities_directional
+    input:
+      companyName: SensCo
+      baseFcf: 100
+      discountRate: 0.1
+      terminalGrowth: 0.02
+      projectionYears: 5
+      fcfGrowth: 0
+    expect:
+      sensitivitiesCount: 4
+      ordering: EV falls as discount rate rises, rises as terminal growth rises

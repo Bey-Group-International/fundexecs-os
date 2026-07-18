@@ -1,0 +1,28 @@
+{
+  "properties": {
+    "arpu": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "cac": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "churnRatePct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    },
+    "companyName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "grossMarginPct": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "companyName" ],
+  "type": "object"
+}

@@ -1,0 +1,60 @@
+# skills/unit-economics/evaluation.yaml
+# Golden evaluation cases for the Unit Economics skill. These are the acceptance
+# fixtures a production skill must pass — LTV / LTV-CAC / payback math correctness,
+# divide-by-zero guarding (churn 0 → LTV null), missing-data handling (flagged not
+# invented), and band thresholds. Exercised by lib/skills/catalog/unit-economics.test.ts.
+cases:
+  - name: healthy_unit_economics
+    input:
+      companyName: HealthySaaS
+      arpu: 1200
+      cac: 1500
+      grossMarginPct: 80
+      churnRatePct: 20
+    expect:
+      annualGrossProfitPerUser: 960
+      ltv: 4800
+      ltvCacRatio: 3.2
+      paybackMonths: 18.8
+      band: healthy
+      keyRisks: []
+
+  - name: churn_zero_guards_divide_by_zero
+    input:
+      companyName: ZeroChurn
+      arpu: 1000
+      cac: 500
+      grossMarginPct: 60
+      churnRatePct: 0
+    expect:
+      annualGrossProfitPerUser: 600
+      ltv: null
+      ltvCacRatio: null
+      band: null
+      paybackMonths: 10
+      keyRiskContains: "Churn rate 0 — LTV undefined"
+
+  - name: unhealthy_band_and_long_payback
+    input:
+      companyName: BurnCo
+      arpu: 1000
+      cac: 2000
+      grossMarginPct: 50
+      churnRatePct: 50
+    expect:
+      ltv: 1000
+      ltvCacRatio: 0.5
+      band: unhealthy
+      paybackMonths: 48
+      keyRisks: ["Long payback (>24mo)", "LTV/CAC below 1 — acquisition uneconomic"]
+
+  - name: missing_data_flags_not_invents
+    input:
+      companyName: Mystery Co
+    expect:
+      annualGrossProfitPerUser: null
+      ltv: null
+      ltvCacRatio: null
+      band: null
+      flagsMissing: [ARPU, CAC, Gross margin %, Churn rate %]
+      neverInvents: true

@@ -1,0 +1,65 @@
+# skills/distribution-notice/evaluation.yaml
+# Golden evaluation cases for Distribution Notice. These are the acceptance
+# fixtures a production skill must pass — draft-only behaviour, required-input
+# handling (flagged not invented), section assembly + status, and the guarantee
+# that amounts/dates are never fabricated. Exercised by
+# lib/skills/catalog/distribution-notice.test.ts.
+cases:
+  - name: fully_specified_all_sections_complete
+    input:
+      fundName: Meridian Growth Fund II
+      investorName: Cedar LP
+      distributionNumber: 3
+      distributionAmount: 1250000
+      distributionType: profit
+      recordDate: "2026-06-30"
+      paymentDate: "2026-07-15"
+      sourceProceeds: Partial realization of Portfolio Co. A
+    expect:
+      sectionsInOrder: [Header, Amount, Type, Record Date, Payment Date, Source of Proceeds]
+      allComplete: true
+      openItems: []
+      missingFields: []
+      draftHeadingIsDraft: true
+
+  - name: missing_amount_is_flagged_not_invented
+    input:
+      fundName: Meridian Growth Fund II
+    expect:
+      missingFields: [distributionAmount]
+      amountSectionStatus: open
+      neverInvents: true
+
+  - name: missing_fund_name_flagged
+    input:
+      fundName: ""
+      distributionAmount: 100
+    expect:
+      missingFields: [fundName]
+      headerSectionStatus: open
+
+  - name: missing_dates_become_open_items
+    input:
+      fundName: Aster Fund
+      distributionAmount: 250
+      distributionType: dividend
+    expect:
+      openItems: [Record Date, Payment Date, Source of Proceeds]
+      typeSectionStatus: complete
+      neverFabricatesDates: true
+
+  - name: unspecified_type_pending_classification
+    input:
+      fundName: Aster Fund
+      distributionAmount: 250
+    expect:
+      typeSectionStatus: open
+      typeSectionBodyContains: "Pending — confirm classification"
+
+# Cross-cutting guardrail every case must satisfy:
+#   - prepares a DRAFT only; never moves capital, never sends.
+#   - recommendedAction always stresses draft-for-operator-review and Tier-3 human release.
+guardrails:
+  - draft_only: true
+  - never_moves_capital: true
+  - never_sends: true

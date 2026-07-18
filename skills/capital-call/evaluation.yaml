@@ -1,0 +1,60 @@
+# skills/capital-call/evaluation.yaml
+# Golden evaluation cases for the Capital Call Notice. These are the acceptance
+# fixtures a production skill must pass — amount derivation vs. flagging, the
+# ALWAYS-open wiring placeholder (never fabricated), and the core guardrail that
+# this skill PREPARES a draft but NEVER moves capital and NEVER sends. Exercised
+# by lib/skills/catalog/capital-call.test.ts.
+cases:
+  - name: explicit_amount_assembles_draft
+    input:
+      fundName: Meridian Growth Fund II
+      investorName: Evergreen Pension LP
+      callNumber: 3
+      callAmount: 250000
+      dueDate: "2026-08-01"
+      purpose: Fund the acquisition of Portfolio Company C and related transaction costs.
+    expect:
+      callAmount: 250000
+      amountSourceKind: fact
+      wiringSectionOpen: true
+      recommendedActionIsDraftOnly: true
+
+  - name: derives_amount_from_commitment_and_percent
+    input:
+      fundName: Meridian Growth Fund II
+      totalCommitment: 1000000
+      callPercent: 25
+    expect:
+      callAmount: 250000            # 1,000,000 × 25 / 100
+      amountSourceKind: calculation
+
+  - name: missing_amount_is_flagged_never_invented
+    input:
+      fundName: Meridian Growth Fund II
+    expect:
+      callAmount: null
+      amountSectionOpen: true
+      missingFieldsNonEmpty: true
+      neverInvents: true
+
+  - name: wiring_is_always_an_open_placeholder
+    input:
+      fundName: Meridian Growth Fund II
+      investorName: Evergreen Pension LP
+      callNumber: 1
+      callAmount: 100000
+      dueDate: "2026-08-01"
+      purpose: Acquisition.
+    expect:
+      wiringSectionOpen: true
+      wiringBody: "Placeholder — wiring details must be supplied by fund admin; never auto-populated."
+      wiringNotInNoticeDraft: true
+
+  - name: prepares_never_executes
+    input:
+      fundName: Meridian Growth Fund II
+      callAmount: 100000
+    expect:
+      neverMovesCapital: true
+      neverSends: true
+      issuingRequiresHumanTier3: true
