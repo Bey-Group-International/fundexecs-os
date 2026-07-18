@@ -89,3 +89,4 @@ typecheck + eslint clean.
   thread a candidate set through for `source-deals`.
 - Planner-emitted tags from the LLM planner (today detection is deterministic
   regex); an explicit `skillId` on a planned step would remove the guesswork.
+
