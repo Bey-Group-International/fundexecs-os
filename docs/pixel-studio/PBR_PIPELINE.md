@@ -47,3 +47,4 @@ colors outside the palette.
   and after (`pixel-studio.test.ts` → "does not mutate the native frame").
 - Output changes with light direction ("responds to light direction").
 - Exported native/runtime PNGs come from the pixel compositor, never from PBR.
+

@@ -25,15 +25,15 @@ assets. IDs never encode user-facing labels.
 
 The compositor (`compositor.ts`) dispatches on `recipe.kind`:
 
-| kind | params | painter |
-|---|---|---|
-| `face` | width, jaw, brow, eyeSpacing, nose, age | jaw/cheek/brow shaping |
-| `expression` | expression (neutral/smile/focused/talk) | eyes, brows, mouth |
-| `hair` | coverage, length, volume, style | crown/fringe/back mass |
-| `facialHair` | style, density | jaw/mustache coverage |
-| `headCovering` | style, drape | crown/wrap/brim |
-| `outfit` | part, skirt?, sheen?, neck? | garment sublayer |
-| `accessory` | acc, shape? | per-accessory geometry |
+|      kind      |                 params                  |        painter         |
+|----------------|-----------------------------------------|------------------------|
+| `face`         | width, jaw, brow, eyeSpacing, nose, age | jaw/cheek/brow shaping |
+| `expression`   | expression (neutral/smile/focused/talk) | eyes, brows, mouth     |
+| `hair`         | coverage, length, volume, style         | crown/fringe/back mass |
+| `facialHair`   | style, density                          | jaw/mustache coverage  |
+| `headCovering` | style, drape                            | crown/wrap/brim        |
+| `outfit`       | part, skirt?, sheen?, neck?             | garment sublayer       |
+| `accessory`    | acc, shape?                             | per-accessory geometry |
 
 ## Adding an asset (existing kind)
 

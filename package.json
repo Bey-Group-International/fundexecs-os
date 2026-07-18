@@ -46,20 +46,17 @@
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "dev": "next dev",
     "lint": "eslint .",
+    "pixel:assets": "tsx scripts/pixel-studio/generate-review-assets.ts",
+    "pixel:export": "tsx scripts/pixel-studio/export-workadventure.ts",
+    "pixel:manifest": "tsx scripts/pixel-studio/generate-manifest.ts",
     "prebuild": "node scripts/copy-mediapipe.mjs",
     "predev": "node scripts/copy-mediapipe.mjs",
     "start": "next start",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "pixel:manifest": "tsx scripts/pixel-studio/generate-manifest.ts",
-    "pixel:assets": "tsx scripts/pixel-studio/generate-review-assets.ts",
-    "pixel:export": "tsx scripts/pixel-studio/export-workadventure.ts",
     "validate:assets": "tsx scripts/pixel-studio/validate-assets.ts",
     "validate:exports": "tsx scripts/pixel-studio/validate-exports.ts"
   },
   "version": "0.0.1",
-  "workspaces": [
-    "shared",
-    "server"
-  ]
+  "workspaces": [ "shared", "server" ]
 }

@@ -1,43 +1,98 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://fundexecs.dev/schemas/character-config.schema.json",
-  "title": "FundExecs Character Configuration",
-  "type": "object",
-  "required": [
-    "characterId", "displayName", "manifestVersion", "fitGroup", "skinPalette",
-    "face", "expression", "hairColor", "facialHairColor", "outfitSystem",
-    "outfitColorway", "accessories", "materialOverrides", "direction", "state",
-    "createdAt", "modifiedAt"
-  ],
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "properties": {
-    "characterId": { "type": "string", "minLength": 1 },
-    "displayName": { "type": "string", "minLength": 1 },
-    "manifestVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-    "seed": { "type": "integer", "minimum": 0 },
-    "fitGroup": { "enum": ["masculine-fit", "feminine-fit", "universal"] },
-    "skinPalette": { "type": "string", "minLength": 1 },
-    "face": { "type": "string", "minLength": 1 },
-    "expression": { "enum": ["neutral", "smile", "focused", "talk"] },
-    "hair": { "type": ["string", "null"] },
-    "hairColor": { "type": "string", "minLength": 1 },
-    "facialHair": { "type": ["string", "null"] },
-    "facialHairColor": { "type": "string", "minLength": 1 },
-    "headCovering": { "type": ["string", "null"] },
-    "outfitSystem": { "type": "string", "minLength": 1 },
-    "outfitColorway": { "type": "string", "minLength": 1 },
-    "accessories": { "type": "array", "items": { "type": "string" } },
+    "accessories": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "characterId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "direction": {
+      "enum": [ "down", "left", "right", "up" ]
+    },
+    "displayName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "expression": {
+      "enum": [ "neutral", "smile", "focused", "talk" ]
+    },
+    "face": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "facialHair": {
+      "type": [ "string", "null" ]
+    },
+    "facialHairColor": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "fitGroup": {
+      "enum": [ "masculine-fit", "feminine-fit", "universal" ]
+    },
+    "hair": {
+      "type": [ "string", "null" ]
+    },
+    "hairColor": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "headCovering": {
+      "type": [ "string", "null" ]
+    },
+    "manifestVersion": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "type": "string"
+    },
     "materialOverrides": {
-      "type": "object",
       "patternProperties": {
         "^.+$": {
-          "type": "object",
-          "properties": { "palette": { "type": "string" }, "material": { "type": "string" } }
+          "properties": {
+            "material": {
+              "type": "string"
+            },
+            "palette": {
+              "type": "string"
+            }
+          },
+          "type": "object"
         }
-      }
+      },
+      "type": "object"
     },
-    "direction": { "enum": ["down", "left", "right", "up"] },
-    "state": { "enum": ["idle", "walk", "talk", "approve"] },
-    "createdAt": { "type": "string" },
-    "modifiedAt": { "type": "string" }
-  }
+    "modifiedAt": {
+      "type": "string"
+    },
+    "outfitColorway": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "outfitSystem": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "seed": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "skinPalette": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "state": {
+      "enum": [ "idle", "walk", "talk", "approve" ]
+    }
+  },
+  "required": [ "characterId", "displayName", "manifestVersion", "fitGroup", "skinPalette", "face", "expression", "hairColor", "facialHairColor", "outfitSystem", "outfitColorway", "accessories", "materialOverrides", "direction", "state", "createdAt", "modifiedAt" ],
+  "title": "FundExecs Character Configuration",
+  "type": "object"
 }

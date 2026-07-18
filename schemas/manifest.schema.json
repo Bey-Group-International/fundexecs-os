@@ -1,211 +1,408 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://fundexecs.dev/schemas/manifest.schema.json",
-  "title": "FundExecs Pixel Studio Manifest",
-  "type": "object",
-  "required": [
-    "schemaVersion",
-    "packageVersion",
-    "frame",
-    "animations",
-    "layerOrder",
-    "workAdventure",
-    "palettes",
-    "materials",
-    "assets",
-    "outfitSystems",
-    "examples",
-    "attribution"
-  ],
-  "properties": {
-    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-    "packageVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-    "frame": {
-      "type": "object",
-      "required": ["width", "height", "reviewScale", "directions"],
-      "properties": {
-        "width": { "const": 32 },
-        "height": { "const": 32 },
-        "reviewScale": { "const": 8 },
-        "directions": {
-          "type": "array",
-          "items": { "enum": ["down", "left", "right", "up"] },
-          "minItems": 4,
-          "maxItems": 4
-        }
-      }
-    },
-    "animations": {
-      "type": "object",
-      "required": ["idle", "walk", "talk", "approve"],
-      "patternProperties": {
-        "^(idle|walk|talk|approve)$": { "$ref": "#/definitions/animation" }
-      }
-    },
-    "layerOrder": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-    "workAdventure": {
-      "type": "object",
-      "required": ["categories", "walkSheet"],
-      "properties": {
-        "categories": {
-          "type": "array",
-          "items": { "enum": ["body", "eyes", "hairs", "clothes", "hats", "accessories"] }
-        },
-        "walkSheet": {
-          "type": "object",
-          "required": ["columns", "rows", "width", "height"],
-          "properties": {
-            "columns": { "const": 3 },
-            "rows": { "const": 4 },
-            "width": { "const": 96 },
-            "height": { "const": 128 }
-          }
-        }
-      }
-    },
-    "palettes": {
-      "type": "object",
-      "patternProperties": { "^.+$": { "$ref": "#/definitions/palette" } }
-    },
-    "materials": {
-      "type": "object",
-      "patternProperties": { "^.+$": { "$ref": "#/definitions/material" } }
-    },
-    "assets": { "type": "array", "items": { "$ref": "#/definitions/asset" } },
-    "outfitSystems": { "type": "array", "items": { "$ref": "#/definitions/outfitSystem" } },
-    "examples": { "type": "array", "items": { "type": "object" } },
-    "attribution": {
-      "type": "object",
-      "required": ["author", "license", "copyright"],
-      "properties": {
-        "author": { "type": "string", "minLength": 1 },
-        "license": { "type": "string", "minLength": 1 },
-        "copyright": { "type": "string", "minLength": 1 },
-        "notes": { "type": "string" }
-      }
-    }
-  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "animation": {
-      "type": "object",
-      "required": ["framesPerDirection", "fps", "loop", "columns", "rows", "width", "height"],
       "properties": {
-        "framesPerDirection": { "type": "integer", "minimum": 1 },
-        "fps": { "type": "integer", "minimum": 1 },
-        "loop": { "type": "boolean" },
-        "columns": { "type": "integer", "minimum": 1 },
-        "rows": { "const": 4 },
-        "width": { "type": "integer", "minimum": 32 },
-        "height": { "const": 128 }
-      }
-    },
-    "palette": {
-      "type": "object",
-      "required": ["id", "label", "group", "colors"],
-      "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "label": { "type": "string", "minLength": 1 },
-        "group": { "type": "string", "minLength": 1 },
-        "colors": {
-          "type": "object",
-          "required": ["deepShadow", "shadow", "base", "midtone", "highlight", "specular"],
-          "patternProperties": {
-            "^(deepShadow|shadow|base|midtone|highlight|specular)$": {
-              "type": "string",
-              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\([^)]*\\))$"
-            }
-          }
+        "columns": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "fps": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "framesPerDirection": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "height": {
+          "const": 128
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "rows": {
+          "const": 4
+        },
+        "width": {
+          "minimum": 32,
+          "type": "integer"
         }
-      }
-    },
-    "material": {
-      "type": "object",
-      "required": ["id", "label", "roughness", "metallic", "ao", "specular", "emissive", "relief"],
-      "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "label": { "type": "string", "minLength": 1 },
-        "roughness": { "type": "number", "minimum": 0, "maximum": 1 },
-        "metallic": { "type": "number", "minimum": 0, "maximum": 1 },
-        "ao": { "type": "number", "minimum": 0, "maximum": 1 },
-        "specular": { "type": "number", "minimum": 0, "maximum": 1 },
-        "emissive": { "type": "number", "minimum": 0, "maximum": 1 },
-        "relief": { "type": "number", "minimum": 0 }
-      }
+      },
+      "required": [ "framesPerDirection", "fps", "loop", "columns", "rows", "width", "height" ],
+      "type": "object"
     },
     "asset": {
-      "type": "object",
-      "required": [
-        "id", "label", "category", "slot", "zIndex", "fitGroups", "directions",
-        "states", "paletteGroup", "materialId", "workAdventureCategory",
-        "requires", "excludes", "occludes", "anchor", "frame", "recipe", "assetVersion"
-      ],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
-        "label": { "type": "string", "minLength": 1 },
-        "category": {
-          "enum": ["skin", "face", "expression", "hair", "facialHair", "headCovering", "outfit", "accessory"]
-        },
-        "slot": { "type": "string", "minLength": 1 },
-        "zIndex": { "type": "integer" },
-        "fitGroups": {
-          "type": "array",
-          "items": { "enum": ["masculine-fit", "feminine-fit", "universal"] }
-        },
-        "directions": { "type": "array", "items": { "enum": ["down", "left", "right", "up"] } },
-        "states": { "type": "array", "items": { "enum": ["idle", "walk", "talk", "approve"] } },
-        "paletteGroup": { "type": "string" },
-        "defaultPalette": { "type": "string" },
-        "materialId": { "type": "string", "minLength": 1 },
-        "workAdventureCategory": {
-          "enum": ["body", "eyes", "hairs", "clothes", "hats", "accessories"]
-        },
-        "requires": { "type": "array", "items": { "type": "string" } },
-        "excludes": { "type": "array", "items": { "type": "string" } },
-        "occludes": { "type": "array", "items": { "type": "string" } },
         "anchor": {
-          "type": "object",
-          "required": ["x", "y"],
-          "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } }
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          },
+          "required": [ "x", "y" ],
+          "type": "object"
+        },
+        "assetVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "category": {
+          "enum": [ "skin", "face", "expression", "hair", "facialHair", "headCovering", "outfit", "accessory" ]
+        },
+        "defaultPalette": {
+          "type": "string"
+        },
+        "directions": {
+          "items": {
+            "enum": [ "down", "left", "right", "up" ]
+          },
+          "type": "array"
+        },
+        "excludes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fitGroups": {
+          "items": {
+            "enum": [ "masculine-fit", "feminine-fit", "universal" ]
+          },
+          "type": "array"
         },
         "frame": {
-          "type": "object",
-          "required": ["width", "height"],
-          "properties": { "width": { "const": 32 }, "height": { "const": 32 } }
+          "properties": {
+            "height": {
+              "const": 32
+            },
+            "width": {
+              "const": 32
+            }
+          },
+          "required": [ "width", "height" ],
+          "type": "object"
+        },
+        "id": {
+          "pattern": "^[a-z0-9-]+$",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "materialId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "occludes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "paletteGroup": {
+          "type": "string"
         },
         "recipe": {
-          "type": "object",
-          "required": ["kind", "params"],
           "properties": {
-            "kind": { "type": "string", "minLength": 1 },
-            "params": { "type": "object" }
-          }
+            "kind": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [ "kind", "params" ],
+          "type": "object"
         },
-        "assetVersion": { "type": "string", "minLength": 1 }
-      }
+        "requires": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "slot": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "states": {
+          "items": {
+            "enum": [ "idle", "walk", "talk", "approve" ]
+          },
+          "type": "array"
+        },
+        "workAdventureCategory": {
+          "enum": [ "body", "eyes", "hairs", "clothes", "hats", "accessories" ]
+        },
+        "zIndex": {
+          "type": "integer"
+        }
+      },
+      "required": [ "id", "label", "category", "slot", "zIndex", "fitGroups", "directions", "states", "paletteGroup", "materialId", "workAdventureCategory", "requires", "excludes", "occludes", "anchor", "frame", "recipe", "assetVersion" ],
+      "type": "object"
+    },
+    "material": {
+      "properties": {
+        "ao": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "emissive": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "metallic": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "relief": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "roughness": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "specular": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "id", "label", "roughness", "metallic", "ao", "specular", "emissive", "relief" ],
+      "type": "object"
     },
     "outfitSystem": {
-      "type": "object",
-      "required": ["id", "label", "fitGroups", "sublayers", "colorways"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
-        "label": { "type": "string", "minLength": 1 },
-        "fitGroups": { "type": "array", "items": { "type": "string" } },
-        "sublayers": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
         "colorways": {
-          "type": "array",
-          "minItems": 3,
           "items": {
-            "type": "object",
-            "required": ["id", "label", "palettes"],
             "properties": {
-              "id": { "type": "string" },
-              "label": { "type": "string" },
-              "palettes": { "type": "object" }
-            }
-          }
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "palettes": {
+                "type": "object"
+              }
+            },
+            "required": [ "id", "label", "palettes" ],
+            "type": "object"
+          },
+          "minItems": 3,
+          "type": "array"
         },
-        "culturallyReviewed": { "type": "boolean" }
-      }
+        "culturallyReviewed": {
+          "type": "boolean"
+        },
+        "fitGroups": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z0-9-]+$",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sublayers": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [ "id", "label", "fitGroups", "sublayers", "colorways" ],
+      "type": "object"
+    },
+    "palette": {
+      "properties": {
+        "colors": {
+          "patternProperties": {
+            "^(deepShadow|shadow|base|midtone|highlight|specular)$": {
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\([^)]*\\))$",
+              "type": "string"
+            }
+          },
+          "required": [ "deepShadow", "shadow", "base", "midtone", "highlight", "specular" ],
+          "type": "object"
+        },
+        "group": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [ "id", "label", "group", "colors" ],
+      "type": "object"
     }
-  }
+  },
+  "properties": {
+    "animations": {
+      "patternProperties": {
+        "^(idle|walk|talk|approve)$": {
+          "$ref": "#/definitions/animation"
+        }
+      },
+      "required": [ "idle", "walk", "talk", "approve" ],
+      "type": "object"
+    },
+    "assets": {
+      "items": {
+        "$ref": "#/definitions/asset"
+      },
+      "type": "array"
+    },
+    "attribution": {
+      "properties": {
+        "author": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "copyright": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "license": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [ "author", "license", "copyright" ],
+      "type": "object"
+    },
+    "examples": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "frame": {
+      "properties": {
+        "directions": {
+          "items": {
+            "enum": [ "down", "left", "right", "up" ]
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "height": {
+          "const": 32
+        },
+        "reviewScale": {
+          "const": 8
+        },
+        "width": {
+          "const": 32
+        }
+      },
+      "required": [ "width", "height", "reviewScale", "directions" ],
+      "type": "object"
+    },
+    "layerOrder": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "materials": {
+      "patternProperties": {
+        "^.+$": {
+          "$ref": "#/definitions/material"
+        }
+      },
+      "type": "object"
+    },
+    "outfitSystems": {
+      "items": {
+        "$ref": "#/definitions/outfitSystem"
+      },
+      "type": "array"
+    },
+    "packageVersion": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "type": "string"
+    },
+    "palettes": {
+      "patternProperties": {
+        "^.+$": {
+          "$ref": "#/definitions/palette"
+        }
+      },
+      "type": "object"
+    },
+    "schemaVersion": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "type": "string"
+    },
+    "workAdventure": {
+      "properties": {
+        "categories": {
+          "items": {
+            "enum": [ "body", "eyes", "hairs", "clothes", "hats", "accessories" ]
+          },
+          "type": "array"
+        },
+        "walkSheet": {
+          "properties": {
+            "columns": {
+              "const": 3
+            },
+            "height": {
+              "const": 128
+            },
+            "rows": {
+              "const": 4
+            },
+            "width": {
+              "const": 96
+            }
+          },
+          "required": [ "columns", "rows", "width", "height" ],
+          "type": "object"
+        }
+      },
+      "required": [ "categories", "walkSheet" ],
+      "type": "object"
+    }
+  },
+  "required": [ "schemaVersion", "packageVersion", "frame", "animations", "layerOrder", "workAdventure", "palettes", "materials", "assets", "outfitSystems", "examples", "attribution" ],
+  "title": "FundExecs Pixel Studio Manifest",
+  "type": "object"
 }

@@ -126,13 +126,13 @@ the stack (`AssetRegistry.resolveLayers`) and never hardcodes rules.
 
 The internal model collapses to the six Woka categories on export:
 
-| Internal slots | Woka category |
-|---|---|
-| body.skin, face.base | `body` |
-| expression, face.features | `eyes` |
+|           Internal slots           |  Woka category   |
+|------------------------------------|------------------|
+| body.skin, face.base               | `body`           |
+| expression, face.features          | `eyes`           |
 | hair.*, facialHair, headCovering.* | `hairs` / `hats` |
-| outfit.* , neckwear | `clothes` |
-| accessory.*, eyewear, handheld | `accessories` |
+| outfit.* , neckwear                | `clothes`        |
+| accessory.*, eyewear, handheld     | `accessories`    |
 
 Each category is rendered to a **96×128** three-frame walk sheet (down/left/
 right/up). See [`WORKADVENTURE_EXPORT.md`](./WORKADVENTURE_EXPORT.md).
@@ -205,4 +205,7 @@ Non-breaking manifest additions keep old configs loadable.
   future split.
 - The compositor is procedural; art is intentionally institutional/minimal
   rather than highly ornamented.
+
 ```
+```
+
