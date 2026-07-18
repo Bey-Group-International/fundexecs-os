@@ -1035,6 +1035,36 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Documentation deliverable (no code); grounded in an evidence-
              |  backed six-agent inventory with cited file paths. No production code, no
              |  migration, no test change this increment.
+
+2026-07-18  |  Terminal Release 1 — spine (contracts + persistence, flag-off)  |
+             |  First production slice of the Private Markets Terminal: the pure, tested
+             |  contracts + the persistence foundation the shell/command-bar build on. No
+             |  UI yet. Behind TERMINAL_ENABLED, default OFF.
+             |  - lib/terminal/action-contract.ts: the unified action & safety contract
+             |    (System 9) — projects the spec's 10 side-effect levels onto the existing
+             |    3 gate tiers (lib/gates.ts), NOT a fork. read-only/draft/internal/
+             |    capital-analysis -> Tier 1; external/compliance/destructive -> Tier 2
+             |    operator; capital-binding/transaction-execution -> Tier 3 human
+             |    NON-DELEGABLE, re-asserted in code so no table/mandate/manifest can lower
+             |    it for any actor (users/agents/API keys/extensions). Pure + tested.
+             |  - lib/terminal/{types,commands/registry,parse}.ts: a typed CommandDefinition
+             |    (mirrors SkillManifest) + an initial ~40-command catalog (navigation
+             |    DEAL/FUND/LP/PIPE/WATCH; analysis LBO/VAL/WATERFALL/CAPTABLE/EXPOSURE;
+             |    workflow SOURCE/OUTREACH/CAPCALL/REPORT/ASK EARN) each declaring its
+             |    side-effect level (CAPCALL/DISTRIBUTE = capital-binding Tier-3), + a pure
+             |    parser with longest-verb-prefix matching (ASK EARN, CREATE DEAL),
+             |    case-insensitive verbs/aliases, null for non-commands (NL fallback).
+             |  - migration 20260718200000_terminal_core.sql: terminal_workspaces,
+             |    terminal_layouts (versioned jsonb pane tree), saved_commands, and an
+             |    append-only command_runs ledger (verb + resolved side-effect + gate tier
+             |    + status) — the terminal observability spine, mirroring skill_runs/
+             |    inference_runs. Org RLS member-read/writer-write, idempotent, additive.
+             |  - lib/terminal/config.ts TERMINAL_ENABLED (default off).
+             |  Reuse-not-fork throughout: wraps gates.ts, mirrors the skills registry,
+             |  extends the API-scope vocabulary. Capital-binding stays human, tested.
+             |  Confidence: Tested by typecheck/eslint/Jest (18 new tests; 3696 total
+             |  green, no regressions). Backend contracts + one additive migration; no UI,
+             |  no engine change, no new deps.
 ```
 
 ---
