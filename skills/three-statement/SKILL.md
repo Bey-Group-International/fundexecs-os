@@ -11,15 +11,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-|                   |                                                                                             |
-|-------------------|---------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                           |
-| **Risk**          | low                                                                                         |
-| **Executives**    | Analyst                                                                                     |
+|                   |                                                                                               |
+|-------------------|-----------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                             |
+| **Risk**          | low                                                                                           |
+| **Executives**    | Analyst                                                                                       |
 | **Inputs**        | horizon + operating drivers (revenue, margins, D&A/capex/NWC %s, tax) + opening balance sheet |
-| **Outputs**       | `years`, `projection`, `balances`, `missingInputs`, `recommendedAction`                     |
-| **Artifacts**     | `analysis`                                                                                   |
-| **Downstream**    | `dcf`, `ic-memo`                                                                             |
+| **Outputs**       | `years`, `projection`, `balances`, `missingInputs`, `recommendedAction`                       |
+| **Artifacts**     | `analysis`                                                                                    |
+| **Downstream**    | `dcf`, `ic-memo`                                                                              |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

@@ -1,37 +1,9 @@
 {
-  "type": "object",
-  "required": [],
   "properties": {
-    "years": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 10
-    },
     "baseRevenue": {
       "type": "number"
     },
-    "revenueGrowth": {
-      "type": "number"
-    },
-    "ebitdaMargin": {
-      "type": "number"
-    },
-    "daPctOfRevenue": {
-      "type": "number"
-    },
-    "taxRate": {
-      "type": "number"
-    },
-    "capexPctOfRevenue": {
-      "type": "number"
-    },
-    "nwcPctOfRevenue": {
-      "type": "number"
-    },
     "beginningCash": {
-      "type": "number"
-    },
-    "beginningPPE": {
       "type": "number"
     },
     "beginningDebt": {
@@ -39,6 +11,34 @@
     },
     "beginningEquity": {
       "type": "number"
+    },
+    "beginningPPE": {
+      "type": "number"
+    },
+    "capexPctOfRevenue": {
+      "type": "number"
+    },
+    "daPctOfRevenue": {
+      "type": "number"
+    },
+    "ebitdaMargin": {
+      "type": "number"
+    },
+    "nwcPctOfRevenue": {
+      "type": "number"
+    },
+    "revenueGrowth": {
+      "type": "number"
+    },
+    "taxRate": {
+      "type": "number"
+    },
+    "years": {
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
     }
-  }
+  },
+  "required": [ ],
+  "type": "object"
 }

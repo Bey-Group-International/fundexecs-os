@@ -7,14 +7,22 @@
       "description": "A vertical SaaS platform for logistics operators. Rapidly scaling ARR with strong net revenue retention.",
       "ebitda": 12,
       "growthRate": 35,
-      "historicalFinancials": [
-        { "year": 2023, "revenue": 30, "ebitda": 6 },
-        { "year": 2024, "revenue": 40, "ebitda": 9 }
-      ],
-      "management": [
-        { "name": "Jane Doe", "role": "CEO" },
-        { "name": "John Roe", "role": "CFO" }
-      ],
+      "historicalFinancials": [ {
+        "ebitda": 6,
+        "revenue": 30,
+        "year": 2023
+      }, {
+        "ebitda": 9,
+        "revenue": 40,
+        "year": 2024
+      } ],
+      "management": [ {
+        "name": "Jane Doe",
+        "role": "CEO"
+      }, {
+        "name": "John Roe",
+        "role": "CFO"
+      } ],
       "marketNotes": "Large, fragmented logistics software TAM growing double digits.",
       "products": [ "Dispatch automation", "Fleet analytics", "Carrier marketplace" ],
       "revenue": 50,

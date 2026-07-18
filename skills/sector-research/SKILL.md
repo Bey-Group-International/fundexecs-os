@@ -13,15 +13,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                                          |
-|-------------------|--------------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                                        |
-| **Risk**          | low                                                                                                                      |
-| **Executives**    | Research                                                                                                                 |
-| **Inputs**        | `sector` (required) + optional `findings` set (`claim`, `category`, `source?`, `sourceType?`)                            |
+|                   |                                                                                                                                     |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                   |
+| **Risk**          | low                                                                                                                                 |
+| **Executives**    | Research                                                                                                                            |
+| **Inputs**        | `sector` (required) + optional `findings` set (`claim`, `category`, `source?`, `sourceType?`)                                       |
 | **Outputs**       | `sector`, `sections`, `sourcedCount`, `unsourcedCount`, `unsupportedClaims`, `sourceQuality`, `recommendedAction`, `missingContext` |
-| **Artifacts**     | `analysis`                                                                                                               |
-| **Downstream**    | `market-map`, `source-deals`                                                                                             |
+| **Artifacts**     | `analysis`                                                                                                                          |
+| **Downstream**    | `market-map`, `source-deals`                                                                                                        |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

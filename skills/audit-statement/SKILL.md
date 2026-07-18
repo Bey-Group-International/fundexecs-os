@@ -15,15 +15,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                                     |
-|-------------------|---------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible preparation of audit support                                                               |
-| **Risk**          | low                                                                                                                 |
-| **Executives**    | Fund Administration                                                                                                 |
-| **Inputs**        | optional `statementLines`, `materialityThreshold`                                                                   |
+|                   |                                                                                                                        |
+|-------------------|------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible preparation of audit support                                                                  |
+| **Risk**          | low                                                                                                                    |
+| **Executives**    | Fund Administration                                                                                                    |
+| **Inputs**        | optional `statementLines`, `materialityThreshold`                                                                      |
 | **Outputs**       | `tieOuts`, `tiedCount`, `varianceCount`, `unsupportedCount`, `totalAbsVariance`, `recommendedAction`, `missingContext` |
-| **Artifacts**     | `analysis`                                                                                                          |
-| **Downstream**    | `nav-review`, `close-period`                                                                                        |
+| **Artifacts**     | `analysis`                                                                                                             |
+| **Downstream**    | `nav-review`, `close-period`                                                                                           |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

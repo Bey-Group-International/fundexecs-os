@@ -12,15 +12,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-|                   |                                                                                                              |
-|-------------------|--------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                            |
-| **Risk**          | low                                                                                                          |
-| **Executives**    | Analyst                                                                                                      |
-| **Inputs**        | `lineItems`, `checks`, `ratios` (all optional — a provided model to audit)                                   |
+|                   |                                                                                                                        |
+|-------------------|------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                      |
+| **Risk**          | low                                                                                                                    |
+| **Executives**    | Analyst                                                                                                                |
+| **Inputs**        | `lineItems`, `checks`, `ratios` (all optional — a provided model to audit)                                             |
 | **Outputs**       | `findings`, `checkedCount`, `passedCount`, `failedCount`, `errorCount`, `warningCount`, `summary`, `recommendedAction` |
-| **Artifacts**     | `analysis`                                                                                                   |
-| **Downstream**    | —                                                                                                            |
+| **Artifacts**     | `analysis`                                                                                                             |
+| **Downstream**    | —                                                                                                                      |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

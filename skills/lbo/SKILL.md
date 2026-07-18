@@ -13,15 +13,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                                                     |
-|-------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                                                   |
-| **Risk**          | low                                                                                                                                 |
-| **Executives**    | Analyst                                                                                                                             |
+|                   |                                                                                                                                                                        |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                                                      |
+| **Risk**          | low                                                                                                                                                                    |
+| **Executives**    | Analyst                                                                                                                                                                |
 | **Inputs**        | optional `entryEbitda`, `entryMultiple`, `leverageMultiple` / `debtAmount`, `holdYears`, `exitMultiple`, `ebitdaGrowthRate`, `annualDebtPaydown`, `transactionFeesPct` |
-| **Outputs**       | `entryEV`, `entryEquity`, `debt`, `exitEbitda`, `exitEV`, `exitEquity`, `moic`, `irr`, `assumptions`, `missingInputs`, `recommendedAction` |
-| **Artifacts**     | `analysis`                                                                                                                          |
-| **Downstream**    | `returns`, `ic-memo`                                                                                                                |
+| **Outputs**       | `entryEV`, `entryEquity`, `debt`, `exitEbitda`, `exitEV`, `exitEquity`, `moic`, `irr`, `assumptions`, `missingInputs`, `recommendedAction`                             |
+| **Artifacts**     | `analysis`                                                                                                                                                             |
+| **Downstream**    | `returns`, `ic-memo`                                                                                                                                                   |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

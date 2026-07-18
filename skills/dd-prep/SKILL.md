@@ -20,15 +20,15 @@ order, at what status, in which phase. One is the ask; this is the agenda.
 
 ## Contract
 
-|                   |                                                                                          |
-|-------------------|------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal; PREPARES the plan, never performs diligence or sends a request             |
-| **Risk**          | low                                                                                      |
-| **Executives**    | Diligence                                                                                |
-| **Inputs**        | `deal` (at minimum `name`) + optional `focusAreas`, `knownItems`, `timelineWeeks`        |
+|                   |                                                                                                         |
+|-------------------|---------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal; PREPARES the plan, never performs diligence or sends a request                            |
+| **Risk**          | low                                                                                                     |
+| **Executives**    | Diligence                                                                                               |
+| **Inputs**        | `deal` (at minimum `name`) + optional `focusAreas`, `knownItems`, `timelineWeeks`                       |
 | **Outputs**       | `workstreams`, `totalItems`, `highPriorityCount`, `coverageGaps`, `recommendedAction`, `missingContext` |
-| **Artifacts**     | `analysis`                                                                               |
-| **Downstream**    | `dd-checklist`, `ic-memo`                                                                |
+| **Artifacts**     | `analysis`                                                                                              |
+| **Downstream**    | `dd-checklist`, `ic-memo`                                                                               |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

@@ -33,6 +33,6 @@
       "type": "number"
     }
   },
-  "required": [],
+  "required": [ ],
   "type": "object"
 }

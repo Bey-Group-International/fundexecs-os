@@ -11,11 +11,11 @@ missing).
 
 ## Analyst modeling (`analyst`) — compute from supplied assumptions, never invent
 
-| Skill | Computes | Never |
-|---|---|---|
-| `lbo` | LBO returns from supplied assumptions: sources & uses, exit equity, MOIC, IRR | invents an assumption — a missing required input means the affected output is `null` and flagged, never guessed |
-| `three-statement` | A simplified, internally-consistent IS/CF/BS projection that **ties out** (assets = liabilities + equity) every year | fabricates a driver — the balance-sheet tie-out is the load-bearing output, `balances===true` by construction |
-| `model-audit` | A rules-grid audit of a supplied model: range breaches, failed checks, implausible ratios → findings with severity | re-computes a corrected model — it flags for the analyst; no finding ever carries an invented "right" number |
+|       Skill       |                                                       Computes                                                       |                                                      Never                                                      |
+|-------------------|----------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `lbo`             | LBO returns from supplied assumptions: sources & uses, exit equity, MOIC, IRR                                        | invents an assumption — a missing required input means the affected output is `null` and flagged, never guessed |
+| `three-statement` | A simplified, internally-consistent IS/CF/BS projection that **ties out** (assets = liabilities + equity) every year | fabricates a driver — the balance-sheet tie-out is the load-bearing output, `balances===true` by construction   |
+| `model-audit`     | A rules-grid audit of a supplied model: range breaches, failed checks, implausible ratios → findings with severity   | re-computes a corrected model — it flags for the analyst; no finding ever carries an invented "right" number    |
 
 The `three-statement` model is **balanced by construction**: debt is held constant,
 equity rolls by net income, and the opening balance sheet is plugged (equity =
@@ -24,26 +24,26 @@ and zero. A supplied-but-unbalanced opening BS is flagged, never silently adjust
 
 ## Diligence (`diligence`) — sequence a workplan, never diligence
 
-| Skill | Prepares | Never |
-|---|---|---|
+|   Skill   |                                                        Prepares                                                        |                                                                        Never                                                                        |
+|-----------|------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | `dd-prep` | A sequenced, prioritized diligence workplan across 8 canonical workstreams, merging supplied known items + focus areas | performs diligence, draws conclusions, or sends a request (Tier-2) — distinct from `dd-checklist` (the request list); this is the agenda/sequencing |
 
 ## Fund administration (`fund_admin`) — tie out, never opine
 
-| Skill | Prepares | Never |
-|---|---|---|
+|       Skill       |                                                   Prepares                                                    |                                                         Never                                                         |
+|-------------------|---------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | `audit-statement` | Audit support: ties supplied statement lines to their supporting schedules/GL → variances + unsupported items | issues an audit opinion, signs off, or posts an entry — a missing support value is `unsupported`, never assumed equal |
 
 ## Research (`research`) — organize + grade sources, never fabricate
 
-| Skill | Organizes | Never |
-|---|---|---|
+|       Skill       |                                                       Organizes                                                       |                                                                        Never                                                                         |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sector-research` | A supplied research set into a sector brief by category, grades each claim's source quality, flags unsupported claims | invents facts, figures, or market data — every material claim must carry a supplied source; an unsourced claim is flagged, never emitted as a `fact` |
 
 ## Communications (`communications`) — draft-only
 
-| Skill | Assembles | Never |
-|---|---|---|
+| Skill |                                        Assembles                                         |                                                                                                 Never                                                                                                  |
+|-------|------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `cim` | A Confidential Information Memorandum **draft outline** (7 sections) from supplied facts | invents a financial figure or distributes — the `financialSummary` uses only supplied figures; with none it is a flagged placeholder and no `fact` source carries an invented number (directly tested) |
 
 ## Epistemics (every skill)
