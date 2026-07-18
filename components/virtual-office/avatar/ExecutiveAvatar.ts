@@ -83,6 +83,15 @@ export class ExecutiveAvatar {
    */
   private static readonly IDLE_ARM_SWAY = 0.05;
 
+  /**
+   * Wave gesture, near-arm shoulder rotation (radians). `RAISE` is the fully-lifted
+   * angle (~155°, hand up beside the head); `OSC` is the peak oscillation amplitude
+   * of the friendly back-and-forth, scaled by the raise so it only waves once the
+   * arm is up and settles as it lowers.
+   */
+  private static readonly WAVE_ARM_RAISE = 2.7;
+  private static readonly WAVE_ARM_OSC = 0.3;
+
   readonly container: Phaser.GameObjects.Container;
 
   private scene: Phaser.Scene;
@@ -152,11 +161,10 @@ export class ExecutiveAvatar {
   // the quantized value changes so a floor of avatars stays cheap.
   private _limbAmt = 0;
   // Live wave state: while a `wave` one-shot plays on a front-facing figure the
-  // near arm is drawn raised and oscillating (real limb motion). `_waving` gates
-  // the raised-arm draw; raise/swing are the quantized engine channels.
+  // peeled near arm rotates up beside the head and oscillates (real limb motion,
+  // driven per-frame from the engine's gestureRaise/armSwing channels). `_waving`
+  // gates the raised-above-trunk z-order and the per-frame rotation in update().
   private _waving = false;
-  private _waveRaise = 0;
-  private _waveSwing = 0;
   private lastPoseKey = "";
   // Blink: staggered so a room of executives never blinks in unison.
   private blinkTimer = 1200 + Math.random() * 4200;
@@ -357,26 +365,28 @@ export class ExecutiveAvatar {
       const g = this.gesture.sample();
       bodyY += g.bounce ?? 0;
       gestureHeadTilt = g.headTilt ?? 0;
-      // A `wave` on a front-facing figure raises and oscillates the near arm as
-      // real limb motion. Quantize the raise/swing channels and redraw only on
-      // change; other facings just get the additive bounce above.
+      // A `wave` on a front-facing figure raises and oscillates the peeled near
+      // arm as a real shoulder rotation — continuous, no redraw. On the first
+      // frame, lift it above the trunk/head so the raised hand isn't occluded
+      // mid-sweep; other facings just get the additive bounce above.
       if (isWave && this.facing === "down") {
-        const raise = Math.round((g.gestureRaise ?? 0) / 0.15) * 0.15;
-        const sw = Math.round((g.armSwing ?? 0) / 0.15) * 0.15;
-        if (!this._waving || raise !== this._waveRaise || sw !== this._waveSwing) {
+        if (!this._waving) {
           this._waving = true;
-          this._waveRaise = raise;
-          this._waveSwing = sw;
-          this._redraw();
+          this._redraw(); // draw the rest arm into armNear so it exists to rotate
+          this._raiseNearArm(true);
         }
+        const raise = g.gestureRaise ?? 0;
+        const sw = g.armSwing ?? 0;
+        this.armNear.setRotation(
+          raise * ExecutiveAvatar.WAVE_ARM_RAISE + sw * raise * ExecutiveAvatar.WAVE_ARM_OSC,
+        );
       }
       if (this.gesture.isFinished()) {
         this.gesture = null;
         if (this._waving) {
-          // Wave over — drop the raised arm and redraw the resting pose once.
+          // Wave over — restore the arm's stacking + upright rest, redraw once.
           this._waving = false;
-          this._waveRaise = 0;
-          this._waveSwing = 0;
+          this._raiseNearArm(false);
           this._redraw();
         }
       }
@@ -629,6 +639,22 @@ export class ExecutiveAvatar {
     }
   }
 
+  /**
+   * Lift the peeled near arm above the trunk/head for a raised-arm pose (wave —
+   * and, later, present), or restore it. The arm normally sits at figure-child
+   * index 2, below the torso (3) and head (4); while raised it must ride on top
+   * so the lifted hand reads in front, not occluded mid-sweep. Restoring also
+   * resets the rotation so the arm drops back to its upright rest.
+   */
+  private _raiseNearArm(on: boolean) {
+    if (on) {
+      this.figure.bringToTop(this.armNear);
+    } else {
+      this.figure.moveTo(this.armNear, 2);
+      this.armNear.setRotation(0);
+    }
+  }
+
   private _redraw() {
     const step = this.walking ? Math.floor(this.walkPhase) % 4 : -1;
     const workStep = this._gestureRate() > 0 ? Math.floor(this.workPhase) % 2 : -1;
@@ -643,6 +669,14 @@ export class ExecutiveAvatar {
     this.torso.clear();
     this.armNear.clear();
     this.armFar.clear();
+
+    // A wave only makes sense standing and front-facing. If the pose changed out
+    // from under an in-flight wave (turned away, sat, or started walking), end it
+    // cleanly here so the near arm doesn't stay lifted or over-stacked.
+    if (this._waving && (this.walking || this.seated || this.facing !== "down")) {
+      this._waving = false;
+      this._raiseNearArm(false);
+    }
 
     // Earn renders as the gold-coin mascot — its own full pose set.
     if (this.spec.coin) { this._redrawCoin(g, step); return; }
@@ -663,16 +697,17 @@ export class ExecutiveAvatar {
     else if (this.facing === "right") this._drawProfile(g, s, swing, 1, arm, workStep);
     else {
       this._drawFront(g, s, swing, arm, workStep);
-      // Resting (idle / walk) arms are peeled into shoulder-pivoted objects. Each
-      // is pinned at its shoulder; the walk swing is a real rotation about that
-      // pivot, driven per-frame by update(). Idle resets them upright here. Work
-      // poses (type/review/present) and the wave keep their arms in `body`, so the
-      // objects stay empty for those.
-      if (!this._waving && (arm === "idle" || arm === "walk")) {
+      // Resting arms are peeled into shoulder-pivoted objects for the idle/walk
+      // pose (and the wave, which rotates the near arm off the same pivot). Each
+      // is pinned at its shoulder; rotation is owned per-frame by update() during
+      // the walk swing and the wave, so it's only reset upright here when the
+      // figure is standing still. Work poses (type/review/present) keep their arms
+      // in `body`, so the objects stay empty for those.
+      if (arm === "idle" || arm === "walk") {
         this._drawFrontRestArms(s);
         this.armNear.setPosition(-6.4, -5);
         this.armFar.setPosition(6.4, -5);
-        if (!this.walking) {
+        if (!this.walking && !this._waving) {
           this.armNear.setRotation(0);
           this.armFar.setRotation(0);
         }
@@ -939,31 +974,8 @@ export class ExecutiveAvatar {
       g.fillCircle(6.4, 6, 1.7);
       return;
     }
-    // Waving — the near (left) arm lifts beside the head and the hand
-    // oscillates, driven by the engine's gestureRaise (lift) + armSwing (wave).
-    if (this._waving) {
-      const r = this._waveRaise;
-      const w = this._waveSwing;
-      const handX = -8.5 + w * 1.8;
-      const handY = -6 - r * 13;
-      g.fillStyle(sleeve, 1);
-      g.fillRoundedRect(-8.4, -6, 3, 6, 1.5); // upper arm rising from the shoulder
-      g.fillRoundedRect(handX - 1.5, handY, 3, 9 + r * 3, 1.5); // forearm up to the hand
-      g.fillStyle(this._shade(s.suit, 0.6), 0.8);
-      g.fillRect(handX - 1.4, handY, 0.7, 8); // inner-sleeve seam
-      g.fillStyle(s.skin, 1);
-      g.fillCircle(handX, handY - 1, 1.9); // waving hand
-      // Far (right) arm rests at the side.
-      g.fillStyle(sleeve, 1);
-      g.fillRoundedRect(4.8, -5, 3.2, 11, 1.6);
-      g.fillStyle(this._shade(s.suit, 0.6), 0.8);
-      g.fillRect(4.6, -4.5, 0.8, 10);
-      g.fillStyle(s.skin, 1);
-      g.fillCircle(6.4, 6, 1.7);
-      g.fillStyle(this._shade(s.shirt, 1.02), 0.95);
-      g.fillRect(4.8, 4.4, 3.2, 0.9);
-      return;
-    }
+    // Waving is no longer painted here — the peeled near arm rotates up off its
+    // shoulder pivot (see the wave block in update() / _drawFrontRestArms).
 
     // Walk / idle resting arms are peeled into their own shoulder-pivoted objects
     // (see _drawFrontRestArms / _redraw), so nothing is painted into `body` here.
