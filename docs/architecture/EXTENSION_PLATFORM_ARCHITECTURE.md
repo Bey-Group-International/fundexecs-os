@@ -20,18 +20,18 @@ No unrestricted remote-code installation. No service-role exposure.
 
 The platform is a thin governance + isolation layer over eleven existing registries:
 
-| Extension capability | Registers into (existing seam) |
-|---|---|
-| Agent skill pack | Skills registry `lib/skills/registry.ts` (versioned, schema-typed, tier+risk) |
-| Data provider | Intelligence provider registry `lib/intelligence/provider.ts` (anti-corruption boundary) |
-| Model provider | Inference registry `lib/inference/registry.ts` (capability router) |
-| Connector / channel | Integrations adapters `lib/integrations/registry.ts` + dispatch_log |
-| MCP tool server | MCP registry `lib/mcp/registry.ts` (+ runtime, net-new) |
-| Command | Terminal `CommandRegistry` (net-new, from the terminal work) |
-| Pane / tab / column / report / alert | Terminal pane framework + `alert_rules` + report templates |
-| Credentials | Vault `lib/vault.ts` + `org_secrets` (extended to per-installation scope) |
-| Permissions | API scopes `lib/api-keys.ts` `API_SCOPES` (extended namespace) |
-| Approval / lifecycle | Gate tiers `lib/gates.ts` + approval queue + `audit_log` |
+|         Extension capability         |                              Registers into (existing seam)                              |
+|--------------------------------------|------------------------------------------------------------------------------------------|
+| Agent skill pack                     | Skills registry `lib/skills/registry.ts` (versioned, schema-typed, tier+risk)            |
+| Data provider                        | Intelligence provider registry `lib/intelligence/provider.ts` (anti-corruption boundary) |
+| Model provider                       | Inference registry `lib/inference/registry.ts` (capability router)                       |
+| Connector / channel                  | Integrations adapters `lib/integrations/registry.ts` + dispatch_log                      |
+| MCP tool server                      | MCP registry `lib/mcp/registry.ts` (+ runtime, net-new)                                  |
+| Command                              | Terminal `CommandRegistry` (net-new, from the terminal work)                             |
+| Pane / tab / column / report / alert | Terminal pane framework + `alert_rules` + report templates                               |
+| Credentials                          | Vault `lib/vault.ts` + `org_secrets` (extended to per-installation scope)                |
+| Permissions                          | API scopes `lib/api-keys.ts` `API_SCOPES` (extended namespace)                           |
+| Approval / lifecycle                 | Gate tiers `lib/gates.ts` + approval queue + `audit_log`                                 |
 
 ## 2. Net-new tables
 
@@ -39,16 +39,16 @@ Organization-scoped + a platform-catalog scope for the registry itself. RLS:
 member-read for installations in your org; admin-write; the catalog is
 platform-admin-write / authenticated-read (mirrors `ai_agents` global-catalog RLS).
 
-| Table | Purpose |
-|---|---|
-| `extensions` | Catalog: id, name, publisher, verified, categories, latest_version, status (`submitted/in_review/approved/published/suspended`) |
-| `extension_versions` | Immutable version ledger: manifest jsonb, `minimum_platform_version`, signature, changelog |
-| `extension_installations` | Per-org install: `extension_id`, `version`, `enabled`, granted scopes, config, health |
-| `extension_permissions` | Granted scope grants per installation (subset of requested) |
-| `extension_credentials` | Per-installation vault references (not raw secrets) |
-| `extension_events` | Append-only activity: invocations, data accessed, errors |
-| `extension_health_checks` | Last health, latency, error rate |
-| `extension_audit_logs` | Admin lifecycle actions (submit/review/approve/suspend/revoke) |
+|           Table           |                                                             Purpose                                                             |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `extensions`              | Catalog: id, name, publisher, verified, categories, latest_version, status (`submitted/in_review/approved/published/suspended`) |
+| `extension_versions`      | Immutable version ledger: manifest jsonb, `minimum_platform_version`, signature, changelog                                      |
+| `extension_installations` | Per-org install: `extension_id`, `version`, `enabled`, granted scopes, config, health                                           |
+| `extension_permissions`   | Granted scope grants per installation (subset of requested)                                                                     |
+| `extension_credentials`   | Per-installation vault references (not raw secrets)                                                                             |
+| `extension_events`        | Append-only activity: invocations, data accessed, errors                                                                        |
+| `extension_health_checks` | Last health, latency, error rate                                                                                                |
+| `extension_audit_logs`    | Admin lifecycle actions (submit/review/approve/suspend/revoke)                                                                  |
 
 ## 3. Manifest
 
@@ -149,3 +149,4 @@ first release).
   empty + flags rather than throwing).
 - The platform can never be used to bypass gates, RLS, or the vault — enforced
   because extensions register **into** the governed registries, not around them.
+
