@@ -1,0 +1,48 @@
+{
+  "properties": {
+    "documentCompleteness": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "escalationReasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "expiringDocuments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "failedChecks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingDocuments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "screeningStatus": {
+      "enum": [ "clear_for_review", "incomplete", "escalate" ],
+      "type": "string"
+    }
+  },
+  "required": [ "screeningStatus", "documentCompleteness", "escalationReasons", "recommendedAction" ],
+  "type": "object"
+}

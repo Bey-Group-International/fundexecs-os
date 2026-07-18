@@ -1,0 +1,74 @@
+# skills/risk-register/evaluation.yaml
+# Golden evaluation cases for the Risk Register. These are the acceptance fixtures
+# a production skill must pass — score/severity correctness, ranking, empty-set
+# handling (flagged not fabricated), and per-risk gap flagging. Exercised by
+# lib/skills/catalog/risk-register.test.ts.
+cases:
+  - name: scores_and_severities
+    input:
+      entityName: Acme Fund
+      risks:
+        - name: Key-person dependency
+          category: Operational
+          likelihood: 4
+          impact: 5
+          mitigation: Succession plan
+          owner: COO
+        - name: FX exposure
+          category: Market
+          likelihood: 3
+          impact: 3
+          mitigation: Hedging policy
+          owner: CFO
+        - name: Vendor lock-in
+          category: Operational
+          likelihood: 2
+          impact: 2
+          mitigation: Second source
+          owner: CTO
+    expect:
+      highCount: 1
+      mediumCount: 1
+      lowCount: 1
+      topScore: 20
+
+  - name: empty_risk_set_flags_not_fabricates
+    input:
+      entityName: Acme Fund
+      risks: []
+    expect:
+      riskCount: 0
+      registerEmpty: true
+      flagsMissing: "No risks supplied — this skill scores a provided risk set; it does not fabricate risks."
+      neverInvents: true
+
+  - name: missing_scoring_fields_flagged
+    input:
+      entityName: Acme Fund
+      risks:
+        - name: Cyber breach
+          category: Technology
+    expect:
+      severity: unscored
+      gaps: [Missing likelihood/impact, No mitigation, No owner]
+      neverInvents: true
+
+  - name: ranked_unscored_last
+    input:
+      entityName: Acme Fund
+      risks:
+        - name: Low
+          likelihood: 1
+          impact: 2
+          mitigation: m
+          owner: o
+        - name: Unscored
+          mitigation: m
+          owner: o
+        - name: High
+          likelihood: 5
+          impact: 5
+          mitigation: m
+          owner: o
+    expect:
+      order: [High, Low, Unscored]

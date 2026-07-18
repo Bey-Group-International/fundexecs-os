@@ -1,0 +1,75 @@
+# skills/source-deals/evaluation.yaml
+# Golden evaluation cases for Deal Sourcing (Rank Candidates). These are the
+# acceptance fixtures a production skill must pass — ranking correctness, the
+# never-fabricate guardrail (empty set returns empty ranking with a note),
+# exclusion handling, and fact/calculation labelling. Exercised by
+# lib/skills/catalog/source-deals.test.ts.
+cases:
+  - name: ranks_supplied_set_best_first
+    input:
+      mandate:
+        sectors: [software]
+        geographies: [north america]
+        minRevenue: 10
+        maxRevenue: 100
+      candidates:
+        - name: MidFit Co
+          sector: Software
+          geography: EU
+          revenue: 40
+          source: crm
+        - name: BestFit Co
+          sector: Software
+          geography: North America
+          revenue: 50
+          source: crm
+        - name: OffMandate Co
+          sector: Retail
+          geography: Asia
+          revenue: 5
+          source: crm
+    expect:
+      topTarget: BestFit Co
+      candidateCount: 3
+
+  - name: empty_candidates_never_fabricates
+    input:
+      mandate:
+        sectors: [software]
+      candidates: []
+    expect:
+      ranked: []
+      candidateCount: 0
+      missingContext: "No candidates supplied — this skill ranks a provided candidate set; it does not fabricate targets."
+      neverInvents: true
+
+  - name: exclusion_hit_ranked_last
+    input:
+      mandate:
+        sectors: [consumer]
+        exclusions: [tobacco]
+      candidates:
+        - name: SmokeCo
+          sector: Tobacco
+          source: broker
+        - name: CleanCo
+          sector: Consumer
+          source: broker
+    expect:
+      excludedCount: 1
+      lastRanked: SmokeCo
+      topTargetExcludes: SmokeCo
+
+  - name: scores_known_dimensions_flags_missing_financials
+    input:
+      mandate:
+        sectors: [software]
+        minRevenue: 10
+        maxRevenue: 100
+      candidates:
+        - name: Mystery SaaS
+          sector: Software
+    expect:
+      fitScore: 100
+      flagsMissingFinancials: true
+      neverInvents: true

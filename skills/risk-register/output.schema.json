@@ -1,0 +1,81 @@
+{
+  "properties": {
+    "highCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "lowCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "mediumCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "register": {
+      "items": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "impact": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "number"
+          },
+          "likelihood": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "number"
+          },
+          "mitigation": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "score": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "number"
+          },
+          "severity": {
+            "enum": [ "high", "medium", "low", "unscored" ],
+            "type": "string"
+          }
+        },
+        "required": [ "name", "severity", "gaps" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "riskCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "unmitigatedCount": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [ "register", "highCount", "mediumCount", "lowCount", "unmitigatedCount", "riskCount", "missingFields", "recommendedAction" ],
+  "type": "object"
+}

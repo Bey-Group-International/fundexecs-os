@@ -1,0 +1,61 @@
+{
+  "properties": {
+    "candidateCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "excludedCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ranked": {
+      "items": {
+        "properties": {
+          "excluded": {
+            "type": "boolean"
+          },
+          "fitScore": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "geography": {
+            "type": "string"
+          },
+          "matchReasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string"
+          }
+        },
+        "required": [ "name", "fitScore", "excluded" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "topTargets": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "ranked", "topTargets", "excludedCount", "candidateCount", "recommendedAction" ],
+  "type": "object"
+}

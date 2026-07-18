@@ -1,0 +1,70 @@
+# skills/kyc-screen/evaluation.yaml
+# Golden evaluation cases for KYC / AML Screening. These are the acceptance
+# fixtures a production skill must pass — status correctness (NEVER "approved"),
+# exception escalation (sanctions / PEP / failed check), missing-data handling
+# (flagged not invented), and the guardrail that a compliance officer makes the
+# final determination. Exercised by lib/skills/catalog/kyc-screen.test.ts.
+cases:
+  - name: clean_subject_clears_for_review
+    input:
+      subjectName: Jane Doe
+      subjectType: individual
+      documents:
+        - { type: passport, present: true, expiresAt: "2030-01-01" }
+        - { type: proof_of_address, present: true, expiresAt: "2027-01-01" }
+      checks:
+        - { name: watchlist, result: pass }
+        - { name: adverse_media, result: pass }
+      pepFlag: false
+      sanctionsHit: false
+    expect:
+      screeningStatus: clear_for_review
+      documentCompleteness: 1
+      neverApproved: true
+      defersToComplianceOfficer: true
+
+  - name: sanctions_hit_escalates
+    input:
+      subjectName: Shady Holdings Ltd
+      subjectType: entity
+      documents:
+        - { type: incorporation_cert, present: true }
+      checks:
+        - { name: sanctions, result: pass }
+      pepFlag: false
+      sanctionsHit: true
+    expect:
+      screeningStatus: escalate
+      escalationReasonsInclude: [Sanctions hit]
+      defersToComplianceOfficer: true
+
+  - name: failed_check_escalates
+    input:
+      subjectName: Risky Co
+      documents:
+        - { type: passport, present: true }
+      checks:
+        - { name: adverse_media, result: fail }
+      pepFlag: false
+      sanctionsHit: false
+    expect:
+      screeningStatus: escalate
+      failedChecks: [adverse_media]
+      escalationReasonsInclude: ["Failed check: adverse_media"]
+
+  - name: missing_documents_incomplete_flags_not_invents
+    input:
+      subjectName: Partial Person
+      subjectType: individual
+      documents:
+        - { type: passport, present: true }
+        - { type: proof_of_address, present: false }
+      checks:
+        - { name: watchlist, result: pass }
+      pepFlag: false
+      sanctionsHit: false
+    expect:
+      screeningStatus: incomplete
+      documentCompleteness: 0.5
+      missingDocuments: [proof_of_address]
+      neverInvents: true

@@ -1,0 +1,83 @@
+# skills/policy-check/evaluation.yaml
+# Golden evaluation cases for the Policy & Restricted-Action Check. These are the
+# acceptance fixtures a production skill must pass — restriction detection,
+# review-on-missing-context (never a silent pass), missing-policy-set handling, and
+# the SUPPORT-only guardrail (never a final determination, never an authorization).
+# Exercised by lib/skills/catalog/policy-check.test.ts.
+cases:
+  - name: restricted_policy_escalates
+    input:
+      action: wire funds to counterparty
+      policies:
+        - name: Sanctions block
+          rule: No dealings with sanctioned entities
+          restricted: true
+    expect:
+      status: restricted
+      requiresEscalation: true
+      defersToOfficer: true
+
+  - name: forbidden_domain_restricted
+    input:
+      action: share materials
+      context:
+        counterpartyDomain: badactor.com
+      policies:
+        - name: Blocked domains
+          rule: No sharing with blocked domains
+          forbiddenDomains: [badactor.com, shell.io]
+    expect:
+      status: restricted
+      requiresEscalation: true
+
+  - name: over_dollar_limit_restricted
+    input:
+      action: approve payment
+      context:
+        dollarAmount: 500000
+      policies:
+        - name: Spend cap
+          rule: Max single spend 250k
+          maxDollar: 250000
+    expect:
+      status: restricted
+
+  - name: missing_context_reviews_not_passes
+    input:
+      action: approve payment
+      policies:
+        - name: Spend cap
+          rule: Max single spend 250k
+          maxDollar: 250000
+    expect:
+      status: review
+      requiresEscalation: false
+      flagsMissing: ["Dollar amount — needed to evaluate a dollar-limit policy."]
+      neverSilentlyPasses: true
+
+  - name: clears_policies_returns_ok
+    input:
+      action: approve payment
+      context:
+        counterpartyDomain: trusted.com
+        dollarAmount: 100000
+        jurisdiction: US
+      policies:
+        - name: Spend cap
+          rule: Max single spend 250k
+          maxDollar: 250000
+        - name: Jurisdiction allowlist
+          rule: US/EU only
+          jurisdictions: [US, EU]
+    expect:
+      status: ok
+      requiresEscalation: false
+      defersToOfficer: true   # even an all-clear is NOT an authorization
+
+  - name: no_policies_flags_gap
+    input:
+      action: move capital
+    expect:
+      flagsEmpty: true
+      flagsMissing: ["No policies supplied — provide the applicable policy set to evaluate."]
+      defersToOfficer: true

@@ -1,0 +1,13 @@
+{
+  "description": "A supplied payments company set organized into segments, sorted by count descending, with one unsegmented company flagged.",
+  "input": {
+    "sector": "Payments",
+    "geography": "North America",
+    "companies": [
+      { "name": "Acquiring Co", "segment": "Acquiring", "revenue": 120 },
+      { "name": "Gateway Inc", "segment": "Acquiring" },
+      { "name": "Issuer One", "segment": "Issuing", "positioning": "Consumer credit" },
+      { "name": "Stealth Startup" }
+    ]
+  }
+}

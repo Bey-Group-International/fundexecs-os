@@ -1,0 +1,32 @@
+{
+  "description": "Three supplied risks are scored (likelihood x impact) and ranked; the register returns one high, one medium, and one low severity.",
+  "input": {
+    "entityName": "Acme Fund",
+    "risks": [
+      {
+        "name": "Key-person dependency",
+        "category": "Operational",
+        "likelihood": 4,
+        "impact": 5,
+        "mitigation": "Succession plan in place",
+        "owner": "COO"
+      },
+      {
+        "name": "FX exposure",
+        "category": "Market",
+        "likelihood": 3,
+        "impact": 3,
+        "mitigation": "Hedging policy",
+        "owner": "CFO"
+      },
+      {
+        "name": "Vendor lock-in",
+        "category": "Operational",
+        "likelihood": 2,
+        "impact": 2,
+        "mitigation": "Second source qualified",
+        "owner": "CTO"
+      }
+    ]
+  }
+}

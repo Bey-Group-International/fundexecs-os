@@ -1,0 +1,76 @@
+{
+  "properties": {
+    "buyerCount": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "byType": {
+      "properties": {
+        "financial": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "sponsor": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "strategic": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "unknown": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [ "strategic", "financial", "sponsor", "unknown" ],
+      "type": "object"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ranked": {
+      "items": {
+        "properties": {
+          "fitScore": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "matchReasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [ "name", "fitScore", "matchReasons" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "topBuyers": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [ "ranked", "byType", "topBuyers", "buyerCount", "missingContext", "recommendedAction" ],
+  "type": "object"
+}

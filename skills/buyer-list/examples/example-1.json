@@ -1,0 +1,32 @@
+{
+  "description": "A three-buyer set for an industrials target; a same-sector strategic ranks top at fitScore 100, ahead of a capitalized in-region sponsor and an off-sector sponsor.",
+  "input": {
+    "company": {
+      "name": "TargetCo",
+      "sector": "Industrials",
+      "geography": "North America"
+    },
+    "buyers": [
+      {
+        "name": "OffSector Sponsor",
+        "type": "sponsor",
+        "sector": "Consumer",
+        "geography": "EU"
+      },
+      {
+        "name": "Perfect Strategic",
+        "type": "strategic",
+        "sector": "Industrials",
+        "geography": "North America",
+        "rationale": "Adjacent product line seeking scale in North America."
+      },
+      {
+        "name": "Capitalized Sponsor",
+        "type": "sponsor",
+        "sector": "Industrials",
+        "geography": "North America",
+        "aum": 5000
+      }
+    ]
+  }
+}

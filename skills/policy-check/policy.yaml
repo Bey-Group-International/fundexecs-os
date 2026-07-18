@@ -1,0 +1,37 @@
+# skills/policy-check/policy.yaml
+# Execution + governance policy for the Policy & Restricted-Action Check. Enforced
+# by the runtime (lib/skills/runner.ts) and the executive registry
+# (lib/executives/registry.ts).
+approval_tier: 1            # Tier 1 — internal, reversible SUPPORT check.
+risk_classification: elevated
+
+# The runtime rejects a run whose assigned executive is not in this list
+# (canRunSkill). These map to lib/executives/registry.ts ExecutiveKeys.
+allowed_executives:
+  - risk_compliance
+
+# Data the skill may read. The runtime does not grant scopes beyond these.
+data_scopes:
+  - policy:read
+
+# Actions the skill may NEVER take, even to prepare (also encoded on the manifest
+# and cross-checked against the executive's prohibited actions).
+prohibited_actions:
+  - sign_document
+  - move_capital
+  - submit_term_sheet
+
+# Hard rules the skill core must honour (validated by evaluation.yaml cases).
+guardrails:
+  - SUPPORT only — this skill evaluates SUPPLIED policies against a proposed action
+    and FLAGS potential restrictions or conflicts for review.
+  - It NEVER makes a final legal or compliance determination.
+  - It NEVER authorizes the action. recommendedAction always defers the final call
+    to a compliance or legal officer.
+  - A restriction it cannot evaluate because context is missing is surfaced as
+    "review" — never silently passed.
+  - Never fabricate context; a missing input is flagged in missingContext, not assumed.
+  - Output must validate against output.schema.json before it is persisted.
+
+# This check seeds no automatic downstream skills — a human owns the next step.
+downstream: []

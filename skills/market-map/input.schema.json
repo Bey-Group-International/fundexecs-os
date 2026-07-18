@@ -1,0 +1,36 @@
+{
+  "properties": {
+    "companies": {
+      "items": {
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "positioning": {
+            "type": "string"
+          },
+          "revenue": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "segment": {
+            "type": "string"
+          }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "geography": {
+      "type": "string"
+    },
+    "sector": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [ "sector" ],
+  "type": "object"
+}

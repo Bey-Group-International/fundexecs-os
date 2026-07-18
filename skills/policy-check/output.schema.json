@@ -1,0 +1,45 @@
+{
+  "properties": {
+    "flags": {
+      "items": {
+        "properties": {
+          "policy": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [ "ok", "review", "restricted" ],
+            "type": "string"
+          }
+        },
+        "required": [ "policy", "status", "reason" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "missingContext": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommendedAction": {
+      "type": "string"
+    },
+    "requiresEscalation": {
+      "type": "boolean"
+    },
+    "restrictedCount": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reviewCount": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [ "flags", "restrictedCount", "reviewCount", "requiresEscalation", "missingContext", "recommendedAction" ],
+  "type": "object"
+}
