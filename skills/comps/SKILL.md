@@ -13,15 +13,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                           |
-|-------------------|-------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                         |
-| **Risk**          | low                                                                                       |
-| **Executives**    | Analyst                                                                                   |
-| **Inputs**        | `subject` (at minimum `companyName`) + `comparables` (array of peers)                     |
-| **Outputs**       | `multiples`, `impliedValuation`, `missingFields`, `keyRisks`, `recommendedAction`         |
-| **Artifacts**     | `analysis`, `model`                                                                       |
-| **Downstream**    | `ic-memo`                                                                                 |
+|                   |                                                                                   |
+|-------------------|-----------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                 |
+| **Risk**          | low                                                                               |
+| **Executives**    | Analyst                                                                           |
+| **Inputs**        | `subject` (at minimum `companyName`) + `comparables` (array of peers)             |
+| **Outputs**       | `multiples`, `impliedValuation`, `missingFields`, `keyRisks`, `recommendedAction` |
+| **Artifacts**     | `analysis`, `model`                                                               |
+| **Downstream**    | `ic-memo`                                                                         |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

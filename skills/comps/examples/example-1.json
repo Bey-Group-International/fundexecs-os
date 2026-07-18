@@ -1,11 +1,22 @@
 {
   "description": "A subject valued off three peers: implied EV range 200-250 (median 10.0x EV/EBITDA and 2.5x EV/Revenue) and implied equity 180 at 18.0x P/E.",
   "input": {
-    "comparables": [
-      { "name": "Alpha", "evEbitda": 8, "evRevenue": 2, "peRatio": 15 },
-      { "name": "Beta", "evEbitda": 10, "evRevenue": 3, "peRatio": 18 },
-      { "name": "Gamma", "evEbitda": 12, "evRevenue": 2.5, "peRatio": 20 }
-    ],
+    "comparables": [ {
+      "evEbitda": 8,
+      "evRevenue": 2,
+      "name": "Alpha",
+      "peRatio": 15
+    }, {
+      "evEbitda": 10,
+      "evRevenue": 3,
+      "name": "Beta",
+      "peRatio": 18
+    }, {
+      "evEbitda": 12,
+      "evRevenue": 2.5,
+      "name": "Gamma",
+      "peRatio": 20
+    } ],
     "subject": {
       "companyName": "TargetCo",
       "ebitda": 20,

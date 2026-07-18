@@ -15,15 +15,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                                                                                              |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                                                                                          |
-| **Risk**          | low                                                                                                                                                                        |
-| **Executives**    | Analyst                                                                                                                                                                    |
-| **Inputs**        | `companyName` (required) + optional `baseFcf`, `projectionYears`, `fcfGrowth`, `discountRate`, `terminalGrowth`, `netDebt`, `sharesOutstanding`                            |
+|                   |                                                                                                                                                                                              |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                                                                            |
+| **Risk**          | low                                                                                                                                                                                          |
+| **Executives**    | Analyst                                                                                                                                                                                      |
+| **Inputs**        | `companyName` (required) + optional `baseFcf`, `projectionYears`, `fcfGrowth`, `discountRate`, `terminalGrowth`, `netDebt`, `sharesOutstanding`                                              |
 | **Outputs**       | `enterpriseValue`, `equityValue`, `perShare`, `pvExplicit`, `pvTerminal`, `terminalValue`, `cashFlows`, `sensitivities`, `assumptionsUsed`, `missingFields`, `keyRisks`, `recommendedAction` |
-| **Artifacts**     | `model`, `analysis`                                                                                                                                                        |
-| **Downstream**    | `ic-memo`                                                                                                                                                                  |
+| **Artifacts**     | `model`, `analysis`                                                                                                                                                                          |
+| **Downstream**    | `ic-memo`                                                                                                                                                                                    |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

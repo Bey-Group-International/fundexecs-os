@@ -16,15 +16,15 @@ audit event.
 
 ## Contract
 
-|                   |                                                                                                          |
-|-------------------|----------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible DRAFT assembly                                                                  |
-| **Risk**          | low                                                                                                      |
-| **Executives**    | Investor Relations                                                                                       |
+|                   |                                                                                                                                 |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible DRAFT assembly                                                                                         |
+| **Risk**          | low                                                                                                                             |
+| **Executives**    | Investor Relations                                                                                                              |
 | **Inputs**        | `fundName` (required) + optional `period`, `nav`, `dpi`, `tvpi`, `netIrrPct`, `highlights`, `portfolioNotes`, `capitalActivity` |
-| **Outputs**       | `sections`, `statedMetrics`, `openItems`, `missingFields`, `completeness`, `recommendedAction`           |
-| **Artifacts**     | `lp_update`                                                                                              |
-| **Downstream**    | none — this is a leaf assembly step                                                                       |
+| **Outputs**       | `sections`, `statedMetrics`, `openItems`, `missingFields`, `completeness`, `recommendedAction`                                  |
+| **Artifacts**     | `lp_update`                                                                                                                     |
+| **Downstream**    | none — this is a leaf assembly step                                                                                             |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

@@ -15,15 +15,15 @@ audit event.
 
 ## Contract
 
-|                   |                                                                                                       |
-|-------------------|-------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — **preparing** the draft is internal, reversible work product                                      |
-| **Risk**          | moderate                                                                                               |
-| **Executives**    | Investor Relations                                                                                    |
+|                   |                                                                                                                                     |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — **preparing** the draft is internal, reversible work product                                                                    |
+| **Risk**          | moderate                                                                                                                            |
+| **Executives**    | Investor Relations                                                                                                                  |
 | **Inputs**        | `fundName` (required) + optional `investorName`, `callNumber`, `callPercent`, `totalCommitment`, `callAmount`, `dueDate`, `purpose` |
-| **Outputs**       | `callAmount`, `noticeDraft`, `sections`, `missingFields`, `openItems`, `recommendedAction`            |
-| **Artifacts**     | `memo`                                                                                                 |
-| **Downstream**    | none — this is a leaf preparation step                                                                 |
+| **Outputs**       | `callAmount`, `noticeDraft`, `sections`, `missingFields`, `openItems`, `recommendedAction`                                          |
+| **Artifacts**     | `memo`                                                                                                                              |
+| **Downstream**    | none — this is a leaf preparation step                                                                                              |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

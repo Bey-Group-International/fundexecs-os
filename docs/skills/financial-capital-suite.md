@@ -15,19 +15,19 @@ flagged; `sources` separate facts / assumptions / calculations / generated.
 
 ### Phase 2 — Financial analysis (Analyst)
 
-| Skill | Computes | Guards |
-|---|---|---|
-| `comps` | Comparable multiples (EV/EBITDA, EV/Rev, P/E) → count/median/mean/min/max; implied EV + equity + range | null when a subject metric or multiple has no data; flags a thin (<3) comp set |
-| `dcf` | Projected FCF, PV, terminal value, EV, equity, per-share + WACC/terminal sensitivities | requires baseFcf + discountRate; **hard guard: discount rate must exceed terminal growth**; defaults labelled assumptions |
-| `unit-economics` | LTV, LTV/CAC, payback months, health band | requires arpu/cac/margin/churn; divide-by-zero (churn 0) guarded → LTV undefined |
+|      Skill       |                                                Computes                                                |                                                          Guards                                                           |
+|------------------|--------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `comps`          | Comparable multiples (EV/EBITDA, EV/Rev, P/E) → count/median/mean/min/max; implied EV + equity + range | null when a subject metric or multiple has no data; flags a thin (<3) comp set                                            |
+| `dcf`            | Projected FCF, PV, terminal value, EV, equity, per-share + WACC/terminal sensitivities                 | requires baseFcf + discountRate; **hard guard: discount rate must exceed terminal growth**; defaults labelled assumptions |
+| `unit-economics` | LTV, LTV/CAC, payback months, health band                                                              | requires arpu/cac/margin/churn; divide-by-zero (churn 0) guarded → LTV undefined                                          |
 
 ### Phase 3 — Capital & LP operations (Investor Relations) — **draft-only**
 
-| Skill | Prepares | Never |
-|---|---|---|
-| `capital-call` | A capital-call **notice draft** (amount = commitment × call %, a calculation) | moves capital or fabricates wiring details — issuing the call is Tier-3 human; wiring is always an open placeholder |
-| `lp-update` | A quarterly LP **update draft** (performance lists only *stated* NAV/DPI/TVPI/IRR) | invents a metric — a missing metric is "Pending — confirm from fund admin"; external send is Tier-2 human |
-| `distribution-notice` | A distribution **notice draft** (amount, type, record/payment dates) | fabricates amounts/dates — missing → open item; capital movement is Tier-3 human |
+|         Skill         |                                      Prepares                                      |                                                        Never                                                        |
+|-----------------------|------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| `capital-call`        | A capital-call **notice draft** (amount = commitment × call %, a calculation)      | moves capital or fabricates wiring details — issuing the call is Tier-3 human; wiring is always an open placeholder |
+| `lp-update`           | A quarterly LP **update draft** (performance lists only *stated* NAV/DPI/TVPI/IRR) | invents a metric — a missing metric is "Pending — confirm from fund admin"; external send is Tier-2 human           |
+| `distribution-notice` | A distribution **notice draft** (amount, type, record/payment dates)               | fabricates amounts/dates — missing → open item; capital movement is Tier-3 human                                    |
 
 The three capital/LP skills are **Tier-1 preparation** skills: they draft, they
 never send or move money. Their manifests prohibit the corresponding Tier-2/Tier-3

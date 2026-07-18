@@ -14,16 +14,16 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                    |
-|-------------------|----------------------------------------------------------------------------------------------------|
-| **Stage**         | PREPARATION — assembles a **draft** only                                                           |
-| **Approval tier** | 1 — internal, reversible preparation                                                               |
-| **Risk**          | moderate                                                                                            |
-| **Executives**    | Investor Relations                                                                                 |
-| **Inputs**        | `fundName` (required) + optional investor / distribution details                                   |
-| **Outputs**       | `noticeDraft`, `sections`, `missingFields`, `openItems`, `recommendedAction`                        |
-| **Artifacts**     | `memo`                                                                                              |
-| **Downstream**    | none — any send or payment is a separate human step                                                |
+|                   |                                                                              |
+|-------------------|------------------------------------------------------------------------------|
+| **Stage**         | PREPARATION — assembles a **draft** only                                     |
+| **Approval tier** | 1 — internal, reversible preparation                                         |
+| **Risk**          | moderate                                                                     |
+| **Executives**    | Investor Relations                                                           |
+| **Inputs**        | `fundName` (required) + optional investor / distribution details             |
+| **Outputs**       | `noticeDraft`, `sections`, `missingFields`, `openItems`, `recommendedAction` |
+| **Artifacts**     | `memo`                                                                       |
+| **Downstream**    | none — any send or payment is a separate human step                          |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
