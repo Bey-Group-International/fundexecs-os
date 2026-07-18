@@ -674,6 +674,35 @@ Deployed, monitoring               →  live, observability active
              |  evidence UI, and the OUTSTANDING Phase-0 fix of the invented "$2B+" metric.
              |  Confidence: Tested by typecheck/eslint/Jest (31 new tests; 3062 total
              |  green, no regressions); live DB/auth flow not exercised (no local Supabase).
+
+2026-07-18  |  Provider-agnostic inference gateway + Phase-0 stabilization  |  Two
+             |  master-prompt non-negotiables: "don't hard-code Anthropic" and
+             |  "don't display invented metrics".
+             |  A) lib/inference/*: a capability-based gateway. A caller asks for a
+             |  CAPABILITY (+ optional data sensitivity / region / context size /
+             |  tier / cost), not a model; a pure, tested router (router.ts) picks the
+             |  model over the available providers (hard filters: available, capability,
+             |  restricted→private/region, region, context window, cost ceiling; ranked
+             |  by tier preference → sensitivity-aware bias → cost). The Anthropic adapter
+             |  reuses anthropicClient() and mirrors lib/brains/llm.ts exactly (fast
+             |  default, effort-gating, error→null), declaring three env-overridable
+             |  tiers. runInference degrades (never throws) when no model qualifies, so
+             |  every caller keeps its deterministic fallback. Reversible proof:
+             |  lib/brains/llm.ts routes through the gateway behind INFERENCE_GATEWAY_ENABLED
+             |  (off by default → the direct Anthropic path is unchanged). OpenAI/Google/
+             |  local are now just new InferenceProvider adapters + one registry line.
+             |  B) Phase-0: removed the invented "$2B+ deal flow tracked" counter and the
+             |  fabricated testimonial from app/page.tsx; kept only verifiable facts (4
+             |  hubs; executive count DERIVED from AGENTS.length so it can't drift); fixed
+             |  StatCounter's zero-on-hydration defect (resting value is the real number
+             |  on SSR/first-paint/no-JS; the count-up is pure enhancement that always
+             |  lands on the true value).
+             |  Decision: build the gateway as the new chokepoint + wire ONE consumer
+             |  behind a flag rather than ripping out lib/claude.ts's ~15 direct calls
+             |  (that reroute + an inference_runs telemetry ledger are the documented
+             |  backlog). Additive, no default behavior change.
+             |  Confidence: Tested by typecheck/eslint/Jest (15 new tests; 3077 total
+             |  green, no regressions); app not run live (no local env).
 ```
 
 ---

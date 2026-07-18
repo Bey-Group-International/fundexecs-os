@@ -21,10 +21,12 @@ function prefersReducedMotion() {
   );
 }
 
-// Counts up from 0 to `value` the first time it scrolls into view, easing out
-// so it decelerates into the final number. Snaps straight to the value under
-// reduced-motion or where IntersectionObserver is unavailable (SSR/older
-// engines), so the real figure is always what's shown at rest.
+// Renders the REAL value at rest — the resting figure is the true number on the
+// server, at first paint, with JS disabled, and if the animation never runs. The
+// count-up is a pure progressive enhancement: when the stat scrolls into view it
+// animates 0 → value once. This means a counter can never render as a stale 0 due
+// to a hydration / observer / initialization defect; the worst case is that the
+// real value simply appears without the flourish.
 export function StatCounter({
   value,
   label,
@@ -35,20 +37,20 @@ export function StatCounter({
 }: StatCounterProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const started = useRef(false);
-  const [display, setDisplay] = useState(0);
+  // Initial state IS the target value (never 0), so SSR + hydration + no-JS all
+  // show the true figure and there is no hydration mismatch.
+  const [display, setDisplay] = useState(value);
 
   useEffect(() => {
     const node = ref.current;
-    if (!node) return;
+    // No animation possible → the resting `value` already shown is correct.
+    if (!node || prefersReducedMotion() || typeof IntersectionObserver === "undefined") {
+      return;
+    }
 
     const run = () => {
       if (started.current) return;
       started.current = true;
-
-      if (prefersReducedMotion()) {
-        setDisplay(value);
-        return;
-      }
 
       let raf = 0;
       const start = performance.now();
@@ -57,15 +59,11 @@ export function StatCounter({
         const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
         setDisplay(Math.round(value * eased));
         if (t < 1) raf = requestAnimationFrame(tick);
+        else setDisplay(value); // guarantee we land exactly on the true value
       };
       raf = requestAnimationFrame(tick);
       return () => cancelAnimationFrame(raf);
     };
-
-    if (typeof IntersectionObserver === "undefined") {
-      run();
-      return;
-    }
 
     const io = new IntersectionObserver(
       (entries) => {

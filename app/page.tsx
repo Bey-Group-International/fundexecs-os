@@ -7,6 +7,14 @@ import { StatCounter } from "@/components/marketing/StatCounter";
 import { FaqAccordion } from "@/components/marketing/FaqAccordion";
 import { MeetEarnTeam } from "@/components/marketing/MeetEarnTeam";
 import { WorkspacePreview } from "@/components/marketing/WorkspacePreview";
+import { AGENTS } from "@/lib/agents";
+
+// Verifiable product facts, derived from source so they can never drift or
+// misstate. We deliberately do NOT display invented platform metrics (AUM, deal
+// flow, customer counts) — only figures that are true by construction.
+const HUB_COUNT = 4; // Build · Source · Run · Execute
+const EXECUTIVE_COUNT = AGENTS.length; // Earn + specialists (lib/agents.ts)
+const SPECIALIST_COUNT = EXECUTIVE_COUNT - 1;
 
 const OPERATING_LOOP = [
   {
@@ -131,38 +139,25 @@ export default async function LandingPage(
 
       <div className="border-t border-line" />
 
-      {/* Social proof strip — one unified inline metric band */}
+      {/* Product-capability band — verifiable facts only, no invented metrics */}
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="rounded-2xl border border-line bg-surface-1 px-6 py-7">
           <p className="mb-6 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
-            Built for operators who move capital at scale
+            One operating system for the private-market lifecycle
           </p>
           <div className="flex flex-col divide-y divide-line/70 sm:flex-row sm:divide-x sm:divide-y-0">
             <StatCounter
               className="flex-1 px-4 py-3 sm:py-0"
-              value={2}
-              prefix="$"
-              suffix="B+"
-              label="private-market deal flow tracked"
-            />
-            <StatCounter
-              className="flex-1 px-4 py-3 sm:py-0"
-              value={4}
+              value={HUB_COUNT}
               suffix=" hubs"
               label="Build · Source · Run · Execute lifecycle"
             />
             <StatCounter
               className="flex-1 px-4 py-3 sm:py-0"
-              value={15}
-              label="AI executives — Earn + 14 specialists"
+              value={EXECUTIVE_COUNT}
+              label={`AI executives — Earn + ${SPECIALIST_COUNT} specialists`}
             />
           </div>
-          <blockquote className="mt-6 border-t border-line/60 pt-5 text-center text-sm italic text-fg-secondary">
-            &ldquo;FundExecs OS gives our team an execution layer we couldn&rsquo;t afford to hire — Earn does in minutes what used to take a full analyst day.&rdquo;
-            <cite className="mt-2 block not-italic font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-              Early-access fund operator
-            </cite>
-          </blockquote>
         </div>
       </section>
 
