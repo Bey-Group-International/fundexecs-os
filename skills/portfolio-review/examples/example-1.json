@@ -6,10 +6,17 @@
     "budgetEbitda": 20,
     "budgetRevenue": 100,
     "companyName": "Portco One",
-    "covenants": [
-      { "actual": 1.5, "name": "Min DSCR", "threshold": 1.2, "type": "min" },
-      { "actual": 3.5, "name": "Max Leverage", "threshold": 4.0, "type": "max" }
-    ],
+    "covenants": [ {
+      "actual": 1.5,
+      "name": "Min DSCR",
+      "threshold": 1.2,
+      "type": "min"
+    }, {
+      "actual": 3.5,
+      "name": "Max Leverage",
+      "threshold": 4.0,
+      "type": "max"
+    } ],
     "period": "Q2 2026"
   }
 }

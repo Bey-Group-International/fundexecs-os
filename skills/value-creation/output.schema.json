@@ -1,69 +1,69 @@
 {
-  "type": "object",
-  "required": [ "ebitdaBridge", "rankedInitiatives", "hundredDayPlan", "missingFields", "keyRisks", "recommendedAction" ],
   "properties": {
     "bridgedEbitda": {
       "type": "number"
     },
+    "ebitdaBridge": {
+      "items": {
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "step": {
+            "type": "string"
+          }
+        },
+        "required": [ "step" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "gapToTarget": {
       "type": "number"
     },
-    "ebitdaBridge": {
-      "type": "array",
+    "hundredDayPlan": {
       "items": {
-        "type": "object",
-        "required": [ "step" ],
-        "properties": {
-          "step": {
-            "type": "string"
-          },
-          "amount": {
-            "type": "number"
-          }
-        }
-      }
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "keyRisks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "missingFields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "rankedInitiatives": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [ "name" ],
         "properties": {
-          "name": {
-            "type": "string"
-          },
           "ebitdaImpact": {
             "type": "number"
           },
-          "workstream": {
+          "name": {
             "type": "string"
           },
           "timelineMonths": {
             "type": "number"
+          },
+          "workstream": {
+            "type": "string"
           }
-        }
-      }
-    },
-    "hundredDayPlan": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "missingFields": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "keyRisks": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
     },
     "recommendedAction": {
       "type": "string"
     }
-  }
+  },
+  "required": [ "ebitdaBridge", "rankedInitiatives", "hundredDayPlan", "missingFields", "keyRisks", "recommendedAction" ],
+  "type": "object"
 }

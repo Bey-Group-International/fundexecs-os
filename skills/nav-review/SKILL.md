@@ -14,15 +14,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                          |
-|-------------------|----------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                        |
-| **Risk**          | moderate                                                                                                 |
-| **Executives**    | Fund Admin                                                                                               |
+|                   |                                                                                                                                                            |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                                          |
+| **Risk**          | moderate                                                                                                                                                   |
+| **Executives**    | Fund Admin                                                                                                                                                 |
 | **Inputs**        | `fundName` (required) + optional `priorNav`, `contributions`, `distributions`, `realizedGainLoss`, `unrealizedGainLoss`, `fees`, `expenses`, `reportedNav` |
-| **Outputs**       | `computedNav`, `tieOutDifference`, `tiesOut`, `rollForward`, `missingFields`, `keyRisks`, `recommendedAction` |
-| **Artifacts**     | `analysis`                                                                                               |
-| **Downstream**    | `lp-update`                                                                                              |
+| **Outputs**       | `computedNav`, `tieOutDifference`, `tiesOut`, `rollForward`, `missingFields`, `keyRisks`, `recommendedAction`                                              |
+| **Artifacts**     | `analysis`                                                                                                                                                 |
+| **Downstream**    | `lp-update`                                                                                                                                                |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

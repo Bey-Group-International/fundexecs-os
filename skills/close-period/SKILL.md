@@ -14,15 +14,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                  |
-|-------------------|--------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — **preparing** the checklist is internal, reversible work product                             |
-| **Risk**          | moderate                                                                                         |
-| **Executives**    | Fund Administration                                                                              |
-| **Inputs**        | `fundName` (required) + optional `periodEnd`, `tasksComplete` (canonical task keys marked done)  |
+|                   |                                                                                                            |
+|-------------------|------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — **preparing** the checklist is internal, reversible work product                                       |
+| **Risk**          | moderate                                                                                                   |
+| **Executives**    | Fund Administration                                                                                        |
+| **Inputs**        | `fundName` (required) + optional `periodEnd`, `tasksComplete` (canonical task keys marked done)            |
 | **Outputs**       | `checklist`, `readiness`, `completeCount`, `totalTasks`, `openTasks`, `missingFields`, `recommendedAction` |
-| **Artifacts**     | `analysis`                                                                                        |
-| **Downstream**    | none — this is a leaf preparation step                                                           |
+| **Artifacts**     | `analysis`                                                                                                 |
+| **Downstream**    | none — this is a leaf preparation step                                                                     |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
@@ -54,16 +54,16 @@ close the period, reopen it, or post anything:
 
 ## The canonical checklist
 
-| Key                  | Task                                    |
-|----------------------|-----------------------------------------|
-| `bank_recs`          | Bank reconciliations complete           |
-| `accruals`           | Accruals booked                         |
-| `capital_activity`   | Capital activity recorded               |
-| `fee_calc`           | Management/performance fees calculated  |
-| `nav_tieout`         | NAV tie-out complete                    |
-| `lp_statements`      | LP statements prepared                  |
-| `subdoc_updates`     | Subscription/transfer updates applied   |
-| `investor_reporting` | Investor reporting drafted              |
+|         Key          |                  Task                  |
+|----------------------|----------------------------------------|
+| `bank_recs`          | Bank reconciliations complete          |
+| `accruals`           | Accruals booked                        |
+| `capital_activity`   | Capital activity recorded              |
+| `fee_calc`           | Management/performance fees calculated |
+| `nav_tieout`         | NAV tie-out complete                   |
+| `lp_statements`      | LP statements prepared                 |
+| `subdoc_updates`     | Subscription/transfer updates applied  |
+| `investor_reporting` | Investor reporting drafted             |
 
 `readiness = round(completeCount / totalTasks, 2)`. When `readiness < 1` the
 recommendation is to resolve the open items before **requesting** close; at

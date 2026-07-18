@@ -3,20 +3,17 @@
   "input": {
     "companyName": "Portfolio Co",
     "currentEbitda": 100,
-    "targetEbitda": 150,
-    "initiatives": [
-      {
-        "name": "Pricing",
-        "ebitdaImpact": 20,
-        "workstream": "Commercial",
-        "timelineMonths": 2
-      },
-      {
-        "name": "Procurement",
-        "ebitdaImpact": 15,
-        "workstream": "Operations",
-        "timelineMonths": 6
-      }
-    ]
+    "initiatives": [ {
+      "ebitdaImpact": 20,
+      "name": "Pricing",
+      "timelineMonths": 2,
+      "workstream": "Commercial"
+    }, {
+      "ebitdaImpact": 15,
+      "name": "Procurement",
+      "timelineMonths": 6,
+      "workstream": "Operations"
+    } ],
+    "targetEbitda": 150
   }
 }

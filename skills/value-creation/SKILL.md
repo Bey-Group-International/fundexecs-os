@@ -14,15 +14,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                                          |
-|-------------------|--------------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                                        |
-| **Risk**          | low                                                                                                                      |
-| **Executives**    | Portfolio Ops                                                                                                            |
-| **Inputs**        | `companyName` (required) + optional `currentEbitda`, `targetEbitda`, `initiatives`                                       |
+|                   |                                                                                                                                         |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                       |
+| **Risk**          | low                                                                                                                                     |
+| **Executives**    | Portfolio Ops                                                                                                                           |
+| **Inputs**        | `companyName` (required) + optional `currentEbitda`, `targetEbitda`, `initiatives`                                                      |
 | **Outputs**       | `bridgedEbitda`, `gapToTarget`, `ebitdaBridge`, `rankedInitiatives`, `hundredDayPlan`, `missingFields`, `keyRisks`, `recommendedAction` |
-| **Artifacts**     | `analysis`, `memo`                                                                                                       |
-| **Downstream**    | none                                                                                                                     |
+| **Artifacts**     | `analysis`, `memo`                                                                                                                      |
+| **Downstream**    | none                                                                                                                                    |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

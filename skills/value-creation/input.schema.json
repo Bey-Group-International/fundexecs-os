@@ -1,6 +1,4 @@
 {
-  "type": "object",
-  "required": [ "companyName" ],
   "properties": {
     "companyName": {
       "minLength": 1,
@@ -9,31 +7,33 @@
     "currentEbitda": {
       "type": "number"
     },
-    "targetEbitda": {
-      "type": "number"
-    },
     "initiatives": {
-      "type": "array",
       "items": {
-        "type": "object",
-        "required": [ "name" ],
         "properties": {
-          "name": {
-            "minLength": 1,
-            "type": "string"
-          },
           "ebitdaImpact": {
             "type": "number"
           },
-          "workstream": {
+          "name": {
+            "minLength": 1,
             "type": "string"
           },
           "timelineMonths": {
             "minimum": 0,
             "type": "number"
+          },
+          "workstream": {
+            "type": "string"
           }
-        }
-      }
+        },
+        "required": [ "name" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "targetEbitda": {
+      "type": "number"
     }
-  }
+  },
+  "required": [ "companyName" ],
+  "type": "object"
 }

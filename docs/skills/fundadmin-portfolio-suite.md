@@ -12,19 +12,19 @@ every one.
 Each prepares work for review and **never** posts, closes, moves capital, or
 approves NAV — those are Tier-3 human actions the manifests prohibit.
 
-| Skill | Prepares | Guards |
-|---|---|---|
-| `reconcile` | Account/GL reconciliation: statement↔ledger difference, break detection, unexplained total | requires both balances (else difference null + flagged); never posts entries |
-| `nav-review` | NAV roll-forward tie-out (prior NAV + signed flows → computed NAV vs reported) | prior NAV is the anchor (missing → null, never assumed 0); absent flows default 0 but labelled assumptions; never approves NAV |
-| `close-period` | Period-close readiness checklist (8 canonical tasks) + readiness % | closing/locking the period is Tier-3 human — prohibited; only prepares |
+|     Skill      |                                          Prepares                                          |                                                             Guards                                                             |
+|----------------|--------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `reconcile`    | Account/GL reconciliation: statement↔ledger difference, break detection, unexplained total | requires both balances (else difference null + flagged); never posts entries                                                   |
+| `nav-review`   | NAV roll-forward tie-out (prior NAV + signed flows → computed NAV vs reported)             | prior NAV is the anchor (missing → null, never assumed 0); absent flows default 0 but labelled assumptions; never approves NAV |
+| `close-period` | Period-close readiness checklist (8 canonical tasks) + readiness %                         | closing/locking the period is Tier-3 human — prohibited; only prepares                                                         |
 
 ## Phase 5 — Portfolio operations (Portfolio Ops)
 
-| Skill | Computes |
-|---|---|
-| `portfolio-review` | Budget-to-actual revenue/EBITDA variance + covenant checks (min/max) → breaches |
-| `value-creation` | EBITDA bridge (current → initiatives → bridged), gap-to-target, ranked initiatives, 100-day plan |
-| `kpi-ingest` | KPI normalization vs target → variance + on/off-track status, missing-value flags |
+|       Skill        |                                             Computes                                             |
+|--------------------|--------------------------------------------------------------------------------------------------|
+| `portfolio-review` | Budget-to-actual revenue/EBITDA variance + covenant checks (min/max) → breaches                  |
+| `value-creation`   | EBITDA bridge (current → initiatives → bridged), gap-to-target, ranked initiatives, 100-day plan |
+| `kpi-ingest`       | KPI normalization vs target → variance + on/off-track status, missing-value flags                |
 
 All deterministic, provenance-labelled (facts / assumptions / calculations /
 generated), and never fabricate a figure — a missing input is flagged.

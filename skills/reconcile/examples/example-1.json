@@ -4,10 +4,21 @@
     "accountName": "Operating — Chase 1234",
     "ledgerBalance": 10000,
     "statementBalance": 10500,
-    "transactions": [
-      { "description": "Wire in", "ledgerAmount": 500, "matched": true, "statementAmount": 500 },
-      { "description": "Bank fee", "ledgerAmount": 0, "matched": true, "statementAmount": -25 },
-      { "description": "Outstanding check", "ledgerAmount": 100, "matched": false, "statementAmount": 0 }
-    ]
+    "transactions": [ {
+      "description": "Wire in",
+      "ledgerAmount": 500,
+      "matched": true,
+      "statementAmount": 500
+    }, {
+      "description": "Bank fee",
+      "ledgerAmount": 0,
+      "matched": true,
+      "statementAmount": -25
+    }, {
+      "description": "Outstanding check",
+      "ledgerAmount": 100,
+      "matched": false,
+      "statementAmount": 0
+    } ]
   }
 }

@@ -15,15 +15,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                                                                    |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                                                                  |
-| **Risk**          | low                                                                                                                                                |
-| **Executives**    | Portfolio Ops                                                                                                                                      |
-| **Inputs**        | `companyName` (required) + optional `period`, `budgetRevenue`, `actualRevenue`, `budgetEbitda`, `actualEbitda`, `covenants`                        |
+|                   |                                                                                                                                                                |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                                                              |
+| **Risk**          | low                                                                                                                                                            |
+| **Executives**    | Portfolio Ops                                                                                                                                                  |
+| **Inputs**        | `companyName` (required) + optional `period`, `budgetRevenue`, `actualRevenue`, `budgetEbitda`, `actualEbitda`, `covenants`                                    |
 | **Outputs**       | `revenueVariance`, `revenueVariancePct`, `ebitdaVariance`, `ebitdaVariancePct`, `covenantChecks`, `breaches`, `missingFields`, `keyRisks`, `recommendedAction` |
-| **Artifacts**     | `analysis`                                                                                                                                         |
-| **Downstream**    | `value-creation`                                                                                                                                  |
+| **Artifacts**     | `analysis`                                                                                                                                                     |
+| **Downstream**    | `value-creation`                                                                                                                                               |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
