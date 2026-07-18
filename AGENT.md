@@ -913,6 +913,34 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Tested by typecheck/eslint/Jest (22 new tests; 3645 total
              |  green, no regressions). Backend + one additive migration; no app/component
              |  changes.
+
+2026-07-18  |  Inference-run ledger + artifact document export  |  Two independent
+             |  infra items built IN PARALLEL (two backend subagents) then integrated
+             |  centrally. Both self-contained, dependency-free, additive.
+             |  - Inference ledger: migration 20260718180000 inference_runs — an
+             |    APPEND-ONLY telemetry ledger (no updated_at/trigger, no realtime;
+             |    like dispatch_log) for the provider-agnostic gateway: capability,
+             |    provider/model, prefer-tier, sensitivity, ok/degraded, in/out tokens,
+             |    latency, purpose label, optional session/workflow links, error; org
+             |    RLS, idempotent. lib/inference/store.ts persistInferenceRun (server-
+             |    only, best-effort, never throws; narrow unknown-cast like skills store)
+             |    + lib/inference/logged.ts runInferenceLogged(ctx, req) = runInference
+             |    then persist telemetry best-effort, result returned unchanged (the
+             |    executeSkillCore-pure + runSkill-persists pattern for inference).
+             |    Deferred to its own increment: routing lib/claude.ts through the gateway.
+             |  - Artifact export: lib/artifacts/export.ts — pure, dependency-free,
+             |    hand-rolled markdown renderers: renderMarkdownToRtf (valid RTF 1.0,
+             |    opens in Word/Pages; escapes \{} + non-ASCII), renderMarkdownToHtml
+             |    (self-contained print-styled doc, the print-to-PDF path), renderArtifact
+             |    dispatch; ReDoS-safe (input cap, line-based, bounded tokenizer, never
+             |    throws). Route app/api/artifacts/[id]/export?format=rtf|html|md —
+             |    requireOrgContext + RLS + org filter, 400/404 guards, attachment
+             |    filename slugified from title. RTF/HTML chosen over binary docx/pdf to
+             |    stay dependency-free; the renderArtifact boundary is where a future
+             |    docx dependency plugs in.
+             |  Confidence: Tested by typecheck/eslint/Jest (21 new tests; 3666 total
+             |  green, no regressions). Backend + one additive migration + one download
+             |  route; no UI/component changes.
 ```
 
 ---
