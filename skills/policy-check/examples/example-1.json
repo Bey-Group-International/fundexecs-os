@@ -7,22 +7,18 @@
       "dollarAmount": 500000,
       "jurisdiction": "US"
     },
-    "policies": [
-      {
-        "name": "Spend cap",
-        "rule": "Single payments over 250k require compliance sign-off",
-        "maxDollar": 250000
-      },
-      {
-        "name": "Blocked counterparties",
-        "rule": "No dealings with blocked counterparty domains",
-        "forbiddenDomains": [ "badactor.com", "shell.io" ]
-      },
-      {
-        "name": "Jurisdiction allowlist",
-        "rule": "US and EU counterparties only",
-        "jurisdictions": [ "US", "EU" ]
-      }
-    ]
+    "policies": [ {
+      "maxDollar": 250000,
+      "name": "Spend cap",
+      "rule": "Single payments over 250k require compliance sign-off"
+    }, {
+      "forbiddenDomains": [ "badactor.com", "shell.io" ],
+      "name": "Blocked counterparties",
+      "rule": "No dealings with blocked counterparty domains"
+    }, {
+      "jurisdictions": [ "US", "EU" ],
+      "name": "Jurisdiction allowlist",
+      "rule": "US and EU counterparties only"
+    } ]
   }
 }

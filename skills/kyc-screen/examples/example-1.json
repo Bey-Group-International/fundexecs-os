@@ -1,12 +1,14 @@
 {
   "description": "An entity subject with a sanctions hit that screens ESCALATE and is routed to a compliance officer — this skill never approves onboarding.",
   "input": {
-    "checks": [
-      { "name": "sanctions", "result": "pass" }
-    ],
-    "documents": [
-      { "present": true, "type": "incorporation_cert" }
-    ],
+    "checks": [ {
+      "name": "sanctions",
+      "result": "pass"
+    } ],
+    "documents": [ {
+      "present": true,
+      "type": "incorporation_cert"
+    } ],
     "pepFlag": false,
     "sanctionsHit": true,
     "subjectName": "Shady Holdings Ltd",

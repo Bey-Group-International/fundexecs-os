@@ -22,15 +22,15 @@ relevant context is missing is surfaced as `review`, never silently passed.
 
 ## Contract
 
-|                   |                                                                                                            |
-|-------------------|------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible SUPPORT check                                                                     |
-| **Risk**          | elevated                                                                                                   |
-| **Executives**    | Risk & Compliance                                                                                          |
-| **Inputs**        | `action` (required) + optional `context` + optional `policies`                                            |
-| **Outputs**       | `flags`, `restrictedCount`, `reviewCount`, `requiresEscalation`, `missingContext`, `recommendedAction`     |
-| **Artifacts**     | `risk_report`, `analysis`                                                                                   |
-| **Downstream**    | none — a human owns the next step                                                                          |
+|                   |                                                                                                        |
+|-------------------|--------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible SUPPORT check                                                                 |
+| **Risk**          | elevated                                                                                               |
+| **Executives**    | Risk & Compliance                                                                                      |
+| **Inputs**        | `action` (required) + optional `context` + optional `policies`                                         |
+| **Outputs**       | `flags`, `restrictedCount`, `reviewCount`, `requiresEscalation`, `missingContext`, `recommendedAction` |
+| **Artifacts**     | `risk_report`, `analysis`                                                                              |
+| **Downstream**    | none — a human owns the next step                                                                      |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

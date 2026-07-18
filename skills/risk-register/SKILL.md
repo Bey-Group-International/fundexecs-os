@@ -15,15 +15,15 @@ tier, and persists a `skill_runs` record with an audit event.
 
 ## Contract
 
-|                   |                                                                                                        |
-|-------------------|--------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible analysis                                                                      |
-| **Risk**          | moderate                                                                                               |
-| **Executives**    | Risk & Compliance                                                                                     |
-| **Inputs**        | `entityName` (required) + `risks` (a supplied set; each with name and optional likelihood/impact/etc.) |
+|                   |                                                                                                                           |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                                         |
+| **Risk**          | moderate                                                                                                                  |
+| **Executives**    | Risk & Compliance                                                                                                         |
+| **Inputs**        | `entityName` (required) + `risks` (a supplied set; each with name and optional likelihood/impact/etc.)                    |
 | **Outputs**       | `register`, `highCount`, `mediumCount`, `lowCount`, `unmitigatedCount`, `riskCount`, `missingFields`, `recommendedAction` |
-| **Artifacts**     | `risk_report`                                                                                          |
-| **Downstream**    | —                                                                                                     |
+| **Artifacts**     | `risk_report`                                                                                                             |
+| **Downstream**    | —                                                                                                                         |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

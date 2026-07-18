@@ -13,11 +13,11 @@ The load-bearing guardrail (a master-prompt concern): these skills **rank/organi
 a candidate set the caller supplies. They never invent, research, or hallucinate
 companies.** With no input set they return an empty result + an explicit note.
 
-| Skill | Executive | Does |
-|---|---|---|
+|     Skill      |   Executive   |                                            Does                                             |
+|----------------|---------------|---------------------------------------------------------------------------------------------|
 | `source-deals` | Deal Sourcing | Ranks supplied candidates against a mandate (sector/geo/size fit, exclusions) → top targets |
-| `buyer-list` | Deal Sourcing | Ranks a supplied buyer set for a sale process (strategic/financial/sponsor, fit) |
-| `market-map` | Research | Segments a supplied company set into a market map (by segment, counts) |
+| `buyer-list`   | Deal Sourcing | Ranks a supplied buyer set for a sale process (strategic/financial/sponsor, fit)            |
+| `market-map`   | Research      | Segments a supplied company set into a market map (by segment, counts)                      |
 
 ## Risk & Compliance (Risk & Compliance) — screen + escalate, never decide
 
@@ -25,11 +25,11 @@ Another master-prompt non-negotiable: these skills **support** compliance. They
 screen, flag, score, and route exceptions — they **never approve onboarding, never
 make the final compliance/legal determination, and never authorize an action.**
 
-| Skill | Does | Never |
-|---|---|---|
-| `kyc-screen` | KYC/AML rules-grid screen: doc completeness, expiry, PEP/sanctions/failed-check escalation | approves onboarding — status is `clear_for_review`/`incomplete`/`escalate`, **never** "approved"; a compliance officer decides |
-| `policy-check` | Evaluates supplied policies against a proposed action + context → ok/review/restricted | authorizes the action or makes the final call — defers to a compliance/legal officer |
-| `risk-register` | Scores a supplied risk set (likelihood × impact → severity), flags gaps | fabricates risks |
+|      Skill      |                                            Does                                            |                                                             Never                                                              |
+|-----------------|--------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `kyc-screen`    | KYC/AML rules-grid screen: doc completeness, expiry, PEP/sanctions/failed-check escalation | approves onboarding — status is `clear_for_review`/`incomplete`/`escalate`, **never** "approved"; a compliance officer decides |
+| `policy-check`  | Evaluates supplied policies against a proposed action + context → ok/review/restricted     | authorizes the action or makes the final call — defers to a compliance/legal officer                                           |
+| `risk-register` | Scores a supplied risk set (likelihood × impact → severity), flags gaps                    | fabricates risks                                                                                                               |
 
 ## Integration
 

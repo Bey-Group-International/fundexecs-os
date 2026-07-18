@@ -24,15 +24,15 @@ stating that **a compliance officer makes the final onboarding determination**.
 
 ## Contract
 
-|                   |                                                                                                                       |
-|-------------------|-----------------------------------------------------------------------------------------------------------------------|
-| **Approval tier** | 1 — internal, reversible screening support                                                                            |
-| **Risk**          | elevated                                                                                                              |
-| **Executives**    | Risk & Compliance                                                                                                     |
-| **Inputs**        | `subjectName` (required) + optional `subjectType`, `documents`, `checks`, `pepFlag`, `sanctionsHit`                   |
+|                   |                                                                                                                                                               |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible screening support                                                                                                                    |
+| **Risk**          | elevated                                                                                                                                                      |
+| **Executives**    | Risk & Compliance                                                                                                                                             |
+| **Inputs**        | `subjectName` (required) + optional `subjectType`, `documents`, `checks`, `pepFlag`, `sanctionsHit`                                                           |
 | **Outputs**       | `screeningStatus`, `documentCompleteness`, `missingDocuments`, `expiringDocuments`, `failedChecks`, `escalationReasons`, `missingFields`, `recommendedAction` |
-| **Artifacts**     | `risk_report`                                                                                                         |
-| **Downstream**    | `policy-check`                                                                                                        |
+| **Artifacts**     | `risk_report`                                                                                                                                                 |
+| **Downstream**    | `policy-check`                                                                                                                                                |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in

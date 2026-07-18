@@ -10,15 +10,15 @@ approval-tier resolution, and a persisted `skill_runs` record with an audit even
 
 ## Contract
 
-| | |
-|---|---|
-| **Approval tier** | 1 — internal, reversible analysis |
-| **Risk** | low |
-| **Executives** | Deal Sourcing |
-| **Inputs** | `mandate` (criteria) + `candidates` (a supplied set to rank) |
-| **Outputs** | `ranked`, `topTargets`, `excludedCount`, `candidateCount`, `missingContext`, `recommendedAction` |
-| **Artifacts** | `analysis` |
-| **Downstream** | `screen-deal` |
+|                   |                                                                                                  |
+|-------------------|--------------------------------------------------------------------------------------------------|
+| **Approval tier** | 1 — internal, reversible analysis                                                                |
+| **Risk**          | low                                                                                              |
+| **Executives**    | Deal Sourcing                                                                                    |
+| **Inputs**        | `mandate` (criteria) + `candidates` (a supplied set to rank)                                     |
+| **Outputs**       | `ranked`, `topTargets`, `excludedCount`, `candidateCount`, `missingContext`, `recommendedAction` |
+| **Artifacts**     | `analysis`                                                                                       |
+| **Downstream**    | `screen-deal`                                                                                    |
 
 Input/output are enforced against [`input.schema.json`](./input.schema.json) and
 [`output.schema.json`](./output.schema.json). Governance lives in
