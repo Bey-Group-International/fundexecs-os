@@ -30,7 +30,10 @@ import { effectiveStepCost } from "@/lib/agent-costs";
 import { parseStoredEdgeContext, edgeContextToPromptLine, type EdgeContextResult } from "@/lib/edge-context";
 import { selectAgentWithContext } from "@/lib/brain-routing";
 import { resolveAutonomyForIntent } from "@/lib/autonomy";
-import { getActiveMandate } from "@/lib/mandates";
+import { getActiveMandate, getActiveScreeningCriteria } from "@/lib/mandates";
+import { planSkillForStep, type SkillPlan, type SkillPlanningContext, type PlanningDeal } from "@/lib/skills/skill-planner";
+import { executePlannedSkill } from "@/lib/skills/engine-run";
+import { SKILL_AUTOINVOKE_ENABLED } from "@/lib/skills/config";
 import { observeOutput } from "@/lib/observe";
 import { extractApiWriteRequest, executeApiWrite } from "@/lib/api-write-requests";
 
@@ -767,7 +770,7 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
   // honestly reflect what happened.
   let failedSteps = 0;
 
-  const [orgContext, orgProfile, activeMandate] = await Promise.all([
+  const [orgContext, orgProfile, activeMandate, screeningCriteria] = await Promise.all([
     loadOrgContext(ctx, workflow),
     // Resolve the org's compounding profile once for the whole workflow so all
     // steps share the same discount.
@@ -776,7 +779,44 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
     // autonomy mode — Tier-1 steps run auto, Tier-2 run auto when pre-authorized
     // by the mandate, Tier-3 always run manual. Best-effort: undefined on miss.
     getActiveMandate(ctx.supabase, ctx.orgId).catch(() => undefined),
+    // The mandate's STRUCTURED screening criteria — the real input the screening/
+    // sourcing skills consume when skill auto-invocation is enabled. Only fetched
+    // when the flag is on; null otherwise (and the free-text path is unchanged).
+    SKILL_AUTOINVOKE_ENABLED
+      ? getActiveScreeningCriteria(ctx.supabase, ctx.orgId).catch(() => null)
+      : Promise.resolve(null),
   ]);
+
+  // Assemble the skill-planning context ONCE per workflow (only when the flag is
+  // on). Deal fields come from a deal already LINKED to this workflow — a real
+  // record, never fabricated; absent for most first-run workflows, in which case
+  // the planner simply defers to the free-text path.
+  let skillPlanningContext: SkillPlanningContext | null = null;
+  if (SKILL_AUTOINVOKE_ENABLED) {
+    let planningDeal: PlanningDeal | null = null;
+    const linkedDealId =
+      workflow.result && typeof workflow.result === "object"
+        ? (workflow.result as { deal_id?: string }).deal_id
+        : undefined;
+    if (linkedDealId) {
+      const { data: dealRow } = await ctx.supabase
+        .from("deals")
+        .select("name, asset_class, geography, target_amount")
+        .eq("id", linkedDealId)
+        .maybeSingle();
+      if (dealRow) {
+        planningDeal = {
+          companyName: dealRow.name ?? undefined,
+          // asset_class is the deal's structured category — the closest field to a
+          // screening "sector". target_amount is the transaction size.
+          sector: dealRow.asset_class ?? undefined,
+          geography: dealRow.geography ?? undefined,
+          askingPrice: typeof dealRow.target_amount === "number" ? dealRow.target_amount : undefined,
+        };
+      }
+    }
+    skillPlanningContext = { criteria: screeningCriteria, deal: planningDeal };
+  }
 
   for (let i = 0; i < list.length; i++) {
     const step = list[i];
@@ -799,6 +839,12 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
 
     const stepIntent = classifyStepIntent(step.title, step.description ?? "");
     const stepAutonomy = resolveAutonomyForIntent(stepIntent, activeMandate);
+    // Does this step map to a governed skill with real structured input? Null when
+    // auto-invoke is off, the step is not a skill, or the required input is absent —
+    // in which case the existing free-text path runs unchanged.
+    const skillPlan: SkillPlan | null = skillPlanningContext
+      ? planSkillForStep(step.title, step.description ?? "", skillPlanningContext)
+      : null;
     let output: string;
     let effectiveAgent = step.assigned_agent;
     try {
@@ -842,6 +888,20 @@ async function executeWorkflow(ctx: Ctx, workflow: Task, onProgress?: OnProgress
             .update({ result: dispatched.tool_result as Json })
             .eq("id", step.id);
         }
+      } else if (skillPlan) {
+        // The step maps to a governed skill AND real structured input is present:
+        // run the skill instead of a free-text generation. Its output flows through
+        // the same artifact / grounding / critique / approval pipeline below, so
+        // review is never bypassed. A failed run is handled like any step failure.
+        const ran = await executePlannedSkill({
+          orgId: ctx.orgId,
+          actorId: ctx.actorId,
+          plan: skillPlan,
+          sessionId: workflow.session_id ?? null,
+          workflowTaskId: workflow.id,
+        });
+        if (!ran.ok) throw new Error(ran.output);
+        output = ran.output;
       } else {
         const rawOutput = await executeStep({
           workflowTitle: workflow.title,

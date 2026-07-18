@@ -1160,6 +1160,13 @@ export type MandateRow = Timestamps & {
   guardrails: Array<{ rule: string }>;
   /** Hard limits on automated footprint: max outreach/day, dollar thresholds, etc. */
   blast_radius_rules: Record<string, unknown>[];
+  /**
+   * Structured, machine-readable screening criteria the deterministic
+   * screening/sourcing skills consume as real input (sectors, geographies,
+   * revenue/EBITDA/EV bands, transaction types, exclusions). Null = none;
+   * parsed defensively by lib/skills/screening-criteria.ts.
+   */
+  screening_criteria: Record<string, unknown> | null;
   is_active: boolean;
   created_by: string | null;
 };

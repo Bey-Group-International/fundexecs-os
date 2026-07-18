@@ -877,6 +877,42 @@ Deployed, monitoring               →  live, observability active
              |  lib/claude.ts through it (+ real OpenAI/Google adapters).
              |  Confidence: Tested by typecheck/eslint/Jest (122 new tests; 3623 total
              |  green, no regressions). Pure backend — no app/components changes.
+
+2026-07-18  |  Engine skill auto-invocation (behind a flag)  |  First vertical
+             |  slice of mid-loop auto-invocation: the workflow engine can now run a
+             |  GOVERNED skill in place of a free-text step generation — but only when
+             |  the step maps to a skill AND real structured input is present, and only
+             |  when SKILL_AUTOINVOKE_ENABLED=true. Default OFF: with the flag off the
+             |  engine is byte-for-byte unchanged (the fetch, context assembly, planning
+             |  call, and execution branch are all gated).
+             |  The missing piece was structured input: the mandate had free-text scope
+             |  but no machine-readable criteria a skill could consume. Added:
+             |  - migration 20260718160000 — mandates.screening_criteria (nullable jsonb;
+             |    sectors/geographies/rev-EBITDA-EV bands/transactionTypes/exclusions, the
+             |    exact shape screen-deal/source-deals accept). Additive; legacy gate
+             |    paths unchanged; null = no criteria (silent dim never a fabricated bound).
+             |  - lib/skills/screening-criteria.ts — defensive pure parser (keeps only
+             |    well-typed values; null when nothing survives; never coerces/invents).
+             |  - lib/mandates.ts getActiveScreeningCriteria — best-effort read, kept
+             |    separate from the gate-layer getActiveMandate.
+             |  - lib/skills/skill-planner.ts planSkillForStep — pure: returns a plan
+             |    (skillId + permitted executive + assembled input) only when the step is
+             |    a skill AND its REQUIRED input is present for real; forwards only present
+             |    fields (missing → left absent so the skill flags it, never filled);
+             |    returns/ic-memo/dd-checklist DEFER (rich input not present mid-workflow).
+             |  - lib/skills/engine-run.ts executePlannedSkill — runs the governed core,
+             |    renders a reviewable deliverable, records a best-effort skill_run; does
+             |    NOT make its own artifact (the engine's step pipeline persists it), so
+             |    auto-invoked output flows through the SAME grounding/critique/approval
+             |    gate — review is never bypassed. External-action steps take precedence.
+             |  Guardrail intact: no skill ever runs on fabricated input — that is exactly
+             |  why auto-invocation waited for structured criteria to exist.
+             |  Remaining follow-ups: mandate-criteria authoring UI; link a deal to a
+             |  workflow earlier + thread a candidate set (so it fires on first-run, not
+             |  only continuations); planner-emitted skill tags to replace regex detection.
+             |  Confidence: Tested by typecheck/eslint/Jest (22 new tests; 3645 total
+             |  green, no regressions). Backend + one additive migration; no app/component
+             |  changes.
 ```
 
 ---

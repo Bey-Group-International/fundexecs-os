@@ -24,6 +24,17 @@ describe("detectSkillForStep", () => {
     expect(detectSkillForStep("Assemble the investment committee memo")).toBe("ic-memo");
   });
 
+  it("detects source-deals", () => {
+    expect(detectSkillForStep("Source targets for the mandate")).toBe("source-deals");
+    expect(detectSkillForStep("Build a sourcing list")).toBe("source-deals");
+    expect(detectSkillForStep("Rank the candidates by fit")).toBe("source-deals");
+  });
+
+  it("still routes a diligence request list to dd-checklist, not source-deals", () => {
+    // The dd-checklist rule precedes source-deals, so "request list" stays diligence.
+    expect(detectSkillForStep("Prepare the diligence request list")).toBe("dd-checklist");
+  });
+
   it("prefers the more specific skill (ic-memo over returns)", () => {
     // A step that mentions both IC pre-read and returns resolves to the memo.
     expect(detectSkillForStep("IC pre-read summarizing the returns case")).toBe("ic-memo");
