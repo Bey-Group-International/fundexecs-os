@@ -98,6 +98,14 @@ export class ExecutiveAvatar {
   // Peeled for the FRONT facing only; other facings still paint the trunk into
   // `body`, so `torso` is left empty for them. Later PRs peel those too.
   private torso: Phaser.GameObjects.Graphics;
+  // The resting (idle / walk) arms as their own Graphics, each drawn once in
+  // shoulder-pivot-local coordinates (shoulder at the object origin) and placed
+  // at the shoulder, so a later PR can swing them by rotating the object instead
+  // of redrawing. `armNear` is the viewer's-left arm, `armFar` the right. Peeled
+  // for the FRONT resting pose only; work poses (type/review/present) and the
+  // wave still paint the arms into `body`, so these are left empty for them.
+  private armNear: Phaser.GameObjects.Graphics;
+  private armFar: Phaser.GameObjects.Graphics;
   private think: Phaser.GameObjects.Graphics;
 
   private facing: AvatarFacing = "down";
@@ -176,11 +184,16 @@ export class ExecutiveAvatar {
     // The trunk rides above the body (legs/arms) and below the head, upright at
     // the figure origin — never rotated, so its suit gradient stays top-lit.
     this.torso = scene.add.graphics();
-    // Inner figure container — wraps the body + torso + head (and, in later PRs,
-    // the other split limb objects). Whole-figure motion is applied here so the
-    // limbs' local draw coordinates never move. Child order is the paint order:
-    // body (legs/feet/outline/arms) → torso → head.
-    this.figure = scene.add.container(0, 0, [this.body, this.torso, this.head]);
+    // The resting arms ride between the body (legs) and the trunk, each pinned at
+    // its shoulder so it can later rotate off that pivot.
+    this.armFar = scene.add.graphics().setPosition(6.4, -5);
+    this.armNear = scene.add.graphics().setPosition(-6.4, -5);
+    // Inner figure container — wraps the split limb objects. Whole-figure motion
+    // is applied here so the limbs' local draw coordinates never move. Child
+    // order is the paint order: body (legs/feet/outline) → arms → torso → head.
+    this.figure = scene.add.container(0, 0, [
+      this.body, this.armFar, this.armNear, this.torso, this.head,
+    ]);
 
     // "Thinking" pulse — three dots floating above the head, ACE-style
     // presence cue shown only while analyzing.
@@ -588,6 +601,8 @@ export class ExecutiveAvatar {
     // so every other facing/pose leaves them empty and paints into `body`.
     this.head.clear();
     this.torso.clear();
+    this.armNear.clear();
+    this.armFar.clear();
 
     // Earn renders as the gold-coin mascot — its own full pose set.
     if (this.spec.coin) { this._redrawCoin(g, step); return; }
@@ -608,6 +623,15 @@ export class ExecutiveAvatar {
     else if (this.facing === "right") this._drawProfile(g, s, swing, 1, arm, workStep);
     else {
       this._drawFront(g, s, swing, arm, workStep);
+      // Resting (idle / walk) arms are peeled into shoulder-pivoted objects; the
+      // walk swing rides as a vertical offset (armNear +, armFar −), matching the
+      // old inline arms. Work poses (type/review/present) and the wave keep their
+      // arms in `body`, so the objects stay empty for those.
+      if (!this._waving && (arm === "idle" || arm === "walk")) {
+        this._drawFrontRestArms(s);
+        this.armNear.setPosition(-6.4, -5 + swing * 0.4).setRotation(0);
+        this.armFar.setPosition(6.4, -5 - swing * 0.4).setRotation(0);
+      }
       this._drawFrontTorso(this.torso, s);
       this._drawHead(this.head, s, 0, 8);
     }
@@ -753,8 +777,10 @@ export class ExecutiveAvatar {
     g.fillEllipse(-3.3, 14.5 - Math.max(0, swing), 1.7, 0.9);
     g.fillEllipse(2.1, 14.5 - Math.max(0, -swing), 1.7, 0.9);
 
-    // Arms — pose depends on the work animation.
-    this._drawFrontArms(g, s, swing, arm, workStep);
+    // Arms — pose depends on the work animation. Resting (idle/walk) arms are
+    // peeled into their own objects (see _redraw); this paints only the work and
+    // wave poses into the body.
+    this._drawFrontArms(g, s, arm, workStep);
 
     // Torso (blazer/shirt/tie) is drawn into the separate upright `torso` object
     // (see _redraw), layered above these arms — not painted into the body here.
@@ -831,7 +857,7 @@ export class ExecutiveAvatar {
   }
 
   /** Front-view arm variants keyed to the work animation. */
-  private _drawFrontArms(g: Phaser.GameObjects.Graphics, s: AvatarSpec, swing: number, arm: ArmMode, workStep: number) {
+  private _drawFrontArms(g: Phaser.GameObjects.Graphics, s: AvatarSpec, arm: ArmMode, workStep: number) {
     const sleeve = s.suit;
     if (arm === "type") {
       // Forearms angled to a desk; hands bob with the keystroke step.
@@ -894,24 +920,38 @@ export class ExecutiveAvatar {
       return;
     }
 
-    // Walk / idle — arms at the sides, swinging opposite the legs.
-    g.fillStyle(sleeve, 1);
-    g.fillRoundedRect(-8, -5 + swing * 0.4, 3.2, 11, 1.6);
-    g.fillRoundedRect(4.8, -5 - swing * 0.4, 3.2, 11, 1.6);
-    // Inner-sleeve shadow — a crisp seam so each arm reads separate from the torso.
-    g.fillStyle(this._shade(s.suit, 0.6), 0.8);
-    g.fillRect(-5.1, -4.5 + swing * 0.4, 0.8, 10);
-    g.fillRect(4.6, -4.5 - swing * 0.4, 0.8, 10);
-    g.fillStyle(s.skin, 1);
-    g.fillCircle(-6.4, 6 + swing * 0.4, 1.7);
-    g.fillCircle(6.4, 6 - swing * 0.4, 1.7);
-    // Shirt cuffs peeking from the sleeves + a small cuff button at each wrist.
-    g.fillStyle(this._shade(s.shirt, 1.02), 0.95);
-    g.fillRect(-8, 4.4 + swing * 0.4, 3.2, 0.9);
-    g.fillRect(4.8, 4.4 - swing * 0.4, 3.2, 0.9);
-    g.fillStyle(this._shade(s.suit, 0.45), 1);
-    g.fillCircle(-6.4, 5.5 + swing * 0.4, 0.33);
-    g.fillCircle(6.4, 5.5 - swing * 0.4, 0.33);
+    // Walk / idle resting arms are peeled into their own shoulder-pivoted objects
+    // (see _drawFrontRestArms / _redraw), so nothing is painted into `body` here.
+  }
+
+  /**
+   * The resting (idle / walk) front arms, each painted once into its own object
+   * in shoulder-pivot-local coordinates — the shoulder sits at the object origin,
+   * the arm hangs straight down (+y). `_redraw` pins each object at its shoulder
+   * (armNear at the viewer's-left, armFar at the right) and applies the walk
+   * swing as a vertical offset; at rotation 0 and that offset the result is
+   * pixel-identical to the previous inline arms. Drawing at the shoulder pivot
+   * lets a later PR swing the arm with a single setRotation.
+   */
+  private _drawFrontRestArms(s: AvatarSpec) {
+    const sleeve = s.suit;
+    const seam = this._shade(s.suit, 0.6);
+    const cuff = this._shade(s.shirt, 1.02);
+    const btn = this._shade(s.suit, 0.45);
+    // Near (viewer's-left) arm — inner seam on its right edge (toward the body).
+    const n = this.armNear;
+    n.fillStyle(sleeve, 1); n.fillRoundedRect(-1.6, 0, 3.2, 11, 1.6);
+    n.fillStyle(seam, 0.8); n.fillRect(1.3, 0.5, 0.8, 10);
+    n.fillStyle(s.skin, 1); n.fillCircle(0, 11, 1.7);
+    n.fillStyle(cuff, 0.95); n.fillRect(-1.6, 9.4, 3.2, 0.9);
+    n.fillStyle(btn, 1); n.fillCircle(0, 10.5, 0.33);
+    // Far (right) arm — inner seam on its left edge.
+    const f = this.armFar;
+    f.fillStyle(sleeve, 1); f.fillRoundedRect(-1.6, 0, 3.2, 11, 1.6);
+    f.fillStyle(seam, 0.8); f.fillRect(-1.8, 0.5, 0.8, 10);
+    f.fillStyle(s.skin, 1); f.fillCircle(0, 11, 1.7);
+    f.fillStyle(cuff, 0.95); f.fillRect(-1.6, 9.4, 3.2, 0.9);
+    f.fillStyle(btn, 1); f.fillCircle(0, 10.5, 0.33);
   }
 
   /** Shared head/hair/face block, offset by (ox, oy). */
