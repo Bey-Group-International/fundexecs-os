@@ -69,6 +69,13 @@ export class ExecutiveAvatar {
    */
   static reducedMotion = false;
 
+  /**
+   * Peak shoulder rotation (radians) of the resting arms during the walk cycle.
+   * A restrained ~7° sweep — enough to read as a natural fore-aft arm swing at
+   * the institutional 2.5D scale without looking like flailing.
+   */
+  private static readonly WALK_ARM_SWING = 0.12;
+
   readonly container: Phaser.GameObjects.Container;
 
   private scene: Phaser.Scene;
@@ -295,6 +302,15 @@ export class ExecutiveAvatar {
       const key = this._poseKey(step, -1);
       if (key !== this.lastPoseKey) this._redraw();
       this.figure.setPosition(0, 0);
+      // Real jointed arm swing: rotate the peeled arms off the shoulder pivots,
+      // continuously and in opposite phase — a natural fore-aft walk swing that
+      // replaces the old discrete vertical bob. Front facing only; other facings
+      // draw their arms into `body`, so the peeled objects are empty there.
+      if (this.facing === "down") {
+        const swing = Math.sin(this.walkPhase * Math.PI / 2) * ExecutiveAvatar.WALK_ARM_SWING;
+        this.armNear.setRotation(swing);
+        this.armFar.setRotation(-swing);
+      }
       return;
     }
 
@@ -623,14 +639,19 @@ export class ExecutiveAvatar {
     else if (this.facing === "right") this._drawProfile(g, s, swing, 1, arm, workStep);
     else {
       this._drawFront(g, s, swing, arm, workStep);
-      // Resting (idle / walk) arms are peeled into shoulder-pivoted objects; the
-      // walk swing rides as a vertical offset (armNear +, armFar −), matching the
-      // old inline arms. Work poses (type/review/present) and the wave keep their
-      // arms in `body`, so the objects stay empty for those.
+      // Resting (idle / walk) arms are peeled into shoulder-pivoted objects. Each
+      // is pinned at its shoulder; the walk swing is a real rotation about that
+      // pivot, driven per-frame by update(). Idle resets them upright here. Work
+      // poses (type/review/present) and the wave keep their arms in `body`, so the
+      // objects stay empty for those.
       if (!this._waving && (arm === "idle" || arm === "walk")) {
         this._drawFrontRestArms(s);
-        this.armNear.setPosition(-6.4, -5 + swing * 0.4).setRotation(0);
-        this.armFar.setPosition(6.4, -5 - swing * 0.4).setRotation(0);
+        this.armNear.setPosition(-6.4, -5);
+        this.armFar.setPosition(6.4, -5);
+        if (!this.walking) {
+          this.armNear.setRotation(0);
+          this.armFar.setRotation(0);
+        }
       }
       this._drawFrontTorso(this.torso, s);
       this._drawHead(this.head, s, 0, 8);
