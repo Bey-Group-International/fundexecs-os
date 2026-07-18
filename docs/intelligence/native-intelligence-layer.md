@@ -10,30 +10,30 @@
 
 Audit of the existing repo against the intelligence surface. Classifications: `ACTIVE` (implemented + connected), `PARTIAL`, `MOCKED`, `PLANNED`, `ABSENT`, `BLOCKED` (needs config).
 
-| Capability | Status | Where | Reused / built |
-|---|---|---|---|
-| Earn orchestration (plan → gate → execute) | ACTIVE | `lib/engine.ts`, `lib/intelligence.ts` (routing), `lib/earn-plan.ts` | **Reused** — intelligence feeds it, never replaces it |
-| Executive-agent registry (15 agents) | ACTIVE | `lib/agents.ts` (`AgentKey`) | **Reused** — routing matrix targets these keys |
-| Approval gates (Tier 1/2/3, ActionKind, Mandate) | ACTIVE | `lib/gates.ts` | **Reused** — `routing.ts` derives tiers from it |
-| Mandate-scoped autonomy | ACTIVE | `lib/mandates.ts`, `lib/autonomy.ts` | **Reused** |
-| Proactive pipeline (Signal→Prioritize→Gate→Learn) | PARTIAL | `lib/proactive/*` (cold-LP live; UI unmounted; flag off) | **Reused as target** — `signal-bridge.ts` maps assessments into it |
-| PMI source registry (`PmiSource`) | PARTIAL | `lib/proactive/pmi/*` (Carta live, rest scaffold) | **Pattern mirrored** for `IntelligenceProvider` |
-| Provider abstraction (signing/payment rails) | PARTIAL | `lib/providers/*` | Not the seam (capital rails, not data) |
-| Source cache (TTL + provenance) | ACTIVE | `lib/source-cache.ts` | Available for connector caching |
-| Secret vault (AES-256-GCM, server-only) | ACTIVE | `lib/vault.ts`, `lib/org-secrets.ts` | **Reused** — provider tokens encrypted with it |
-| MCP support | PARTIAL | `lib/mcp/registry.ts` (registry only), `lib/integrations/carta/mcp-client.server.ts` (one JSON-RPC client) | Pattern available for connector MCP mode (declared, follow-on) |
-| Rate limiting | PARTIAL | `lib/rate-limit.ts` (in-memory) | Connector carries its own backoff/retry-after |
-| Provider connection model (health/last-sync) | ABSENT | closest: `integration_connections` (no health/sync) | **Built** — `intelligence_provider_connections` |
-| **IntelligenceObservation / TrackedEntity / EntityObservationLink / Exposure / Assessment / Watchlist** | **ABSENT** | — | **Built** — this increment |
-| Signal / propensity / radar machinery | ACTIVE | `lib/sourcing-signals.ts`, `lib/source-radar.ts`, `entity_signals`, `deal_signals` | Complemented, not duplicated (signal-centric; new layer is observation/assessment-centric) |
-| Operating brief | ACTIVE (pure) | `lib/operating-brief.ts` | Read model available; intelligence section = follow-on |
-| Notifications / inbox | PARTIAL | `lib/inbox/*`, `components/TopNavAlerts.tsx` | Available surface |
-| Audit log | ACTIVE | `audit_log`, `lib/dashboard/audit.ts` | Available for provider admin actions |
-| Usage metering | ACTIVE | `lib/credits.ts`, `lib/agent-costs.ts` | Available for `ask`/MCP spend |
-| RBAC | ACTIVE | `lib/rbac.ts` (`is_org_writer`/`is_org_admin`) | **Reused** — RLS + provider-admin gating |
-| Workspace/tenant isolation | ACTIVE | `organization_id` + RLS helpers | **Reused** — every new table |
-| Event bus / job queue | PARTIAL | `task_events` + Realtime + hourly `/api/cron` sweep (no bus) | **Reused** — sync is a best-effort cron block |
-| Feature flags | PARTIAL | env-string constants (e.g. `PROACTIVE_ENABLED`) | **Pattern mirrored** in `lib/intelligence/flags.ts` |
+|                                               Capability                                                |    Status     |                                                   Where                                                    |                                       Reused / built                                       |
+|---------------------------------------------------------------------------------------------------------|---------------|------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| Earn orchestration (plan → gate → execute)                                                              | ACTIVE        | `lib/engine.ts`, `lib/intelligence.ts` (routing), `lib/earn-plan.ts`                                       | **Reused** — intelligence feeds it, never replaces it                                      |
+| Executive-agent registry (15 agents)                                                                    | ACTIVE        | `lib/agents.ts` (`AgentKey`)                                                                               | **Reused** — routing matrix targets these keys                                             |
+| Approval gates (Tier 1/2/3, ActionKind, Mandate)                                                        | ACTIVE        | `lib/gates.ts`                                                                                             | **Reused** — `routing.ts` derives tiers from it                                            |
+| Mandate-scoped autonomy                                                                                 | ACTIVE        | `lib/mandates.ts`, `lib/autonomy.ts`                                                                       | **Reused**                                                                                 |
+| Proactive pipeline (Signal→Prioritize→Gate→Learn)                                                       | PARTIAL       | `lib/proactive/*` (cold-LP live; UI unmounted; flag off)                                                   | **Reused as target** — `signal-bridge.ts` maps assessments into it                         |
+| PMI source registry (`PmiSource`)                                                                       | PARTIAL       | `lib/proactive/pmi/*` (Carta live, rest scaffold)                                                          | **Pattern mirrored** for `IntelligenceProvider`                                            |
+| Provider abstraction (signing/payment rails)                                                            | PARTIAL       | `lib/providers/*`                                                                                          | Not the seam (capital rails, not data)                                                     |
+| Source cache (TTL + provenance)                                                                         | ACTIVE        | `lib/source-cache.ts`                                                                                      | Available for connector caching                                                            |
+| Secret vault (AES-256-GCM, server-only)                                                                 | ACTIVE        | `lib/vault.ts`, `lib/org-secrets.ts`                                                                       | **Reused** — provider tokens encrypted with it                                             |
+| MCP support                                                                                             | PARTIAL       | `lib/mcp/registry.ts` (registry only), `lib/integrations/carta/mcp-client.server.ts` (one JSON-RPC client) | Pattern available for connector MCP mode (declared, follow-on)                             |
+| Rate limiting                                                                                           | PARTIAL       | `lib/rate-limit.ts` (in-memory)                                                                            | Connector carries its own backoff/retry-after                                              |
+| Provider connection model (health/last-sync)                                                            | ABSENT        | closest: `integration_connections` (no health/sync)                                                        | **Built** — `intelligence_provider_connections`                                            |
+| **IntelligenceObservation / TrackedEntity / EntityObservationLink / Exposure / Assessment / Watchlist** | **ABSENT**    | —                                                                                                          | **Built** — this increment                                                                 |
+| Signal / propensity / radar machinery                                                                   | ACTIVE        | `lib/sourcing-signals.ts`, `lib/source-radar.ts`, `entity_signals`, `deal_signals`                         | Complemented, not duplicated (signal-centric; new layer is observation/assessment-centric) |
+| Operating brief                                                                                         | ACTIVE (pure) | `lib/operating-brief.ts`                                                                                   | Read model available; intelligence section = follow-on                                     |
+| Notifications / inbox                                                                                   | PARTIAL       | `lib/inbox/*`, `components/TopNavAlerts.tsx`                                                               | Available surface                                                                          |
+| Audit log                                                                                               | ACTIVE        | `audit_log`, `lib/dashboard/audit.ts`                                                                      | Available for provider admin actions                                                       |
+| Usage metering                                                                                          | ACTIVE        | `lib/credits.ts`, `lib/agent-costs.ts`                                                                     | Available for `ask`/MCP spend                                                              |
+| RBAC                                                                                                    | ACTIVE        | `lib/rbac.ts` (`is_org_writer`/`is_org_admin`)                                                             | **Reused** — RLS + provider-admin gating                                                   |
+| Workspace/tenant isolation                                                                              | ACTIVE        | `organization_id` + RLS helpers                                                                            | **Reused** — every new table                                                               |
+| Event bus / job queue                                                                                   | PARTIAL       | `task_events` + Realtime + hourly `/api/cron` sweep (no bus)                                               | **Reused** — sync is a best-effort cron block                                              |
+| Feature flags                                                                                           | PARTIAL       | env-string constants (e.g. `PROACTIVE_ENABLED`)                                                            | **Pattern mirrored** in `lib/intelligence/flags.ts`                                        |
 
 ## 2. Gap analysis
 
@@ -50,25 +50,25 @@ The intelligence *machinery* (signals, scoring, gates, routing, providers, prove
 Two layers with a hard boundary. Layer A works with Signal Bureau disabled.
 
 ```
-                        LAYER A — Native FundExecs Intelligence Core (owned)
-  ┌───────────────────────────────────────────────────────────────────────────┐
-  │  tracked_entities   intelligence_observations   entity_observation_links    │
-  │  intelligence_exposures   intelligence_assessments   watchlists/_items      │
-  │                                                                             │
-  │  relevance.ts (multi-dim, versioned weights)   entity-match.ts   routing.ts │
-  │  dedup.ts   assess.ts   store.ts   ingest.ts   sweep.ts   flags.ts          │
-  └───────────────▲───────────────────────────────────────────────┬────────────┘
-                  │ ProviderObservation (neutral)                  │ Signal (bridge)
-  ┌───────────────┴───────────────┐                    ┌───────────▼────────────┐
-  │  IntelligenceProvider (seam)   │                    │  Earn proactive loop   │
-  │  provider.ts registry          │                    │  + gates.ts (Tier 1-3) │
-  └───────────────▲───────────────┘                    └────────────────────────┘
-                  │ anti-corruption adapter
-  ┌───────────────┴──────────────────────────────────────────────────────────┐
-  │  LAYER B — signal-bureau connector (optional, removable)                   │
-  │  schema.ts (sb.signals.v1) → adapter.ts → client.ts (REST) → index.ts      │
-  │  intelligence_provider_connections (health/sync + vault-encrypted token)   │
-  └────────────────────────────────────────────────────────────────────────────┘
+                      LAYER A — Native FundExecs Intelligence Core (owned)
+┌───────────────────────────────────────────────────────────────────────────┐
+│  tracked_entities   intelligence_observations   entity_observation_links    │
+│  intelligence_exposures   intelligence_assessments   watchlists/_items      │
+│                                                                             │
+│  relevance.ts (multi-dim, versioned weights)   entity-match.ts   routing.ts │
+│  dedup.ts   assess.ts   store.ts   ingest.ts   sweep.ts   flags.ts          │
+└───────────────▲───────────────────────────────────────────────┬────────────┘
+                │ ProviderObservation (neutral)                  │ Signal (bridge)
+┌───────────────┴───────────────┐                    ┌───────────▼────────────┐
+│  IntelligenceProvider (seam)   │                    │  Earn proactive loop   │
+│  provider.ts registry          │                    │  + gates.ts (Tier 1-3) │
+└───────────────▲───────────────┘                    └────────────────────────┘
+                │ anti-corruption adapter
+┌───────────────┴──────────────────────────────────────────────────────────┐
+│  LAYER B — signal-bureau connector (optional, removable)                   │
+│  schema.ts (sb.signals.v1) → adapter.ts → client.ts (REST) → index.ts      │
+│  intelligence_provider_connections (health/sync + vault-encrypted token)   │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Data flow:** cron sweep → provider `fetchObservations` → adapter normalizes `sb.signals.v1` → `ProviderObservation` → freshness → dedup+persist (`intelligence_observations`) → entity match (`tracked_entities`) → exposures → assessment (relevance × routing) → persisted `intelligence_assessments` with `assigned_agent` + `required_tier`. It STOPS there. `signal-bridge.ts` maps an actionable assessment into a proactive `Signal`; Earn's existing loop + `gates.ts` own everything downstream. External intelligence initiates analysis, never final action.
@@ -77,15 +77,15 @@ Two layers with a hard boundary. Layer A works with Signal Bureau disabled.
 
 Migration `supabase/migrations/20260718120000_intelligence_core.sql`; TS types in `lib/intelligence/types.ts`. Tenancy `organization_id`; canonical member-read / writer-write RLS; `set_updated_at` triggers; observations + assessments on `supabase_realtime`.
 
-| Table | Purpose | Key columns |
-|---|---|---|
-| `intelligence_provider_connections` | one row per (org, provider) | provider, status, auth_mode, config, feature_permissions, rate_limits, health, last_success/failure_at, encrypted token |
-| `tracked_entities` | monitored universe | entity_type (15 kinds), name, aliases[], external_identifiers, status |
-| `intelligence_observations` | raw observation, any provider | provider, provider_record_id, provider_schema_version, evidence_status, freshness_status, confidence, source_urls[], raw_payload, content_hash, **unique(org, deduplication_key)** |
-| `entity_observation_links` | observation ↔ entity | match_method, match_confidence, provider/inferred relationship, human_confirmed |
-| `intelligence_exposures` | entity/observation → firm record | exposure_type, target, direction, magnitude, materiality, rationale |
-| `intelligence_assessments` | FundExecs' interpretation | 5 relevance dims + materiality/urgency/confidence, actionability, time_horizon, implications, invalidators, monitoring_condition, recommended_action, assigned_agent, required_tier, **score_breakdown**, weights_version |
-| `watchlists` / `watchlist_items` | scope (workspace/fund/mandate/deal/portfolio/user) | config (thresholds/cadence/escalation); ten-concern cap is a plan constraint in app logic, NOT hard-coded |
+|                Table                |                      Purpose                       |                                                                                                        Key columns                                                                                                        |
+|-------------------------------------|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `intelligence_provider_connections` | one row per (org, provider)                        | provider, status, auth_mode, config, feature_permissions, rate_limits, health, last_success/failure_at, encrypted token                                                                                                   |
+| `tracked_entities`                  | monitored universe                                 | entity_type (15 kinds), name, aliases[], external_identifiers, status                                                                                                                                                     |
+| `intelligence_observations`         | raw observation, any provider                      | provider, provider_record_id, provider_schema_version, evidence_status, freshness_status, confidence, source_urls[], raw_payload, content_hash, **unique(org, deduplication_key)**                                        |
+| `entity_observation_links`          | observation ↔ entity                               | match_method, match_confidence, provider/inferred relationship, human_confirmed                                                                                                                                           |
+| `intelligence_exposures`            | entity/observation → firm record                   | exposure_type, target, direction, magnitude, materiality, rationale                                                                                                                                                       |
+| `intelligence_assessments`          | FundExecs' interpretation                          | 5 relevance dims + materiality/urgency/confidence, actionability, time_horizon, implications, invalidators, monitoring_condition, recommended_action, assigned_agent, required_tier, **score_breakdown**, weights_version |
+| `watchlists` / `watchlist_items`    | scope (workspace/fund/mandate/deal/portfolio/user) | config (thresholds/cadence/escalation); ten-concern cap is a plan constraint in app logic, NOT hard-coded                                                                                                                 |
 
 ## 6. Native relevance & materiality engine (`relevance.ts`)
 
@@ -97,15 +97,15 @@ Every dimension stays **separately visible** (never one opaque number). Trust (e
 
 Dominant relevance dimension → specialist + follow-on `ActionKind` + gate tier (derived from `gates.ts`). Structural invariant: **an external signal can never yield a Tier-3 follow-on** (test-enforced).
 
-| Dominant dimension | Agent (`AgentKey`) | Follow-on | Tier |
-|---|---|---|---|
-| Regulatory | `executive_advisor` (risk/compliance synthesis) | `draft_memo` | 1 |
-| Deal | `diligence` | `research` | 1 |
-| Portfolio | `portfolio_ops` | `research` | 1 |
-| Relationship (LP) | `investor_relations` | `distribute_report` | 2 |
-| Relationship (lender/capital) | `capital_connector` | `send_outreach` | 2 |
-| Mandate/thesis | `deal_sourcer` | `send_outreach` | 2 |
-| None dominant | `analyst` | `research` | 1 |
+|      Dominant dimension       |               Agent (`AgentKey`)                |      Follow-on      | Tier |
+|-------------------------------|-------------------------------------------------|---------------------|------|
+| Regulatory                    | `executive_advisor` (risk/compliance synthesis) | `draft_memo`        | 1    |
+| Deal                          | `diligence`                                     | `research`          | 1    |
+| Portfolio                     | `portfolio_ops`                                 | `research`          | 1    |
+| Relationship (LP)             | `investor_relations`                            | `distribute_report` | 2    |
+| Relationship (lender/capital) | `capital_connector`                             | `send_outreach`     | 2    |
+| Mandate/thesis                | `deal_sourcer`                                  | `send_outreach`     | 2    |
+| None dominant                 | `analyst`                                       | `research`          | 1    |
 
 Earn (`associate`) coordinates; the bridge signal is class `market` (external-grounded), which `lib/proactive/gate.ts` floors to investor-facing so external data never auto-sends.
 
@@ -141,15 +141,15 @@ schema normalization, additive-schema tolerance, unknown fields, invalid/malform
 
 `lib/intelligence/flags.ts` — all off by default; a capability is live only when `INTELLIGENCE_CORE_ENABLED` is also on.
 
-| Phase | Flags | Ships |
-|---|---|---|
-| 0 Audit/activate | — | this doc + migration + core lib |
-| 1 Native foundation | `intelligence_core`, `intelligence_watchlists` | observations, entities, watchlists, manual entry, assessments **(landed)** |
-| 2 Signal Bureau REST | `provider_signal_bureau` | feed ingestion, normalization, dedup, provider health, sync **(landed)** |
-| 3 Relevance/exposure | `intelligence_exposure_mapping` | exposure mapping + Earn routing **(landed; DB exposure→live-record join = follow-on)** |
-| 4 MCP + entity intel | `provider_signal_bureau_mcp` | entity dossiers, calibration, today's brief (declared; runtime binding follow-on) |
-| 5 Future-event | `provider_signal_bureau_ask`, `intelligence_scenarios` | async `ask` jobs, scenario prose (client + provider ready; async job = follow-on) |
-| 6 Private desks | `intelligence_private_desks` | priority concerns, briefs, SLAs (follow-on) |
+|        Phase         |                         Flags                          |                                         Ships                                          |
+|----------------------|--------------------------------------------------------|----------------------------------------------------------------------------------------|
+| 0 Audit/activate     | —                                                      | this doc + migration + core lib                                                        |
+| 1 Native foundation  | `intelligence_core`, `intelligence_watchlists`         | observations, entities, watchlists, manual entry, assessments **(landed)**             |
+| 2 Signal Bureau REST | `provider_signal_bureau`                               | feed ingestion, normalization, dedup, provider health, sync **(landed)**               |
+| 3 Relevance/exposure | `intelligence_exposure_mapping`                        | exposure mapping + Earn routing **(landed; DB exposure→live-record join = follow-on)** |
+| 4 MCP + entity intel | `provider_signal_bureau_mcp`                           | entity dossiers, calibration, today's brief (declared; runtime binding follow-on)      |
+| 5 Future-event       | `provider_signal_bureau_ask`, `intelligence_scenarios` | async `ask` jobs, scenario prose (client + provider ready; async job = follow-on)      |
+| 6 Private desks      | `intelligence_private_desks`                           | priority concerns, briefs, SLAs (follow-on)                                            |
 
 ## 14. Implementation backlog (next increments, with acceptance criteria)
 
