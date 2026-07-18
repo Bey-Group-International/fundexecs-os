@@ -1,0 +1,123 @@
+{
+  "$id": "https://fundexecs.dev/schemas/map-project.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "attribution": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "copyright": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        }
+      },
+      "required": [ "author", "license", "copyright" ],
+      "type": "object"
+    },
+    "branding": {
+      "properties": {
+        "companyName": {
+          "type": "string"
+        },
+        "logoAssetId": {
+          "type": "string"
+        },
+        "primaryColor": {
+          "type": "string"
+        },
+        "secondaryColor": {
+          "type": "string"
+        }
+      },
+      "required": [ "primaryColor", "secondaryColor", "companyName" ],
+      "type": "object"
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "height": {
+      "maximum": 512,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "layers": {
+      "items": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "placements": {
+            "items": {
+              "properties": {
+                "assetId": {
+                  "type": "string"
+                },
+                "props": {
+                  "type": "object"
+                },
+                "rotation": {
+                  "enum": [ 0, 90, 180, 270 ]
+                },
+                "x": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "y": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [ "assetId", "x", "y" ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [ "id", "label", "visible", "locked", "placements" ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "mapId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "modifiedAt": {
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schemaVersion": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "type": "string"
+    },
+    "tileSize": {
+      "const": 32
+    },
+    "width": {
+      "maximum": 512,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [ "mapId", "name", "description", "schemaVersion", "width", "height", "tileSize", "layers", "branding", "attribution", "createdAt", "modifiedAt" ],
+  "title": "FundExecs Map Project",
+  "type": "object"
+}

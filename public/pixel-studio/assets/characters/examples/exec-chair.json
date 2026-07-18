@@ -1,0 +1,22 @@
+{
+  "accessories": [ "accessory-pin", "accessory-pocket-square" ],
+  "characterId": "exec-chair",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "direction": "down",
+  "displayName": "Board Chair",
+  "expression": "neutral",
+  "face": "face-f-06",
+  "facialHair": null,
+  "facialHairColor": "hair-dark-brown",
+  "fitGroup": "feminine-fit",
+  "hair": "hair-f-afro",
+  "hairColor": "hair-white",
+  "headCovering": null,
+  "manifestVersion": "1.0.0",
+  "materialOverrides": { },
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "outfitColorway": "midnight",
+  "outfitSystem": "black-tie",
+  "skinPalette": "skin-olive-06-deep",
+  "state": "approve"
+}

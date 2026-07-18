@@ -1,0 +1,22 @@
+{
+  "accessories": [ "accessory-phone", "accessory-earpiece" ],
+  "characterId": "exec-tech",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "direction": "down",
+  "displayName": "Chief Technology Officer",
+  "expression": "focused",
+  "face": "face-m-05",
+  "facialHair": null,
+  "facialHairColor": "hair-dark-brown",
+  "fitGroup": "universal",
+  "hair": "hair-m-short-curly",
+  "hairColor": "hair-espresso",
+  "headCovering": null,
+  "manifestVersion": "1.0.0",
+  "materialOverrides": { },
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "outfitColorway": "black",
+  "outfitSystem": "tech-exec",
+  "skinPalette": "skin-olive-04",
+  "state": "idle"
+}
