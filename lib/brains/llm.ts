@@ -10,6 +10,7 @@
 // any Brain logic.
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient } from "@/lib/anthropic-client";
+import { runInference } from "@/lib/inference/gateway";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 
@@ -40,6 +41,20 @@ export interface CompleteArgs {
 // Returns the model's text, or null when no key is configured / on error so the
 // caller can fall back to a deterministic stub.
 export async function complete({ system, prompt, maxTokens = 1200 }: CompleteArgs): Promise<string | null> {
+  // Provider-agnostic path (opt-in): route through the inference gateway so the
+  // model is chosen by capability, not hard-coded. Off by default → the direct
+  // Anthropic path below is unchanged. `preferTier: "fast"` preserves the Brain
+  // default (Haiku). The gateway degrades to null on no provider, same as here.
+  if (process.env.INFERENCE_GATEWAY_ENABLED === "true") {
+    const result = await runInference({
+      system,
+      messages: [{ role: "user", content: prompt }],
+      maxTokens,
+      preferTier: "fast",
+    });
+    return result.text;
+  }
+
   const anthropic = client();
   if (!anthropic) return null;
   try {
