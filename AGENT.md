@@ -1065,6 +1065,42 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: Tested by typecheck/eslint/Jest (18 new tests; 3696 total
              |  green, no regressions). Backend contracts + one additive migration; no UI,
              |  no engine change, no new deps.
+
+2026-07-18  |  Terminal Release 1 — shell (multi-pane workspace + command bar)  |
+             |  The surface on top of the spine: the configurable multi-pane workspace
+             |  (System 1) + the command bar that parses -> previews -> dispatches through
+             |  the action contract, writing command_runs (System 2 + 9). Behind
+             |  TERMINAL_ENABLED, default OFF; /terminal redirects home when off, no nav
+             |  entry.
+             |  - lib/terminal/layout.ts: pure pane-tree model (LeafPane/SplitPane) with
+             |    open/split/close/update/resize/focus as pure (layout,..)->layout
+             |    transforms, deterministic preset layouts, and a version-guarded, totally
+             |    tolerant serialize/deserialize (garbage/unknown-type/dangling-focus/
+             |    single-child-split/bad-version all handled). Resize honors a per-pane
+             |    floor EVEN after renormalization (clampSizes) so a pane can't be dragged
+             |    to zero. Pure + tested.
+             |  - lib/terminal/dispatch.ts: planCommand(raw) -> CommandPlan (pane, tier,
+             |    approval, non-delegable, summary) via classifySideEffect; the SAME
+             |    decision the client previews and the server records, so they can't
+             |    disagree. Pure + tested.
+             |  - lib/terminal/store.ts: logCommandRun + loadTerminalWorkspace/
+             |    saveTerminalLayout, user-cookie client (RLS enforces tenancy), narrow
+             |    unknown-cast like inference/store, best-effort (never throws).
+             |  - app/(app)/terminal/{page,actions}.ts: flag-guarded authed route +
+             |    server actions. Authorization RE-DERIVED server-side from the raw text —
+             |    client-claimed tier never trusted; an approval-required command is
+             |    clamped to pending_approval (a gated action is never recorded executed).
+             |  - components/terminal/{TerminalShell,CommandBar,PaneView}.tsx: reducer over
+             |    the pane tree, resizable splits, live tier-chip preview, honest panes
+             |    (deep-link out; never show invented figures; analysis pane states the
+             |    live model wires in later).
+             |  Scope: executes read-only navigation + opens analysis/Copilot workspaces;
+             |  every workflow command (writes, capital events, outreach) is recorded as
+             |  pending_approval intent awaiting execution wiring + human approval —
+             |  nothing fabricated or bound-executed. Capital-binding stays Tier-3 human.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +28 new
+             |  (3724 total green, no regressions). Additive UI + two lib modules + one
+             |  route; no migration, no engine change, no new deps.
 ```
 
 ---
