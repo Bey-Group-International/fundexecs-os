@@ -1,0 +1,7894 @@
+{
+  "schemaVersion": "1.0.0",
+  "packageVersion": "1.0.0",
+  "frame": {
+    "width": 32,
+    "height": 32,
+    "reviewScale": 8,
+    "directions": [
+      "down",
+      "left",
+      "right",
+      "up"
+    ]
+  },
+  "animations": {
+    "idle": {
+      "framesPerDirection": 2,
+      "fps": 2,
+      "loop": true,
+      "columns": 2,
+      "rows": 4,
+      "width": 64,
+      "height": 128
+    },
+    "walk": {
+      "framesPerDirection": 3,
+      "fps": 8,
+      "loop": true,
+      "columns": 3,
+      "rows": 4,
+      "width": 96,
+      "height": 128
+    },
+    "talk": {
+      "framesPerDirection": 4,
+      "fps": 8,
+      "loop": true,
+      "columns": 4,
+      "rows": 4,
+      "width": 128,
+      "height": 128
+    },
+    "approve": {
+      "framesPerDirection": 4,
+      "fps": 6,
+      "loop": false,
+      "columns": 4,
+      "rows": 4,
+      "width": 128,
+      "height": 128
+    }
+  },
+  "layerOrder": [
+    "shadow",
+    "accessory.back",
+    "hair.back",
+    "headCovering.back",
+    "body.skin",
+    "outfit.lower",
+    "outfit.base",
+    "outfit.shirt",
+    "outfit.outer",
+    "outfit.shoes",
+    "face.base",
+    "face.features",
+    "expression",
+    "facialHair",
+    "hair.front",
+    "headCovering.front",
+    "neckwear",
+    "eyewear",
+    "accessory.front",
+    "handheld",
+    "state.effect"
+  ],
+  "workAdventure": {
+    "categories": [
+      "body",
+      "eyes",
+      "hairs",
+      "clothes",
+      "hats",
+      "accessories"
+    ],
+    "walkSheet": {
+      "columns": 3,
+      "rows": 4,
+      "width": 96,
+      "height": 128
+    }
+  },
+  "palettes": {
+    "skin-olive-01-light": {
+      "id": "skin-olive-01-light",
+      "label": "olive 01 light",
+      "group": "skin",
+      "colors": {
+        "deepShadow": "#5b5247",
+        "shadow": "#8b7c65",
+        "base": "#e7cba1",
+        "midtone": "#ffe3b4",
+        "highlight": "#ffffd0",
+        "specular": "#ffffdb"
+      }
+    },
+    "skin-olive-02": {
+      "id": "skin-olive-02",
+      "label": "olive 02",
+      "group": "skin",
+      "colors": {
+        "deepShadow": "#55493d",
+        "shadow": "#826d56",
+        "base": "#d6b287",
+        "midtone": "#f0c797",
+        "highlight": "#ffe6b3",
+        "specular": "#fff2c6"
+      }
+    },
+    "skin-olive-03": {
+      "id": "skin-olive-03",
+      "label": "olive 03",
+      "group": "skin",
+      "colors": {
+        "deepShadow": "#4d4132",
+        "shadow": "#745f44",
+        "base": "#bf9968",
+        "midtone": "#d6ab74",
+        "highlight": "#f6ca90",
+        "specular": "#ffddad"
+      }
+    },
+    "skin-olive-04": {
+      "id": "skin-olive-04",
+      "label": "olive 04",
+      "group": "skin",
+      "colors": {
+        "deepShadow": "#423629",
+        "shadow": "#634d35",
+        "base": "#a17b4d",
+        "midtone": "#b48a56",
+        "highlight": "#d4a872",
+        "specular": "#e7c598"
+      }
+    },
+    "skin-olive-05": {
+      "id": "skin-olive-05",
+      "label": "olive 05",
+      "group": "skin",
+      "colors": {
+        "deepShadow": "#362b21",
+        "shadow": "#4f3c28",
+        "base": "#7e5c37",
+        "midtone": "#8d673e",
+        "highlight": "#ad8559",
+        "specular": "#cbac86"
+      }
+    },
+    "skin-olive-06-deep": {
+      "id": "skin-olive-06-deep",
+      "label": "olive 06 deep",
+      "group": "skin",
+      "colors": {
+        "deepShadow": "#2a211b",
+        "shadow": "#3b2b1e",
+        "base": "#5c3f25",
+        "midtone": "#674729",
+        "highlight": "#866445",
+        "specular": "#b09577"
+      }
+    },
+    "hair-soft-black": {
+      "id": "hair-soft-black",
+      "label": "soft black",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#1b1d23",
+        "shadow": "#202126",
+        "base": "#2b2b30",
+        "midtone": "#303036",
+        "highlight": "#535254",
+        "specular": "#a6a198"
+      }
+    },
+    "hair-blue-black": {
+      "id": "hair-blue-black",
+      "label": "blue black",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#191b22",
+        "shadow": "#1b1d25",
+        "base": "#23252e",
+        "midtone": "#272934",
+        "highlight": "#4a4b52",
+        "specular": "#a19e97"
+      }
+    },
+    "hair-espresso": {
+      "id": "hair-espresso",
+      "label": "espresso",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#211c1d",
+        "shadow": "#29201d",
+        "base": "#3b2a20",
+        "midtone": "#422f24",
+        "highlight": "#655143",
+        "specular": "#b0a18e"
+      }
+    },
+    "hair-dark-brown": {
+      "id": "hair-dark-brown",
+      "label": "dark brown",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#26201e",
+        "shadow": "#32261f",
+        "base": "#4b3423",
+        "midtone": "#543a27",
+        "highlight": "#765c46",
+        "specular": "#b9a790"
+      }
+    },
+    "hair-chestnut": {
+      "id": "hair-chestnut",
+      "label": "chestnut",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#30241f",
+        "shadow": "#432e20",
+        "base": "#6b4326",
+        "midtone": "#784b2b",
+        "highlight": "#996c49",
+        "specular": "#cdb092"
+      }
+    },
+    "hair-auburn": {
+      "id": "hair-auburn",
+      "label": "auburn",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#35221e",
+        "shadow": "#4c291e",
+        "base": "#7a3b22",
+        "midtone": "#894226",
+        "highlight": "#aa6345",
+        "specular": "#d6ab90"
+      }
+    },
+    "hair-warm-blond": {
+      "id": "hair-warm-blond",
+      "label": "warm blond",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#4a3c2c",
+        "shadow": "#6f5537",
+        "base": "#b98a4e",
+        "midtone": "#cf9b57",
+        "highlight": "#efba75",
+        "specular": "#fcdbaa"
+      }
+    },
+    "hair-ash-blond": {
+      "id": "hair-ash-blond",
+      "label": "ash blond",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#4e4940",
+        "shadow": "#766b57",
+        "base": "#c7b189",
+        "midtone": "#dfc699",
+        "highlight": "#ffe5b6",
+        "specular": "#fff2ce"
+      }
+    },
+    "hair-salt-pepper": {
+      "id": "hair-salt-pepper",
+      "label": "salt pepper",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#3a3c42",
+        "shadow": "#55555b",
+        "base": "#8a8a8f",
+        "midtone": "#9b9ba0",
+        "highlight": "#bcbabd",
+        "specular": "#dfdbd1"
+      }
+    },
+    "hair-white": {
+      "id": "hair-white",
+      "label": "white",
+      "group": "hair",
+      "colors": {
+        "deepShadow": "#55575d",
+        "shadow": "#828389",
+        "base": "#dcdce2",
+        "midtone": "#f6f6fd",
+        "highlight": "#ffffff",
+        "specular": "#ffffff"
+      }
+    },
+    "fabric-navy": {
+      "id": "fabric-navy",
+      "label": "navy wool",
+      "group": "fabric-navy",
+      "colors": {
+        "deepShadow": "#19202f",
+        "shadow": "#1e283e",
+        "base": "#2a3a5c",
+        "midtone": "#2f4167",
+        "highlight": "#526285",
+        "specular": "#a6aab3"
+      }
+    },
+    "fabric-charcoal": {
+      "id": "fabric-charcoal",
+      "label": "charcoal wool",
+      "group": "fabric-charcoal",
+      "colors": {
+        "deepShadow": "#1c1e24",
+        "shadow": "#24262c",
+        "base": "#33363d",
+        "midtone": "#393c44",
+        "highlight": "#5c5e63",
+        "specular": "#aba8a0"
+      }
+    },
+    "fabric-graphite": {
+      "id": "fabric-graphite",
+      "label": "graphite",
+      "group": "fabric-graphite",
+      "colors": {
+        "deepShadow": "#24272d",
+        "shadow": "#31343b",
+        "base": "#4a4e57",
+        "midtone": "#535761",
+        "highlight": "#75787f",
+        "specular": "#b9b6b0"
+      }
+    },
+    "fabric-black": {
+      "id": "fabric-black",
+      "label": "black formal",
+      "group": "fabric-black",
+      "colors": {
+        "deepShadow": "#18191e",
+        "shadow": "#1c1d22",
+        "base": "#26272b",
+        "midtone": "#2b2c30",
+        "highlight": "#4e4d4f",
+        "specular": "#a39f95"
+      }
+    },
+    "fabric-olive": {
+      "id": "fabric-olive",
+      "label": "olive",
+      "group": "fabric-olive",
+      "colors": {
+        "deepShadow": "#242621",
+        "shadow": "#313327",
+        "base": "#4a4d34",
+        "midtone": "#53563a",
+        "highlight": "#757759",
+        "specular": "#b9b69b"
+      }
+    },
+    "fabric-burgundy": {
+      "id": "fabric-burgundy",
+      "label": "burgundy",
+      "group": "fabric-burgundy",
+      "colors": {
+        "deepShadow": "#2a1921",
+        "shadow": "#3a1d26",
+        "base": "#5a2733",
+        "midtone": "#652c39",
+        "highlight": "#874d58",
+        "specular": "#c39f9a"
+      }
+    },
+    "fabric-tan": {
+      "id": "fabric-tan",
+      "label": "tan",
+      "group": "fabric-tan",
+      "colors": {
+        "deepShadow": "#453d34",
+        "shadow": "#675946",
+        "base": "#a9906a",
+        "midtone": "#bda177",
+        "highlight": "#dec194",
+        "specular": "#f2debb"
+      }
+    },
+    "fabric-taupe": {
+      "id": "fabric-taupe",
+      "label": "taupe",
+      "group": "fabric-taupe",
+      "colors": {
+        "deepShadow": "#353230",
+        "shadow": "#4c4640",
+        "base": "#7a6f5f",
+        "midtone": "#897c6a",
+        "highlight": "#aa9d88",
+        "specular": "#d6cab4"
+      }
+    },
+    "fabric-forest": {
+      "id": "fabric-forest",
+      "label": "forest",
+      "group": "fabric-forest",
+      "colors": {
+        "deepShadow": "#1b2322",
+        "shadow": "#212e28",
+        "base": "#2f4436",
+        "midtone": "#354c3c",
+        "highlight": "#576d5b",
+        "specular": "#a9b09c"
+      }
+    },
+    "fabric-slate": {
+      "id": "fabric-slate",
+      "label": "slate",
+      "group": "fabric-slate",
+      "colors": {
+        "deepShadow": "#232730",
+        "shadow": "#2e3540",
+        "base": "#45505f",
+        "midtone": "#4d5a6a",
+        "highlight": "#707b88",
+        "specular": "#b6b8b4"
+      }
+    },
+    "fabric-cream": {
+      "id": "fabric-cream",
+      "label": "cream",
+      "group": "fabric-cream",
+      "colors": {
+        "deepShadow": "#524f49",
+        "shadow": "#7d7769",
+        "base": "#cfc4a8",
+        "midtone": "#e8dcbc",
+        "highlight": "#fffad8",
+        "specular": "#fffde1"
+      }
+    },
+    "shirt-white": {
+      "id": "shirt-white",
+      "label": "white shirt",
+      "group": "shirt-white",
+      "colors": {
+        "deepShadow": "#5b5c61",
+        "shadow": "#8b8c91",
+        "base": "#e8e8ee",
+        "midtone": "#ffffff",
+        "highlight": "#ffffff",
+        "specular": "#ffffff"
+      }
+    },
+    "shirt-blue": {
+      "id": "shirt-blue",
+      "label": "blue shirt",
+      "group": "shirt-blue",
+      "colors": {
+        "deepShadow": "#4b505c",
+        "shadow": "#707887",
+        "base": "#b9c6dd",
+        "midtone": "#cfdef8",
+        "highlight": "#eefdff",
+        "specular": "#fcffff"
+      }
+    },
+    "shirt-gray": {
+      "id": "shirt-gray",
+      "label": "gray shirt",
+      "group": "shirt-gray",
+      "colors": {
+        "deepShadow": "#4e4f55",
+        "shadow": "#75777d",
+        "base": "#c2c4cb",
+        "midtone": "#d9dce3",
+        "highlight": "#f9fbff",
+        "specular": "#fffdf6"
+      }
+    },
+    "shirt-rose": {
+      "id": "shirt-rose",
+      "label": "rose blouse",
+      "group": "shirt-rose",
+      "colors": {
+        "deepShadow": "#564b4c",
+        "shadow": "#82706e",
+        "base": "#d9b8b0",
+        "midtone": "#f3cec5",
+        "highlight": "#ffece1",
+        "specular": "#fff6e5"
+      }
+    },
+    "tie-navy": {
+      "id": "tie-navy",
+      "label": "navy silk",
+      "group": "tie-navy",
+      "colors": {
+        "deepShadow": "#161c2b",
+        "shadow": "#192336",
+        "base": "#20304f",
+        "midtone": "#243658",
+        "highlight": "#475776",
+        "specular": "#bfbfbd"
+      }
+    },
+    "tie-burgundy": {
+      "id": "tie-burgundy",
+      "label": "burgundy silk",
+      "group": "tie-burgundy",
+      "colors": {
+        "deepShadow": "#2a171e",
+        "shadow": "#3a1921",
+        "base": "#5a2029",
+        "midtone": "#65242e",
+        "highlight": "#87464c",
+        "specular": "#d7b9ad"
+      }
+    },
+    "tie-gold": {
+      "id": "tie-gold",
+      "label": "gold silk",
+      "group": "tie-gold",
+      "colors": {
+        "deepShadow": "#4b4120",
+        "shadow": "#705e24",
+        "base": "#b9992f",
+        "midtone": "#cfab35",
+        "highlight": "#efcb53",
+        "specular": "#fdeab0"
+      }
+    },
+    "tie-forest": {
+      "id": "tie-forest",
+      "label": "forest silk",
+      "group": "tie-forest",
+      "colors": {
+        "deepShadow": "#17201f",
+        "shadow": "#1a2822",
+        "base": "#223a2c",
+        "midtone": "#264131",
+        "highlight": "#496250",
+        "specular": "#c0c4ae"
+      }
+    },
+    "leather-black": {
+      "id": "leather-black",
+      "label": "black leather",
+      "group": "leather-black",
+      "colors": {
+        "deepShadow": "#171618",
+        "shadow": "#1b1717",
+        "base": "#241c18",
+        "midtone": "#281f1b",
+        "highlight": "#4b413a",
+        "specular": "#796e63"
+      }
+    },
+    "leather-brown": {
+      "id": "leather-brown",
+      "label": "brown leather",
+      "group": "leather-brown",
+      "colors": {
+        "deepShadow": "#1f1a1a",
+        "shadow": "#281f1a",
+        "base": "#3a2a1e",
+        "midtone": "#412f22",
+        "highlight": "#645140",
+        "specular": "#8c7b69"
+      }
+    },
+    "metal-steel": {
+      "id": "metal-steel",
+      "label": "brushed steel",
+      "group": "metal-steel",
+      "colors": {
+        "deepShadow": "#363940",
+        "shadow": "#4d5159",
+        "base": "#7c828c",
+        "midtone": "#8b929d",
+        "highlight": "#acb2b9",
+        "specular": "#f2ebdb"
+      }
+    },
+    "metal-gold": {
+      "id": "metal-gold",
+      "label": "polished gold",
+      "group": "metal-gold",
+      "colors": {
+        "deepShadow": "#4b3e20",
+        "shadow": "#705a24",
+        "base": "#b9922f",
+        "midtone": "#cfa435",
+        "highlight": "#efc353",
+        "specular": "#fef1d0"
+      }
+    },
+    "plastic-dark": {
+      "id": "plastic-dark",
+      "label": "dark plastic",
+      "group": "plastic-dark",
+      "colors": {
+        "deepShadow": "#1a1c22",
+        "shadow": "#202228",
+        "base": "#2c2f36",
+        "midtone": "#31353c",
+        "highlight": "#54565b",
+        "specular": "#a7a49c"
+      }
+    },
+    "glass-clear": {
+      "id": "glass-clear",
+      "label": "clear glass",
+      "group": "glass-clear",
+      "colors": {
+        "deepShadow": "#474e55",
+        "shadow": "#6a747d",
+        "base": "#aebfca",
+        "midtone": "#c3d6e2",
+        "highlight": "#e3f5fe",
+        "specular": "#fdf7e5"
+      }
+    },
+    "screen-cyan": {
+      "id": "screen-cyan",
+      "label": "display screen",
+      "group": "screen-cyan",
+      "colors": {
+        "deepShadow": "#1b3241",
+        "shadow": "#21465b",
+        "base": "#2f6f8f",
+        "midtone": "#357ca0",
+        "highlight": "#579dbd",
+        "specular": "#b2cfd3"
+      }
+    },
+    "fabric-lanyard": {
+      "id": "fabric-lanyard",
+      "label": "lanyard",
+      "group": "fabric-lanyard",
+      "colors": {
+        "deepShadow": "#1f242d",
+        "shadow": "#282f3b",
+        "base": "#3a4657",
+        "midtone": "#414e61",
+        "highlight": "#646f7f",
+        "specular": "#afb2b0"
+      }
+    },
+    "cover-charcoal": {
+      "id": "cover-charcoal",
+      "label": "charcoal fabric",
+      "group": "cover-charcoal",
+      "colors": {
+        "deepShadow": "#1c1e24",
+        "shadow": "#24262c",
+        "base": "#33363d",
+        "midtone": "#393c44",
+        "highlight": "#5c5e63",
+        "specular": "#aba8a0"
+      }
+    },
+    "cover-cream": {
+      "id": "cover-cream",
+      "label": "cream fabric",
+      "group": "cover-cream",
+      "colors": {
+        "deepShadow": "#524f49",
+        "shadow": "#7d7769",
+        "base": "#cfc4a8",
+        "midtone": "#e8dcbc",
+        "highlight": "#fffad8",
+        "specular": "#fffde1"
+      }
+    },
+    "cover-navy": {
+      "id": "cover-navy",
+      "label": "navy fabric",
+      "group": "cover-navy",
+      "colors": {
+        "deepShadow": "#19202f",
+        "shadow": "#1e283e",
+        "base": "#2a3a5c",
+        "midtone": "#2f4167",
+        "highlight": "#526285",
+        "specular": "#a6aab3"
+      }
+    },
+    "cover-burgundy": {
+      "id": "cover-burgundy",
+      "label": "burgundy fabric",
+      "group": "cover-burgundy",
+      "colors": {
+        "deepShadow": "#2a1921",
+        "shadow": "#3a1d26",
+        "base": "#5a2733",
+        "midtone": "#652c39",
+        "highlight": "#874d58",
+        "specular": "#c39f9a"
+      }
+    },
+    "cover-white": {
+      "id": "cover-white",
+      "label": "white fabric",
+      "group": "cover-white",
+      "colors": {
+        "deepShadow": "#5a5b61",
+        "shadow": "#8a8a90",
+        "base": "#e6e6ec",
+        "midtone": "#ffffff",
+        "highlight": "#ffffff",
+        "specular": "#ffffff"
+      }
+    },
+    "cover-black": {
+      "id": "cover-black",
+      "label": "black fabric",
+      "group": "cover-black",
+      "colors": {
+        "deepShadow": "#18191e",
+        "shadow": "#1c1d22",
+        "base": "#26272b",
+        "midtone": "#2b2c30",
+        "highlight": "#4e4d4f",
+        "specular": "#a39f95"
+      }
+    }
+  },
+  "materials": {
+    "skin": {
+      "id": "skin",
+      "label": "Skin",
+      "roughness": 0.55,
+      "metallic": 0,
+      "ao": 0.35,
+      "specular": 0.4,
+      "emissive": 0,
+      "relief": 0.6
+    },
+    "wool-matte": {
+      "id": "wool-matte",
+      "label": "Matte Wool Suit",
+      "roughness": 0.92,
+      "metallic": 0,
+      "ao": 0.5,
+      "specular": 0.15,
+      "emissive": 0,
+      "relief": 0.4
+    },
+    "cotton": {
+      "id": "cotton",
+      "label": "Cotton Shirt",
+      "roughness": 0.78,
+      "metallic": 0,
+      "ao": 0.4,
+      "specular": 0.25,
+      "emissive": 0,
+      "relief": 0.3
+    },
+    "silk": {
+      "id": "silk",
+      "label": "Silk / Satin Tie",
+      "roughness": 0.32,
+      "metallic": 0,
+      "ao": 0.3,
+      "specular": 0.7,
+      "emissive": 0,
+      "relief": 0.5
+    },
+    "leather": {
+      "id": "leather",
+      "label": "Leather",
+      "roughness": 0.45,
+      "metallic": 0,
+      "ao": 0.45,
+      "specular": 0.5,
+      "emissive": 0,
+      "relief": 0.7
+    },
+    "hair-matte": {
+      "id": "hair-matte",
+      "label": "Hair",
+      "roughness": 0.6,
+      "metallic": 0,
+      "ao": 0.5,
+      "specular": 0.45,
+      "emissive": 0,
+      "relief": 0.8
+    },
+    "metal-brushed": {
+      "id": "metal-brushed",
+      "label": "Brushed Metal",
+      "roughness": 0.4,
+      "metallic": 1,
+      "ao": 0.3,
+      "specular": 0.85,
+      "emissive": 0,
+      "relief": 0.3
+    },
+    "metal-polished": {
+      "id": "metal-polished",
+      "label": "Polished Metal",
+      "roughness": 0.12,
+      "metallic": 1,
+      "ao": 0.2,
+      "specular": 0.95,
+      "emissive": 0,
+      "relief": 0.2
+    },
+    "glass": {
+      "id": "glass",
+      "label": "Glass",
+      "roughness": 0.08,
+      "metallic": 0,
+      "ao": 0.1,
+      "specular": 0.9,
+      "emissive": 0,
+      "relief": 0.1
+    },
+    "plastic": {
+      "id": "plastic",
+      "label": "Plastic",
+      "roughness": 0.5,
+      "metallic": 0,
+      "ao": 0.35,
+      "specular": 0.5,
+      "emissive": 0,
+      "relief": 0.3
+    },
+    "wood": {
+      "id": "wood",
+      "label": "Wood",
+      "roughness": 0.7,
+      "metallic": 0,
+      "ao": 0.5,
+      "specular": 0.3,
+      "emissive": 0,
+      "relief": 0.6
+    },
+    "stone": {
+      "id": "stone",
+      "label": "Stone",
+      "roughness": 0.85,
+      "metallic": 0,
+      "ao": 0.6,
+      "specular": 0.2,
+      "emissive": 0,
+      "relief": 0.7
+    },
+    "screen": {
+      "id": "screen",
+      "label": "Display Screen",
+      "roughness": 0.2,
+      "metallic": 0,
+      "ao": 0.1,
+      "specular": 0.6,
+      "emissive": 0.9,
+      "relief": 0.1
+    }
+  },
+  "assets": [
+    {
+      "id": "face-m-01",
+      "label": "Angular Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 6,
+          "jaw": 1,
+          "brow": 1,
+          "eyeSpacing": 2,
+          "nose": 0,
+          "age": 1
+        }
+      },
+      "assetVersion": "32a313ad"
+    },
+    {
+      "id": "face-m-02",
+      "label": "Broad Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 7,
+          "jaw": 2,
+          "brow": 0,
+          "eyeSpacing": 3,
+          "nose": 1,
+          "age": 2
+        }
+      },
+      "assetVersion": "e8404616"
+    },
+    {
+      "id": "face-m-03",
+      "label": "Oval Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 8,
+          "jaw": 1,
+          "brow": 1,
+          "eyeSpacing": 2,
+          "nose": 2,
+          "age": 3
+        }
+      },
+      "assetVersion": "b5261ed7"
+    },
+    {
+      "id": "face-m-04",
+      "label": "Square Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 6,
+          "jaw": 2,
+          "brow": 0,
+          "eyeSpacing": 3,
+          "nose": 0,
+          "age": 1
+        }
+      },
+      "assetVersion": "94279c88"
+    },
+    {
+      "id": "face-m-05",
+      "label": "Lean Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 7,
+          "jaw": 1,
+          "brow": 1,
+          "eyeSpacing": 2,
+          "nose": 1,
+          "age": 2
+        }
+      },
+      "assetVersion": "f81482ae"
+    },
+    {
+      "id": "face-m-06",
+      "label": "Rounded Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 8,
+          "jaw": 2,
+          "brow": 0,
+          "eyeSpacing": 3,
+          "nose": 2,
+          "age": 3
+        }
+      },
+      "assetVersion": "e9b5bd86"
+    },
+    {
+      "id": "face-f-01",
+      "label": "Soft-Oval Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 6,
+          "jaw": 0,
+          "brow": 1,
+          "eyeSpacing": 2,
+          "nose": 0,
+          "age": 1
+        }
+      },
+      "assetVersion": "2d13a79e"
+    },
+    {
+      "id": "face-f-02",
+      "label": "Heart Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 7,
+          "jaw": 1,
+          "brow": 0,
+          "eyeSpacing": 3,
+          "nose": 1,
+          "age": 2
+        }
+      },
+      "assetVersion": "433aaa82"
+    },
+    {
+      "id": "face-f-03",
+      "label": "Diamond Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 8,
+          "jaw": 0,
+          "brow": 1,
+          "eyeSpacing": 2,
+          "nose": 2,
+          "age": 3
+        }
+      },
+      "assetVersion": "9d9dce81"
+    },
+    {
+      "id": "face-f-04",
+      "label": "Round Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 6,
+          "jaw": 1,
+          "brow": 0,
+          "eyeSpacing": 3,
+          "nose": 0,
+          "age": 1
+        }
+      },
+      "assetVersion": "7e5bae0f"
+    },
+    {
+      "id": "face-f-05",
+      "label": "Refined Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 7,
+          "jaw": 0,
+          "brow": 1,
+          "eyeSpacing": 2,
+          "nose": 1,
+          "age": 2
+        }
+      },
+      "assetVersion": "016fa379"
+    },
+    {
+      "id": "face-f-06",
+      "label": "Wide Face",
+      "category": "face",
+      "slot": "face.base",
+      "zIndex": 110,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "body",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "face",
+        "params": {
+          "width": 8,
+          "jaw": 1,
+          "brow": 0,
+          "eyeSpacing": 3,
+          "nose": 2,
+          "age": 3
+        }
+      },
+      "assetVersion": "12d4e0be"
+    },
+    {
+      "id": "expression-neutral",
+      "label": "Neutral",
+      "category": "expression",
+      "slot": "expression",
+      "zIndex": 130,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "eyes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "expression",
+        "params": {
+          "expression": "neutral"
+        }
+      },
+      "assetVersion": "0bc6a4fa"
+    },
+    {
+      "id": "expression-smile",
+      "label": "Smile",
+      "category": "expression",
+      "slot": "expression",
+      "zIndex": 130,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "eyes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "expression",
+        "params": {
+          "expression": "smile"
+        }
+      },
+      "assetVersion": "1eea3891"
+    },
+    {
+      "id": "expression-focused",
+      "label": "Focused",
+      "category": "expression",
+      "slot": "expression",
+      "zIndex": 130,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "eyes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "expression",
+        "params": {
+          "expression": "focused"
+        }
+      },
+      "assetVersion": "48ec2b42"
+    },
+    {
+      "id": "expression-talk",
+      "label": "Talk",
+      "category": "expression",
+      "slot": "expression",
+      "zIndex": 130,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "skin",
+      "materialId": "skin",
+      "workAdventureCategory": "eyes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "expression",
+        "params": {
+          "expression": "talk"
+        }
+      },
+      "assetVersion": "b695901d"
+    },
+    {
+      "id": "hair-m-shaved",
+      "label": "Shaved",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 0,
+          "length": 0,
+          "volume": 0,
+          "style": "shaved"
+        }
+      },
+      "assetVersion": "72ce86cf"
+    },
+    {
+      "id": "hair-m-buzz",
+      "label": "Buzz Cut",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 1,
+          "length": 0,
+          "volume": 0,
+          "style": "buzz"
+        }
+      },
+      "assetVersion": "189c9436"
+    },
+    {
+      "id": "hair-m-crew",
+      "label": "Crew Cut",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 1,
+          "length": 0,
+          "volume": 0,
+          "style": "crew"
+        }
+      },
+      "assetVersion": "8386f662"
+    },
+    {
+      "id": "hair-m-side-part",
+      "label": "Side Part",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 0,
+          "style": "side-part"
+        }
+      },
+      "assetVersion": "a556c3cd"
+    },
+    {
+      "id": "hair-m-slick",
+      "label": "Slicked Back",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 0,
+          "style": "slick"
+        }
+      },
+      "assetVersion": "baaefed5"
+    },
+    {
+      "id": "hair-m-short-wavy",
+      "label": "Short Wavy",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 1,
+          "style": "short-wavy"
+        }
+      },
+      "assetVersion": "1a57a02b"
+    },
+    {
+      "id": "hair-m-short-curly",
+      "label": "Short Curly",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 1,
+          "style": "short-curly"
+        }
+      },
+      "assetVersion": "6bccf2c3"
+    },
+    {
+      "id": "hair-m-cropped-coils",
+      "label": "Cropped Coils",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 1,
+          "style": "cropped-coils"
+        }
+      },
+      "assetVersion": "673eed25"
+    },
+    {
+      "id": "hair-m-medium-coils",
+      "label": "Medium Coils",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 2,
+          "volume": 1,
+          "style": "medium-coils"
+        }
+      },
+      "assetVersion": "960fadc5"
+    },
+    {
+      "id": "hair-m-short-locs",
+      "label": "Short Locs",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 2,
+          "volume": 1,
+          "style": "short-locs"
+        }
+      },
+      "assetVersion": "41de0f02"
+    },
+    {
+      "id": "hair-m-tied-locs",
+      "label": "Tied Locs",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 2,
+          "volume": 0,
+          "style": "tied-locs"
+        }
+      },
+      "assetVersion": "dc18b24d"
+    },
+    {
+      "id": "hair-m-shoulder",
+      "label": "Shoulder-Length",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 3,
+          "volume": 1,
+          "style": "shoulder"
+        }
+      },
+      "assetVersion": "f971888c"
+    },
+    {
+      "id": "hair-f-pixie",
+      "label": "Pixie",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 0,
+          "style": "pixie"
+        }
+      },
+      "assetVersion": "261f68eb"
+    },
+    {
+      "id": "hair-f-bob",
+      "label": "Bob",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 2,
+          "volume": 1,
+          "style": "bob"
+        }
+      },
+      "assetVersion": "3c5c9b6b"
+    },
+    {
+      "id": "hair-f-long-bob",
+      "label": "Long Bob",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 2,
+          "volume": 1,
+          "style": "long-bob"
+        }
+      },
+      "assetVersion": "6a83f660"
+    },
+    {
+      "id": "hair-f-long-straight",
+      "label": "Long Straight",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 3,
+          "volume": 0,
+          "style": "long-straight"
+        }
+      },
+      "assetVersion": "a609d469"
+    },
+    {
+      "id": "hair-f-long-wavy",
+      "label": "Long Wavy",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 3,
+          "volume": 1,
+          "style": "long-wavy"
+        }
+      },
+      "assetVersion": "d598b277"
+    },
+    {
+      "id": "hair-f-shoulder-curls",
+      "label": "Shoulder Curls",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 3,
+          "volume": 1,
+          "style": "shoulder-curls"
+        }
+      },
+      "assetVersion": "23bb5561"
+    },
+    {
+      "id": "hair-f-short-coils",
+      "label": "Short Coils",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 1,
+          "style": "short-coils"
+        }
+      },
+      "assetVersion": "57437f0f"
+    },
+    {
+      "id": "hair-f-afro",
+      "label": "Professional Afro",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 2,
+          "volume": 2,
+          "style": "afro"
+        }
+      },
+      "assetVersion": "9cb3d077"
+    },
+    {
+      "id": "hair-f-braids",
+      "label": "Braids",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 3,
+          "volume": 1,
+          "style": "braids"
+        }
+      },
+      "assetVersion": "1c26726b"
+    },
+    {
+      "id": "hair-f-locs",
+      "label": "Locs",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 3,
+          "length": 3,
+          "volume": 1,
+          "style": "locs"
+        }
+      },
+      "assetVersion": "f30abd37"
+    },
+    {
+      "id": "hair-f-bun",
+      "label": "Executive Bun",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 1,
+          "volume": 0,
+          "style": "bun"
+        }
+      },
+      "assetVersion": "bd39fc1f"
+    },
+    {
+      "id": "hair-f-ponytail",
+      "label": "Professional Ponytail",
+      "category": "hair",
+      "slot": "hair.front",
+      "zIndex": 200,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "hair",
+        "params": {
+          "coverage": 2,
+          "length": 2,
+          "volume": 0,
+          "style": "ponytail"
+        }
+      },
+      "assetVersion": "6d3dfdb6"
+    },
+    {
+      "id": "facialhair-light-stubble",
+      "label": "Light Stubble",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "stubble",
+          "density": 1,
+          "id": "light-stubble"
+        }
+      },
+      "assetVersion": "6dc1488e"
+    },
+    {
+      "id": "facialhair-full-stubble",
+      "label": "Full Stubble",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "stubble",
+          "density": 1,
+          "id": "full-stubble"
+        }
+      },
+      "assetVersion": "c6804643"
+    },
+    {
+      "id": "facialhair-pencil-mustache",
+      "label": "Pencil Mustache",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "mustache",
+          "density": 1,
+          "id": "pencil-mustache"
+        }
+      },
+      "assetVersion": "6026caad"
+    },
+    {
+      "id": "facialhair-classic-mustache",
+      "label": "Classic Mustache",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "mustache",
+          "density": 2,
+          "id": "classic-mustache"
+        }
+      },
+      "assetVersion": "47d28797"
+    },
+    {
+      "id": "facialhair-chevron-mustache",
+      "label": "Chevron Mustache",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "mustache",
+          "density": 2,
+          "id": "chevron-mustache"
+        }
+      },
+      "assetVersion": "4a7268f8"
+    },
+    {
+      "id": "facialhair-goatee",
+      "label": "Goatee",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "goatee",
+          "density": 2,
+          "id": "goatee"
+        }
+      },
+      "assetVersion": "bbae7fd3"
+    },
+    {
+      "id": "facialhair-circle-beard",
+      "label": "Circle Beard",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "circle",
+          "density": 2,
+          "id": "circle-beard"
+        }
+      },
+      "assetVersion": "bf00ffe3"
+    },
+    {
+      "id": "facialhair-short-boxed",
+      "label": "Short Boxed Beard",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "short-boxed",
+          "density": 2,
+          "id": "short-boxed"
+        }
+      },
+      "assetVersion": "8ca01f4e"
+    },
+    {
+      "id": "facialhair-full-beard",
+      "label": "Full Beard",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "full",
+          "density": 2,
+          "id": "full-beard"
+        }
+      },
+      "assetVersion": "5284fe03"
+    },
+    {
+      "id": "facialhair-tapered-beard",
+      "label": "Tapered Beard",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "tapered",
+          "density": 2,
+          "id": "tapered-beard"
+        }
+      },
+      "assetVersion": "b3624e43"
+    },
+    {
+      "id": "facialhair-chin-strap",
+      "label": "Chin Strap",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "chin-strap",
+          "density": 1,
+          "id": "chin-strap"
+        }
+      },
+      "assetVersion": "bda6fc1d"
+    },
+    {
+      "id": "facialhair-soul-patch",
+      "label": "Soul Patch",
+      "category": "facialHair",
+      "slot": "facialHair",
+      "zIndex": 135,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "hair",
+      "defaultPalette": "hair-dark-brown",
+      "materialId": "hair-matte",
+      "workAdventureCategory": "hairs",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "facialHair",
+        "params": {
+          "style": "soul-patch",
+          "density": 1,
+          "id": "soul-patch"
+        }
+      },
+      "assetVersion": "335af4bd"
+    },
+    {
+      "id": "headcovering-hijab-classic",
+      "label": "Classic Hijab",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "hijab",
+          "drape": 1,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "73f022da"
+    },
+    {
+      "id": "headcovering-hijab-draped",
+      "label": "Draped Hijab",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "hijab",
+          "drape": 2,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "37909af9"
+    },
+    {
+      "id": "headcovering-turban-formal",
+      "label": "Formal Turban",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "turban",
+          "drape": 1,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "e4c1d10c"
+    },
+    {
+      "id": "headcovering-turban-wrapped",
+      "label": "Wrapped Turban",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "turban",
+          "drape": 1,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "389771ac"
+    },
+    {
+      "id": "headcovering-dastar",
+      "label": "Dastar",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "dastar",
+          "drape": 1,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "a219e1ee"
+    },
+    {
+      "id": "headcovering-headwrap-structured",
+      "label": "Structured Headwrap",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "headwrap",
+          "drape": 1,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "ab72470e"
+    },
+    {
+      "id": "headcovering-headwrap-knotted",
+      "label": "Knotted Headwrap",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [
+        "hair.front"
+      ],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "headwrap",
+          "drape": 1,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "bbfd18ee"
+    },
+    {
+      "id": "headcovering-kufi",
+      "label": "Kufi",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "cap",
+          "drape": 0,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "390e9971"
+    },
+    {
+      "id": "headcovering-taqiyah",
+      "label": "Taqiyah",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "cap",
+          "drape": 0,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "96515791"
+    },
+    {
+      "id": "headcovering-kippah",
+      "label": "Kippah",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "cap",
+          "drape": 0,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "5f50c231"
+    },
+    {
+      "id": "headcovering-hat-brimmed",
+      "label": "Professional Brimmed Hat",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "hat",
+          "drape": 0,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "a734d318"
+    },
+    {
+      "id": "headcovering-cap-formal",
+      "label": "Formal Cap",
+      "category": "headCovering",
+      "slot": "headCovering.front",
+      "zIndex": 210,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "cover-charcoal",
+      "defaultPalette": "cover-charcoal",
+      "materialId": "cotton",
+      "workAdventureCategory": "hats",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "headCovering",
+        "params": {
+          "style": "cap",
+          "drape": 0,
+          "culturallyReviewed": true
+        }
+      },
+      "assetVersion": "20363bbc"
+    },
+    {
+      "id": "outfit-suit-2p-lower",
+      "label": "Classic Two-Piece Suit — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-2p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "4eecb566"
+    },
+    {
+      "id": "outfit-suit-2p-shirt",
+      "label": "Classic Two-Piece Suit — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-2p",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "d2915e5e"
+    },
+    {
+      "id": "outfit-suit-2p-outer",
+      "label": "Classic Two-Piece Suit — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-2p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "c7fd3228"
+    },
+    {
+      "id": "outfit-suit-2p-shoes",
+      "label": "Classic Two-Piece Suit — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-2p",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "435c4c26"
+    },
+    {
+      "id": "outfit-suit-2p-neckwear",
+      "label": "Classic Two-Piece Suit — neckwear",
+      "category": "outfit",
+      "slot": "neckwear",
+      "zIndex": 220,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-2p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "silk",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "neckwear",
+          "neck": "tie"
+        }
+      },
+      "assetVersion": "b253c6e4"
+    },
+    {
+      "id": "outfit-suit-3p-lower",
+      "label": "Three-Piece Suit — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-3p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "160f4960"
+    },
+    {
+      "id": "outfit-suit-3p-shirt",
+      "label": "Three-Piece Suit — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-3p",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "d708f598"
+    },
+    {
+      "id": "outfit-suit-3p-base",
+      "label": "Three-Piece Suit — base",
+      "category": "outfit",
+      "slot": "outfit.base",
+      "zIndex": 70,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-3p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "base"
+        }
+      },
+      "assetVersion": "85167041"
+    },
+    {
+      "id": "outfit-suit-3p-outer",
+      "label": "Three-Piece Suit — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-3p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "b448682e"
+    },
+    {
+      "id": "outfit-suit-3p-shoes",
+      "label": "Three-Piece Suit — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-3p",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "e600d460"
+    },
+    {
+      "id": "outfit-suit-3p-neckwear",
+      "label": "Three-Piece Suit — neckwear",
+      "category": "outfit",
+      "slot": "neckwear",
+      "zIndex": 220,
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-suit-3p",
+      "defaultPalette": "fabric-navy",
+      "materialId": "silk",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "neckwear",
+          "neck": "tie"
+        }
+      },
+      "assetVersion": "71e7a182"
+    },
+    {
+      "id": "outfit-pantsuit-lower",
+      "label": "Modern Pantsuit — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-pantsuit",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "dffd6ca1"
+    },
+    {
+      "id": "outfit-pantsuit-shirt",
+      "label": "Modern Pantsuit — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-pantsuit",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "51a8c0b9"
+    },
+    {
+      "id": "outfit-pantsuit-outer",
+      "label": "Modern Pantsuit — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-pantsuit",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "aa502d2f"
+    },
+    {
+      "id": "outfit-pantsuit-shoes",
+      "label": "Modern Pantsuit — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-pantsuit",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "2c328821"
+    },
+    {
+      "id": "outfit-skirt-suit-lower",
+      "label": "Skirt Suit — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-skirt-suit",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower",
+          "skirt": 1
+        }
+      },
+      "assetVersion": "68835dd2"
+    },
+    {
+      "id": "outfit-skirt-suit-shirt",
+      "label": "Skirt Suit — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-skirt-suit",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "7a481b7a"
+    },
+    {
+      "id": "outfit-skirt-suit-outer",
+      "label": "Skirt Suit — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-skirt-suit",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "3c5bab8c"
+    },
+    {
+      "id": "outfit-skirt-suit-shoes",
+      "label": "Skirt Suit — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-skirt-suit",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "cd803142"
+    },
+    {
+      "id": "outfit-business-dress-lower",
+      "label": "Tailored Business Dress — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-business-dress",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower",
+          "skirt": 1
+        }
+      },
+      "assetVersion": "4fdb8e47"
+    },
+    {
+      "id": "outfit-business-dress-base",
+      "label": "Tailored Business Dress — base",
+      "category": "outfit",
+      "slot": "outfit.base",
+      "zIndex": 70,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-business-dress",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "base"
+        }
+      },
+      "assetVersion": "e2126336"
+    },
+    {
+      "id": "outfit-business-dress-shoes",
+      "label": "Tailored Business Dress — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-business-dress",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "00888897"
+    },
+    {
+      "id": "outfit-blazer-trousers-lower",
+      "label": "Blazer & Tailored Trousers — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-trousers",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "f833707d"
+    },
+    {
+      "id": "outfit-blazer-trousers-shirt",
+      "label": "Blazer & Tailored Trousers — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-trousers",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "ab704005"
+    },
+    {
+      "id": "outfit-blazer-trousers-outer",
+      "label": "Blazer & Tailored Trousers — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-trousers",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "a1ebc0b3"
+    },
+    {
+      "id": "outfit-blazer-trousers-shoes",
+      "label": "Blazer & Tailored Trousers — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-trousers",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "5726261d"
+    },
+    {
+      "id": "outfit-blazer-blouse-lower",
+      "label": "Blazer & Blouse — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-blouse",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "ed097c48"
+    },
+    {
+      "id": "outfit-blazer-blouse-shirt",
+      "label": "Blazer & Blouse — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-blouse",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "825e75f0"
+    },
+    {
+      "id": "outfit-blazer-blouse-outer",
+      "label": "Blazer & Blouse — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-blouse",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "908066c6"
+    },
+    {
+      "id": "outfit-blazer-blouse-shoes",
+      "label": "Blazer & Blouse — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-blazer-blouse",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "9f6c2068"
+    },
+    {
+      "id": "outfit-turtleneck-jacket-lower",
+      "label": "Turtleneck & Tailored Jacket — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-turtleneck-jacket",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "deba6f4b"
+    },
+    {
+      "id": "outfit-turtleneck-jacket-shirt",
+      "label": "Turtleneck & Tailored Jacket — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-turtleneck-jacket",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "34ec61b3"
+    },
+    {
+      "id": "outfit-turtleneck-jacket-outer",
+      "label": "Turtleneck & Tailored Jacket — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-turtleneck-jacket",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer"
+        }
+      },
+      "assetVersion": "d5c2d085"
+    },
+    {
+      "id": "outfit-turtleneck-jacket-shoes",
+      "label": "Turtleneck & Tailored Jacket — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-turtleneck-jacket",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "e94f78ab"
+    },
+    {
+      "id": "outfit-smart-casual-lower",
+      "label": "Smart-Casual Executive — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-smart-casual",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "83e93a23"
+    },
+    {
+      "id": "outfit-smart-casual-shirt",
+      "label": "Smart-Casual Executive — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-smart-casual",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "5a442a3b"
+    },
+    {
+      "id": "outfit-smart-casual-outer",
+      "label": "Smart-Casual Executive — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-smart-casual",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer",
+          "sheen": 0
+        }
+      },
+      "assetVersion": "057b80de"
+    },
+    {
+      "id": "outfit-smart-casual-shoes",
+      "label": "Smart-Casual Executive — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-smart-casual",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "bd7f53c3"
+    },
+    {
+      "id": "outfit-tech-exec-lower",
+      "label": "Technology Executive — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-tech-exec",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "5347fbd8"
+    },
+    {
+      "id": "outfit-tech-exec-shirt",
+      "label": "Technology Executive — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-tech-exec",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "9ae39b20"
+    },
+    {
+      "id": "outfit-tech-exec-outer",
+      "label": "Technology Executive — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-tech-exec",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer",
+          "sheen": 1
+        }
+      },
+      "assetVersion": "e99efd44"
+    },
+    {
+      "id": "outfit-tech-exec-shoes",
+      "label": "Technology Executive — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-tech-exec",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "242a2058"
+    },
+    {
+      "id": "outfit-black-tie-lower",
+      "label": "Formal Board / Evening Event — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-black-tie",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "50838224"
+    },
+    {
+      "id": "outfit-black-tie-shirt",
+      "label": "Formal Board / Evening Event — shirt",
+      "category": "outfit",
+      "slot": "outfit.shirt",
+      "zIndex": 75,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-black-tie",
+      "defaultPalette": "shirt-white",
+      "materialId": "cotton",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shirt"
+        }
+      },
+      "assetVersion": "03fcc1dc"
+    },
+    {
+      "id": "outfit-black-tie-outer",
+      "label": "Formal Board / Evening Event — outer",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 80,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-black-tie",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "outer",
+          "sheen": 1
+        }
+      },
+      "assetVersion": "40528f38"
+    },
+    {
+      "id": "outfit-black-tie-shoes",
+      "label": "Formal Board / Evening Event — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-black-tie",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "3c471fa4"
+    },
+    {
+      "id": "outfit-black-tie-neckwear",
+      "label": "Formal Board / Evening Event — neckwear",
+      "category": "outfit",
+      "slot": "neckwear",
+      "zIndex": 220,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-black-tie",
+      "defaultPalette": "fabric-navy",
+      "materialId": "silk",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "neckwear",
+          "neck": "bowtie"
+        }
+      },
+      "assetVersion": "14b2dd5c"
+    },
+    {
+      "id": "outfit-black-tie-pocket",
+      "label": "Formal Board / Evening Event — pocket",
+      "category": "outfit",
+      "slot": "outfit.outer",
+      "zIndex": 82,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-black-tie",
+      "defaultPalette": "fabric-navy",
+      "materialId": "silk",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "pocket"
+        }
+      },
+      "assetVersion": "38ce8c15"
+    },
+    {
+      "id": "outfit-cultural-formal-01-lower",
+      "label": "Cultural Formalwear I — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-01",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower"
+        }
+      },
+      "assetVersion": "a1989e69"
+    },
+    {
+      "id": "outfit-cultural-formal-01-base",
+      "label": "Cultural Formalwear I — base",
+      "category": "outfit",
+      "slot": "outfit.base",
+      "zIndex": 70,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-01",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "base"
+        }
+      },
+      "assetVersion": "411994a8"
+    },
+    {
+      "id": "outfit-cultural-formal-01-shoes",
+      "label": "Cultural Formalwear I — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-01",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "d41225a9"
+    },
+    {
+      "id": "outfit-cultural-formal-01-neckwear",
+      "label": "Cultural Formalwear I — neckwear",
+      "category": "outfit",
+      "slot": "neckwear",
+      "zIndex": 220,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-01",
+      "defaultPalette": "fabric-navy",
+      "materialId": "silk",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "neckwear",
+          "neck": "scarf"
+        }
+      },
+      "assetVersion": "2fc47416"
+    },
+    {
+      "id": "outfit-cultural-formal-02-lower",
+      "label": "Cultural Formalwear II — lower",
+      "category": "outfit",
+      "slot": "outfit.lower",
+      "zIndex": 60,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-02",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "lower",
+          "skirt": 1
+        }
+      },
+      "assetVersion": "e7a12c90"
+    },
+    {
+      "id": "outfit-cultural-formal-02-base",
+      "label": "Cultural Formalwear II — base",
+      "category": "outfit",
+      "slot": "outfit.base",
+      "zIndex": 70,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-02",
+      "defaultPalette": "fabric-navy",
+      "materialId": "wool-matte",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "base",
+          "sheen": 1
+        }
+      },
+      "assetVersion": "eb6e02d3"
+    },
+    {
+      "id": "outfit-cultural-formal-02-shoes",
+      "label": "Cultural Formalwear II — shoes",
+      "category": "outfit",
+      "slot": "outfit.shoes",
+      "zIndex": 65,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "outfit-cultural-formal-02",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "clothes",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "outfit",
+        "params": {
+          "part": "shoes"
+        }
+      },
+      "assetVersion": "f5ae7540"
+    },
+    {
+      "id": "accessory-glasses-rect",
+      "label": "Rectangular Glasses",
+      "category": "accessory",
+      "slot": "eyewear",
+      "zIndex": 230,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "glass-clear",
+      "defaultPalette": "glass-clear",
+      "materialId": "glass",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-glasses-round",
+        "accessory-glasses-browline"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "glasses",
+          "shape": "rect"
+        }
+      },
+      "assetVersion": "27894b23"
+    },
+    {
+      "id": "accessory-glasses-round",
+      "label": "Round Glasses",
+      "category": "accessory",
+      "slot": "eyewear",
+      "zIndex": 230,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "glass-clear",
+      "defaultPalette": "glass-clear",
+      "materialId": "glass",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-glasses-browline",
+        "accessory-glasses-rect"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "glasses",
+          "shape": "round"
+        }
+      },
+      "assetVersion": "10548041"
+    },
+    {
+      "id": "accessory-glasses-browline",
+      "label": "Browline Glasses",
+      "category": "accessory",
+      "slot": "eyewear",
+      "zIndex": 230,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "glass-clear",
+      "defaultPalette": "glass-clear",
+      "materialId": "glass",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-glasses-round",
+        "accessory-glasses-rect"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "glasses",
+          "shape": "browline"
+        }
+      },
+      "assetVersion": "efa827e1"
+    },
+    {
+      "id": "accessory-badge",
+      "label": "ID Badge",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 240,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "plastic-dark",
+      "defaultPalette": "plastic-dark",
+      "materialId": "plastic",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "badge"
+        }
+      },
+      "assetVersion": "db18bf43"
+    },
+    {
+      "id": "accessory-lanyard",
+      "label": "Lanyard",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 239,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "fabric-lanyard",
+      "defaultPalette": "fabric-lanyard",
+      "materialId": "cotton",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "lanyard"
+        }
+      },
+      "assetVersion": "1e50e9d5"
+    },
+    {
+      "id": "accessory-pin",
+      "label": "Lapel Pin",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 241,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "metal-gold",
+      "defaultPalette": "metal-gold",
+      "materialId": "metal-polished",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "pin"
+        }
+      },
+      "assetVersion": "385f35e5"
+    },
+    {
+      "id": "accessory-pocket-square",
+      "label": "Pocket Square",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 238,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "tie-burgundy",
+      "defaultPalette": "tie-burgundy",
+      "materialId": "silk",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "pocket-square"
+        }
+      },
+      "assetVersion": "8cb83ece"
+    },
+    {
+      "id": "accessory-pen",
+      "label": "Pen",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 242,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "metal-steel",
+      "defaultPalette": "metal-steel",
+      "materialId": "metal-polished",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "pen"
+        }
+      },
+      "assetVersion": "42fd193e"
+    },
+    {
+      "id": "accessory-tablet",
+      "label": "Tablet",
+      "category": "accessory",
+      "slot": "handheld",
+      "zIndex": 250,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "screen-cyan",
+      "defaultPalette": "screen-cyan",
+      "materialId": "screen",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-clipboard",
+        "accessory-phone",
+        "accessory-portfolio",
+        "accessory-briefcase"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "tablet"
+        }
+      },
+      "assetVersion": "fb7106bd"
+    },
+    {
+      "id": "accessory-clipboard",
+      "label": "Clipboard",
+      "category": "accessory",
+      "slot": "handheld",
+      "zIndex": 250,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "fabric-tan",
+      "defaultPalette": "fabric-tan",
+      "materialId": "wood",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-tablet",
+        "accessory-phone",
+        "accessory-portfolio",
+        "accessory-briefcase"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "clipboard"
+        }
+      },
+      "assetVersion": "cf9f85a2"
+    },
+    {
+      "id": "accessory-watch",
+      "label": "Wristwatch",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 243,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "metal-steel",
+      "defaultPalette": "metal-steel",
+      "materialId": "metal-polished",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-smartwatch"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "watch"
+        }
+      },
+      "assetVersion": "5ebf563b"
+    },
+    {
+      "id": "accessory-smartwatch",
+      "label": "Smartwatch",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 243,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "screen-cyan",
+      "defaultPalette": "screen-cyan",
+      "materialId": "screen",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-watch"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "smartwatch"
+        }
+      },
+      "assetVersion": "08b95800"
+    },
+    {
+      "id": "accessory-briefcase",
+      "label": "Briefcase",
+      "category": "accessory",
+      "slot": "handheld",
+      "zIndex": 40,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "leather-brown",
+      "defaultPalette": "leather-brown",
+      "materialId": "leather",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-tablet",
+        "accessory-clipboard",
+        "accessory-phone",
+        "accessory-portfolio"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "briefcase"
+        }
+      },
+      "assetVersion": "87304641"
+    },
+    {
+      "id": "accessory-portfolio",
+      "label": "Portfolio Folder",
+      "category": "accessory",
+      "slot": "handheld",
+      "zIndex": 250,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "leather-black",
+      "defaultPalette": "leather-black",
+      "materialId": "leather",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-tablet",
+        "accessory-clipboard",
+        "accessory-phone",
+        "accessory-briefcase"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "portfolio"
+        }
+      },
+      "assetVersion": "aaacf0e4"
+    },
+    {
+      "id": "accessory-phone",
+      "label": "Phone",
+      "category": "accessory",
+      "slot": "handheld",
+      "zIndex": 250,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "plastic-dark",
+      "defaultPalette": "plastic-dark",
+      "materialId": "screen",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [
+        "accessory-tablet",
+        "accessory-clipboard",
+        "accessory-portfolio",
+        "accessory-briefcase"
+      ],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "phone"
+        }
+      },
+      "assetVersion": "f057105d"
+    },
+    {
+      "id": "accessory-earpiece",
+      "label": "Earpiece",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 245,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "plastic-dark",
+      "defaultPalette": "plastic-dark",
+      "materialId": "plastic",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "earpiece"
+        }
+      },
+      "assetVersion": "14d4d202"
+    },
+    {
+      "id": "accessory-headset",
+      "label": "Conference Headset",
+      "category": "accessory",
+      "slot": "accessory.front",
+      "zIndex": 246,
+      "fitGroups": [
+        "universal"
+      ],
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "states": [
+        "idle",
+        "walk",
+        "talk",
+        "approve"
+      ],
+      "paletteGroup": "plastic-dark",
+      "defaultPalette": "plastic-dark",
+      "materialId": "plastic",
+      "workAdventureCategory": "accessories",
+      "requires": [],
+      "excludes": [],
+      "occludes": [],
+      "anchor": {
+        "x": 16,
+        "y": 30
+      },
+      "frame": {
+        "width": 32,
+        "height": 32
+      },
+      "recipe": {
+        "kind": "accessory",
+        "params": {
+          "acc": "headset"
+        }
+      },
+      "assetVersion": "920e5f19"
+    }
+  ],
+  "outfitSystems": [
+    {
+      "id": "suit-2p",
+      "label": "Classic Two-Piece Suit",
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "sublayers": [
+        "outfit-suit-2p-lower",
+        "outfit-suit-2p-shirt",
+        "outfit-suit-2p-outer",
+        "outfit-suit-2p-shoes",
+        "outfit-suit-2p-neckwear"
+      ],
+      "colorways": [
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "tie-burgundy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "charcoal",
+          "label": "Charcoal",
+          "palettes": {
+            "outfit.outer": "fabric-charcoal",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "shirt-blue",
+            "neckwear": "tie-navy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "graphite",
+          "label": "Graphite",
+          "palettes": {
+            "outfit.outer": "fabric-graphite",
+            "outfit.lower": "fabric-graphite",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "tie-forest",
+            "outfit.shoes": "leather-brown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "suit-3p",
+      "label": "Three-Piece Suit",
+      "fitGroups": [
+        "masculine-fit"
+      ],
+      "sublayers": [
+        "outfit-suit-3p-lower",
+        "outfit-suit-3p-shirt",
+        "outfit-suit-3p-base",
+        "outfit-suit-3p-outer",
+        "outfit-suit-3p-shoes",
+        "outfit-suit-3p-neckwear"
+      ],
+      "colorways": [
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.base": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "tie-gold",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "charcoal",
+          "label": "Charcoal",
+          "palettes": {
+            "outfit.outer": "fabric-charcoal",
+            "outfit.base": "fabric-graphite",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "shirt-blue",
+            "neckwear": "tie-burgundy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "forest",
+          "label": "Forest",
+          "palettes": {
+            "outfit.outer": "fabric-forest",
+            "outfit.base": "fabric-forest",
+            "outfit.lower": "fabric-forest",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "tie-gold",
+            "outfit.shoes": "leather-brown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pantsuit",
+      "label": "Modern Pantsuit",
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "sublayers": [
+        "outfit-pantsuit-lower",
+        "outfit-pantsuit-shirt",
+        "outfit-pantsuit-outer",
+        "outfit-pantsuit-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "burgundy",
+          "label": "Burgundy",
+          "palettes": {
+            "outfit.outer": "fabric-burgundy",
+            "outfit.lower": "fabric-burgundy",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "shirt-rose",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "slate",
+          "label": "Slate",
+          "palettes": {
+            "outfit.outer": "fabric-slate",
+            "outfit.lower": "fabric-slate",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-brown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "skirt-suit",
+      "label": "Skirt Suit",
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "sublayers": [
+        "outfit-skirt-suit-lower",
+        "outfit-skirt-suit-shirt",
+        "outfit-skirt-suit-outer",
+        "outfit-skirt-suit-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "charcoal",
+          "label": "Charcoal",
+          "palettes": {
+            "outfit.outer": "fabric-charcoal",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "taupe",
+          "label": "Taupe",
+          "palettes": {
+            "outfit.outer": "fabric-taupe",
+            "outfit.lower": "fabric-taupe",
+            "outfit.shirt": "shirt-rose",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "shirt-blue",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ]
+    },
+    {
+      "id": "business-dress",
+      "label": "Tailored Business Dress",
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "sublayers": [
+        "outfit-business-dress-lower",
+        "outfit-business-dress-base",
+        "outfit-business-dress-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "burgundy",
+          "label": "Burgundy",
+          "palettes": {
+            "outfit.base": "fabric-burgundy",
+            "outfit.lower": "fabric-burgundy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "forest",
+          "label": "Forest",
+          "palettes": {
+            "outfit.base": "fabric-forest",
+            "outfit.lower": "fabric-forest",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "slate",
+          "label": "Slate",
+          "palettes": {
+            "outfit.base": "fabric-slate",
+            "outfit.lower": "fabric-slate",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ]
+    },
+    {
+      "id": "blazer-trousers",
+      "label": "Blazer & Tailored Trousers",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-blazer-trousers-lower",
+        "outfit-blazer-trousers-shirt",
+        "outfit-blazer-trousers-outer",
+        "outfit-blazer-trousers-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "navy-tan",
+          "label": "Navy / Tan",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-tan",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "charcoal",
+          "label": "Charcoal",
+          "palettes": {
+            "outfit.outer": "fabric-charcoal",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "shirt-blue",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "olive",
+          "label": "Olive",
+          "palettes": {
+            "outfit.outer": "fabric-olive",
+            "outfit.lower": "fabric-graphite",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-brown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "blazer-blouse",
+      "label": "Blazer & Blouse",
+      "fitGroups": [
+        "feminine-fit"
+      ],
+      "sublayers": [
+        "outfit-blazer-blouse-lower",
+        "outfit-blazer-blouse-shirt",
+        "outfit-blazer-blouse-outer",
+        "outfit-blazer-blouse-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "slate-rose",
+          "label": "Slate / Rose",
+          "palettes": {
+            "outfit.outer": "fabric-slate",
+            "outfit.lower": "fabric-slate",
+            "outfit.shirt": "shirt-rose",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "cream",
+          "label": "Cream",
+          "palettes": {
+            "outfit.outer": "fabric-cream",
+            "outfit.lower": "fabric-taupe",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-brown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "turtleneck-jacket",
+      "label": "Turtleneck & Tailored Jacket",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-turtleneck-jacket-lower",
+        "outfit-turtleneck-jacket-shirt",
+        "outfit-turtleneck-jacket-outer",
+        "outfit-turtleneck-jacket-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "charcoal-black",
+          "label": "Charcoal / Black",
+          "palettes": {
+            "outfit.outer": "fabric-charcoal",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "fabric-black",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "navy-cream",
+          "label": "Navy / Cream",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "fabric-cream",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "forest",
+          "label": "Forest",
+          "palettes": {
+            "outfit.outer": "fabric-forest",
+            "outfit.lower": "fabric-graphite",
+            "outfit.shirt": "fabric-black",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ]
+    },
+    {
+      "id": "smart-casual",
+      "label": "Smart-Casual Executive",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-smart-casual-lower",
+        "outfit-smart-casual-shirt",
+        "outfit-smart-casual-outer",
+        "outfit-smart-casual-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-tan",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "olive",
+          "label": "Olive",
+          "palettes": {
+            "outfit.outer": "fabric-olive",
+            "outfit.lower": "fabric-taupe",
+            "outfit.shirt": "shirt-blue",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "graphite",
+          "label": "Graphite",
+          "palettes": {
+            "outfit.outer": "fabric-graphite",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tech-exec",
+      "label": "Technology Executive",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-tech-exec-lower",
+        "outfit-tech-exec-shirt",
+        "outfit-tech-exec-outer",
+        "outfit-tech-exec-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "black",
+          "label": "All Black",
+          "palettes": {
+            "outfit.outer": "fabric-black",
+            "outfit.lower": "fabric-black",
+            "outfit.shirt": "fabric-black",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "graphite",
+          "label": "Graphite",
+          "palettes": {
+            "outfit.outer": "fabric-graphite",
+            "outfit.lower": "fabric-graphite",
+            "outfit.shirt": "shirt-gray",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "navy",
+          "label": "Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shirt": "shirt-white",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ]
+    },
+    {
+      "id": "black-tie",
+      "label": "Formal Board / Evening Event",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-black-tie-lower",
+        "outfit-black-tie-shirt",
+        "outfit-black-tie-outer",
+        "outfit-black-tie-shoes",
+        "outfit-black-tie-neckwear",
+        "outfit-black-tie-pocket"
+      ],
+      "colorways": [
+        {
+          "id": "black",
+          "label": "Black Tie",
+          "palettes": {
+            "outfit.outer": "fabric-black",
+            "outfit.lower": "fabric-black",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "fabric-black",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "midnight",
+          "label": "Midnight Navy",
+          "palettes": {
+            "outfit.outer": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "tie-navy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "burgundy",
+          "label": "Burgundy Dinner",
+          "palettes": {
+            "outfit.outer": "fabric-burgundy",
+            "outfit.lower": "fabric-black",
+            "outfit.shirt": "shirt-white",
+            "neckwear": "fabric-black",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cultural-formal-01",
+      "label": "Cultural Formalwear I",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-cultural-formal-01-lower",
+        "outfit-cultural-formal-01-base",
+        "outfit-cultural-formal-01-shoes",
+        "outfit-cultural-formal-01-neckwear"
+      ],
+      "colorways": [
+        {
+          "id": "cream",
+          "label": "Cream & Gold",
+          "palettes": {
+            "outfit.base": "fabric-cream",
+            "outfit.lower": "fabric-cream",
+            "neckwear": "tie-gold",
+            "outfit.shoes": "leather-brown"
+          }
+        },
+        {
+          "id": "forest",
+          "label": "Forest & Gold",
+          "palettes": {
+            "outfit.base": "fabric-forest",
+            "outfit.lower": "fabric-forest",
+            "neckwear": "tie-gold",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "burgundy",
+          "label": "Burgundy",
+          "palettes": {
+            "outfit.base": "fabric-burgundy",
+            "outfit.lower": "fabric-burgundy",
+            "neckwear": "tie-gold",
+            "outfit.shoes": "leather-black"
+          }
+        }
+      ],
+      "culturallyReviewed": true
+    },
+    {
+      "id": "cultural-formal-02",
+      "label": "Cultural Formalwear II",
+      "fitGroups": [
+        "universal"
+      ],
+      "sublayers": [
+        "outfit-cultural-formal-02-lower",
+        "outfit-cultural-formal-02-base",
+        "outfit-cultural-formal-02-shoes"
+      ],
+      "colorways": [
+        {
+          "id": "navy-gold",
+          "label": "Navy & Gold",
+          "palettes": {
+            "outfit.base": "fabric-navy",
+            "outfit.lower": "fabric-navy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "burgundy",
+          "label": "Burgundy",
+          "palettes": {
+            "outfit.base": "fabric-burgundy",
+            "outfit.lower": "fabric-burgundy",
+            "outfit.shoes": "leather-black"
+          }
+        },
+        {
+          "id": "charcoal",
+          "label": "Charcoal",
+          "palettes": {
+            "outfit.base": "fabric-charcoal",
+            "outfit.lower": "fabric-charcoal",
+            "outfit.shoes": "leather-brown"
+          }
+        }
+      ],
+      "culturallyReviewed": true
+    }
+  ],
+  "examples": [
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "masculine-fit",
+      "skinPalette": "skin-olive-02",
+      "face": "face-m-03",
+      "expression": "focused",
+      "hair": "hair-m-side-part",
+      "hairColor": "hair-salt-pepper",
+      "facialHair": "facialhair-short-boxed",
+      "facialHairColor": "hair-salt-pepper",
+      "headCovering": null,
+      "outfitSystem": "suit-3p",
+      "outfitColorway": "navy",
+      "accessories": [
+        "accessory-glasses-rect",
+        "accessory-watch",
+        "accessory-pin"
+      ],
+      "materialOverrides": {},
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-ceo",
+      "displayName": "Managing Partner"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "feminine-fit",
+      "skinPalette": "skin-olive-05",
+      "face": "face-f-02",
+      "expression": "smile",
+      "hair": "hair-f-bun",
+      "hairColor": "hair-soft-black",
+      "facialHair": null,
+      "facialHairColor": "hair-dark-brown",
+      "headCovering": null,
+      "outfitSystem": "pantsuit",
+      "outfitColorway": "burgundy",
+      "accessories": [
+        "accessory-tablet",
+        "accessory-smartwatch"
+      ],
+      "materialOverrides": {},
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-cio",
+      "displayName": "Chief Investment Officer"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "feminine-fit",
+      "skinPalette": "skin-olive-01-light",
+      "face": "face-f-05",
+      "expression": "neutral",
+      "hair": null,
+      "hairColor": "hair-dark-brown",
+      "facialHair": null,
+      "facialHairColor": "hair-dark-brown",
+      "headCovering": "headcovering-hijab-draped",
+      "outfitSystem": "skirt-suit",
+      "outfitColorway": "charcoal",
+      "accessories": [
+        "accessory-glasses-browline",
+        "accessory-portfolio"
+      ],
+      "materialOverrides": {
+        "headcovering-hijab-draped": {
+          "palette": "cover-navy"
+        }
+      },
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-counsel",
+      "displayName": "General Counsel"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "masculine-fit",
+      "skinPalette": "skin-olive-06-deep",
+      "face": "face-m-02",
+      "expression": "talk",
+      "hair": "hair-m-cropped-coils",
+      "hairColor": "hair-soft-black",
+      "facialHair": "facialhair-full-beard",
+      "facialHairColor": "hair-soft-black",
+      "headCovering": null,
+      "outfitSystem": "blazer-trousers",
+      "outfitColorway": "navy-tan",
+      "accessories": [
+        "accessory-clipboard",
+        "accessory-lanyard"
+      ],
+      "materialOverrides": {},
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-ops",
+      "displayName": "Head of Operations"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "universal",
+      "skinPalette": "skin-olive-04",
+      "face": "face-m-05",
+      "expression": "focused",
+      "hair": "hair-m-short-curly",
+      "hairColor": "hair-espresso",
+      "facialHair": null,
+      "facialHairColor": "hair-dark-brown",
+      "headCovering": null,
+      "outfitSystem": "tech-exec",
+      "outfitColorway": "black",
+      "accessories": [
+        "accessory-phone",
+        "accessory-earpiece"
+      ],
+      "materialOverrides": {},
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-tech",
+      "displayName": "Chief Technology Officer"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "masculine-fit",
+      "skinPalette": "skin-olive-03",
+      "face": "face-m-04",
+      "expression": "smile",
+      "hair": null,
+      "hairColor": "hair-dark-brown",
+      "facialHair": null,
+      "facialHairColor": "hair-dark-brown",
+      "headCovering": "headcovering-turban-formal",
+      "outfitSystem": "suit-2p",
+      "outfitColorway": "charcoal",
+      "accessories": [
+        "accessory-glasses-round",
+        "accessory-briefcase"
+      ],
+      "materialOverrides": {
+        "headcovering-turban-formal": {
+          "palette": "cover-burgundy"
+        }
+      },
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-advisor",
+      "displayName": "Senior Advisor"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "feminine-fit",
+      "skinPalette": "skin-olive-02",
+      "face": "face-f-03",
+      "expression": "neutral",
+      "hair": "hair-f-long-straight",
+      "hairColor": "hair-chestnut",
+      "facialHair": null,
+      "facialHairColor": "hair-dark-brown",
+      "headCovering": null,
+      "outfitSystem": "blazer-blouse",
+      "outfitColorway": "slate-rose",
+      "accessories": [
+        "accessory-headset",
+        "accessory-smartwatch"
+      ],
+      "materialOverrides": {},
+      "direction": "down",
+      "state": "idle",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-capital",
+      "displayName": "Capital Markets Lead"
+    },
+    {
+      "manifestVersion": "1.0.0",
+      "fitGroup": "feminine-fit",
+      "skinPalette": "skin-olive-06-deep",
+      "face": "face-f-06",
+      "expression": "neutral",
+      "hair": "hair-f-afro",
+      "hairColor": "hair-white",
+      "facialHair": null,
+      "facialHairColor": "hair-dark-brown",
+      "headCovering": null,
+      "outfitSystem": "black-tie",
+      "outfitColorway": "midnight",
+      "accessories": [
+        "accessory-pin",
+        "accessory-pocket-square"
+      ],
+      "materialOverrides": {},
+      "direction": "down",
+      "state": "approve",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "characterId": "exec-chair",
+      "displayName": "Board Chair"
+    }
+  ],
+  "attribution": {
+    "author": "FundExecs",
+    "license": "MIT",
+    "copyright": "© 2026 FundExecs. Original pixel-art system.",
+    "notes": "All character art is procedurally composited raster pixel art authored for FundExecs. No assets are copied from WorkAdventure, Spot, or any third-party product. WorkAdventure and Tiled are referenced only for format compatibility."
+  }
+}

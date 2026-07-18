@@ -1,0 +1,29 @@
+{
+  "manifestVersion": "1.0.0",
+  "fitGroup": "masculine-fit",
+  "skinPalette": "skin-olive-03",
+  "face": "face-m-04",
+  "expression": "smile",
+  "hair": null,
+  "hairColor": "hair-dark-brown",
+  "facialHair": null,
+  "facialHairColor": "hair-dark-brown",
+  "headCovering": "headcovering-turban-formal",
+  "outfitSystem": "suit-2p",
+  "outfitColorway": "charcoal",
+  "accessories": [
+    "accessory-glasses-round",
+    "accessory-briefcase"
+  ],
+  "materialOverrides": {
+    "headcovering-turban-formal": {
+      "palette": "cover-burgundy"
+    }
+  },
+  "direction": "down",
+  "state": "idle",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "characterId": "exec-advisor",
+  "displayName": "Senior Advisor"
+}

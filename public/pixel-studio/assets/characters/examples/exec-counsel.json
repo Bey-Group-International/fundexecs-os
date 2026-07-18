@@ -1,0 +1,29 @@
+{
+  "manifestVersion": "1.0.0",
+  "fitGroup": "feminine-fit",
+  "skinPalette": "skin-olive-01-light",
+  "face": "face-f-05",
+  "expression": "neutral",
+  "hair": null,
+  "hairColor": "hair-dark-brown",
+  "facialHair": null,
+  "facialHairColor": "hair-dark-brown",
+  "headCovering": "headcovering-hijab-draped",
+  "outfitSystem": "skirt-suit",
+  "outfitColorway": "charcoal",
+  "accessories": [
+    "accessory-glasses-browline",
+    "accessory-portfolio"
+  ],
+  "materialOverrides": {
+    "headcovering-hijab-draped": {
+      "palette": "cover-navy"
+    }
+  },
+  "direction": "down",
+  "state": "idle",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "characterId": "exec-counsel",
+  "displayName": "General Counsel"
+}

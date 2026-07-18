@@ -1,0 +1,25 @@
+{
+  "manifestVersion": "1.0.0",
+  "fitGroup": "feminine-fit",
+  "skinPalette": "skin-olive-05",
+  "face": "face-f-02",
+  "expression": "smile",
+  "hair": "hair-f-bun",
+  "hairColor": "hair-soft-black",
+  "facialHair": null,
+  "facialHairColor": "hair-dark-brown",
+  "headCovering": null,
+  "outfitSystem": "pantsuit",
+  "outfitColorway": "burgundy",
+  "accessories": [
+    "accessory-tablet",
+    "accessory-smartwatch"
+  ],
+  "materialOverrides": {},
+  "direction": "down",
+  "state": "idle",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "characterId": "exec-cio",
+  "displayName": "Chief Investment Officer"
+}

@@ -1,0 +1,25 @@
+{
+  "manifestVersion": "1.0.0",
+  "fitGroup": "masculine-fit",
+  "skinPalette": "skin-olive-06-deep",
+  "face": "face-m-02",
+  "expression": "talk",
+  "hair": "hair-m-cropped-coils",
+  "hairColor": "hair-soft-black",
+  "facialHair": "facialhair-full-beard",
+  "facialHairColor": "hair-soft-black",
+  "headCovering": null,
+  "outfitSystem": "blazer-trousers",
+  "outfitColorway": "navy-tan",
+  "accessories": [
+    "accessory-clipboard",
+    "accessory-lanyard"
+  ],
+  "materialOverrides": {},
+  "direction": "down",
+  "state": "idle",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "characterId": "exec-ops",
+  "displayName": "Head of Operations"
+}

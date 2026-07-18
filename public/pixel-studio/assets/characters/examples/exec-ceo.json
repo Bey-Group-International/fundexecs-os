@@ -1,0 +1,26 @@
+{
+  "manifestVersion": "1.0.0",
+  "fitGroup": "masculine-fit",
+  "skinPalette": "skin-olive-02",
+  "face": "face-m-03",
+  "expression": "focused",
+  "hair": "hair-m-side-part",
+  "hairColor": "hair-salt-pepper",
+  "facialHair": "facialhair-short-boxed",
+  "facialHairColor": "hair-salt-pepper",
+  "headCovering": null,
+  "outfitSystem": "suit-3p",
+  "outfitColorway": "navy",
+  "accessories": [
+    "accessory-glasses-rect",
+    "accessory-watch",
+    "accessory-pin"
+  ],
+  "materialOverrides": {},
+  "direction": "down",
+  "state": "idle",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "characterId": "exec-ceo",
+  "displayName": "Managing Partner"
+}

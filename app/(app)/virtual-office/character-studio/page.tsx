@@ -28,6 +28,13 @@ export default async function CharacterStudioPage() {
 
   return (
     <div className="p-1">
+      <a
+        href="/virtual-office/pixel-studio"
+        className="mb-2 flex items-center justify-between rounded-lg border border-[#c9a84c]/40 bg-[#c9a84c]/10 px-3 py-2 text-sm text-[#c9a84c] hover:bg-[#c9a84c]/20"
+      >
+        <span>✦ New: Pixel Character &amp; Map Studio — raster 16-bit executives with WorkAdventure export</span>
+        <span aria-hidden>→</span>
+      </a>
       <CharacterStudioShell initialAvatar={initialAvatar} />
     </div>
   );

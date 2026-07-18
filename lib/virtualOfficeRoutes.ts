@@ -16,6 +16,9 @@ export const virtualOfficeRoutes = {
   root: "/virtual-office",
   /** Operational dashboard surface hosted inside the Virtual Office. */
   commandCenter: "/virtual-office/command-center",
+  /** Raster pixel-art character + map studio (replaces the vector avatar). */
+  pixelStudio: "/virtual-office/pixel-studio",
+  pixelMapStudio: "/virtual-office/pixel-studio/map",
   /** People + AI-executive avatar configuration. */
   characterStudio: "/virtual-office/character-studio",
   characterStudioNew: "/virtual-office/character-studio/new",

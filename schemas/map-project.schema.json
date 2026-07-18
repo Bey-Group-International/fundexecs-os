@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fundexecs.dev/schemas/map-project.schema.json",
+  "title": "FundExecs Map Project",
+  "type": "object",
+  "required": [
+    "mapId", "name", "description", "schemaVersion", "width", "height",
+    "tileSize", "layers", "branding", "attribution", "createdAt", "modifiedAt"
+  ],
+  "properties": {
+    "mapId": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "width": { "type": "integer", "minimum": 1, "maximum": 512 },
+    "height": { "type": "integer", "minimum": 1, "maximum": 512 },
+    "tileSize": { "const": 32 },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "visible", "locked", "placements"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "visible": { "type": "boolean" },
+          "locked": { "type": "boolean" },
+          "placements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["assetId", "x", "y"],
+              "properties": {
+                "assetId": { "type": "string" },
+                "x": { "type": "integer", "minimum": 0 },
+                "y": { "type": "integer", "minimum": 0 },
+                "rotation": { "enum": [0, 90, 180, 270] },
+                "props": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "required": ["primaryColor", "secondaryColor", "companyName"],
+      "properties": {
+        "logoAssetId": { "type": "string" },
+        "primaryColor": { "type": "string" },
+        "secondaryColor": { "type": "string" },
+        "companyName": { "type": "string" }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "required": ["author", "license", "copyright"],
+      "properties": {
+        "author": { "type": "string" },
+        "license": { "type": "string" },
+        "copyright": { "type": "string" }
+      }
+    },
+    "createdAt": { "type": "string" },
+    "modifiedAt": { "type": "string" }
+  }
+}

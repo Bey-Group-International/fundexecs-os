@@ -1,0 +1,25 @@
+{
+  "manifestVersion": "1.0.0",
+  "fitGroup": "feminine-fit",
+  "skinPalette": "skin-olive-02",
+  "face": "face-f-03",
+  "expression": "neutral",
+  "hair": "hair-f-long-straight",
+  "hairColor": "hair-chestnut",
+  "facialHair": null,
+  "facialHairColor": "hair-dark-brown",
+  "headCovering": null,
+  "outfitSystem": "blazer-blouse",
+  "outfitColorway": "slate-rose",
+  "accessories": [
+    "accessory-headset",
+    "accessory-smartwatch"
+  ],
+  "materialOverrides": {},
+  "direction": "down",
+  "state": "idle",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "modifiedAt": "2026-01-01T00:00:00.000Z",
+  "characterId": "exec-capital",
+  "displayName": "Capital Markets Lead"
+}

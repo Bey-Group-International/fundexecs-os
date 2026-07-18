@@ -32,6 +32,7 @@
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.13",
     "ts-jest": "^29.4.11",
+    "tsx": "^4.23.1",
     "typescript": "^5.6.3"
   },
   "license": "MIT",
@@ -49,8 +50,16 @@
     "predev": "node scripts/copy-mediapipe.mjs",
     "start": "next start",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pixel:manifest": "tsx scripts/pixel-studio/generate-manifest.ts",
+    "pixel:assets": "tsx scripts/pixel-studio/generate-review-assets.ts",
+    "pixel:export": "tsx scripts/pixel-studio/export-workadventure.ts",
+    "validate:assets": "tsx scripts/pixel-studio/validate-assets.ts",
+    "validate:exports": "tsx scripts/pixel-studio/validate-exports.ts"
   },
   "version": "0.0.1",
-  "workspaces": [ "shared", "server" ]
+  "workspaces": [
+    "shared",
+    "server"
+  ]
 }
