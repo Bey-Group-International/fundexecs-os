@@ -6,12 +6,9 @@ const eslintConfig = [
     ignores: [
       ".next/**",
       "node_modules/**",
-      "server/dist/**",
-      "shared/dist/**",
       "coverage/**",
       "next-env.d.ts",
-      // Static assets are not source — in particular the generated MediaPipe
-      // wasm/JS glue copied into public/ by scripts/copy-mediapipe.mjs.
+      // Static assets are not source.
       "public/**",
     ],
   },

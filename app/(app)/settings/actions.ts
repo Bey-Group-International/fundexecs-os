@@ -5,7 +5,6 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import type { ActionKind } from "@/lib/gates";
 import { TIER_2_ACTIONS } from "./tier2-actions";
-import { parseUserAvatar, type UserAvatar } from "@/lib/office/userAvatar";
 
 const TIER_2_SET = new Set<ActionKind>(TIER_2_ACTIONS.map((a) => a.kind));
 
@@ -132,18 +131,6 @@ export async function saveUserProfile(formData: FormData): Promise<{ error?: str
 
   if (error) return { error: error.message };
   revalidatePath("/settings");
-  return {};
-}
-
-// Persist the operator's Executive Floor avatar (human character identity) to
-// their auth user_metadata, where the virtual office reads it on load. Stored
-// under `office_avatar`; validated so only a well-formed UserAvatar is saved.
-export async function saveOfficeAvatar(avatar: UserAvatar): Promise<{ error?: string }> {
-  const parsed = parseUserAvatar(avatar);
-  if (!parsed) return { error: "Invalid avatar" };
-  const supabase = await createServerClient();
-  const { error } = await supabase.auth.updateUser({ data: { office_avatar: parsed } });
-  if (error) return { error: error.message };
   return {};
 }
 

@@ -16,14 +16,6 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      // Command Center → Virtual Office. The spatial workspace was renamed;
-      // /virtual-office is canonical. Preserve nested segments and query
-      // strings (Next.js carries the query automatically) so existing
-      // bookmarks, deep links, and invite URLs (?room=&meet=&deal=&invite=)
-      // keep working in one hop. The bare path and the wildcard are separate
-      // rules so /command-center itself also redirects.
-      { source: "/command-center", destination: "/virtual-office", permanent: true },
-      { source: "/command-center/:path*", destination: "/virtual-office/:path*", permanent: true },
       {
         // The Materials & Data Room module key is `data_room`; any older links
         // or bookmarks pointing to /build/materials now land correctly.

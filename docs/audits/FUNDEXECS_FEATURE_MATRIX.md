@@ -58,7 +58,6 @@ replace them.
 | Executive roster — `VirtualExecutiveRole` (12)                                  | Dup (superseded) | `lib/executive-team.ts`                                                            |
 | Execution Grid (7 engine panes, realtime)                                       | Active           | `app/(app)/grid`, `lib/execution-grid.ts`                                          |
 | Command Center dashboard (fixed HUD)                                            | Active           | `app/(app)/dashboard`, `components/CommandCenter.tsx`                              |
-| Virtual Office (2.5D Phaser world, canonical home)                              | Active           | `app/(app)/virtual-office`, `components/virtual-office/*`                          |
 | Automations + visual canvas                                                     | Active           | `lib/automation-canvas.ts`, `app/(app)/automations`                                |
 | Mobile shell (bottom tabs, FAB, PWA, offline, approvals flow)                   | Active           | `components/mobile/*` (~40 files)                                                  |
 | **Multi-pane / dockable / resizable / saved-layout workspace**                  | **Missing**      | greenfield — only inert `splitRef` vestige in `Copilot.tsx`                        |
