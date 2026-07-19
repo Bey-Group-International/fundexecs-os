@@ -142,12 +142,6 @@ export function WorkspacePage({ view, data }: { view: WorkspaceViewModel; data: 
               {view.description}
             </p>
           </div>
-          <Link
-            href="/dashboard/office"
-            className="rounded-lg border border-gold-500/45 px-3 py-2 text-xs font-medium text-gold-300 transition hover:bg-gold-500/10"
-          >
-            Open visual office
-          </Link>
         </div>
       </header>
 
