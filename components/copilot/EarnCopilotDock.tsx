@@ -89,8 +89,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const team = ctx.hub ? AGENTS.filter((a) => a.hub === ctx.hub) : [];
 
   const [open, setOpen] = useState(false);
-  // Some surfaces (the Virtual Office, which has its own Earn entry points) ask
-  // to hide the floating launcher pill; ⌘K still opens the dock.
+  // Some surfaces with their own Earn entry points ask to hide the floating
+  // launcher pill; ⌘K still opens the dock.
   const [launcherSuppressed, setLauncherSuppressed] = useState(false);
   const [body, setBody] = useState("");
   const [thread, setThread] = useState<Turn[]>([]);
@@ -245,8 +245,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
     askRef.current = ask;
   });
 
-  // Surfaces with their own Earn entry (the Virtual Office) can hide the
-  // floating launcher pill via this event. ⌘K still opens the dock.
+  // Surfaces with their own Earn entry can hide the floating launcher pill via
+  // this event. ⌘K still opens the dock.
   useEffect(() => {
     const onSuppress = (e: Event) => {
       const detail = (e as CustomEvent<{ suppress?: boolean }>).detail;
@@ -280,14 +280,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
     function onExecContext(e: Event) {
       const detail = (e as CustomEvent<{ execName?: string; prompt?: string; autoSend?: boolean; chatContext?: MeetingChatContext }>).detail;
       setOpen(true);
-      // Some senders open Earn with no pre-filled prompt (e.g. the in-office
-      // "Ask Earn" whiteboard dispatches an empty detail). Never store a
-      // non-string body — `body.trim()` in render would otherwise crash.
+      // Some senders open Earn with no pre-filled prompt (dispatching an empty
+      // detail). Never store a non-string body — `body.trim()` in render would
+      // otherwise crash.
       const prompt = detail?.prompt ?? "";
       const chatContext = detail?.chatContext;
       setBody(prompt);
-      // Delegation from the office floor asks Earn to route the task straight
-      // away (autoSend). Fire it through the latest `ask` via the ref so there's
+      // A sender can ask Earn to route the task straight away (autoSend). Fire
+      // it through the latest `ask` via the ref so there's
       // no stale-closure risk; the small delay lets the dock finish opening.
       // A chatContext (meeting prep/follow-up) carries the server-side context
       // reference so only a clean one-liner is ever shown or stored client-side.

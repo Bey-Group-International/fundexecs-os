@@ -3,7 +3,6 @@ import path from "path";
 import { navCommands } from "./nav-commands";
 import { HUBS } from "./hubs";
 import { dashboardWorkspaces } from "./dashboard/config";
-import { INTERACTIVE_OBJECTS, ROOM_ACTIONS } from "@/components/virtual-office/types";
 
 const APP_ROOT = path.join(process.cwd(), "app", "(app)");
 
@@ -58,17 +57,6 @@ describe("route existence", () => {
   it("has pages for dashboard workspace hrefs", () => {
     for (const workspace of dashboardWorkspaces) {
       expectRoute(workspace.href);
-    }
-  });
-
-  it("has pages for virtual-office hrefs", () => {
-    for (const object of INTERACTIVE_OBJECTS) {
-      if (object.href) expectRoute(object.href);
-    }
-    for (const actions of Object.values(ROOM_ACTIONS)) {
-      for (const action of actions) {
-        if (action.href) expectRoute(action.href);
-      }
     }
   });
 });

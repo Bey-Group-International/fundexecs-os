@@ -171,5 +171,5 @@ tokens, full documents, PII beyond need, or cross-tenant payloads (existing rule
 - Cross-org terminal (needs the deferred org-switcher; today active org = first
   membership, `lib/auth.ts`).
 - Trade execution surfaces.
-- Replacing the Virtual Office / dashboards (they remain; the terminal is additive).
+- Replacing the dashboards (they remain; the terminal is additive).
 

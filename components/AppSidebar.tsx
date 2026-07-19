@@ -393,7 +393,7 @@ function SidebarPanel({
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-500/30 to-transparent"
         />
-        <Logo href="/virtual-office" variant="coin-wordmark" />
+        <Logo href="/dashboard" variant="coin-wordmark" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
@@ -418,15 +418,6 @@ function SidebarPanel({
             className={navHrefActive(pathname, "/automations") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
             Automations
-          </Link>
-          {/* Virtual Office — direct rail access to the AI Executive Command
-              Floor (the spatial office world where Earn orchestrates the
-              executive team). Sits between Automations and Inbox. */}
-          <Link
-            href="/virtual-office"
-            className={navHrefActive(pathname, "/virtual-office") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
-          >
-            Virtual Office
           </Link>
           <Link
             href="/inbox"

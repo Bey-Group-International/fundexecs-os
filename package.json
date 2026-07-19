@@ -2,16 +2,13 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.0",
     "@composio/core": "^0.13.1",
-    "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.0",
     "docx": "^9.7.1",
-    "mediasoup-client": "^3.21.0",
     "next": "^16.2.10",
     "pdf-lib": "^1.17.1",
-    "phaser": "^3.90.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^9.1.0",
@@ -46,17 +43,9 @@
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "dev": "next dev",
     "lint": "eslint .",
-    "pixel:assets": "tsx scripts/pixel-studio/generate-review-assets.ts",
-    "pixel:export": "tsx scripts/pixel-studio/export-workadventure.ts",
-    "pixel:manifest": "tsx scripts/pixel-studio/generate-manifest.ts",
-    "prebuild": "node scripts/copy-mediapipe.mjs",
-    "predev": "node scripts/copy-mediapipe.mjs",
     "start": "next start",
     "test": "jest",
-    "typecheck": "tsc --noEmit",
-    "validate:assets": "tsx scripts/pixel-studio/validate-assets.ts",
-    "validate:exports": "tsx scripts/pixel-studio/validate-exports.ts"
+    "typecheck": "tsc --noEmit"
   },
-  "version": "0.0.1",
-  "workspaces": [ "shared", "server" ]
+  "version": "0.0.1"
 }
