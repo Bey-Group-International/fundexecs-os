@@ -180,7 +180,7 @@ export const executiveCharacters: ExecutiveCharacter[] = [
     agentKey: "diligence",
     name: "Workflow Instructor",
     role: "Training executive",
-    screens: ["/dashboard", "/dashboard/office"],
+    screens: ["/dashboard", "/virtual-office"],
     trigger: "User stalls or enters a new module",
     promptBoundary: "Explain workflow steps and SOPs. Do not bypass required approvals.",
     approvedActions: allowedActions,

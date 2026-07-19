@@ -15,7 +15,7 @@ export interface NavCommand {
 
 const BASE_COMMANDS: NavCommand[] = [
   { label: "Command Center", href: "/dashboard", hint: "Main HUD", group: "nav" },
-  { label: "Interactive Office", href: "/dashboard/office", hint: "Visual workspace", group: "nav" },
+  { label: "Interactive Office", href: "/virtual-office", hint: "Visual workspace", group: "nav" },
   { label: "Earn Workspace", href: "/workspace", hint: "Create a workflow", group: "nav" },
   { label: "Automated Sessions", href: "/automations", hint: "Workflow automation", group: "nav" },
   { label: "Inbox", href: "/inbox", hint: "Unified messages", group: "nav" },

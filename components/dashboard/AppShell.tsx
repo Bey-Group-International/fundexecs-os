@@ -52,16 +52,6 @@ export function AppShell({
               </Link>
             );
           })}
-          <Link
-            href="/dashboard/office"
-            className={`shrink-0 rounded-xl px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 ${
-              pathname === "/dashboard/office"
-                ? "bg-gold-500 text-surface-0"
-                : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
-            }`}
-          >
-            Office
-          </Link>
         </nav>
         {/* Opens the app-wide palette mounted in the (app) layout. */}
         <CommandPaletteTrigger />

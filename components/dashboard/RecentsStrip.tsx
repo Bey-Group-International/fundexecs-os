@@ -16,7 +16,6 @@ const KNOWN_LABELS: Record<string, string> = {
   "/dashboard/investor-relations": "Investor Relations",
   "/dashboard/automation": "Automation Lab",
   "/dashboard/marketing": "Marketing Engine",
-  "/dashboard/office": "Office",
   "/workspace": "Earn Workspace",
   "/automations": "Automated Sessions",
   "/inbox": "Inbox",
