@@ -454,6 +454,14 @@ function SidebarPanel({
           >
             Meetings
           </Link>
+          {/* Virtual Office — spatial co-presence workspace where agents and
+              teammates gather in real time. */}
+          <Link
+            href="/office"
+            className={navHrefActive(pathname, "/office") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+          >
+            Office
+          </Link>
         </div>
 
         <p className="mb-1.5 mt-5 px-2 font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted/70">
