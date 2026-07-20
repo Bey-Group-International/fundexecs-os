@@ -3,10 +3,12 @@
 // The Virtual Office experience (reboot). A SoWork-style spatial workspace:
 // a 2D-canvas floor with hub rooms, the AI agents seated at their desks, and
 // live human co-presence over Supabase Realtime. Move with WASD / arrows or
-// click-to-move; walk near a teammate to open a "Spatial Meeting" range.
+// click-to-move; walk near a teammate to open a proximity "Spatial Meeting"
+// with real spatial voice/video.
 //
-// This pass is presence-only — status, proximity, and emotes are live; audio /
-// video is a later layer. Rendering is native Canvas 2D (no Phaser / Three).
+// Composes the follow-up systems: a persisted, editable layout; live agent
+// activity from real task data; proximity voice/video over a P2P mesh; and a
+// demo mode + guided tour. Rendering is native Canvas 2D (no Phaser / Three).
 import {
   useCallback,
   useEffect,
@@ -31,14 +33,24 @@ import {
   type Participant,
   type PresenceStatus,
 } from "@/lib/office/presence";
+import type { OfficeLayoutData } from "@/lib/office/layoutStore";
+import type { AgentActivity } from "@/lib/office/activity";
+import { demoParticipants } from "@/lib/office/demoParticipants";
 import { drawOffice, type OfficeTheme } from "./render";
+import { useProximityVoice } from "./useProximityVoice";
+import { OfficeEditor } from "./OfficeEditor";
+import { OfficeTour, useOfficeTour } from "./OfficeTour";
 
 interface OfficeShellProps {
   userId: string;
   displayName: string;
   orgId: string | null;
-  /** Whether Supabase Realtime is configured (co-presence enabled). */
+  /** Whether Supabase Realtime is configured (co-presence + voice enabled). */
   hasRealtime: boolean;
+  /** Persisted (or default) office layout. */
+  layout: OfficeLayoutData;
+  /** Server-fetched agent activity, keyed by agent key. */
+  initialActivity: Record<string, AgentActivity>;
 }
 
 interface PresencePayload {
@@ -86,30 +98,46 @@ function readTheme(el: HTMLElement): OfficeTheme {
   };
 }
 
-// Deterministic agent roster — everyone renders these identically, so agents
-// need no presence sync. Status is derived from the hub for a little life.
-function useAgentParticipants(): Participant[] {
-  return useMemo(() => {
-    return agentDesks().map((desk): Participant => {
-      const gated = desk.room.approvalGated;
-      return {
-        id: `agent:${desk.agent.key}`,
-        name: desk.agent.name,
-        kind: "agent",
-        x: desk.x,
-        y: desk.y,
-        color: desk.agent.color,
-        status: gated ? "focusing" : "available",
-        agentKey: desk.agent.key,
-        role: desk.agent.role,
-        emote: null,
-      };
-    });
-  }, []);
+function shorten(text: string, max = 42): string {
+  const t = text.trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
-export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeShellProps) {
-  const agents = useAgentParticipants();
+/** A muted <video> sink that binds a MediaStream (audio is handled by the
+ * voice hook's spatial audio elements, so every tile stays muted). */
+function VideoTile({ stream, label }: { stream: MediaStream; label: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (ref.current && ref.current.srcObject !== stream) {
+      ref.current.srcObject = stream;
+    }
+  }, [stream]);
+  const hasVideo = stream.getVideoTracks().some((t) => t.readyState === "live");
+  if (!hasVideo) return null;
+  return (
+    <div className="relative overflow-hidden rounded-md border border-surface-3/60 bg-surface-0">
+      <video
+        ref={ref}
+        autoPlay
+        playsInline
+        muted
+        className="h-20 w-full object-cover"
+      />
+      <span className="absolute bottom-0 left-0 w-full truncate bg-black/50 px-1 py-0.5 text-[10px] text-white">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+export function OfficeShell({
+  userId,
+  displayName,
+  orgId,
+  hasRealtime,
+  layout,
+  initialActivity,
+}: OfficeShellProps) {
   const myColor = useMemo(() => colorFromId(userId), [userId]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -127,10 +155,36 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
   const subscribedRef = useRef(false);
   const lastTrackRef = useRef(0);
 
+  // Editable layout + live agent activity, mirrored into refs for the loop.
+  const [layoutState, setLayoutState] = useState<OfficeLayoutData>(layout);
+  const desks = useMemo(() => agentDesks(layoutState.rooms), [layoutState.rooms]);
+  const desksRef = useRef(desks);
+  desksRef.current = desks;
+  const roomsRef = useRef(layoutState.rooms);
+  roomsRef.current = layoutState.rooms;
+  const [activity, setActivity] = useState(initialActivity);
+  const activityRef = useRef(activity);
+  activityRef.current = activity;
+
   // Mirrored into React state only for the side panel (low-frequency updates).
   const [status, setStatus] = useState<PresenceStatus>("available");
   const [remotes, setRemotes] = useState<Participant[]>([]);
   const [nearbyList, setNearbyList] = useState<Participant[]>([]);
+  const [demoMode, setDemoMode] = useState(false);
+  const demoModeRef = useRef(false);
+  demoModeRef.current = demoMode;
+  const [editing, setEditing] = useState(false);
+  const tour = useOfficeTour();
+
+  // Proximity voice/video mesh (P2P), gated on Realtime being configured.
+  const voice = useProximityVoice({
+    enabled: hasRealtime && !!orgId,
+    orgId: orgId ?? "",
+    userId,
+    displayName,
+    getSelfPos: () => posRef.current,
+    humans: remotes,
+  });
 
   const buildPayload = useCallback(
     (): PresencePayload => ({
@@ -195,9 +249,56 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
     };
   }, [hasRealtime, orgId, userId, buildPayload]);
 
+  // --- Live agent activity over task_events --------------------------------
+  useEffect(() => {
+    if (!hasRealtime || !orgId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`office-activity:${orgId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "task_events",
+          filter: `organization_id=eq.${orgId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            agent?: string | null;
+            event_type?: string;
+            payload?: { message?: string } | null;
+          };
+          const key = row.agent;
+          if (!key) return;
+          const done = row.event_type === "task.completed";
+          const label = row.payload?.message;
+          setActivity((prev) => ({
+            ...prev,
+            [key]: done
+              ? { status: "available", label: "Wrapped up a task", busy: false }
+              : {
+                  status: "focusing",
+                  label: shorten(label || "Working…"),
+                  busy: true,
+                },
+          }));
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [hasRealtime, orgId]);
+
   // --- Input ---------------------------------------------------------------
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Don't hijack typing in the editor's inputs.
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        return;
+      }
       const k = e.key.toLowerCase();
       if (k in MOVE_KEYS) {
         keysRef.current.add(k);
@@ -276,11 +377,30 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
         }
       }
 
-      // Throttled presence broadcast (~11/s) when we have moved
+      // Throttled presence broadcast (~11/s)
       if (now - lastTrackRef.current > 90) {
         lastTrackRef.current = now;
         track();
       }
+
+      // Agents, seated at desks, reflecting their live activity.
+      const agentParticipants: Participant[] = desksRef.current.map((desk) => {
+        const act = activityRef.current[desk.agent.key];
+        return {
+          id: `agent:${desk.agent.key}`,
+          name: desk.agent.name,
+          kind: "agent",
+          x: desk.x,
+          y: desk.y,
+          color: desk.agent.color,
+          status: act?.status ?? "available",
+          agentKey: desk.agent.key,
+          role: desk.agent.role,
+          emote: null,
+          activityLabel: act?.label,
+          busy: act?.busy ?? false,
+        };
+      });
 
       const local: Participant = {
         id: userId,
@@ -292,13 +412,20 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
         status: statusRef.current,
         emote: emoteRef.current,
       };
-      const participants = [...agents, ...remotesRef.current.values(), local];
+
+      const participants = [
+        ...agentParticipants,
+        ...remotesRef.current.values(),
+        ...(demoModeRef.current ? demoParticipants(now) : []),
+        local,
+      ];
 
       if (themeRef.current) {
         drawOffice({
           ctx,
           theme: themeRef.current,
-          desks: agentDesks(),
+          rooms: roomsRef.current,
+          desks: desksRef.current,
           participants,
           localId: userId,
           time: now,
@@ -318,16 +445,33 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
       cancelAnimationFrame(raf);
       mql.removeEventListener("change", onTheme);
     };
-  }, [agents, userId, displayName, myColor, track]);
+  }, [userId, displayName, myColor, track]);
 
   // Recompute "near you" for the panel a few times a second.
   useEffect(() => {
     const id = setInterval(() => {
-      const others = [...agents, ...remotesRef.current.values()];
+      const agentsNow: Participant[] = desksRef.current.map((desk) => {
+        const act = activityRef.current[desk.agent.key];
+        return {
+          id: `agent:${desk.agent.key}`,
+          name: desk.agent.name,
+          kind: "agent",
+          x: desk.x,
+          y: desk.y,
+          color: desk.agent.color,
+          status: act?.status ?? "available",
+          role: desk.agent.role,
+        };
+      });
+      const others = [
+        ...agentsNow,
+        ...remotesRef.current.values(),
+        ...(demoModeRef.current ? demoParticipants(performance.now()) : []),
+      ];
       setNearbyList(nearby(posRef.current, others));
     }, 300);
     return () => clearInterval(id);
-  }, [agents]);
+  }, []);
 
   const changeStatus = useCallback(
     (s: PresenceStatus) => {
@@ -352,25 +496,74 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
     [track],
   );
 
-  const humanCount = remotes.length + 1;
+  const humanCount = remotes.length + 1 + (demoMode ? demoParticipants(0).length : 0);
+  const voiceTiles: { id: string; stream: MediaStream; label: string }[] = [];
+  if (voice.localStream && voice.camOn) {
+    voiceTiles.push({ id: "self", stream: voice.localStream, label: "You" });
+  }
+  for (const [peerId, stream] of voice.peerStreams) {
+    const who = remotes.find((r) => r.id === peerId);
+    voiceTiles.push({ id: peerId, stream, label: who?.name ?? "Teammate" });
+  }
 
   return (
     <div ref={wrapRef} className="fx-ambient">
-      <header className="mb-4">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
-          Virtual Office
-        </span>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-          Your team, in one room
-        </h1>
-        <p className="mt-1 text-sm text-fg-secondary">
-          A spatial workspace where your executive agents work at their desks and
-          teammates gather in real time. Move with{" "}
-          <kbd className="rounded bg-surface-2 px-1 font-mono text-xs">WASD</kbd>{" "}
-          or click to walk over — step inside someone&apos;s ring to start a
-          spatial conversation.
-        </p>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            Virtual Office
+          </span>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
+            Your team, in one room
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-fg-secondary">
+            A spatial workspace where your executive agents work at their desks
+            and teammates gather in real time. Move with{" "}
+            <kbd className="rounded bg-surface-2 px-1 font-mono text-xs">WASD</kbd>{" "}
+            or click to walk over — step inside someone&apos;s ring to start a
+            spatial conversation.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setDemoMode((v) => !v)}
+            className={`rounded-md border px-2.5 py-1.5 text-xs transition ${
+              demoMode
+                ? "border-gold-400/60 bg-gold-400/10 text-fg-primary"
+                : "border-surface-3/50 text-fg-secondary hover:bg-surface-2"
+            }`}
+          >
+            {demoMode ? "Demo: on" : "Demo mode"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
+          >
+            {editing ? "Close editor" : "Edit office"}
+          </button>
+          <button
+            type="button"
+            onClick={tour.reopen}
+            className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
+          >
+            Take the tour
+          </button>
+        </div>
       </header>
+
+      {editing && (
+        <div className="mb-4 rounded-xl border border-surface-3/60 bg-surface-1 p-4">
+          <OfficeEditor
+            initial={layoutState}
+            onSaved={(d) => {
+              setLayoutState(d);
+              setEditing(false);
+            }}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         {/* Floor */}
@@ -388,11 +581,62 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
         <aside className="flex flex-col gap-4">
           {!hasRealtime && (
             <div className="rounded-lg border border-gold-400/30 bg-gold-400/5 p-3 text-xs text-fg-secondary">
-              Live co-presence needs Supabase Realtime configured. You&apos;re in
-              solo mode — your agents are here, teammates will appear once it&apos;s
-              connected.
+              Live co-presence and voice need Supabase Realtime configured.
+              You&apos;re in solo mode — your agents are here, teammates appear
+              once it&apos;s connected.
             </div>
           )}
+
+          {/* Voice */}
+          <section>
+            <h2 className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+              <span>Spatial voice</span>
+              {voice.connected && (
+                <span className="text-status-success">● live</span>
+              )}
+            </h2>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={voice.toggleMic}
+                disabled={!hasRealtime}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-xs transition disabled:opacity-40 ${
+                  voice.micOn
+                    ? "border-status-success/60 bg-status-success/10 text-fg-primary"
+                    : "border-surface-3/50 text-fg-secondary hover:bg-surface-2"
+                }`}
+              >
+                {voice.micOn ? "🎙 Mic on" : "🔇 Mic off"}
+              </button>
+              <button
+                type="button"
+                onClick={voice.toggleCam}
+                disabled={!hasRealtime}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-xs transition disabled:opacity-40 ${
+                  voice.camOn
+                    ? "border-status-success/60 bg-status-success/10 text-fg-primary"
+                    : "border-surface-3/50 text-fg-secondary hover:bg-surface-2"
+                }`}
+              >
+                {voice.camOn ? "📹 Cam on" : "📷 Cam off"}
+              </button>
+            </div>
+            {voice.error && (
+              <p className="mt-1.5 text-[11px] text-status-danger">{voice.error}</p>
+            )}
+            {!voice.error && (
+              <p className="mt-1.5 text-[11px] text-fg-muted">
+                Voices fade in as you approach — {voice.peerStreams.size} in range.
+              </p>
+            )}
+            {voiceTiles.length > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {voiceTiles.map((t) => (
+                  <VideoTile key={t.id} stream={t.stream} label={t.label} />
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* Your status */}
           <section>
@@ -469,7 +713,9 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
                         {p.name}
                       </span>
                       <span className="block truncate text-[10px] text-fg-muted">
-                        {p.kind === "agent" ? p.role : STATUS_LABELS[p.status]}
+                        {p.kind === "agent"
+                          ? p.activityLabel || p.role
+                          : STATUS_LABELS[p.status]}
                       </span>
                     </span>
                   </li>
@@ -483,7 +729,7 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
             <h2 className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
               <span>In the office</span>
               <span className="text-gold-400">
-                {humanCount} · {agents.length} agents
+                {humanCount} · {desks.length} agents
               </span>
             </h2>
             <ul className="flex flex-col gap-1">
@@ -510,6 +756,8 @@ export function OfficeShell({ userId, displayName, orgId, hasRealtime }: OfficeS
           </section>
         </aside>
       </div>
+
+      <OfficeTour open={tour.open} onClose={tour.dismiss} />
     </div>
   );
 }

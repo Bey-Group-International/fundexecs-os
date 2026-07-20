@@ -26,6 +26,10 @@ export interface Participant {
   role?: string;
   /** Transient emote glyph shown above the avatar, if any. */
   emote?: string | null;
+  /** Agents only: a short live-activity phrase shown under the name. */
+  activityLabel?: string;
+  /** Agents only: whether the agent is actively working (drives a busy pulse). */
+  busy?: boolean;
 }
 
 export const STATUS_LABELS: Record<PresenceStatus, string> = {
