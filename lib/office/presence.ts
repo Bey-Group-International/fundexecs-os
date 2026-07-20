@@ -5,6 +5,7 @@
 // volume falloff that models spatial audio even while the reboot is
 // presence-only (used to fade/scale nearby avatars and draw the voice ring).
 import { PROXIMITY_RADIUS } from "./layout";
+import type { AvatarConfig, Facing } from "./avatarConfig";
 
 export type PresenceStatus = "available" | "focusing" | "away" | "in_meeting";
 
@@ -30,6 +31,12 @@ export interface Participant {
   activityLabel?: string;
   /** Agents only: whether the agent is actively working (drives a busy pulse). */
   busy?: boolean;
+  /** Humans only: pixel-avatar appearance (agents resolve theirs by key). */
+  avatar?: AvatarConfig;
+  /** Direction the character faces; drives sprite selection. */
+  facing?: Facing;
+  /** Whether the character is walking (drives the walk-cycle animation). */
+  moving?: boolean;
 }
 
 export const STATUS_LABELS: Record<PresenceStatus, string> = {

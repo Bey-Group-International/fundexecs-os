@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { hasSupabaseServerEnv } from "@/lib/supabase/server";
 import { OfficeShell } from "@/components/office/OfficeShell";
 import { loadOfficeLayout } from "./actions";
+import { loadMyAvatar } from "./avatar-actions";
 import { fetchAgentActivity } from "@/lib/office/activityServer";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,10 @@ export default async function OfficePage() {
 
   // Layout (persisted per-org, default fallback) and the agents' current
   // activity are fetched server-side so the office renders populated on load.
-  const [layout, activity] = await Promise.all([
+  const [layout, activity, myAvatar] = await Promise.all([
     loadOfficeLayout(ctx.orgId),
     fetchAgentActivity(ctx.orgId),
+    loadMyAvatar(ctx.orgId),
   ]);
 
   return (
@@ -36,6 +38,7 @@ export default async function OfficePage() {
         hasRealtime={hasSupabaseServerEnv()}
         layout={layout}
         initialActivity={activity}
+        myAvatar={myAvatar}
       />
     </div>
   );
