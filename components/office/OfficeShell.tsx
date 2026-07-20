@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   OFFICE_WIDTH,
@@ -24,6 +25,8 @@ import {
   SPAWN,
   agentDesks,
   clampToBounds,
+  roomAt,
+  type OfficeRoom,
 } from "@/lib/office/layout";
 import {
   STATUS_LABELS,
@@ -36,9 +39,12 @@ import {
 import type { OfficeLayoutData } from "@/lib/office/layoutStore";
 import type { AgentActivity } from "@/lib/office/activity";
 import { demoParticipants } from "@/lib/office/demoParticipants";
+import { recordPresenceEvent } from "@/lib/office/analyticsServer";
 import { drawOffice, type OfficeTheme } from "./render";
 import { useProximityVoice } from "./useProximityVoice";
-import { OfficeEditor } from "./OfficeEditor";
+import { OfficeMapEditor } from "./OfficeMapEditor";
+import { RoomCallDock } from "./RoomCallDock";
+import { OfficeChat } from "./OfficeChat";
 import { OfficeTour, useOfficeTour } from "./OfficeTour";
 
 interface OfficeShellProps {
@@ -170,6 +176,11 @@ export function OfficeShell({
   const [status, setStatus] = useState<PresenceStatus>("available");
   const [remotes, setRemotes] = useState<Participant[]>([]);
   const [nearbyList, setNearbyList] = useState<Participant[]>([]);
+  // Local tile + the room the local user currently stands in — drives the
+  // meeting-room dock and the analytics room-enter/leave events.
+  const [selfTile, setSelfTile] = useState({ x: SPAWN.x, y: SPAWN.y });
+  const [currentRoom, setCurrentRoom] = useState<OfficeRoom | null>(null);
+  const currentRoomRef = useRef<OfficeRoom | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const demoModeRef = useRef(false);
   demoModeRef.current = demoMode;
@@ -468,18 +479,43 @@ export function OfficeShell({
         ...remotesRef.current.values(),
         ...(demoModeRef.current ? demoParticipants(performance.now()) : []),
       ];
-      setNearbyList(nearby(posRef.current, others));
+      const pos = posRef.current;
+      setNearbyList(nearby(pos, others));
+      setSelfTile({ x: pos.x, y: pos.y });
+
+      // Track which room we're in; record enter/leave for analytics (the
+      // server only persists these when the member has opted in).
+      const room = roomAt(pos.x, pos.y);
+      if ((room?.key ?? null) !== (currentRoomRef.current?.key ?? null)) {
+        const prev = currentRoomRef.current;
+        currentRoomRef.current = room;
+        setCurrentRoom(room);
+        if (orgId) {
+          if (prev) void recordPresenceEvent({ orgId, kind: "room_leave", roomKey: prev.key });
+          if (room) void recordPresenceEvent({ orgId, kind: "room_enter", roomKey: room.key });
+        }
+      }
     }, 300);
     return () => clearInterval(id);
-  }, []);
+  }, [orgId]);
+
+  // Record office join/leave for analytics (opt-in enforced server-side).
+  useEffect(() => {
+    if (!orgId) return;
+    void recordPresenceEvent({ orgId, kind: "join" });
+    return () => {
+      void recordPresenceEvent({ orgId, kind: "leave" });
+    };
+  }, [orgId]);
 
   const changeStatus = useCallback(
     (s: PresenceStatus) => {
       statusRef.current = s;
       setStatus(s);
       track();
+      if (orgId) void recordPresenceEvent({ orgId, kind: "status", status: s });
     },
-    [track],
+    [track, orgId],
   );
 
   const sendEmote = useCallback(
@@ -496,6 +532,16 @@ export function OfficeShell({
     [track],
   );
 
+  const selfParticipant: Participant = {
+    id: userId,
+    name: displayName,
+    kind: "human",
+    x: selfTile.x,
+    y: selfTile.y,
+    color: myColor,
+    status,
+  };
+  const officeHumans = [...remotes, selfParticipant];
   const humanCount = remotes.length + 1 + (demoMode ? demoParticipants(0).length : 0);
   const voiceTiles: { id: string; stream: MediaStream; label: string }[] = [];
   if (voice.localStream && voice.camOn) {
@@ -550,12 +596,18 @@ export function OfficeShell({
           >
             Take the tour
           </button>
+          <Link
+            href="/office/analytics"
+            className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
+          >
+            Analytics
+          </Link>
         </div>
       </header>
 
       {editing && (
         <div className="mb-4 rounded-xl border border-surface-3/60 bg-surface-1 p-4">
-          <OfficeEditor
+          <OfficeMapEditor
             initial={layoutState}
             onSaved={(d) => {
               setLayoutState(d);
@@ -579,6 +631,12 @@ export function OfficeShell({
 
         {/* Side panel */}
         <aside className="flex flex-col gap-4">
+          <RoomCallDock
+            orgId={orgId ?? ""}
+            currentRoom={currentRoom}
+            participants={officeHumans}
+          />
+
           {!hasRealtime && (
             <div className="rounded-lg border border-gold-400/30 bg-gold-400/5 p-3 text-xs text-fg-secondary">
               Live co-presence and voice need Supabase Realtime configured.
@@ -758,6 +816,17 @@ export function OfficeShell({
       </div>
 
       <OfficeTour open={tour.open} onClose={tour.dismiss} />
+
+      <div className="fixed bottom-4 right-4 z-40">
+        <OfficeChat
+          orgId={orgId ?? ""}
+          userId={userId}
+          displayName={displayName}
+          color={myColor}
+          getSelfPos={() => posRef.current}
+          enabled={hasRealtime && !!orgId}
+        />
+      </div>
     </div>
   );
 }

@@ -117,6 +117,91 @@ describe("layoutStore", () => {
     }
   });
 
+  it("defaults the room type from the built-in room and validates the enum", () => {
+    const parsed = parseLayout({
+      rooms: [
+        // No type supplied → defaults to the built-in hub type.
+        { key: "build", label: "Build", x: 1, y: 1, w: 13, h: 10, accent: "#8b5cf6" },
+        // Invalid type → also falls back to the default.
+        { key: "run", label: "Run", x: 1, y: 13, w: 13, h: 10, accent: "#22d3ee", type: "nonsense" },
+        // Valid explicit type on a custom room is kept.
+        { key: "lounge", label: "Lounge", hub: null, x: 2, y: 2, w: 4, h: 4, accent: "#123abc", type: "social" },
+      ],
+    });
+    expect(parsed.rooms.find((r) => r.key === "build")?.type).toBe("hub");
+    expect(parsed.rooms.find((r) => r.key === "run")?.type).toBe("hub");
+    expect(parsed.rooms.find((r) => r.key === "commons")?.type).toBe("commons");
+    expect(parsed.rooms.find((r) => r.key === "lounge")?.type).toBe("social");
+  });
+
+  it("validates, de-duplicates, and clamps objects; drops invalid kinds", () => {
+    const parsed = parseLayout({
+      rooms: [
+        {
+          key: "commons",
+          label: "Commons",
+          hub: null,
+          x: 15,
+          y: 1,
+          w: 10,
+          h: 22,
+          accent: "#d4a82a",
+          objects: [
+            { id: "a", kind: "plant", x: 3, y: 3 },
+            { id: "a", kind: "couch", x: 4, y: 4 }, // dup id dropped
+            { id: "b", kind: "bogus", x: 5, y: 5 }, // invalid kind dropped
+            { id: "c", kind: "desk", x: 999, y: -20 }, // clamped in-bounds
+            "garbage", // dropped
+          ],
+        },
+      ],
+    });
+    const commons = parsed.rooms.find((r) => r.key === "commons");
+    const objects = commons?.objects ?? [];
+    expect(objects.map((o) => o.id)).toEqual(["a", "c"]);
+    expect(objects.find((o) => o.id === "a")?.kind).toBe("plant");
+    const c = objects.find((o) => o.id === "c");
+    expect(c?.x).toBeGreaterThanOrEqual(0);
+    expect(c?.x).toBeLessThanOrEqual(OFFICE_COLS);
+    expect(c?.y).toBeGreaterThanOrEqual(0);
+    expect(c?.y).toBeLessThanOrEqual(OFFICE_ROWS);
+  });
+
+  it("round-trips objects and type through serialize with rounding", () => {
+    const serialized = serializeLayout({
+      version: LAYOUT_VERSION,
+      rooms: [
+        {
+          key: "lounge",
+          label: "Lounge",
+          hub: null,
+          x: 2,
+          y: 2,
+          w: 4,
+          h: 4,
+          accent: "#123abc",
+          purpose: "",
+          type: "social",
+          objects: [{ id: "p1", kind: "plant", x: 3.04, y: 2.97 }],
+        },
+      ],
+    });
+    const lounge = serialized.rooms.find((r) => r.key === "lounge");
+    expect(lounge?.type).toBe("social");
+    expect(lounge?.objects).toEqual([{ id: "p1", kind: "plant", x: 3, y: 3 }]);
+
+    // A second pass is a stable fixed point.
+    expect(serializeLayout(serialized)).toEqual(serialized);
+  });
+
+  it("omits objects entirely for object-free layouts (backward-compatible)", () => {
+    const parsed = parseLayout({
+      rooms: [{ key: "commons", label: "Commons", hub: null, x: 15, y: 1, w: 10, h: 22, accent: "#d4a82a" }],
+    });
+    const commons = parsed.rooms.find((r) => r.key === "commons");
+    expect(commons && "objects" in commons).toBe(false);
+  });
+
   it("rounds coordinates when serializing", () => {
     const serialized = serializeLayout({
       version: LAYOUT_VERSION,

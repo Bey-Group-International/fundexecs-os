@@ -12,8 +12,33 @@ import {
   OFFICE_COLS,
   OFFICE_ROWS,
   type OfficeRoom,
+  type OfficeObject,
+  type RoomType,
 } from "./layout";
 import type { Hub } from "@/lib/supabase/database.types";
+
+/** Valid object kinds, mirrored from {@link OfficeObject}. */
+const OBJECT_KINDS = new Set<OfficeObject["kind"]>([
+  "desk",
+  "plant",
+  "whiteboard",
+  "couch",
+  "table",
+  "screen",
+]);
+
+/** Valid room types, mirrored from {@link RoomType}. */
+const ROOM_TYPE_SET = new Set<RoomType>([
+  "hub",
+  "meeting",
+  "focus",
+  "private",
+  "social",
+  "commons",
+]);
+
+/** Fallback room type for custom rooms with no default and no valid `type`. */
+const DEFAULT_ROOM_TYPE: RoomType = "focus";
 
 /** Bumped when the persisted shape changes so future migrations can branch. */
 export const LAYOUT_VERSION = 1;
@@ -69,6 +94,44 @@ function toAccent(v: unknown, fallback: string): string {
     : fallback;
 }
 
+/** Coerce a value into a valid {@link RoomType}, else the room's default. */
+function toRoomType(v: unknown, fallback: RoomType): RoomType {
+  return typeof v === "string" && ROOM_TYPE_SET.has(v as RoomType)
+    ? (v as RoomType)
+    : fallback;
+}
+
+/**
+ * Validate & clamp an untrusted `objects` value into safe {@link OfficeObject}s:
+ * each must have a valid `kind`; positions are clamped inside the office floor;
+ * ids are coerced to non-empty strings and de-duplicated (later dupes dropped).
+ * Returns `undefined` when there is nothing to store so backward-compatible
+ * layouts (which omit `objects`) round-trip byte-for-byte.
+ */
+function parseObjects(raw: unknown): OfficeObject[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const objects: OfficeObject[] = [];
+  raw.forEach((entry, i) => {
+    if (!entry || typeof entry !== "object") return;
+    const o = entry as Record<string, unknown>;
+    if (typeof o.kind !== "string" || !OBJECT_KINDS.has(o.kind as OfficeObject["kind"])) {
+      return;
+    }
+    let id = typeof o.id === "string" ? o.id.trim() : "";
+    if (!id) id = `obj-${i}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    objects.push({
+      id,
+      kind: o.kind as OfficeObject["kind"],
+      x: Math.min(Math.max(toNumber(o.x, 0), 0), OFFICE_COLS),
+      y: Math.min(Math.max(toNumber(o.y, 0), 0), OFFICE_ROWS),
+    });
+  });
+  return objects.length > 0 ? objects : undefined;
+}
+
 /**
  * Clamp a room rectangle fully inside the office floor: size is bounded to the
  * floor and at least MIN_SIZE, then the origin is pulled in so `x+w`/`y+h` never
@@ -121,8 +184,12 @@ function parseRoom(raw: unknown): OfficeRoom | null {
     h: toNumber(r.h, base?.h ?? MIN_SIZE),
     accent: toAccent(r.accent, base?.accent ?? "#d4a82a"),
     purpose,
+    type: toRoomType(r.type, base?.type ?? DEFAULT_ROOM_TYPE),
   };
   if (approvalGated !== undefined) room.approvalGated = approvalGated;
+
+  const objects = parseObjects(r.objects);
+  if (objects) room.objects = objects;
 
   return clampRoomRect(room);
 }
@@ -183,6 +250,17 @@ export function serializeLayout(data: OfficeLayoutData): OfficeLayoutData {
       y: round(room.y),
       w: round(room.w),
       h: round(room.h),
+      // Only rewrite `objects` when present, so object-free layouts stay byte-
+      // identical after a round-trip.
+      ...(room.objects
+        ? {
+            objects: room.objects.map((o) => ({
+              ...o,
+              x: round(o.x),
+              y: round(o.y),
+            })),
+          }
+        : {}),
     })),
   };
 }

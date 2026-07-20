@@ -17,6 +17,16 @@ import {
   type Participant,
 } from "@/lib/office/presence";
 
+/** Emoji glyphs for MapMaker furniture kinds. */
+const OBJECT_GLYPH: Record<string, string> = {
+  desk: "🖥",
+  plant: "🪴",
+  whiteboard: "📋",
+  couch: "🛋",
+  table: "🍽",
+  screen: "📺",
+};
+
 export interface OfficeTheme {
   surface0: string;
   surface1: string;
@@ -134,6 +144,17 @@ export function drawOffice(state: DrawState): void {
     ctx.fillStyle = hexA(desk.room.accent, 0.22);
     roundRect(ctx, x - TILE * 0.6, y - TILE * 0.28, TILE * 1.2, TILE * 0.56, 4);
     ctx.fill();
+  }
+
+  // Furniture / objects placed via the MapMaker.
+  for (const room of rooms) {
+    if (!room.objects) continue;
+    for (const obj of room.objects) {
+      ctx.font = "16px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(OBJECT_GLYPH[obj.kind] ?? "▪", obj.x * TILE, obj.y * TILE);
+    }
   }
 
   const local = participants.find((p) => p.id === localId);
