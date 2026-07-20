@@ -4,12 +4,12 @@
 // lib/office. No external rendering SDK — plain Canvas 2D, per the repo's
 // "native intelligence" directive.
 import {
-  ROOMS,
   TILE,
   OFFICE_WIDTH,
   OFFICE_HEIGHT,
   PROXIMITY_RADIUS,
   type AgentDesk,
+  type OfficeRoom,
 } from "@/lib/office/layout";
 import {
   STATUS_COLORS,
@@ -30,6 +30,8 @@ export interface OfficeTheme {
 export interface DrawState {
   ctx: CanvasRenderingContext2D;
   theme: OfficeTheme;
+  /** The active room set (built-in default or a persisted custom layout). */
+  rooms: OfficeRoom[];
   desks: AgentDesk[];
   participants: Participant[];
   localId: string;
@@ -64,7 +66,7 @@ function roundRect(
 }
 
 export function drawOffice(state: DrawState): void {
-  const { ctx, theme, desks, participants, localId, time } = state;
+  const { ctx, theme, rooms, desks, participants, localId, time } = state;
 
   // Floor
   ctx.fillStyle = theme.surface0;
@@ -87,7 +89,7 @@ export function drawOffice(state: DrawState): void {
   }
 
   // Rooms
-  for (const room of ROOMS) {
+  for (const room of rooms) {
     const x = room.x * TILE;
     const y = room.y * TILE;
     const w = room.w * TILE;
@@ -179,6 +181,16 @@ export function drawOffice(state: DrawState): void {
     const radius = isAgent ? 9 : 11;
     const isLocal = p.id === localId;
 
+    // Busy pulse — a soft expanding ring for agents actively working.
+    if (p.busy) {
+      const pulse = (Math.sin(time / 500 + p.x) + 1) / 2; // 0..1
+      ctx.beginPath();
+      ctx.arc(x, y, radius + 4 + pulse * 4, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA(p.color, 0.35 * (1 - pulse));
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     // Shadow
     ctx.beginPath();
     ctx.ellipse(x, y + radius + 3, radius * 0.8, radius * 0.35, 0, 0, Math.PI * 2);
@@ -221,6 +233,13 @@ export function drawOffice(state: DrawState): void {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, x, y + radius + 13);
+
+    // Live activity line for busy agents (what they're working on right now).
+    if (isAgent && p.busy && p.activityLabel) {
+      ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillStyle = theme.fgMuted;
+      ctx.fillText(p.activityLabel, x, y + radius + 26);
+    }
 
     // Emote bubble
     if (p.emote) {

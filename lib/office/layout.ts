@@ -141,8 +141,11 @@ export interface AgentDesk {
  * Deterministically seat every AI agent at a desk inside its hub's room (Earn,
  * the null-hub coordinator, sits in the Commons). Same input → same layout, so
  * every client renders agents identically without syncing them over presence.
+ *
+ * Accepts the active room set so a customized (persisted) layout seats agents in
+ * its own rooms; defaults to the built-in {@link ROOMS}.
  */
-export function agentDesks(): AgentDesk[] {
+export function agentDesks(rooms: OfficeRoom[] = ROOMS): AgentDesk[] {
   const byRoom = new Map<string, AgentDefinition[]>();
   for (const agent of AGENTS) {
     const key = agent.hub ?? "commons";
@@ -152,7 +155,7 @@ export function agentDesks(): AgentDesk[] {
   }
 
   const desks: AgentDesk[] = [];
-  for (const room of ROOMS) {
+  for (const room of rooms) {
     const agents = byRoom.get(room.key) ?? [];
     if (agents.length === 0) continue;
 
