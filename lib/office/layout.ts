@@ -21,6 +21,34 @@ export const OFFICE_HEIGHT = OFFICE_ROWS * TILE;
 /** Half-tile margin keeps avatars fully inside the floor when clamped. */
 const EDGE_MARGIN = 0.6;
 
+/**
+ * Semantic classification for a room, driving affordances in the map editor
+ * (and, later, ambient behavior). Purely additive: rooms without a `type` still
+ * render and function exactly as before.
+ */
+export type RoomType =
+  | "hub"
+  | "meeting"
+  | "focus"
+  | "private"
+  | "social"
+  | "commons";
+
+/**
+ * A decorative/functional prop placed inside the office floor. Coordinates are
+ * in TILE space (top-left origin), like everything else in this module. Objects
+ * are optional layout data — the renderer draws them if present, ignores them if
+ * not.
+ */
+export interface OfficeObject {
+  /** Unique id within a layout (used for hit-testing and removal). */
+  id: string;
+  kind: "desk" | "plant" | "whiteboard" | "couch" | "table" | "screen";
+  /** Tile-space position (the object's anchor point). */
+  x: number;
+  y: number;
+}
+
 export interface OfficeRoom {
   /** Stable key; hub rooms use the hub key, the lounge uses "commons". */
   key: string;
@@ -37,6 +65,10 @@ export interface OfficeRoom {
   /** Outward-facing hubs run behind an approval gate — flagged on the map. */
   approvalGated?: boolean;
   purpose: string;
+  /** Semantic room classification (optional; defaulted by the layout store). */
+  type?: RoomType;
+  /** Placeable props inside the room (optional). */
+  objects?: OfficeObject[];
 }
 
 // A cross-shaped open-plan floor: four hub rooms in the corners, a Commons
@@ -52,6 +84,7 @@ export const ROOMS: OfficeRoom[] = [
     w: 13,
     h: 10,
     accent: "#8b5cf6",
+    type: "hub",
     purpose: "Firm identity, brand, and materials.",
   },
   {
@@ -63,6 +96,7 @@ export const ROOMS: OfficeRoom[] = [
     w: 13,
     h: 10,
     accent: "#f59e0b",
+    type: "hub",
     purpose: "LP, deal, and partner pipelines.",
   },
   {
@@ -75,6 +109,7 @@ export const ROOMS: OfficeRoom[] = [
     h: 10,
     accent: "#22d3ee",
     approvalGated: true,
+    type: "hub",
     purpose: "Underwriting, diligence, and IC.",
   },
   {
@@ -87,6 +122,7 @@ export const ROOMS: OfficeRoom[] = [
     h: 10,
     accent: "#22c55e",
     approvalGated: true,
+    type: "hub",
     purpose: "Capital, reporting, and fund admin.",
   },
   {
@@ -98,6 +134,7 @@ export const ROOMS: OfficeRoom[] = [
     w: 10,
     h: 22,
     accent: "#d4a82a",
+    type: "commons",
     purpose: "Where the team gathers and Earn coordinates.",
   },
 ];
