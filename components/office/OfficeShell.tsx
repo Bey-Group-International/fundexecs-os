@@ -40,6 +40,14 @@ import type { OfficeLayoutData } from "@/lib/office/layoutStore";
 import type { AgentActivity } from "@/lib/office/activity";
 import { demoParticipants } from "@/lib/office/demoParticipants";
 import { recordPresenceEvent } from "@/lib/office/analyticsServer";
+import { buildWalls, resolveMovement } from "@/lib/office/walls";
+import {
+  type AvatarConfig,
+  type Facing,
+  avatarForId,
+} from "@/lib/office/avatarConfig";
+import { AvatarCustomizer } from "./AvatarCustomizer";
+import { saveMyAvatar } from "@/app/(app)/office/avatar-actions";
 import { drawOffice, type OfficeTheme } from "./render";
 import { useProximityVoice } from "./useProximityVoice";
 import { OfficeMapEditor } from "./OfficeMapEditor";
@@ -57,6 +65,8 @@ interface OfficeShellProps {
   layout: OfficeLayoutData;
   /** Server-fetched agent activity, keyed by agent key. */
   initialActivity: Record<string, AgentActivity>;
+  /** The member's persisted pixel-avatar (or a deterministic default). */
+  myAvatar: AvatarConfig;
 }
 
 interface PresencePayload {
@@ -66,6 +76,9 @@ interface PresencePayload {
   color: string;
   status: PresenceStatus;
   emote: string | null;
+  avatar: AvatarConfig;
+  facing: Facing;
+  moving: boolean;
 }
 
 const MOVE_KEYS: Record<string, [number, number]> = {
@@ -143,6 +156,7 @@ export function OfficeShell({
   hasRealtime,
   layout,
   initialActivity,
+  myAvatar,
 }: OfficeShellProps) {
   const myColor = useMemo(() => colorFromId(userId), [userId]);
 
@@ -160,6 +174,9 @@ export function OfficeShell({
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
   const subscribedRef = useRef(false);
   const lastTrackRef = useRef(0);
+  // Facing + walking state for the pixel-sprite walk cycle.
+  const facingRef = useRef<Facing>("down");
+  const movingRef = useRef(false);
 
   // Editable layout + live agent activity, mirrored into refs for the loop.
   const [layoutState, setLayoutState] = useState<OfficeLayoutData>(layout);
@@ -171,6 +188,14 @@ export function OfficeShell({
   const [activity, setActivity] = useState(initialActivity);
   const activityRef = useRef(activity);
   activityRef.current = activity;
+  // Wall segments + doorways for the active layout (collision + rendering).
+  const walls = useMemo(() => buildWalls(layoutState.rooms), [layoutState.rooms]);
+  const wallsRef = useRef(walls);
+  wallsRef.current = walls;
+  // The member's editable pixel-avatar; the loop reads it via the ref.
+  const [avatar, setAvatar] = useState<AvatarConfig>(myAvatar);
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
 
   // Mirrored into React state only for the side panel (low-frequency updates).
   const [status, setStatus] = useState<PresenceStatus>("available");
@@ -185,6 +210,8 @@ export function OfficeShell({
   const demoModeRef = useRef(false);
   demoModeRef.current = demoMode;
   const [editing, setEditing] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
   const tour = useOfficeTour();
 
   // Proximity voice/video mesh (P2P), gated on Realtime being configured.
@@ -205,6 +232,9 @@ export function OfficeShell({
       color: myColor,
       status: statusRef.current,
       emote: emoteRef.current,
+      avatar: avatarRef.current,
+      facing: facingRef.current,
+      moving: movingRef.current,
     }),
     [displayName, myColor],
   );
@@ -239,6 +269,9 @@ export function OfficeShell({
           color: meta.color || "#6366f1",
           status: meta.status || "available",
           emote: meta.emote ?? null,
+          avatar: meta.avatar ?? avatarForId(key),
+          facing: meta.facing ?? "down",
+          moving: meta.moving ?? false,
         });
       }
       remotesRef.current = map;
@@ -366,14 +399,12 @@ export function OfficeShell({
         }
       }
       const pos = posRef.current;
+      let mvx = 0;
+      let mvy = 0;
       if (dx !== 0 || dy !== 0) {
         const len = Math.hypot(dx, dy) || 1;
-        const next = clampToBounds(
-          pos.x + (dx / len) * SPEED * dt,
-          pos.y + (dy / len) * SPEED * dt,
-        );
-        pos.x = next.x;
-        pos.y = next.y;
+        mvx = (dx / len) * SPEED * dt;
+        mvy = (dy / len) * SPEED * dt;
       } else if (targetRef.current) {
         const t = targetRef.current;
         const ddx = t.x - pos.x;
@@ -383,9 +414,32 @@ export function OfficeShell({
           targetRef.current = null;
         } else {
           const step = Math.min(SPEED * dt, dist);
-          pos.x += (ddx / dist) * step;
-          pos.y += (ddy / dist) * step;
+          mvx = (ddx / dist) * step;
+          mvy = (ddy / dist) * step;
         }
+      }
+
+      if (mvx !== 0 || mvy !== 0) {
+        // Clamp to the floor, then resolve against walls (slide, don't tunnel).
+        const desired = clampToBounds(pos.x + mvx, pos.y + mvy);
+        const resolved = resolveMovement(pos, desired, wallsRef.current.walls);
+        const moved =
+          Math.abs(resolved.x - pos.x) + Math.abs(resolved.y - pos.y);
+        pos.x = resolved.x;
+        pos.y = resolved.y;
+        movingRef.current = moved > 1e-4;
+        if (movingRef.current) {
+          facingRef.current =
+            Math.abs(mvx) > Math.abs(mvy)
+              ? mvx > 0
+                ? "right"
+                : "left"
+              : mvy > 0
+                ? "down"
+                : "up";
+        }
+      } else {
+        movingRef.current = false;
       }
 
       // Throttled presence broadcast (~11/s)
@@ -422,12 +476,21 @@ export function OfficeShell({
         color: myColor,
         status: statusRef.current,
         emote: emoteRef.current,
+        avatar: avatarRef.current,
+        facing: facingRef.current,
+        moving: movingRef.current,
       };
 
       const participants = [
         ...agentParticipants,
         ...remotesRef.current.values(),
-        ...(demoModeRef.current ? demoParticipants(now) : []),
+        ...(demoModeRef.current
+          ? demoParticipants(now).map((d) => ({
+              ...d,
+              avatar: avatarForId(d.id),
+              moving: true,
+            }))
+          : []),
         local,
       ];
 
@@ -436,6 +499,8 @@ export function OfficeShell({
           ctx,
           theme: themeRef.current,
           rooms: roomsRef.current,
+          walls: wallsRef.current.walls,
+          doorways: wallsRef.current.doorways,
           desks: desksRef.current,
           participants,
           localId: userId,
@@ -542,6 +607,18 @@ export function OfficeShell({
     status,
   };
   const officeHumans = [...remotes, selfParticipant];
+  const saveAvatar = useCallback(async () => {
+    if (!orgId) {
+      setCustomizing(false);
+      return;
+    }
+    setSavingAvatar(true);
+    await saveMyAvatar(orgId, avatarRef.current);
+    setSavingAvatar(false);
+    setCustomizing(false);
+    track(); // broadcast the updated look to teammates
+  }, [orgId, track]);
+
   const humanCount = remotes.length + 1 + (demoMode ? demoParticipants(0).length : 0);
   const voiceTiles: { id: string; stream: MediaStream; label: string }[] = [];
   if (voice.localStream && voice.camOn) {
@@ -584,6 +661,17 @@ export function OfficeShell({
           </button>
           <button
             type="button"
+            onClick={() => setCustomizing((v) => !v)}
+            className={`rounded-md border px-2.5 py-1.5 text-xs transition ${
+              customizing
+                ? "border-gold-400/60 bg-gold-400/10 text-fg-primary"
+                : "border-surface-3/50 text-fg-secondary hover:bg-surface-2"
+            }`}
+          >
+            Customize character
+          </button>
+          <button
+            type="button"
             onClick={() => setEditing((v) => !v)}
             className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
           >
@@ -604,6 +692,37 @@ export function OfficeShell({
           </Link>
         </div>
       </header>
+
+      {customizing && (
+        <div className="mb-4 rounded-xl border border-surface-3/60 bg-surface-1 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+              Your character
+            </h2>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setAvatar(myAvatar);
+                  setCustomizing(false);
+                }}
+                className="rounded-md border border-surface-3/50 px-2.5 py-1 text-xs text-fg-secondary transition hover:bg-surface-2"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveAvatar}
+                disabled={savingAvatar}
+                className="rounded-md border border-gold-400/60 bg-gold-400/10 px-2.5 py-1 text-xs text-fg-primary transition hover:bg-gold-400/20 disabled:opacity-50"
+              >
+                {savingAvatar ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+          <AvatarCustomizer value={avatar} onChange={setAvatar} />
+        </div>
+      )}
 
       {editing && (
         <div className="mb-4 rounded-xl border border-surface-3/60 bg-surface-1 p-4">

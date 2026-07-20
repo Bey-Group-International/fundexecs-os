@@ -16,6 +16,9 @@ import {
   distance,
   type Participant,
 } from "@/lib/office/presence";
+import { roomTheme, type Wall, type Doorway } from "@/lib/office/walls";
+import type { Facing } from "@/lib/office/avatarConfig";
+import { drawAvatar } from "./pixelDraw";
 
 /** Emoji glyphs for MapMaker furniture kinds. */
 const OBJECT_GLYPH: Record<string, string> = {
@@ -42,11 +45,78 @@ export interface DrawState {
   theme: OfficeTheme;
   /** The active room set (built-in default or a persisted custom layout). */
   rooms: OfficeRoom[];
+  /** Wall segments + doorways for the active layout (from buildWalls). */
+  walls: Wall[];
+  doorways: Doorway[];
   desks: AgentDesk[];
   participants: Participant[];
   localId: string;
   /** ms timestamp for idle animation. */
   time: number;
+}
+
+/** Per-room floor texture, drawn inside the room's clip region. */
+function drawFloorPattern(
+  ctx: CanvasRenderingContext2D,
+  floor: "grid" | "wood" | "carpet" | "tile" | "marble",
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  accent: string,
+): void {
+  ctx.save();
+  if (floor === "wood") {
+    ctx.strokeStyle = hexA(accent, 0.12);
+    ctx.lineWidth = 1;
+    for (let py = y + TILE * 0.7; py < y + h; py += TILE * 0.7) {
+      ctx.beginPath();
+      ctx.moveTo(x, py + 0.5);
+      ctx.lineTo(x + w, py + 0.5);
+      ctx.stroke();
+    }
+  } else if (floor === "tile") {
+    for (let iy = 0; iy * TILE < h; iy++) {
+      for (let ix = 0; ix * TILE < w; ix++) {
+        if ((ix + iy) % 2 === 0) continue;
+        ctx.fillStyle = hexA(accent, 0.06);
+        ctx.fillRect(x + ix * TILE, y + iy * TILE, TILE, TILE);
+      }
+    }
+  } else if (floor === "carpet") {
+    ctx.fillStyle = hexA(accent, 0.08);
+    for (let py = y + 4; py < y + h; py += 6) {
+      for (let px = x + 4; px < x + w; px += 6) {
+        ctx.fillRect(px, py, 1.5, 1.5);
+      }
+    }
+  } else if (floor === "marble") {
+    ctx.strokeStyle = hexA(accent, 0.1);
+    ctx.lineWidth = 1;
+    for (let d = -h; d < w; d += TILE * 1.6) {
+      ctx.beginPath();
+      ctx.moveTo(x + d, y);
+      ctx.lineTo(x + d + h, y + h);
+      ctx.stroke();
+    }
+  } else {
+    // grid
+    ctx.strokeStyle = hexA(accent, 0.1);
+    ctx.lineWidth = 1;
+    for (let gx = x + TILE; gx < x + w; gx += TILE) {
+      ctx.beginPath();
+      ctx.moveTo(gx + 0.5, y);
+      ctx.lineTo(gx + 0.5, y + h);
+      ctx.stroke();
+    }
+    for (let gy = y + TILE; gy < y + h; gy += TILE) {
+      ctx.beginPath();
+      ctx.moveTo(x, gy + 0.5);
+      ctx.lineTo(x + w, gy + 0.5);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function hexA(hex: string, alpha: number): string {
@@ -76,7 +146,8 @@ function roundRect(
 }
 
 export function drawOffice(state: DrawState): void {
-  const { ctx, theme, rooms, desks, participants, localId, time } = state;
+  const { ctx, theme, rooms, walls, doorways, desks, participants, localId, time } =
+    state;
 
   // Floor
   ctx.fillStyle = theme.surface0;
@@ -98,18 +169,31 @@ export function drawOffice(state: DrawState): void {
     ctx.stroke();
   }
 
-  // Rooms
+  // Rooms — themed floor, border, label
   for (const room of rooms) {
     const x = room.x * TILE;
     const y = room.y * TILE;
     const w = room.w * TILE;
     const h = room.h * TILE;
+    const rt = roomTheme(room);
 
-    ctx.fillStyle = hexA(room.accent, 0.07);
+    // Themed floor (clipped to the room)
+    ctx.save();
     roundRect(ctx, x, y, w, h, 10);
-    ctx.fill();
+    ctx.clip();
+    ctx.fillStyle = hexA(room.accent, 0.07);
+    ctx.fillRect(x, y, w, h);
+    drawFloorPattern(ctx, rt.floor, x, y, w, h, room.accent);
+    if (rt.rug) {
+      ctx.fillStyle = hexA(room.accent, 0.12);
+      roundRect(ctx, x + w * 0.28, y + h * 0.5, w * 0.44, h * 0.38, 10);
+      ctx.fill();
+    }
+    ctx.restore();
+
     ctx.strokeStyle = hexA(room.accent, 0.5);
     ctx.lineWidth = 1.5;
+    roundRect(ctx, x, y, w, h, 10);
     ctx.stroke();
 
     // Label bar
@@ -144,6 +228,27 @@ export function drawOffice(state: DrawState): void {
     ctx.fillStyle = hexA(desk.room.accent, 0.22);
     roundRect(ctx, x - TILE * 0.6, y - TILE * 0.28, TILE * 1.2, TILE * 0.56, 4);
     ctx.fill();
+  }
+
+  // Doorway thresholds (drawn under the walls so the mat sits in the gap).
+  for (const d of doorways) {
+    ctx.fillStyle = hexA("#d4a82a", 0.16);
+    ctx.fillRect(d.x * TILE, d.y * TILE, d.w * TILE, d.h * TILE);
+  }
+
+  // Walls — thin stone segments with a soft top edge.
+  for (const wall of walls) {
+    const wx = wall.x * TILE;
+    const wy = wall.y * TILE;
+    const ww = wall.w * TILE;
+    const wh = wall.h * TILE;
+    ctx.fillStyle = theme.surface3;
+    ctx.fillRect(wx, wy, ww, wh);
+    ctx.fillStyle = hexA("#ffffff", 0.06);
+    ctx.fillRect(wx, wy, ww, Math.min(3, wh));
+    ctx.strokeStyle = hexA("#000000", 0.22);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(wx + 0.5, wy + 0.5, ww, wh);
   }
 
   // Furniture / objects placed via the MapMaker.
@@ -195,81 +300,89 @@ export function drawOffice(state: DrawState): void {
 
   for (const p of ordered) {
     const isAgent = p.kind === "agent";
-    // Agents bob gently; humans stay put.
-    const bob = isAgent ? Math.sin(time / 600 + p.x + p.y) * 1.2 : 0;
-    const x = p.x * TILE;
-    const y = p.y * TILE + bob;
-    const radius = isAgent ? 9 : 11;
+    const cx = p.x * TILE;
+    // Feet sit slightly below the tile centre so the character "stands" on it.
+    const feetY = p.y * TILE + TILE * 0.35;
+    const height = TILE * (isAgent ? 1.5 : 1.7);
+    const headY = feetY - height;
     const isLocal = p.id === localId;
+    const facing: Facing = p.facing ?? "down";
+    // Two-frame walk cycle while moving; idle frame otherwise. Agents idle.
+    const frame: 0 | 1 | 2 =
+      p.moving && !isAgent ? (Math.floor(time / 140) % 2 === 0 ? 1 : 2) : 0;
 
-    // Busy pulse — a soft expanding ring for agents actively working.
+    // Busy pulse — a soft ring for agents actively working.
     if (p.busy) {
-      const pulse = (Math.sin(time / 500 + p.x) + 1) / 2; // 0..1
+      const pulse = (Math.sin(time / 500 + p.x) + 1) / 2;
       ctx.beginPath();
-      ctx.arc(x, y, radius + 4 + pulse * 4, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(p.color, 0.35 * (1 - pulse));
+      ctx.arc(cx, feetY - height * 0.4, 14 + pulse * 5, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA(p.color, 0.3 * (1 - pulse));
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
-    // Shadow
+    // Ground shadow
     ctx.beginPath();
-    ctx.ellipse(x, y + radius + 3, radius * 0.8, radius * 0.35, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY, 9, 3.4, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.28)";
     ctx.fill();
+    if (isLocal) {
+      ctx.beginPath();
+      ctx.ellipse(cx, feetY, 11, 4.4, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA("#ffffff", 0.7);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
 
-    // Body
+    // Pixel-art character (agents resolve by key; humans by their config).
+    drawAvatar(ctx, {
+      config: isAgent ? undefined : p.avatar,
+      agentKey: p.agentKey,
+      x: cx,
+      y: feetY,
+      height,
+      facing,
+      frame,
+    });
+
+    // Status dot near the head
     ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
-    ctx.fill();
-    ctx.lineWidth = isLocal ? 3 : 2;
-    ctx.strokeStyle = isLocal ? "#ffffff" : hexA(p.color, 0.9);
-    ctx.stroke();
-
-    // Initial
-    ctx.fillStyle = "#0a111f";
-    ctx.font = `700 ${isAgent ? 9 : 11}px ui-sans-serif, system-ui, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText((p.name[0] ?? "?").toUpperCase(), x, y + 0.5);
-
-    // Status dot
-    ctx.beginPath();
-    ctx.arc(x + radius * 0.75, y - radius * 0.75, 3.5, 0, Math.PI * 2);
+    ctx.arc(cx + 7, headY + 4, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = STATUS_COLORS[p.status];
     ctx.strokeStyle = theme.surface0;
     ctx.lineWidth = 1.5;
     ctx.fill();
     ctx.stroke();
 
-    // Name tag
+    // Name tag below the feet
     const label = isAgent ? p.name : `${p.name}${isLocal ? " (you)" : ""}`;
     ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
     const tw = ctx.measureText(label).width + 10;
     ctx.fillStyle = hexA(theme.surface2, 0.92);
-    roundRect(ctx, x - tw / 2, y + radius + 5, tw, 15, 7);
+    roundRect(ctx, cx - tw / 2, feetY + 4, tw, 15, 7);
     ctx.fill();
     ctx.fillStyle = theme.fg;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, x, y + radius + 13);
+    ctx.fillText(label, cx, feetY + 12);
 
-    // Live activity line for busy agents (what they're working on right now).
+    // Live activity line for busy agents
     if (isAgent && p.busy && p.activityLabel) {
       ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
       ctx.fillStyle = theme.fgMuted;
-      ctx.fillText(p.activityLabel, x, y + radius + 26);
+      ctx.fillText(p.activityLabel, cx, feetY + 25);
     }
 
-    // Emote bubble
+    // Emote bubble above the head
     if (p.emote) {
       ctx.font = "16px ui-sans-serif, system-ui, sans-serif";
       ctx.fillStyle = hexA(theme.surface3, 0.95);
       ctx.beginPath();
-      ctx.arc(x, y - radius - 12, 12, 0, Math.PI * 2);
+      ctx.arc(cx, headY - 6, 12, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillText(p.emote, x, y - radius - 11);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(p.emote, cx, headY - 5);
     }
   }
 }
