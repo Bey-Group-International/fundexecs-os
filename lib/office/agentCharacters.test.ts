@@ -1,36 +1,30 @@
-import { AGENTS } from "@/lib/agents";
 import { agentAvatar } from "@/lib/office/agentCharacters";
+import { AGENTS } from "@/lib/agents";
 import {
   ACCESSORIES,
+  BUILDS,
+  EYE_COLORS,
+  FACIAL_HAIR,
   HAIR_COLORS,
   HAIR_STYLES,
-  SHIRT_COLORS,
+  OUTFIT_COLORS,
+  OUTFIT_STYLES,
   SKIN_TONES,
 } from "@/lib/office/avatarConfig";
 
 describe("agentAvatar", () => {
-  it("yields a valid AvatarConfig for every agent key", () => {
+  it("yields a fully valid expanded config for every agent key", () => {
     for (const agent of AGENTS) {
-      const config = agentAvatar(agent.key);
-
-      // Enum members must be valid.
-      expect(HAIR_STYLES).toContain(config.hair);
-      expect(ACCESSORIES).toContain(config.accessory);
-
-      // Skin and hair colors come from the catalog.
-      expect(SKIN_TONES).toContain(config.skin);
-      expect(HAIR_COLORS).toContain(config.hairColor);
-
-      // Shirt is either a catalog color or the agent's own brand color.
-      const shirtOk =
-        SHIRT_COLORS.includes(config.shirt) || config.shirt === agent.color;
-      expect(shirtOk).toBe(true);
-    }
-  });
-
-  it("wears each agent's brand color as the shirt", () => {
-    for (const agent of AGENTS) {
-      expect(agentAvatar(agent.key).shirt).toBe(agent.color);
+      const a = agentAvatar(agent.key);
+      expect(SKIN_TONES).toContain(a.skin);
+      expect(HAIR_STYLES).toContain(a.hair);
+      expect(HAIR_COLORS).toContain(a.hairColor);
+      expect(EYE_COLORS).toContain(a.eyes);
+      expect(OUTFIT_STYLES).toContain(a.outfit);
+      expect(OUTFIT_COLORS).toContain(a.outfitColor);
+      expect(FACIAL_HAIR).toContain(a.facialHair);
+      expect(ACCESSORIES).toContain(a.accessory);
+      expect(BUILDS).toContain(a.build);
     }
   });
 
@@ -40,20 +34,27 @@ describe("agentAvatar", () => {
     }
   });
 
-  it("gives distinct-enough looks (not all identical)", () => {
-    const signatures = new Set(
+  it("gives the fifteen agents distinct looks", () => {
+    const sigs = new Set(
       AGENTS.map((a) => {
         const c = agentAvatar(a.key);
-        return `${c.hair}|${c.accessory}|${c.shirt}`;
+        return `${c.hair}|${c.outfit}|${c.accessory}|${c.facialHair}|${c.build}|${c.outfitColor}`;
       }),
     );
-    expect(signatures.size).toBeGreaterThan(1);
+    // Allow a little overlap but expect broad variety across fifteen agents.
+    expect(sigs.size).toBeGreaterThanOrEqual(12);
   });
 
   it("falls back to a valid config for an unknown key", () => {
-    const config = agentAvatar("not_a_real_agent");
-    expect(HAIR_STYLES).toContain(config.hair);
-    expect(ACCESSORIES).toContain(config.accessory);
-    expect(SKIN_TONES).toContain(config.skin);
+    const a = agentAvatar("not_a_real_agent");
+    expect(SKIN_TONES).toContain(a.skin);
+    expect(OUTFIT_COLORS).toContain(a.outfitColor);
+    expect(HAIR_STYLES).toContain(a.hair);
+  });
+
+  it("snaps the outfit color to a catalog swatch for every agent", () => {
+    for (const agent of AGENTS) {
+      expect(OUTFIT_COLORS).toContain(agentAvatar(agent.key).outfitColor);
+    }
   });
 });

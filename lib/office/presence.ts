@@ -37,6 +37,8 @@ export interface Participant {
   facing?: Facing;
   /** Whether the character is walking (drives the walk-cycle animation). */
   moving?: boolean;
+  /** Humans only: URL of the member's AI-generated portrait, if any. */
+  portrait?: string | null;
 }
 
 export const STATUS_LABELS: Record<PresenceStatus, string> = {

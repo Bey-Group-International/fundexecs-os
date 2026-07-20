@@ -1,20 +1,27 @@
 "use client";
 
-// A controlled avatar customizer. The parent owns the AvatarConfig and wires
-// persistence; this component only renders the pickers and reports changes via
-// `onChange`. Swatch pickers for the colors, segmented pickers for the enum
-// choices, and a live pixel preview. Styled with the repo's surface/fg/gold
-// tokens so it sits inside the office UI without extra theming.
+// A controlled, expanded avatar customizer. The parent owns the AvatarConfig
+// and wires persistence; this component only renders the pickers and reports
+// changes via `onChange`. Swatch pickers for the colors, segmented pickers for
+// the enum choices, and a large live animated preview. Styled with the repo's
+// surface/fg/gold tokens so it sits inside the office UI without extra theming.
 import type { ReactNode } from "react";
 import {
   ACCESSORIES,
+  BUILDS,
+  EYE_COLORS,
+  FACIAL_HAIR,
   HAIR_COLORS,
   HAIR_STYLES,
-  SHIRT_COLORS,
+  OUTFIT_COLORS,
+  OUTFIT_STYLES,
   SKIN_TONES,
   type Accessory,
   type AvatarConfig,
+  type Build,
+  type FacialHair,
   type HairStyle,
+  type OutfitStyle,
 } from "@/lib/office/avatarConfig";
 import { AvatarPreview } from "@/components/office/AvatarPreview";
 
@@ -29,23 +36,44 @@ const HAIR_LABELS: Record<HairStyle, string> = {
   bun: "Bun",
   buzz: "Buzz",
   bald: "Bald",
+  ponytail: "Ponytail",
+  curly: "Curly",
+  mohawk: "Mohawk",
+};
+
+const OUTFIT_LABELS: Record<OutfitStyle, string> = {
+  tee: "Tee",
+  blazer: "Blazer",
+  hoodie: "Hoodie",
+  turtleneck: "Turtleneck",
+  dress_shirt: "Dress shirt",
+  vneck: "V-neck",
 };
 
 const ACCESSORY_LABELS: Record<Accessory, string> = {
   none: "None",
   glasses: "Glasses",
+  sunglasses: "Sunglasses",
   headset: "Headset",
   cap: "Cap",
   beanie: "Beanie",
+  earrings: "Earrings",
 };
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+const FACIAL_HAIR_LABELS: Record<FacialHair, string> = {
+  none: "None",
+  stubble: "Stubble",
+  beard: "Beard",
+  mustache: "Mustache",
+};
+
+const BUILD_LABELS: Record<Build, string> = {
+  slim: "Slim",
+  regular: "Regular",
+  broad: "Broad",
+};
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-medium uppercase tracking-wide text-fg-muted">
@@ -139,9 +167,9 @@ export function AvatarCustomizer({ value, onChange }: AvatarCustomizerProps) {
 
   return (
     <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-      <div className="flex shrink-0 flex-col items-center gap-2 rounded-xl bg-surface-2 p-4">
-        <AvatarPreview config={value} size={64} facing="down" />
-        <span className="text-xs text-fg-muted">Preview</span>
+      <div className="flex shrink-0 flex-col items-center gap-2 self-center rounded-xl bg-surface-2 p-4 sm:self-start sm:sticky sm:top-4">
+        <AvatarPreview config={value} size={160} facing="down" animate />
+        <span className="text-xs text-fg-muted">Live preview</span>
       </div>
 
       <div className="flex flex-1 flex-col gap-4">
@@ -173,12 +201,41 @@ export function AvatarCustomizer({ value, onChange }: AvatarCustomizerProps) {
           />
         </Field>
 
-        <Field label="Shirt">
+        <Field label="Eyes">
           <SwatchRow
-            label="Shirt color"
-            colors={SHIRT_COLORS}
-            selected={value.shirt}
-            onSelect={(shirt) => patch({ shirt })}
+            label="Eye color"
+            colors={EYE_COLORS}
+            selected={value.eyes}
+            onSelect={(eyes) => patch({ eyes })}
+          />
+        </Field>
+
+        <Field label="Outfit">
+          <Segmented
+            label="Outfit style"
+            options={OUTFIT_STYLES}
+            selected={value.outfit}
+            onSelect={(outfit) => patch({ outfit })}
+            labels={OUTFIT_LABELS}
+          />
+        </Field>
+
+        <Field label="Outfit color">
+          <SwatchRow
+            label="Outfit color"
+            colors={OUTFIT_COLORS}
+            selected={value.outfitColor}
+            onSelect={(outfitColor) => patch({ outfitColor })}
+          />
+        </Field>
+
+        <Field label="Facial hair">
+          <Segmented
+            label="Facial hair"
+            options={FACIAL_HAIR}
+            selected={value.facialHair}
+            onSelect={(facialHair) => patch({ facialHair })}
+            labels={FACIAL_HAIR_LABELS}
           />
         </Field>
 
@@ -189,6 +246,16 @@ export function AvatarCustomizer({ value, onChange }: AvatarCustomizerProps) {
             selected={value.accessory}
             onSelect={(accessory) => patch({ accessory })}
             labels={ACCESSORY_LABELS}
+          />
+        </Field>
+
+        <Field label="Build">
+          <Segmented
+            label="Build"
+            options={BUILDS}
+            selected={value.build}
+            onSelect={(build) => patch({ build })}
+            labels={BUILD_LABELS}
           />
         </Field>
       </div>

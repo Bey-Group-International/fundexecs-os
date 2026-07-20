@@ -1,72 +1,144 @@
-// The avatar contract for the Virtual Office's pixel-art characters.
+// The avatar contract for the Virtual Office's premium characters.
 //
-// A small, serializable description of how a character looks. The pixel-sprite
-// engine reads it to compose a sprite; the customizer edits it; the presence
-// payload broadcasts it; office_member_prefs persists it. Kept as plain data
-// (no DOM) so it is safe to import anywhere — server actions included.
+// A small, serializable description of how a character looks. The smooth-vector
+// renderer reads it to draw a shaded figure; the customizer edits it; the
+// presence payload broadcasts it; office_member_prefs persists it; the AI
+// portrait pipeline turns it into a deterministic prompt. Plain data (no DOM),
+// safe to import anywhere — server actions included.
 
 export interface AvatarConfig {
-  /** Skin fill (hex) — face and hands. */
+  /** Skin fill (hex). */
   skin: string;
-  /** Hairstyle key; the sprite engine implements exactly these. */
   hair: HairStyle;
   /** Hair fill (hex). */
   hairColor: string;
-  /** Shirt / torso fill (hex). */
-  shirt: string;
-  /** Worn accessory; "none" for bare. */
+  /** Iris color (hex). */
+  eyes: string;
+  outfit: OutfitStyle;
+  /** Outfit fill (hex). */
+  outfitColor: string;
+  facialHair: FacialHair;
   accessory: Accessory;
+  /** Body build, scales the silhouette. */
+  build: Build;
 }
 
-export type HairStyle = "short" | "long" | "bun" | "buzz" | "bald";
-export type Accessory = "none" | "glasses" | "headset" | "cap" | "beanie";
+export type HairStyle =
+  | "short"
+  | "long"
+  | "bun"
+  | "buzz"
+  | "bald"
+  | "ponytail"
+  | "curly"
+  | "mohawk";
 
-export const HAIR_STYLES: HairStyle[] = ["short", "long", "bun", "buzz", "bald"];
+export type OutfitStyle =
+  | "tee"
+  | "blazer"
+  | "hoodie"
+  | "turtleneck"
+  | "dress_shirt"
+  | "vneck";
+
+export type Accessory =
+  | "none"
+  | "glasses"
+  | "sunglasses"
+  | "headset"
+  | "cap"
+  | "beanie"
+  | "earrings";
+
+export type FacialHair = "none" | "stubble" | "beard" | "mustache";
+
+export type Build = "slim" | "regular" | "broad";
+
+export const HAIR_STYLES: HairStyle[] = [
+  "short",
+  "long",
+  "bun",
+  "buzz",
+  "bald",
+  "ponytail",
+  "curly",
+  "mohawk",
+];
+export const OUTFIT_STYLES: OutfitStyle[] = [
+  "tee",
+  "blazer",
+  "hoodie",
+  "turtleneck",
+  "dress_shirt",
+  "vneck",
+];
 export const ACCESSORIES: Accessory[] = [
   "none",
   "glasses",
+  "sunglasses",
   "headset",
   "cap",
   "beanie",
+  "earrings",
 ];
+export const FACIAL_HAIR: FacialHair[] = ["none", "stubble", "beard", "mustache"];
+export const BUILDS: Build[] = ["slim", "regular", "broad"];
 
-// Curated, theme-neutral swatches. Order is stable — the deterministic
-// fallback picks by index, so don't reorder without intending to reshuffle.
+// Curated, theme-neutral swatches. Order is stable — the deterministic fallback
+// picks by index, so don't reorder without intending to reshuffle.
 export const SKIN_TONES: string[] = [
-  "#f6d0b0",
+  "#ffdbb4",
+  "#f4c9a1",
   "#eab58e",
   "#d69f6e",
   "#b57a48",
   "#8a5a34",
-  "#5c3a22",
+  "#6b4326",
+  "#4a2e1a",
 ];
 
 export const HAIR_COLORS: string[] = [
+  "#1c1a1a",
   "#2b2320",
   "#54331b",
   "#8a5a2b",
   "#caa14a",
-  "#9aa0a6",
+  "#b0b6bd",
   "#c65b3a",
+  "#6d4bd8",
 ];
 
-export const SHIRT_COLORS: string[] = [
-  "#6366f1",
-  "#ec4899",
+export const EYE_COLORS: string[] = [
+  "#3b2a1a",
+  "#5b3b1e",
+  "#2f6d5a",
+  "#2f5da8",
+  "#6b7280",
+];
+
+export const OUTFIT_COLORS: string[] = [
+  "#4f46e5",
+  "#0ea5e9",
   "#14b8a6",
   "#f97316",
   "#84cc16",
-  "#06b6d4",
+  "#e11d48",
   "#a855f7",
   "#eab308",
+  "#1f2937",
+  "#e2e8f0",
 ];
 
 export const DEFAULT_AVATAR: AvatarConfig = {
   skin: SKIN_TONES[1],
   hair: "short",
-  hairColor: HAIR_COLORS[0],
-  shirt: SHIRT_COLORS[0],
+  hairColor: HAIR_COLORS[1],
+  eyes: EYE_COLORS[0],
+  outfit: "blazer",
+  outfitColor: OUTFIT_COLORS[0],
+  facialHair: "none",
   accessory: "none",
+  build: "regular",
 };
 
 function hash(str: string): number {
@@ -75,15 +147,21 @@ function hash(str: string): number {
   return Math.abs(h);
 }
 
+const at = <T>(arr: T[], n: number): T => arr[n % arr.length];
+
 /** Deterministic avatar from an id — the fallback when a member hasn't set one. */
 export function avatarForId(id: string): AvatarConfig {
   const h = hash(id);
   return {
-    skin: SKIN_TONES[h % SKIN_TONES.length],
-    hair: HAIR_STYLES[(h >> 3) % HAIR_STYLES.length],
-    hairColor: HAIR_COLORS[(h >> 6) % HAIR_COLORS.length],
-    shirt: SHIRT_COLORS[(h >> 9) % SHIRT_COLORS.length],
-    accessory: ACCESSORIES[(h >> 12) % ACCESSORIES.length],
+    skin: at(SKIN_TONES, h),
+    hair: at(HAIR_STYLES, h >> 2),
+    hairColor: at(HAIR_COLORS, h >> 4),
+    eyes: at(EYE_COLORS, h >> 6),
+    outfit: at(OUTFIT_STYLES, h >> 8),
+    outfitColor: at(OUTFIT_COLORS, h >> 10),
+    facialHair: at(FACIAL_HAIR, h >> 13),
+    accessory: at(ACCESSORIES, h >> 15),
+    build: at(BUILDS, h >> 18),
   };
 }
 
@@ -96,12 +174,21 @@ export function parseAvatar(raw: unknown, fallbackId = "anon"): AvatarConfig {
     typeof v === "string" && (allowed as string[]).includes(v) ? (v as T) : dflt;
   const hex = (v: unknown, allowed: string[], dflt: string): string =>
     typeof v === "string" && allowed.includes(v) ? v : dflt;
+  // Legacy rows used `shirt` for the outfit color — carry it forward.
+  const legacyOutfit =
+    typeof r.shirt === "string" && OUTFIT_COLORS.includes(r.shirt)
+      ? r.shirt
+      : undefined;
   return {
     skin: hex(r.skin, SKIN_TONES, base.skin),
     hair: pick(r.hair, HAIR_STYLES, base.hair),
     hairColor: hex(r.hairColor, HAIR_COLORS, base.hairColor),
-    shirt: hex(r.shirt, SHIRT_COLORS, base.shirt),
+    eyes: hex(r.eyes, EYE_COLORS, base.eyes),
+    outfit: pick(r.outfit, OUTFIT_STYLES, base.outfit),
+    outfitColor: hex(r.outfitColor, OUTFIT_COLORS, legacyOutfit ?? base.outfitColor),
+    facialHair: pick(r.facialHair, FACIAL_HAIR, base.facialHair),
     accessory: pick(r.accessory, ACCESSORIES, base.accessory),
+    build: pick(r.build, BUILDS, base.build),
   };
 }
 
