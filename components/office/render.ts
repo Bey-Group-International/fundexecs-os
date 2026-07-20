@@ -18,7 +18,7 @@ import {
 } from "@/lib/office/presence";
 import { roomTheme, type Wall, type Doorway } from "@/lib/office/walls";
 import type { Facing } from "@/lib/office/avatarConfig";
-import { drawAvatar } from "./pixelDraw";
+import { drawAvatar } from "./vectorAvatar";
 
 /** Emoji glyphs for MapMaker furniture kinds. */
 const OBJECT_GLYPH: Record<string, string> = {
@@ -307,9 +307,6 @@ export function drawOffice(state: DrawState): void {
     const headY = feetY - height;
     const isLocal = p.id === localId;
     const facing: Facing = p.facing ?? "down";
-    // Two-frame walk cycle while moving; idle frame otherwise. Agents idle.
-    const frame: 0 | 1 | 2 =
-      p.moving && !isAgent ? (Math.floor(time / 140) % 2 === 0 ? 1 : 2) : 0;
 
     // Busy pulse — a soft ring for agents actively working.
     if (p.busy) {
@@ -321,11 +318,7 @@ export function drawOffice(state: DrawState): void {
       ctx.stroke();
     }
 
-    // Ground shadow
-    ctx.beginPath();
-    ctx.ellipse(cx, feetY, 9, 3.4, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
-    ctx.fill();
+    // Local highlight ring on the floor (the sprite draws its own shadow).
     if (isLocal) {
       ctx.beginPath();
       ctx.ellipse(cx, feetY, 11, 4.4, 0, 0, Math.PI * 2);
@@ -334,7 +327,7 @@ export function drawOffice(state: DrawState): void {
       ctx.stroke();
     }
 
-    // Pixel-art character (agents resolve by key; humans by their config).
+    // Smooth-vector character (agents resolve by key; humans by their config).
     drawAvatar(ctx, {
       config: isAgent ? undefined : p.avatar,
       agentKey: p.agentKey,
@@ -342,7 +335,9 @@ export function drawOffice(state: DrawState): void {
       y: feetY,
       height,
       facing,
-      frame,
+      timeMs: time,
+      moving: !isAgent && !!p.moving,
+      status: p.status,
     });
 
     // Status dot near the head

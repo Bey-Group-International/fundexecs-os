@@ -47,7 +47,9 @@ import {
   avatarForId,
 } from "@/lib/office/avatarConfig";
 import { AvatarCustomizer } from "./AvatarCustomizer";
+import { MemberPortrait } from "./MemberPortrait";
 import { saveMyAvatar } from "@/app/(app)/office/avatar-actions";
+import { generateMyPortrait } from "@/app/(app)/office/portrait-actions";
 import { drawOffice, type OfficeTheme } from "./render";
 import { useProximityVoice } from "./useProximityVoice";
 import { OfficeMapEditor } from "./OfficeMapEditor";
@@ -65,8 +67,10 @@ interface OfficeShellProps {
   layout: OfficeLayoutData;
   /** Server-fetched agent activity, keyed by agent key. */
   initialActivity: Record<string, AgentActivity>;
-  /** The member's persisted pixel-avatar (or a deterministic default). */
+  /** The member's persisted avatar config (or a deterministic default). */
   myAvatar: AvatarConfig;
+  /** The member's AI portrait URL, if one has been generated. */
+  myPortraitUrl: string | null;
 }
 
 interface PresencePayload {
@@ -79,6 +83,7 @@ interface PresencePayload {
   avatar: AvatarConfig;
   facing: Facing;
   moving: boolean;
+  portrait: string | null;
 }
 
 const MOVE_KEYS: Record<string, [number, number]> = {
@@ -157,6 +162,7 @@ export function OfficeShell({
   layout,
   initialActivity,
   myAvatar,
+  myPortraitUrl,
 }: OfficeShellProps) {
   const myColor = useMemo(() => colorFromId(userId), [userId]);
 
@@ -196,6 +202,9 @@ export function OfficeShell({
   const [avatar, setAvatar] = useState<AvatarConfig>(myAvatar);
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
+  const [portraitUrl, setPortraitUrl] = useState<string | null>(myPortraitUrl);
+  const portraitRef = useRef(portraitUrl);
+  portraitRef.current = portraitUrl;
 
   // Mirrored into React state only for the side panel (low-frequency updates).
   const [status, setStatus] = useState<PresenceStatus>("available");
@@ -212,6 +221,8 @@ export function OfficeShell({
   const [editing, setEditing] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [portraitBusy, setPortraitBusy] = useState(false);
+  const [portraitNote, setPortraitNote] = useState<string | null>(null);
   const tour = useOfficeTour();
 
   // Proximity voice/video mesh (P2P), gated on Realtime being configured.
@@ -235,6 +246,7 @@ export function OfficeShell({
       avatar: avatarRef.current,
       facing: facingRef.current,
       moving: movingRef.current,
+      portrait: portraitRef.current,
     }),
     [displayName, myColor],
   );
@@ -272,6 +284,7 @@ export function OfficeShell({
           avatar: meta.avatar ?? avatarForId(key),
           facing: meta.facing ?? "down",
           moving: meta.moving ?? false,
+          portrait: meta.portrait ?? null,
         });
       }
       remotesRef.current = map;
@@ -377,9 +390,23 @@ export function OfficeShell({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    canvas.width = OFFICE_WIDTH;
-    canvas.height = OFFICE_HEIGHT;
+    // Retina-crisp backing store: size the canvas to its displayed CSS box ×
+    // devicePixelRatio, then scale the context so we keep drawing in office
+    // coordinates (0..OFFICE_WIDTH) but every path is rasterised sharply.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const setupCanvas = () => {
+      const cssW = canvas.clientWidth || OFFICE_WIDTH;
+      const cssH = cssW * (OFFICE_HEIGHT / OFFICE_WIDTH);
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      const scale = canvas.width / OFFICE_WIDTH;
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+    };
+    setupCanvas();
     themeRef.current = readTheme(wrap);
+    const ro = new ResizeObserver(setupCanvas);
+    ro.observe(canvas);
 
     let raf = 0;
     let last = performance.now();
@@ -520,6 +547,7 @@ export function OfficeShell({
     return () => {
       cancelAnimationFrame(raf);
       mql.removeEventListener("change", onTheme);
+      ro.disconnect();
     };
   }, [userId, displayName, myColor, track]);
 
@@ -617,6 +645,23 @@ export function OfficeShell({
     setSavingAvatar(false);
     setCustomizing(false);
     track(); // broadcast the updated look to teammates
+  }, [orgId, track]);
+
+  const generatePortrait = useCallback(async () => {
+    if (!orgId) return;
+    setPortraitBusy(true);
+    setPortraitNote(null);
+    const res = await generateMyPortrait(orgId);
+    setPortraitBusy(false);
+    if (res.url) {
+      setPortraitUrl(res.url);
+      portraitRef.current = res.url;
+      track(); // broadcast the portrait so teammates' cards update
+    } else {
+      setPortraitNote(
+        "AI portraits aren't configured yet (needs a Replicate key). Your character is used until then.",
+      );
+    }
   }, [orgId, track]);
 
   const humanCount = remotes.length + 1 + (demoMode ? demoParticipants(0).length : 0);
@@ -721,6 +766,31 @@ export function OfficeShell({
             </div>
           </div>
           <AvatarCustomizer value={avatar} onChange={setAvatar} />
+          <div className="mt-4 flex items-center gap-3 border-t border-surface-3/50 pt-4">
+            <MemberPortrait
+              url={portraitUrl}
+              name={displayName}
+              size={56}
+              accent={avatar.outfitColor}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-fg-primary">AI portrait</p>
+              <p className="text-[11px] text-fg-muted">
+                Generate a premium portrait from your character.
+              </p>
+              {portraitNote && (
+                <p className="mt-1 text-[11px] text-gold-400">{portraitNote}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={generatePortrait}
+              disabled={portraitBusy}
+              className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 disabled:opacity-50"
+            >
+              {portraitBusy ? "Generating…" : "Generate"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -879,12 +949,12 @@ export function OfficeShell({
                     key={p.id}
                     className="flex items-center gap-2 rounded-md bg-surface-2/60 px-2 py-1.5"
                   >
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-surface-0"
-                      style={{ background: p.color }}
-                    >
-                      {p.name[0]?.toUpperCase()}
-                    </span>
+                    <MemberPortrait
+                      url={p.portrait ?? null}
+                      name={p.name}
+                      size={24}
+                      accent={p.color}
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs text-fg-primary">
                         {p.name}
