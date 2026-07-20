@@ -92,6 +92,7 @@ export const MORE_GROUPS: MoreGroup[] = [
       { key: "workflows", label: "Workflows", href: "/automations", icon: TaskIcon, desc: "Active & automated work" },
       { key: "activity", label: "Activity", href: "/activity", icon: SparkIcon, desc: "What agents have been doing" },
       { key: "meetings", label: "Meetings", href: "/meetings", icon: CalendarIcon, desc: "Calls, notes & scheduling" },
+      { key: "office", label: "Virtual Office", href: "/office", icon: UsersIcon, desc: "Spatial team workspace" },
     ],
   },
   {
