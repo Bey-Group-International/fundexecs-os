@@ -10,23 +10,63 @@ import {
   type OfficeRoom,
   type RoomType,
 } from "./layout";
+import { PROP_SIZE } from "./furnish";
 
 /** Minimum room extent (tiles) — matches `layoutStore`'s MIN_SIZE. */
 export const MIN_ROOM_SIZE = 2;
 
-/** Palette of placeable objects: kind → human label + emoji glyph. */
-export const OBJECT_CATALOG: readonly {
+/** A palette entry: kind + label + glyph, joined with its default footprint. */
+export interface CatalogEntry {
+  kind: OfficeObject["kind"];
+  label: string;
+  emoji: string;
+  /** Default footprint (tiles) applied when placing this prop. */
+  w: number;
+  h: number;
+}
+
+/** kind → human label + emoji glyph, in palette display order. */
+const CATALOG_META: readonly {
   kind: OfficeObject["kind"];
   label: string;
   emoji: string;
 }[] = [
+  // legacy
   { kind: "desk", label: "Desk", emoji: "🪑" },
   { kind: "plant", label: "Plant", emoji: "🪴" },
   { kind: "whiteboard", label: "Whiteboard", emoji: "📝" },
   { kind: "couch", label: "Couch", emoji: "🛋️" },
   { kind: "table", label: "Table", emoji: "🍽️" },
   { kind: "screen", label: "Screen", emoji: "🖥️" },
+  // premium catalogue
+  { kind: "chair", label: "Chair", emoji: "💺" },
+  { kind: "monitor", label: "Monitor", emoji: "💻" },
+  { kind: "plant_lg", label: "Large Plant", emoji: "🌳" },
+  { kind: "armchair", label: "Armchair", emoji: "🛋️" },
+  { kind: "coffee_table", label: "Coffee Table", emoji: "☕" },
+  { kind: "meeting_table", label: "Meeting Table", emoji: "📊" },
+  { kind: "tv", label: "TV", emoji: "📺" },
+  { kind: "bookshelf", label: "Bookshelf", emoji: "📚" },
+  { kind: "rug", label: "Rug", emoji: "🟫" },
+  { kind: "rug_round", label: "Round Rug", emoji: "🟢" },
+  { kind: "reception_desk", label: "Reception Desk", emoji: "🛎️" },
+  { kind: "cafe_counter", label: "Cafe Counter", emoji: "🍵" },
+  { kind: "coffee_machine", label: "Coffee Machine", emoji: "☕" },
+  { kind: "water_cooler", label: "Water Cooler", emoji: "🚰" },
+  { kind: "wall_art", label: "Wall Art", emoji: "🖼️" },
+  { kind: "window", label: "Window", emoji: "🪟" },
+  { kind: "divider", label: "Divider", emoji: "🚧" },
+  { kind: "pod", label: "Focus Pod", emoji: "🔇" },
+  { kind: "lamp", label: "Lamp", emoji: "💡" },
+  { kind: "server_rack", label: "Server Rack", emoji: "🗄️" },
 ];
+
+/** Palette of placeable objects: label + emoji + default footprint per kind. */
+export const OBJECT_CATALOG: readonly CatalogEntry[] = CATALOG_META.map((m) => ({
+  ...m,
+  w: PROP_SIZE[m.kind].w,
+  h: PROP_SIZE[m.kind].h,
+}));
 
 const OBJECT_LABEL: Record<OfficeObject["kind"], string> = Object.fromEntries(
   OBJECT_CATALOG.map((o) => [o.kind, o.label]),
@@ -40,6 +80,10 @@ export const ROOM_TYPES: readonly { type: RoomType; label: string }[] = [
   { type: "private", label: "Private" },
   { type: "social", label: "Social" },
   { type: "commons", label: "Commons" },
+  { type: "reception", label: "Reception" },
+  { type: "lounge", label: "Lounge" },
+  { type: "cafe", label: "Cafe" },
+  { type: "pod", label: "Focus Pod" },
 ];
 
 /** A resize grip: a corner (two letters) or an edge (one letter). */
@@ -175,11 +219,14 @@ export function addObject(
   y: number,
 ): OfficeRoom {
   const objects = room.objects ?? [];
+  const size = PROP_SIZE[kind];
   const obj: OfficeObject = {
     id: nextObjectId(objects, kind),
     kind,
     x: clamp(x, room.x, room.x + room.w),
     y: clamp(y, room.y, room.y + room.h),
+    w: size.w,
+    h: size.h,
   };
   return { ...room, objects: [...objects, obj] };
 }

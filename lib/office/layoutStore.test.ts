@@ -215,4 +215,99 @@ describe("layoutStore", () => {
     expect(commons?.w).toBe(10.1);
     expect(commons?.h).toBe(22);
   });
+
+  it("ships a pre-furnished default layout that round-trips", () => {
+    // Every default room carries auto-furnished props.
+    for (const room of DEFAULT_LAYOUT.rooms) {
+      expect(room.objects && room.objects.length).toBeGreaterThan(0);
+    }
+    // Parse + serialize is a stable fixed point on the furnished default.
+    const serialized = serializeLayout(DEFAULT_LAYOUT);
+    expect(serialized).toEqual({
+      version: LAYOUT_VERSION,
+      rooms: DEFAULT_LAYOUT.rooms,
+    });
+    expect(serializeLayout(serialized)).toEqual(serialized);
+  });
+
+  it("validates the expanded object kinds and clamps w/h/rot", () => {
+    const parsed = parseLayout({
+      rooms: [
+        {
+          key: "commons",
+          label: "Commons",
+          hub: null,
+          x: 15,
+          y: 1,
+          w: 12,
+          h: 22,
+          accent: "#d4a82a",
+          objects: [
+            // Premium kinds are accepted, with footprint + rotation preserved.
+            { id: "mt", kind: "meeting_table", x: 20, y: 8, w: 4, h: 2, rot: 90 },
+            { id: "ch", kind: "chair", x: 21, y: 9 },
+            // Out-of-range footprint clamps; odd rotation snaps to a cardinal.
+            { id: "rug", kind: "rug_round", x: 22, y: 10, w: 999, h: -3, rot: 47 },
+            // Still-invalid kind dropped.
+            { id: "x", kind: "spaceship", x: 18, y: 4 },
+          ],
+        },
+      ],
+    });
+    const objects = parsed.rooms.find((r) => r.key === "commons")?.objects ?? [];
+    expect(objects.map((o) => o.id)).toEqual(["mt", "ch", "rug"]);
+
+    const mt = objects.find((o) => o.id === "mt");
+    expect(mt?.kind).toBe("meeting_table");
+    expect(mt?.w).toBe(4);
+    expect(mt?.h).toBe(2);
+    expect(mt?.rot).toBe(90);
+
+    // Chair supplied no footprint → none stored (byte-compatible).
+    const ch = objects.find((o) => o.id === "ch");
+    expect("w" in (ch ?? {})).toBe(false);
+
+    const rug = objects.find((o) => o.id === "rug");
+    expect(rug?.w).toBeLessThanOrEqual(OFFICE_COLS);
+    expect(rug?.w).toBeGreaterThan(0);
+    expect(rug?.h).toBeGreaterThan(0);
+    expect([0, 90, 180, 270]).toContain(rug?.rot);
+  });
+
+  it("parses a legacy layout (old kinds, no footprint) unchanged", () => {
+    const legacy = {
+      version: 1,
+      rooms: [
+        {
+          key: "commons",
+          label: "The Commons",
+          hub: null,
+          x: 15,
+          y: 1,
+          w: 10,
+          h: 22,
+          accent: "#d4a82a",
+          purpose: "gather",
+          type: "commons",
+          objects: [
+            { id: "p1", kind: "plant", x: 18, y: 5 },
+            { id: "d1", kind: "desk", x: 20, y: 9 },
+            { id: "w1", kind: "whiteboard", x: 22, y: 3 },
+          ],
+        },
+      ],
+    };
+    const parsed = parseLayout(legacy);
+    const commons = parsed.rooms.find((r) => r.key === "commons");
+    // Legacy objects survive with no footprint keys added.
+    expect(commons?.objects).toEqual([
+      { id: "p1", kind: "plant", x: 18, y: 5 },
+      { id: "d1", kind: "desk", x: 20, y: 9 },
+      { id: "w1", kind: "whiteboard", x: 22, y: 3 },
+    ]);
+    // The four hubs are still restored alongside the legacy commons.
+    for (const key of CORE_ROOM_KEYS) {
+      expect(parsed.rooms.some((r) => r.key === key)).toBe(true);
+    }
+  });
 });

@@ -528,7 +528,6 @@ export function OfficeShell({
           rooms: roomsRef.current,
           walls: wallsRef.current.walls,
           doorways: wallsRef.current.doorways,
-          desks: desksRef.current,
           participants,
           localId: userId,
           time: now,

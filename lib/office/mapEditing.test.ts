@@ -1,4 +1,9 @@
-import { OFFICE_COLS, OFFICE_ROWS, type OfficeRoom } from "./layout";
+import {
+  OFFICE_COLS,
+  OFFICE_ROWS,
+  type OfficeObjectKind,
+  type OfficeRoom,
+} from "./layout";
 import {
   MIN_ROOM_SIZE,
   OBJECT_CATALOG,
@@ -28,21 +33,53 @@ function room(over: Partial<OfficeRoom> = {}): OfficeRoom {
 }
 
 describe("mapEditing", () => {
-  it("exposes a full catalog and room-type set", () => {
-    expect(OBJECT_CATALOG.map((o) => o.kind)).toEqual([
+  it("exposes a catalog covering every object kind, with footprints", () => {
+    const ALL_KINDS: OfficeObjectKind[] = [
       "desk",
       "plant",
       "whiteboard",
       "couch",
       "table",
       "screen",
-    ]);
+      "chair",
+      "monitor",
+      "plant_lg",
+      "armchair",
+      "coffee_table",
+      "meeting_table",
+      "tv",
+      "bookshelf",
+      "rug",
+      "rug_round",
+      "reception_desk",
+      "cafe_counter",
+      "coffee_machine",
+      "water_cooler",
+      "wall_art",
+      "window",
+      "divider",
+      "pod",
+      "lamp",
+      "server_rack",
+    ];
+    const catalogKinds = OBJECT_CATALOG.map((o) => o.kind);
+    // Every kind is present, exactly once.
+    expect([...catalogKinds].sort()).toEqual([...ALL_KINDS].sort());
+    expect(new Set(catalogKinds).size).toBe(catalogKinds.length);
     for (const o of OBJECT_CATALOG) {
       expect(o.label).toBeTruthy();
       expect(o.emoji).toBeTruthy();
+      expect(o.w).toBeGreaterThan(0);
+      expect(o.h).toBeGreaterThan(0);
     }
-    expect(ROOM_TYPES.map((t) => t.type)).toContain("hub");
-    expect(ROOM_TYPES).toHaveLength(6);
+  });
+
+  it("exposes the full room-type set including the premium zones", () => {
+    const types = ROOM_TYPES.map((t) => t.type);
+    for (const t of ["hub", "commons", "reception", "lounge", "cafe", "pod"] as const) {
+      expect(types).toContain(t);
+    }
+    expect(new Set(types).size).toBe(types.length);
   });
 
   it("hitTestRoom returns the topmost containing room", () => {

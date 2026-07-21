@@ -8,7 +8,6 @@ import {
   OFFICE_WIDTH,
   OFFICE_HEIGHT,
   PROXIMITY_RADIUS,
-  type AgentDesk,
   type OfficeRoom,
 } from "@/lib/office/layout";
 import {
@@ -17,18 +16,10 @@ import {
   type Participant,
 } from "@/lib/office/presence";
 import { roomTheme, type Wall, type Doorway } from "@/lib/office/walls";
+import { furnishRoom } from "@/lib/office/furnish";
 import type { Facing } from "@/lib/office/avatarConfig";
 import { drawAvatar } from "./vectorAvatar";
-
-/** Emoji glyphs for MapMaker furniture kinds. */
-const OBJECT_GLYPH: Record<string, string> = {
-  desk: "🖥",
-  plant: "🪴",
-  whiteboard: "📋",
-  couch: "🛋",
-  table: "🍽",
-  screen: "📺",
-};
+import { drawProp } from "./officeProps";
 
 export interface OfficeTheme {
   surface0: string;
@@ -48,7 +39,6 @@ export interface DrawState {
   /** Wall segments + doorways for the active layout (from buildWalls). */
   walls: Wall[];
   doorways: Doorway[];
-  desks: AgentDesk[];
   participants: Participant[];
   localId: string;
   /** ms timestamp for idle animation. */
@@ -146,11 +136,24 @@ function roundRect(
 }
 
 export function drawOffice(state: DrawState): void {
-  const { ctx, theme, rooms, walls, doorways, desks, participants, localId, time } =
-    state;
+  const { ctx, theme, rooms, walls, doorways, participants, localId, time } = state;
 
   // Floor
   ctx.fillStyle = theme.surface0;
+  ctx.fillRect(0, 0, OFFICE_WIDTH, OFFICE_HEIGHT);
+
+  // Soft global floor sheen from the top — gives the whole floor some depth.
+  const sheen = ctx.createRadialGradient(
+    OFFICE_WIDTH * 0.5,
+    OFFICE_HEIGHT * 0.05,
+    0,
+    OFFICE_WIDTH * 0.5,
+    OFFICE_HEIGHT * 0.05,
+    OFFICE_HEIGHT * 1.05,
+  );
+  sheen.addColorStop(0, "rgba(255,255,255,0.05)");
+  sheen.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = sheen;
   ctx.fillRect(0, 0, OFFICE_WIDTH, OFFICE_HEIGHT);
 
   // Tile grid
@@ -221,13 +224,24 @@ export function drawOffice(state: DrawState): void {
     }
   }
 
-  // Desks
-  for (const desk of desks) {
-    const x = desk.x * TILE;
-    const y = desk.y * TILE;
-    ctx.fillStyle = hexA(desk.room.accent, 0.22);
-    roundRect(ctx, x - TILE * 0.6, y - TILE * 0.28, TILE * 1.2, TILE * 0.56, 4);
-    ctx.fill();
+  // Ambient lighting — a warm accent glow pooled in each room for depth.
+  for (const room of rooms) {
+    const rx = room.x * TILE;
+    const ry = room.y * TILE;
+    const rw = room.w * TILE;
+    const rh = room.h * TILE;
+    const cx = rx + rw / 2;
+    const cy = ry + rh * 0.42;
+    const rad = Math.max(rw, rh) * 0.75;
+    const glow = ctx.createRadialGradient(cx, cy, rad * 0.08, cx, cy, rad);
+    glow.addColorStop(0, hexA(room.accent, 0.06));
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.save();
+    roundRect(ctx, rx, ry, rw, rh, 10);
+    ctx.clip();
+    ctx.fillStyle = glow;
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.restore();
   }
 
   // Doorway thresholds (drawn under the walls so the mat sits in the gap).
@@ -251,14 +265,24 @@ export function drawOffice(state: DrawState): void {
     ctx.strokeRect(wx + 0.5, wy + 0.5, ww, wh);
   }
 
-  // Furniture / objects placed via the MapMaker.
+  // Furniture — premium 3D-shaded props. Custom layouts that carry their own
+  // objects use them; anything unfurnished falls back to the room template so
+  // the office is never bare.
   for (const room of rooms) {
-    if (!room.objects) continue;
-    for (const obj of room.objects) {
-      ctx.font = "16px ui-sans-serif, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(OBJECT_GLYPH[obj.kind] ?? "▪", obj.x * TILE, obj.y * TILE);
+    const objects =
+      room.objects && room.objects.length ? room.objects : furnishRoom(room);
+    for (const obj of objects) {
+      drawProp(ctx, {
+        kind: obj.kind,
+        x: obj.x,
+        y: obj.y,
+        tile: TILE,
+        w: obj.w,
+        h: obj.h,
+        rot: obj.rot,
+        accent: room.accent,
+        timeMs: time,
+      });
     }
   }
 

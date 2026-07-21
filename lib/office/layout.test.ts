@@ -19,20 +19,54 @@ describe("office layout", () => {
     }
   });
 
-  it("has a room for each hub plus the commons", () => {
+  it("has a room for each hub plus the premium zones", () => {
     const keys = ROOMS.map((r) => r.key).sort();
-    expect(keys).toEqual(["build", "commons", "execute", "run", "source"]);
+    expect(keys).toEqual([
+      "build",
+      "cafe",
+      "commons",
+      "execute",
+      "lounge",
+      "pod-1",
+      "pod-2",
+      "reception",
+      "run",
+      "source",
+    ]);
   });
 
-  it("spawns humans inside the commons", () => {
+  it("keeps each hub large enough to seat its agents", () => {
+    for (const key of ["build", "source", "run", "execute"]) {
+      const room = ROOMS.find((r) => r.key === key)!;
+      expect(room.w).toBeGreaterThanOrEqual(10);
+      expect(room.h).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it("does not overlap any two rooms", () => {
+    for (let i = 0; i < ROOMS.length; i++) {
+      for (let j = i + 1; j < ROOMS.length; j++) {
+        const a = ROOMS[i];
+        const b = ROOMS[j];
+        const disjoint =
+          a.x + a.w <= b.x ||
+          b.x + b.w <= a.x ||
+          a.y + a.h <= b.y ||
+          b.y + b.h <= a.y;
+        expect(disjoint).toBe(true);
+      }
+    }
+  });
+
+  it("spawns humans inside the reception lobby", () => {
     const room = roomAt(SPAWN.x, SPAWN.y);
-    expect(room?.key).toBe("commons");
+    expect(room?.key).toBe("reception");
   });
 
   it("roomAt returns null in the corridor between rooms", () => {
-    // The one-tile gap between the left rooms (end at x=14) and the commons
-    // (starts at x=15) is a corridor.
-    expect(roomAt(14.5, 6)).toBeNull();
+    // The two-tile vertical corridor (x 15..17) between the left hubs and the
+    // central spine is open floor.
+    expect(roomAt(16, 6)).toBeNull();
   });
 
   it("clampToBounds pins points to the floor", () => {
