@@ -116,17 +116,20 @@ export const EYE_COLORS: string[] = [
   "#6b7280",
 ];
 
+// Institutional, tailored palette — muted, low-saturation business tones so the
+// floor reads like a fund's office, not a startup. Order is stable (the
+// deterministic fallback and the customizer swatch row pick by index):
+// charcoal, navy, slate, graphite, camel, ivory, forest, burgundy, brass.
 export const OUTFIT_COLORS: string[] = [
-  "#4f46e5",
-  "#0ea5e9",
-  "#14b8a6",
-  "#f97316",
-  "#84cc16",
-  "#e11d48",
-  "#a855f7",
-  "#eab308",
-  "#1f2937",
-  "#e2e8f0",
+  "#2f3541", // charcoal
+  "#26314b", // navy
+  "#4a5568", // slate
+  "#383d45", // graphite
+  "#b08d57", // camel
+  "#e8e2d4", // ivory
+  "#31473b", // forest
+  "#6b2c39", // burgundy
+  "#9a7d3f", // brass
 ];
 
 export const DEFAULT_AVATAR: AvatarConfig = {
@@ -135,7 +138,7 @@ export const DEFAULT_AVATAR: AvatarConfig = {
   hairColor: HAIR_COLORS[1],
   eyes: EYE_COLORS[0],
   outfit: "blazer",
-  outfitColor: OUTFIT_COLORS[0],
+  outfitColor: OUTFIT_COLORS[0], // charcoal blazer
   facialHair: "none",
   accessory: "none",
   build: "regular",

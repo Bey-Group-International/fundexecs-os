@@ -162,7 +162,9 @@ function buildGradients(
   const w = BUILD_W[cfg.build];
 
   // Skin: a soft radial highlight from the upper-left of the head falling to a
-  // shaded lower-right — the core of the semi-3D read on the face.
+  // shaded lower-right — the core of the semi-3D read on the face. A warm
+  // mid-stop fakes subsurface scattering so the tone reads like lit flesh rather
+  // than flat plastic.
   const skin = ctx.createRadialGradient(
     -A.headRx * 0.5 * H,
     -(A.headCy + A.headRy * 0.35) * H,
@@ -171,9 +173,10 @@ function buildGradients(
     -A.headCy * H,
     A.headRy * 1.5 * H,
   );
-  skin.addColorStop(0, lighten(cfg.skin, 0.26));
-  skin.addColorStop(0.55, cfg.skin);
-  skin.addColorStop(1, darken(cfg.skin, 0.16));
+  skin.addColorStop(0, lighten(cfg.skin, 0.3));
+  skin.addColorStop(0.42, lighten(cfg.skin, 0.06));
+  skin.addColorStop(0.72, mix(cfg.skin, [214, 150, 120], 0.14)); // subsurface warmth
+  skin.addColorStop(1, darken(cfg.skin, 0.2));
 
   // Hair: a top-down sheen — bright crown, base body, darker underside.
   const hair = ctx.createLinearGradient(
@@ -182,20 +185,23 @@ function buildGradients(
     A.headRx * 0.4 * H,
     -A.chinY * H,
   );
-  hair.addColorStop(0, lighten(cfg.hairColor, 0.3));
-  hair.addColorStop(0.4, cfg.hairColor);
-  hair.addColorStop(1, darken(cfg.hairColor, 0.22));
+  hair.addColorStop(0, lighten(cfg.hairColor, 0.34));
+  hair.addColorStop(0.32, lighten(cfg.hairColor, 0.1));
+  hair.addColorStop(0.62, cfg.hairColor);
+  hair.addColorStop(1, darken(cfg.hairColor, 0.26));
 
-  // Outfit: a diagonal light-to-shadow across the torso.
+  // Outfit: a diagonal light-to-shadow across the torso, with a soft central
+  // body tone so tailored cloth reads with a gentle sheen and turned edges.
   const outfit = ctx.createLinearGradient(
     -A.shoulderHalf * w * H,
     -A.shoulderY * H,
     A.waistHalf * w * H,
     -A.hipY * H,
   );
-  outfit.addColorStop(0, lighten(cfg.outfitColor, 0.16));
-  outfit.addColorStop(0.5, cfg.outfitColor);
-  outfit.addColorStop(1, darken(cfg.outfitColor, 0.2));
+  outfit.addColorStop(0, lighten(cfg.outfitColor, 0.2));
+  outfit.addColorStop(0.34, lighten(cfg.outfitColor, 0.05));
+  outfit.addColorStop(0.62, cfg.outfitColor);
+  outfit.addColorStop(1, darken(cfg.outfitColor, 0.24));
 
   return { skin, hair, outfit };
 }
@@ -269,7 +275,9 @@ function traceTorso(
   ctx.closePath();
 }
 
-const OUTLINE = "rgba(17, 22, 34, 0.5)";
+// A crisp but soft ink outline — deep enough to read as a clean edge, low enough
+// in alpha to stay painterly rather than cartoonish.
+const OUTLINE = "rgba(14, 18, 30, 0.58)";
 
 // ---------------------------------------------------------------------------
 // Pose — everything the animation clock produces, resolved once per call.
@@ -638,6 +646,23 @@ function drawFront(
   ctx.lineWidth = 0.05 * H;
   ctx.strokeStyle = "rgba(0,0,0,0.16)";
   ctx.stroke();
+  // Soft tailoring folds — a shaded drape sweeping from each armhole toward the
+  // waist and a faint highlighted fold catching the light, so the cloth reads
+  // as fabric with give rather than a flat panel.
+  const midY = (shoulderY + hipY) / 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(shoulderHalf * 0.72, shoulderY + 0.03 * H);
+  ctx.quadraticCurveTo(hipHalf * 0.7, midY, hipHalf * 0.5, hipY - 0.02 * H);
+  ctx.lineWidth = 0.02 * H;
+  ctx.strokeStyle = "rgba(0,0,0,0.1)";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-shoulderHalf * 0.5, shoulderY + 0.05 * H);
+  ctx.quadraticCurveTo(-hipHalf * 0.3, midY + 0.02 * H, -hipHalf * 0.2, hipY - 0.02 * H);
+  ctx.lineWidth = 0.014 * H;
+  ctx.strokeStyle = rgba("#ffffff", 0.08);
+  ctx.stroke();
   ctx.restore();
 
   drawOutfitDetail(ctx, cfg, H, w, shoulderY, hipY, shoulderHalf);
@@ -818,6 +843,14 @@ function drawHead(
   ctx.beginPath();
   ctx.ellipse(A.headRx * 0.7 * H, cy, A.headRx * 0.4 * H, A.headRy * 0.8 * H, 0, 0, Math.PI * 2);
   ctx.fillStyle = rgba("#ffffff", 0.1);
+  ctx.fill();
+  // Soft forehead/upper-cheek highlight from the key light for a rounded brow.
+  ellipse(ctx, -A.headRx * 0.28 * H, -(A.headCy + A.headRy * 0.4) * H, A.headRx * 0.55 * H, A.headRy * 0.34 * H);
+  ctx.fillStyle = rgba("#ffffff", 0.08);
+  ctx.fill();
+  // Gentle temple shadow on the shaded side to turn the form.
+  ellipse(ctx, A.headRx * 0.78 * H, -(A.headCy + A.headRy * 0.1) * H, A.headRx * 0.3 * H, A.headRy * 0.5 * H);
+  ctx.fillStyle = rgba(darken(cfg.skin, 0.5), 0.1);
   ctx.fill();
   // Soft jaw/chin ambient occlusion — grounds the lower face and reads as a
   // gentle jawline rather than a flat oval.
@@ -1167,14 +1200,35 @@ function drawHairFront(
     }
   }
 
-  // Hair sheen streak.
+  // Layered strands + sheen — a few flowing strokes give the hair internal
+  // structure and a glossy top-light instead of a single solid blob. Skipped for
+  // the shaved styles where a strand read would look wrong.
   ctx.save();
+  ctx.lineCap = "round";
+  if (cfg.hair !== "buzz" && cfg.hair !== "mohawk") {
+    // Darker parting strands for depth.
+    ctx.strokeStyle = rgba(darken(cfg.hairColor, 0.22), 0.4);
+    ctx.lineWidth = Math.max(1, 0.006 * H);
+    for (const sx of [-0.62, -0.24, 0.16, 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(rx * sx, cy - ry * 0.72);
+      ctx.quadraticCurveTo(rx * (sx + 0.12), cy - ry * 0.2, rx * (sx + 0.18), cy + ry * 0.1);
+      ctx.stroke();
+    }
+  }
+  // Primary sheen streak.
   ctx.beginPath();
   ctx.moveTo(-rx * 0.5, cy - ry * 0.6);
   ctx.quadraticCurveTo(0, cy - ry * 0.85, rx * 0.2, cy - ry * 0.55);
   ctx.lineWidth = Math.max(1, 0.01 * H);
-  ctx.strokeStyle = rgba("#ffffff", 0.18);
-  ctx.lineCap = "round";
+  ctx.strokeStyle = rgba("#ffffff", 0.2);
+  ctx.stroke();
+  // Finer secondary sheen just below it.
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.32, cy - ry * 0.45);
+  ctx.quadraticCurveTo(rx * 0.05, cy - ry * 0.62, rx * 0.34, cy - ry * 0.4);
+  ctx.lineWidth = Math.max(1, 0.004 * H);
+  ctx.strokeStyle = rgba("#ffffff", 0.12);
   ctx.stroke();
   ctx.restore();
 }
@@ -1211,32 +1265,104 @@ function drawOutfitDetail(
     ctx.stroke();
   } else if (meta.neck === "collar") {
     if (cfg.outfit === "blazer") {
-      // Shirt triangle + lapels.
+      // A tailored suit jacket over a dress shirt: shirt V, a knotted tie,
+      // peaked lapels with a lit top plane, jacket buttons and a breast-pocket
+      // square. All coordinates sit in the torso's feet-origin frame.
+      const shirt = "#eef1f6";
+      const collarY = shoulderY + 0.008 * H;
+      const vDepth = shoulderY + 0.12 * H;
+      const tieBottom = shoulderY * 0.32 + hipY * 0.68;
+
+      // Shirt triangle behind everything.
       ctx.beginPath();
-      ctx.moveTo(-neckHalf * 1.1, shoulderY + 0.005 * H);
-      ctx.lineTo(0, shoulderY + 0.11 * H);
-      ctx.lineTo(neckHalf * 1.1, shoulderY + 0.005 * H);
+      ctx.moveTo(-neckHalf * 1.15, collarY);
+      ctx.lineTo(0, vDepth);
+      ctx.lineTo(neckHalf * 1.15, collarY);
       ctx.closePath();
-      ctx.fillStyle = "#e9edf3";
+      ctx.fillStyle = shirt;
       ctx.fill();
-      // Tie hint.
+      // Shirt-collar band shading at the throat.
       ctx.beginPath();
-      ctx.moveTo(-0.012 * H, shoulderY + 0.02 * H);
-      ctx.lineTo(0.012 * H, shoulderY + 0.02 * H);
-      ctx.lineTo(0.02 * H, hipY * 0.7 + shoulderY * 0.3);
-      ctx.lineTo(-0.02 * H, hipY * 0.7 + shoulderY * 0.3);
+      ctx.moveTo(-neckHalf * 1.15, collarY);
+      ctx.lineTo(0, collarY + 0.03 * H);
+      ctx.lineTo(neckHalf * 1.15, collarY);
+      ctx.lineWidth = Math.max(1, 0.006 * H);
+      ctx.strokeStyle = darken(shirt, 0.14);
+      ctx.stroke();
+
+      // Tie — a knot then a tapering blade to mid-torso.
+      const tieColor = darken(cfg.outfitColor, 0.36);
+      ctx.beginPath();
+      ctx.moveTo(-0.014 * H, collarY + 0.016 * H);
+      ctx.lineTo(0.014 * H, collarY + 0.016 * H);
+      ctx.lineTo(0.01 * H, collarY + 0.04 * H);
+      ctx.lineTo(-0.01 * H, collarY + 0.04 * H);
       ctx.closePath();
-      ctx.fillStyle = darken(cfg.outfitColor, 0.35);
+      ctx.fillStyle = lighten(tieColor, 0.08);
       ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-0.01 * H, collarY + 0.04 * H);
+      ctx.lineTo(0.01 * H, collarY + 0.04 * H);
+      ctx.lineTo(0.022 * H, tieBottom);
+      ctx.lineTo(0, tieBottom + 0.02 * H);
+      ctx.lineTo(-0.022 * H, tieBottom);
+      ctx.closePath();
+      ctx.fillStyle = tieColor;
+      ctx.fill();
+      // Tie sheen.
+      ctx.beginPath();
+      ctx.moveTo(-0.004 * H, collarY + 0.05 * H);
+      ctx.lineTo(-0.006 * H, tieBottom - 0.01 * H);
+      ctx.lineWidth = Math.max(1, 0.004 * H);
+      ctx.strokeStyle = rgba("#ffffff", 0.12);
+      ctx.stroke();
+
+      // Peaked lapels — a filled panel each side with a lit outer edge.
       for (const s of [-1, 1] as const) {
         ctx.beginPath();
-        ctx.moveTo(s * neckHalf * 1.1, shoulderY + 0.005 * H);
-        ctx.lineTo(s * shoulderHalf * 0.8, shoulderY + 0.02 * H);
-        ctx.lineTo(s * 0.02 * H, shoulderY + 0.13 * H);
+        ctx.moveTo(s * neckHalf * 1.15, collarY);
+        ctx.lineTo(s * shoulderHalf * 0.82, collarY + 0.016 * H);
+        ctx.lineTo(s * shoulderHalf * 0.5, shoulderY + 0.075 * H);
+        ctx.lineTo(s * 0.022 * H, vDepth + 0.008 * H);
         ctx.closePath();
-        ctx.fillStyle = darken(cfg.outfitColor, 0.12);
+        ctx.fillStyle = darken(cfg.outfitColor, 0.14);
+        ctx.fill();
+        // Lit lapel roll.
+        ctx.beginPath();
+        ctx.moveTo(s * neckHalf * 1.1, collarY + 0.004 * H);
+        ctx.lineTo(s * 0.02 * H, vDepth);
+        ctx.lineWidth = Math.max(1, 0.005 * H);
+        ctx.strokeStyle = rgba("#ffffff", 0.12);
+        ctx.stroke();
+        // Lapel notch nick.
+        ctx.beginPath();
+        ctx.moveTo(s * shoulderHalf * 0.82, collarY + 0.016 * H);
+        ctx.lineTo(s * shoulderHalf * 0.6, shoulderY + 0.05 * H);
+        ctx.lineWidth = Math.max(1, 0.004 * H);
+        ctx.strokeStyle = darken(cfg.outfitColor, 0.3);
+        ctx.stroke();
+      }
+
+      // Jacket front seam + two buttons below the tie knot.
+      ctx.beginPath();
+      ctx.moveTo(0, vDepth + 0.01 * H);
+      ctx.lineTo(0, hipY - 0.01 * H);
+      ctx.lineWidth = Math.max(1, 0.005 * H);
+      ctx.strokeStyle = darken(cfg.outfitColor, 0.26);
+      ctx.stroke();
+      for (const by of [0.55, 0.78]) {
+        ellipse(ctx, 0.004 * H, shoulderY + (hipY - shoulderY) * by, 0.007 * H, 0.007 * H);
+        ctx.fillStyle = darken(cfg.outfitColor, 0.4);
         ctx.fill();
       }
+      // Breast-pocket square — a small folded accent on the wearer's left chest.
+      ctx.beginPath();
+      ctx.moveTo(-shoulderHalf * 0.62, shoulderY + 0.06 * H);
+      ctx.lineTo(-shoulderHalf * 0.38, shoulderY + 0.06 * H);
+      ctx.lineTo(-shoulderHalf * 0.5, shoulderY + 0.045 * H);
+      ctx.closePath();
+      ctx.fillStyle = lighten(cfg.outfitColor, 0.42);
+      ctx.fill();
     } else {
       // Dress shirt: collar wings + button placket.
       for (const s of [-1, 1] as const) {
@@ -1257,6 +1383,18 @@ function drawOutfitDetail(
       ctx.strokeStyle = darken(cfg.outfitColor, 0.22);
       ctx.lineWidth = Math.max(1, 0.006 * H);
       ctx.stroke();
+      // Placket buttons down the front for a crisp, pressed read.
+      for (const by of [0.12, 0.34, 0.56, 0.78]) {
+        ellipse(
+          ctx,
+          0,
+          shoulderY + 0.05 * H + (hipY - (shoulderY + 0.05 * H)) * by,
+          0.006 * H,
+          0.006 * H,
+        );
+        ctx.fillStyle = darken(cfg.outfitColor, 0.28);
+        ctx.fill();
+      }
     }
   } else if (meta.neck === "hood") {
     // Hood behind the neck + kangaroo pocket + drawstrings.

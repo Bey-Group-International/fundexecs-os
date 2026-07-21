@@ -62,16 +62,15 @@ const EYE_LABELS = zip(EYE_COLORS, [
 ]);
 
 const OUTFIT_COLOR_LABELS = zip(OUTFIT_COLORS, [
-  "indigo",
-  "sky blue",
-  "teal",
-  "orange",
-  "lime green",
-  "rose",
-  "purple",
-  "gold",
   "charcoal",
-  "light grey",
+  "navy",
+  "slate",
+  "graphite",
+  "camel",
+  "ivory",
+  "forest green",
+  "burgundy",
+  "brass",
 ]);
 
 const HAIR_STYLE_LABELS: Record<AvatarConfig["hair"], string> = {

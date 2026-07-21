@@ -1,12 +1,14 @@
 // Bespoke, deterministic looks for the fifteen native agents, expressed as the
 // expanded AvatarConfig the smooth-vector renderer reads.
 //
-// Each agent keeps its brand `color` as its outfit (so it stays recognizable
-// next to its badges elsewhere), snapping to the nearest OUTFIT_COLORS swatch
-// when the brand hue isn't an exact catalog entry. Senior/advisory roles wear
-// blazers or turtlenecks; comms roles (IR, Analyst, Lead Gen) wear headsets;
-// Diligence wears glasses; the rest get a role-fitting hairstyle, facial hair,
-// accessory, and build so the fifteen read as distinct people on the floor.
+// Each agent keeps a muted nod to its brand `color` as its outfit (so it stays
+// recognizable next to its badges elsewhere), snapping to the nearest
+// institutional OUTFIT_COLORS swatch. Everyone is in tailored business attire:
+// senior/advisory roles wear turtlenecks, client-facing roles wear blazers, and
+// the analytical desk wears crisp dress shirts. Comms roles (IR, Lead Gen) keep
+// a headset; diligence/analytical roles wear glasses; the rest get a
+// role-fitting hairstyle, facial hair, accessory, and build so the fifteen read
+// as distinct people on the floor.
 // Skin, hair color and eyes come from the deterministic catalog fallback, so
 // every result is a fully valid config. Anything unmapped falls back to
 // `avatarForId`.
@@ -30,31 +32,37 @@ interface Look {
   build: Build;
 }
 
+// Every agent is dressed in tailored, institutional attire fitting their role
+// and seniority — blazers/suits for client-facing and advisory roles,
+// turtlenecks for senior strategists, crisp dress shirts for the analytical
+// desk. Casual pieces (tees, hoodies, caps, beanies) are retired so the floor
+// reads like a fund. Outfit COLOR still nods to each agent's brand hue, snapped
+// to the muted institutional catalog in `agentAvatar`.
 const LOOKS: Record<string, Look> = {
-  // Run — heads-down analytical desk.
+  // Run — the heads-down analytical desk (sharp, buttoned-up).
   analyst: {
     hair: "short",
     outfit: "dress_shirt",
     facialHair: "stubble",
-    accessory: "headset",
+    accessory: "glasses",
     build: "regular",
   },
   diligence: {
     hair: "short",
-    outfit: "vneck",
+    outfit: "blazer",
     facialHair: "beard",
     accessory: "glasses",
     build: "regular",
   },
-  // Earn — the cross-hub coordinator; deliberately its own look.
+  // Earn — the cross-hub coordinator; a tailored blazer, own look.
   associate: {
     hair: "bun",
-    outfit: "hoodie",
+    outfit: "blazer",
     facialHair: "none",
-    accessory: "beanie",
+    accessory: "none",
     build: "slim",
   },
-  // Execute — comms & books.
+  // Execute — comms & books (polished, presentable).
   investor_relations: {
     hair: "long",
     outfit: "blazer",
@@ -64,9 +72,9 @@ const LOOKS: Record<string, Look> = {
   },
   portfolio_ops: {
     hair: "buzz",
-    outfit: "tee",
+    outfit: "dress_shirt",
     facialHair: "stubble",
-    accessory: "cap",
+    accessory: "none",
     build: "broad",
   },
   fund_admin: {
@@ -96,13 +104,13 @@ const LOOKS: Record<string, Look> = {
     outfit: "blazer",
     facialHair: "beard",
     accessory: "glasses",
-    build: "regular",
+    build: "broad",
   },
   deal_sourcer: {
     hair: "buzz",
     outfit: "turtleneck",
     facialHair: "stubble",
-    accessory: "cap",
+    accessory: "none",
     build: "broad",
   },
   rainmaker: {
@@ -112,10 +120,10 @@ const LOOKS: Record<string, Look> = {
     accessory: "sunglasses",
     build: "regular",
   },
-  // Build — the studio.
+  // Build — the studio (creative, but still tailored on the floor).
   lead_generator: {
     hair: "ponytail",
-    outfit: "tee",
+    outfit: "dress_shirt",
     facialHair: "none",
     accessory: "headset",
     build: "slim",
@@ -129,14 +137,14 @@ const LOOKS: Record<string, Look> = {
   },
   seo_disruptor: {
     hair: "mohawk",
-    outfit: "hoodie",
+    outfit: "blazer",
     facialHair: "stubble",
-    accessory: "beanie",
+    accessory: "none",
     build: "slim",
   },
   curator: {
     hair: "bun",
-    outfit: "vneck",
+    outfit: "turtleneck",
     facialHair: "none",
     accessory: "earrings",
     build: "regular",

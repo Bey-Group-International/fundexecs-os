@@ -15,7 +15,7 @@ describe("portraitPrompt", () => {
       hairColor: "#caa14a", // "blonde"
       eyes: "#2f5da8", // "blue"
       outfit: "blazer",
-      outfitColor: "#4f46e5", // "indigo"
+      outfitColor: "#26314b", // "navy"
       facialHair: "beard",
       accessory: "glasses",
       build: "broad",
@@ -24,7 +24,7 @@ describe("portraitPrompt", () => {
     expect(prompt).toContain("brown skin");
     expect(prompt).toContain("blonde curly hair");
     expect(prompt).toContain("blue eyes");
-    expect(prompt).toContain("indigo a tailored blazer");
+    expect(prompt).toContain("navy a tailored blazer");
     expect(prompt).toContain("full beard");
     expect(prompt).toContain("glasses");
     expect(prompt).toContain("broad build");
