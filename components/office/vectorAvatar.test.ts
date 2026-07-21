@@ -34,6 +34,19 @@ function mockCtx(): CanvasRenderingContext2D {
 }
 
 const FACINGS: Facing[] = ["down", "up", "left", "right"];
+const POSES: ("stand" | "sit")[] = ["stand", "sit"];
+const STATUSES: (PresenceStatus | undefined)[] = [
+  undefined,
+  "available",
+  "focusing",
+  "away",
+  "in_meeting",
+];
+
+// A stand-in for a playing <video>: has width/height but is not a real element.
+// The drawImage guard in drawVideoBubble must tolerate it (and the mock ctx's
+// no-op drawImage never throws).
+const MOCK_VIDEO = { width: 100, height: 100 } as unknown as CanvasImageSource;
 
 describe("drawAvatar", () => {
   it("runs for every facing, moving and idle, without throwing", () => {
@@ -52,6 +65,68 @@ describe("drawAvatar", () => {
               moving,
             }),
           ).not.toThrow();
+        }
+      }
+    }
+  });
+
+  it("runs for both poses across every facing, moving/idle, agent + human", () => {
+    const ctx = mockCtx();
+    for (const pose of POSES) {
+      for (const facing of FACINGS) {
+        for (const moving of [false, true]) {
+          // Human config.
+          expect(() =>
+            drawAvatar(ctx, {
+              config: DEFAULT_AVATAR,
+              x: 100,
+              y: 200,
+              height: 120,
+              facing,
+              timeMs: 1000,
+              moving,
+              pose,
+            }),
+          ).not.toThrow();
+          // Agent by key.
+          expect(() =>
+            drawAvatar(ctx, {
+              agentKey: "analyst",
+              x: 100,
+              y: 200,
+              height: 120,
+              facing,
+              timeMs: 1000,
+              moving,
+              pose,
+            }),
+          ).not.toThrow();
+        }
+      }
+    }
+  });
+
+  it("runs with a null video and a mock video source, every pose/facing/status", () => {
+    const ctx = mockCtx();
+    for (const video of [null, MOCK_VIDEO]) {
+      for (const pose of POSES) {
+        for (const facing of FACINGS) {
+          for (const status of STATUSES) {
+            expect(() =>
+              drawAvatar(ctx, {
+                config: DEFAULT_AVATAR,
+                x: 80,
+                y: 160,
+                height: 110,
+                facing,
+                timeMs: 1500,
+                moving: false,
+                pose,
+                status,
+                video,
+              }),
+            ).not.toThrow();
+          }
         }
       }
     }

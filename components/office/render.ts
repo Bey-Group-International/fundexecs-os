@@ -17,9 +17,9 @@ import {
 } from "@/lib/office/presence";
 import { roomTheme, type Wall, type Doorway } from "@/lib/office/walls";
 import { furnishRoom } from "@/lib/office/furnish";
-import type { Facing } from "@/lib/office/avatarConfig";
 import { drawAvatar } from "./vectorAvatar";
-import { drawProp } from "./officeProps";
+import { drawProp, PROP_CATALOG } from "./officeProps";
+import { drawFloorMaterial, drawRaisedWall, applySceneLighting } from "./sceneEnv";
 
 export interface OfficeTheme {
   surface0: string;
@@ -43,70 +43,8 @@ export interface DrawState {
   localId: string;
   /** ms timestamp for idle animation. */
   time: number;
-}
-
-/** Per-room floor texture, drawn inside the room's clip region. */
-function drawFloorPattern(
-  ctx: CanvasRenderingContext2D,
-  floor: "grid" | "wood" | "carpet" | "tile" | "marble",
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  accent: string,
-): void {
-  ctx.save();
-  if (floor === "wood") {
-    ctx.strokeStyle = hexA(accent, 0.12);
-    ctx.lineWidth = 1;
-    for (let py = y + TILE * 0.7; py < y + h; py += TILE * 0.7) {
-      ctx.beginPath();
-      ctx.moveTo(x, py + 0.5);
-      ctx.lineTo(x + w, py + 0.5);
-      ctx.stroke();
-    }
-  } else if (floor === "tile") {
-    for (let iy = 0; iy * TILE < h; iy++) {
-      for (let ix = 0; ix * TILE < w; ix++) {
-        if ((ix + iy) % 2 === 0) continue;
-        ctx.fillStyle = hexA(accent, 0.06);
-        ctx.fillRect(x + ix * TILE, y + iy * TILE, TILE, TILE);
-      }
-    }
-  } else if (floor === "carpet") {
-    ctx.fillStyle = hexA(accent, 0.08);
-    for (let py = y + 4; py < y + h; py += 6) {
-      for (let px = x + 4; px < x + w; px += 6) {
-        ctx.fillRect(px, py, 1.5, 1.5);
-      }
-    }
-  } else if (floor === "marble") {
-    ctx.strokeStyle = hexA(accent, 0.1);
-    ctx.lineWidth = 1;
-    for (let d = -h; d < w; d += TILE * 1.6) {
-      ctx.beginPath();
-      ctx.moveTo(x + d, y);
-      ctx.lineTo(x + d + h, y + h);
-      ctx.stroke();
-    }
-  } else {
-    // grid
-    ctx.strokeStyle = hexA(accent, 0.1);
-    ctx.lineWidth = 1;
-    for (let gx = x + TILE; gx < x + w; gx += TILE) {
-      ctx.beginPath();
-      ctx.moveTo(gx + 0.5, y);
-      ctx.lineTo(gx + 0.5, y + h);
-      ctx.stroke();
-    }
-    for (let gy = y + TILE; gy < y + h; gy += TILE) {
-      ctx.beginPath();
-      ctx.moveTo(x, gy + 0.5);
-      ctx.lineTo(x + w, gy + 0.5);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
+  /** Optional live video source (webcam) per participant id, for head bubbles. */
+  videoFor?: (id: string) => CanvasImageSource | null;
 }
 
 function hexA(hex: string, alpha: number): string {
@@ -136,7 +74,8 @@ function roundRect(
 }
 
 export function drawOffice(state: DrawState): void {
-  const { ctx, theme, rooms, walls, doorways, participants, localId, time } = state;
+  const { ctx, theme, rooms, walls, doorways, participants, localId, time, videoFor } =
+    state;
 
   // Floor
   ctx.fillStyle = theme.surface0;
@@ -186,7 +125,15 @@ export function drawOffice(state: DrawState): void {
     ctx.clip();
     ctx.fillStyle = hexA(room.accent, 0.07);
     ctx.fillRect(x, y, w, h);
-    drawFloorPattern(ctx, rt.floor, x, y, w, h, room.accent);
+    drawFloorMaterial(ctx, {
+      floor: rt.floor,
+      x,
+      y,
+      w,
+      h,
+      accent: room.accent,
+      surface: theme.surface1,
+    });
     if (rt.rug) {
       ctx.fillStyle = hexA(room.accent, 0.12);
       roundRect(ctx, x + w * 0.28, y + h * 0.5, w * 0.44, h * 0.38, 10);
@@ -250,45 +197,9 @@ export function drawOffice(state: DrawState): void {
     ctx.fillRect(d.x * TILE, d.y * TILE, d.w * TILE, d.h * TILE);
   }
 
-  // Walls — thin stone segments with a soft top edge.
-  for (const wall of walls) {
-    const wx = wall.x * TILE;
-    const wy = wall.y * TILE;
-    const ww = wall.w * TILE;
-    const wh = wall.h * TILE;
-    ctx.fillStyle = theme.surface3;
-    ctx.fillRect(wx, wy, ww, wh);
-    ctx.fillStyle = hexA("#ffffff", 0.06);
-    ctx.fillRect(wx, wy, ww, Math.min(3, wh));
-    ctx.strokeStyle = hexA("#000000", 0.22);
-    ctx.lineWidth = 1;
-    ctx.strokeRect(wx + 0.5, wy + 0.5, ww, wh);
-  }
-
-  // Furniture — premium 3D-shaded props. Custom layouts that carry their own
-  // objects use them; anything unfurnished falls back to the room template so
-  // the office is never bare.
-  for (const room of rooms) {
-    const objects =
-      room.objects && room.objects.length ? room.objects : furnishRoom(room);
-    for (const obj of objects) {
-      drawProp(ctx, {
-        kind: obj.kind,
-        x: obj.x,
-        y: obj.y,
-        tile: TILE,
-        w: obj.w,
-        h: obj.h,
-        rot: obj.rot,
-        accent: room.accent,
-        timeMs: time,
-      });
-    }
-  }
-
   const local = participants.find((p) => p.id === localId);
 
-  // Proximity ring + spatial-conversation links for the local avatar
+  // Proximity ring + conversation links, painted on the floor beneath everyone.
   if (local) {
     const lx = local.x * TILE;
     const ly = local.y * TILE;
@@ -315,56 +226,63 @@ export function drawOffice(state: DrawState): void {
     }
   }
 
-  // Avatars (agents first so humans sit on top)
-  const ordered = [...participants].sort((a, b) => {
-    if (a.id === localId) return 1;
-    if (b.id === localId) return -1;
-    return a.kind === b.kind ? 0 : a.kind === "agent" ? -1 : 1;
-  });
+  // Character geometry. Standing anchors the feet; seated anchors the hip line
+  // (per drawAvatar), so the head/label offsets shift with the pose.
+  const charHeight = (p: Participant) => TILE * (p.kind === "agent" ? 1.5 : 1.7);
+  const anchorYOf = (p: Participant) =>
+    p.pose === "sit" ? p.y * TILE : p.y * TILE + TILE * 0.35;
 
-  for (const p of ordered) {
+  const drawCharacter = (p: Participant) => {
     const isAgent = p.kind === "agent";
+    const seated = p.pose === "sit";
     const cx = p.x * TILE;
-    // Feet sit slightly below the tile centre so the character "stands" on it.
-    const feetY = p.y * TILE + TILE * 0.35;
-    const height = TILE * (isAgent ? 1.5 : 1.7);
-    const headY = feetY - height;
-    const isLocal = p.id === localId;
-    const facing: Facing = p.facing ?? "down";
+    const height = charHeight(p);
+    const anchorY = anchorYOf(p);
+    const groundY = p.y * TILE + TILE * 0.42;
 
-    // Busy pulse — a soft ring for agents actively working.
     if (p.busy) {
       const pulse = (Math.sin(time / 500 + p.x) + 1) / 2;
       ctx.beginPath();
-      ctx.arc(cx, feetY - height * 0.4, 14 + pulse * 5, 0, Math.PI * 2);
+      ctx.arc(cx, anchorY - height * 0.35, 14 + pulse * 5, 0, Math.PI * 2);
       ctx.strokeStyle = hexA(p.color, 0.3 * (1 - pulse));
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-
-    // Local highlight ring on the floor (the sprite draws its own shadow).
-    if (isLocal) {
+    if (p.id === localId) {
       ctx.beginPath();
-      ctx.ellipse(cx, feetY, 11, 4.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, groundY, 11, 4.4, 0, 0, Math.PI * 2);
       ctx.strokeStyle = hexA("#ffffff", 0.7);
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
-    // Smooth-vector character (agents resolve by key; humans by their config).
+    const video =
+      videoFor && p.kind === "human" ? videoFor(p.id) ?? null : null;
     drawAvatar(ctx, {
       config: isAgent ? undefined : p.avatar,
       agentKey: p.agentKey,
       x: cx,
-      y: feetY,
+      y: anchorY,
       height,
-      facing,
+      facing: p.facing ?? "down",
       timeMs: time,
-      moving: !isAgent && !!p.moving,
+      moving: !isAgent && !!p.moving && !seated,
       status: p.status,
+      pose: seated ? "sit" : "stand",
+      video,
     });
+  };
 
-    // Status dot near the head
+  const drawLabel = (p: Participant) => {
+    const isAgent = p.kind === "agent";
+    const seated = p.pose === "sit";
+    const cx = p.x * TILE;
+    const height = charHeight(p);
+    const anchorY = anchorYOf(p);
+    const headY = anchorY - height * (seated ? 0.7 : 1);
+    const baseY = seated ? p.y * TILE + TILE * 0.55 : anchorY + 4;
+    const isLocal = p.id === localId;
+
     ctx.beginPath();
     ctx.arc(cx + 7, headY + 4, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = STATUS_COLORS[p.status];
@@ -373,26 +291,23 @@ export function drawOffice(state: DrawState): void {
     ctx.fill();
     ctx.stroke();
 
-    // Name tag below the feet
     const label = isAgent ? p.name : `${p.name}${isLocal ? " (you)" : ""}`;
     ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
     const tw = ctx.measureText(label).width + 10;
     ctx.fillStyle = hexA(theme.surface2, 0.92);
-    roundRect(ctx, cx - tw / 2, feetY + 4, tw, 15, 7);
+    roundRect(ctx, cx - tw / 2, baseY, tw, 15, 7);
     ctx.fill();
     ctx.fillStyle = theme.fg;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, cx, feetY + 12);
+    ctx.fillText(label, cx, baseY + 8);
 
-    // Live activity line for busy agents
     if (isAgent && p.busy && p.activityLabel) {
       ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
       ctx.fillStyle = theme.fgMuted;
-      ctx.fillText(p.activityLabel, cx, feetY + 25);
+      ctx.fillText(p.activityLabel, cx, baseY + 21);
     }
 
-    // Emote bubble above the head
     if (p.emote) {
       ctx.font = "16px ui-sans-serif, system-ui, sans-serif";
       ctx.fillStyle = hexA(theme.surface3, 0.95);
@@ -403,5 +318,64 @@ export function drawOffice(state: DrawState): void {
       ctx.textBaseline = "middle";
       ctx.fillText(p.emote, cx, headY - 5);
     }
+  };
+
+  // Depth-sorted scene — raised walls, furniture, and characters interleaved by
+  // their baseline (screen-space bottom) so nearer things occlude farther ones.
+  const scene: { baseY: number; draw: () => void }[] = [];
+
+  for (const wall of walls) {
+    scene.push({
+      baseY: wall.y + wall.h,
+      draw: () =>
+        drawRaisedWall(ctx, {
+          wall,
+          tile: TILE,
+          color: theme.surface3,
+          floorShadow: true,
+        }),
+    });
   }
+
+  for (const room of rooms) {
+    const objects =
+      room.objects && room.objects.length ? room.objects : furnishRoom(room);
+    for (const obj of objects) {
+      const fh = obj.h ?? PROP_CATALOG[obj.kind].h;
+      scene.push({
+        baseY: obj.y + fh,
+        draw: () =>
+          drawProp(ctx, {
+            kind: obj.kind,
+            x: obj.x,
+            y: obj.y,
+            tile: TILE,
+            w: obj.w,
+            h: obj.h,
+            rot: obj.rot,
+            accent: room.accent,
+            timeMs: time,
+          }),
+      });
+    }
+  }
+
+  for (const p of participants) {
+    scene.push({ baseY: p.y, draw: () => drawCharacter(p) });
+  }
+
+  scene.sort((a, b) => a.baseY - b.baseY);
+  for (const item of scene) item.draw();
+
+  // Global directional lighting + ambient occlusion overlay.
+  applySceneLighting(ctx, {
+    width: OFFICE_WIDTH,
+    height: OFFICE_HEIGHT,
+    rooms,
+    tile: TILE,
+  });
+
+  // Labels on top — always readable above the lit, depth-sorted scene.
+  for (const p of participants) drawLabel(p);
+
 }

@@ -42,6 +42,12 @@ import { demoParticipants } from "@/lib/office/demoParticipants";
 import { recordPresenceEvent } from "@/lib/office/analyticsServer";
 import { buildWalls, resolveMovement } from "@/lib/office/walls";
 import {
+  agentSeats,
+  seatsForRooms,
+  nearestFreeSeat,
+  seatKey,
+} from "@/lib/office/seating";
+import {
   type AvatarConfig,
   type Facing,
   avatarForId,
@@ -84,6 +90,7 @@ interface PresencePayload {
   facing: Facing;
   moving: boolean;
   portrait: string | null;
+  pose: "stand" | "sit";
 }
 
 const MOVE_KEYS: Record<string, [number, number]> = {
@@ -154,6 +161,32 @@ function VideoTile({ stream, label }: { stream: MediaStream; label: string }) {
   );
 }
 
+/** A hidden <video> that binds a MediaStream and registers itself so the canvas
+ * loop can sample it for proximity head-bubbles. */
+function StreamVideo({
+  id,
+  stream,
+  reg,
+}: {
+  id: string;
+  stream: MediaStream;
+  reg: { current: Map<string, HTMLVideoElement> };
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const map = reg.current;
+    if (el.srcObject !== stream) el.srcObject = stream;
+    void el.play?.().catch(() => {});
+    map.set(id, el);
+    return () => {
+      map.delete(id);
+    };
+  }, [id, stream, reg]);
+  return <video ref={ref} autoPlay playsInline muted className="h-px w-px" />;
+}
+
 export function OfficeShell({
   userId,
   displayName,
@@ -180,9 +213,14 @@ export function OfficeShell({
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
   const subscribedRef = useRef(false);
   const lastTrackRef = useRef(0);
-  // Facing + walking state for the pixel-sprite walk cycle.
+  // Facing + walking state for the walk cycle; pose + idle timer for auto-sit.
   const facingRef = useRef<Facing>("down");
   const movingRef = useRef(false);
+  const poseRef = useRef<"stand" | "sit">("stand");
+  const idleMsRef = useRef(0);
+  // Hidden <video> elements (local + peers) the canvas samples for head bubbles.
+  const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const voiceCamOnRef = useRef(false);
 
   // Editable layout + live agent activity, mirrored into refs for the loop.
   const [layoutState, setLayoutState] = useState<OfficeLayoutData>(layout);
@@ -198,6 +236,21 @@ export function OfficeShell({
   const walls = useMemo(() => buildWalls(layoutState.rooms), [layoutState.rooms]);
   const wallsRef = useRef(walls);
   wallsRef.current = walls;
+  // Seats for auto-sit, and each agent's seat (agents sit at their desks).
+  const seats = useMemo(() => seatsForRooms(layoutState.rooms), [layoutState.rooms]);
+  const seatsRef = useRef(seats);
+  seatsRef.current = seats;
+  const agentSeatMap = useMemo(
+    () => agentSeats(layoutState.rooms),
+    [layoutState.rooms],
+  );
+  const agentSeatMapRef = useRef(agentSeatMap);
+  agentSeatMapRef.current = agentSeatMap;
+  const occupiedSeatsRef = useRef<Set<string>>(new Set());
+  occupiedSeatsRef.current = useMemo(
+    () => new Set(Object.values(agentSeatMap).map(seatKey)),
+    [agentSeatMap],
+  );
   // The member's editable pixel-avatar; the loop reads it via the ref.
   const [avatar, setAvatar] = useState<AvatarConfig>(myAvatar);
   const avatarRef = useRef(avatar);
@@ -234,6 +287,7 @@ export function OfficeShell({
     getSelfPos: () => posRef.current,
     humans: remotes,
   });
+  voiceCamOnRef.current = voice.camOn;
 
   const buildPayload = useCallback(
     (): PresencePayload => ({
@@ -247,6 +301,7 @@ export function OfficeShell({
       facing: facingRef.current,
       moving: movingRef.current,
       portrait: portraitRef.current,
+      pose: poseRef.current,
     }),
     [displayName, myColor],
   );
@@ -285,6 +340,7 @@ export function OfficeShell({
           facing: meta.facing ?? "down",
           moving: meta.moving ?? false,
           portrait: meta.portrait ?? null,
+          pose: meta.pose ?? "stand",
         });
       }
       remotesRef.current = map;
@@ -469,6 +525,33 @@ export function OfficeShell({
         movingRef.current = false;
       }
 
+      // Auto-sit when idle near a free seat; stand the instant you move.
+      if (mvx !== 0 || mvy !== 0) {
+        idleMsRef.current = 0;
+        if (poseRef.current === "sit") {
+          poseRef.current = "stand";
+          track();
+        }
+      } else if (poseRef.current === "stand") {
+        idleMsRef.current += dt * 1000;
+        if (idleMsRef.current > 1500) {
+          const seat = nearestFreeSeat(
+            pos,
+            seatsRef.current,
+            occupiedSeatsRef.current,
+            1.4,
+          );
+          if (seat) {
+            pos.x = seat.x;
+            pos.y = seat.y;
+            facingRef.current = seat.facing;
+            poseRef.current = "sit";
+            movingRef.current = false;
+            track();
+          }
+        }
+      }
+
       // Throttled presence broadcast (~11/s)
       if (now - lastTrackRef.current > 90) {
         lastTrackRef.current = now;
@@ -478,12 +561,13 @@ export function OfficeShell({
       // Agents, seated at desks, reflecting their live activity.
       const agentParticipants: Participant[] = desksRef.current.map((desk) => {
         const act = activityRef.current[desk.agent.key];
+        const seat = agentSeatMapRef.current[desk.agent.key];
         return {
           id: `agent:${desk.agent.key}`,
           name: desk.agent.name,
           kind: "agent",
-          x: desk.x,
-          y: desk.y,
+          x: seat ? seat.x : desk.x,
+          y: seat ? seat.y : desk.y,
           color: desk.agent.color,
           status: act?.status ?? "available",
           agentKey: desk.agent.key,
@@ -491,6 +575,8 @@ export function OfficeShell({
           emote: null,
           activityLabel: act?.label,
           busy: act?.busy ?? false,
+          facing: seat?.facing,
+          pose: seat ? "sit" : "stand",
         };
       });
 
@@ -506,6 +592,7 @@ export function OfficeShell({
         avatar: avatarRef.current,
         facing: facingRef.current,
         moving: movingRef.current,
+        pose: poseRef.current,
       };
 
       const participants = [
@@ -531,6 +618,12 @@ export function OfficeShell({
           participants,
           localId: userId,
           time: now,
+          videoFor: (id: string) => {
+            const el = videoElsRef.current.get(id);
+            if (!el || el.readyState < 2) return null;
+            if (id === userId && !voiceCamOnRef.current) return null;
+            return el;
+          },
         });
       }
       raf = requestAnimationFrame(frame);
@@ -1014,6 +1107,20 @@ export function OfficeShell({
           getSelfPos={() => posRef.current}
           enabled={hasRealtime && !!orgId}
         />
+      </div>
+
+      {/* Hidden video sinks (local + peers) sampled by the canvas for the
+          proximity head-bubbles. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+      >
+        {voice.localStream && (
+          <StreamVideo id={userId} stream={voice.localStream} reg={videoElsRef} />
+        )}
+        {[...voice.peerStreams].map(([id, stream]) => (
+          <StreamVideo key={id} id={id} stream={stream} reg={videoElsRef} />
+        ))}
       </div>
     </div>
   );

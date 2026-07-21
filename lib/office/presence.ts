@@ -39,6 +39,8 @@ export interface Participant {
   moving?: boolean;
   /** Humans only: URL of the member's AI-generated portrait, if any. */
   portrait?: string | null;
+  /** Standing or seated (agents sit at desks; humans auto-sit at a seat). */
+  pose?: "stand" | "sit";
 }
 
 export const STATUS_LABELS: Record<PresenceStatus, string> = {
