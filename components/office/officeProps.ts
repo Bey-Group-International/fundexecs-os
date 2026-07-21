@@ -321,7 +321,7 @@ type Drawer = (
   src?: string,
 ) => void;
 
-function drawDesk(ctx: CanvasRenderingContext2D, pw: number, ph: number, _a: string, _t: number, key: string): void {
+function drawDesk(ctx: CanvasRenderingContext2D, pw: number, ph: number, accent: string, _t: number, key: string): void {
   const top = ph * 0.18;
   const deskH = ph * 0.5;
   // Legs.
@@ -331,6 +331,16 @@ function drawDesk(ctx: CanvasRenderingContext2D, pw: number, ph: number, _a: str
   ctx.fillRect(pw - pw * 0.06 - legW, top + deskH * 0.7, legW, ph * 0.34);
   // Desktop slab.
   shadedBox(ctx, pw * 0.03, top, pw * 0.94, deskH, 4, WOOD, `${key}:top`);
+  // Fine wood grain running the length of the desktop.
+  ctx.strokeStyle = rgba(darken(WOOD, 0.4), 0.1);
+  ctx.lineWidth = 0.7;
+  for (let i = 0; i < 3; i++) {
+    const gy = top + deskH * (0.16 + 0.16 * i);
+    ctx.beginPath();
+    ctx.moveTo(pw * 0.07, gy);
+    ctx.lineTo(pw * 0.9, gy);
+    ctx.stroke();
+  }
   // Front apron (a shaded band under the surface for depth).
   ctx.fillStyle = rgba("#000000", 0.18);
   ctx.fillRect(pw * 0.03, top + deskH * 0.62, pw * 0.94, deskH * 0.14);
@@ -341,6 +351,30 @@ function drawDesk(ctx: CanvasRenderingContext2D, pw: number, ph: number, _a: str
   ctx.moveTo(pw * 0.62, top + deskH * 0.14);
   ctx.lineTo(pw * 0.62, top + deskH * 0.55);
   ctx.stroke();
+  // A dark leather blotter pad on the desktop.
+  ctx.fillStyle = rgba("#20242e", 0.5);
+  rr(ctx, pw * 0.28, top + deskH * 0.12, pw * 0.44, deskH * 0.4, 3);
+  ctx.fill();
+  // Keyboard resting on the pad.
+  ctx.fillStyle = rgba("#c8cdd6", 0.8);
+  rr(ctx, pw * 0.36, top + deskH * 0.32, pw * 0.28, deskH * 0.14, 2);
+  ctx.fill();
+  // A slim monitor standing at the back of the desk, screen lit with the accent.
+  const mw = pw * 0.34;
+  const mh = deskH * 0.34;
+  const mx = pw * 0.5 - mw / 2;
+  const my = top - mh * 0.5;
+  ctx.fillStyle = darken(METAL, 0.3);
+  ctx.fillRect(pw * 0.5 - pw * 0.02, top - 1, pw * 0.04, mh * 0.4);
+  shadedBox(ctx, mx, my, mw, mh, 2, DARK, `${key}:mon`);
+  ctx.fillStyle = memoGrad(ctx, `${key}:monscr`, () => {
+    const g = ctx.createLinearGradient(mx, my, mx + mw, my + mh);
+    g.addColorStop(0, lighten(accent, 0.1));
+    g.addColorStop(1, darken(accent, 0.45));
+    return g;
+  });
+  rr(ctx, mx + mw * 0.08, my + mh * 0.14, mw * 0.84, mh * 0.6, 1.5);
+  ctx.fill();
 }
 
 function drawChair(ctx: CanvasRenderingContext2D, pw: number, ph: number, accent: string, _t: number, key: string): void {
@@ -461,6 +495,14 @@ function drawTable(ctx: CanvasRenderingContext2D, pw: number, ph: number, _a: st
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx * 0.94, ry * 0.9, 0, Math.PI * 1.05, Math.PI * 1.9);
   ctx.stroke();
+  // Concentric grain rings, so the round top reads as a single figured slab.
+  ctx.strokeStyle = rgba(darken(WOOD, 0.4), 0.08);
+  ctx.lineWidth = 0.7;
+  for (let i = 1; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * (i / 4), ry * (i / 4), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function drawScreen(ctx: CanvasRenderingContext2D, pw: number, ph: number, accent: string, t: number, key: string): void {
@@ -619,6 +661,16 @@ function drawMeetingTable(ctx: CanvasRenderingContext2D, pw: number, ph: number,
   ctx.strokeStyle = OUTLINE;
   ctx.lineWidth = 1.2;
   ctx.stroke();
+  // Long figured grain running the length of the boardroom top.
+  ctx.strokeStyle = rgba(darken(WOOD, 0.4), 0.1);
+  ctx.lineWidth = 0.7;
+  for (let i = 0; i < 4; i++) {
+    const gy = y + hh * (0.22 + 0.16 * i);
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.06, gy);
+    ctx.lineTo(x + w * 0.94, gy);
+    ctx.stroke();
+  }
   // Center inlay + rim light.
   ctx.strokeStyle = rgba("#ffffff", 0.16);
   ctx.lineWidth = 1;

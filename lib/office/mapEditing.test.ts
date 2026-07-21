@@ -1,12 +1,14 @@
 import {
   OFFICE_COLS,
   OFFICE_ROWS,
+  type OfficeFloor,
   type OfficeObjectKind,
   type OfficeRoom,
 } from "./layout";
 import {
   MIN_ROOM_SIZE,
   OBJECT_CATALOG,
+  ROOM_TEMPLATES,
   ROOM_TYPES,
   hitTestRoom,
   resizeHandleAt,
@@ -15,6 +17,17 @@ import {
   hitTestObject,
   addObject,
   removeObject,
+  snapToGrid,
+  snapRoom,
+  addRoom,
+  deleteRoom,
+  duplicateRoom,
+  updateRoom,
+  addFloor,
+  deleteFloor,
+  renameFloor,
+  duplicateFloor,
+  moveFloor,
 } from "./mapEditing";
 
 function room(over: Partial<OfficeRoom> = {}): OfficeRoom {
@@ -167,5 +180,216 @@ describe("mapEditing", () => {
     expect("objects" in empty).toBe(false);
     // Removing a non-existent id from an object-free room is a no-op.
     expect(removeObject(empty, "nope")).toBe(empty);
+  });
+
+  // --- snapping ------------------------------------------------------------
+
+  it("snapToGrid rounds to the nearest step and guards bad input", () => {
+    expect(snapToGrid(2.4)).toBe(2);
+    expect(snapToGrid(2.6)).toBe(3);
+    expect(snapToGrid(7, 2)).toBe(8);
+    expect(snapToGrid(11, 4)).toBe(12);
+    // Non-positive / NaN step falls back to 1; non-finite value → 0.
+    expect(snapToGrid(3.5, 0)).toBe(4);
+    expect(snapToGrid(3.5, -2)).toBe(4);
+    expect(snapToGrid(Number.NaN)).toBe(0);
+  });
+
+  it("snapRoom snaps the rect and re-clamps to bounds and min size", () => {
+    const r = room({ x: 4.6, y: 2.4, w: 5.6, h: 3.4 });
+    const snapped = snapRoom(r);
+    expect(snapped).toMatchObject({ x: 5, y: 2, w: 6, h: 3 });
+    // Input untouched.
+    expect(r.x).toBe(4.6);
+    // A tiny snapped size is floored to MIN_ROOM_SIZE.
+    const tiny = snapRoom(room({ x: 1, y: 1, w: 0.2, h: 0.2 }));
+    expect(tiny.w).toBe(MIN_ROOM_SIZE);
+    expect(tiny.h).toBe(MIN_ROOM_SIZE);
+    // A step keeps it on-grid.
+    expect(snapRoom(room({ x: 3, y: 3, w: 5, h: 5 }), 2)).toMatchObject({
+      x: 4,
+      y: 4,
+      w: 6,
+      h: 6,
+    });
+  });
+
+  // --- room CRUD -----------------------------------------------------------
+
+  it("ROOM_TEMPLATES is a well-formed preset palette", () => {
+    expect(ROOM_TEMPLATES.length).toBeGreaterThanOrEqual(7);
+    const labels = ROOM_TEMPLATES.map((t) => t.label);
+    for (const l of ["Meeting Room", "Focus Pod", "Boardroom", "Open Plan"]) {
+      expect(labels).toContain(l);
+    }
+    for (const t of ROOM_TEMPLATES) {
+      expect(t.w).toBeGreaterThanOrEqual(MIN_ROOM_SIZE);
+      expect(t.h).toBeGreaterThanOrEqual(MIN_ROOM_SIZE);
+      expect(t.accent).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(t.purpose).toBeTruthy();
+    }
+  });
+
+  it("addRoom appends a clamped room with a unique key", () => {
+    const tmpl = ROOM_TEMPLATES[0]; // Meeting Room 8×6
+    const rooms: OfficeRoom[] = [];
+    const r1 = addRoom(rooms, tmpl, { x: 3, y: 4 });
+    expect(rooms).toHaveLength(0); // input untouched
+    expect(r1).toHaveLength(1);
+    expect(r1[0]).toMatchObject({
+      key: `${tmpl.type}-1`,
+      hub: null,
+      x: 3,
+      y: 4,
+      w: tmpl.w,
+      h: tmpl.h,
+    });
+    // Same-type template gets a distinct key.
+    const r2 = addRoom(r1, tmpl, { x: 0, y: 0 });
+    const keys = r2.map((r) => r.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    // Placed off the floor → clamped fully inside.
+    const r3 = addRoom([], tmpl, { x: 999, y: 999 });
+    expect(r3[0].x).toBe(OFFICE_COLS - tmpl.w);
+    expect(r3[0].y).toBe(OFFICE_ROWS - tmpl.h);
+  });
+
+  it("deleteRoom removes by key and is a no-op when absent", () => {
+    const rooms = [room({ key: "a" }), room({ key: "b" })];
+    expect(deleteRoom(rooms, "a").map((r) => r.key)).toEqual(["b"]);
+    // No-op keeps both, and never mutates the input.
+    expect(deleteRoom(rooms, "zzz").map((r) => r.key)).toEqual(["a", "b"]);
+    expect(rooms).toHaveLength(2);
+  });
+
+  it("duplicateRoom clones with an offset, a fresh key, and fresh object ids", () => {
+    let src = room({ key: "a", type: "meeting", x: 5, y: 5, w: 6, h: 4 });
+    src = addObject(src, "desk", 6, 6);
+    const rooms = [src];
+    const dup = duplicateRoom(rooms, "a");
+    expect(dup).toHaveLength(2);
+    const clone = dup[1];
+    expect(clone.key).not.toBe("a");
+    expect(clone.x).toBe(6);
+    expect(clone.y).toBe(6);
+    // Objects copied but independent (fresh object array, not the same ref).
+    expect(clone.objects).toHaveLength(1);
+    expect(clone.objects).not.toBe(src.objects);
+    clone.objects![0].x = 99;
+    expect(src.objects![0].x).toBe(6); // source unaffected
+    // Absent key → no-op (same array reference back).
+    expect(duplicateRoom(rooms, "nope")).toBe(rooms);
+    // Duplicate near the edge stays inside the floor.
+    const edge = room({ key: "e", type: "pod", x: OFFICE_COLS - 4, y: OFFICE_ROWS - 4, w: 4, h: 4 });
+    const dupEdge = duplicateRoom([edge], "e", { x: 3, y: 3 });
+    expect(dupEdge[1].x).toBe(OFFICE_COLS - 4);
+    expect(dupEdge[1].y).toBe(OFFICE_ROWS - 4);
+  });
+
+  it("updateRoom shallow-merges a patch and re-clamps the rect", () => {
+    const rooms = [room({ key: "a", label: "Old", x: 5, y: 5, w: 6, h: 4 })];
+    const patched = updateRoom(rooms, "a", { label: "New", accent: "#000000" });
+    expect(patched[0]).toMatchObject({ label: "New", accent: "#000000" });
+    expect(rooms[0].label).toBe("Old"); // input untouched
+    // An oversized/off-floor patch is clamped.
+    const clamped = updateRoom(rooms, "a", { w: 999, x: 999 });
+    expect(clamped[0].w).toBe(OFFICE_COLS);
+    expect(clamped[0].x).toBe(0);
+    // A below-min patch is floored.
+    expect(updateRoom(rooms, "a", { h: 0 })[0].h).toBe(MIN_ROOM_SIZE);
+    // Absent key → unchanged rooms (still a new array from map, values equal).
+    expect(updateRoom(rooms, "nope", { label: "X" })[0].label).toBe("Old");
+  });
+
+  // --- floor CRUD ----------------------------------------------------------
+
+  function floor(over: Partial<OfficeFloor> = {}): OfficeFloor {
+    return { id: "f", name: "F", level: 0, rooms: [], ...over };
+  }
+
+  it("addFloor appends an empty floor with a unique id and next level", () => {
+    const floors = [floor({ id: "ground", level: 0 })];
+    const next = addFloor(floors, "Mezzanine");
+    expect(floors).toHaveLength(1); // input untouched
+    expect(next).toHaveLength(2);
+    expect(next[1]).toMatchObject({ name: "Mezzanine", level: 1, rooms: [] });
+    expect(next[1].id).not.toBe("ground");
+    // Default name when none supplied.
+    expect(addFloor(next)[2].name).toBeTruthy();
+    // Ids stay unique across repeated adds.
+    const ids = addFloor(addFloor(floors)).map((f) => f.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("deleteFloor protects the last floor and re-numbers levels", () => {
+    const only = [floor({ id: "a", level: 0 })];
+    expect(deleteFloor(only, "a")).toBe(only); // last-floor protection
+    const floors = [
+      floor({ id: "a", level: 0 }),
+      floor({ id: "b", level: 1 }),
+      floor({ id: "c", level: 2 }),
+    ];
+    const afterDelete = deleteFloor(floors, "b");
+    expect(afterDelete.map((f) => f.id)).toEqual(["a", "c"]);
+    expect(afterDelete.map((f) => f.level)).toEqual([0, 1]); // renumbered
+    expect(floors).toHaveLength(3); // input untouched
+    // Absent id → no-op.
+    expect(deleteFloor(floors, "zzz")).toBe(floors);
+  });
+
+  it("renameFloor renames by id only", () => {
+    const floors = [floor({ id: "a", name: "A" }), floor({ id: "b", name: "B" })];
+    const next = renameFloor(floors, "b", "Beta");
+    expect(next.map((f) => f.name)).toEqual(["A", "Beta"]);
+    expect(floors[1].name).toBe("B"); // input untouched
+  });
+
+  it("duplicateFloor deep-clones rooms after the source with a unique id", () => {
+    let r = room({ key: "risk", type: "meeting", x: 1, y: 1, w: 6, h: 4 });
+    r = addObject(r, "desk", 2, 2);
+    const floors = [
+      floor({ id: "ground", level: 0 }),
+      floor({ id: "trading", name: "Trading", level: 1, rooms: [r] }),
+      floor({ id: "exec", level: 2 }),
+    ];
+    const next = duplicateFloor(floors, "trading");
+    expect(next.map((f) => f.id)).toEqual([
+      "ground",
+      "trading",
+      expect.any(String),
+      "exec",
+    ]);
+    const clone = next[2];
+    expect(clone.id).not.toBe("trading");
+    expect(clone.name).toContain("copy");
+    expect(next.map((f) => f.level)).toEqual([0, 1, 2, 3]); // renumbered
+    // Rooms are deep-cloned: distinct objects, independent mutation.
+    expect(clone.rooms).not.toBe(floors[1].rooms);
+    expect(clone.rooms[0]).not.toBe(r);
+    clone.rooms[0].label = "MUTATED";
+    clone.rooms[0].objects![0].x = 42;
+    expect(r.label).not.toBe("MUTATED");
+    expect(r.objects![0].x).toBe(2);
+    // Absent id → no-op.
+    expect(duplicateFloor(floors, "nope")).toBe(floors);
+  });
+
+  it("moveFloor reorders and re-numbers levels, clamping at the ends", () => {
+    const floors = [
+      floor({ id: "a", level: 0 }),
+      floor({ id: "b", level: 1 }),
+      floor({ id: "c", level: 2 }),
+    ];
+    const up = moveFloor(floors, "c", "up");
+    expect(up.map((f) => f.id)).toEqual(["a", "c", "b"]);
+    expect(up.map((f) => f.level)).toEqual([0, 1, 2]);
+    const down = moveFloor(floors, "a", "down");
+    expect(down.map((f) => f.id)).toEqual(["b", "a", "c"]);
+    // Already at the top / bottom → no-op.
+    expect(moveFloor(floors, "a", "up")).toBe(floors);
+    expect(moveFloor(floors, "c", "down")).toBe(floors);
+    // Absent id → no-op.
+    expect(moveFloor(floors, "zzz", "up")).toBe(floors);
+    expect(floors.map((f) => f.id)).toEqual(["a", "b", "c"]); // input untouched
   });
 });

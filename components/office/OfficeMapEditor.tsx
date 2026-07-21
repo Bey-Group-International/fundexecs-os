@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useTransition,
@@ -15,6 +16,7 @@ import {
   OFFICE_WIDTH,
   OFFICE_HEIGHT,
   TILE,
+  type OfficeFloor,
   type OfficeObject,
   type OfficeRoom,
   type RoomType,
@@ -27,13 +29,22 @@ import {
 import {
   OBJECT_CATALOG,
   ROOM_TYPES,
+  ROOM_TEMPLATES,
   addObject,
+  addRoom,
+  deleteRoom,
+  duplicateRoom,
   hitTestRoom,
   moveRoom,
   objectLabel,
   removeObject,
   resizeHandleAt,
   resizeRoom,
+  addFloor,
+  deleteFloor,
+  renameFloor,
+  duplicateFloor,
+  moveFloor,
   type ResizeHandle,
 } from "@/lib/office/mapEditing";
 import { saveOfficeLayout } from "@/app/(app)/office/actions";
@@ -44,18 +55,25 @@ import {
 
 const CORE = new Set<string>(CORE_ROOM_KEYS);
 
+/** The floors of a layout: the stored building, or a single ground floor. */
+function floorsOf(layout: OfficeLayoutData): OfficeFloor[] {
+  if (layout.floors && layout.floors.length > 0) return layout.floors;
+  return [{ id: "ground", name: "Office Floor", level: 0, rooms: layout.rooms }];
+}
+
+/** A deep-ish clone so the working copy never mutates the incoming layout. */
+function cloneFloors(floors: OfficeFloor[]): OfficeFloor[] {
+  return floors.map((f) => ({ ...f, rooms: f.rooms.map((r) => ({ ...r })) }));
+}
+
+/** Assemble a full layout from the working floors (ground mirrored into rooms). */
+function buildLayout(floors: OfficeFloor[], version: number): OfficeLayoutData {
+  return { version, rooms: floors[0].rooms, floors };
+}
+
 /** Snap a tile-space value to the nearest half tile. */
 function snap(v: number): number {
   return Math.round(v * 2) / 2;
-}
-
-/** Mint a unique key for a newly added (non-core) room. */
-function nextRoomKey(rooms: OfficeRoom[]): string {
-  const used = new Set(rooms.map((r) => r.key));
-  let i = rooms.length + 1;
-  let key = `room-${i}`;
-  while (used.has(key)) key = `room-${++i}`;
-  return key;
 }
 
 function hexA(hex: string, alpha: number): string {
@@ -93,20 +111,28 @@ interface DragState {
 }
 
 /**
- * Drag-on-canvas MapMaker for the persisted Virtual Office layout. Rooms are
- * moved and resized by direct manipulation (corner/edge grips), objects are
- * dropped from a palette into a room, and each room carries a semantic type.
- * Core rooms (the four hubs + Commons) are protected from deletion and
- * type-change. Save normalizes via `serializeLayout` and persists through the
- * server action, which re-checks auth/org.
+ * Drag-on-canvas MapMaker for the persisted, multi-floor Virtual Office layout.
+ * Floors are added, renamed, duplicated, reordered, and deleted; within a floor,
+ * rooms are placed from a template palette, moved and resized by direct
+ * manipulation, given a semantic type, and filled with furniture/branding props.
+ * The ground floor's core rooms (the four hubs + Commons) are protected from
+ * deletion and type-change. Save normalizes the whole building via
+ * `serializeLayout` and persists through the server action, which re-checks
+ * auth/org.
  */
 export function OfficeMapEditor({
   initial,
+  activeFloorId,
+  onFloorChange,
   onSaved,
   onChange,
   orgId = "",
 }: {
   initial: OfficeLayoutData;
+  /** The floor the host is currently viewing (kept in sync both ways). */
+  activeFloorId?: string;
+  /** Called when the editor switches floor, so the host view can follow. */
+  onFloorChange?: (id: string) => void;
   onSaved?: (d: OfficeLayoutData) => void;
   onChange?: (d: OfficeLayoutData) => void;
   /** Active org (defaults to ""; the server action resolves the session org). */
@@ -114,9 +140,34 @@ export function OfficeMapEditor({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
-  const [rooms, setRooms] = useState<OfficeRoom[]>(() =>
-    initial.rooms.map((r) => ({ ...r })),
+
+  // The whole building is the working copy; the active floor is what we edit.
+  const [floors, setFloors] = useState<OfficeFloor[]>(() =>
+    cloneFloors(floorsOf(initial)),
   );
+  const [activeId, setActiveId] = useState<string>(
+    activeFloorId && floors.some((f) => f.id === activeFloorId)
+      ? activeFloorId
+      : floors[0].id,
+  );
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
+  // Follow the host's floor selection when it changes externally.
+  useEffect(() => {
+    if (activeFloorId && floors.some((f) => f.id === activeFloorId)) {
+      setActiveId(activeFloorId);
+    }
+  }, [activeFloorId, floors]);
+
+  // Keep the active floor valid if the building shrinks.
+  useEffect(() => {
+    if (!floors.some((f) => f.id === activeId)) setActiveId(floors[0].id);
+  }, [floors, activeId]);
+
+  const activeFloor = floors.find((f) => f.id === activeId) ?? floors[0];
+  const rooms = activeFloor.rooms;
+
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [paletteKind, setPaletteKind] = useState<OfficeObject["kind"] | null>(
     null,
@@ -130,6 +181,36 @@ export function OfficeMapEditor({
   const [images, setImages] = useState<string[]>([]);
 
   const selected = rooms.find((r) => r.key === selectedKey) ?? null;
+
+  /** Update the active floor's rooms (functional or replacement). */
+  const setRooms = useCallback(
+    (updater: OfficeRoom[] | ((prev: OfficeRoom[]) => OfficeRoom[])) => {
+      setFloors((prev) =>
+        prev.map((f) =>
+          f.id === activeIdRef.current
+            ? {
+                ...f,
+                rooms:
+                  typeof updater === "function"
+                    ? (updater as (p: OfficeRoom[]) => OfficeRoom[])(f.rooms)
+                    : updater,
+              }
+            : f,
+        ),
+      );
+    },
+    [],
+  );
+
+  /** Switch the edited floor and let the host view follow. */
+  const switchFloor = useCallback(
+    (id: string) => {
+      setActiveId(id);
+      setSelectedKey(null);
+      onFloorChange?.(id);
+    },
+    [onFloorChange],
+  );
 
   // Load the org's previously-uploaded branding images for the picker.
   useEffect(() => {
@@ -169,7 +250,7 @@ export function OfficeMapEditor({
       const target = rooms.find((r) => r.key === selectedKey) ?? rooms[0];
       if (target) setSelectedKey(target.key);
     },
-    [rooms, selectedKey],
+    [rooms, selectedKey, setRooms],
   );
 
   const readAsDataUrl = (file: File): Promise<string> =>
@@ -202,10 +283,10 @@ export function OfficeMapEditor({
     }
   }
 
-  // Surface live edits to the host (unserialized working copy).
+  // Surface live edits to the host (unserialized working copy of the building).
   useEffect(() => {
-    onChange?.({ version: initial.version, rooms });
-  }, [rooms, initial.version, onChange]);
+    onChange?.(buildLayout(floors, initial.version));
+  }, [floors, initial.version, onChange]);
 
   // ---- Canvas rendering -------------------------------------------------
   const draw = useCallback(() => {
@@ -390,32 +471,24 @@ export function OfficeMapEditor({
     canvasRef.current?.releasePointerCapture(e.pointerId);
   }
 
-  // ---- Room list mutations ---------------------------------------------
-  function addRoom() {
+  // ---- Room mutations ---------------------------------------------------
+  function addRoomFromTemplate(index: number) {
+    const template = ROOM_TEMPLATES[index];
+    if (!template) return;
     setResult(null);
-    setRooms((prev) => {
-      const key = nextRoomKey(prev);
-      const room: OfficeRoom = {
-        key,
-        label: "New Room",
-        hub: null,
-        x: 1,
-        y: 1,
-        w: 6,
-        h: 5,
-        accent: "#d4a82a",
-        purpose: "",
-        type: "focus",
-      };
-      return [...prev, room];
-    });
+    setRooms((prev) => addRoom(prev, template, { x: 2, y: 2 }));
   }
 
   function removeRoom(key: string) {
     if (CORE.has(key)) return;
     setResult(null);
-    setRooms((prev) => prev.filter((r) => r.key !== key));
+    setRooms((prev) => deleteRoom(prev, key));
     setSelectedKey((k) => (k === key ? null : k));
+  }
+
+  function duplicateSelected(key: string) {
+    setResult(null);
+    setRooms((prev) => duplicateRoom(prev, key));
   }
 
   function deleteObject(roomKey: string, id: string) {
@@ -425,43 +498,165 @@ export function OfficeMapEditor({
     );
   }
 
+  // ---- Floor mutations --------------------------------------------------
+  function onAddFloor() {
+    setResult(null);
+    setFloors((prev) => {
+      const next = addFloor(prev);
+      const created = next[next.length - 1];
+      if (created) {
+        setActiveId(created.id);
+        onFloorChange?.(created.id);
+      }
+      return next;
+    });
+  }
+
+  function onDeleteFloor(id: string) {
+    setResult(null);
+    setFloors((prev) => deleteFloor(prev, id));
+  }
+
+  function onDuplicateFloor(id: string) {
+    setResult(null);
+    setFloors((prev) => duplicateFloor(prev, id));
+  }
+
+  function onRenameFloor(id: string, name: string) {
+    setFloors((prev) => renameFloor(prev, id, name));
+  }
+
+  function onMoveFloor(id: string, dir: "up" | "down") {
+    setFloors((prev) => moveFloor(prev, id, dir));
+  }
+
   function save() {
     setResult(null);
-    const data = serializeLayout({ version: initial.version, rooms });
+    const data = serializeLayout(buildLayout(floors, initial.version));
     startTransition(async () => {
       const res = await saveOfficeLayout("", data);
       setResult(res);
       if (res.ok) {
-        setRooms(data.rooms.map((r) => ({ ...r })));
+        setFloors(cloneFloors(data.floors ?? floorsOf(data)));
         onSaved?.(data);
       }
     });
   }
 
   const selectedCore = selected ? CORE.has(selected.key) : false;
+  const orderedFloors = useMemo(
+    () => [...floors].sort((a, b) => b.level - a.level),
+    [floors],
+  );
 
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-fg-primary">
-            Map editor
-          </h2>
+          <h2 className="text-sm font-semibold text-fg-primary">MapMaker</h2>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Drag rooms to move them, grab a corner to resize. Drop props from the
-            palette, then Save. Hub rooms and Commons are protected.
+            Build the firm&apos;s building — add floors, place rooms from the
+            palette, drag to move, grab a corner to resize, then Save. The ground
+            floor&apos;s hub rooms and Commons are protected.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={addRoom}
-          className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
-        >
-          + Add room
-        </button>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      {/* Floors */}
+      <div className="mt-4 rounded-lg border border-line bg-surface-2/50 p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wide text-fg-muted">
+            Floors
+          </span>
+          <button
+            type="button"
+            onClick={onAddFloor}
+            className="rounded-md border border-line px-2 py-1 text-[11px] text-fg-secondary transition hover:bg-surface-2"
+          >
+            + Add floor
+          </button>
+        </div>
+        <ul className="flex flex-col gap-1.5">
+          {orderedFloors.map((f) => {
+            const active = f.id === activeFloor.id;
+            const idx = floors.findIndex((x) => x.id === f.id);
+            return (
+              <li
+                key={f.id}
+                className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 ${
+                  active
+                    ? "border-gold-400/60 bg-gold-400/10"
+                    : "border-line bg-surface-0"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => switchFloor(f.id)}
+                  className="shrink-0 text-left"
+                  aria-label={`Edit ${f.name}`}
+                >
+                  <span
+                    className={`text-xs font-medium ${active ? "text-fg-primary" : "text-fg-secondary"}`}
+                  >
+                    L{f.level}
+                  </span>
+                </button>
+                <input
+                  aria-label={`Name for ${f.name}`}
+                  value={f.name}
+                  onChange={(e) => onRenameFloor(f.id, e.target.value)}
+                  onFocus={() => switchFloor(f.id)}
+                  className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-xs text-fg-secondary outline-none focus:border-line focus:bg-surface-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => onMoveFloor(f.id, "up")}
+                  disabled={idx === floors.length - 1}
+                  className="px-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-30"
+                  aria-label="Move floor up"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMoveFloor(f.id, "down")}
+                  disabled={idx === 0}
+                  className="px-1 text-xs text-fg-muted transition hover:text-fg-primary disabled:opacity-30"
+                  aria-label="Move floor down"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDuplicateFloor(f.id)}
+                  className="px-1 text-xs text-fg-muted transition hover:text-fg-primary"
+                  aria-label="Duplicate floor"
+                  title="Duplicate floor"
+                >
+                  ⧉
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteFloor(f.id)}
+                  disabled={floors.length <= 1}
+                  className="px-1 text-xs text-status-danger transition hover:opacity-80 disabled:opacity-30"
+                  aria-label="Delete floor"
+                  title="Delete floor"
+                >
+                  ✕
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <p className="mt-3 text-[11px] text-fg-muted">
+        Editing <span className="text-fg-secondary">{activeFloor.name}</span>{" "}
+        (level {activeFloor.level}) · {rooms.length} rooms
+      </p>
+
+      <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
         {/* Canvas */}
         <div className="overflow-x-auto rounded-lg border border-line bg-surface-0">
           <canvas
@@ -482,12 +677,37 @@ export function OfficeMapEditor({
 
         {/* Controls */}
         <div className="space-y-4">
+          {/* Room templates */}
+          <div>
+            <span className="mb-1.5 block text-[10px] uppercase tracking-wide text-fg-muted">
+              Add a room
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ROOM_TEMPLATES.map((t, i) => (
+                <button
+                  key={`${t.type}-${t.label}`}
+                  type="button"
+                  onClick={() => addRoomFromTemplate(i)}
+                  title={`Add a ${t.label} (${t.w}×${t.h})`}
+                  className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-[11px] text-fg-secondary transition hover:bg-surface-2"
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                    style={{ background: t.accent }}
+                    aria-hidden
+                  />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Palette */}
           <div>
             <span className="mb-1.5 block text-[10px] uppercase tracking-wide text-fg-muted">
-              Palette
+              Furniture
             </span>
-            <div className="grid max-h-64 grid-cols-3 gap-1.5 overflow-y-auto pr-1">
+            <div className="grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto pr-1">
               {OBJECT_CATALOG.map((o) => (
                 <button
                   key={o.kind}
@@ -638,7 +858,14 @@ export function OfficeMapEditor({
                 </div>
               )}
 
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => duplicateSelected(selected.key)}
+                  className="rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2"
+                >
+                  Duplicate
+                </button>
                 {selectedCore ? (
                   <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-fg-muted">
                     Core
@@ -656,7 +883,7 @@ export function OfficeMapEditor({
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-line bg-surface-2 p-3 text-xs text-fg-muted">
-              Click a room to select it.
+              Click a room to select it, or add one from a template above.
             </p>
           )}
         </div>
@@ -664,7 +891,7 @@ export function OfficeMapEditor({
 
       <div className="mt-4 flex items-center justify-end gap-3">
         {result?.ok && (
-          <span className="text-xs text-status-success">Layout saved.</span>
+          <span className="text-xs text-status-success">Building saved.</span>
         )}
         {result && !result.ok && (
           <span className="text-xs text-status-danger">

@@ -7,18 +7,11 @@ import {
   TILE,
   OFFICE_WIDTH,
   OFFICE_HEIGHT,
-  PROXIMITY_RADIUS,
   type OfficeRoom,
   type OfficeZone,
 } from "@/lib/office/layout";
-import {
-  STATUS_COLORS,
-  distance,
-  type Participant,
-} from "@/lib/office/presence";
 import { roomTheme, type Wall, type Doorway } from "@/lib/office/walls";
 import { furnishRoom } from "@/lib/office/furnish";
-import { drawAvatar } from "./vectorAvatar";
 import { drawProp, PROP_CATALOG } from "./officeProps";
 import {
   drawFloorMaterial,
@@ -52,19 +45,15 @@ export interface OfficeTheme {
 export interface DrawState {
   ctx: CanvasRenderingContext2D;
   theme: OfficeTheme;
-  /** The active room set (built-in default or a persisted custom layout). */
+  /** The active floor's room set (built-in default or a persisted custom layout). */
   rooms: OfficeRoom[];
   /** Wall segments + doorways for the active layout (from buildWalls). */
   walls: Wall[];
   doorways: Doorway[];
-  /** Interaction zones (meeting/silent/embed/spawn/…). */
+  /** Interaction zones (meeting/silent/embed/spawn/…), drawn as map overlays. */
   zones?: OfficeZone[];
-  participants: Participant[];
-  localId: string;
-  /** ms timestamp for idle animation. */
+  /** ms timestamp for idle animation (e.g. subtle prop motion). */
   time: number;
-  /** Optional live video source (webcam) per participant id, for head bubbles. */
-  videoFor?: (id: string) => CanvasImageSource | null;
 }
 
 function hexA(hex: string, alpha: number): string {
@@ -101,10 +90,7 @@ export function drawOffice(state: DrawState): void {
     walls,
     doorways,
     zones = [],
-    participants,
-    localId,
     time,
-    videoFor,
   } = state;
 
   // Floor
@@ -235,8 +221,8 @@ export function drawOffice(state: DrawState): void {
     ctx.fillRect(d.x * TILE, d.y * TILE, d.w * TILE, d.h * TILE);
   }
 
-  // Interaction zones — a subtle tinted, dashed region with a labelled pill.
-  const local0 = participants.find((p) => p.id === localId);
+  // Interaction zones — a subtle tinted, dashed region with a labelled pill,
+  // drawn as an informational overlay on the map.
   for (const z of zones) {
     const zx = z.x * TILE;
     const zy = z.y * TILE;
@@ -265,191 +251,10 @@ export function drawOffice(state: DrawState): void {
       ctx.fillStyle = theme.surface0;
       ctx.fillText(z.label, zx + 10, zy + 7);
     }
-
-    // "Press E" prompt when the local avatar is inside an action-trigger zone.
-    if (
-      z.trigger === "action" &&
-      local0 &&
-      local0.x >= z.x &&
-      local0.x <= z.x + z.w &&
-      local0.y >= z.y &&
-      local0.y <= z.y + z.h
-    ) {
-      const px = zx + zw / 2;
-      const py = zy + zh / 2;
-      ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const label = "Press E";
-      const pw = ctx.measureText(label).width + 16;
-      ctx.fillStyle = hexA("#0a111f", 0.85);
-      roundRect(ctx, px - pw / 2, py - 10, pw, 20, 10);
-      ctx.fill();
-      ctx.strokeStyle = hexA(color, 0.8);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(label, px, py);
-    }
   }
 
-  const local = participants.find((p) => p.id === localId);
-
-  // Proximity ring + conversation links, painted on the floor beneath everyone.
-  if (local) {
-    const lx = local.x * TILE;
-    const ly = local.y * TILE;
-    ctx.beginPath();
-    ctx.arc(lx, ly, PROXIMITY_RADIUS * TILE, 0, Math.PI * 2);
-    ctx.fillStyle = hexA("#c9a24a", 0.05);
-    ctx.fill();
-    ctx.strokeStyle = hexA("#c9a24a", 0.35);
-    ctx.setLineDash([5, 5]);
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    for (const p of participants) {
-      if (p.id === localId || p.status === "away") continue;
-      const d = distance(local, p);
-      if (d > PROXIMITY_RADIUS) continue;
-      ctx.beginPath();
-      ctx.moveTo(lx, ly);
-      ctx.lineTo(p.x * TILE, p.y * TILE);
-      ctx.strokeStyle = hexA("#c9a24a", 0.4 * (1 - d / PROXIMITY_RADIUS));
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-  }
-
-  // Character geometry. Standing anchors the feet; seated anchors the hip line
-  // (per drawAvatar), so the head/label offsets shift with the pose.
-  const charHeight = (p: Participant) => TILE * (p.kind === "agent" ? 1.5 : 1.7);
-  const anchorYOf = (p: Participant) =>
-    p.pose === "sit" ? p.y * TILE : p.y * TILE + TILE * 0.35;
-
-  const drawCharacter = (p: Participant) => {
-    const isAgent = p.kind === "agent";
-    const seated = p.pose === "sit";
-    const cx = p.x * TILE;
-    const height = charHeight(p);
-    const anchorY = anchorYOf(p);
-    const groundY = p.y * TILE + TILE * 0.42;
-
-    if (p.busy) {
-      const pulse = (Math.sin(time / 500 + p.x) + 1) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, anchorY - height * 0.35, 14 + pulse * 5, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(p.color, 0.3 * (1 - pulse));
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    if (p.id === localId) {
-      ctx.beginPath();
-      ctx.ellipse(cx, groundY, 11, 4.4, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA("#ffffff", 0.7);
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
-
-    const video =
-      videoFor && p.kind === "human" ? videoFor(p.id) ?? null : null;
-    drawAvatar(ctx, {
-      config: isAgent ? undefined : p.avatar,
-      agentKey: p.agentKey,
-      x: cx,
-      y: anchorY,
-      height,
-      facing: p.facing ?? "down",
-      timeMs: time,
-      moving: !isAgent && !!p.moving && !seated,
-      status: p.status,
-      pose: seated ? "sit" : "stand",
-      video,
-    });
-  };
-
-  const drawLabel = (p: Participant) => {
-    const isAgent = p.kind === "agent";
-    const seated = p.pose === "sit";
-    const cx = p.x * TILE;
-    const height = charHeight(p);
-    const anchorY = anchorYOf(p);
-    const headY = anchorY - height * (seated ? 0.7 : 1);
-    const baseY = seated ? p.y * TILE + TILE * 0.55 : anchorY + 4;
-    const isLocal = p.id === localId;
-
-    ctx.beginPath();
-    ctx.arc(cx + 7, headY + 4, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = STATUS_COLORS[p.status];
-    ctx.strokeStyle = theme.surface0;
-    ctx.lineWidth = 1.5;
-    ctx.fill();
-    ctx.stroke();
-
-    const label = isAgent ? p.name : `${p.name}${isLocal ? " (you)" : ""}`;
-    ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
-    const tw = ctx.measureText(label).width + 10;
-    ctx.fillStyle = hexA(theme.surface2, 0.92);
-    roundRect(ctx, cx - tw / 2, baseY, tw, 15, 7);
-    ctx.fill();
-    ctx.fillStyle = theme.fg;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, cx, baseY + 8);
-
-    if (isAgent && p.busy && p.activityLabel) {
-      ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillStyle = theme.fgMuted;
-      ctx.fillText(p.activityLabel, cx, baseY + 21);
-    }
-
-    if (p.emote) {
-      ctx.font = "16px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillStyle = hexA(theme.surface3, 0.95);
-      ctx.beginPath();
-      ctx.arc(cx, headY - 6, 12, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(p.emote, cx, headY - 5);
-    }
-
-    // Agent activity glyph — an emoji badge beside the head.
-    if (p.glyph) {
-      ctx.beginPath();
-      ctx.arc(cx + 11, headY - 1, 9, 0, Math.PI * 2);
-      ctx.fillStyle = hexA(theme.surface3, 0.95);
-      ctx.fill();
-      ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(p.glyph, cx + 11, headY);
-    }
-
-    // Agent thought bubble — a one-line current intent above the head.
-    if (p.thought) {
-      ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
-      let t = p.thought;
-      while (t.length > 1 && ctx.measureText(t).width > 150) t = t.slice(0, -1);
-      if (t !== p.thought) t += "…";
-      const tw = ctx.measureText(t).width + 12;
-      const by = headY - 26;
-      ctx.fillStyle = hexA(theme.surface2, 0.96);
-      roundRect(ctx, cx - tw / 2, by, tw, 15, 7);
-      ctx.fill();
-      ctx.strokeStyle = hexA(theme.surface3, 0.9);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = theme.fgMuted;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(t, cx, by + 8);
-    }
-  };
-
-  // Depth-sorted scene — raised walls, furniture, and characters interleaved by
-  // their baseline (screen-space bottom) so nearer things occlude farther ones.
+  // Depth-sorted scene — raised walls and furniture interleaved by their
+  // baseline (screen-space bottom) so nearer things occlude farther ones.
   const scene: { baseY: number; draw: () => void }[] = [];
 
   // Glass-walled zones (focus pods, the lounge) read as framed glass partitions.
@@ -512,10 +317,6 @@ export function drawOffice(state: DrawState): void {
     }
   }
 
-  for (const p of participants) {
-    scene.push({ baseY: p.y, draw: () => drawCharacter(p) });
-  }
-
   scene.sort((a, b) => a.baseY - b.baseY);
   for (const item of scene) item.draw();
 
@@ -526,8 +327,4 @@ export function drawOffice(state: DrawState): void {
     rooms,
     tile: TILE,
   });
-
-  // Labels on top — always readable above the lit, depth-sorted scene.
-  for (const p of participants) drawLabel(p);
-
 }

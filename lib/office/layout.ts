@@ -294,6 +294,71 @@ export const ROOM_BY_KEY: Record<string, OfficeRoom> = Object.fromEntries(
   ROOMS.map((r) => [r.key, r]),
 );
 
+// ---------------------------------------------------------------------------
+// The building — a multi-floor world. Each floor is an independent tile plan on
+// the same OFFICE_COLS×OFFICE_ROWS grid, so the renderer, editor, and camera
+// are floor-agnostic: they operate on whichever floor's `rooms` is active. The
+// ground floor is the original {@link ROOMS} plan (unchanged, so every existing
+// consumer and persisted layout keeps working); the upper floors add a Trading
+// Floor and an Executive Suite. All three reuse the same proven, non-overlapping
+// rectangle skeleton (hub bands left/right, a central spine, focus pods and a
+// cafe along the bottom), relabelled per floor.
+// ---------------------------------------------------------------------------
+
+/** One level of the building: a named tile plan of rooms (+ optional zones). */
+export interface OfficeFloor {
+  /** Stable id (used in the floor switcher, persistence, and the URL later). */
+  id: string;
+  /** Human-facing name shown in the switcher ("Level 2 · Trading Floor"). */
+  name: string;
+  /** Ordering / display level; 0 is the ground floor. */
+  level: number;
+  /** The floor's room plan. */
+  rooms: OfficeRoom[];
+  /** Optional per-floor interaction zones (derived by default when absent). */
+  zones?: OfficeZone[];
+}
+
+/** Level 2 — an open trading floor: pits, desks, market data, a client suite. */
+export const TRADING_ROOMS: OfficeRoom[] = [
+  { key: "risk", label: "Risk & Controls", hub: null, x: 1, y: 1, w: 14, h: 10, accent: "#5566a6", type: "meeting", purpose: "Limits, exposure, and pre-trade controls." },
+  { key: "quant", label: "Quant Lab", hub: null, x: 33, y: 1, w: 14, h: 10, accent: "#3d7387", type: "focus", purpose: "Models, signals, and back-testing." },
+  { key: "execution", label: "Execution Desk", hub: null, x: 1, y: 15, w: 14, h: 10, accent: "#4a7a5e", type: "meeting", purpose: "Order flow, routing, and fills." },
+  { key: "prime", label: "Prime Brokerage", hub: null, x: 33, y: 15, w: 14, h: 10, accent: "#b08d57", type: "meeting", purpose: "Financing, custody, and counterparties." },
+  { key: "market-data", label: "Market Data", hub: null, x: 17, y: 1, w: 14, h: 8, accent: "#5b6673", type: "private", purpose: "Live feeds, screens, and the tape." },
+  { key: "trading-pit", label: "The Pit", hub: null, x: 17, y: 10, w: 14, h: 10, accent: "#c9a24a", type: "commons", purpose: "The open floor where the desk trades together." },
+  { key: "client-suite", label: "Client Suite", hub: null, x: 17, y: 21, w: 14, h: 9, accent: "#5a7797", type: "meeting", purpose: "Where counterparties and clients are hosted." },
+  { key: "trading-pod-1", label: "Call Booth A", hub: null, x: 1, y: 27, w: 6, h: 4, accent: "#5b6673", type: "pod", purpose: "A private booth for counterparty calls." },
+  { key: "trading-pod-2", label: "Call Booth B", hub: null, x: 9, y: 27, w: 6, h: 4, accent: "#5b6673", type: "pod", purpose: "A private booth for counterparty calls." },
+  { key: "trading-cafe", label: "The Bar", hub: null, x: 33, y: 27, w: 14, h: 4, accent: "#a6774d", type: "cafe", purpose: "Coffee and fast fuel between sessions." },
+];
+
+/** Level 3 — the executive suite: partner offices, a boardroom, a lounge. */
+export const EXEC_ROOMS: OfficeRoom[] = [
+  { key: "ceo-office", label: "CEO Office", hub: null, x: 1, y: 1, w: 14, h: 10, accent: "#5566a6", type: "private", purpose: "The chief executive's office." },
+  { key: "cfo-office", label: "CFO Office", hub: null, x: 33, y: 1, w: 14, h: 10, accent: "#4a7a5e", type: "private", purpose: "The chief financial officer's office." },
+  { key: "deal-room", label: "Deal Room", hub: null, x: 1, y: 15, w: 14, h: 10, accent: "#3d7387", type: "meeting", purpose: "Where live transactions are run to close." },
+  { key: "partners", label: "Partners' Row", hub: null, x: 33, y: 15, w: 14, h: 10, accent: "#b08d57", type: "meeting", purpose: "The investment partners' offices." },
+  { key: "gallery", label: "The Gallery", hub: null, x: 17, y: 1, w: 14, h: 8, accent: "#8a7096", type: "social", purpose: "A curated arrivals gallery for guests." },
+  { key: "boardroom", label: "The Boardroom", hub: null, x: 17, y: 10, w: 14, h: 10, accent: "#c9a24a", type: "meeting", purpose: "The main boardroom for IC and the board." },
+  { key: "exec-lounge", label: "Executive Lounge", hub: null, x: 17, y: 21, w: 14, h: 9, accent: "#5a7797", type: "lounge", purpose: "Discreet seating for private conversation." },
+  { key: "exec-pod-1", label: "Study A", hub: null, x: 1, y: 27, w: 6, h: 4, accent: "#5b6673", type: "pod", purpose: "A quiet study for focused reading." },
+  { key: "exec-pod-2", label: "Study B", hub: null, x: 9, y: 27, w: 6, h: 4, accent: "#5b6673", type: "pod", purpose: "A quiet study for focused reading." },
+  { key: "exec-cafe", label: "The Terrace", hub: null, x: 33, y: 27, w: 14, h: 4, accent: "#a6774d", type: "cafe", purpose: "A skyline terrace bar for the top floor." },
+];
+
+/** The default multi-floor building. Ground floor is the canonical {@link ROOMS}. */
+export const BUILDING: OfficeFloor[] = [
+  { id: "ground", name: "Ground · Arrival & Hubs", level: 0, rooms: ROOMS },
+  { id: "trading", name: "Level 2 · Trading Floor", level: 1, rooms: TRADING_ROOMS },
+  { id: "exec", name: "Level 3 · Executive Suite", level: 2, rooms: EXEC_ROOMS },
+];
+
+/** Look up a floor by id (falls back to the ground floor). */
+export function floorById(id: string, building: OfficeFloor[] = BUILDING): OfficeFloor {
+  return building.find((f) => f.id === id) ?? building[0];
+}
+
 /** Human avatars spawn just inside the Reception lobby, where people arrive. */
 export const SPAWN = { x: 24, y: 26 };
 

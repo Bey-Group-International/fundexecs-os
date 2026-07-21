@@ -9,10 +9,12 @@
 // rooms, with every rectangle clamped inside the office floor.
 import {
   ROOMS,
+  BUILDING,
   OFFICE_COLS,
   OFFICE_ROWS,
   type OfficeRoom,
   type OfficeObject,
+  type OfficeFloor,
   type RoomType,
 } from "./layout";
 import { furnishAll } from "./furnish";
@@ -79,7 +81,19 @@ export const LAYOUT_VERSION = 1;
 
 export interface OfficeLayoutData {
   version: number;
+  /**
+   * The active (ground) floor's rooms. Kept as a top-level field so every
+   * existing consumer keeps working and legacy single-floor rows round-trip
+   * byte-for-byte. When `floors` is present this mirrors `floors[0].rooms`.
+   */
   rooms: OfficeRoom[];
+  /**
+   * The full multi-floor building, when the layout has more than the ground
+   * floor. Omitted entirely for legacy single-floor layouts so their stored
+   * jsonb is unchanged. `floors[0]` is the ground floor and carries the core
+   * rooms; upper floors are free-form.
+   */
+  floors?: OfficeFloor[];
 }
 
 /**
@@ -100,10 +114,14 @@ const DEFAULT_ROOM_BY_KEY: Record<string, OfficeRoom> = Object.fromEntries(
   ROOMS.map((r) => [r.key, r]),
 );
 
-/** The built-in map, derived from the current static `ROOMS`, pre-furnished. */
+/**
+ * The built-in map: a pre-furnished, multi-floor building. The ground floor is
+ * the canonical {@link ROOMS}; `rooms` mirrors it for back-compat consumers.
+ */
 export const DEFAULT_LAYOUT: OfficeLayoutData = {
   version: LAYOUT_VERSION,
   rooms: furnishAll(ROOMS),
+  floors: BUILDING.map((f) => ({ ...f, rooms: furnishAll(f.rooms) })),
 };
 
 function cloneRoom(room: OfficeRoom): OfficeRoom {
@@ -254,16 +272,13 @@ function parseRoom(raw: unknown): OfficeRoom | null {
 }
 
 /**
- * Validate & normalize an untrusted layout value into a safe `OfficeLayoutData`.
- * Invalid rooms are dropped, duplicate keys collapse to the first seen, every
- * rectangle is clamped into the floor, and any missing core room (the four hubs
- * + Commons) is restored from the defaults. Never throws.
+ * Parse an untrusted `rooms` array into a safe, de-duplicated room list (invalid
+ * rooms dropped, duplicate keys collapsed to the first seen, rects clamped).
+ * When `ensureCore` is set, any missing structural room (the four hubs + the
+ * Commons) is restored from the defaults — used only for the ground floor.
  */
-export function parseLayout(raw: unknown): OfficeLayoutData {
-  const source =
-    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const rawRooms = Array.isArray(source.rooms) ? source.rooms : [];
-
+function parseRoomList(raw: unknown, ensureCore: boolean): OfficeRoom[] {
+  const rawRooms = Array.isArray(raw) ? raw : [];
   const seen = new Set<string>();
   const rooms: OfficeRoom[] = [];
   for (const entry of rawRooms) {
@@ -272,20 +287,66 @@ export function parseLayout(raw: unknown): OfficeLayoutData {
     seen.add(room.key);
     rooms.push(room);
   }
-
-  // Guarantee the structural rooms exist, restoring defaults for any missing.
-  for (const key of CORE_ROOM_KEYS) {
-    if (seen.has(key)) continue;
-    const fallback = DEFAULT_ROOM_BY_KEY[key];
-    if (fallback) {
-      seen.add(key);
-      rooms.push(cloneRoom(fallback));
+  if (ensureCore) {
+    for (const key of CORE_ROOM_KEYS) {
+      if (seen.has(key)) continue;
+      const fallback = DEFAULT_ROOM_BY_KEY[key];
+      if (fallback) {
+        seen.add(key);
+        rooms.push(cloneRoom(fallback));
+      }
     }
+  }
+  return rooms;
+}
+
+/**
+ * Coerce one untrusted value into a safe {@link OfficeFloor}. `index` seeds the
+ * fallbacks for id/name/level. The ground floor (index 0) has its core rooms
+ * guaranteed; upper floors are free-form. Zones are not persisted (they are
+ * derived by the renderer), so they are dropped here.
+ */
+function parseFloor(raw: unknown, index: number): OfficeFloor {
+  const f =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const id =
+    typeof f.id === "string" && f.id.trim() ? f.id.trim() : `floor-${index}`;
+  const name =
+    typeof f.name === "string" && f.name.trim()
+      ? f.name.trim()
+      : `Floor ${index + 1}`;
+  const level = Math.round(toNumber(f.level, index));
+  return {
+    id,
+    name,
+    level,
+    rooms: parseRoomList(f.rooms, index === 0),
+  };
+}
+
+/**
+ * Validate & normalize an untrusted layout value into a safe `OfficeLayoutData`.
+ * Two shapes are accepted:
+ *  - Multi-floor: a `floors` array → each floor is validated; the ground floor
+ *    (index 0) gets its core rooms guaranteed; `rooms` mirrors `floors[0]`.
+ *  - Legacy single-floor: a `rooms` array (no `floors`) → validated with core
+ *    rooms guaranteed, and NO `floors` key is added, so the stored jsonb stays
+ *    byte-identical after a round-trip.
+ * Never throws.
+ */
+export function parseLayout(raw: unknown): OfficeLayoutData {
+  const source =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const version = toNumber(source.version, LAYOUT_VERSION);
+
+  if (Array.isArray(source.floors) && source.floors.length > 0) {
+    const floors = source.floors.map((f, i) => parseFloor(f, i));
+    return { version, rooms: floors[0].rooms, floors };
   }
 
   return {
-    version: toNumber(source.version, LAYOUT_VERSION),
-    rooms,
+    version,
+    rooms: parseRoomList(source.rooms, true),
   };
 }
 
@@ -294,32 +355,49 @@ function round(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Round a room rectangle's coordinates for tidy, diff-friendly jsonb storage. */
+function roundRoom(room: OfficeRoom): OfficeRoom {
+  return {
+    ...room,
+    x: round(room.x),
+    y: round(room.y),
+    w: round(room.w),
+    h: round(room.h),
+    // Only rewrite `objects` when present, so object-free layouts stay byte-
+    // identical after a round-trip.
+    ...(room.objects
+      ? {
+          objects: room.objects.map((o) => ({
+            ...o,
+            x: round(o.x),
+            y: round(o.y),
+          })),
+        }
+      : {}),
+  };
+}
+
 /**
  * Produce a normalized, rounded layout ready to write to jsonb. Runs the input
  * through `parseLayout` first so a serialized layout is always valid, then
- * rounds coordinates to keep the stored payload tidy and diff-friendly.
+ * rounds coordinates to keep the stored payload tidy and diff-friendly. A
+ * multi-floor layout serializes its `floors` (and mirrors the ground floor into
+ * `rooms`); a legacy single-floor layout omits `floors` so it stays
+ * byte-identical after a round-trip.
  */
 export function serializeLayout(data: OfficeLayoutData): OfficeLayoutData {
   const safe = parseLayout(data);
+  if (safe.floors) {
+    const floors = safe.floors.map((f) => ({
+      id: f.id,
+      name: f.name,
+      level: f.level,
+      rooms: f.rooms.map(roundRoom),
+    }));
+    return { version: LAYOUT_VERSION, rooms: floors[0].rooms, floors };
+  }
   return {
     version: LAYOUT_VERSION,
-    rooms: safe.rooms.map((room) => ({
-      ...room,
-      x: round(room.x),
-      y: round(room.y),
-      w: round(room.w),
-      h: round(room.h),
-      // Only rewrite `objects` when present, so object-free layouts stay byte-
-      // identical after a round-trip.
-      ...(room.objects
-        ? {
-            objects: room.objects.map((o) => ({
-              ...o,
-              x: round(o.x),
-              y: round(o.y),
-            })),
-          }
-        : {}),
-    })),
+    rooms: safe.rooms.map(roundRoom),
   };
 }
