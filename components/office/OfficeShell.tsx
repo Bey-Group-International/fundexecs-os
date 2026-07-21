@@ -830,6 +830,9 @@ export function OfficeShell({
         </div>
       </header>
 
+      {/* Brass hairline rule — an institutional divider under the header. */}
+      <div className="mb-4 h-px bg-gradient-to-r from-gold-400/50 via-gold-400/15 to-transparent" />
+
       {customizing && (
         <div className="mb-4 rounded-xl border border-surface-3/60 bg-surface-1 p-4">
           <div className="mb-3 flex items-center justify-between">
@@ -900,7 +903,7 @@ export function OfficeShell({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         {/* Floor */}
-        <div className="overflow-hidden rounded-xl border border-surface-3/60 bg-surface-1 shadow-lg">
+        <div className="overflow-hidden rounded-2xl border border-surface-3/50 bg-surface-1 shadow-[0_16px_50px_-12px_rgba(0,0,0,0.6)] ring-1 ring-gold-400/10">
           <canvas
             ref={canvasRef}
             onClick={onCanvasClick}

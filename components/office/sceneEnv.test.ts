@@ -1,24 +1,33 @@
 import {
   drawFloorMaterial,
   drawRaisedWall,
+  drawGlassPartition,
   drawWindow,
   applySceneLighting,
+  drawRoomPlaque,
+  drawHubCrest,
+  drawWordmark,
   WALL_HEIGHT,
   LIGHT,
+  BRASS,
 } from "@/components/office/sceneEnv";
 import type { FloorStyle, Wall } from "@/lib/office/walls";
 import type { OfficeRoom } from "@/lib/office/layout";
 
 const ALL_FLOORS: FloorStyle[] = ["grid", "wood", "carpet", "tile", "marble"];
 
-// A minimal mock 2D context: every drawing method is a no-op, and the gradient
-// factories return an object with addColorStop — all the engine touches.
+// A minimal mock 2D context: every drawing method is a no-op, the gradient
+// factories return an object with addColorStop, and measureText returns a
+// width — all the engine touches.
 function mockCtx(): CanvasRenderingContext2D {
   const gradient = { addColorStop: () => {} };
   const handler: ProxyHandler<Record<string, unknown>> = {
     get(target, prop: string) {
       if (prop === "createLinearGradient" || prop === "createRadialGradient") {
         return () => gradient;
+      }
+      if (prop === "measureText") {
+        return (t: string) => ({ width: (t ?? "").length * 7 });
       }
       if (prop === "canvas") return { width: 300, height: 300 };
       if (!(prop in target)) {
@@ -73,6 +82,16 @@ describe("light convention", () => {
   it("exposes a positive wall height in tiles", () => {
     expect(WALL_HEIGHT).toBeGreaterThan(0);
     expect(WALL_HEIGHT).toBeLessThan(1);
+  });
+});
+
+describe("BRASS palette", () => {
+  it("exposes a small set of well-formed brass hex tones", () => {
+    const tones = Object.values(BRASS);
+    expect(tones.length).toBeGreaterThanOrEqual(3);
+    for (const hex of tones) {
+      expect(hex).toMatch(/^#[0-9a-fA-F]{6}$/);
+    }
   });
 });
 
@@ -154,6 +173,51 @@ describe("drawRaisedWall", () => {
       }
     }
   });
+
+  it("renders the glass-walled variant via the glass flag", () => {
+    const ctx = mockCtx();
+    for (const wall of WALLS) {
+      expect(() =>
+        drawRaisedWall(ctx, {
+          wall,
+          tile: 26,
+          color: "#3a4150",
+          glass: true,
+          accent: "#7fb0c4",
+        }),
+      ).not.toThrow();
+    }
+  });
+});
+
+describe("drawGlassPartition", () => {
+  it("runs for horizontal and vertical panes, with/without floor shadow", () => {
+    const ctx = mockCtx();
+    expect(() =>
+      drawGlassPartition(ctx, {
+        x: 40,
+        y: 20,
+        w: 200,
+        h: 30,
+        accent: "#7fb0c4",
+        tile: 26,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      drawGlassPartition(ctx, {
+        x: 40,
+        y: 20,
+        w: 30,
+        h: 200,
+        accent: "#8b5cf6",
+        tile: 26,
+        floorShadow: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      drawGlassPartition(ctx, { x: 0, y: 0, w: 0, h: 0, accent: "#abc" }),
+    ).not.toThrow();
+  });
 });
 
 describe("drawWindow", () => {
@@ -192,6 +256,63 @@ describe("applySceneLighting", () => {
         rooms: [],
         tile: 32,
       }),
+    ).not.toThrow();
+  });
+});
+
+describe("signage helpers", () => {
+  it("drawRoomPlaque runs, auto-sized and explicitly-sized", () => {
+    const ctx = mockCtx();
+    expect(() =>
+      drawRoomPlaque(ctx, { x: 30, y: 12, label: "Boardroom", accent: "#d4a82a" }),
+    ).not.toThrow();
+    expect(() =>
+      drawRoomPlaque(ctx, {
+        x: 30,
+        y: 12,
+        label: "",
+        accent: "#8b5cf6",
+        w: 120,
+        h: 22,
+      }),
+    ).not.toThrow();
+  });
+
+  it("drawHubCrest runs with and without a monogram, incl. zero radius", () => {
+    const ctx = mockCtx();
+    expect(() =>
+      drawHubCrest(ctx, { cx: 100, cy: 100, r: 26, accent: "#d4a82a" }),
+    ).not.toThrow();
+    expect(() =>
+      drawHubCrest(ctx, {
+        cx: 100,
+        cy: 100,
+        r: 40,
+        accent: "#8b5cf6",
+        monogram: "FE",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      drawHubCrest(ctx, { cx: 0, cy: 0, r: 0, accent: "#abc" }),
+    ).not.toThrow();
+  });
+
+  it("drawWordmark runs at default and custom scale", () => {
+    const ctx = mockCtx();
+    expect(() =>
+      drawWordmark(ctx, { x: 24, y: 24, text: "FUNDEXECS" }),
+    ).not.toThrow();
+    expect(() =>
+      drawWordmark(ctx, {
+        x: 24,
+        y: 24,
+        text: "Reception",
+        scale: 1.6,
+        accent: "#d4a82a",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      drawWordmark(ctx, { x: 0, y: 0, text: "" }),
     ).not.toThrow();
   });
 });

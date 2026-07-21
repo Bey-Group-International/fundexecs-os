@@ -19,7 +19,14 @@ import { roomTheme, type Wall, type Doorway } from "@/lib/office/walls";
 import { furnishRoom } from "@/lib/office/furnish";
 import { drawAvatar } from "./vectorAvatar";
 import { drawProp, PROP_CATALOG } from "./officeProps";
-import { drawFloorMaterial, drawRaisedWall, applySceneLighting } from "./sceneEnv";
+import {
+  drawFloorMaterial,
+  drawRaisedWall,
+  applySceneLighting,
+  drawRoomPlaque,
+  drawHubCrest,
+  drawWordmark,
+} from "./sceneEnv";
 
 export interface OfficeTheme {
   surface0: string;
@@ -146,27 +153,35 @@ export function drawOffice(state: DrawState): void {
     roundRect(ctx, x, y, w, h, 10);
     ctx.stroke();
 
-    // Label bar
-    ctx.fillStyle = room.accent;
-    ctx.font = "600 13px ui-sans-serif, system-ui, sans-serif";
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
-    ctx.fillText(room.label.toUpperCase(), x + 10, y + 8);
-
-    ctx.fillStyle = theme.fgMuted;
-    ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
-    ctx.fillText(room.purpose, x + 10, y + 26);
+    // Institutional signage — a brushed-brass nameplate, a hub crest, and a
+    // reception wordmark.
+    drawRoomPlaque(ctx, { x: x + 10, y: y + 8, label: room.label, accent: room.accent });
+    if (room.type === "hub") {
+      drawHubCrest(ctx, { cx: x + w - 22, cy: y + 22, r: 12, accent: room.accent });
+    }
+    if (room.type === "reception") {
+      drawWordmark(ctx, { x: x + w / 2 - 62, y: y + h - 30, text: "FUNDEXECS OS" });
+    } else {
+      ctx.fillStyle = theme.fgMuted;
+      ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+      ctx.textBaseline = "top";
+      ctx.textAlign = "left";
+      ctx.fillText(room.purpose, x + 12, y + 34);
+    }
 
     if (room.approvalGated) {
       const badge = "APPROVAL-GATED";
       ctx.font = "600 9px ui-monospace, monospace";
+      ctx.textBaseline = "top";
       const bw = ctx.measureText(badge).width + 12;
+      // Bottom-left so it clears the hub crest in the top-right.
+      const by = y + h - 24;
       ctx.fillStyle = hexA(room.accent, 0.18);
-      roundRect(ctx, x + w - bw - 8, y + 8, bw, 16, 8);
+      roundRect(ctx, x + 10, by, bw, 16, 8);
       ctx.fill();
       ctx.fillStyle = room.accent;
       ctx.textAlign = "center";
-      ctx.fillText(badge, x + w - bw / 2 - 8, y + 12);
+      ctx.fillText(badge, x + 10 + bw / 2, by + 4);
       ctx.textAlign = "left";
     }
   }
@@ -193,7 +208,7 @@ export function drawOffice(state: DrawState): void {
 
   // Doorway thresholds (drawn under the walls so the mat sits in the gap).
   for (const d of doorways) {
-    ctx.fillStyle = hexA("#d4a82a", 0.16);
+    ctx.fillStyle = hexA("#c9a24a", 0.16);
     ctx.fillRect(d.x * TILE, d.y * TILE, d.w * TILE, d.h * TILE);
   }
 
@@ -205,9 +220,9 @@ export function drawOffice(state: DrawState): void {
     const ly = local.y * TILE;
     ctx.beginPath();
     ctx.arc(lx, ly, PROXIMITY_RADIUS * TILE, 0, Math.PI * 2);
-    ctx.fillStyle = hexA("#d4a82a", 0.05);
+    ctx.fillStyle = hexA("#c9a24a", 0.05);
     ctx.fill();
-    ctx.strokeStyle = hexA("#d4a82a", 0.35);
+    ctx.strokeStyle = hexA("#c9a24a", 0.35);
     ctx.setLineDash([5, 5]);
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -220,7 +235,7 @@ export function drawOffice(state: DrawState): void {
       ctx.beginPath();
       ctx.moveTo(lx, ly);
       ctx.lineTo(p.x * TILE, p.y * TILE);
-      ctx.strokeStyle = hexA("#d4a82a", 0.4 * (1 - d / PROXIMITY_RADIUS));
+      ctx.strokeStyle = hexA("#c9a24a", 0.4 * (1 - d / PROXIMITY_RADIUS));
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -324,7 +339,28 @@ export function drawOffice(state: DrawState): void {
   // their baseline (screen-space bottom) so nearer things occlude farther ones.
   const scene: { baseY: number; draw: () => void }[] = [];
 
+  // Glass-walled zones (focus pods, the lounge) read as framed glass partitions.
+  const glassTypes = new Set(["pod", "lounge"]);
+  const glassInfo = (wall: Wall): { glass: boolean; accent: string } => {
+    const mx = wall.x + wall.w / 2;
+    const my = wall.y + wall.h / 2;
+    for (const r of rooms) {
+      if (!r.type || !glassTypes.has(r.type)) continue;
+      const onV =
+        (Math.abs(mx - r.x) < 0.6 || Math.abs(mx - (r.x + r.w)) < 0.6) &&
+        my >= r.y - 0.6 &&
+        my <= r.y + r.h + 0.6;
+      const onH =
+        (Math.abs(my - r.y) < 0.6 || Math.abs(my - (r.y + r.h)) < 0.6) &&
+        mx >= r.x - 0.6 &&
+        mx <= r.x + r.w + 0.6;
+      if (onV || onH) return { glass: true, accent: r.accent };
+    }
+    return { glass: false, accent: theme.surface3 };
+  };
+
   for (const wall of walls) {
+    const gi = glassInfo(wall);
     scene.push({
       baseY: wall.y + wall.h,
       draw: () =>
@@ -332,6 +368,8 @@ export function drawOffice(state: DrawState): void {
           wall,
           tile: TILE,
           color: theme.surface3,
+          accent: gi.accent,
+          glass: gi.glass,
           floorShadow: true,
         }),
     });
