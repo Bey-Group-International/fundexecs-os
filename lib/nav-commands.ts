@@ -24,8 +24,6 @@ const BASE_COMMANDS: NavCommand[] = [
   { label: "Portfolio", href: "/portfolio", hint: "Portfolio health", group: "nav" },
   { label: "Deals", href: "/deals/feed", hint: "Deal signal feed", group: "nav" },
   { label: "Envelopes", href: "/envelopes", hint: "Native e-sign", group: "nav" },
-  { label: "Virtual Office", href: "/office", hint: "Spatial team workspace", group: "nav" },
-  { label: "Office Analytics", href: "/office/analytics", hint: "Presence & collaboration", group: "nav" },
   { label: "Settings", href: "/settings", hint: "Account & org", group: "settings" },
   { label: "Integrations", href: "/settings#integrations", hint: "Connect tools", group: "settings" },
 ];
