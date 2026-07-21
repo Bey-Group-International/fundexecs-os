@@ -1,12 +1,61 @@
 import { ROOMS, ROOM_BY_KEY, OFFICE_COLS, OFFICE_ROWS, SPAWN } from "./layout";
+import { furnishRoom } from "./furnish";
 import {
   buildWalls,
+  COLLIDABLE_KINDS,
   doorwayFor,
   doorwaysForRoom,
+  furnitureColliders,
   resolveMovement,
   roomTheme,
   type Wall,
 } from "./walls";
+
+/** Is a point inside any wall in the set? */
+function inAnyWall(x: number, y: number, walls: Wall[]): boolean {
+  return walls.some((w) => insideWall(x, y, w));
+}
+
+/**
+ * A brute-force reference resolver mirroring the source's axis-separated slide
+ * but WITHOUT the broadphase cull — every wall is tested. Used to prove the
+ * broadphase never changes the outcome.
+ */
+function resolveBrute(
+  prev: { x: number; y: number },
+  next: { x: number; y: number },
+  walls: Wall[],
+  r: number,
+): { x: number; y: number } {
+  const EPS = 1e-6;
+  const overlapsY = (cy: number, w: Wall): boolean =>
+    cy - r < w.y + w.h - EPS && w.y < cy + r - EPS;
+  const overlapsX = (cx: number, w: Wall): boolean =>
+    cx - r < w.x + w.w - EPS && w.x < cx + r - EPS;
+  let x = next.x;
+  for (const w of walls) {
+    if (!overlapsY(prev.y, w)) continue;
+    if (next.x > prev.x) {
+      const face = w.x;
+      if (prev.x + r <= face + EPS && next.x + r > face) x = Math.min(x, face - r);
+    } else if (next.x < prev.x) {
+      const face = w.x + w.w;
+      if (prev.x - r >= face - EPS && next.x - r < face) x = Math.max(x, face + r);
+    }
+  }
+  let y = next.y;
+  for (const w of walls) {
+    if (!overlapsX(x, w)) continue;
+    if (next.y > prev.y) {
+      const face = w.y;
+      if (prev.y + r <= face + EPS && next.y + r > face) y = Math.min(y, face - r);
+    } else if (next.y < prev.y) {
+      const face = w.y + w.h;
+      if (prev.y - r >= face - EPS && next.y - r < face) y = Math.max(y, face + r);
+    }
+  }
+  return { x, y };
+}
 
 /** Is a point inside a wall rectangle? */
 function insideWall(x: number, y: number, w: Wall): boolean {
@@ -205,5 +254,133 @@ describe("roomTheme", () => {
     const theme = roomTheme(ROOM_BY_KEY.build);
     expect(theme.wall).not.toBe(ROOM_BY_KEY.build.accent);
     expect(theme.wall).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe("furnitureColliders", () => {
+  it("blocks a solid desk tile but not a walk-through rug tile", () => {
+    const colliders = furnitureColliders(ROOMS);
+    // A desk (collidable) in the Build hub.
+    const desk = furnishRoom(ROOM_BY_KEY.build).find((o) => o.kind === "desk")!;
+    expect(inAnyWall(desk.x, desk.y, colliders)).toBe(true);
+    // The rug (non-collidable) in the Commons.
+    const rug = furnishRoom(ROOM_BY_KEY.commons).find((o) => o.kind === "rug")!;
+    expect(inAnyWall(rug.x, rug.y, colliders)).toBe(false);
+  });
+
+  it("emits one collider per collidable object and skips the rest", () => {
+    // The lounge has a round rug (non-blocking) plus solid seating.
+    const lounge = ROOM_BY_KEY.lounge;
+    const objects = furnishRoom(lounge);
+    const collidable = objects.filter((o) => COLLIDABLE_KINDS.has(o.kind));
+    const colliders = furnitureColliders([lounge]);
+    // One collider per collidable piece, and the round rug is not one of them.
+    expect(colliders).toHaveLength(collidable.length);
+    expect(collidable.length).toBeLessThan(objects.length);
+    // The couch is solid.
+    const couch = objects.find((o) => o.kind === "couch")!;
+    expect(inAnyWall(couch.x, couch.y, colliders)).toBe(true);
+  });
+
+  it("classifies every collidable kind as solid and none of the pass-through kinds", () => {
+    for (const k of [
+      "desk",
+      "meeting_table",
+      "couch",
+      "armchair",
+      "coffee_table",
+      "bookshelf",
+      "reception_desk",
+      "cafe_counter",
+      "server_rack",
+      "plant_lg",
+      "water_cooler",
+      "divider",
+      "table",
+    ] as const) {
+      expect(COLLIDABLE_KINDS.has(k)).toBe(true);
+    }
+    for (const k of [
+      "rug",
+      "rug_round",
+      "lamp",
+      "wall_art",
+      "window",
+      "monitor",
+      "tv",
+      "chair",
+      "plant",
+      "whiteboard",
+      "screen",
+      "coffee_machine",
+      "pod",
+      "image",
+    ] as const) {
+      expect(COLLIDABLE_KINDS.has(k)).toBe(false);
+    }
+  });
+
+  it("is deterministic for the same rooms", () => {
+    expect(furnitureColliders(ROOMS)).toEqual(furnitureColliders(ROOMS));
+  });
+});
+
+describe("resolveMovement with furniture", () => {
+  it("stops an avatar at a solid desk face", () => {
+    // The leftmost desk in the Build hub, and its collider set.
+    const desk = furnishRoom(ROOM_BY_KEY.build).find((o) => o.kind === "desk")!;
+    const colliders = furnitureColliders([ROOM_BY_KEY.build]);
+    const r = 0.3;
+    // Approach the desk from its left at the desk's own y.
+    const out = resolveMovement({ x: desk.x - 2, y: desk.y }, { x: desk.x, y: desk.y }, colliders, r);
+    // The desk footprint is 2 wide, inset 0.15/side → left face at desk.x - 0.85.
+    const leftFace = desk.x - 1 + 0.15;
+    expect(out.x).toBeLessThan(desk.x);
+    expect(out.x).toBeCloseTo(leftFace - r);
+    expect(out.y).toBeCloseTo(desk.y);
+  });
+
+  it("slides along a desk, blocking only the crossing axis", () => {
+    const desk = furnishRoom(ROOM_BY_KEY.build).find((o) => o.kind === "desk")!;
+    const colliders = furnitureColliders([ROOM_BY_KEY.build]);
+    const r = 0.3;
+    // Push right into the desk while also moving up: X clamps, Y slides.
+    const out = resolveMovement(
+      { x: desk.x - 2, y: desk.y },
+      { x: desk.x, y: desk.y - 1.5 },
+      colliders,
+      r,
+    );
+    expect(out.x).toBeLessThan(desk.x - 0.85);
+    expect(out.y).toBeCloseTo(desk.y - 1.5);
+  });
+});
+
+describe("broadphase equivalence", () => {
+  it("matches brute force across a grid of moves on the default layout", () => {
+    const { walls } = buildWalls(ROOMS);
+    const all = [...walls, ...furnitureColliders(ROOMS)];
+    const r = 0.3;
+    const step = 1.3;
+    for (let x = 2; x < OFFICE_COLS - 2; x += 3) {
+      for (let y = 2; y < OFFICE_ROWS - 2; y += 3) {
+        const prev = { x, y };
+        for (const [dx, dy] of [
+          [step, 0],
+          [-step, 0],
+          [0, step],
+          [0, -step],
+          [step, step],
+          [-step, step],
+          [step, -step],
+        ]) {
+          const next = { x: x + dx, y: y + dy };
+          const fast = resolveMovement(prev, next, all, r);
+          const brute = resolveBrute(prev, next, all, r);
+          expect(fast.x).toBeCloseTo(brute.x, 9);
+          expect(fast.y).toBeCloseTo(brute.y, 9);
+        }
+      }
+    }
   });
 });

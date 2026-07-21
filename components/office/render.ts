@@ -9,6 +9,7 @@ import {
   OFFICE_HEIGHT,
   PROXIMITY_RADIUS,
   type OfficeRoom,
+  type OfficeZone,
 } from "@/lib/office/layout";
 import {
   STATUS_COLORS,
@@ -28,6 +29,16 @@ import {
   drawWordmark,
 } from "./sceneEnv";
 
+/** Accent per interaction-zone kind. */
+const ZONE_COLORS: Record<string, string> = {
+  spawn: "#5a7797",
+  silent: "#8a7096",
+  meeting: "#c9a24a",
+  social: "#a6774d",
+  embed: "#3d7387",
+  portal: "#4a7a5e",
+};
+
 export interface OfficeTheme {
   surface0: string;
   surface1: string;
@@ -46,6 +57,8 @@ export interface DrawState {
   /** Wall segments + doorways for the active layout (from buildWalls). */
   walls: Wall[];
   doorways: Doorway[];
+  /** Interaction zones (meeting/silent/embed/spawn/…). */
+  zones?: OfficeZone[];
   participants: Participant[];
   localId: string;
   /** ms timestamp for idle animation. */
@@ -81,8 +94,18 @@ function roundRect(
 }
 
 export function drawOffice(state: DrawState): void {
-  const { ctx, theme, rooms, walls, doorways, participants, localId, time, videoFor } =
-    state;
+  const {
+    ctx,
+    theme,
+    rooms,
+    walls,
+    doorways,
+    zones = [],
+    participants,
+    localId,
+    time,
+    videoFor,
+  } = state;
 
   // Floor
   ctx.fillStyle = theme.surface0;
@@ -212,6 +235,64 @@ export function drawOffice(state: DrawState): void {
     ctx.fillRect(d.x * TILE, d.y * TILE, d.w * TILE, d.h * TILE);
   }
 
+  // Interaction zones — a subtle tinted, dashed region with a labelled pill.
+  const local0 = participants.find((p) => p.id === localId);
+  for (const z of zones) {
+    const zx = z.x * TILE;
+    const zy = z.y * TILE;
+    const zw = z.w * TILE;
+    const zh = z.h * TILE;
+    const color = ZONE_COLORS[z.kind];
+    ctx.save();
+    ctx.fillStyle = hexA(color, 0.06);
+    roundRect(ctx, zx, zy, zw, zh, 8);
+    ctx.fill();
+    ctx.strokeStyle = hexA(color, 0.4);
+    ctx.setLineDash([6, 5]);
+    ctx.lineWidth = 1.25;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    if (z.label) {
+      ctx.font = "600 9px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      const tw = ctx.measureText(z.label).width + 12;
+      ctx.fillStyle = hexA(color, 0.9);
+      roundRect(ctx, zx + 4, zy + 4, tw, 14, 7);
+      ctx.fill();
+      ctx.fillStyle = theme.surface0;
+      ctx.fillText(z.label, zx + 10, zy + 7);
+    }
+
+    // "Press E" prompt when the local avatar is inside an action-trigger zone.
+    if (
+      z.trigger === "action" &&
+      local0 &&
+      local0.x >= z.x &&
+      local0.x <= z.x + z.w &&
+      local0.y >= z.y &&
+      local0.y <= z.y + z.h
+    ) {
+      const px = zx + zw / 2;
+      const py = zy + zh / 2;
+      ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = "Press E";
+      const pw = ctx.measureText(label).width + 16;
+      ctx.fillStyle = hexA("#0a111f", 0.85);
+      roundRect(ctx, px - pw / 2, py - 10, pw, 20, 10);
+      ctx.fill();
+      ctx.strokeStyle = hexA(color, 0.8);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(label, px, py);
+    }
+  }
+
   const local = participants.find((p) => p.id === localId);
 
   // Proximity ring + conversation links, painted on the floor beneath everyone.
@@ -333,6 +414,38 @@ export function drawOffice(state: DrawState): void {
       ctx.textBaseline = "middle";
       ctx.fillText(p.emote, cx, headY - 5);
     }
+
+    // Agent activity glyph — an emoji badge beside the head.
+    if (p.glyph) {
+      ctx.beginPath();
+      ctx.arc(cx + 11, headY - 1, 9, 0, Math.PI * 2);
+      ctx.fillStyle = hexA(theme.surface3, 0.95);
+      ctx.fill();
+      ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(p.glyph, cx + 11, headY);
+    }
+
+    // Agent thought bubble — a one-line current intent above the head.
+    if (p.thought) {
+      ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+      let t = p.thought;
+      while (t.length > 1 && ctx.measureText(t).width > 150) t = t.slice(0, -1);
+      if (t !== p.thought) t += "…";
+      const tw = ctx.measureText(t).width + 12;
+      const by = headY - 26;
+      ctx.fillStyle = hexA(theme.surface2, 0.96);
+      roundRect(ctx, cx - tw / 2, by, tw, 15, 7);
+      ctx.fill();
+      ctx.strokeStyle = hexA(theme.surface3, 0.9);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = theme.fgMuted;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(t, cx, by + 8);
+    }
   };
 
   // Depth-sorted scene — raised walls, furniture, and characters interleaved by
@@ -391,6 +504,7 @@ export function drawOffice(state: DrawState): void {
             w: obj.w,
             h: obj.h,
             rot: obj.rot,
+            src: obj.src,
             accent: room.accent,
             timeMs: time,
           }),

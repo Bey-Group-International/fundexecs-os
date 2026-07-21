@@ -30,6 +30,7 @@ const ALL_KINDS: OfficeObjectKind[] = [
   "pod",
   "lamp",
   "server_rack",
+  "image",
 ];
 
 // A minimal mock 2D context: every drawing method is a no-op, and the gradient

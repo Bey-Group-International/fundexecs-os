@@ -41,6 +41,10 @@ export interface Participant {
   portrait?: string | null;
   /** Standing or seated (agents sit at desks; humans auto-sit at a seat). */
   pose?: "stand" | "sit";
+  /** Agents only: an activity emoji shown over the head (💻 🔧 🔎 …). */
+  glyph?: string;
+  /** Agents only: a one-line current-intent shown as a thought bubble. */
+  thought?: string;
 }
 
 export const STATUS_LABELS: Record<PresenceStatus, string> = {

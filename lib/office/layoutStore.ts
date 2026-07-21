@@ -48,6 +48,7 @@ const OBJECT_KINDS = new Set<OfficeObject["kind"]>([
   "pod",
   "lamp",
   "server_rack",
+  "image",
 ]);
 
 /** Valid room types, mirrored from {@link RoomType}. */
@@ -182,6 +183,9 @@ function parseObjects(raw: unknown): OfficeObject[] | undefined {
     }
     const rot = toRotation(o.rot);
     if (rot !== undefined) obj.rot = rot;
+    // Image props carry an asset URL + optional caption.
+    if (typeof o.src === "string" && o.src.trim()) obj.src = o.src.trim();
+    if (typeof o.label === "string" && o.label.trim()) obj.label = o.label.trim();
     objects.push(obj);
   });
   return objects.length > 0 ? objects : undefined;

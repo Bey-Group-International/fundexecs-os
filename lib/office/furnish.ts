@@ -43,6 +43,7 @@ export const PROP_SIZE: Record<OfficeObjectKind, { w: number; h: number }> = {
   pod: { w: 3, h: 3 },
   lamp: { w: 1, h: 1 },
   server_rack: { w: 1.5, h: 1.5 },
+  image: { w: 3, h: 2 },
 };
 
 function clamp(v: number, lo: number, hi: number): number {

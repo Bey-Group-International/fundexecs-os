@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -36,6 +37,10 @@ import {
   type ResizeHandle,
 } from "@/lib/office/mapEditing";
 import { saveOfficeLayout } from "@/app/(app)/office/actions";
+import {
+  listOfficeImages,
+  uploadOfficeImage,
+} from "@/app/(app)/office/asset-actions";
 
 const CORE = new Set<string>(CORE_ROOM_KEYS);
 
@@ -99,10 +104,13 @@ export function OfficeMapEditor({
   initial,
   onSaved,
   onChange,
+  orgId = "",
 }: {
   initial: OfficeLayoutData;
   onSaved?: (d: OfficeLayoutData) => void;
   onChange?: (d: OfficeLayoutData) => void;
+  /** Active org (defaults to ""; the server action resolves the session org). */
+  orgId?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -117,8 +125,82 @@ export function OfficeMapEditor({
   const [result, setResult] = useState<{ ok: boolean; error?: string } | null>(
     null,
   );
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
 
   const selected = rooms.find((r) => r.key === selectedKey) ?? null;
+
+  // Load the org's previously-uploaded branding images for the picker.
+  useEffect(() => {
+    let active = true;
+    void listOfficeImages(orgId).then((urls) => {
+      if (active) setImages(urls);
+    });
+    return () => {
+      active = false;
+    };
+  }, [orgId]);
+
+  // ---- Custom image props ----------------------------------------------
+  /** Drop a `kind:"image"` prop (with `src`) into the selected/first room. */
+  const addImageToRoom = useCallback(
+    (url: string, label?: string) => {
+      setResult(null);
+      setRooms((prev) => {
+        const target = prev.find((r) => r.key === selectedKey) ?? prev[0];
+        if (!target) return prev;
+        const cx = target.x + target.w / 2;
+        const cy = target.y + target.h / 2;
+        const withObj = addObject(target, "image", cx, cy);
+        const objs = withObj.objects ?? [];
+        const created = objs[objs.length - 1];
+        const patched: OfficeObject = {
+          ...created,
+          src: url,
+          ...(label ? { label } : {}),
+        };
+        const nextRoom: OfficeRoom = {
+          ...withObj,
+          objects: [...objs.slice(0, -1), patched],
+        };
+        return prev.map((r) => (r.key === target.key ? nextRoom : r));
+      });
+      const target = rooms.find((r) => r.key === selectedKey) ?? rooms[0];
+      if (target) setSelectedKey(target.key);
+    },
+    [rooms, selectedKey],
+  );
+
+  const readAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.readAsDataURL(file);
+    });
+
+  async function onFilePicked(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    setResult(null);
+    setUploadBusy(true);
+    try {
+      const dataUrl = await readAsDataUrl(file);
+      const res = await uploadOfficeImage(orgId, dataUrl, file.name);
+      if (res.url) {
+        addImageToRoom(res.url, file.name);
+        setImages((prev) => [res.url!, ...prev]);
+      } else {
+        setResult({ ok: false, error: res.error ?? "Upload failed" });
+      }
+    } catch {
+      setResult({ ok: false, error: "Could not read the selected file" });
+    } finally {
+      setUploadBusy(false);
+    }
+  }
 
   // Surface live edits to the host (unserialized working copy).
   useEffect(() => {
@@ -430,6 +512,51 @@ export function OfficeMapEditor({
                 Click a room to place a{" "}
                 {objectLabel(paletteKind).toLowerCase()}.
               </p>
+            )}
+          </div>
+
+          {/* Custom branding images */}
+          <div>
+            <span className="mb-1.5 block text-[10px] uppercase tracking-wide text-fg-muted">
+              Custom image
+            </span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={onFilePicked}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadBusy}
+              className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {uploadBusy ? "Uploading…" : "Upload image"}
+            </button>
+            <p className="mt-1 text-[10px] text-fg-muted">
+              Logos, posters, or wall art — added to the selected room.
+            </p>
+            {images.length > 0 && (
+              <div className="mt-2 grid grid-cols-3 gap-1.5">
+                {images.map((url) => (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => addImageToRoom(url)}
+                    title="Place this image in the selected room"
+                    className="aspect-square overflow-hidden rounded-md border border-line transition hover:border-gold-400/60"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt="Uploaded branding"
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 

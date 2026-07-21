@@ -1,6 +1,7 @@
 import {
   deriveAgentActivity,
   restingActivity,
+  type AgentActivity,
   type TaskRow,
   type TaskEventRow,
 } from "./activity";
@@ -50,19 +51,43 @@ function event(overrides: Partial<TaskEventRow>): TaskEventRow {
   };
 }
 
+// A non-empty glyph is required on every entry.
+function assertGlyph(a: AgentActivity) {
+  expect(typeof a.glyph).toBe("string");
+  expect(a.glyph.length).toBeGreaterThan(0);
+}
+
 describe("deriveAgentActivity", () => {
-  it("marks an agent with an in-flight task busy/focusing with a non-empty label", () => {
+  it("marks an agent with an in-flight task busy/active, with a glyph + non-empty label + a thought from the title", () => {
     const out = deriveAgentActivity({
       tasks: [task({ assigned_agent: "analyst", status: "in_progress", title: "Run a valuation" })],
       events: [],
     });
     expect(out.analyst.busy).toBe(true);
     expect(out.analyst.status).toBe("focusing");
-    expect(out.analyst.label).toBe("Run a valuation");
+    expect(out.analyst.state).toBe("active");
     expect(out.analyst.label.length).toBeGreaterThan(0);
+    assertGlyph(out.analyst);
+    // The specific work rides in `thought`, cleaned from the title.
+    expect(out.analyst.thought).toBe("Run a valuation");
   });
 
-  it("marks an agent busy from an active task_event, labelled from the payload message", () => {
+  it("classifies an active edit event as busy/active with the editing glyph", () => {
+    const out = deriveAgentActivity({
+      tasks: [],
+      events: [
+        event({ agent: "pr_director", event_type: "task.progress", payload: { message: "Editing the pitch deck…" } }),
+      ],
+    });
+    expect(out.pr_director.busy).toBe(true);
+    expect(out.pr_director.status).toBe("focusing");
+    expect(out.pr_director.state).toBe("active");
+    expect(out.pr_director.label).toBe("Editing files");
+    expect(out.pr_director.glyph).toBe("💻");
+    expect(out.pr_director.thought).toBe("Editing the pitch deck");
+  });
+
+  it("classifies a search/parse event with the searching glyph", () => {
     const out = deriveAgentActivity({
       tasks: [],
       events: [
@@ -70,15 +95,71 @@ describe("deriveAgentActivity", () => {
       ],
     });
     expect(out.diligence.busy).toBe(true);
-    expect(out.diligence.status).toBe("focusing");
-    expect(out.diligence.label).toBe("Parsing the CIM");
+    expect(out.diligence.label).toBe("Searching the codebase");
+    expect(out.diligence.glyph).toBe("🔎");
+    expect(out.diligence.thought).toBe("Parsing the CIM");
+  });
+
+  it("reads a completed event as idle, with the ✅ glyph and 'Wrapped up a task'", () => {
+    const out = deriveAgentActivity({
+      tasks: [],
+      events: [
+        event({
+          agent: "portfolio_ops",
+          event_type: "task.completed",
+          payload: { message: "Finished the KPI sweep" },
+        }),
+      ],
+    });
+    expect(out.portfolio_ops.busy).toBe(false);
+    expect(out.portfolio_ops.state).toBe("idle");
+    expect(out.portfolio_ops.status).toBe("available");
+    expect(out.portfolio_ops.label).toBe("Wrapped up a task");
+    expect(out.portfolio_ops.glyph).toBe("✅");
+  });
+
+  it("reads a blocked signal in a progress event as state 'blocked' with the ⛔ glyph", () => {
+    const out = deriveAgentActivity({
+      tasks: [],
+      events: [
+        event({
+          agent: "fund_admin",
+          event_type: "task.progress",
+          payload: { message: "Blocked: awaiting bank credentials" },
+        }),
+      ],
+    });
+    expect(out.fund_admin.state).toBe("blocked");
+    expect(out.fund_admin.status).toBe("focusing");
+    expect(out.fund_admin.label).toBe("Blocked — needs input");
+    expect(out.fund_admin.glyph).toBe("⛔");
+    expect(out.fund_admin.busy).toBe(false);
+  });
+
+  it("reads a `blocked` task status as state 'blocked'", () => {
+    const out = deriveAgentActivity({
+      tasks: [task({ assigned_agent: "analyst", status: "blocked", title: "Stuck on the model" })],
+      events: [],
+    });
+    expect(out.analyst.state).toBe("blocked");
+    expect(out.analyst.glyph).toBe("⛔");
+  });
+
+  it("reads an `awaiting_approval` task status as state 'paused'", () => {
+    const out = deriveAgentActivity({
+      tasks: [task({ assigned_agent: "analyst", status: "awaiting_approval", title: "Sign off the memo" })],
+      events: [],
+    });
+    expect(out.analyst.state).toBe("paused");
   });
 
   it("rests an agent with no active work", () => {
     const out = deriveAgentActivity({ tasks: [], events: [] });
     expect(out.analyst.busy).toBe(false);
     expect(out.analyst.status).toBe("available");
+    expect(out.analyst.state).toBe("idle");
     expect(out.analyst.label.length).toBeGreaterThan(0);
+    assertGlyph(out.analyst);
     // Matches the reusable resting helper exactly.
     expect(out.analyst).toEqual(restingActivity("analyst"));
   });
@@ -114,12 +195,17 @@ describe("deriveAgentActivity", () => {
       ],
     });
     expect(out.portfolio_ops.busy).toBe(false);
+    expect(out.portfolio_ops.state).toBe("idle");
   });
 
-  it("includes an entry for every known agent", () => {
+  it("includes an entry for every known agent, each with a glyph + state", () => {
     const out = deriveAgentActivity({ tasks: [], events: [] });
+    const states = new Set(["active", "idle", "blocked", "paused"]);
     for (const agent of AGENTS) {
-      expect(out[agent.key]).toBeDefined();
+      const entry = out[agent.key];
+      expect(entry).toBeDefined();
+      assertGlyph(entry);
+      expect(states.has(entry.state)).toBe(true);
     }
     expect(Object.keys(out)).toHaveLength(AGENTS.length);
   });
@@ -136,15 +222,25 @@ describe("deriveAgentActivity", () => {
     expect(Object.keys(out)).toHaveLength(AGENTS.length);
   });
 
-  it("keeps the freshest signal's label when an agent has several", () => {
+  it("keeps the freshest signal when an agent has several", () => {
     const out = deriveAgentActivity({
       tasks: [
-        task({ id: "old", assigned_agent: "capital_raiser", title: "Old work", created_at: "2026-07-20T09:00:00.000Z" }),
-        task({ id: "new", assigned_agent: "capital_raiser", title: "New work", created_at: "2026-07-20T11:00:00.000Z" }),
+        task({ id: "old", assigned_agent: "capital_raiser", title: "Old drafting work", created_at: "2026-07-20T09:00:00.000Z" }),
+        task({ id: "new", assigned_agent: "capital_raiser", title: "New research work", created_at: "2026-07-20T11:00:00.000Z" }),
       ],
       events: [],
     });
-    expect(out.capital_raiser.label).toBe("New work");
+    expect(out.capital_raiser.thought).toBe("New research work");
+  });
+
+  it("truncates a long thought to 60 chars or fewer", () => {
+    const longTitle = "Reconciling the master fund waterfall against every LP capital account and side letter";
+    const out = deriveAgentActivity({
+      tasks: [task({ assigned_agent: "fund_admin", status: "in_progress", title: longTitle })],
+      events: [],
+    });
+    expect(out.fund_admin.thought).toBeDefined();
+    expect(out.fund_admin.thought!.length).toBeLessThanOrEqual(60);
   });
 
   it("is deterministic — identical inputs yield identical output", () => {
@@ -157,16 +253,27 @@ describe("deriveAgentActivity", () => {
 });
 
 describe("restingActivity", () => {
-  it("derives an idle label from the agent's capabilities", () => {
+  it("derives an idle label from the agent's capabilities, with an idle glyph + state", () => {
     const resting = restingActivity("analyst");
     expect(resting.busy).toBe(false);
     expect(resting.status).toBe("available");
+    expect(resting.state).toBe("idle");
+    assertGlyph(resting);
     // analyst's first capability is "pro_forma".
     expect(resting.label).toBe("Ready for pro forma");
   });
 
   it("degrades gracefully for an unknown agent key", () => {
     const resting = restingActivity("nobody");
-    expect(resting).toEqual({ status: "available", label: "Idle at desk", busy: false });
+    expect(resting.status).toBe("available");
+    expect(resting.state).toBe("idle");
+    expect(resting.busy).toBe(false);
+    expect(resting.label).toBe("Idle at desk");
+    assertGlyph(resting);
+    expect(resting.thought).toBeUndefined();
+  });
+
+  it("is deterministic per key — same key yields the same glyph", () => {
+    expect(restingActivity("analyst").glyph).toBe(restingActivity("analyst").glyph);
   });
 });

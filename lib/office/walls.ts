@@ -9,7 +9,13 @@
 // non-overlapping rooms it opens a passable gap on every room edge that faces a
 // corridor (open floor between rooms), guaranteeing each room at least one
 // reachable door regardless of how the map has been redesigned or hand-edited.
-import { OFFICE_COLS, OFFICE_ROWS, type OfficeRoom } from "./layout";
+import {
+  OFFICE_COLS,
+  OFFICE_ROWS,
+  type OfficeObjectKind,
+  type OfficeRoom,
+} from "./layout";
+import { furnishRoom, PROP_SIZE } from "./furnish";
 
 /** A thin, axis-aligned wall segment (tile space, top-left origin). */
 export interface Wall {
@@ -40,6 +46,18 @@ const EPS = 1e-6;
 const PROBE = 0.5;
 /** Keep doors off the outer floor margin (a border edge is never a corridor). */
 const BORDER_MARGIN = 0.75;
+/**
+ * How far to shrink a furniture footprint before turning it into a collider, in
+ * tiles per side, so an avatar can stand right up against the piece without the
+ * inset AABB shoving it away.
+ */
+const FURNITURE_INSET = 0.15;
+/**
+ * Broadphase padding (tiles) added around the swept move box when culling walls.
+ * Must comfortably exceed the avatar radius so the narrow-phase never misses a
+ * wall the cull dropped; the outcome is identical to testing every wall.
+ */
+const BROADPHASE_MARGIN = 0.5;
 
 type Edge = "left" | "right" | "top" | "bottom";
 
@@ -221,6 +239,62 @@ export function buildWalls(rooms: OfficeRoom[]): {
   return { walls, doorways };
 }
 
+/**
+ * Furniture kinds solid enough to block movement. Big, standing pieces an avatar
+ * would bump into; everything else (rugs, lamps, wall art, windows, monitors,
+ * loose chairs, small plants, whiteboards, screens, the pod shell, images) is
+ * walk-through and deliberately absent here.
+ */
+export const COLLIDABLE_KINDS: Set<OfficeObjectKind> = new Set([
+  "desk",
+  "meeting_table",
+  "couch",
+  "armchair",
+  "coffee_table",
+  "bookshelf",
+  "reception_desk",
+  "cafe_counter",
+  "server_rack",
+  "plant_lg",
+  "water_cooler",
+  "divider",
+  "table",
+]);
+
+/**
+ * Collider walls for every solid piece of furniture across a room set. Each
+ * room's objects (its persisted `objects`, else the deterministic
+ * {@link furnishRoom} template) are scanned; each {@link COLLIDABLE_KINDS} piece
+ * emits a thin-inset AABB centered on the object's anchor, using its footprint
+ * (`obj.w/obj.h`, else {@link PROP_SIZE}). The inset lets avatars stand flush
+ * against the piece. Pure: same rooms in, same colliders out.
+ *
+ * Callers feed these into movement alongside the room walls:
+ * `resolveMovement(prev, next, [...walls, ...furnitureColliders(rooms)])`.
+ */
+export function furnitureColliders(rooms: OfficeRoom[]): Wall[] {
+  const colliders: Wall[] = [];
+  for (const room of rooms) {
+    const objects = room.objects ?? furnishRoom(room);
+    for (const obj of objects) {
+      if (!COLLIDABLE_KINDS.has(obj.kind)) continue;
+      const size = PROP_SIZE[obj.kind];
+      const w = obj.w ?? size.w;
+      const h = obj.h ?? size.h;
+      const iw = Math.max(0, w - FURNITURE_INSET * 2);
+      const ih = Math.max(0, h - FURNITURE_INSET * 2);
+      if (iw <= 0 || ih <= 0) continue;
+      colliders.push({
+        x: obj.x - w / 2 + FURNITURE_INSET,
+        y: obj.y - h / 2 + FURNITURE_INSET,
+        w: iw,
+        h: ih,
+      });
+    }
+  }
+  return colliders;
+}
+
 /** Does an avatar circle at (cx, cy) with radius r overlap wall `w` in Y? */
 function overlapsY(cy: number, r: number, w: Wall): boolean {
   return cy - r < w.y + w.h - EPS && w.y < cy + r - EPS;
@@ -266,10 +340,35 @@ function moveY(y0: number, y1: number, x: number, walls: Wall[], r: number): num
 }
 
 /**
+ * Broadphase cull: the walls whose AABB lies within {@link BROADPHASE_MARGIN} +
+ * radius of the swept move box. With many colliders on the floor this skips the
+ * far ones cheaply; the retained set is a superset of every wall the axis
+ * clamps could touch, so the result is identical to testing all walls.
+ */
+function nearbyWalls(
+  prev: { x: number; y: number },
+  next: { x: number; y: number },
+  walls: Wall[],
+  radius: number,
+): Wall[] {
+  const pad = radius + BROADPHASE_MARGIN;
+  const minX = Math.min(prev.x, next.x) - pad;
+  const maxX = Math.max(prev.x, next.x) + pad;
+  const minY = Math.min(prev.y, next.y) - pad;
+  const maxY = Math.max(prev.y, next.y) + pad;
+  return walls.filter(
+    (w) =>
+      w.x < maxX && w.x + w.w > minX && w.y < maxY && w.y + w.h > minY,
+  );
+}
+
+/**
  * Axis-separated slide collision. Resolve the X move first (clamped against any
  * wall face it would cross), then the Y move independently at the resolved X, so
  * avatars slide along walls, pass cleanly through doorway gaps, and never tunnel
- * through a thin wall at normal speeds.
+ * through a thin wall at normal speeds. A broadphase cull first drops walls far
+ * from the swept segment, so a floor dense with furniture colliders stays cheap
+ * without changing the outcome.
  */
 export function resolveMovement(
   prev: { x: number; y: number },
@@ -277,8 +376,9 @@ export function resolveMovement(
   walls: Wall[],
   radius: number = DEFAULT_RADIUS,
 ): { x: number; y: number } {
-  const x = moveX(prev.x, next.x, prev.y, walls, radius);
-  const y = moveY(prev.y, next.y, x, walls, radius);
+  const near = nearbyWalls(prev, next, walls, radius);
+  const x = moveX(prev.x, next.x, prev.y, near, radius);
+  const y = moveY(prev.y, next.y, x, near, radius);
   return { x, y };
 }
 

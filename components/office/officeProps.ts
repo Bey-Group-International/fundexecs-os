@@ -53,6 +53,8 @@ export const PROP_CATALOG: Record<
   pod: { label: "Meeting Pod", w: 3, h: 3 },
   lamp: { label: "Floor Lamp", w: 1, h: 1 },
   server_rack: { label: "Server Rack", w: 2, h: 1 },
+  // uploaded branding (logo / poster / wall art) — drawn from `src`
+  image: { label: "Image", w: 3, h: 2 },
 };
 
 // ---------------------------------------------------------------------------
@@ -231,6 +233,8 @@ export interface DrawPropOptions {
   accent?: string;
   /** Clock in ms for cheap continuous animation. */
   timeMs?: number;
+  /** For kind "image": the uploaded asset URL to cover-fit into the footprint. */
+  src?: string;
 }
 
 /**
@@ -268,7 +272,7 @@ export function drawProp(ctx: CanvasRenderingContext2D, opts: DrawPropOptions): 
   }
 
   drawContactShadow(ctx, pw, ph, key);
-  DRAWERS[opts.kind](ctx, pw, ph, accent, t, key);
+  DRAWERS[opts.kind](ctx, pw, ph, accent, t, key, opts.src);
 
   ctx.restore();
 }
@@ -313,6 +317,8 @@ type Drawer = (
   accent: string,
   t: number,
   key: string,
+  /** Only the "image" drawer consumes this (the uploaded asset URL). */
+  src?: string,
 ) => void;
 
 function drawDesk(ctx: CanvasRenderingContext2D, pw: number, ph: number, _a: string, _t: number, key: string): void {
@@ -954,6 +960,119 @@ function drawServerRack(ctx: CanvasRenderingContext2D, pw: number, ph: number, a
   }
 }
 
+// ---------------------------------------------------------------------------
+// Uploaded branding image (logo / poster / wall art).
+//
+// A module-level cache of decoded <img> elements keyed by `src`, shared across
+// every context and instance. The office renders inside a rAF loop, so a prop
+// flips from placeholder to photo automatically on the first frame after the
+// image finishes decoding — no React state or reflow involved.
+// ---------------------------------------------------------------------------
+
+const IMAGE_CACHE = new Map<string, HTMLImageElement>();
+
+const BRASS = "#b98a3e";
+
+/** A brass-framed placeholder with a small picture glyph (SSR + loading state). */
+function drawImagePlaceholder(
+  ctx: CanvasRenderingContext2D,
+  pw: number,
+  ph: number,
+  key: string,
+): void {
+  // Brushed-brass frame.
+  shadedBox(ctx, 0, 0, pw, ph, 4, BRASS, `${key}:imgframe`);
+  // Matte opening.
+  const b = Math.max(2, Math.min(pw, ph) * 0.08);
+  ctx.fillStyle = "#2a2f3a";
+  rr(ctx, b, b, pw - b * 2, ph - b * 2, 3);
+  ctx.fill();
+  // Picture glyph: a small sun + mountain inside the opening.
+  const gx = pw * 0.5;
+  const gy = ph * 0.5;
+  const gs = Math.min(pw, ph) * 0.26;
+  ctx.fillStyle = rgba("#f0d9a8", 0.85);
+  ell(ctx, gx - gs * 0.5, gy - gs * 0.45, gs * 0.28, gs * 0.28);
+  ctx.fill();
+  ctx.fillStyle = rgba("#9aa6b4", 0.9);
+  ctx.beginPath();
+  ctx.moveTo(gx - gs, gy + gs * 0.7);
+  ctx.lineTo(gx - gs * 0.2, gy - gs * 0.1);
+  ctx.lineTo(gx + gs * 0.2, gy + gs * 0.3);
+  ctx.lineTo(gx + gs * 0.55, gy - gs * 0.05);
+  ctx.lineTo(gx + gs, gy + gs * 0.7);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/**
+ * Draw an uploaded branding image cover-fit into the footprint, inside a
+ * brushed-brass frame with a soft drop shadow. Guards SSR/jest (`Image`
+ * undefined) and a not-yet-decoded image by drawing the placeholder instead —
+ * it never throws.
+ */
+function drawImage(
+  ctx: CanvasRenderingContext2D,
+  pw: number,
+  ph: number,
+  _a: string,
+  _t: number,
+  key: string,
+  src?: string,
+): void {
+  if (!src || typeof Image === "undefined") {
+    drawImagePlaceholder(ctx, pw, ph, key);
+    return;
+  }
+  let img = IMAGE_CACHE.get(src);
+  if (!img) {
+    img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    IMAGE_CACHE.set(src, img);
+  }
+  if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) {
+    drawImagePlaceholder(ctx, pw, ph, key);
+    return;
+  }
+
+  // Brushed-brass frame with a soft drop shadow.
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = Math.max(4, Math.min(pw, ph) * 0.12);
+  ctx.shadowOffsetY = Math.max(2, ph * 0.04);
+  shadedBox(ctx, 0, 0, pw, ph, 4, BRASS, `${key}:imgframe`);
+  ctx.restore();
+
+  // Cover-fit the photo into the frame opening (clip to the inner rect).
+  const b = Math.max(2, Math.min(pw, ph) * 0.06);
+  const ix = b;
+  const iy = b;
+  const iw = pw - b * 2;
+  const ih = ph - b * 2;
+  const scale = Math.max(iw / img.naturalWidth, ih / img.naturalHeight);
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  const dx = ix + (iw - dw) / 2;
+  const dy = iy + (ih - dh) / 2;
+  ctx.save();
+  rr(ctx, ix, iy, iw, ih, 2);
+  ctx.clip();
+  try {
+    ctx.drawImage(img, dx, dy, dw, dh);
+  } catch {
+    // A broken/tainted image can throw on draw — degrade to the matte.
+    ctx.fillStyle = "#2a2f3a";
+    ctx.fillRect(ix, iy, iw, ih);
+  }
+  ctx.restore();
+  // Inner rim to seat the photo in the frame.
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1;
+  rr(ctx, ix, iy, iw, ih, 2);
+  ctx.stroke();
+}
+
 const DRAWERS: Record<OfficeObjectKind, Drawer> = {
   desk: drawDesk,
   plant: drawPlant,
@@ -981,4 +1100,5 @@ const DRAWERS: Record<OfficeObjectKind, Drawer> = {
   pod: drawPod,
   lamp: drawLamp,
   server_rack: drawServerRack,
+  image: drawImage,
 };

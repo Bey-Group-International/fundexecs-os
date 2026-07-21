@@ -59,13 +59,23 @@ const CATALOG_META: readonly {
   { kind: "pod", label: "Focus Pod", emoji: "🔇" },
   { kind: "lamp", label: "Lamp", emoji: "💡" },
   { kind: "server_rack", label: "Server Rack", emoji: "🗄️" },
+  // uploaded branding (logo / poster / wall art) — placed via the upload control
+  { kind: "image", label: "Image", emoji: "🖼️" },
 ];
+
+/** Default footprint for the uploaded-image prop (not in `PROP_SIZE`). */
+const IMAGE_SIZE = { w: 3, h: 2 } as const;
+
+/** Default footprint (tiles) for a kind — `PROP_SIZE`, plus the image override. */
+function footprintFor(kind: OfficeObject["kind"]): { w: number; h: number } {
+  return kind === "image" ? IMAGE_SIZE : PROP_SIZE[kind];
+}
 
 /** Palette of placeable objects: label + emoji + default footprint per kind. */
 export const OBJECT_CATALOG: readonly CatalogEntry[] = CATALOG_META.map((m) => ({
   ...m,
-  w: PROP_SIZE[m.kind].w,
-  h: PROP_SIZE[m.kind].h,
+  w: footprintFor(m.kind).w,
+  h: footprintFor(m.kind).h,
 }));
 
 const OBJECT_LABEL: Record<OfficeObject["kind"], string> = Object.fromEntries(
@@ -219,7 +229,7 @@ export function addObject(
   y: number,
 ): OfficeRoom {
   const objects = room.objects ?? [];
-  const size = PROP_SIZE[kind];
+  const size = footprintFor(kind);
   const obj: OfficeObject = {
     id: nextObjectId(objects, kind),
     kind,
