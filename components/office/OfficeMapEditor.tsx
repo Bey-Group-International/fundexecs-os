@@ -405,7 +405,7 @@ export function OfficeMapEditor({
             <span className="mb-1.5 block text-[10px] uppercase tracking-wide text-fg-muted">
               Palette
             </span>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid max-h-64 grid-cols-3 gap-1.5 overflow-y-auto pr-1">
               {OBJECT_CATALOG.map((o) => (
                 <button
                   key={o.kind}

@@ -5,13 +5,11 @@
 // in TILE space (the same coordinate system as `layout.ts`), so it is fully
 // unit-testable without a canvas.
 //
-// The floor is a cross: four hub rooms in the corners (left rooms span the left
-// band, right rooms the right band) with a Commons down the middle column and a
-// ~1-tile corridor between rooms. Doorways open toward that central corridor so
-// avatars can travel room-to-room: left-of-Commons rooms open on their right
-// edge, right-of-Commons rooms on their left edge, and the Commons opens on both
-// sides, one gap facing each hub room.
-import type { OfficeRoom } from "./layout";
+// The doorway placement is layout-agnostic: for an arbitrary set of
+// non-overlapping rooms it opens a passable gap on every room edge that faces a
+// corridor (open floor between rooms), guaranteeing each room at least one
+// reachable door regardless of how the map has been redesigned or hand-edited.
+import { OFFICE_COLS, OFFICE_ROWS, type OfficeRoom } from "./layout";
 
 /** A thin, axis-aligned wall segment (tile space, top-left origin). */
 export interface Wall {
@@ -38,78 +36,114 @@ const DOOR_WIDTH = 2;
 const DEFAULT_RADIUS = 0.3;
 /** Float tolerance for edge/gap matching. */
 const EPS = 1e-6;
+/** How far outside an edge to sample for open (corridor) floor, in tiles. */
+const PROBE = 0.5;
+/** Keep doors off the outer floor margin (a border edge is never a corridor). */
+const BORDER_MARGIN = 0.75;
 
-type Side = "left" | "right";
+type Edge = "left" | "right" | "top" | "bottom";
 
-function commonsOf(rooms: OfficeRoom[]): OfficeRoom | undefined {
-  return rooms.find((r) => r.type === "commons" || r.key === "commons");
+/** Is a point inside a room rectangle (with a small inward tolerance)? */
+function pointInRoom(x: number, y: number, room: OfficeRoom): boolean {
+  return (
+    x > room.x + EPS &&
+    x < room.x + room.w - EPS &&
+    y > room.y + EPS &&
+    y < room.y + room.h - EPS
+  );
 }
 
-/** Which side of the Commons a room sits on (by horizontal center). */
-function sideOfCommons(room: OfficeRoom, commons: OfficeRoom): Side {
-  const roomCenter = room.x + room.w / 2;
-  const commonsCenter = commons.x + commons.w / 2;
-  return roomCenter < commonsCenter ? "left" : "right";
-}
-
-/**
- * A doorway on `room`'s edge facing the Commons, centered vertically on that
- * edge. Left-of-Commons rooms open on their right edge; right-of-Commons rooms
- * open on their left edge.
- */
-function doorwayFacingCommons(room: OfficeRoom, commons: OfficeRoom): Doorway {
-  const side = sideOfCommons(room, commons);
-  const edgeX = side === "left" ? room.x + room.w : room.x;
+/** The point just outside `room`'s `edge`, at the middle of that edge. */
+function probePoint(room: OfficeRoom, edge: Edge): { x: number; y: number } {
+  const cx = room.x + room.w / 2;
   const cy = room.y + room.h / 2;
-  return {
-    x: edgeX - WALL_THICKNESS / 2,
-    y: cy - DOOR_WIDTH / 2,
-    w: WALL_THICKNESS,
-    h: DOOR_WIDTH,
-    roomKey: room.key,
-  };
+  switch (edge) {
+    case "left":
+      return { x: room.x - PROBE, y: cy };
+    case "right":
+      return { x: room.x + room.w + PROBE, y: cy };
+    case "top":
+      return { x: cx, y: room.y - PROBE };
+    case "bottom":
+      return { x: cx, y: room.y + room.h + PROBE };
+  }
 }
 
 /**
- * A doorway on the Commons' edge that faces `room`, aligned vertically with
- * `room`'s own doorway so the two openings line up across the corridor.
+ * Does `edge` face a corridor — open floor between this room and the next? True
+ * when the point just outside the edge lies within the interior floor (not the
+ * outer margin) and inside no other room.
  */
-function commonsDoorwayFacing(commons: OfficeRoom, room: OfficeRoom): Doorway {
-  const side = sideOfCommons(room, commons);
-  const edgeX = side === "left" ? commons.x : commons.x + commons.w;
+function edgeFacesCorridor(
+  room: OfficeRoom,
+  edge: Edge,
+  rooms: OfficeRoom[],
+): boolean {
+  const p = probePoint(room, edge);
+  if (
+    p.x < BORDER_MARGIN ||
+    p.x > OFFICE_COLS - BORDER_MARGIN ||
+    p.y < BORDER_MARGIN ||
+    p.y > OFFICE_ROWS - BORDER_MARGIN
+  ) {
+    return false;
+  }
+  return !rooms.some((r) => r.key !== room.key && pointInRoom(p.x, p.y, r));
+}
+
+/** A doorway rect centered on `room`'s `edge`, spanning ~{@link DOOR_WIDTH}. */
+function doorwayOnEdge(room: OfficeRoom, edge: Edge): Doorway {
+  const t = WALL_THICKNESS;
+  const cx = room.x + room.w / 2;
   const cy = room.y + room.h / 2;
-  return {
-    x: edgeX - WALL_THICKNESS / 2,
-    y: cy - DOOR_WIDTH / 2,
-    w: WALL_THICKNESS,
-    h: DOOR_WIDTH,
-    roomKey: commons.key,
-  };
+  // Keep the opening within the edge span for short edges.
+  const half = Math.min(DOOR_WIDTH, Math.min(room.w, room.h)) / 2;
+  switch (edge) {
+    case "left":
+      return { x: room.x - t / 2, y: cy - half, w: t, h: half * 2, roomKey: room.key };
+    case "right":
+      return { x: room.x + room.w - t / 2, y: cy - half, w: t, h: half * 2, roomKey: room.key };
+    case "top":
+      return { x: cx - half, y: room.y - t / 2, w: half * 2, h: t, roomKey: room.key };
+    case "bottom":
+      return { x: cx - half, y: room.y + room.h - t / 2, w: half * 2, h: t, roomKey: room.key };
+  }
 }
 
 /**
- * The doorway for a room. Hub rooms get a single opening toward the Commons;
- * the Commons returns its primary opening (facing the first hub room) —
- * {@link buildWalls} adds the remaining Commons openings, one per hub room.
+ * Edges of `room` in placement-preference order: the horizontal edge facing the
+ * office center first (corridors run as vertical bands, so side doors read best),
+ * then its opposite, then the vertical edges. Deterministic for a given layout.
+ */
+function preferredEdges(room: OfficeRoom): Edge[] {
+  const cx = room.x + room.w / 2;
+  const cy = room.y + room.h / 2;
+  const towardX: Edge = cx < OFFICE_COLS / 2 ? "right" : "left";
+  const awayX: Edge = towardX === "right" ? "left" : "right";
+  const towardY: Edge = cy < OFFICE_ROWS / 2 ? "bottom" : "top";
+  const awayY: Edge = towardY === "bottom" ? "top" : "bottom";
+  return [towardX, awayX, towardY, awayY];
+}
+
+/**
+ * Every corridor-facing doorway for a room, in preference order. Guarantees at
+ * least one opening: if no edge faces a corridor (a fully enclosed room), it
+ * falls back to a single door on the most-preferred edge so the room is never
+ * sealed off.
+ */
+export function doorwaysForRoom(room: OfficeRoom, rooms: OfficeRoom[]): Doorway[] {
+  const edges = preferredEdges(room);
+  const open = edges.filter((e) => edgeFacesCorridor(room, e, rooms));
+  const chosen = open.length > 0 ? open : [edges[0]];
+  return chosen.map((e) => doorwayOnEdge(room, e));
+}
+
+/**
+ * The primary doorway for a room — the most-preferred corridor-facing opening.
+ * Layout-agnostic: works for the built-in plan and any custom/hand-edited map.
  */
 export function doorwayFor(room: OfficeRoom, rooms: OfficeRoom[]): Doorway {
-  const commons = commonsOf(rooms);
-  if (!commons) {
-    // No Commons in the set: fall back to a right-edge opening.
-    const cy = room.y + room.h / 2;
-    return {
-      x: room.x + room.w - WALL_THICKNESS / 2,
-      y: cy - DOOR_WIDTH / 2,
-      w: WALL_THICKNESS,
-      h: DOOR_WIDTH,
-      roomKey: room.key,
-    };
-  }
-  if (room.key === commons.key) {
-    const firstHub = rooms.find((r) => r.key !== commons.key);
-    return commonsDoorwayFacing(commons, firstHub ?? commons);
-  }
-  return doorwayFacingCommons(room, commons);
+  return doorwaysForRoom(room, rooms)[0];
 }
 
 /** Remaining sub-intervals of [start, end] after removing `gaps`. */
@@ -166,24 +200,16 @@ function edgesForRoom(room: OfficeRoom, doors: Doorway[]): Wall[] {
 /**
  * Build the full set of wall segments and doorways for a room layout. Each room
  * gets a thin wall along its four edges, split around every doorway so the
- * openings are passable. The Commons receives one opening per hub room.
+ * openings are passable. Every room receives a door on each of its
+ * corridor-facing edges (at minimum one), so the whole floor stays connected.
  */
 export function buildWalls(rooms: OfficeRoom[]): {
   walls: Wall[];
   doorways: Doorway[];
 } {
-  const commons = commonsOf(rooms);
   const doorways: Doorway[] = [];
-
   for (const room of rooms) {
-    if (commons && room.key === commons.key) {
-      for (const other of rooms) {
-        if (other.key === commons.key) continue;
-        doorways.push(commonsDoorwayFacing(commons, other));
-      }
-    } else {
-      doorways.push(doorwayFor(room, rooms));
-    }
+    doorways.push(...doorwaysForRoom(room, rooms));
   }
 
   const walls: Wall[] = [];
@@ -306,17 +332,25 @@ export function roomTheme(room: OfficeRoom): RoomTheme {
     floor = HUB_FLOOR[room.hub];
   } else {
     switch (room.type) {
+      case "reception":
+        floor = "marble";
+        break;
       case "meeting":
         floor = "carpet";
         break;
+      case "lounge":
+      case "social":
+        floor = "carpet";
+        break;
+      case "cafe":
+        floor = "tile";
+        break;
+      case "pod":
       case "focus":
         floor = "wood";
         break;
       case "private":
         floor = "tile";
-        break;
-      case "social":
-        floor = "carpet";
         break;
       default:
         floor = "grid";
@@ -327,6 +361,8 @@ export function roomTheme(room: OfficeRoom): RoomTheme {
     room.type === "social" ||
     room.type === "commons" ||
     room.type === "meeting" ||
+    room.type === "lounge" ||
+    room.type === "reception" ||
     room.key === "commons";
 
   return { floor, wall: shade(room.accent), rug };

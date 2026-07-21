@@ -13,8 +13,8 @@ import type { Hub } from "@/lib/supabase/database.types";
 
 /** Pixels per tile at native resolution. The canvas scales to fit its column. */
 export const TILE = 26;
-export const OFFICE_COLS = 40;
-export const OFFICE_ROWS = 24;
+export const OFFICE_COLS = 48;
+export const OFFICE_ROWS = 32;
 export const OFFICE_WIDTH = OFFICE_COLS * TILE;
 export const OFFICE_HEIGHT = OFFICE_ROWS * TILE;
 
@@ -32,21 +32,66 @@ export type RoomType =
   | "focus"
   | "private"
   | "social"
-  | "commons";
+  | "commons"
+  | "reception"
+  | "lounge"
+  | "cafe"
+  | "pod";
+
+/**
+ * The furniture / decor vocabulary. The first six kinds are the original
+ * (back-compatible) set; the rest are the premium prop catalogue drawn by the
+ * vector prop engine (components/office/officeProps.ts).
+ */
+export type OfficeObjectKind =
+  // legacy
+  | "desk"
+  | "plant"
+  | "whiteboard"
+  | "couch"
+  | "table"
+  | "screen"
+  // premium catalogue
+  | "chair"
+  | "monitor"
+  | "plant_lg"
+  | "armchair"
+  | "coffee_table"
+  | "meeting_table"
+  | "tv"
+  | "bookshelf"
+  | "rug"
+  | "rug_round"
+  | "reception_desk"
+  | "cafe_counter"
+  | "coffee_machine"
+  | "water_cooler"
+  | "wall_art"
+  | "window"
+  | "divider"
+  | "pod"
+  | "lamp"
+  | "server_rack";
 
 /**
  * A decorative/functional prop placed inside the office floor. Coordinates are
  * in TILE space (top-left origin), like everything else in this module. Objects
  * are optional layout data — the renderer draws them if present, ignores them if
- * not.
+ * not. `w`/`h` give a multi-tile footprint (default ~1 tile); `rot` orients the
+ * piece (degrees, 0/90/180/270).
  */
 export interface OfficeObject {
   /** Unique id within a layout (used for hit-testing and removal). */
   id: string;
-  kind: "desk" | "plant" | "whiteboard" | "couch" | "table" | "screen";
+  kind: OfficeObjectKind;
   /** Tile-space position (the object's anchor point). */
   x: number;
   y: number;
+  /** Footprint in tiles (optional; the prop engine has sensible defaults). */
+  w?: number;
+  h?: number;
+  /** Orientation in degrees (0 | 90 | 180 | 270). */
+  rot?: number;
 }
 
 export interface OfficeRoom {
@@ -71,9 +116,21 @@ export interface OfficeRoom {
   objects?: OfficeObject[];
 }
 
-// A cross-shaped open-plan floor: four hub rooms in the corners, a Commons
-// spanning the middle column. Rectangles are non-overlapping with a one-tile
-// corridor between them so avatars can flow across the whole office.
+// A premium, SoWork-style floor plan. Three vertical bands — hub rooms down the
+// left and right, a central spine of lounge / Commons / reception — separated by
+// two-tile vertical corridors, with horizontal corridors slotting focus pods and
+// the cafe beneath the hubs. Every rectangle is non-overlapping and every room
+// borders a corridor, so the whole floor is one connected, walkable network.
+//
+//   x:  1        15 17        31 33        47
+//       ┌─build──┐  ┌─lounge──┐  ┌─source──┐   y 1
+//       │  hub   │  │ social  │  │  hub    │
+//       └────────┘  ├─commons─┤  └─────────┘   y 11 (corridor)
+//       ┌─run────┐  │ gather  │  ┌─execute─┐   y 15
+//       │  hub   │  ├reception┤  │  hub    │
+//       └────────┘  │  lobby  │  └─────────┘   y 25 (corridor)
+//       ┌pod┐┌pod┐  │  SPAWN  │  ┌─cafe────┐   y 27
+//       └───┘└───┘  └─────────┘  └─────────┘   y 31
 export const ROOMS: OfficeRoom[] = [
   {
     key: "build",
@@ -81,7 +138,7 @@ export const ROOMS: OfficeRoom[] = [
     hub: "build",
     x: 1,
     y: 1,
-    w: 13,
+    w: 14,
     h: 10,
     accent: "#8b5cf6",
     type: "hub",
@@ -91,9 +148,9 @@ export const ROOMS: OfficeRoom[] = [
     key: "source",
     label: "Source Floor",
     hub: "source",
-    x: 26,
+    x: 33,
     y: 1,
-    w: 13,
+    w: 14,
     h: 10,
     accent: "#f59e0b",
     type: "hub",
@@ -104,8 +161,8 @@ export const ROOMS: OfficeRoom[] = [
     label: "Run War Room",
     hub: "run",
     x: 1,
-    y: 13,
-    w: 13,
+    y: 15,
+    w: 14,
     h: 10,
     accent: "#22d3ee",
     approvalGated: true,
@@ -116,9 +173,9 @@ export const ROOMS: OfficeRoom[] = [
     key: "execute",
     label: "Execute Ops",
     hub: "execute",
-    x: 26,
-    y: 13,
-    w: 13,
+    x: 33,
+    y: 15,
+    w: 14,
     h: 10,
     accent: "#22c55e",
     approvalGated: true,
@@ -126,16 +183,76 @@ export const ROOMS: OfficeRoom[] = [
     purpose: "Capital, reporting, and fund admin.",
   },
   {
+    key: "lounge",
+    label: "The Lounge",
+    hub: null,
+    x: 17,
+    y: 1,
+    w: 14,
+    h: 8,
+    accent: "#c084fc",
+    type: "lounge",
+    purpose: "Soft seating for casual syncs and downtime.",
+  },
+  {
     key: "commons",
     label: "The Commons",
     hub: null,
-    x: 15,
-    y: 1,
-    w: 10,
-    h: 22,
+    x: 17,
+    y: 10,
+    w: 14,
+    h: 10,
     accent: "#d4a82a",
     type: "commons",
     purpose: "Where the team gathers and Earn coordinates.",
+  },
+  {
+    key: "reception",
+    label: "Reception",
+    hub: null,
+    x: 17,
+    y: 21,
+    w: 14,
+    h: 9,
+    accent: "#38bdf8",
+    type: "reception",
+    purpose: "The lobby — where people arrive and are welcomed.",
+  },
+  {
+    key: "pod-1",
+    label: "Focus Pod A",
+    hub: null,
+    x: 1,
+    y: 27,
+    w: 6,
+    h: 4,
+    accent: "#64748b",
+    type: "pod",
+    purpose: "A quiet booth for heads-down, single-track work.",
+  },
+  {
+    key: "pod-2",
+    label: "Focus Pod B",
+    hub: null,
+    x: 9,
+    y: 27,
+    w: 6,
+    h: 4,
+    accent: "#64748b",
+    type: "pod",
+    purpose: "A quiet booth for heads-down, single-track work.",
+  },
+  {
+    key: "cafe",
+    label: "The Cafe",
+    hub: null,
+    x: 33,
+    y: 27,
+    w: 14,
+    h: 4,
+    accent: "#fb923c",
+    type: "cafe",
+    purpose: "Coffee, counter seating, and informal collisions.",
   },
 ];
 
@@ -143,8 +260,8 @@ export const ROOM_BY_KEY: Record<string, OfficeRoom> = Object.fromEntries(
   ROOMS.map((r) => [r.key, r]),
 );
 
-/** Human avatars spawn near the bottom of the Commons. */
-export const SPAWN = { x: 20, y: 19 };
+/** Human avatars spawn just inside the Reception lobby, where people arrive. */
+export const SPAWN = { x: 24, y: 26 };
 
 /** Radius (tiles) within which spatial conversation is possible. */
 export const PROXIMITY_RADIUS = 4;

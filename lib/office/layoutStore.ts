@@ -15,16 +15,39 @@ import {
   type OfficeObject,
   type RoomType,
 } from "./layout";
+import { furnishAll } from "./furnish";
 import type { Hub } from "@/lib/supabase/database.types";
 
-/** Valid object kinds, mirrored from {@link OfficeObject}. */
+/** Valid object kinds, mirrored from {@link OfficeObject}. Legacy + premium. */
 const OBJECT_KINDS = new Set<OfficeObject["kind"]>([
+  // legacy
   "desk",
   "plant",
   "whiteboard",
   "couch",
   "table",
   "screen",
+  // premium catalogue
+  "chair",
+  "monitor",
+  "plant_lg",
+  "armchair",
+  "coffee_table",
+  "meeting_table",
+  "tv",
+  "bookshelf",
+  "rug",
+  "rug_round",
+  "reception_desk",
+  "cafe_counter",
+  "coffee_machine",
+  "water_cooler",
+  "wall_art",
+  "window",
+  "divider",
+  "pod",
+  "lamp",
+  "server_rack",
 ]);
 
 /** Valid room types, mirrored from {@link RoomType}. */
@@ -35,7 +58,17 @@ const ROOM_TYPE_SET = new Set<RoomType>([
   "private",
   "social",
   "commons",
+  "reception",
+  "lounge",
+  "cafe",
+  "pod",
 ]);
+
+/** Allowed prop orientations, in degrees. */
+const ROTATIONS = [0, 90, 180, 270];
+/** Bounds for a prop's footprint (tiles). */
+const MIN_FOOTPRINT = 0.25;
+const MAX_FOOTPRINT = Math.max(OFFICE_COLS, OFFICE_ROWS);
 
 /** Fallback room type for custom rooms with no default and no valid `type`. */
 const DEFAULT_ROOM_TYPE: RoomType = "focus";
@@ -66,10 +99,10 @@ const DEFAULT_ROOM_BY_KEY: Record<string, OfficeRoom> = Object.fromEntries(
   ROOMS.map((r) => [r.key, r]),
 );
 
-/** The built-in map, derived from the current static `ROOMS`. */
+/** The built-in map, derived from the current static `ROOMS`, pre-furnished. */
 export const DEFAULT_LAYOUT: OfficeLayoutData = {
   version: LAYOUT_VERSION,
-  rooms: ROOMS.map(cloneRoom),
+  rooms: furnishAll(ROOMS),
 };
 
 function cloneRoom(room: OfficeRoom): OfficeRoom {
@@ -101,12 +134,25 @@ function toRoomType(v: unknown, fallback: RoomType): RoomType {
     : fallback;
 }
 
+/** Snap an untrusted rotation to the nearest allowed orientation, or undefined. */
+function toRotation(v: unknown): number | undefined {
+  if (!isFiniteNumber(v)) return undefined;
+  const norm = ((v % 360) + 360) % 360;
+  let best = ROTATIONS[0];
+  for (const r of ROTATIONS) {
+    if (Math.abs(norm - r) < Math.abs(norm - best)) best = r;
+  }
+  return best;
+}
+
 /**
  * Validate & clamp an untrusted `objects` value into safe {@link OfficeObject}s:
- * each must have a valid `kind`; positions are clamped inside the office floor;
- * ids are coerced to non-empty strings and de-duplicated (later dupes dropped).
- * Returns `undefined` when there is nothing to store so backward-compatible
- * layouts (which omit `objects`) round-trip byte-for-byte.
+ * each must have a valid (legacy or premium) `kind`; positions are clamped inside
+ * the office floor; `w`/`h` are clamped to a sane footprint and `rot` snapped to
+ * a cardinal orientation — all three preserved only when supplied, so legacy
+ * layouts (six kinds, no footprint) round-trip byte-for-byte. Ids are coerced to
+ * non-empty strings and de-duplicated (later dupes dropped). Returns `undefined`
+ * when there is nothing to store so object-free layouts stay byte-identical.
  */
 function parseObjects(raw: unknown): OfficeObject[] | undefined {
   if (!Array.isArray(raw)) return undefined;
@@ -122,12 +168,21 @@ function parseObjects(raw: unknown): OfficeObject[] | undefined {
     if (!id) id = `obj-${i}`;
     if (seen.has(id)) return;
     seen.add(id);
-    objects.push({
+    const obj: OfficeObject = {
       id,
       kind: o.kind as OfficeObject["kind"],
       x: Math.min(Math.max(toNumber(o.x, 0), 0), OFFICE_COLS),
       y: Math.min(Math.max(toNumber(o.y, 0), 0), OFFICE_ROWS),
-    });
+    };
+    if (o.w !== undefined) {
+      obj.w = Math.min(Math.max(toNumber(o.w, MIN_FOOTPRINT), MIN_FOOTPRINT), MAX_FOOTPRINT);
+    }
+    if (o.h !== undefined) {
+      obj.h = Math.min(Math.max(toNumber(o.h, MIN_FOOTPRINT), MIN_FOOTPRINT), MAX_FOOTPRINT);
+    }
+    const rot = toRotation(o.rot);
+    if (rot !== undefined) obj.rot = rot;
+    objects.push(obj);
   });
   return objects.length > 0 ? objects : undefined;
 }
