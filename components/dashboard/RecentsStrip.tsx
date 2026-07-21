@@ -37,6 +37,21 @@ function labelFor(path: string) {
   return KNOWN_LABELS[path] ?? path.split("/").filter(Boolean).pop() ?? path;
 }
 
+// Routes that have been removed from the app (e.g. the retired Virtual Office).
+// A path that lives on in a user's localStorage history would otherwise keep
+// resurfacing as a recent chip — showing a dead label like "OFFICE" and, before
+// the redirect, 404ing. Filter these out of both the persisted list and the
+// rendered strip so removed pages disappear on the next dashboard load.
+function isRemovedPath(path: string): boolean {
+  return (
+    path === "/dashboard/office" ||
+    path === "/office" ||
+    path.startsWith("/office/") ||
+    path === "/virtual-office" ||
+    path.startsWith("/virtual-office/")
+  );
+}
+
 interface RecentEntry {
   path: string;
   label: string;
@@ -53,12 +68,15 @@ export function RecentsStrip() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const current: RecentEntry[] = raw ? JSON.parse(raw) : [];
-      // Deduplicate then prepend the current path.
-      const without = current.filter((e) => e.path !== pathname);
-      const updated: RecentEntry[] = [
-        { path: pathname, label: labelFor(pathname), ts: Date.now() },
-        ...without,
-      ].slice(0, MAX_RECENTS + 1); // +1 because current path is filtered out below
+      // Deduplicate the current path and drop any routes that no longer exist,
+      // so stale history (e.g. the removed Virtual Office) is scrubbed for good.
+      const without = current.filter((e) => e.path !== pathname && !isRemovedPath(e.path));
+      // Only record the current path if it's still a live route.
+      const updated: RecentEntry[] = (
+        isRemovedPath(pathname)
+          ? without
+          : [{ path: pathname, label: labelFor(pathname), ts: Date.now() }, ...without]
+      ).slice(0, MAX_RECENTS + 1); // +1 because current path is filtered out below
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       // Exclude the current page from the strip — it's already highlighted in the nav.
       setRecents(updated.filter((e) => e.path !== pathname).slice(0, MAX_RECENTS));
