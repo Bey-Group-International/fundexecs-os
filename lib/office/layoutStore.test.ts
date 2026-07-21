@@ -35,9 +35,11 @@ describe("layoutStore", () => {
 
     const serialized = serializeLayout(DEFAULT_LAYOUT);
     // The default rects are integers, so serialization is a stable fixed point.
+    // The default is now a multi-floor building, so `floors` round-trips too.
     expect(serialized).toEqual({
       version: LAYOUT_VERSION,
       rooms: DEFAULT_LAYOUT.rooms,
+      floors: DEFAULT_LAYOUT.floors,
     });
     expect(serializeLayout(serialized)).toEqual(serialized);
   });
@@ -221,11 +223,18 @@ describe("layoutStore", () => {
     for (const room of DEFAULT_LAYOUT.rooms) {
       expect(room.objects && room.objects.length).toBeGreaterThan(0);
     }
+    // Every floor's rooms are furnished, too.
+    for (const floor of DEFAULT_LAYOUT.floors ?? []) {
+      for (const room of floor.rooms) {
+        expect(room.objects && room.objects.length).toBeGreaterThan(0);
+      }
+    }
     // Parse + serialize is a stable fixed point on the furnished default.
     const serialized = serializeLayout(DEFAULT_LAYOUT);
     expect(serialized).toEqual({
       version: LAYOUT_VERSION,
       rooms: DEFAULT_LAYOUT.rooms,
+      floors: DEFAULT_LAYOUT.floors,
     });
     expect(serializeLayout(serialized)).toEqual(serialized);
   });
@@ -309,5 +318,55 @@ describe("layoutStore", () => {
     for (const key of CORE_ROOM_KEYS) {
       expect(parsed.rooms.some((r) => r.key === key)).toBe(true);
     }
+  });
+
+  describe("multi-floor layouts", () => {
+    it("keeps legacy single-floor rows single-floor (no `floors` added)", () => {
+      const parsed = parseLayout({ version: 1, rooms: [] });
+      expect(parsed.floors).toBeUndefined();
+      const serialized = serializeLayout(parsed);
+      expect(serialized.floors).toBeUndefined();
+      expect("floors" in serialized).toBe(false);
+    });
+
+    it("validates a floors[] building and mirrors the ground floor into rooms", () => {
+      const parsed = parseLayout({
+        version: 1,
+        floors: [
+          { id: "ground", name: "G", level: 0, rooms: [] },
+          {
+            id: "up",
+            name: "Level 2",
+            level: 1,
+            rooms: [
+              { key: "lab", label: "Lab", hub: null, x: 2, y: 2, w: 6, h: 6, accent: "#3d7387", type: "focus", purpose: "" },
+            ],
+          },
+        ],
+      });
+      expect(parsed.floors).toHaveLength(2);
+      // Ground floor (index 0) still has its core rooms guaranteed.
+      for (const key of CORE_ROOM_KEYS) {
+        expect(parsed.floors![0].rooms.some((r) => r.key === key)).toBe(true);
+      }
+      // `rooms` mirrors floors[0].
+      expect(parsed.rooms).toBe(parsed.floors![0].rooms);
+      // Upper floors are free-form (no core rooms forced).
+      expect(parsed.floors![1].rooms.map((r) => r.key)).toEqual(["lab"]);
+      // Every rect stays inside the floor.
+      for (const floor of parsed.floors!) for (const room of floor.rooms) withinBounds(room);
+    });
+
+    it("coerces malformed floor metadata and round-trips a building", () => {
+      const parsed = parseLayout({
+        floors: [{ rooms: [] }, { id: "  ", name: 42, level: "x", rooms: [] }],
+      });
+      expect(parsed.floors![0].id).toBe("floor-0");
+      expect(parsed.floors![1].id).toBe("floor-1");
+      expect(typeof parsed.floors![1].name).toBe("string");
+      expect(parsed.floors![1].level).toBe(1);
+      const serialized = serializeLayout(parsed);
+      expect(serializeLayout(serialized)).toEqual(serialized);
+    });
   });
 });

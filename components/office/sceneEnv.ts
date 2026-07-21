@@ -163,11 +163,6 @@ export function drawFloorMaterial(
   ctx.restore();
 }
 
-/** A single plank width scales with room size but stays in a readable band. */
-function plankHeight(h: number): number {
-  return Math.max(18, Math.min(34, h / 5));
-}
-
 function drawWood(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -177,64 +172,93 @@ function drawWood(
   surface: string,
   accent: string,
 ): void {
-  const ph = plankHeight(h);
-  // Dark, warm hardwood — walnut/wenge, not honey oak. Long planks.
-  const plankBase = mix(darken(surface, 0.05), hexToRgb("#5a3d24"), 0.5);
-  let row = 0;
-  for (let py = y; py < y + h; py += ph, row++) {
-    const bh = Math.min(ph, y + h - py);
-    // Alternate plank tone very slightly so rows read individually but stay hushed.
-    const tone = row % 2 === 0 ? lighten(plankBase, 0.035) : darken(plankBase, 0.035);
-    const g = ctx.createLinearGradient(0, py, 0, py + bh);
-    g.addColorStop(0, lighten(tone, 0.05));
-    g.addColorStop(0.5, tone);
-    g.addColorStop(1, darken(tone, 0.07));
-    ctx.fillStyle = g;
-    ctx.fillRect(x, py, w, bh);
+  // Premium executive PARQUET, laid as a basketweave: square blocks of a few
+  // short planks, each block turned 90° from its neighbour (a classic bank-lobby
+  // parquet, richer than plain boards). Dark, warm hardwood — walnut, not honey
+  // oak. Lit from the top-left; every block reads as figured timber, not print.
+  const walnut = mix(darken(surface, 0.05), hexToRgb("#5a3d24"), 0.5);
+  const grainDark = rgba(darken(walnut, 0.4), 0.12);
+  const grainLight = rgba(lighten(walnut, 0.18), 0.06);
+  // Block size scales with the room but stays in a readable band.
+  const block = Math.max(24, Math.min(64, Math.min(w, h) / 3.2));
+  const planks = 4; // short planks per block
 
-    // Seam between rows (dark recess, with a thin top-left-lit lip just below).
-    ctx.strokeStyle = rgba("#000000", 0.22);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, py + bh - 0.5);
-    ctx.lineTo(x + w, py + bh - 0.5);
-    ctx.stroke();
-    ctx.strokeStyle = rgba("#ffffff", 0.045);
-    ctx.beginPath();
-    ctx.moveTo(x, py + 0.5);
-    ctx.lineTo(x + w, py + 0.5);
-    ctx.stroke();
+  let iy = 0;
+  for (let by = y; by < y + h; by += block, iy++) {
+    const bh = Math.min(block, y + h - by);
+    let ix = 0;
+    for (let bx = x; bx < x + w; bx += block, ix++) {
+      const bw = Math.min(block, x + w - bx);
+      // Alternate the weave: this block's planks run 90° to its neighbours'.
+      const horiz = (ix + iy) % 2 === 0;
+      const blockTone = horiz ? lighten(walnut, 0.03) : darken(walnut, 0.03);
 
-    // Rich fine grain — several faint length-wise strokes per plank, wavering
-    // deterministically so the timber reads as figured, not printed.
-    const grains = 6;
-    for (let gI = 0; gI < grains; gI++) {
-      const gy = py + bh * (0.12 + 0.13 * gI + 0.05 * hash(row * 7.3 + gI));
-      const dark = gI % 2 === 0;
-      ctx.strokeStyle = dark
-        ? rgba(darken(plankBase, 0.4), 0.14)
-        : rgba(lighten(plankBase, 0.18), 0.07);
-      ctx.lineWidth = dark ? 0.9 : 0.7;
-      ctx.beginPath();
-      ctx.moveTo(x, gy);
-      const steps = 4;
-      for (let s = 1; s <= steps; s++) {
-        const gx = x + (w * s) / steps;
-        const wobble = (hash(row * 3.1 + gI * 1.7 + s) - 0.5) * bh * 0.18;
-        ctx.lineTo(gx, gy + wobble);
+      for (let p = 0; p < planks; p++) {
+        let px: number;
+        let py: number;
+        let pw2: number;
+        let ph2: number;
+        if (horiz) {
+          ph2 = bh / planks;
+          py = by + p * ph2;
+          px = bx;
+          pw2 = bw;
+        } else {
+          pw2 = bw / planks;
+          px = bx + p * pw2;
+          py = by;
+          ph2 = bh;
+        }
+        // Faint plank-to-plank tone shift so the boards read individually.
+        const pt = p % 2 === 0 ? lighten(blockTone, 0.03) : darken(blockTone, 0.025);
+        const g = horiz
+          ? ctx.createLinearGradient(0, py, 0, py + ph2)
+          : ctx.createLinearGradient(px, 0, px + pw2, 0);
+        g.addColorStop(0, lighten(pt, 0.05));
+        g.addColorStop(0.5, pt);
+        g.addColorStop(1, darken(pt, 0.08));
+        ctx.fillStyle = g;
+        ctx.fillRect(px, py, pw2, ph2);
+
+        // A couple of length-wise grain streaks per plank.
+        ctx.lineWidth = 0.7;
+        for (let s = 0; s < 2; s++) {
+          ctx.strokeStyle = s === 0 ? grainDark : grainLight;
+          ctx.beginPath();
+          if (horiz) {
+            const gy = py + ph2 * (0.34 + 0.3 * s);
+            ctx.moveTo(px, gy);
+            ctx.lineTo(px + pw2, gy);
+          } else {
+            const gx = px + pw2 * (0.34 + 0.3 * s);
+            ctx.moveTo(gx, py);
+            ctx.lineTo(gx, py + ph2);
+          }
+          ctx.stroke();
+        }
+        // Thin recessed seam between short planks.
+        ctx.strokeStyle = rgba("#000000", 0.16);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (horiz) {
+          ctx.moveTo(px, py + ph2 - 0.5);
+          ctx.lineTo(px + pw2, py + ph2 - 0.5);
+        } else {
+          ctx.moveTo(px + pw2 - 0.5, py);
+          ctx.lineTo(px + pw2 - 0.5, py + ph2);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
-    }
 
-    // Vertical board breaks, staggered per row (long-plank butt joints).
-    ctx.strokeStyle = rgba("#000000", 0.14);
-    ctx.lineWidth = 1;
-    const boardW = Math.max(80, w / 4);
-    const offset = (row % 2) * boardW * 0.5;
-    for (let bx = x + offset; bx < x + w; bx += boardW) {
+      // Block frame — a dark recess with a top-left-lit lip (beveled parquet).
+      ctx.strokeStyle = rgba("#000000", 0.22);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+      ctx.strokeStyle = rgba("#ffffff", 0.05);
       ctx.beginPath();
-      ctx.moveTo(bx + 0.5, py);
-      ctx.lineTo(bx + 0.5, py + bh);
+      ctx.moveTo(bx + 1, by + bh - 1);
+      ctx.lineTo(bx + 1, by + 1);
+      ctx.lineTo(bx + bw - 1, by + 1);
       ctx.stroke();
     }
   }
@@ -286,6 +310,33 @@ function drawCarpet(
       const jy = (hash(i * 5.3) - 0.5) * 1.8;
       ctx.fillStyle = r < 0.5 ? rgba("#ffffff", 0.035) : rgba("#000000", 0.05);
       ctx.fillRect(px + jx, py + jy, 1.3, 1.3);
+    }
+  }
+
+  // Carpet TILES — a subtle checkerboard where each tile's nap runs 90° to its
+  // neighbour's, the hallmark of a commercial modular-carpet floor. A faint
+  // directional sheen per tile plus a hairline seam sells the laid-tile grid.
+  const tsize = Math.max(38, Math.min(72, Math.min(w, h) / 3));
+  let ty2 = 0;
+  for (let ty = y; ty < y + h; ty += tsize, ty2++) {
+    const th = Math.min(tsize, y + h - ty);
+    let tx2 = 0;
+    for (let tx = x; tx < x + w; tx += tsize, tx2++) {
+      const tw = Math.min(tsize, x + w - tx);
+      const flip = (tx2 + ty2) % 2 === 0;
+      const nap = ctx.createLinearGradient(
+        tx,
+        ty,
+        flip ? tx + tw : tx,
+        flip ? ty : ty + th,
+      );
+      nap.addColorStop(0, rgba("#ffffff", 0.03));
+      nap.addColorStop(1, rgba("#000000", 0.032));
+      ctx.fillStyle = nap;
+      ctx.fillRect(tx, ty, tw, th);
+      ctx.strokeStyle = rgba("#000000", 0.07);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx + 0.5, ty + 0.5, tw - 1, th - 1);
     }
   }
 
@@ -822,11 +873,27 @@ export function drawWindow(
   const daylight = opts.daylight ?? "#bfe3f5";
   ctx.save();
 
-  // Sky pane — brighter at the top.
+  // Sky pane — a graded sky, brighter toward a soft horizon low in the pane.
   const sky = ctx.createLinearGradient(x, y, x, y + h);
-  sky.addColorStop(0, lighten(daylight, 0.12));
-  sky.addColorStop(1, lighten(daylight, 0.32));
+  sky.addColorStop(0, darken(daylight, 0.06));
+  sky.addColorStop(0.55, lighten(daylight, 0.16));
+  sky.addColorStop(1, lighten(daylight, 0.34));
   ctx.fillStyle = sky;
+  ctx.fillRect(x, y, w, h);
+
+  // Warm low sun glare bleeding through the glass from the top-left.
+  const sun = ctx.createRadialGradient(
+    x + w * 0.24,
+    y + h * 0.3,
+    0,
+    x + w * 0.24,
+    y + h * 0.3,
+    Math.max(w, h) * 0.6,
+  );
+  sun.addColorStop(0, rgba("#fff4d8", 0.55));
+  sun.addColorStop(0.5, rgba("#fff4d8", 0.12));
+  sun.addColorStop(1, "rgba(255,244,216,0)");
+  ctx.fillStyle = sun;
   ctx.fillRect(x, y, w, h);
 
   // Daylight glow — a top-left radial spill onto the pane.
@@ -951,6 +1018,38 @@ export function applySceneLighting(
     ao.addColorStop(1, "rgba(8, 10, 18, 0.16)");
     ctx.fillStyle = ao;
     ctx.fillRect(rx, ry, rw, rh);
+
+    // Wall-base pooling — a soft dark band hugging the room's inner perimeter,
+    // where ambient occlusion gathers along the foot of the raised walls. Four
+    // edge gradients (dark at the wall, fading to nothing toward the interior)
+    // ground the floor against its walls without dimming the room centre.
+    const band = Math.max(6, Math.min(rw, rh) * 0.16);
+    const edgeDark = "rgba(6, 8, 16, 0.20)";
+    const edgeClear = "rgba(6, 8, 16, 0)";
+    // Top.
+    let eg = ctx.createLinearGradient(rx, ry, rx, ry + band);
+    eg.addColorStop(0, edgeDark);
+    eg.addColorStop(1, edgeClear);
+    ctx.fillStyle = eg;
+    ctx.fillRect(rx, ry, rw, band);
+    // Bottom (deeper — shadows pool away from the top-left key light).
+    eg = ctx.createLinearGradient(rx, ry + rh, rx, ry + rh - band);
+    eg.addColorStop(0, "rgba(6, 8, 16, 0.26)");
+    eg.addColorStop(1, edgeClear);
+    ctx.fillStyle = eg;
+    ctx.fillRect(rx, ry + rh - band, rw, band);
+    // Left.
+    eg = ctx.createLinearGradient(rx, ry, rx + band, ry);
+    eg.addColorStop(0, edgeDark);
+    eg.addColorStop(1, edgeClear);
+    ctx.fillStyle = eg;
+    ctx.fillRect(rx, ry, band, rh);
+    // Right (deeper).
+    eg = ctx.createLinearGradient(rx + rw, ry, rx + rw - band, ry);
+    eg.addColorStop(0, "rgba(6, 8, 16, 0.26)");
+    eg.addColorStop(1, edgeClear);
+    ctx.fillStyle = eg;
+    ctx.fillRect(rx + rw - band, ry, band, rh);
   }
 
   // 4. Filmic vignette — a soft darkening toward the canvas edges, cooler.
