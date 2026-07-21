@@ -61,6 +61,7 @@ describe("mapEditing", () => {
       "pod",
       "lamp",
       "server_rack",
+      "image",
     ];
     const catalogKinds = OBJECT_CATALOG.map((o) => o.kind);
     // Every kind is present, exactly once.

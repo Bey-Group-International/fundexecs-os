@@ -1,33 +1,33 @@
 "use client";
 
-// A controlled, expanded avatar customizer. The parent owns the AvatarConfig
-// and wires persistence; this component only renders the pickers and reports
-// changes via `onChange`. Swatch pickers for the colors, segmented pickers for
-// the enum choices, and a large live animated preview. Styled with the repo's
-// surface/fg/gold tokens so it sits inside the office UI without extra theming.
-import type { ReactNode } from "react";
+// A controlled, Woka-style tabbed avatar creator. The parent owns the
+// AvatarConfig and wires persistence; this component renders a row of category
+// tabs, the selected category's swatch/option grid, and a large live animated
+// preview. Cosmetics are role-gated: `optionsFor` drops anything the viewer's
+// role can't pick, so leadership-only tones simply don't appear. Styled with the
+// repo's surface/fg/gold tokens so it sits inside the office UI without extra
+// theming.
+import { useState } from "react";
 import {
-  ACCESSORIES,
-  BUILDS,
-  EYE_COLORS,
-  FACIAL_HAIR,
-  HAIR_COLORS,
-  HAIR_STYLES,
-  OUTFIT_COLORS,
-  OUTFIT_STYLES,
-  SKIN_TONES,
+  CATEGORY_META,
+  COSMETIC_LAYERS,
+  categoryField,
+  optionsFor,
   type Accessory,
   type AvatarConfig,
   type Build,
+  type CosmeticCategory,
   type FacialHair,
   type HairStyle,
   type OutfitStyle,
 } from "@/lib/office/avatarConfig";
+import type { MemberRole } from "@/lib/supabase/database.types";
 import { AvatarPreview } from "@/components/office/AvatarPreview";
 
 interface AvatarCustomizerProps {
   value: AvatarConfig;
   onChange: (config: AvatarConfig) => void;
+  role?: MemberRole | null;
 }
 
 const HAIR_LABELS: Record<HairStyle, string> = {
@@ -73,191 +73,151 @@ const BUILD_LABELS: Record<Build, string> = {
   broad: "Broad",
 };
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium uppercase tracking-wide text-fg-muted">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
+// Friendly names for the named color swatches — used as the accessible label on
+// each color cell (the swatch itself carries the meaning visually).
+const COLOR_NAMES: Record<string, string> = {
+  "#2f3541": "Charcoal",
+  "#26314b": "Navy",
+  "#4a5568": "Slate",
+  "#383d45": "Graphite",
+  "#b08d57": "Camel",
+  "#e8e2d4": "Ivory",
+  "#31473b": "Forest",
+  "#6b2c39": "Burgundy",
+  "#9a7d3f": "Brass",
+};
+
+// Per-category value → label map for the "option" categories. Swatch categories
+// fall back to a color name / the hex itself.
+const OPTION_LABELS: Partial<Record<CosmeticCategory, Record<string, string>>> = {
+  hair: HAIR_LABELS,
+  outfit: OUTFIT_LABELS,
+  facialHair: FACIAL_HAIR_LABELS,
+  accessory: ACCESSORY_LABELS,
+  build: BUILD_LABELS,
+};
+
+function labelFor(cat: CosmeticCategory, value: string): string {
+  const map = OPTION_LABELS[cat];
+  if (map && value in map) return map[value];
+  return COLOR_NAMES[value] ?? value;
 }
 
-function SwatchRow({
-  colors,
-  selected,
-  onSelect,
-  label,
-}: {
-  colors: string[];
-  selected: string;
-  onSelect: (color: string) => void;
-  label: string;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={label}>
-      {colors.map((color) => {
-        const active = color === selected;
-        return (
-          <button
-            key={color}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={color}
-            onClick={() => onSelect(color)}
-            className={`h-7 w-7 rounded-full border transition ${
-              active
-                ? "border-gold-400 ring-2 ring-gold-400/40"
-                : "border-border hover:border-fg-muted"
-            }`}
-            style={{ backgroundColor: color }}
-          />
-        );
-      })}
-    </div>
-  );
-}
+export function AvatarCustomizer({
+  value,
+  onChange,
+  role,
+}: AvatarCustomizerProps) {
+  const [active, setActive] = useState<CosmeticCategory>(COSMETIC_LAYERS[0]);
 
-function Segmented<T extends string>({
-  options,
-  selected,
-  onSelect,
-  labels,
-  label,
-}: {
-  options: T[];
-  selected: T;
-  onSelect: (value: T) => void;
-  labels: Record<T, string>;
-  label: string;
-}) {
-  return (
-    <div
-      className="flex flex-wrap gap-1.5 rounded-lg bg-surface-1 p-1"
-      role="radiogroup"
-      aria-label={label}
-    >
-      {options.map((option) => {
-        const active = option === selected;
-        return (
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onSelect(option)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              active
-                ? "bg-surface-3 text-fg-primary shadow-sm"
-                : "text-fg-secondary hover:text-fg-primary"
-            }`}
-          >
-            {labels[option]}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+  const meta = CATEGORY_META[active];
+  const field = categoryField(active);
+  const selected = value[field] as string;
+  const options = optionsFor(active, { role });
 
-export function AvatarCustomizer({ value, onChange }: AvatarCustomizerProps) {
-  const patch = (next: Partial<AvatarConfig>) => onChange({ ...value, ...next });
+  const select = (next: string) => {
+    // The catalogs are the source of truth, so `next` is always a valid member
+    // of the field's enum/hex set — a controlled cast keeps the config typed.
+    onChange({ ...value, [field]: next } as AvatarConfig);
+  };
 
   return (
     <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
       <div className="flex shrink-0 flex-col items-center gap-2 self-center rounded-xl bg-surface-2 p-4 sm:self-start sm:sticky sm:top-4">
-        <AvatarPreview config={value} size={160} facing="down" animate />
+        <AvatarPreview config={value} size={168} facing="down" animate />
         <span className="text-xs text-fg-muted">Live preview</span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4">
-        <Field label="Skin">
-          <SwatchRow
-            label="Skin tone"
-            colors={SKIN_TONES}
-            selected={value.skin}
-            onSelect={(skin) => patch({ skin })}
-          />
-        </Field>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <div
+          role="tablist"
+          aria-label="Avatar categories"
+          className="flex flex-wrap gap-1.5 rounded-lg bg-surface-1 p-1"
+        >
+          {COSMETIC_LAYERS.map((cat) => {
+            const isActive = cat === active;
+            return (
+              <button
+                key={cat}
+                type="button"
+                role="tab"
+                id={`avatar-tab-${cat}`}
+                aria-selected={isActive}
+                aria-controls={`avatar-panel-${cat}`}
+                onClick={() => setActive(cat)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  isActive
+                    ? "bg-surface-3 text-fg-primary shadow-sm"
+                    : "text-fg-secondary hover:text-fg-primary"
+                }`}
+              >
+                {CATEGORY_META[cat].label}
+              </button>
+            );
+          })}
+        </div>
 
-        <Field label="Hair style">
-          <Segmented
-            label="Hair style"
-            options={HAIR_STYLES}
-            selected={value.hair}
-            onSelect={(hair) => patch({ hair })}
-            labels={HAIR_LABELS}
-          />
-        </Field>
-
-        <Field label="Hair color">
-          <SwatchRow
-            label="Hair color"
-            colors={HAIR_COLORS}
-            selected={value.hairColor}
-            onSelect={(hairColor) => patch({ hairColor })}
-          />
-        </Field>
-
-        <Field label="Eyes">
-          <SwatchRow
-            label="Eye color"
-            colors={EYE_COLORS}
-            selected={value.eyes}
-            onSelect={(eyes) => patch({ eyes })}
-          />
-        </Field>
-
-        <Field label="Outfit">
-          <Segmented
-            label="Outfit style"
-            options={OUTFIT_STYLES}
-            selected={value.outfit}
-            onSelect={(outfit) => patch({ outfit })}
-            labels={OUTFIT_LABELS}
-          />
-        </Field>
-
-        <Field label="Outfit color">
-          <SwatchRow
-            label="Outfit color"
-            colors={OUTFIT_COLORS}
-            selected={value.outfitColor}
-            onSelect={(outfitColor) => patch({ outfitColor })}
-          />
-        </Field>
-
-        <Field label="Facial hair">
-          <Segmented
-            label="Facial hair"
-            options={FACIAL_HAIR}
-            selected={value.facialHair}
-            onSelect={(facialHair) => patch({ facialHair })}
-            labels={FACIAL_HAIR_LABELS}
-          />
-        </Field>
-
-        <Field label="Accessory">
-          <Segmented
-            label="Accessory"
-            options={ACCESSORIES}
-            selected={value.accessory}
-            onSelect={(accessory) => patch({ accessory })}
-            labels={ACCESSORY_LABELS}
-          />
-        </Field>
-
-        <Field label="Build">
-          <Segmented
-            label="Build"
-            options={BUILDS}
-            selected={value.build}
-            onSelect={(build) => patch({ build })}
-            labels={BUILD_LABELS}
-          />
-        </Field>
+        <div
+          role="tabpanel"
+          id={`avatar-panel-${active}`}
+          aria-labelledby={`avatar-tab-${active}`}
+          className="rounded-xl bg-surface-2 p-4"
+        >
+          {meta.kind === "swatch" ? (
+            <div
+              className="flex flex-wrap gap-2.5"
+              role="radiogroup"
+              aria-label={meta.label}
+            >
+              {options.map((color) => {
+                const isSel = color === selected;
+                return (
+                  <button
+                    key={color}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSel}
+                    aria-label={labelFor(active, color)}
+                    title={labelFor(active, color)}
+                    onClick={() => select(color)}
+                    className={`h-9 w-9 rounded-full border transition ${
+                      isSel
+                        ? "border-gold-400 ring-2 ring-gold-400/40"
+                        : "border-border hover:border-fg-muted"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div
+              className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+              role="radiogroup"
+              aria-label={meta.label}
+            >
+              {options.map((option) => {
+                const isSel = option === selected;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSel}
+                    onClick={() => select(option)}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                      isSel
+                        ? "border-gold-400 bg-surface-3 text-fg-primary shadow-sm"
+                        : "border-border text-fg-secondary hover:border-fg-muted hover:text-fg-primary"
+                    }`}
+                  >
+                    {labelFor(active, option)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

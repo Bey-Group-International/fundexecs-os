@@ -42,6 +42,7 @@ export default async function OfficePage() {
         initialActivity={activity}
         myAvatar={myAvatar}
         myPortraitUrl={myPortraitUrl}
+        role={ctx.role}
       />
     </div>
   );

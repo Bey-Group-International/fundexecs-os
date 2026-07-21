@@ -40,13 +40,16 @@ import type { OfficeLayoutData } from "@/lib/office/layoutStore";
 import type { AgentActivity } from "@/lib/office/activity";
 import { demoParticipants } from "@/lib/office/demoParticipants";
 import { recordPresenceEvent } from "@/lib/office/analyticsServer";
-import { buildWalls, resolveMovement } from "@/lib/office/walls";
+import { buildWalls, resolveMovement, furnitureColliders } from "@/lib/office/walls";
 import {
   agentSeats,
   seatsForRooms,
   nearestFreeSeat,
   seatKey,
 } from "@/lib/office/seating";
+import { defaultZones, zonesContaining, zoneAt } from "@/lib/office/zones";
+import type { OfficeZone } from "@/lib/office/layout";
+import type { MemberRole } from "@/lib/supabase/database.types";
 import {
   type AvatarConfig,
   type Facing,
@@ -77,6 +80,8 @@ interface OfficeShellProps {
   myAvatar: AvatarConfig;
   /** The member's AI portrait URL, if one has been generated. */
   myPortraitUrl: string | null;
+  /** The member's org role — gates leadership-only cosmetics. */
+  role?: MemberRole | null;
 }
 
 interface PresencePayload {
@@ -196,6 +201,7 @@ export function OfficeShell({
   initialActivity,
   myAvatar,
   myPortraitUrl,
+  role,
 }: OfficeShellProps) {
   const myColor = useMemo(() => colorFromId(userId), [userId]);
 
@@ -236,6 +242,31 @@ export function OfficeShell({
   const walls = useMemo(() => buildWalls(layoutState.rooms), [layoutState.rooms]);
   const wallsRef = useRef(walls);
   wallsRef.current = walls;
+  // Solid furniture colliders + interaction zones for the active layout.
+  const colliders = useMemo(
+    () => [...walls.walls, ...furnitureColliders(layoutState.rooms)],
+    [walls, layoutState.rooms],
+  );
+  const collidersRef = useRef(colliders);
+  collidersRef.current = colliders;
+  const zones = useMemo(() => defaultZones(layoutState.rooms), [layoutState.rooms]);
+  const zonesRef = useRef(zones);
+  zonesRef.current = zones;
+  // Camera (follow the local avatar, or fit the whole floor). camViewRef stores
+  // the live transform so click-to-move can invert it.
+  const [camMode, setCamMode] = useState<"follow" | "fit">("follow");
+  const camModeRef = useRef(camMode);
+  camModeRef.current = camMode;
+  const camViewRef = useRef({ sc: 1, tx: 0, ty: 0 });
+  const focusRef = useRef<{ x: number; y: number; until: number } | null>(null);
+  // Zone state for the side panel + behaviours.
+  const [inSilentZone, setInSilentZone] = useState(false);
+  const [meetingZoneId, setMeetingZoneId] = useState<string | null>(null);
+  const meetingZoneIdRef = useRef<string | null>(null);
+  const [embedPanel, setEmbedPanel] = useState<{ url: string; label: string } | null>(
+    null,
+  );
+  const actionZoneRef = useRef<OfficeZone | null>(null);
   // Seats for auto-sit, and each agent's seat (agents sit at their desks).
   const seats = useMemo(() => seatsForRooms(layoutState.rooms), [layoutState.rooms]);
   const seatsRef = useRef(seats);
@@ -286,6 +317,14 @@ export function OfficeShell({
     displayName,
     getSelfPos: () => posRef.current,
     humans: remotes,
+    outputMuted: inSilentZone,
+    sameCall: (id: string) => {
+      const mz = meetingZoneIdRef.current;
+      if (!mz) return false;
+      const r = remotesRef.current.get(id);
+      if (!r) return false;
+      return zoneAt({ x: r.x, y: r.y }, zonesRef.current)?.id === mz;
+    },
   });
   voiceCamOnRef.current = voice.camOn;
 
@@ -389,11 +428,19 @@ export function OfficeShell({
           setActivity((prev) => ({
             ...prev,
             [key]: done
-              ? { status: "available", label: "Wrapped up a task", busy: false }
+              ? {
+                  status: "available",
+                  label: "Wrapped up a task",
+                  busy: false,
+                  glyph: "✅",
+                  state: "idle",
+                }
               : {
                   status: "focusing",
                   label: shorten(label || "Working…"),
                   busy: true,
+                  glyph: "🛠",
+                  state: "active",
                 },
           }));
         },
@@ -413,6 +460,13 @@ export function OfficeShell({
         return;
       }
       const k = e.key.toLowerCase();
+      if (k === "e") {
+        const z = actionZoneRef.current;
+        if (z && z.kind === "embed" && z.payload?.url) {
+          setEmbedPanel({ url: z.payload.url, label: z.label ?? "Embed" });
+        }
+        return;
+      }
       if (k in MOVE_KEYS) {
         keysRef.current.add(k);
         targetRef.current = null; // keyboard overrides click-to-move
@@ -432,10 +486,23 @@ export function OfficeShell({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const scale = rect.width / OFFICE_WIDTH;
-    const tx = (e.clientX - rect.left) / scale / TILE;
-    const ty = (e.clientY - rect.top) / scale / TILE;
-    targetRef.current = clampToBounds(tx, ty);
+    // Invert the live camera transform to map the click to office tiles.
+    const { sc, tx: ctx0, ty: cty } = camViewRef.current;
+    const backX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const backY = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const tileX = (backX - ctx0) / sc / TILE;
+    const tileY = (backY - cty) / sc / TILE;
+    // Click an agent → briefly focus the camera on it.
+    for (const desk of desksRef.current) {
+      const seat = agentSeatMapRef.current[desk.agent.key];
+      const ax = seat ? seat.x : desk.x;
+      const ay = seat ? seat.y : desk.y;
+      if (Math.hypot(ax - tileX, ay - tileY) < 1.2) {
+        focusRef.current = { x: ax, y: ay, until: performance.now() + 4000 };
+        return;
+      }
+    }
+    targetRef.current = clampToBounds(tileX, tileY);
   }, []);
 
   // --- Animation + render loop --------------------------------------------
@@ -505,7 +572,7 @@ export function OfficeShell({
       if (mvx !== 0 || mvy !== 0) {
         // Clamp to the floor, then resolve against walls (slide, don't tunnel).
         const desired = clampToBounds(pos.x + mvx, pos.y + mvy);
-        const resolved = resolveMovement(pos, desired, wallsRef.current.walls);
+        const resolved = resolveMovement(pos, desired, collidersRef.current);
         const moved =
           Math.abs(resolved.x - pos.x) + Math.abs(resolved.y - pos.y);
         pos.x = resolved.x;
@@ -575,6 +642,8 @@ export function OfficeShell({
           emote: null,
           activityLabel: act?.label,
           busy: act?.busy ?? false,
+          glyph: act?.glyph,
+          thought: act?.busy ? act?.thought : undefined,
           facing: seat?.facing,
           pose: seat ? "sit" : "stand",
         };
@@ -609,12 +678,44 @@ export function OfficeShell({
       ];
 
       if (themeRef.current) {
+        // Camera: fit the whole floor, or follow the local avatar / focus agent.
+        const cw = canvas.width;
+        const chh = canvas.height;
+        const s0 = cw / OFFICE_WIDTH;
+        let sc = s0;
+        let tx = 0;
+        let ty = 0;
+        if (camModeRef.current === "follow") {
+          sc = s0 * 1.8;
+          const focus =
+            focusRef.current && now < focusRef.current.until ? focusRef.current : null;
+          const fx = (focus ? focus.x : pos.x) * TILE;
+          const fy = (focus ? focus.y : pos.y) * TILE;
+          const halfW = cw / 2;
+          const halfH = chh / 2;
+          const camX = Math.min(
+            Math.max(fx * sc, halfW),
+            Math.max(halfW, OFFICE_WIDTH * sc - halfW),
+          );
+          const camY = Math.min(
+            Math.max(fy * sc, halfH),
+            Math.max(halfH, OFFICE_HEIGHT * sc - halfH),
+          );
+          tx = halfW - camX;
+          ty = halfH - camY;
+        }
+        camViewRef.current = { sc, tx, ty };
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = themeRef.current.surface0;
+        ctx.fillRect(0, 0, cw, chh);
+        ctx.setTransform(sc, 0, 0, sc, tx, ty);
         drawOffice({
           ctx,
           theme: themeRef.current,
           rooms: roomsRef.current,
           walls: wallsRef.current.walls,
           doorways: wallsRef.current.doorways,
+          zones: zonesRef.current,
           participants,
           localId: userId,
           time: now,
@@ -667,6 +768,16 @@ export function OfficeShell({
       const pos = posRef.current;
       setNearbyList(nearby(pos, others));
       setSelfTile({ x: pos.x, y: pos.y });
+
+      // Interaction zones the local avatar currently stands in.
+      const here = zonesContaining(pos, zonesRef.current);
+      const silent = here.some((z) => z.kind === "silent");
+      const meeting = here.find((z) => z.kind === "meeting")?.id ?? null;
+      const action = here.find((z) => z.trigger === "action") ?? null;
+      setInSilentZone((v) => (v === silent ? v : silent));
+      meetingZoneIdRef.current = meeting;
+      setMeetingZoneId((v) => (v === meeting ? v : meeting));
+      actionZoneRef.current = action;
 
       // Track which room we're in; record enter/leave for analytics (the
       // server only persists these when the member has opted in).
@@ -821,6 +932,13 @@ export function OfficeShell({
           >
             Take the tour
           </button>
+          <button
+            type="button"
+            onClick={() => setCamMode((m) => (m === "follow" ? "fit" : "follow"))}
+            className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
+          >
+            {camMode === "follow" ? "View: Follow" : "View: Whole floor"}
+          </button>
           <Link
             href="/office/analytics"
             className="rounded-md border border-surface-3/50 px-2.5 py-1.5 text-xs text-fg-secondary transition hover:bg-surface-2"
@@ -860,7 +978,7 @@ export function OfficeShell({
               </button>
             </div>
           </div>
-          <AvatarCustomizer value={avatar} onChange={setAvatar} />
+          <AvatarCustomizer value={avatar} onChange={setAvatar} role={role} />
           <div className="mt-4 flex items-center gap-3 border-t border-surface-3/50 pt-4">
             <MemberPortrait
               url={portraitUrl}
@@ -892,6 +1010,7 @@ export function OfficeShell({
       {editing && (
         <div className="mb-4 rounded-xl border border-surface-3/60 bg-surface-1 p-4">
           <OfficeMapEditor
+            orgId={orgId ?? ""}
             initial={layoutState}
             onSaved={(d) => {
               setLayoutState(d);
@@ -1125,6 +1244,37 @@ export function OfficeShell({
           <StreamVideo key={id} id={id} stream={stream} reg={videoElsRef} />
         ))}
       </div>
+
+      {embedPanel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setEmbedPanel(null)}
+        >
+          <div
+            className="flex h-[80vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-surface-3/60 bg-surface-1 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-surface-3/50 px-4 py-2">
+              <span className="text-sm font-medium text-fg-primary">
+                {embedPanel.label}
+              </span>
+              <button
+                type="button"
+                onClick={() => setEmbedPanel(null)}
+                className="rounded-md px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2"
+              >
+                Close
+              </button>
+            </div>
+            <iframe
+              src={embedPanel.url}
+              title={embedPanel.label}
+              className="h-full w-full flex-1"
+              allow="clipboard-write"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

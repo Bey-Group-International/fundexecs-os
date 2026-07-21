@@ -6,6 +6,8 @@
 // portrait pipeline turns it into a deterministic prompt. Plain data (no DOM),
 // safe to import anywhere — server actions included.
 
+import type { MemberRole } from "@/lib/supabase/database.types";
+
 export interface AvatarConfig {
   /** Skin fill (hex). */
   skin: string;
@@ -193,6 +195,147 @@ export function parseAvatar(raw: unknown, fallbackId = "anon"): AvatarConfig {
     accessory: pick(r.accessory, ACCESSORIES, base.accessory),
     build: pick(r.build, BUILDS, base.build),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Cosmetic categories — the tabbed customizer's vocabulary. Each category maps
+// to one AvatarConfig field, carries display metadata, exposes its catalog, and
+// can be role-gated. Kept here (next to the catalogs) so the gating rules and
+// the option lists stay in lock-step. Adding a category means: extend the union,
+// add it to COSMETIC_LAYERS + CATEGORY_META, and wire it in categoryOptions.
+// ---------------------------------------------------------------------------
+
+export type CosmeticCategory =
+  | "skin"
+  | "hair"
+  | "hairColor"
+  | "eyes"
+  | "outfit"
+  | "outfitColor"
+  | "facialHair"
+  | "accessory"
+  | "build";
+
+/**
+ * The ordered category list. Drives the customizer's tab row and documents the
+ * intended draw order (skin first, layered cosmetics after) — the same order the
+ * fields sit in on AvatarConfig.
+ */
+export const COSMETIC_LAYERS: CosmeticCategory[] = [
+  "skin",
+  "hair",
+  "hairColor",
+  "eyes",
+  "outfit",
+  "outfitColor",
+  "facialHair",
+  "accessory",
+  "build",
+];
+
+/**
+ * Per-category display metadata. `kind` tells the customizer which control to
+ * render: "swatch" is a color grid (values are hex), "option" is a labeled
+ * choice grid (values are enum keys).
+ */
+export const CATEGORY_META: Record<
+  CosmeticCategory,
+  { label: string; kind: "swatch" | "option" }
+> = {
+  skin: { label: "Skin", kind: "swatch" },
+  hair: { label: "Hair", kind: "option" },
+  hairColor: { label: "Hair color", kind: "swatch" },
+  eyes: { label: "Eyes", kind: "swatch" },
+  outfit: { label: "Outfit", kind: "option" },
+  outfitColor: { label: "Outfit color", kind: "swatch" },
+  facialHair: { label: "Facial hair", kind: "option" },
+  accessory: { label: "Accessory", kind: "option" },
+  build: { label: "Build", kind: "option" },
+};
+
+// The AvatarConfig field each category edits — the category names match the
+// field names, but this keeps the coupling explicit and type-checked.
+const CATEGORY_FIELD: Record<CosmeticCategory, keyof AvatarConfig> = {
+  skin: "skin",
+  hair: "hair",
+  hairColor: "hairColor",
+  eyes: "eyes",
+  outfit: "outfit",
+  outfitColor: "outfitColor",
+  facialHair: "facialHair",
+  accessory: "accessory",
+  build: "build",
+};
+
+/** The AvatarConfig field a category writes to (skin, hair, hairColor, …). */
+export function categoryField(cat: CosmeticCategory): keyof AvatarConfig {
+  return CATEGORY_FIELD[cat];
+}
+
+/** The full catalog of option values for a category (before any gating). */
+export function categoryOptions(cat: CosmeticCategory): string[] {
+  switch (cat) {
+    case "skin":
+      return SKIN_TONES;
+    case "hair":
+      return HAIR_STYLES;
+    case "hairColor":
+      return HAIR_COLORS;
+    case "eyes":
+      return EYE_COLORS;
+    case "outfit":
+      return OUTFIT_STYLES;
+    case "outfitColor":
+      return OUTFIT_COLORS;
+    case "facialHair":
+      return FACIAL_HAIR;
+    case "accessory":
+      return ACCESSORIES;
+    case "build":
+      return BUILDS;
+  }
+}
+
+// Leadership-only cosmetics. The two richest boardroom outfit tones — burgundy
+// and brass — are reserved for owners and admins; everyone else gets the tailored
+// business palette. Add future prestige unlocks to this table.
+const LEADERSHIP_ROLES: ReadonlySet<MemberRole> = new Set<MemberRole>([
+  "owner",
+  "admin",
+]);
+
+const LEADERSHIP_OUTFIT_COLORS: ReadonlySet<string> = new Set<string>([
+  "#6b2c39", // burgundy
+  "#9a7d3f", // brass
+]);
+
+/**
+ * Whether a given cosmetic value is available to a viewer. A predicate seam so
+ * the customizer can filter (or lock) options and the persistence layer can
+ * validate. Never throws; when the role is unknown (null/undefined) everything
+ * is unlocked so anonymous/loading states never hide the base wardrobe.
+ */
+export function isCosmeticUnlocked(
+  cat: CosmeticCategory,
+  value: string,
+  ctx: { role?: MemberRole | null },
+): boolean {
+  if (cat === "outfitColor" && LEADERSHIP_OUTFIT_COLORS.has(value)) {
+    const role = ctx.role;
+    if (!role) return true;
+    return LEADERSHIP_ROLES.has(role);
+  }
+  return true;
+}
+
+/** A category's catalog filtered down to the values the viewer may pick. */
+export function optionsFor(
+  cat: CosmeticCategory,
+  ctx: { role?: MemberRole | null },
+): string[] {
+  return categoryOptions(cat).filter((value) =>
+    isCosmeticUnlocked(cat, value, ctx),
+  );
 }
 
 export type Facing = "down" | "up" | "left" | "right";

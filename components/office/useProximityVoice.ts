@@ -68,6 +68,10 @@ export interface UseProximityVoiceOptions {
   getSelfPos: () => { x: number; y: number };
   /** Remote HUMAN participants (agents excluded) with live x/y. */
   humans: Participant[];
+  /** Silence all incoming audio (e.g. the local user is in a quiet zone). */
+  outputMuted?: boolean;
+  /** Connect regardless of distance — e.g. both are in the same meeting room. */
+  sameCall?: (id: string) => boolean;
 }
 
 export interface UseProximityVoiceResult {
@@ -88,6 +92,10 @@ export function useProximityVoice(
   opts: UseProximityVoiceOptions,
 ): UseProximityVoiceResult {
   const { enabled, orgId, userId, displayName, getSelfPos, humans } = opts;
+  const outputMutedRef = useRef(!!opts.outputMuted);
+  outputMutedRef.current = !!opts.outputMuted;
+  const sameCallRef = useRef(opts.sameCall);
+  sameCallRef.current = opts.sameCall;
 
   // --- Public state --------------------------------------------------------
   const [connected, setConnected] = useState(false);
@@ -353,7 +361,13 @@ export function useProximityVoice(
       const inRange = new Set<string>();
       for (const h of humansRef.current) {
         if (h.id === userId || h.kind !== "human") continue;
-        if (distance(self, h) <= PROXIMITY_RADIUS) inRange.add(h.id);
+        // In range by distance, OR sharing a meeting room (same-call override).
+        if (
+          distance(self, h) <= PROXIMITY_RADIUS ||
+          sameCallRef.current?.(h.id)
+        ) {
+          inRange.add(h.id);
+        }
       }
       for (const id of inRange) {
         if (!peersRef.current.has(id)) createPeer(id);
@@ -368,9 +382,12 @@ export function useProximityVoice(
     const driveVolumes = () => {
       const self = getSelfPosRef.current();
       const next = new Map<string, number>();
+      const muted = outputMutedRef.current;
       for (const [id, st] of peersRef.current) {
         const h = humansRef.current.find((p) => p.id === id);
-        const gain = h ? clamp01(gainForDistance(distance(self, h))) : 0;
+        const distGain = h ? clamp01(gainForDistance(distance(self, h))) : 0;
+        // A meeting room keeps everyone audible; a quiet zone silences output.
+        const gain = muted ? 0 : sameCallRef.current?.(id) ? 1 : distGain;
         if (st.audioEl) {
           st.audioEl.volume = gain;
           if (st.audioEl.paused) {

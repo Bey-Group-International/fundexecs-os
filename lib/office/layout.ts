@@ -71,7 +71,9 @@ export type OfficeObjectKind =
   | "divider"
   | "pod"
   | "lamp"
-  | "server_rack";
+  | "server_rack"
+  // a user-uploaded branded image (logo, poster, wall art); uses `src`
+  | "image";
 
 /**
  * A decorative/functional prop placed inside the office floor. Coordinates are
@@ -92,6 +94,38 @@ export interface OfficeObject {
   h?: number;
   /** Orientation in degrees (0 | 90 | 180 | 270). */
   rot?: number;
+  /** For kind "image": the uploaded asset URL. */
+  src?: string;
+  /** Optional label (e.g. an image caption). */
+  label?: string;
+}
+
+/**
+ * Interaction zone — WorkAdventure-style "special area" that triggers behavior
+ * when an avatar enters it (or presses the action key inside). A third layout
+ * primitive alongside rooms and objects. Rects are in tile space.
+ */
+export type ZoneKind =
+  | "spawn"
+  | "silent"
+  | "meeting"
+  | "social"
+  | "embed"
+  | "portal";
+
+export interface OfficeZone {
+  id: string;
+  kind: ZoneKind;
+  /** Tile-space rectangle. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label?: string;
+  /** Fires on enter ("auto") or on the action key while inside ("action"). */
+  trigger?: "auto" | "action";
+  /** Kind-specific payload (embed url + policy, portal target, etc.). */
+  payload?: { url?: string; policy?: string; to?: string };
 }
 
 export interface OfficeRoom {
