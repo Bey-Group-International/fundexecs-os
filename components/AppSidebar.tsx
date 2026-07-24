@@ -408,6 +408,12 @@ function SidebarPanel({
             Dashboard
           </Link>
           <Link
+            href="/office"
+            className={navHrefActive(pathname, "/office") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
+          >
+            Office
+          </Link>
+          <Link
             href="/workspace"
             className={navHrefActive(pathname, "/workspace") ? `${activeLinkClass} flex items-center gap-2` : linkClass}
           >
