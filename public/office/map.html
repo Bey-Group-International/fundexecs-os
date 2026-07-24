@@ -329,6 +329,9 @@ body.viewmode .main{padding:0}
 body.viewmode .stage{border-radius:0;border:0}
 .cmenu button.cbuild{color:var(--gold2)}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
+#viewfp{display:none}
+body.viewmode #viewfp{display:flex;position:absolute;left:14px;bottom:14px;z-index:40;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;border:1px solid var(--line2);background:linear-gradient(180deg,#16233c,#0d1626);color:var(--gold2);font:700 11px ui-monospace,monospace;letter-spacing:.08em;cursor:pointer;box-shadow:0 10px 26px -12px #000}
+body.viewmode #viewfp:hover{border-color:var(--gold);color:#fff}
 </style>
 <div class="top">
   <div class="brand"><span class="bi"></span><span class="bt"><b>MAP BUILDER</b><small>FUNDEXECS OS</small></span></div>
@@ -1810,6 +1813,11 @@ const panelWrap=document.getElementById('panelWrap'),panelToggle=document.getEle
 let panelAnim;function togglePanel(force){const c=force!==undefined?force:!panelWrap.classList.contains('collapsed');panelWrap.classList.toggle('collapsed',c);panelCollapsed=c;panelToggle.title=(c?'Show':'Hide')+' inspector (I)';cancelAnimationFrame(panelAnim);const start=Date.now();const step=()=>{applyView();drawSel();if(Date.now()-start<300)panelAnim=requestAnimationFrame(step);};step();}
 panelToggle.onclick=()=>togglePanel();
 buildPal();buildPanel();render();pushHistory();enterView();
+(function(){var fpBtn=document.createElement('button');fpBtn.id='viewfp';fpBtn.type='button';
+  var setLbl=function(){fpBtn.innerHTML=(MODE==='fp'?'▲ TOP VIEW':'◱ WALK THE OFFICE');};setLbl();
+  fpBtn.onclick=function(){if(MODE==='fp'){mRows.onclick();}else{mIso.onclick();}setLbl();};
+  document.getElementById('stage').appendChild(fpBtn);
+})();
 </script>
 
 </body>
