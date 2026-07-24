@@ -1671,7 +1671,7 @@ function buildTree(){
     h+=`<div class="lgroup"><div class="lrow room" data-kind="zgroup"><span class="cav" data-act="caretzn">${collapsed.__zn&&!f?'▸':'▾'}</span><span class="gh" style="visibility:hidden">⠿</span><span class="nm" style="color:#ffb0dc">Zones</span><span class="badge">${zones.length}</span></div>`;
     listZ.forEach(z=>{h+=prow(z,'zone','__zn',renaming===z.id?`<input value="${(z.label||'').replace(/"/g,'&quot;')}">`:(z.label||ZLB[z.kind]||'Zone'),`color:${(ZCOL[z.kind]||ZCOL.audio).stroke}`);});h+=`</div>`;}
   if(!model.rooms.length&&!unplaced.length&&!zones.length)h+=`<div class="lempty">Nothing here yet.<br>Add a room or drag furnishings from the <b>ADD</b> tab.</div>`;
-  else if(f&&oi===0)h+=`<div class="lempty">No matches for “${f}”.</div>`;
+  else if(f&&oi===0)h+=`<div class="lempty">No matches for “${f.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}”.</div>`;
   tree.innerHTML=h;wireLayers();
   const s=tree.querySelector('.lrow.sel');if(s&&!renaming)s.scrollIntoView({block:'nearest'});
 }
