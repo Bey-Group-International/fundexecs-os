@@ -13,15 +13,15 @@ directly in any browser (no server or build step required).
 Highlights:
 - Dual projection: top-down 2.5D and a first-person walkthrough (WASD + mouse).
 - Spot-style **Build Mode**: Add / Floorplan / Environment / Brand tabs, search,
-  a category icon rail, big thumbnail catalog, and a floating action toolbar.
+a category icon rail, big thumbnail catalog, and a floating action toolbar.
 - Rich institutional asset library with per-object **style galleries**
-  (tables, seating, desks, storage…) and swappable finishes (mahogany, walnut,
-  oak, ebony, marble) and executive leathers.
+(tables, seating, desks, storage…) and swappable finishes (mahogany, walnut,
+oak, ebony, marble) and executive leathers.
 - Rooms, corridors, doors, walls, walkable tiles, full-office templates, and a
-  live-activity simulation (raise stations tick, jumbotron leaderboard) with a
-  `window.FundExecsActivity` / `postMessage` API for real data.
+live-activity simulation (raise stations tick, jumbotron leaderboard) with a
+`window.FundExecsActivity` / `postMessage` API for real data.
 - Double-click to unlock movement; single-file, self-persisting via
-  `localStorage`.
+`localStorage`.
 
 This is the design prototype behind the in-app office map component
 (`app/(app)/dashboard/office/`).

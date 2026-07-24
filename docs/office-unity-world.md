@@ -32,14 +32,14 @@ Z=0  └────────────────────────
 
 ### 1.2 Zone → legacy-map mapping
 
-| New Unity zone       | Legacy 2D room(s)            | Role                                   |
-|----------------------|------------------------------|----------------------------------------|
-| Command Center       | Reception + Operations Hub   | Arrival, live ops video wall, routing hub |
-| Executive Pods       | CEO Office                   | Glass-walled exec offices (A1–A3)      |
-| Workflow Terminals   | Trading desks / bullpen      | Open-plan benching workstations        |
-| Diligence Rooms      | Boardroom + Legal Corner     | Enclosed data/meeting rooms (D1–D3)    |
-| Capital Stack Lab    | Trading Floor                | Multi-monitor quant/exec rigs          |
-| Strategy Hub         | Research Hub + Marketing      | Whiteboard collab, campaign/brand wall |
+|   New Unity zone   |     Legacy 2D room(s)      |                   Role                    |
+|--------------------|----------------------------|-------------------------------------------|
+| Command Center     | Reception + Operations Hub | Arrival, live ops video wall, routing hub |
+| Executive Pods     | CEO Office                 | Glass-walled exec offices (A1–A3)         |
+| Workflow Terminals | Trading desks / bullpen    | Open-plan benching workstations           |
+| Diligence Rooms    | Boardroom + Legal Corner   | Enclosed data/meeting rooms (D1–D3)       |
+| Capital Stack Lab  | Trading Floor              | Multi-monitor quant/exec rigs             |
+| Strategy Hub       | Research Hub + Marketing   | Whiteboard collab, campaign/brand wall    |
 
 ### 1.3 Zone rects (interior, metres)
 
@@ -165,19 +165,19 @@ Each **kit** is a set of snap-to-grid modular prefabs (`2 m` snap in XZ, `0.4 m`
 
 ### 2.2 Procedural material library (Substance / Shader Graph)
 
-| Material ID              | Base            | Procedural params                                 | Lighting response      |
-|--------------------------|-----------------|---------------------------------------------------|------------------------|
-| `MAT_CARPET_LOOP_*`      | Loop-pile carpet| tint, pile-noise scale, tri-planar, roughness 0.9 | matte, high AO uptake  |
-| `MAT_CONCRETE_POLISHED`  | Polished concrete| clearcoat 0.3, smoothness 0.6, subtle SSR         | soft specular          |
-| `MAT_GLASS_CLEAR`        | Glass           | transmission 0.92, IOR 1.5, thin-wall, edge-tint  | refractive, no shadow  |
-| `MAT_GLASS_FROST`        | Frosted glass   | roughness 0.5, translucency, blur backdrop        | diffuse transmit       |
-| `MAT_ALU_BRUSHED`        | Brushed metal   | anisotropic 0.7, streak-noise, metallic 1.0       | anisotropic highlight  |
-| `MAT_LED_PANEL*`         | LED panel       | emissive HDR (nits), grid mask, flicker off       | **emissive light src** |
-| `MAT_LED_VIDEO`          | Video wall      | RenderTexture input (live dashboards), bloom       | **emissive**           |
-| `MAT_WALNUT_VENEER`      | Wood veneer     | grain-noise, satin coat, warm tint                | warm diffuse           |
-| `MAT_FELT_CHARCOAL`      | Acoustic felt   | fiber-noise, roughness 1.0                         | fully matte, deep AO   |
-| `MAT_WHITEBOARD`         | Gloss white     | smoothness 0.85, marker decals layer              | bright, spec ping      |
-| `MAT_GLASS_WALKWAY`      | Structural glass| frosted core, edge LED, footfall decals           | emissive edge          |
+|       Material ID       |       Base        |                 Procedural params                 |   Lighting response    |
+|-------------------------|-------------------|---------------------------------------------------|------------------------|
+| `MAT_CARPET_LOOP_*`     | Loop-pile carpet  | tint, pile-noise scale, tri-planar, roughness 0.9 | matte, high AO uptake  |
+| `MAT_CONCRETE_POLISHED` | Polished concrete | clearcoat 0.3, smoothness 0.6, subtle SSR         | soft specular          |
+| `MAT_GLASS_CLEAR`       | Glass             | transmission 0.92, IOR 1.5, thin-wall, edge-tint  | refractive, no shadow  |
+| `MAT_GLASS_FROST`       | Frosted glass     | roughness 0.5, translucency, blur backdrop        | diffuse transmit       |
+| `MAT_ALU_BRUSHED`       | Brushed metal     | anisotropic 0.7, streak-noise, metallic 1.0       | anisotropic highlight  |
+| `MAT_LED_PANEL*`        | LED panel         | emissive HDR (nits), grid mask, flicker off       | **emissive light src** |
+| `MAT_LED_VIDEO`         | Video wall        | RenderTexture input (live dashboards), bloom      | **emissive**           |
+| `MAT_WALNUT_VENEER`     | Wood veneer       | grain-noise, satin coat, warm tint                | warm diffuse           |
+| `MAT_FELT_CHARCOAL`     | Acoustic felt     | fiber-noise, roughness 1.0                        | fully matte, deep AO   |
+| `MAT_WHITEBOARD`        | Gloss white       | smoothness 0.85, marker decals layer              | bright, spec ping      |
+| `MAT_GLASS_WALKWAY`     | Structural glass  | frosted core, edge LED, footfall decals           | emissive edge          |
 
 ### 2.3 Lighting profiles
 
@@ -275,17 +275,17 @@ void DressProp(PropInstance p, int seed) {
 ### 4.1 Node graph (topology)
 
 ```
-        [EXEC A1]─[EXEC A2]─[EXEC A3]        [D1]─[D2]─[D3]  (diligence)
-             │        │         │              │    │    │
-          (idle)   (idle)    (idle)          (meet)(meet)(meet)
-             └────────┴────┬────┴──────┬────────┴────┴────┘
-                        [SPINE_N]───[SPINE_NE]───────► [LAB_RIG×6]
-                            │            │               (work)
-        [STRATEGY]──[SPINE_W]──[HUB_CORE]──[SPINE_E]──[BENCH×6]
-         (collab)                  │        (routing)     (work)
-                              [RECEPTION]
-                                   │
-                               [WELCOME]  (spawn / portal)
+[EXEC A1]─[EXEC A2]─[EXEC A3]        [D1]─[D2]─[D3]  (diligence)
+     │        │         │              │    │    │
+  (idle)   (idle)    (idle)          (meet)(meet)(meet)
+     └────────┴────┬────┴──────┬────────┴────┴────┘
+                [SPINE_N]───[SPINE_NE]───────► [LAB_RIG×6]
+                    │            │               (work)
+[STRATEGY]──[SPINE_W]──[HUB_CORE]──[SPINE_E]──[BENCH×6]
+ (collab)                  │        (routing)     (work)
+                      [RECEPTION]
+                           │
+                       [WELCOME]  (spawn / portal)
 ```
 
 ### 4.2 Node + edge definitions
@@ -427,15 +427,15 @@ void FocusZone(string zoneId) {
 
 ### 6.3 Lighting rig (URP)
 
-| Element            | Setup                                                                 |
-|--------------------|-----------------------------------------------------------------------|
-| Sun / key          | Single directional, 35° elevation, 4200K, soft shadows (2048, 2 cascades) |
-| Ambient            | Gradient IBL (sky 4500K / floor bounce warm), intensity 0.35          |
-| Room key lights    | Per-zone `Light` from `lighting_profile` (K + lux above)              |
-| Emissive sources   | LED panels / video walls / rigs contribute via **light probes + reflection probes** (baked+realtime hybrid) |
-| Light probes       | 3 m grid, denser (1.5 m) around emissive walls                        |
-| Reflection probes  | 1 per room, boxed to zone bounds, blended on glass/metal              |
-| Ceiling cull       | Layer 5 fades out above camera pitch threshold (keeps top-down read)  |
+|      Element      |                                                    Setup                                                    |
+|-------------------|-------------------------------------------------------------------------------------------------------------|
+| Sun / key         | Single directional, 35° elevation, 4200K, soft shadows (2048, 2 cascades)                                   |
+| Ambient           | Gradient IBL (sky 4500K / floor bounce warm), intensity 0.35                                                |
+| Room key lights   | Per-zone `Light` from `lighting_profile` (K + lux above)                                                    |
+| Emissive sources  | LED panels / video walls / rigs contribute via **light probes + reflection probes** (baked+realtime hybrid) |
+| Light probes      | 3 m grid, denser (1.5 m) around emissive walls                                                              |
+| Reflection probes | 1 per room, boxed to zone bounds, blended on glass/metal                                                    |
+| Ceiling cull      | Layer 5 fades out above camera pitch threshold (keeps top-down read)                                        |
 
 ### 6.4 Ambient occlusion & shadow rules
 
@@ -471,3 +471,4 @@ void FocusZone(string zoneId) {
 5. Place lighting rig + probes (§6.3); bake GI.
 6. Cinemachine vcams + confiners (§6.2); tune blends.
 7. Re-bake legacy 2D grid via the atlas (§5) for parity checks.
+

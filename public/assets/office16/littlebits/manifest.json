@@ -1,44 +1,140 @@
 {
-  "set": "Little Bits Office",
-  "tile": 16,
-  "note": "16px flat pixel-art office set. Individual PNGs sliced from the source atlases in _atlas/. Sizes are native pixels; scale up with image-rendering:pixelated.",
   "components": {
-    "objects": [
-      { "name": "monitor-blank", "w": 16, "h": 32 },
-      { "name": "monitor-data", "w": 16, "h": 32 },
-      { "name": "monitor-chart", "w": 16, "h": 32 },
-      { "name": "desk-computer", "w": 32, "h": 32 },
-      { "name": "fridge", "w": 16, "h": 32 },
-      { "name": "chair-left", "w": 16, "h": 17 },
-      { "name": "chair-down", "w": 16, "h": 17 },
-      { "name": "chair-right", "w": 16, "h": 17 },
-      { "name": "chair-up", "w": 16, "h": 17 },
-      { "name": "drawer-tray", "w": 16, "h": 16 },
-      { "name": "mat-blue-sm", "w": 16, "h": 16 },
-      { "name": "mat-blue", "w": 16, "h": 32 },
-      { "name": "plant", "w": 16, "h": 18 },
-      { "name": "keyboard-a", "w": 16, "h": 8 },
-      { "name": "keyboard-b", "w": 16, "h": 8 },
-      { "name": "vending", "w": 32, "h": 48 },
-      { "name": "shelf", "w": 16, "h": 32 },
-      { "name": "watercooler", "w": 16, "h": 32 },
-      { "name": "filing-cabinet", "w": 16, "h": 32 },
-      { "name": "easel", "w": 16, "h": 32 },
-      { "name": "coffee-table", "w": 32, "h": 28 }
-    ],
-    "floors": [
-      { "name": "floor-cream", "w": 16, "h": 16, "tileable": true },
-      { "name": "floor-grey", "w": 16, "h": 16, "tileable": true },
-      { "name": "floor-tan", "w": 16, "h": 16, "tileable": true },
-      { "name": "floor-parquet", "w": 16, "h": 16, "tileable": true },
-      { "name": "floor-blue", "w": 16, "h": 16, "tileable": true },
-      { "name": "floor-green", "w": 16, "h": 16, "tileable": true }
-    ],
-    "walls": [
-      { "name": "window-tall", "w": 48, "h": 64 },
-      { "name": "window-arch", "w": 48, "h": 64 },
-      { "name": "counter", "w": 64, "h": 32 },
-      { "name": "door-frame", "w": 32, "h": 48 }
-    ]
-  }
+    "floors": [ {
+      "h": 16,
+      "name": "floor-cream",
+      "tileable": true,
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "floor-grey",
+      "tileable": true,
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "floor-tan",
+      "tileable": true,
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "floor-parquet",
+      "tileable": true,
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "floor-blue",
+      "tileable": true,
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "floor-green",
+      "tileable": true,
+      "w": 16
+    } ],
+    "objects": [ {
+      "h": 32,
+      "name": "monitor-blank",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "monitor-data",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "monitor-chart",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "desk-computer",
+      "w": 32
+    }, {
+      "h": 32,
+      "name": "fridge",
+      "w": 16
+    }, {
+      "h": 17,
+      "name": "chair-left",
+      "w": 16
+    }, {
+      "h": 17,
+      "name": "chair-down",
+      "w": 16
+    }, {
+      "h": 17,
+      "name": "chair-right",
+      "w": 16
+    }, {
+      "h": 17,
+      "name": "chair-up",
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "drawer-tray",
+      "w": 16
+    }, {
+      "h": 16,
+      "name": "mat-blue-sm",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "mat-blue",
+      "w": 16
+    }, {
+      "h": 18,
+      "name": "plant",
+      "w": 16
+    }, {
+      "h": 8,
+      "name": "keyboard-a",
+      "w": 16
+    }, {
+      "h": 8,
+      "name": "keyboard-b",
+      "w": 16
+    }, {
+      "h": 48,
+      "name": "vending",
+      "w": 32
+    }, {
+      "h": 32,
+      "name": "shelf",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "watercooler",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "filing-cabinet",
+      "w": 16
+    }, {
+      "h": 32,
+      "name": "easel",
+      "w": 16
+    }, {
+      "h": 28,
+      "name": "coffee-table",
+      "w": 32
+    } ],
+    "walls": [ {
+      "h": 64,
+      "name": "window-tall",
+      "w": 48
+    }, {
+      "h": 64,
+      "name": "window-arch",
+      "w": 48
+    }, {
+      "h": 32,
+      "name": "counter",
+      "w": 64
+    }, {
+      "h": 48,
+      "name": "door-frame",
+      "w": 32
+    } ]
+  },
+  "note": "16px flat pixel-art office set. Individual PNGs sliced from the source atlases in _atlas/. Sizes are native pixels; scale up with image-rendering:pixelated.",
+  "set": "Little Bits Office",
+  "tile": 16
 }
