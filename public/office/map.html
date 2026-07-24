@@ -885,8 +885,8 @@ function drawMinimap(){const cv=document.getElementById('minimap');if(!cv)return
 function panToWorld(wx,wy){const sp=worldToStage(wx,wy);const st=stageDom.getBoundingClientRect();panX+=(st.width/2-sp[0]);panY+=(st.height/2-sp[1]);applyView();drawSel();}
 function svgEl(){return canvas.querySelector('svg');}
 function fitSvg(sv){const c=C();const cw=canvas.clientWidth,ch=canvas.clientHeight;if(!cw||!ch)return;const wider=cw/ch>c.SW/c.SH;
-  // hosted view: contain-fit (whole office visible, symmetric letterbox); build mode: cover-fit (overflow reached via pan/zoom)
-  if(document.body.classList.contains("viewmode")){if(wider){sv.style.width='auto';sv.style.height='100%';}else{sv.style.width='100%';sv.style.height='auto';}}
+  // hosted view: fill width edge-to-edge (letterbox top/bottom); build mode: cover-fit (overflow reached via pan/zoom)
+  if(document.body.classList.contains("viewmode")){sv.style.width='100%';sv.style.height='auto';}
   else if(wider){sv.style.width='100%';sv.style.height='auto';}else{sv.style.width='auto';sv.style.height='100%';}}
 function applyView(){const sv=svgEl();if(sv){fitSvg(sv);sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
 function fitOverlay(){const sv=svgEl();if(!sv)return;const ow=document.getElementById('ovwrap');const r=sv.getBoundingClientRect();const c=C();const s=r.width/c.SW;ow.style.width=c.SW+'px';ow.style.height=c.SH+'px';ow.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${s})`;}
