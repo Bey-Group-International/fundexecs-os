@@ -36,7 +36,9 @@
   "name": "fundexecs-os",
   "overrides": {
     "postcss": "^8.5.23",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "minimatch": "^10.0.3",
+    "brace-expansion": "^5.0.8"
   },
   "private": true,
   "scripts": {
