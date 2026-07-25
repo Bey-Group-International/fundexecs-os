@@ -281,14 +281,13 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .zonelabel span{font-weight:800;font-size:.9em;font-family:ui-monospace,monospace;letter-spacing:.16em;padding:.2em .7em;border-radius:.45em;background:#0b1220cc;white-space:nowrap}
 .zonelabel.z-audio span{color:#8fe3ff;border:1px solid #38d0ff}
 .zonelabel.z-meeting span{color:#f5d773;border:1px solid #d4a82a}
-/* Spot-style teammate avatars (living showroom) — placeholder presence, hosted view only. */
+/* FundExecs persona avatars (living showroom) — sprite-sheet characters, hosted view only.
+   Each atlas is 3 walk frames × 4 directions (down/up/left/right) of 64px; shown one 46px frame at a time
+   via background-position, stepped by the people RAF. */
 .person{z-index:6}
-.person .pav{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:800 9.5px ui-monospace,SFMono-Regular,monospace;color:#0b1220;border:2px solid rgba(11,18,32,.85);box-shadow:0 3px 7px rgba(0,0,0,.5);position:relative;margin:0 auto}
-.person .pdot{position:absolute;right:-2px;bottom:-2px;width:7px;height:7px;border-radius:50%;border:2px solid #0b1220;box-sizing:content-box}
-.person .pnm{margin-top:3px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.03em;color:#eaf0ff;background:rgba(11,18,32,.82);padding:1px 5px;border-radius:4px;white-space:nowrap;display:inline-block}
-.person.walk .pav{animation:pbob .55s ease-in-out infinite alternate}
-@keyframes pbob{from{transform:translateY(1px)}to{transform:translateY(-2px)}}
-@media (prefers-reduced-motion:reduce){.person.walk .pav{animation:none}}
+.person .spr{width:46px;height:46px;background-repeat:no-repeat;background-size:138px 184px;image-rendering:auto;margin:0 auto;filter:drop-shadow(0 3px 2px rgba(0,0,0,.45))}
+.person .pdot{position:absolute;left:50%;top:2px;margin-left:9px;width:8px;height:8px;border-radius:50%;border:2px solid #0b1220;box-sizing:content-box}
+.person .pnm{margin-top:-2px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.82);padding:1px 5px;border-radius:4px;white-space:nowrap;display:inline-block}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
 .ibwrap{pointer-events:none}
@@ -759,8 +758,8 @@ function renderModel(model){
   draws.sort((a,b)=>a.k-b.k);
   // Placeholder teammates — a Spot-style "living" office in the hosted view only (never in the builder).
   if(document.body.classList.contains('viewmode')&&MODE!=='fp'&&typeof PEOPLE!=='undefined'){
-    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const q=P(pp.x,pp.y,0);const sc=STC[pp.s]||STC.available;
-      overlays.push(`<div class="ov person" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${q[1].toFixed(1)}px"><div class="pav" style="background:${pp.c}">${pp.i}<i class="pdot" style="background:${sc}"></i></div><div class="pnm">${pp.n}</div></div>`);});
+    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const q=P(pp.x,pp.y,0);const sc=STC[pp.s]||STC.available;const dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1;
+      overlays.push(`<div class="ov person" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${q[1].toFixed(1)}px"><div class="spr" style="background-image:url('/assets/fundexecs/characters/${pp.k}/walk.png');background-position:-${fi*46}px -${dir*46}px"></div><i class="pdot" style="background:${sc}"></i><div class="pnm">${pp.r}</div></div>`);});
   }
   return {svg:draws.map(o=>o.svg).join(""),ov:overlays.join(""),bounds:{fx,fy,fw,fh}};
 }
@@ -869,28 +868,38 @@ function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setIt
 // ---- Placeholder teammates: a Spot-style "living" office in the hosted view ----
 // Sitters have a fixed x/y; roamers have a waypoint list and are lerped between points by a light RAF that
 // only touches these DOM chips (never the office SVG). Reduced-motion users get static, placed avatars.
+// Each teammate is a FundExecs persona: r=role label, k=sprite-atlas key, s=status; sitters have x/y, roamers
+// a waypoint list. dir 0=down 1=up 2=left 3=right (atlas rows); fi=walk frame column (0-2).
 const STC={available:'#34d399',busy:'#f5b342',away:'#94a3b8',dnd:'#ef5a6a'};
 const PEOPLE=[
- {id:'a',n:'Ava Chen',i:'AC',c:'#b9a7f0',s:'available',x:22.6,y:5.2},
- {id:'b',n:'Marcus Lee',i:'ML',c:'#7fd8cb',s:'busy',x:25.2,y:5.2},
- {id:'c',n:'Priya Rao',i:'PR',c:'#f0cf7a',s:'available',x:27.8,y:5.2},
- {id:'d',n:'Sam Okoye',i:'SO',c:'#f2a98f',s:'available',x:32.6,y:5.2},
- {id:'e',n:'Lena Vogt',i:'LV',c:'#8fb6f5',s:'away',x:35.4,y:5.2},
- {id:'f',n:'Diego Ruiz',i:'DR',c:'#8fe0a6',s:'available',x:21.4,y:14.7},
- {id:'g',n:'Nadia Farouk',i:'NF',c:'#e0a7ec',s:'busy',x:33,y:13.2},
- {id:'h',n:'Tom Beck',i:'TB',c:'#f0b48f',s:'available',x:8,y:32},
- {id:'i',n:'Ivy Park',i:'IP',c:'#f2c56b',s:'available',roam:[[5,19],[37,19]],ti:0},
- {id:'j',n:'Owen Cole',i:'OC',c:'#9ab8fe',s:'available',roam:[[5,10],[37,10]],ti:0},
+ {id:'om',r:'Office Manager',k:'office-manager',s:'available',x:5.5,y:4.2},
+ {id:'ea',r:'Executive Advisor',k:'executive-advisor',s:'busy',x:15,y:4},
+ {id:'ds',r:'Deal Sourcer',k:'deal-sourcer',s:'available',x:22.6,y:5.2},
+ {id:'lg',r:'Lead Generator',k:'lead-generator',s:'available',x:25.2,y:5.2},
+ {id:'seo',r:'SEO Disruptor',k:'seo-disruptor',s:'busy',x:27.8,y:5.2},
+ {id:'au',r:'Automater',k:'automater',s:'available',x:32.6,y:5.2},
+ {id:'wf',r:'Workflow Instructor',k:'workflow-instructor',s:'away',x:35.4,y:5.2},
+ {id:'la',r:'Legal Admin',k:'legal-admin',s:'available',x:6,y:14},
+ {id:'cu',r:'Curator',k:'curator',s:'available',x:16.5,y:13.4},
+ {id:'pr',r:'PR Director',k:'pr-director',s:'busy',x:21.4,y:14.7},
+ {id:'ir',r:'Investor Relations',k:'investor-relations',s:'available',x:30.5,y:13.2},
+ {id:'cc',r:'Capital Connector',k:'capital-connector',s:'available',x:34,y:14},
+ {id:'rm',r:'Rainmaker',k:'rainmaker',s:'available',roam:[[5,10],[37,10]],ti:0},
+ {id:'cr',r:'Capital Raiser',k:'capital-raiser',s:'available',roam:[[6,24],[36,24]],ti:0},
+ {id:'er',r:'Earn',k:'earn',s:'available',roam:[[5,19],[37,19]],ti:0},
 ];
 let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
 function peopleLoop(t){
   if(!document.body.classList.contains('viewmode')||MODE==='fp'){peopleRAF=0;return;}
   const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
   PEOPLE.forEach(pp=>{
+    let moving=false;
     if(pp.roam){const tg=pp.roam[pp.ti||0];const dx=tg[0]-pp.x,dy=tg[1]-pp.y,d=Math.hypot(dx,dy);
-      if(d<0.12){pp.moving=false;pp.wait=(pp.wait||0)+dt;if(pp.wait>1.6){pp.wait=0;pp.ti=((pp.ti||0)+1)%pp.roam.length;}}
-      else{const sp=Math.min(1.7*dt,d);pp.x+=dx/d*sp;pp.y+=dy/d*sp;pp.moving=true;}}
-    const el=document.getElementById('pe_'+pp.id);if(el){const q=P(pp.x,pp.y,0);el.style.left=q[0].toFixed(1)+'px';el.style.top=q[1].toFixed(1)+'px';el.classList.toggle('walk',!!pp.moving);}
+      if(d<0.12){pp.wait=(pp.wait||0)+dt;if(pp.wait>1.4){pp.wait=0;pp.ti=((pp.ti||0)+1)%pp.roam.length;}}
+      else{const sp=Math.min(1.7*dt,d);pp.x+=dx/d*sp;pp.y+=dy/d*sp;moving=true;pp.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);}}
+    if(moving){pp.ft=(pp.ft||0)+dt;if(pp.ft>0.13){pp.ft=0;pp.fi=((pp.fi==null?1:pp.fi)+1)%3;}}else pp.fi=1;
+    const el=document.getElementById('pe_'+pp.id);if(!el)return;const q=P(pp.x,pp.y,0);el.style.left=q[0].toFixed(1)+'px';el.style.top=q[1].toFixed(1)+'px';
+    const spr=el.firstChild;if(spr)spr.style.backgroundPosition=`-${(pp.fi||0)*46}px -${(pp.dir||0)*46}px`;
   });
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
