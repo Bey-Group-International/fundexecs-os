@@ -140,7 +140,7 @@ body.previewing .fabbar{top:14px}
 .pitem.wide .ic{color:var(--gold2)}
 .stage{flex:1;position:relative;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:radial-gradient(120% 120% at 50% -5%,#0e1a30,#070c16 70%);box-shadow:inset 0 0 0 1px rgba(245,215,115,.04),0 30px 80px -44px #000}
 .canvas{position:absolute;inset:0}
-.canvas svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto}
+.canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto}
 .ovwrap{position:absolute;top:50%;left:50%;transform-origin:center;pointer-events:none}
 .sel{position:absolute;inset:0;pointer-events:none;z-index:6}
 .brk{position:absolute;width:26px;height:26px;pointer-events:none;z-index:5;opacity:.5}
@@ -281,20 +281,13 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .zonelabel span{font-weight:800;font-size:.9em;font-family:ui-monospace,monospace;letter-spacing:.16em;padding:.2em .7em;border-radius:.45em;background:#0b1220cc;white-space:nowrap}
 .zonelabel.z-audio span{color:#8fe3ff;border:1px solid #38d0ff}
 .zonelabel.z-meeting span{color:#f5d773;border:1px solid #d4a82a}
-/* FundExecs persona avatars (living showroom) — sprite-sheet characters, hosted view only.
-   Each atlas is 3 walk frames × 4 directions (down/up/left/right) of 64px; shown one 46px frame at a time
-   via background-position, stepped by the people RAF. */
-.person{z-index:6}
-/* Feet-anchored so each character stands ON its floor point (WorkAdventure/Spot grounding), not floating. */
-.ov.person{transform:translate(-50%,-76%)}
-.person .gsh{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:26px;height:7px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0));z-index:0}
-.person .spr{position:relative;z-index:1;width:46px;height:46px;background-repeat:no-repeat;background-size:138px 184px;image-rendering:pixelated;margin:0 auto;filter:drop-shadow(0 2px 1px rgba(0,0,0,.35));animation:idlebob 2.6s ease-in-out infinite alternate}
-.person.walk .spr{animation:wbounce .26s ease-in-out infinite alternate}
-.person .pdot{position:absolute;top:3px;left:50%;margin-left:8px;width:8px;height:8px;border-radius:50%;border:2px solid #0b1220;box-sizing:content-box;z-index:2}
-.person .pnm{position:relative;z-index:2;margin-top:3px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.85);padding:1px 5px;border-radius:4px;white-space:nowrap;display:inline-block;box-shadow:0 0 0 1px rgba(245,215,115,.28)}
-@keyframes idlebob{to{transform:translateY(-1px)}}
-@keyframes wbounce{to{transform:translateY(-2.5px)}}
-@media (prefers-reduced-motion:reduce){.person .spr,.person.walk .spr{animation:none}}
+/* FundExecs persona avatars (living showroom), hosted view only. The character sprite + cast shadow are
+   drawn INTO the office SVG (depth-sorted by position, perspective-scaled) so they occlude / are occluded
+   like true 2.5D scene objects; only the floating name+status label lives in the top overlay so it stays
+   readable above furniture. Animation is driven by the people RAF mutating the SVG nodes. */
+.plabel{z-index:6}
+.plabel .pnm{display:inline-flex;align-items:center;gap:4px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.86);padding:1px 6px 1px 4px;border-radius:5px;white-space:nowrap;box-shadow:0 0 0 1px rgba(245,215,115,.28)}
+.plabel .pdot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 1.5px #0b1220}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
 .ibwrap{pointer-events:none}
@@ -342,7 +335,7 @@ body.viewmode .top,body.viewmode .leftcol,body.viewmode .panel,body.viewmode .fa
 body.viewmode .main{padding:0}
 /* Full-iframe stage (no nav bar). The office contain-fits it (meet) so the whole floor plan is visible; keeping the builder's centered transform means scroll-zoom and pan still work. */
 body.viewmode .stage{position:fixed;inset:0;border:0;border-radius:0}
-body.viewmode .canvas svg{width:100%!important;height:100%!important}
+body.viewmode .canvas>svg{width:100%!important;height:100%!important}
 .cmenu button.cbuild{color:var(--gold2)}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
 /* Floating Top / 1st-person control: two round icon orbs at the top-right of the office. */
@@ -763,10 +756,16 @@ function renderModel(model){
   (model.zones||[]).forEach(z=>{if(z.hidden)return;const col=ZCOL[z.kind]||ZCOL.audio;if(MODE==='fp'){const sp=projFP([[z.x,z.y,.02],[z.x+z.w,z.y,.02],[z.x+z.w,z.y+z.d,.02],[z.x,z.y+z.d,.02]]);if(sp.length>=3)push(-8e5,poly(sp,col.fill,null,0,.55));return;}const A=P(z.x,z.y),B=P(z.x+z.w,z.y),Cc=P(z.x+z.w,z.y+z.d),D=P(z.x,z.y+z.d);push(-6600+z.y*.3,poly([A,B,Cc,D],col.fill,null,0,.95)+`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${col.stroke}" stroke-width="1.6" stroke-dasharray="7 5" opacity=".85"/>`);overlay(z.x+z.w/2,z.y+.55,2.1,`<span>${(z.label||ZLB[z.kind]||'ZONE').toUpperCase()}</span>`,'zonelabel z-'+z.kind,z.w,z.d);});
   model.props.forEach(p=>{if(p.hidden)return;const rm=roomOf(p);if(rm&&hiddenRooms.has(rm.id))return;if(soloId&&(!rm||rm.id!==soloId))return;try{if(!PR[p.t])return;if(p.rot){const f=FOOT[p.t]||[1,1];ROT={cx:p.args[0]+f[0]/2,cy:p.args[1]+f[1]/2,cos:Math.cos(p.rot),sin:Math.sin(p.rot)};}CURP=p;PR[p.t](...p.args);CURP=null;ROT=null;const f=FOOT[p.t]||[1,1];if(p.action&&p.action!=='none'||p.link||p.note)overlay(p.args[0]+f[0]/2,p.args[1],1.5,`<span class="ib ib-${p.action||'link'}">${p.action==='seat'?'♟':p.action==='embed'?'▤':'★'}</span>`,'ibwrap');}catch(e){CURP=null;ROT=null;}});
   draws.sort((a,b)=>a.k-b.k);
-  // Placeholder teammates — a Spot-style "living" office in the hosted view only (never in the builder).
+  // FundExecs persona teammates (2.5D): sprite + cast shadow are depth-sorted INTO the scene (push into
+  // draws, so walls/desks occlude them), perspective-scaled by position; the name/status label floats in the
+  // overlay above furniture. Hosted view only.
   if(document.body.classList.contains('viewmode')&&MODE!=='fp'&&typeof PEOPLE!=='undefined'){
-    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const q=P(pp.x,pp.y,0);const sc=STC[pp.s]||STC.available;const dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1;
-      overlays.push(`<div class="ov person" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${q[1].toFixed(1)}px"><div class="gsh"></div><div class="spr" style="background-image:url('/assets/fundexecs/characters/${pp.k}/walk.png');background-position:-${fi*46}px -${dir*46}px"></div><i class="pdot" style="background:${sc}"></i><div class="pnm">${pp.r}</div></div>`);});
+    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}
+      const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1,sc=STC[pp.s]||STC.available;
+      const X=q[0]-W/2,Y=q[1]-H;
+      push(pp.x,pp.y,`<g id="ps_${pp.id}"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><clipPath id="cl_${pp.id}"><rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}"/></clipPath><image href="/assets/fundexecs/characters/${pp.k}/walk.png" x="${(X-fi*W).toFixed(1)}" y="${(Y-dir*H).toFixed(1)}" width="${(3*W).toFixed(1)}" height="${(4*H).toFixed(1)}" clip-path="url(#cl_${pp.id})" style="image-rendering:pixelated"/></g>`);
+      overlays.push(`<div class="ov plabel" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${(q[1]-H-3).toFixed(1)}px"><span class="pnm"><i class="pdot" style="background:${sc}"></i>${pp.r}</span></div>`);
+    });
   }
   return {svg:draws.map(o=>o.svg).join(""),ov:overlays.join(""),bounds:{fx,fy,fw,fh}};
 }
@@ -878,35 +877,46 @@ function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setIt
 // Each teammate is a FundExecs persona: r=role label, k=sprite-atlas key, s=status; sitters have x/y, roamers
 // a waypoint list. dir 0=down 1=up 2=left 3=right (atlas rows); fi=walk frame column (0-2).
 const STC={available:'#34d399',busy:'#f5b342',away:'#94a3b8',dnd:'#ef5a6a'};
+// Sitters sit just behind their desk (smaller y) facing down, so the desk (drawn later) reads in front.
 const PEOPLE=[
- {id:'om',r:'Office Manager',k:'office-manager',s:'available',x:5.5,y:4.2},
- {id:'ea',r:'Executive Advisor',k:'executive-advisor',s:'busy',x:15,y:4},
- {id:'ds',r:'Deal Sourcer',k:'deal-sourcer',s:'available',x:22.6,y:5.2},
- {id:'lg',r:'Lead Generator',k:'lead-generator',s:'available',x:25.2,y:5.2},
- {id:'seo',r:'SEO Disruptor',k:'seo-disruptor',s:'busy',x:27.8,y:5.2},
- {id:'au',r:'Automater',k:'automater',s:'available',x:32.6,y:5.2},
- {id:'wf',r:'Workflow Instructor',k:'workflow-instructor',s:'away',x:35.4,y:5.2},
- {id:'la',r:'Legal Admin',k:'legal-admin',s:'available',x:6,y:14},
- {id:'cu',r:'Curator',k:'curator',s:'available',x:16.5,y:13.4},
- {id:'pr',r:'PR Director',k:'pr-director',s:'busy',x:21.4,y:14.7},
- {id:'ir',r:'Investor Relations',k:'investor-relations',s:'available',x:30.5,y:13.2},
- {id:'cc',r:'Capital Connector',k:'capital-connector',s:'available',x:34,y:14},
+ {id:'om',r:'Office Manager',k:'office-manager',s:'available',x:5.2,y:2.6},
+ {id:'ea',r:'Executive Advisor',k:'executive-advisor',s:'busy',x:15.5,y:2.8},
+ {id:'ds',r:'Deal Sourcer',k:'deal-sourcer',s:'available',x:22.5,y:3.6},
+ {id:'lg',r:'Lead Generator',k:'lead-generator',s:'available',x:25.1,y:3.6},
+ {id:'seo',r:'SEO Disruptor',k:'seo-disruptor',s:'busy',x:27.7,y:3.6},
+ {id:'au',r:'Automater',k:'automater',s:'available',x:32.5,y:3.6},
+ {id:'wf',r:'Workflow Instructor',k:'workflow-instructor',s:'away',x:35.3,y:3.6},
+ {id:'la',r:'Legal Admin',k:'legal-admin',s:'available',x:4.6,y:12.7},
+ {id:'cu',r:'Curator',k:'curator',s:'available',x:16.3,y:12.7},
+ {id:'pr',r:'PR Director',k:'pr-director',s:'busy',x:22,y:13.6},
+ {id:'ir',r:'Investor Relations',k:'investor-relations',s:'available',x:30,y:13.5},
+ {id:'cc',r:'Capital Connector',k:'capital-connector',s:'available',x:33.8,y:13.6},
  {id:'rm',r:'Rainmaker',k:'rainmaker',s:'available',roam:[[5,10],[37,10]],ti:0},
  {id:'cr',r:'Capital Raiser',k:'capital-raiser',s:'available',roam:[[6,24],[36,24]],ti:0},
  {id:'er',r:'Earn',k:'earn',s:'available',roam:[[5,19],[37,19]],ti:0},
 ];
+// perspective scale: characters toward the back (small y) render a touch smaller than those in front.
+const pscale=y=>Math.max(.82,Math.min(1.14,.82+(y-2)/33*0.32));
 let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
 function peopleLoop(t){
   if(!document.body.classList.contains('viewmode')||MODE==='fp'){peopleRAF=0;return;}
   const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
   PEOPLE.forEach(pp=>{
+    if(pp.ph==null)pp.ph=(pp.id.charCodeAt(0)%12)*0.5;
     let moving=false;
     if(pp.roam){const tg=pp.roam[pp.ti||0];const dx=tg[0]-pp.x,dy=tg[1]-pp.y,d=Math.hypot(dx,dy);
       if(d<0.12){pp.wait=(pp.wait||0)+dt;if(pp.wait>1.4){pp.wait=0;pp.ti=((pp.ti||0)+1)%pp.roam.length;}}
       else{const sp=Math.min(1.7*dt,d);pp.x+=dx/d*sp;pp.y+=dy/d*sp;moving=true;pp.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);}}
     if(moving){pp.ft=(pp.ft||0)+dt;if(pp.ft>0.13){pp.ft=0;pp.fi=((pp.fi==null?1:pp.fi)+1)%3;}}else pp.fi=1;
-    const el=document.getElementById('pe_'+pp.id);if(!el)return;const q=P(pp.x,pp.y,0);el.style.left=q[0].toFixed(1)+'px';el.style.top=q[1].toFixed(1)+'px';el.classList.toggle('walk',moving);
-    const spr=el.querySelector('.spr');if(spr)spr.style.backgroundPosition=`-${(pp.fi||0)*46}px -${(pp.dir||0)*46}px`;
+    const g=document.getElementById('ps_'+pp.id);if(!g)return;
+    const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf;
+    const bounce=moving?(pp.fi===1?0:-2.2):(REDUCED?0:Math.sin(t/620+pp.ph)*0.7);
+    const X=q[0]-W/2,Y=q[1]-H+bounce,fi=pp.fi||0,dir=pp.dir||0;
+    const cr=g.querySelector('clipPath rect');if(cr){cr.setAttribute('x',X.toFixed(1));cr.setAttribute('y',Y.toFixed(1));cr.setAttribute('width',W.toFixed(1));cr.setAttribute('height',H.toFixed(1));}
+    const im=g.querySelector('image');if(im){im.setAttribute('x',(X-fi*W).toFixed(1));im.setAttribute('y',(Y-dir*H).toFixed(1));im.setAttribute('width',(3*W).toFixed(1));im.setAttribute('height',(4*H).toFixed(1));}
+    const es=g.getElementsByTagName('ellipse');if(es[0]){es[0].setAttribute('cx',(q[0]+1).toFixed(1));es[0].setAttribute('cy',(q[1]+1).toFixed(1));es[0].setAttribute('rx',(13.8*pf).toFixed(1));es[0].setAttribute('ry',(4.6*pf).toFixed(1));}
+    if(es[1]){es[1].setAttribute('cx',(q[0]+2*pf).toFixed(1));es[1].setAttribute('cy',q[1].toFixed(1));es[1].setAttribute('rx',(12*pf).toFixed(1));es[1].setAttribute('ry',(4*pf).toFixed(1));}
+    const lb=document.getElementById('pe_'+pp.id);if(lb){lb.style.left=q[0].toFixed(1)+'px';lb.style.top=(q[1]-H-3).toFixed(1)+'px';}
   });
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
