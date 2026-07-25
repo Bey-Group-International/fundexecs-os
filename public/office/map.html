@@ -333,7 +333,7 @@ body.viewmode .canvas svg{width:100%!important;height:100%!important}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
 /* Floating Top / 1st-person control overlaid on the top-right of the office (replaces the top nav bar). */
 .viewctl{display:none}
-body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:40;align-items:center;gap:10px;padding:7px 10px 7px 8px;border-radius:13px;background:linear-gradient(180deg,rgba(18,28,50,.82),rgba(9,15,28,.82));border:1px solid var(--line2);box-shadow:0 12px 30px -14px #000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:40;align-items:center;gap:10px;padding:6px;border-radius:13px;background:linear-gradient(180deg,rgba(18,28,50,.82),rgba(9,15,28,.82));border:1px solid var(--line2);box-shadow:0 12px 30px -14px #000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .tbtn.save{background:linear-gradient(180deg,#1f7a44,#155f34);border-color:#2a7a4a;color:#eafff1}
 .tbtn.save:hover{background:linear-gradient(180deg,#279a55,#1a7a44);color:#fff;box-shadow:0 6px 16px -6px #0a3a20}
 </style>
@@ -346,7 +346,7 @@ body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:4
   <button class="tbtn save" id="btnSave" title="Save layout & return to the office view">✓ SAVE</button><button class="tbtn gold" id="btnLayouts">◆ LAYOUTS</button>
   <button class="tbtn" id="btnReset">RESET</button>
 </div>
-<div class="viewctl" id="viewctl"><span class="brand"><span class="bi"></span></span><div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div></div>
+<div class="viewctl" id="viewctl"><div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div></div>
 <div class="main">
   <div class="leftcol">
     <div class="bmhead"><span class="bmtitle">◆ BUILD MODE</span><button class="bmlayers" id="tabLayers" title="Layers panel"><svg viewBox="0 0 16 16"><path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg></button></div>
