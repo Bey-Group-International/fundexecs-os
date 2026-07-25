@@ -868,7 +868,7 @@ function render(){
   const c=C();
   const {svg,ov,bounds}=renderModel(model);
   if(bounds)lastBounds=bounds;
-  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="${document.body.classList.contains('viewmode')?'xMidYMid slice':'xMidYMid meet'}"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
+  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid meet"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
   const _sv=svgEl();if(_sv)_sv.style.setProperty('--ad',(-(((Date.now()-T0)/1000)%3)).toFixed(3)+'s'); // keep screen-pulse phase continuous across rebuilds
   applyView();
   drawSel();
