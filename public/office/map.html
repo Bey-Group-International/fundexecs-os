@@ -737,7 +737,11 @@ function renderModel(model){
   }
   PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
-  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.label&&r.build!=='corridor'){const _l=String(r.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const _ly=r.build==='trading'?r.y+r.d-1.0:r.y+0.9;overlay(r.x+r.w/2,_ly,2.0,'<span>'+_l+'</span>','roomlabel');}if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
+  // The hosted view's floating Top/1st-person control sits at the top-right; bottom-anchor the label of the
+  // room beneath it so the name isn't hidden. Recomputed each render, so it tracks Build-Mode edits.
+  let _ctlRoom=null;
+  if(document.body.classList.contains('viewmode')){const _lab=model.rooms.filter(r=>r.label&&r.build!=='corridor'&&r.build!=='trading');if(_lab.length){const _minY=Math.min(..._lab.map(r=>r.y));const _top=_lab.filter(r=>r.y<=_minY+2);_ctlRoom=_top.reduce((a,b)=>(b.x+b.w)>(a.x+a.w)?b:a,_top[0]);}}
+  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.label&&r.build!=='corridor'){const _l=String(r.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const _ly=(r.build==='trading'||(_ctlRoom&&r.id===_ctlRoom.id))?r.y+r.d-1.0:r.y+0.9;overlay(r.x+r.w/2,_ly,2.0,'<span>'+_l+'</span>','roomlabel');}if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
   drawManualWalls();
   // blocked (non-walkable) tiles
   const blk=model.blocked||{};if(MODE!=='fp')Object.keys(blk).forEach(k=>{const t=k.split(',');const tx=+t[0],ty=+t[1];const A=P(tx,ty),B=P(tx+1,ty),Cc=P(tx+1,ty+1),D=P(tx,ty+1);push(-6650+ty*.2,poly([A,B,Cc,D],'url(#blockHatch)','#ff5a6a',.7,.7));});
@@ -864,7 +868,8 @@ function render(){
   const c=C();
   const {svg,ov,bounds}=renderModel(model);
   if(bounds)lastBounds=bounds;
-  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid meet"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
+  // Hosted view fills the frame (cover / slice); the builder contains the whole plan (meet).
+  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid ${viewPar()}"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
   const _sv=svgEl();if(_sv)_sv.style.setProperty('--ad',(-(((Date.now()-T0)/1000)%3)).toFixed(3)+'s'); // keep screen-pulse phase continuous across rebuilds
   applyView();
   drawSel();
@@ -885,11 +890,26 @@ function drawMinimap(){const cv=document.getElementById('minimap');if(!cv)return
 }
 function panToWorld(wx,wy){const sp=worldToStage(wx,wy);const st=stageDom.getBoundingClientRect();panX+=(st.width/2-sp[0]);panY+=(st.height/2-sp[1]);applyView();drawSel();}
 function svgEl(){return canvas.querySelector('svg');}
+// Hosted-view fit: fill the frame (slice) while the whole office stays visible; if the frame is far
+// off the office's aspect (ultrawide or portrait), covering would crop rooms, so contain instead (meet).
+// The builder always contains (meet). render() and fitOverlay() share this so overlay labels stay glued.
+function viewPar(){
+  if(!document.body.classList.contains('viewmode'))return 'meet';
+  const st=document.getElementById('stage');if(!st)return 'slice';
+  const b=st.getBoundingClientRect();if(!b.width||!b.height)return 'slice';
+  const c=C(),ca=b.width/b.height,oa=c.SW/c.SH,mm=ca>oa?ca/oa:oa/ca;
+  return mm>1.14?'meet':'slice';
+}
 function fitSvg(sv){const c=C();const cw=canvas.clientWidth,ch=canvas.clientHeight;if(!cw||!ch)return;const wider=cw/ch>c.SW/c.SH;
   // cover-fit: fill the stage on both axes; overflow is cropped in the hosted view and reachable via pan/zoom in build mode
   if(wider){sv.style.width='100%';sv.style.height='auto';}else{sv.style.width='auto';sv.style.height='100%';}}
 function applyView(){const sv=svgEl();if(sv){fitSvg(sv);sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
-function fitOverlay(){const sv=svgEl();if(!sv)return;const ow=document.getElementById('ovwrap');const r=sv.getBoundingClientRect();const c=C();const s=r.width/c.SW;ow.style.width=c.SW+'px';ow.style.height=c.SH+'px';ow.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${s})`;}
+function fitOverlay(){const sv=svgEl();if(!sv)return;const ow=document.getElementById('ovwrap');const r=sv.getBoundingClientRect();const c=C();
+  // Match the overlay scale to how the svg content actually fits, so labels stay glued: slice→cover ratio
+  // (max axis), viewmode meet→contain ratio (min axis), builder→width (its svg element matches content aspect).
+  const par=viewPar();
+  const s=par==='slice'?Math.max(r.width/c.SW,r.height/c.SH):document.body.classList.contains('viewmode')?Math.min(r.width/c.SW,r.height/c.SH):(r.width/c.SW);
+  ow.style.width=c.SW+'px';ow.style.height=c.SH+'px';ow.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${s})`;}
 function screenToSvg(clientX,clientY){const sv=svgEl();const r=sv.getBoundingClientRect();const c=C();return [ (clientX-r.left)*(c.SW/r.width), (clientY-r.top)*(c.SH/r.height) ];}
 let marquee=null; // stage-screen rect while rubber-band selecting
 let walkHover=null; // {tx,ty,valid} hovered tile while in walk mode
