@@ -95,6 +95,17 @@ Or, signed in as an org writer, POST `/api/brains/ingest` from the app (the rout
 also accepts a session cookie from an owner/admin/member). The response reports
 per-Brain chunk counts. Re-running is safe and idempotent.
 
+One-step helper (wraps the curl above, and can drain the re-embed backfill):
+
+```bash
+BRAIN_INGEST_SECRET=... npm run brains:ingest                 # → localhost:3000
+BRAIN_INGEST_SECRET=... BASE_URL=https://app npm run brains:ingest
+BRAIN_INGEST_SECRET=... npm run brains:reembed                # ingest, then drain reembed
+```
+
+See [`scripts/ingest-brains.sh`](../../../scripts/ingest-brains.sh). The server env
+must hold `SUPABASE_SERVICE_ROLE_KEY`; the script only needs `BRAIN_INGEST_SECRET`.
+
 > **After refreshing any corpus below, re-run ingestion** so the pgvector store
 > reflects the new content — the retrieval corpus is embedded at ingest time, not
 > read live.
