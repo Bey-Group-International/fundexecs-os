@@ -283,6 +283,7 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .zonelabel.z-meeting span{color:#f5d773;border:1px solid #d4a82a}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
+.roomlabel span{font:800 8px ui-monospace,SFMono-Regular,monospace;letter-spacing:.14em;color:#f5d773;background:#0b1220cc;border:1px solid rgba(245,215,115,.42);padding:3px 7px;border-radius:5px;white-space:nowrap;text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .ibwrap{pointer-events:none}
 .ib{display:inline-block;font-size:11px;line-height:16px;width:17px;height:17px;border-radius:50%;background:#0b1220e0;border:1px solid #d4a82a;color:#f5d773;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .ib-seat{border-color:#4ade80;color:#8ef0ad}.ib-embed{border-color:#38d0ff;color:#8fe3ff}
@@ -736,7 +737,7 @@ function renderModel(model){
   }
   PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
-  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
+  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.label&&r.build!=='corridor'){const _l=String(r.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const _ly=r.build==='trading'?r.y+r.d-1.0:r.y+0.9;overlay(r.x+r.w/2,_ly,2.0,'<span>'+_l+'</span>','roomlabel');}if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
   drawManualWalls();
   // blocked (non-walkable) tiles
   const blk=model.blocked||{};if(MODE!=='fp')Object.keys(blk).forEach(k=>{const t=k.split(',');const tx=+t[0],ty=+t[1];const A=P(tx,ty),B=P(tx+1,ty),Cc=P(tx+1,ty+1),D=P(tx,ty+1);push(-6650+ty*.2,poly([A,B,Cc,D],'url(#blockHatch)','#ff5a6a',.7,.7));});
