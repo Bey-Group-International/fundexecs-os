@@ -285,9 +285,16 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
    Each atlas is 3 walk frames × 4 directions (down/up/left/right) of 64px; shown one 46px frame at a time
    via background-position, stepped by the people RAF. */
 .person{z-index:6}
-.person .spr{width:46px;height:46px;background-repeat:no-repeat;background-size:138px 184px;image-rendering:auto;margin:0 auto;filter:drop-shadow(0 3px 2px rgba(0,0,0,.45))}
-.person .pdot{position:absolute;left:50%;top:2px;margin-left:9px;width:8px;height:8px;border-radius:50%;border:2px solid #0b1220;box-sizing:content-box}
-.person .pnm{margin-top:-2px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.82);padding:1px 5px;border-radius:4px;white-space:nowrap;display:inline-block}
+/* Feet-anchored so each character stands ON its floor point (WorkAdventure/Spot grounding), not floating. */
+.ov.person{transform:translate(-50%,-76%)}
+.person .gsh{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:26px;height:7px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0));z-index:0}
+.person .spr{position:relative;z-index:1;width:46px;height:46px;background-repeat:no-repeat;background-size:138px 184px;image-rendering:pixelated;margin:0 auto;filter:drop-shadow(0 2px 1px rgba(0,0,0,.35));animation:idlebob 2.6s ease-in-out infinite alternate}
+.person.walk .spr{animation:wbounce .26s ease-in-out infinite alternate}
+.person .pdot{position:absolute;top:3px;left:50%;margin-left:8px;width:8px;height:8px;border-radius:50%;border:2px solid #0b1220;box-sizing:content-box;z-index:2}
+.person .pnm{position:relative;z-index:2;margin-top:3px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.85);padding:1px 5px;border-radius:4px;white-space:nowrap;display:inline-block;box-shadow:0 0 0 1px rgba(245,215,115,.28)}
+@keyframes idlebob{to{transform:translateY(-1px)}}
+@keyframes wbounce{to{transform:translateY(-2.5px)}}
+@media (prefers-reduced-motion:reduce){.person .spr,.person.walk .spr{animation:none}}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
 .ibwrap{pointer-events:none}
@@ -759,7 +766,7 @@ function renderModel(model){
   // Placeholder teammates — a Spot-style "living" office in the hosted view only (never in the builder).
   if(document.body.classList.contains('viewmode')&&MODE!=='fp'&&typeof PEOPLE!=='undefined'){
     PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const q=P(pp.x,pp.y,0);const sc=STC[pp.s]||STC.available;const dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1;
-      overlays.push(`<div class="ov person" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${q[1].toFixed(1)}px"><div class="spr" style="background-image:url('/assets/fundexecs/characters/${pp.k}/walk.png');background-position:-${fi*46}px -${dir*46}px"></div><i class="pdot" style="background:${sc}"></i><div class="pnm">${pp.r}</div></div>`);});
+      overlays.push(`<div class="ov person" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${q[1].toFixed(1)}px"><div class="gsh"></div><div class="spr" style="background-image:url('/assets/fundexecs/characters/${pp.k}/walk.png');background-position:-${fi*46}px -${dir*46}px"></div><i class="pdot" style="background:${sc}"></i><div class="pnm">${pp.r}</div></div>`);});
   }
   return {svg:draws.map(o=>o.svg).join(""),ov:overlays.join(""),bounds:{fx,fy,fw,fh}};
 }
@@ -898,8 +905,8 @@ function peopleLoop(t){
       if(d<0.12){pp.wait=(pp.wait||0)+dt;if(pp.wait>1.4){pp.wait=0;pp.ti=((pp.ti||0)+1)%pp.roam.length;}}
       else{const sp=Math.min(1.7*dt,d);pp.x+=dx/d*sp;pp.y+=dy/d*sp;moving=true;pp.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);}}
     if(moving){pp.ft=(pp.ft||0)+dt;if(pp.ft>0.13){pp.ft=0;pp.fi=((pp.fi==null?1:pp.fi)+1)%3;}}else pp.fi=1;
-    const el=document.getElementById('pe_'+pp.id);if(!el)return;const q=P(pp.x,pp.y,0);el.style.left=q[0].toFixed(1)+'px';el.style.top=q[1].toFixed(1)+'px';
-    const spr=el.firstChild;if(spr)spr.style.backgroundPosition=`-${(pp.fi||0)*46}px -${(pp.dir||0)*46}px`;
+    const el=document.getElementById('pe_'+pp.id);if(!el)return;const q=P(pp.x,pp.y,0);el.style.left=q[0].toFixed(1)+'px';el.style.top=q[1].toFixed(1)+'px';el.classList.toggle('walk',moving);
+    const spr=el.querySelector('.spr');if(spr)spr.style.backgroundPosition=`-${(pp.fi||0)*46}px -${(pp.dir||0)*46}px`;
   });
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
