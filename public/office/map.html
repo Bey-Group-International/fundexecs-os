@@ -326,15 +326,14 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .altsw.cur{box-shadow:0 0 0 2px var(--gold2),0 0 0 4px rgba(212,168,42,.22)}
 body.viewmode .top,body.viewmode .leftcol,body.viewmode .panel,body.viewmode .fabbar,body.viewmode .coord,body.viewmode .status,body.viewmode .zoom{display:none!important}
 body.viewmode .main{padding:0}
-/* Pin the stage to the iframe viewport (below the 52px nav), sized to the office's aspect ratio and centered, so the office contain-fills it exactly — no crop, no internal margin — and the corner brackets hug the office on all four sides. Independent of the flex-height chain resolving. */
-body.viewmode .stage{position:fixed;top:52px;left:0;right:0;bottom:0;margin:auto;aspect-ratio:1204 / 735;max-width:100%;max-height:calc(100% - 52px);width:auto;height:auto;border:0;border-radius:0}
-/* Fill the aspect-matched stage exactly (height 100%, width auto = office aspect = stage width) while keeping the builder's centered transform so scroll-zoom still works. No JS-computed width/height, so it can't stick at a stale fit. */
-body.viewmode .canvas svg{width:auto!important;height:100%!important}
+/* Full-iframe stage (no nav bar). The office contain-fits it (meet) so the whole floor plan is visible; keeping the builder's centered transform means scroll-zoom and pan still work. */
+body.viewmode .stage{position:fixed;inset:0;border:0;border-radius:0}
+body.viewmode .canvas svg{width:100%!important;height:100%!important}
 .cmenu button.cbuild{color:var(--gold2)}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
-.viewnav{display:none}
-body.viewmode .viewnav{display:flex;flex:none;height:52px;align-items:center;gap:16px;padding:0 16px;background:linear-gradient(180deg,rgba(18,28,50,.96),rgba(9,15,28,.96));border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(245,215,115,.06),0 10px 30px -18px #000;z-index:30}
-.viewnav .vhint{margin-left:auto;color:var(--faint);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+/* Floating Top / 1st-person control overlaid on the top-right of the office (replaces the top nav bar). */
+.viewctl{display:none}
+body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:40;align-items:center;gap:10px;padding:6px;border-radius:13px;background:linear-gradient(180deg,rgba(18,28,50,.82),rgba(9,15,28,.82));border:1px solid var(--line2);box-shadow:0 12px 30px -14px #000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .tbtn.save{background:linear-gradient(180deg,#1f7a44,#155f34);border-color:#2a7a4a;color:#eafff1}
 .tbtn.save:hover{background:linear-gradient(180deg,#279a55,#1a7a44);color:#fff;box-shadow:0 6px 16px -6px #0a3a20}
 </style>
@@ -347,11 +346,7 @@ body.viewmode .viewnav{display:flex;flex:none;height:52px;align-items:center;gap
   <button class="tbtn save" id="btnSave" title="Save layout & return to the office view">✓ SAVE</button><button class="tbtn gold" id="btnLayouts">◆ LAYOUTS</button>
   <button class="tbtn" id="btnReset">RESET</button>
 </div>
-<div class="viewnav" id="viewnav">
-  <div class="brand"><span class="bi"></span><span class="bt"><b>FUNDEXECS OS</b><small>VIRTUAL OFFICE</small></span></div>
-  <div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div>
-  <span class="vhint">Right-click for Build Mode</span>
-</div>
+<div class="viewctl" id="viewctl"><div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div></div>
 <div class="main">
   <div class="leftcol">
     <div class="bmhead"><span class="bmtitle">◆ BUILD MODE</span><button class="bmlayers" id="tabLayers" title="Layers panel"><svg viewBox="0 0 16 16"><path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg></button></div>
@@ -817,7 +812,7 @@ const DEFAULT={rooms:[
  {id:'p27',t:'board',args:[32,2.05,4.4,1.8,'wbGrad','scr dashW']},{id:'p28',t:'desk',args:[31.6,4.2,'warm']},{id:'p29',t:'chair',args:[32.6,5.5,'n']},{id:'p30',t:'desk',args:[34.4,4.2,'warm']},{id:'p31',t:'chair',args:[35.4,5.5,'n']},{id:'p32',t:'cabinet',args:[38.4,3]},{id:'p33',t:'plant',args:[37.4,7,.85]},{id:'p35',t:'recep',args:[4,13.4,2.2]},{id:'p36',t:'books',args:[2.4,11.4]},{id:'p37',t:'books',args:[4.2,11.4]},{id:'p38',t:'cabinet',args:[11.6,12]},{id:'p39',t:'cabinet',args:[12.6,12]},{id:'p40',t:'plant',args:[2.6,16.6,.85]},{id:'p41',t:'rug',args:[3.6,13,3.4,2.4,'rugWarm']},
  {id:'p42',t:'board',args:[19.4,11.05,3,1.6,'brandGrad','scr neon']},{id:'p43',t:'desk',args:[15.8,13.4,'warm']},{id:'p44',t:'bar',args:[20,15.6,3]},{id:'p45',t:'stool',args:[20.4,15]},{id:'p46',t:'stool',args:[21.4,15]},{id:'p47',t:'stool',args:[22.4,15]},{id:'p48',t:'plant',args:[25.4,16.6,.85]},
  {id:'p50',t:'panel',args:[35.6,11.02,1.2,2.6,1.3,'artGrad','scr']},{id:'p51',t:'sofa',args:[29.2,13.4,'#33406a']},{id:'p52',t:'armchair',args:[33.4,13.4,'#3a4a78']},{id:'p53',t:'coffee',args:[31.4,15.2]},{id:'p54',t:'lamp',args:[29,12.2]},{id:'p55',t:'plant',args:[38.2,12.2,.9]},{id:'p56',t:'rug',args:[29.4,13.2,4.6,2.6,'rugCool']},
- {id:'p57',t:'recep',args:[17,31.6,5]},{id:'p58',t:'plant',args:[13,31.2,1]},{id:'p59',t:'plant',args:[24.4,31.2,1]},{id:'p60',t:'sofa',args:[6,32.4,'#2f3d63']},{id:'p61',t:'sofa',args:[30,32.4,'#2f3d63']},{id:'p62',t:'rug',args:[15.5,31.4,7,2.8,'rugCool']},{id:'p63',t:'glass',args:[19,34.4,3,.16,2]},{id:'p64',t:'text',args:[19.5,31.4,2.4,'<span class="rec"><i class="bar"></i>FundExecs OS</span>','reclabel',8]},
+ {id:'p57',t:'recep',args:[17,31.6,5]},{id:'p58',t:'plant',args:[13,31.2,1]},{id:'p59',t:'plant',args:[24.4,31.2,1]},{id:'p60',t:'sofa',args:[6,32.4,'#2f3d63']},{id:'p61',t:'sofa',args:[30,32.4,'#2f3d63']},{id:'p62',t:'rug',args:[15.5,31.4,7,2.8,'rugCool']},{id:'p63',t:'glass',args:[19,34.4,3,.16,2]},
  {id:'pj1',t:'jumbo',args:[7,20.5,28,'LIVE RAISES','live','','','#38d0ff']},
  {id:'pr1',t:'raise',args:[4.2,22.4,'NOVA CAPITAL','SEED','$2.4M',80,'#d4a82a']},
  {id:'pr2',t:'raise',args:[12.1,22.4,'ORBITAL','SERIES A','$8M',67,'#38d0ff']},
