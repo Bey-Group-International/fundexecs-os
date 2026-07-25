@@ -737,7 +737,11 @@ function renderModel(model){
   }
   PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
-  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.label&&r.build!=='corridor'){const _l=String(r.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const _ly=r.build==='trading'?r.y+r.d-1.0:r.y+0.9;overlay(r.x+r.w/2,_ly,2.0,'<span>'+_l+'</span>','roomlabel');}if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
+  // The hosted view's floating Top/1st-person control sits at the top-right; bottom-anchor the label of the
+  // room beneath it so the name isn't hidden. Recomputed each render, so it tracks Build-Mode edits.
+  let _ctlRoom=null;
+  if(document.body.classList.contains('viewmode')){const _lab=model.rooms.filter(r=>r.label&&r.build!=='corridor'&&r.build!=='trading');if(_lab.length){const _minY=Math.min(..._lab.map(r=>r.y));const _top=_lab.filter(r=>r.y<=_minY+2);_ctlRoom=_top.reduce((a,b)=>(b.x+b.w)>(a.x+a.w)?b:a,_top[0]);}}
+  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.label&&r.build!=='corridor'){const _l=String(r.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const _ly=(r.build==='trading'||(_ctlRoom&&r.id===_ctlRoom.id))?r.y+r.d-1.0:r.y+0.9;overlay(r.x+r.w/2,_ly,2.0,'<span>'+_l+'</span>','roomlabel');}if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
   drawManualWalls();
   // blocked (non-walkable) tiles
   const blk=model.blocked||{};if(MODE!=='fp')Object.keys(blk).forEach(k=>{const t=k.split(',');const tx=+t[0],ty=+t[1];const A=P(tx,ty),B=P(tx+1,ty),Cc=P(tx+1,ty+1),D=P(tx,ty+1);push(-6650+ty*.2,poly([A,B,Cc,D],'url(#blockHatch)','#ff5a6a',.7,.7));});
