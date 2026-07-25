@@ -6,6 +6,7 @@
 
 export * from "@/lib/avatars/descriptor";
 export * from "@/lib/avatars/self-model";
+export * from "@/lib/avatars/enrich";
 
 import { AVATAR_BRAIN_BY_ID, AVATAR_BRAIN_BY_SPRITE, type AvatarBrainLink } from "@/lib/brains/avatars";
 import {
