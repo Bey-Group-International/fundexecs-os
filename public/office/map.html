@@ -905,10 +905,7 @@ function viewPar(){
 function fitSvg(sv){const c=C();const cw=canvas.clientWidth,ch=canvas.clientHeight;if(!cw||!ch)return;const wider=cw/ch>c.SW/c.SH;
   // cover-fit: fill the stage on both axes; overflow is cropped in the hosted view and reachable via pan/zoom in build mode
   if(wider){sv.style.width='100%';sv.style.height='auto';}else{sv.style.width='auto';sv.style.height='100%';}}
-function applyView(){const sv=svgEl();if(sv){fitSvg(sv);
-  // In the hosted view, clamp scroll/drag to the cover overflow so the office can't be flung into the void.
-  if(document.body.classList.contains('viewmode')&&MODE!=='fp'){const st=stageDom.getBoundingClientRect(),c=C(),sc=Math.min(st.width/c.SW,st.height/c.SH)*zoom;const ovx=Math.max(0,(c.SW*sc-st.width)/2),ovy=Math.max(0,(c.SH*sc-st.height)/2);panX=Math.max(-ovx,Math.min(ovx,panX));panY=Math.max(-ovy,Math.min(ovy,panY));}
-  sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
+function applyView(){const sv=svgEl();if(sv){fitSvg(sv);sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
 function fitOverlay(){const sv=svgEl();if(!sv)return;const ow=document.getElementById('ovwrap');const r=sv.getBoundingClientRect();const c=C();
   // Match the overlay scale to how the svg content actually fits, so labels stay glued: slice→cover ratio
   // (max axis), viewmode meet→contain ratio (min axis), builder→width (its svg element matches content aspect).
@@ -1767,12 +1764,12 @@ mRows.onclick=()=>{fpStop();MODE='top';mRows.classList.add('on');mIso.classList.
 mIso.onclick=()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();};
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
-function zoomAt(clientX,clientY,nz){nz=Math.max(.45,Math.min(2.4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
+function zoomAt(clientX,clientY,nz){nz=Math.max(.45,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
 function setZoom(z){const st=stageDom.getBoundingClientRect();zoomAt(st.left+st.width/2,st.top+st.height/2,z);}
 document.getElementById('zIn').onclick=()=>setZoom(zoom+.2);
 document.getElementById('zOut').onclick=()=>setZoom(zoom-.2);
 document.getElementById('zFit').onclick=()=>{panX=0;panY=0;zoom=1;YAW=0;document.getElementById('zl').textContent='100%';render();toast('View reset');};
-let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='fp'){camStep(-e.deltaY*0.006,0);return;}const sv=svgEl();if(sv)sv.style.transition='none';const d=Math.max(-0.4,Math.min(0.4,-e.deltaY*0.0016));setZoom(zoom+d);clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);},{passive:false});
+let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='fp'){camStep(-e.deltaY*0.006,0);return;}const sv=svgEl();if(sv)sv.style.transition='none';const d=Math.max(-0.4,Math.min(0.4,-e.deltaY*0.0016));zoomAt(e.clientX,e.clientY,zoom+d);clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);},{passive:false});
 // coordinate readout
 const coordEl=document.getElementById('coord');
 const stageEl=document.getElementById('stage');
@@ -1784,13 +1781,13 @@ function hideMenu(){cmenu.classList.remove('on');}
 // right-drag orbits, so the browser's contextmenu (fired on mousedown) is always suppressed;
 // the menu is opened from the right-mouseup only when the drag didn't move (see openMenu).
 stageDom.addEventListener('contextmenu',e=>{e.preventDefault();});
-function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu();panX=0;panY=0;zoom=1;render();applyView();drawSel();requestAnimationFrame(()=>{applyView();drawSel();});}
-function exitView(){document.body.classList.remove('viewmode');refreshFab();render();applyView();drawSel();toast('Build mode');}
+function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu();panX=0;panY=0;zoom=1.7;render();applyView();drawSel();requestAnimationFrame(()=>{applyView();drawSel();});}
+function exitView(){document.body.classList.remove('viewmode');panX=0;panY=0;zoom=1;refreshFab();render();applyView();drawSel();toast('Build mode');}
 function openMenu(cx,cy){
   if(document.body.classList.contains('viewmode')){
     cmenu.innerHTML='<button data-a="__build" class="cbuild">◆ Build Mode</button><div class="csep"></div><button data-a="__reset">Reset view</button>';
     cmenu.style.left=Math.min(cx,innerWidth-186)+'px';cmenu.style.top=Math.min(cy,innerHeight-96)+'px';cmenu.classList.add('on');
-    cmenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{const a=b.dataset.a;hideMenu();if(a==='__build')exitView();else if(a==='__reset'){panX=0;panY=0;zoom=1;YAW=0;applyView();drawSel();}});
+    cmenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{const a=b.dataset.a;hideMenu();if(a==='__build')exitView();else if(a==='__reset'){panX=0;panY=0;zoom=1.7;YAW=0;applyView();drawSel();}});
     return;
   }
   if(walkMode||buildMode)return;
