@@ -759,12 +759,20 @@ function renderModel(model){
   // FundExecs persona teammates (2.5D): sprite + cast shadow are depth-sorted INTO the scene (push into
   // draws, so walls/desks occlude them), perspective-scaled by position; the name/status label floats in the
   // overlay above furniture. Hosted view only.
-  if(document.body.classList.contains('viewmode')&&MODE!=='fp'&&typeof PEOPLE!=='undefined'){
-    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}
-      const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1,sc=STC[pp.s]||STC.available;
-      const X=q[0]-W/2,Y=q[1]-H;
-      push(pp.x,pp.y,`<g id="ps_${pp.id}"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><clipPath id="cl_${pp.id}"><rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}"/></clipPath><image href="/assets/fundexecs/characters/${pp.k}/walk.png" x="${(X-fi*W).toFixed(1)}" y="${(Y-dir*H).toFixed(1)}" width="${(3*W).toFixed(1)}" height="${(4*H).toFixed(1)}" clip-path="url(#cl_${pp.id})" style="image-rendering:pixelated"/></g>`);
-      overlays.push(`<div class="ov plabel" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${(q[1]-H-3).toFixed(1)}px"><span class="pnm"><i class="pdot" style="background:${sc}"></i>${pp.r}</span></div>`);
+  if(document.body.classList.contains('viewmode')&&typeof PEOPLE!=='undefined'){
+    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const sc=STC[pp.s]||STC.available;
+      if(MODE==='fp'){
+        // First-person: upright billboard facing the camera. Feet stay on the correct floor point (depth), but
+        // the body height is scaled up and clamped to a legible range so teammates read clearly at any distance,
+        // and drawn ON TOP of furniture (large sort key) so they're never hidden. SVG name/status label above.
+        const cf=camF(pp.x,pp.y);if(cf<0.4)return;const feet=P(pp.x,pp.y,0);const nat=1.7*C().FOCAL/cf;const Hpx=Math.max(96,Math.min(560,nat*1.3));
+        const W=Hpx*0.6,X=feet[0]-W/2,Y=feet[1]-Hpx,fp=Math.max(9,Math.min(17,Hpx*0.1)),lw=pp.r.length*fp*0.6+16,ly=Y-fp*0.6;
+        push(5e5-cf,`<g><ellipse cx="${feet[0].toFixed(1)}" cy="${feet[1].toFixed(1)}" rx="${(W*0.4).toFixed(1)}" ry="${(W*0.14).toFixed(1)}" fill="rgba(0,0,0,.34)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${Hpx.toFixed(1)}" viewBox="96 0 96 96"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="288" height="384" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.5)) saturate(1.06)"/></svg><g transform="translate(${feet[0].toFixed(1)},${ly.toFixed(1)})"><rect x="${(-lw/2).toFixed(1)}" y="${(-fp-4).toFixed(1)}" width="${lw.toFixed(1)}" height="${(fp+7).toFixed(1)}" rx="3" fill="rgba(11,18,32,.88)" stroke="rgba(245,215,115,.3)" stroke-width="0.6"/><circle cx="${(-lw/2+fp*0.8).toFixed(1)}" cy="${(-fp*0.4-0.5).toFixed(1)}" r="${(fp*0.28).toFixed(1)}" fill="${sc}"/><text x="${(fp*0.5).toFixed(1)}" y="${(-fp*0.4).toFixed(1)}" text-anchor="middle" font-family="ui-monospace,monospace" font-weight="700" font-size="${fp.toFixed(1)}" fill="#eaf0ff" dominant-baseline="central">${pp.r}</text></g></g>`);
+      } else {
+        const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1,X=q[0]-W/2,Y=q[1]-H;
+        push(pp.x,pp.y,`<g id="ps_${pp.id}"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}" viewBox="${fi*96} ${dir*96} 96 96"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="288" height="384" style="filter:drop-shadow(0 1px 1.4px rgba(0,0,0,.5)) saturate(1.06) contrast(1.03)"/></svg></g>`);
+        overlays.push(`<div class="ov plabel" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${(q[1]-H-3).toFixed(1)}px"><span class="pnm"><i class="pdot" style="background:${sc}"></i>${pp.r}</span></div>`);
+      }
     });
   }
   return {svg:draws.map(o=>o.svg).join(""),ov:overlays.join(""),bounds:{fx,fy,fw,fh}};
@@ -912,8 +920,7 @@ function peopleLoop(t){
     const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf;
     const bounce=moving?(pp.fi===1?0:-2.2):(REDUCED?0:Math.sin(t/620+pp.ph)*0.7);
     const X=q[0]-W/2,Y=q[1]-H+bounce,fi=pp.fi||0,dir=pp.dir||0;
-    const cr=g.querySelector('clipPath rect');if(cr){cr.setAttribute('x',X.toFixed(1));cr.setAttribute('y',Y.toFixed(1));cr.setAttribute('width',W.toFixed(1));cr.setAttribute('height',H.toFixed(1));}
-    const im=g.querySelector('image');if(im){im.setAttribute('x',(X-fi*W).toFixed(1));im.setAttribute('y',(Y-dir*H).toFixed(1));im.setAttribute('width',(3*W).toFixed(1));im.setAttribute('height',(4*H).toFixed(1));}
+    const sv=g.querySelector('svg');if(sv){sv.setAttribute('x',X.toFixed(1));sv.setAttribute('y',Y.toFixed(1));sv.setAttribute('width',W.toFixed(1));sv.setAttribute('height',H.toFixed(1));sv.setAttribute('viewBox',`${fi*96} ${dir*96} 96 96`);}
     const es=g.getElementsByTagName('ellipse');if(es[0]){es[0].setAttribute('cx',(q[0]+1).toFixed(1));es[0].setAttribute('cy',(q[1]+1).toFixed(1));es[0].setAttribute('rx',(13.8*pf).toFixed(1));es[0].setAttribute('ry',(4.6*pf).toFixed(1));}
     if(es[1]){es[1].setAttribute('cx',(q[0]+2*pf).toFixed(1));es[1].setAttribute('cy',q[1].toFixed(1));es[1].setAttribute('rx',(12*pf).toFixed(1));es[1].setAttribute('ry',(4*pf).toFixed(1));}
     const lb=document.getElementById('pe_'+pp.id);if(lb){lb.style.left=q[0].toFixed(1)+'px';lb.style.top=(q[1]-H-3).toFixed(1)+'px';}
@@ -1163,9 +1170,12 @@ function fpStop(){fpKeys.clear();fpShift=false;cancelAnimationFrame(fpRAF);fpRAF
 window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='shift')fpShift=false;fpKeyUp(k);});
 window.addEventListener('blur',fpStop);
 function enterFP(){cancelAnimationFrame(camAnim);buildFPWalls();CAM.z=1.62;
-  const t=model.rooms.find(r=>r.build==='trading');
-  if(t){CAM.x=t.x+1.6;CAM.y=t.y+t.d/2;CAM.yaw=Math.PI/2;} // west end, looking east down the concourse aisle
-  else{const rs=model.rooms.filter(r=>r.build!=='corridor');const r=rs[rs.length-1]||{x:16,y:30,w:8,d:6};CAM.x=r.x+r.w/2;CAM.y=r.y+r.d/2;CAM.yaw=Math.PI;}}
+  // Spawn centrally among the team so teammates are nearby and clearly visible from the start.
+  const rs=model.rooms.filter(r=>r.build!=='corridor');let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
+  rs.forEach(r=>{mnx=Math.min(mnx,r.x);mxx=Math.max(mxx,r.x+r.w);mny=Math.min(mny,r.y);mxy=Math.max(mxy,r.y+r.d);});
+  if(mnx>mxx){mnx=2;mxx=40;mny=2;mxy=35;}
+  CAM.x=(mnx+mxx)/2;CAM.y=(mny+mxy)/2;CAM.yaw=Math.PI; // office center, looking north across the rooms
+}
 function finishMarquee(){
   if(!marquee)return;
   const x0=Math.min(marquee.x0,marquee.x1),x1=Math.max(marquee.x0,marquee.x1),y0=Math.min(marquee.y0,marquee.y1),y1=Math.max(marquee.y0,marquee.y1);
@@ -1829,8 +1839,10 @@ refreshFab();
 
 // toolbar
 const mRows=document.getElementById('mRows'),mIso=document.getElementById('mIso');
-mRows.onclick=()=>{fpStop();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=1;document.body.classList.remove('fpmode');render();buildPanel();drawSel();};
-mIso.onclick=()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();};
+// Graceful top-down <-> first-person switch: brief fade+blur so the projection change doesn't hard-cut.
+function viewSwitch(fn){const st=stageDom;if(!st||(typeof REDUCED!=='undefined'&&REDUCED)){fn();return;}st.style.transition='opacity .16s ease,filter .16s ease';st.style.opacity='0';st.style.filter='blur(4px)';setTimeout(()=>{fn();requestAnimationFrame(()=>{st.style.opacity='1';st.style.filter='blur(0)';setTimeout(()=>{st.style.transition='';st.style.filter='';},240);});},150);}
+mRows.onclick=()=>viewSwitch(()=>{fpStop();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
+mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();});
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
 function zoomAt(clientX,clientY,nz){nz=Math.max(.45,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
