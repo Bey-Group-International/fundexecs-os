@@ -36,6 +36,8 @@
   "name": "fundexecs-os",
   "private": true,
   "scripts": {
+    "brains:ingest": "scripts/ingest-brains.sh",
+    "brains:reembed": "scripts/ingest-brains.sh --reembed",
     "build": "next build --webpack",
     "db:diff": "supabase db diff",
     "db:reset": "supabase db reset",
