@@ -94,3 +94,35 @@ curl -X POST https://<host>/api/brains/ingest \
 Or, signed in as an org writer, POST `/api/brains/ingest` from the app (the route
 also accepts a session cookie from an owner/admin/member). The response reports
 per-Brain chunk counts. Re-running is safe and idempotent.
+
+> **After refreshing any corpus below, re-run ingestion** so the pgvector store
+> reflects the new content — the retrieval corpus is embedded at ingest time, not
+> read live.
+
+## Avatar ↔ Brain (virtual office)
+
+Each persona avatar in the virtual office (`public/office/map.html`) is powered by
+one of the Brains above. The mapping is declared in
+[`../avatars.ts`](../avatars.ts) (`AVATAR_BRAINS`) — a presentation view over the
+catalog, not a new taxonomy — so the office avatars can be wired to their Brains
+(e.g. the LIVING-EXECS `attachBrain` slow-loop; see
+[`docs/avatars/AVATAR_SYSTEM_SPEC.md`](../../../docs/avatars/AVATAR_SYSTEM_SPEC.md)).
+
+|    Office avatar    |            Brain             |
+|---------------------|------------------------------|
+| Executive Advisor   | `executive_advisor`          |
+| Deal Sourcer        | `deal_sourcer`               |
+| Lead Generator      | `funnel_lead_gen`            |
+| SEO Disruptor       | `seo_disrupter`              |
+| Automater           | `automater_scrubber`         |
+| Legal Admin         | `legal_admin`                |
+| Curator             | `event_curator`              |
+| PR Director         | `marketing_pr`               |
+| Investor Relations  | `investor_relations`         |
+| Capital Connector   | `capital_connector`          |
+| Rainmaker           | `rainmaker`                  |
+| Capital Raiser      | `capital_raiser`             |
+| Earn (coin mascot)  | `earnest_fundmaker`          |
+| Office Manager      | — (front-of-house, no Brain) |
+| Workflow Instructor | — (OS orchestration layer)   |
+
