@@ -283,7 +283,6 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .zonelabel.z-meeting span{color:#f5d773;border:1px solid #d4a82a}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
-.roomlabel span{font:800 8px ui-monospace,SFMono-Regular,monospace;letter-spacing:.14em;color:#f5d773;background:#0b1220cc;border:1px solid rgba(245,215,115,.42);padding:3px 7px;border-radius:5px;white-space:nowrap;text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .ibwrap{pointer-events:none}
 .ib{display:inline-block;font-size:11px;line-height:16px;width:17px;height:17px;border-radius:50%;background:#0b1220e0;border:1px solid #d4a82a;color:#f5d773;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .ib-seat{border-color:#4ade80;color:#8ef0ad}.ib-embed{border-color:#38d0ff;color:#8fe3ff}
@@ -332,9 +331,14 @@ body.viewmode .stage{position:fixed;inset:0;border:0;border-radius:0}
 body.viewmode .canvas svg{width:100%!important;height:100%!important}
 .cmenu button.cbuild{color:var(--gold2)}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
-/* Floating Top / 1st-person control overlaid on the top-right of the office (replaces the top nav bar). */
+/* Floating Top / 1st-person control: two round icon orbs at the top-right of the office. */
 .viewctl{display:none}
-body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:40;align-items:center;gap:10px;padding:6px;border-radius:13px;background:linear-gradient(180deg,rgba(18,28,50,.82),rgba(9,15,28,.82));border:1px solid var(--line2);box-shadow:0 12px 30px -14px #000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+body.viewmode .viewctl{display:flex;position:fixed;top:16px;right:16px;z-index:40;align-items:center;gap:10px;padding:0;background:none;border:0;box-shadow:none}
+body.viewmode .viewctl .seg{background:none;border:0;padding:0;gap:10px;border-radius:0}
+body.viewmode .viewctl .seg button{width:44px;height:44px;padding:0;border-radius:50%;display:grid;place-items:center;color:#9fb2d4;background:linear-gradient(180deg,rgba(22,32,54,.92),rgba(9,15,28,.92));border:1px solid var(--line2);box-shadow:0 10px 24px -12px #000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:.15s}
+body.viewmode .viewctl .seg button svg{width:21px;height:21px}
+body.viewmode .viewctl .seg button:hover{color:var(--gold2);border-color:var(--goldsoft);transform:translateY(-1px)}
+body.viewmode .viewctl .seg button.on{color:#0b1220;background:radial-gradient(circle at 50% 32%,#f7e08a,#e2b53f);border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,215,115,.16),0 10px 24px -10px #000}
 .tbtn.save{background:linear-gradient(180deg,#1f7a44,#155f34);border-color:#2a7a4a;color:#eafff1}
 .tbtn.save:hover{background:linear-gradient(180deg,#279a55,#1a7a44);color:#fff;box-shadow:0 6px 16px -6px #0a3a20}
 </style>
@@ -347,7 +351,7 @@ body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:4
   <button class="tbtn save" id="btnSave" title="Save layout & return to the office view">✓ SAVE</button><button class="tbtn gold" id="btnLayouts">◆ LAYOUTS</button>
   <button class="tbtn" id="btnReset">RESET</button>
 </div>
-<div class="viewctl" id="viewctl"><div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div></div>
+<div class="viewctl" id="viewctl"><div class="seg"><button id="mRows" class="on" title="Top-down view" aria-label="Top-down view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 3.5v17M14.5 3.5v17"/></svg></button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step" aria-label="First-person view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.4" r="2.4"/><path d="M12 8.2v6.3"/><path d="M12 14.5l-3.2 5M12 14.5l3.2 5"/><path d="M7 10.7l5-1.1 5 1.1"/></svg></button></div></div>
 <div class="main">
   <div class="leftcol">
     <div class="bmhead"><span class="bmtitle">◆ BUILD MODE</span><button class="bmlayers" id="tabLayers" title="Layers panel"><svg viewBox="0 0 16 16"><path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg></button></div>
@@ -737,11 +741,7 @@ function renderModel(model){
   }
   PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
-  // The hosted view's floating Top/1st-person control sits at the top-right; bottom-anchor the label of the
-  // room beneath it so the name isn't hidden. Recomputed each render, so it tracks Build-Mode edits.
-  let _ctlRoom=null;
-  if(document.body.classList.contains('viewmode')){const _lab=model.rooms.filter(r=>r.label&&r.build!=='corridor'&&r.build!=='trading');if(_lab.length){const _minY=Math.min(..._lab.map(r=>r.y));const _top=_lab.filter(r=>r.y<=_minY+2);_ctlRoom=_top.reduce((a,b)=>(b.x+b.w)>(a.x+a.w)?b:a,_top[0]);}}
-  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.label&&r.build!=='corridor'){const _l=String(r.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const _ly=(r.build==='trading'||(_ctlRoom&&r.id===_ctlRoom.id))?r.y+r.d-1.0:r.y+0.9;overlay(r.x+r.w/2,_ly,2.0,'<span>'+_l+'</span>','roomlabel');}if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
+  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
   drawManualWalls();
   // blocked (non-walkable) tiles
   const blk=model.blocked||{};if(MODE!=='fp')Object.keys(blk).forEach(k=>{const t=k.split(',');const tx=+t[0],ty=+t[1];const A=P(tx,ty),B=P(tx+1,ty),Cc=P(tx+1,ty+1),D=P(tx,ty+1);push(-6650+ty*.2,poly([A,B,Cc,D],'url(#blockHatch)','#ff5a6a',.7,.7));});
@@ -832,6 +832,8 @@ const DEFAULT={rooms:[
 // ===================== EDITOR =====================
 const T0=Date.now(); // global clock so CSS screen-pulse survives SVG re-renders
 let model=load()||JSON.parse(JSON.stringify(DEFAULT));
+// Drop the deprecated "FundExecs OS" reception sign from any stale saved layout in localStorage.
+if(model&&Array.isArray(model.props))model.props=model.props.filter(p=>!(p&&p.t==='text'&&/FundExecs OS/i.test((p.args&&p.args[3])||'')));
 let sel=null, selSet=[], snap=true, uid=100, zoom=1;
 let armed=null, lastDown=null; // armed = the object unlocked for movement via double-click; single-click only selects
 let soloId=null, collapsed={}, renaming=null, dragRow=null, walkMode=false, clipboard=null, guides=[], suppressMenu=false;
@@ -897,13 +899,17 @@ function viewPar(){
   if(!document.body.classList.contains('viewmode'))return 'meet';
   const st=document.getElementById('stage');if(!st)return 'slice';
   const b=st.getBoundingClientRect();if(!b.width||!b.height)return 'slice';
-  const c=C(),ca=b.width/b.height,oa=c.SW/c.SH,mm=ca>oa?ca/oa:oa/ca;
-  return mm>1.14?'meet':'slice';
+  // Landscape frames cover-fit so the office fills the frame edge-to-edge (horizontally and vertically);
+  // the cropped strip is reachable by scroll/drag. Only portrait frames contain, to avoid gutting the sides.
+  return b.width>=b.height?'slice':'meet';
 }
 function fitSvg(sv){const c=C();const cw=canvas.clientWidth,ch=canvas.clientHeight;if(!cw||!ch)return;const wider=cw/ch>c.SW/c.SH;
   // cover-fit: fill the stage on both axes; overflow is cropped in the hosted view and reachable via pan/zoom in build mode
   if(wider){sv.style.width='100%';sv.style.height='auto';}else{sv.style.width='auto';sv.style.height='100%';}}
-function applyView(){const sv=svgEl();if(sv){fitSvg(sv);sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
+function applyView(){const sv=svgEl();if(sv){fitSvg(sv);
+  // In the hosted view, clamp scroll/drag to the cover overflow so the office can't be flung into the void.
+  if(document.body.classList.contains('viewmode')&&MODE!=='fp'){const st=stageDom.getBoundingClientRect(),c=C(),sc=Math.max(st.width/c.SW,st.height/c.SH)*zoom;const ovx=Math.max(0,(c.SW*sc-st.width)/2),ovy=Math.max(0,(c.SH*sc-st.height)/2);panX=Math.max(-ovx,Math.min(ovx,panX));panY=Math.max(-ovy,Math.min(ovy,panY));}
+  sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
 function fitOverlay(){const sv=svgEl();if(!sv)return;const ow=document.getElementById('ovwrap');const r=sv.getBoundingClientRect();const c=C();
   // Match the overlay scale to how the svg content actually fits, so labels stay glued: slice→cover ratio
   // (max axis), viewmode meet→contain ratio (min axis), builder→width (its svg element matches content aspect).
@@ -1275,7 +1281,7 @@ const MAPS={
    {label:'CONCOURSE ENTRY',x:2,y:6,w:37,d:2,floor:'gConcrete',pat:'stone',build:'corridor'},
    {label:'CAPITAL RAISING FLOOR',x:2,y:8,w:37,d:11,floor:'gTradeFloor',pat:'carpet',build:'trading',doors:[{side:'N',at:.08},{side:'N',at:.5},{side:'N',at:.92}]},
   ],props:[
-   ['recep',18,3.4,5],['plant',13,3.2,1],['plant',24,3.2,1],['glass',20,5.4,3,.16,2],['sofa',5,3.4,'#2f3d63'],['sofa',31,3.4,'#2f3d63'],['text',19.5,2.6,2.4,'<span class="rec"><i class="bar"></i>FundExecs OS</span>','reclabel',8],
+   ['recep',18,3.4,5],['plant',13,3.2,1],['plant',24,3.2,1],['glass',20,5.4,3,.16,2],['sofa',5,3.4,'#2f3d63'],['sofa',31,3.4,'#2f3d63'],
    ['jumbo',5,8.6,32,'LIVE RAISES','live','','','#38d0ff'],
    ['raise',4,10.6,'NOVA CAPITAL','SEED','$2.4M',80,'#d4a82a'],['raise',11.5,10.6,'ORBITAL','SERIES A','$8M',67,'#38d0ff'],['raise',19,10.6,'LEDGERWORKS','SEED','$1.1M',55,'#4ade80'],['raise',26.5,10.6,'HELIX BIO','SERIES B','$22M',73,'#8b7bd8'],['raise',34,10.6,'QUANTA','PRE-SEED','$0.6M',60,'#f5a623'],
    ['raise',8,14.2,'ATLAS GRID','SERIES A','$9.5M',63,'#38d0ff'],['raise',15.5,14.2,'VERDE','SEED','$3.2M',80,'#4ade80'],['raise',23,14.2,'MERIDIAN','SERIES A','$6M',70,'#d4a82a'],['raise',30.5,14.2,'PIXELFORGE','SEED','$1.8M',72,'#ff9e6d'],
@@ -1767,7 +1773,10 @@ function setZoom(z){const st=stageDom.getBoundingClientRect();zoomAt(st.left+st.
 document.getElementById('zIn').onclick=()=>setZoom(zoom+.2);
 document.getElementById('zOut').onclick=()=>setZoom(zoom-.2);
 document.getElementById('zFit').onclick=()=>{panX=0;panY=0;zoom=1;YAW=0;document.getElementById('zl').textContent='100%';render();toast('View reset');};
-let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='fp'){camStep(-e.deltaY*0.006,0);return;}const sv=svgEl();if(sv)sv.style.transition='none';const d=Math.max(-0.4,Math.min(0.4,-e.deltaY*0.0016));setZoom(zoom+d);clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);},{passive:false});
+let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='fp'){camStep(-e.deltaY*0.006,0);return;}
+  // Hosted view: the wheel scrolls the office (pan); the builder keeps wheel-to-zoom.
+  if(document.body.classList.contains('viewmode')){const sv=svgEl();if(sv)sv.style.transition='none';panY-=e.deltaY;panX-=e.deltaX;applyView();drawSel();clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);return;}
+  const sv=svgEl();if(sv)sv.style.transition='none';const d=Math.max(-0.4,Math.min(0.4,-e.deltaY*0.0016));setZoom(zoom+d);clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);},{passive:false});
 // coordinate readout
 const coordEl=document.getElementById('coord');
 const stageEl=document.getElementById('stage');
