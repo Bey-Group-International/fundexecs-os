@@ -281,6 +281,14 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .zonelabel span{font-weight:800;font-size:.9em;font-family:ui-monospace,monospace;letter-spacing:.16em;padding:.2em .7em;border-radius:.45em;background:#0b1220cc;white-space:nowrap}
 .zonelabel.z-audio span{color:#8fe3ff;border:1px solid #38d0ff}
 .zonelabel.z-meeting span{color:#f5d773;border:1px solid #d4a82a}
+/* Spot-style teammate avatars (living showroom) — placeholder presence, hosted view only. */
+.person{z-index:6}
+.person .pav{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:800 9.5px ui-monospace,SFMono-Regular,monospace;color:#0b1220;border:2px solid rgba(11,18,32,.85);box-shadow:0 3px 7px rgba(0,0,0,.5);position:relative;margin:0 auto}
+.person .pdot{position:absolute;right:-2px;bottom:-2px;width:7px;height:7px;border-radius:50%;border:2px solid #0b1220;box-sizing:content-box}
+.person .pnm{margin-top:3px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.03em;color:#eaf0ff;background:rgba(11,18,32,.82);padding:1px 5px;border-radius:4px;white-space:nowrap;display:inline-block}
+.person.walk .pav{animation:pbob .55s ease-in-out infinite alternate}
+@keyframes pbob{from{transform:translateY(1px)}to{transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){.person.walk .pav{animation:none}}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
 .ibwrap{pointer-events:none}
@@ -749,6 +757,11 @@ function renderModel(model){
   (model.zones||[]).forEach(z=>{if(z.hidden)return;const col=ZCOL[z.kind]||ZCOL.audio;if(MODE==='fp'){const sp=projFP([[z.x,z.y,.02],[z.x+z.w,z.y,.02],[z.x+z.w,z.y+z.d,.02],[z.x,z.y+z.d,.02]]);if(sp.length>=3)push(-8e5,poly(sp,col.fill,null,0,.55));return;}const A=P(z.x,z.y),B=P(z.x+z.w,z.y),Cc=P(z.x+z.w,z.y+z.d),D=P(z.x,z.y+z.d);push(-6600+z.y*.3,poly([A,B,Cc,D],col.fill,null,0,.95)+`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${col.stroke}" stroke-width="1.6" stroke-dasharray="7 5" opacity=".85"/>`);overlay(z.x+z.w/2,z.y+.55,2.1,`<span>${(z.label||ZLB[z.kind]||'ZONE').toUpperCase()}</span>`,'zonelabel z-'+z.kind,z.w,z.d);});
   model.props.forEach(p=>{if(p.hidden)return;const rm=roomOf(p);if(rm&&hiddenRooms.has(rm.id))return;if(soloId&&(!rm||rm.id!==soloId))return;try{if(!PR[p.t])return;if(p.rot){const f=FOOT[p.t]||[1,1];ROT={cx:p.args[0]+f[0]/2,cy:p.args[1]+f[1]/2,cos:Math.cos(p.rot),sin:Math.sin(p.rot)};}CURP=p;PR[p.t](...p.args);CURP=null;ROT=null;const f=FOOT[p.t]||[1,1];if(p.action&&p.action!=='none'||p.link||p.note)overlay(p.args[0]+f[0]/2,p.args[1],1.5,`<span class="ib ib-${p.action||'link'}">${p.action==='seat'?'♟':p.action==='embed'?'▤':'★'}</span>`,'ibwrap');}catch(e){CURP=null;ROT=null;}});
   draws.sort((a,b)=>a.k-b.k);
+  // Placeholder teammates — a Spot-style "living" office in the hosted view only (never in the builder).
+  if(document.body.classList.contains('viewmode')&&MODE!=='fp'&&typeof PEOPLE!=='undefined'){
+    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const q=P(pp.x,pp.y,0);const sc=STC[pp.s]||STC.available;
+      overlays.push(`<div class="ov person" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${q[1].toFixed(1)}px"><div class="pav" style="background:${pp.c}">${pp.i}<i class="pdot" style="background:${sc}"></i></div><div class="pnm">${pp.n}</div></div>`);});
+  }
   return {svg:draws.map(o=>o.svg).join(""),ov:overlays.join(""),bounds:{fx,fy,fw,fh}};
 }
 function keyDefsFor(mode){const k=mode==='iso'?{cx:.47,cy:.46,r:.98}:{cx:.45,cy:.4,r:.92};return '';}
@@ -853,6 +866,36 @@ function setXY(s,x,y){if(isRect(s.kind)){s.obj.x=x;s.obj.y=y;}else{s.obj.args[0]
 function arrFor(kind){return kind==='room'?model.rooms:kind==='zone'?(model.zones||(model.zones=[])):model.props;}
 const canvas=document.getElementById('canvas'), selSvg=document.getElementById('sel'), panel=document.getElementById('panel'), statusEl=document.getElementById('status'), layersEl=document.getElementById('layers');
 function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}},400);}
+// ---- Placeholder teammates: a Spot-style "living" office in the hosted view ----
+// Sitters have a fixed x/y; roamers have a waypoint list and are lerped between points by a light RAF that
+// only touches these DOM chips (never the office SVG). Reduced-motion users get static, placed avatars.
+const STC={available:'#34d399',busy:'#f5b342',away:'#94a3b8',dnd:'#ef5a6a'};
+const PEOPLE=[
+ {id:'a',n:'Ava Chen',i:'AC',c:'#b9a7f0',s:'available',x:22.6,y:5.2},
+ {id:'b',n:'Marcus Lee',i:'ML',c:'#7fd8cb',s:'busy',x:25.2,y:5.2},
+ {id:'c',n:'Priya Rao',i:'PR',c:'#f0cf7a',s:'available',x:27.8,y:5.2},
+ {id:'d',n:'Sam Okoye',i:'SO',c:'#f2a98f',s:'available',x:32.6,y:5.2},
+ {id:'e',n:'Lena Vogt',i:'LV',c:'#8fb6f5',s:'away',x:35.4,y:5.2},
+ {id:'f',n:'Diego Ruiz',i:'DR',c:'#8fe0a6',s:'available',x:21.4,y:14.7},
+ {id:'g',n:'Nadia Farouk',i:'NF',c:'#e0a7ec',s:'busy',x:33,y:13.2},
+ {id:'h',n:'Tom Beck',i:'TB',c:'#f0b48f',s:'available',x:8,y:32},
+ {id:'i',n:'Ivy Park',i:'IP',c:'#f2c56b',s:'available',roam:[[5,19],[37,19]],ti:0},
+ {id:'j',n:'Owen Cole',i:'OC',c:'#9ab8fe',s:'available',roam:[[5,10],[37,10]],ti:0},
+];
+let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function peopleLoop(t){
+  if(!document.body.classList.contains('viewmode')||MODE==='fp'){peopleRAF=0;return;}
+  const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
+  PEOPLE.forEach(pp=>{
+    if(pp.roam){const tg=pp.roam[pp.ti||0];const dx=tg[0]-pp.x,dy=tg[1]-pp.y,d=Math.hypot(dx,dy);
+      if(d<0.12){pp.moving=false;pp.wait=(pp.wait||0)+dt;if(pp.wait>1.6){pp.wait=0;pp.ti=((pp.ti||0)+1)%pp.roam.length;}}
+      else{const sp=Math.min(1.7*dt,d);pp.x+=dx/d*sp;pp.y+=dy/d*sp;pp.moving=true;}}
+    const el=document.getElementById('pe_'+pp.id);if(el){const q=P(pp.x,pp.y,0);el.style.left=q[0].toFixed(1)+'px';el.style.top=q[1].toFixed(1)+'px';el.classList.toggle('walk',!!pp.moving);}
+  });
+  peopleRAF=requestAnimationFrame(peopleLoop);
+}
+function startPeople(){if(REDUCED)return;if(!peopleRAF){peopleLast=performance.now();peopleRAF=requestAnimationFrame(peopleLoop);}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(peopleRAF);peopleRAF=0;}else startPeople();});
 function load(){try{['fx_map','fx_map_v3','fx_map_v4','fx_map_v5','fx_map_v6','fx_map_v7','fx_map_v8'].forEach(k=>localStorage.removeItem(k));const s=localStorage.getItem('fx_map_v9');return s?JSON.parse(s):null;}catch(e){return null;}}
 const snapv=v=>snap?Math.round(v):Math.round(v*100)/100;
 const TSNAP=v=>Math.round(v); // always-tile snap (for tile-based tools)
@@ -1781,7 +1824,7 @@ function hideMenu(){cmenu.classList.remove('on');}
 // right-drag orbits, so the browser's contextmenu (fired on mousedown) is always suppressed;
 // the menu is opened from the right-mouseup only when the drag didn't move (see openMenu).
 stageDom.addEventListener('contextmenu',e=>{e.preventDefault();});
-function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu();panX=0;panY=0;zoom=1.7;render();applyView();drawSel();requestAnimationFrame(()=>{applyView();drawSel();});}
+function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu();panX=0;panY=0;zoom=1.7;render();applyView();drawSel();if(typeof startPeople==='function')startPeople();requestAnimationFrame(()=>{applyView();drawSel();});}
 function exitView(){document.body.classList.remove('viewmode');panX=0;panY=0;zoom=1;refreshFab();render();applyView();drawSel();toast('Build mode');}
 function openMenu(cx,cy){
   if(document.body.classList.contains('viewmode')){
