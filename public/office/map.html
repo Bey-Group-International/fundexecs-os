@@ -848,6 +848,23 @@ function actTick(){
   }
   // ambient: a door swings now and then
   if(Math.random()<.1){const cand=[];model.rooms.forEach(r=>{if(!r.hidden&&r.doors)r.doors.forEach(d=>cand.push(d));});if(cand.length)ambientDoor(cand[Math.floor(Math.random()*cand.length)]);}
+  // ambient life: the desk is home base, but a real office is never frozen — now and then a seated
+  // exec steps away, either called up to work a live raise (app-style activity) or just moving about
+  // (coffee, a stretch, a lap), then returns. Capped so most execs stay at their desks.
+  if(PEOPLE.filter(p=>p.deleg).length<2){
+    const idle=PEOPLE.filter(p=>!p.roam&&!p.deleg),roll=Math.random();
+    if(idle.length&&roll<.22){                                  // work a live raise on the trading floor
+      const who=idle[(Math.random()*idle.length)|0],rr=raises.length?raises[(Math.random()*raises.length)|0]:null,
+        kinds=['session','build','source','run','execute'],kind=kinds[(Math.random()*kinds.length)|0],label=rr?(rr.args[2]||'a raise'):'a task';
+      if(delegateAvatar(who.id,{kind,label,target:rr?nearestNode(rr.args[0],rr.args[1]):null}))
+        ACT.feed.push({t:Date.now(),type:'deleg',text:`${who.r} — ${DELEG_VERB[kind]||'working on'} ${label}`});
+    } else if(idle.length&&roll<.44){                           // casual movement around the office
+      const who=idle[(Math.random()*idle.length)|0],
+        HALL=['nA','nB','nC','nD','nE','nF','nG','nH','nV'],
+        phrases=['grabbing a coffee','stretching their legs','refilling their water','taking a quick lap','stepping out for a moment','catching up with the team'];
+      delegateAvatar(who.id,{wander:true,kind:'wander',label:phrases[(Math.random()*phrases.length)|0],target:HALL[(Math.random()*HALL.length)|0],dur:3+Math.random()*4});
+    }
+  }
   if(ACT.feed.length>80)ACT.feed=ACT.feed.slice(-80);
   if(changed&&!drag&&!fpRAF)render(); // never fight an active drag; the FP walk loop repaints on its own
 }
@@ -863,7 +880,15 @@ window.FundExecsActivity={
     ACT.feed.push({t:Date.now(),type:'ext',text:(p.args[2]||'Company')+' updated'});if(!drag)render();return true;},
   setOccupancy(roomIdOrLabel,count){const q=String(roomIdOrLabel).toLowerCase();const r=model.rooms.find(r=>r.id===roomIdOrLabel||String(r.label||'').toLowerCase()===q);if(!r)return false;
     actSeed();const s=ACT.rooms[r.id];if(!s)return false;ACT.ext['room:'+r.id]=true;s.occ=Math.max(0,Math.min(12,Math.round(+count||0)));return true;},
-  pushEvent(e){ACT.feed.push({t:Date.now(),type:'ext',...e});},
+  pushEvent(e){e=e||{};ACT.feed.push({t:Date.now(),type:'ext',...e});
+    // Activity from the rest of the app (a session/build/source/run/execute) calls the named
+    // exec up from their desk to go work, then return. Fire-and-forget; no-op if unmatched.
+    const who=e.avatar||e.role||e.who||e.persona,kind=String(e.kind||e.action||e.type||'').toLowerCase();
+    if(who&&/^(session|build|source|run|execute|deploy|task|work)/.test(kind))
+      delegateAvatar(who,{kind:kind.replace(/[^a-z].*$/,''),label:e.label||e.target||e.name,target:e.node,dur:e.dur});
+    return true;},
+  delegate(idOrRole,opts){return delegateAvatar(idOrRole,opts||{});},
+  recall(idOrRole){return recallAvatar(idOrRole);},
   setSimulation(on){ACT.on=!!on;const b=document.getElementById('btnLive');if(b)b.classList.toggle('gold',ACT.on);if(!drag)render();},
   getState(){return JSON.parse(JSON.stringify({on:ACT.on,rooms:ACT.rooms,raises:ACT.raises,feed:ACT.feed.slice(-30)}));}
 };
@@ -893,8 +918,8 @@ const DEFAULT={rooms:[
  {id:'p14',t:'chair',args:[14.2,6.2,'s']},{id:'p15',t:'chair',args:[15.4,6.2,'s']},{id:'p16',t:'chair',args:[16.6,6.2,'s']},
  {id:'p18',t:'board',args:[22,2.05,4.6,1.8,'kanbanGrad','scr dash']},{id:'p19',t:'desk',args:[21.6,4.2,'cool']},{id:'p20',t:'chair',args:[22.6,5.5,'n']},{id:'p21',t:'desk',args:[24.2,4.2,'cool']},{id:'p22',t:'chair',args:[25.2,5.5,'n']},{id:'p23',t:'desk',args:[26.8,4.2,'cool']},{id:'p24',t:'chair',args:[27.8,5.5,'n']},{id:'p25',t:'rack',args:[28.8,2.4]},
  {id:'p27',t:'board',args:[32,2.05,4.4,1.8,'wbGrad','scr dashW']},{id:'p28',t:'desk',args:[31.6,4.2,'warm']},{id:'p29',t:'chair',args:[32.6,5.5,'n']},{id:'p30',t:'desk',args:[34.4,4.2,'warm']},{id:'p31',t:'chair',args:[35.4,5.5,'n']},{id:'p32',t:'cabinet',args:[38.4,3]},{id:'p33',t:'plant',args:[37.4,7,.85]},{id:'p35',t:'recep',args:[4,13.4,2.2]},{id:'p36',t:'books',args:[2.4,11.4]},{id:'p37',t:'books',args:[4.2,11.4]},{id:'p38',t:'cabinet',args:[11.6,12]},{id:'p39',t:'cabinet',args:[12.6,12]},{id:'p40',t:'plant',args:[2.6,16.6,.85]},{id:'p41',t:'rug',args:[3.6,13,3.4,2.4,'rugWarm']},
- {id:'p42',t:'board',args:[19.4,11.05,3,1.6,'brandGrad','scr neon']},{id:'p43',t:'desk',args:[15.8,13.4,'warm']},{id:'p44',t:'bar',args:[20,15.6,3]},{id:'p45',t:'stool',args:[20.4,15]},{id:'p46',t:'stool',args:[21.4,15]},{id:'p47',t:'stool',args:[22.4,15]},{id:'p48',t:'plant',args:[25.4,16.6,.85]},
- {id:'p50',t:'panel',args:[35.6,11.02,1.2,2.6,1.3,'artGrad','scr']},{id:'p51',t:'sofa',args:[29.2,13.4,'#33406a']},{id:'p52',t:'armchair',args:[33.4,13.4,'#3a4a78']},{id:'p53',t:'coffee',args:[31.4,15.2]},{id:'p54',t:'lamp',args:[29,12.2]},{id:'p55',t:'plant',args:[38.2,12.2,.9]},{id:'p56',t:'rug',args:[29.4,13.2,4.6,2.6,'rugCool']},
+ {id:'p42',t:'board',args:[19.4,11.05,3,1.6,'brandGrad','scr neon']},{id:'p43',t:'desk',args:[15.8,13.4,'warm']},{id:'pmk1',t:'deskexec',args:[24,12.6,'cool']},{id:'pmk2',t:'execchair',args:[24.9,13.9,'n','#242a33']},{id:'p44',t:'bar',args:[20,15.6,3]},{id:'p45',t:'stool',args:[20.4,15]},{id:'p46',t:'stool',args:[21.4,15]},{id:'p47',t:'stool',args:[22.4,15]},{id:'p48',t:'plant',args:[25.4,16.6,.85]},
+ {id:'p50',t:'panel',args:[35.6,11.02,1.2,2.6,1.3,'artGrad','scr']},{id:'p51',t:'sofa',args:[29.2,13.4,'#33406a']},{id:'p52',t:'armchair',args:[33.4,13.4,'#3a4a78']},{id:'p53',t:'coffee',args:[31.4,15.2]},{id:'p54',t:'lamp',args:[29,12.2]},{id:'pil1',t:'deskexec',args:[36,15,'cool']},{id:'pil2',t:'execchair',args:[36.9,16.3,'n','#242a33']},{id:'p55',t:'plant',args:[38.2,12.2,.9]},{id:'p56',t:'rug',args:[29.4,13.2,4.6,2.6,'rugCool']},
  {id:'p57',t:'recep',args:[17,31.6,5]},{id:'p58',t:'plant',args:[13,31.2,1]},{id:'p59',t:'plant',args:[24.4,31.2,1]},{id:'p60',t:'sofa',args:[6,32.4,'#2f3d63']},{id:'p61',t:'sofa',args:[30,32.4,'#2f3d63']},{id:'p62',t:'rug',args:[15.5,31.4,7,2.8,'rugCool']},{id:'p63',t:'glass',args:[19,34.4,3,.16,2]},
  {id:'pj1',t:'jumbo',args:[7,20.5,28,'LIVE RAISES','live','','','#38d0ff']},
  {id:'pr1',t:'raise',args:[4.2,22.4,'NOVA CAPITAL','SEED','$2.4M',80,'#d4a82a']},
@@ -953,8 +978,8 @@ const PEOPLE=[
  {id:'pr',r:'PR Director',k:'pr-director',s:'busy',x:22,y:13.6},
  {id:'ir',r:'Investor Relations',k:'investor-relations',s:'available',x:30,y:13.5},
  {id:'cc',r:'Capital Connector',k:'capital-connector',s:'available',x:33.8,y:13.6},
- {id:'rm',r:'Rainmaker',k:'rainmaker',s:'available',roam:1,x:4,y:10.2},
- {id:'cr',r:'Capital Raiser',k:'capital-raiser',s:'available',roam:1,x:37.5,y:19},
+ {id:'rm',r:'Rainmaker',k:'rainmaker',s:'available',x:24.8,y:12},
+ {id:'cr',r:'Capital Raiser',k:'capital-raiser',s:'available',x:37.3,y:14.4},
  {id:'er',r:'Earn',k:'earn',s:'available',roam:1,x:14,y:19},
 ];
 // ---- corridor navigation graph: roamers path (BFS) between these nodes and only ever travel corridor
@@ -981,6 +1006,36 @@ const roamers=PEOPLE.filter(p=>p.roam);
 // Reuses the overlay layer — no new panel. The local line is instant + deterministic; a click
 // asks the avatar's Brain (/api/avatars/introspect) for a richer line and swaps it in if it answers.
 const PBID=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+// ---- Delegation: seated execs stay at their desks until the rest of the app delegates them
+// work (a session / build / source / run / execute event). A delegated exec gets up, walks out
+// through the room's doorway and along the corridors to a spot on the trading floor, works there
+// briefly, then walks back and sits down. Earn (the roaming mascot) is never seated or delegated.
+const FLOOR_NODES=['nL','nM','nN','nO'];
+const DELEG_VERB={session:'in session on',build:'building',source:'sourcing',run:'running',execute:'executing',deploy:'shipping',task:'working on'};
+function execRoomAt(x,y){for(let i=model.rooms.length-1;i>=0;i--){const r=model.rooms[i];if(r.build==='corridor')continue;if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d)return r;}return null;}
+function doorWaypoint(r){if(!r||!r.doors||!r.doors.length)return null;
+  // prefer a door onto a hallway (the upper rooms open S); fall back to the first door
+  const d=r.doors.find(x=>x.side==='S')||r.doors[0],at=d.at!=null?d.at:0.5;
+  if(d.side==='S')return [r.x+at*r.w,r.y+r.d+0.7];
+  if(d.side==='N')return [r.x+at*r.w,r.y-0.7];
+  if(d.side==='E')return [r.x+r.w+0.7,r.y+at*r.d];
+  return [r.x-0.7,r.y+at*r.d];}
+const nodesToPts=list=>list.map(n=>NODE[n]);
+function delegateAvatar(idOrRole,opts={}){
+  const key=String(idOrRole).toLowerCase();
+  const pp=PBID[idOrRole]||PEOPLE.find(p=>!p.roam&&(p.k===idOrRole||p.id===key||p.k===key||p.r.toLowerCase()===key));
+  if(!pp||pp.roam)return false;                                   // Earn / roamers are never desk-bound
+  if(pp.deleg)return true;                                        // already out on a task
+  pp.home=pp.home||[pp.x,pp.y];
+  // default target: the nearest trading-floor node (a short, purposeful trip); the app can name one
+  const goal=(opts.target&&NODE[opts.target])?opts.target:FLOOR_NODES.reduce((a,n)=>{const d=(NODE[n][0]-pp.x)**2+(NODE[n][1]-pp.y)**2;return d<a.d?{n,d}:a;},{n:FLOOR_NODES[0],d:1e9}).n;
+  const wp=doorWaypoint(execRoomAt(pp.x,pp.y));
+  const from=nearestNode(wp?wp[0]:pp.x,wp?wp[1]:pp.y);
+  pp.path=[[pp.x,pp.y],...(wp?[wp]:[]),...nodesToPts(bfs(from,goal))];
+  pp.pi=1;pp.cur=0.35;pp.dist=pp.dist||0;pp.spd=1.8+Math.random()*0.5;   // brisk, on-a-mission
+  pp.deleg={phase:'out',goal,kind:opts.kind||'task',wander:!!opts.wander,label:opts.label||'',t:0,dur:opts.dur||(4.5+Math.random()*4.5)};
+  startPeople();return true;}
+function recallAvatar(idOrRole){const key=String(idOrRole).toLowerCase();const pp=PBID[idOrRole]||PEOPLE.find(p=>p.k===idOrRole||p.id===key||p.r.toLowerCase()===key);if(pp&&pp.deleg&&pp.deleg.phase==='task')pp.deleg.dur=pp.deleg.t;return !!pp;}
 let intentHover=null,intentPin=null;
 function intentFor(pp){
   if(pp._say)return pp._say;                       // Claude-enriched (set on click), else local template
@@ -990,6 +1045,14 @@ function intentFor(pp){
     if(pp.state==='walk')return r+': heading across the floor';
     return r+': on the floor, taking a moment';
   }
+  if(pp.deleg){
+    if(pp.deleg.wander){const w=pp.deleg.label||'stepping away for a bit';
+      if(pp.deleg.phase==='back')return r+': heading back to the desk';
+      return r+': '+w;}
+    const v=DELEG_VERB[pp.deleg.kind]||'working on',what=pp.deleg.label||'a task';
+    if(pp.deleg.phase==='out')return r+': heading out — '+v+' '+what;
+    if(pp.deleg.phase==='back')return r+': wrapping up, back to the desk';
+    return r+': '+v+' '+what;}
   const w=pp.wst&&pp.wst.s;
   if(w==='review')return r+': reviewing documents';
   if(w==='idle')return r+': taking a beat at the desk';
@@ -997,6 +1060,7 @@ function intentFor(pp){
 }
 function behaviorOf(pp){
   if(pp.roam)return pp._chat?'converse':(pp.state==='walk'?'go_to':'idle');
+  if(pp.deleg)return pp.deleg.phase!=='task'?'go_to':(pp.deleg.wander?'idle':'work');
   const w=pp.wst&&pp.wst.s;return w==='review'?'review':w==='idle'?'idle':'work_at_desk';
 }
 function enrichIntent(pp){
@@ -1067,7 +1131,32 @@ function peopleLoop(t){
       }
       if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.0;}
       else{pp.fi=1;yoff=REDUCED?0:Math.sin(t/950+pp.ph)*0.45;}
+    } else if(pp.deleg){ // delegated: walk out → work at the task spot → walk back to the desk
+      if(pp.deleg.phase==='task'){
+        pp.deleg.t+=dt;pp.fi=1;
+        if(pp.deleg.wander){pp.dir=(pp.deleg.t%3<1.5)?2:3;yoff=REDUCED?0:Math.sin(t/900+pp.ph)*0.5;}  // relaxed, looking around
+        else{pp.dir=0;yoff=Math.abs(Math.sin(t/95+pp.ph))*0.6-0.15;}                                    // heads-down on the floor
+        if(pp.deleg.t>=pp.deleg.dur){                                              // done → head home
+          const wp=doorWaypoint(execRoomAt(pp.home[0],pp.home[1]));
+          const from=nearestNode(pp.x,pp.y),goalN=nearestNode(wp?wp[0]:pp.home[0],wp?wp[1]:pp.home[1]);
+          pp.path=[[pp.x,pp.y],...nodesToPts(bfs(from,goalN)),...(wp?[wp]:[]),[pp.home[0],pp.home[1]]];
+          pp.pi=1;pp.cur=0.35;pp.deleg.phase='back';}
+      } else {                                                                     // walking out / back
+        const tgt=pp.path[pp.pi],dx=tgt[0]-pp.x,dy=tgt[1]-pp.y,d=Math.hypot(dx,dy),isLast=pp.pi>=pp.path.length-1;
+        let sp=pp.spd||1.3;if(isLast)sp=Math.min(sp,0.55+d*1.7);
+        pp.cur=Math.min(sp,(pp.cur||0.35)+dt*2.8);
+        const step=Math.min(pp.cur*dt,d);
+        if(d>1e-3){pp.x+=dx/d*step;pp.y+=dy/d*step;pp.dist+=step;pp.dir=dir4(dx,dy);}
+        moving=pp.cur>0.15;
+        if(d<0.1){if(isLast){
+          if(pp.deleg.phase==='out'){pp.deleg.phase='task';pp.deleg.t=0;}
+          else{pp.x=pp.home[0];pp.y=pp.home[1];pp.deleg=null;pp.wst=null;pp.dir=0;pp.fi=1;}
+        }else pp.pi++;}
+      }
+      if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.0;}
+      else if(pp.deleg&&pp.deleg.phase!=='task'){pp.fi=1;}
     } else { // seated persona — a small work-state machine: typing / reviewing / idle glance
+      if(pp.home==null)pp.home=[pp.x,pp.y];
       pp.wst=pp.wst||{s:'type',t:0,d:2+(pp.id.charCodeAt(0)%3)};pp.wst.t+=dt;
       if(pp.wst.t>=pp.wst.d){const o=['type','review','idle','type'];pp.wst.s=o[(Math.random()*o.length)|0];pp.wst.t=0;
         pp.wst.d=pp.wst.s==='type'?2.2+Math.random()*2.4:pp.wst.s==='review'?1.8+Math.random()*1.6:1.4+Math.random()*1.8;}
