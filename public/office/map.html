@@ -288,6 +288,13 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .plabel{z-index:6}
 .plabel .pnm{display:inline-flex;align-items:center;gap:4px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.86);padding:1px 6px 1px 4px;border-radius:5px;white-space:nowrap;box-shadow:0 0 0 1px rgba(245,215,115,.28)}
 .plabel .pdot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 1.5px #0b1220}
+.speech{z-index:7}
+.speech .bub{display:inline-flex;gap:3px;align-items:center;background:rgba(11,18,32,.9);padding:3px 6px;border-radius:7px 7px 7px 2px;box-shadow:0 0 0 1px rgba(245,215,115,.24),0 4px 10px -5px #000}
+.speech .bub i{width:3px;height:3px;border-radius:50%;background:#9fb2d4;animation:chatdot 1.25s infinite}
+.speech .bub i:nth-child(2){animation-delay:.18s}
+.speech .bub i:nth-child(3){animation-delay:.36s}
+@keyframes chatdot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-1.5px)}}
+@media (prefers-reduced-motion:reduce){.speech .bub i{animation:none}}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
 .ibwrap{pointer-events:none}
@@ -760,17 +767,17 @@ function renderModel(model){
   // draws, so walls/desks occlude them), perspective-scaled by position; the name/status label floats in the
   // overlay above furniture. Hosted view only.
   if(document.body.classList.contains('viewmode')&&typeof PEOPLE!=='undefined'){
-    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=pp.roam[0][0];pp.y=pp.roam[0][1];}const sc=STC[pp.s]||STC.available;
+    PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=20;pp.y=19;}const sc=STC[pp.s]||STC.available;
       if(MODE==='fp'){
         // First-person: upright billboard facing the camera. Feet stay on the correct floor point (depth), but
         // the body height is scaled up and clamped to a legible range so teammates read clearly at any distance,
         // and drawn ON TOP of furniture (large sort key) so they're never hidden. SVG name/status label above.
         const cf=camF(pp.x,pp.y);if(cf<0.4)return;const feet=P(pp.x,pp.y,0);const nat=1.7*C().FOCAL/cf;const Hpx=Math.max(96,Math.min(560,nat*1.3));
-        const W=Hpx*0.6,X=feet[0]-W/2,Y=feet[1]-Hpx,fp=Math.max(9,Math.min(17,Hpx*0.1)),lw=pp.r.length*fp*0.6+16,ly=Y-fp*0.6;
-        push(5e5-cf,`<g><ellipse cx="${feet[0].toFixed(1)}" cy="${feet[1].toFixed(1)}" rx="${(W*0.4).toFixed(1)}" ry="${(W*0.14).toFixed(1)}" fill="rgba(0,0,0,.34)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${Hpx.toFixed(1)}" viewBox="96 0 96 96"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="288" height="384" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.5)) saturate(1.06)"/></svg><g transform="translate(${feet[0].toFixed(1)},${ly.toFixed(1)})"><rect x="${(-lw/2).toFixed(1)}" y="${(-fp-4).toFixed(1)}" width="${lw.toFixed(1)}" height="${(fp+7).toFixed(1)}" rx="3" fill="rgba(11,18,32,.88)" stroke="rgba(245,215,115,.3)" stroke-width="0.6"/><circle cx="${(-lw/2+fp*0.8).toFixed(1)}" cy="${(-fp*0.4-0.5).toFixed(1)}" r="${(fp*0.28).toFixed(1)}" fill="${sc}"/><text x="${(fp*0.5).toFixed(1)}" y="${(-fp*0.4).toFixed(1)}" text-anchor="middle" font-family="ui-monospace,monospace" font-weight="700" font-size="${fp.toFixed(1)}" fill="#eaf0ff" dominant-baseline="central">${pp.r}</text></g></g>`);
+        const W=Hpx*0.6,X=feet[0]-W/2,Y=feet[1]-Hpx,fp=Math.max(9,Math.min(17,Hpx*0.1)),lw=pp.r.length*fp*0.6+16,ly=Y-fp*0.6,ffi=(pp.fi!=null?pp.fi:1);
+        push(5e5-cf,`<g><ellipse cx="${feet[0].toFixed(1)}" cy="${feet[1].toFixed(1)}" rx="${(W*0.4).toFixed(1)}" ry="${(W*0.14).toFixed(1)}" fill="rgba(0,0,0,.34)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${Hpx.toFixed(1)}" viewBox="${ffi*128} 0 128 128"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="384" height="512" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.5)) saturate(1.05) contrast(1.02)"/></svg><g transform="translate(${feet[0].toFixed(1)},${ly.toFixed(1)})"><rect x="${(-lw/2).toFixed(1)}" y="${(-fp-4).toFixed(1)}" width="${lw.toFixed(1)}" height="${(fp+7).toFixed(1)}" rx="3" fill="rgba(11,18,32,.88)" stroke="rgba(245,215,115,.3)" stroke-width="0.6"/><circle cx="${(-lw/2+fp*0.8).toFixed(1)}" cy="${(-fp*0.4-0.5).toFixed(1)}" r="${(fp*0.28).toFixed(1)}" fill="${sc}"/><text x="${(fp*0.5).toFixed(1)}" y="${(-fp*0.4).toFixed(1)}" text-anchor="middle" font-family="ui-monospace,monospace" font-weight="700" font-size="${fp.toFixed(1)}" fill="#eaf0ff" dominant-baseline="central">${pp.r}</text></g></g>`);
       } else {
         const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1,X=q[0]-W/2,Y=q[1]-H;
-        push(pp.x,pp.y,`<g id="ps_${pp.id}"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}" viewBox="${fi*96} ${dir*96} 96 96"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="288" height="384" style="filter:drop-shadow(0 1px 1.4px rgba(0,0,0,.5)) saturate(1.06) contrast(1.03)"/></svg></g>`);
+        push(pp.x,pp.y,`<g id="ps_${pp.id}"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}" viewBox="${fi*128} ${dir*128} 128 128"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="384" height="512" style="filter:drop-shadow(0 1px 1.4px rgba(0,0,0,.5)) saturate(1.05) contrast(1.02)"/></svg></g>`);
         overlays.push(`<div class="ov plabel" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${(q[1]-H-3).toFixed(1)}px"><span class="pnm"><i class="pdot" style="background:${sc}"></i>${pp.r}</span></div>`);
       }
     });
@@ -886,6 +893,8 @@ function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setIt
 // a waypoint list. dir 0=down 1=up 2=left 3=right (atlas rows); fi=walk frame column (0-2).
 const STC={available:'#34d399',busy:'#f5b342',away:'#94a3b8',dnd:'#ef5a6a'};
 // Sitters sit just behind their desk (smaller y) facing down, so the desk (drawn later) reads in front.
+// Roamers carry roam:1 and are driven by the corridor-navigation engine below (real destinations, not a
+// back-and-forth line); their x/y here is just the spawn node.
 const PEOPLE=[
  {id:'om',r:'Office Manager',k:'office-manager',s:'available',x:5.2,y:2.6},
  {id:'ea',r:'Executive Advisor',k:'executive-advisor',s:'busy',x:15.5,y:2.8},
@@ -899,31 +908,90 @@ const PEOPLE=[
  {id:'pr',r:'PR Director',k:'pr-director',s:'busy',x:22,y:13.6},
  {id:'ir',r:'Investor Relations',k:'investor-relations',s:'available',x:30,y:13.5},
  {id:'cc',r:'Capital Connector',k:'capital-connector',s:'available',x:33.8,y:13.6},
- {id:'rm',r:'Rainmaker',k:'rainmaker',s:'available',roam:[[5,10],[37,10]],ti:0},
- {id:'cr',r:'Capital Raiser',k:'capital-raiser',s:'available',roam:[[6,24],[36,24]],ti:0},
- {id:'er',r:'Earn',k:'earn',s:'available',roam:[[5,19],[37,19]],ti:0},
+ {id:'rm',r:'Rainmaker',k:'rainmaker',s:'available',roam:1,x:4,y:10.2},
+ {id:'cr',r:'Capital Raiser',k:'capital-raiser',s:'available',roam:1,x:37.5,y:19},
+ {id:'er',r:'Earn',k:'earn',s:'available',roam:1,x:14,y:19},
 ];
+// ---- corridor navigation graph: roamers path (BFS) between these nodes and only ever travel corridor
+// centrelines / the open trading floor, so no one walks through walls or furniture. ----
+const NODE={
+ nA:[4,10.2], nB:[14,10.2], nC:[24,10.2], nD:[37.5,10.2],   // hallway N
+ nV:[14,15],                                                 // vertical connector
+ nE:[4,19], nF:[14,19], nG:[24,19], nH:[37.5,19],           // hallway mid
+ nL:[6,24], nM:[16,24], nN:[26,24], nO:[34,24],             // trading-floor lane
+};
+const EDGE={nA:['nB'],nB:['nA','nC','nV'],nC:['nB','nD'],nD:['nC'],nV:['nB','nF'],
+ nE:['nF','nL'],nF:['nE','nG','nV'],nG:['nF','nH'],nH:['nG','nO'],
+ nL:['nE','nM'],nM:['nL','nN'],nN:['nM','nO'],nO:['nN','nH']};
+const NODES=Object.keys(NODE);
+function nearestNode(x,y){let best=NODES[0],bd=1e9;for(const n of NODES){const d=(NODE[n][0]-x)**2+(NODE[n][1]-y)**2;if(d<bd){bd=d;best=n;}}return best;}
+function bfs(a,b){if(a===b)return[a];const prev={},q=[a],seen={};seen[a]=1;while(q.length){const u=q.shift();for(const v of(EDGE[u]||[])){if(!seen[v]){seen[v]=1;prev[v]=u;if(v===b){const path=[v];let c=v;while(c!==a){c=prev[c];path.unshift(c);}return path;}q.push(v);}}}return[a];}
 // perspective scale: characters toward the back (small y) render a touch smaller than those in front.
 const pscale=y=>Math.max(.82,Math.min(1.14,.82+(y-2)/33*0.32));
 let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const STRIDE=0.6, WALKSEQ=[1,0,1,2], CHAT_RANGE=3.8;   // distance-based ping-pong framing (no foot-slide)
+const dir4=(dx,dy)=>Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);
+const roamers=PEOPLE.filter(p=>p.roam);
+function enterPause(pp){pp.state='pause';pp.cur=0;pp.pauseT=0;pp.pauseDur=2.4+Math.random()*3.4;pp.act=Math.random()<0.55?'look':'idle';}
+function pickDest(pp){
+  const others=roamers.filter(o=>o!==pp);
+  let goal; // ~40% of the time, head toward a colleague to spark a conversation; else a random node
+  if(others.length&&Math.random()<0.4){const o=others[(Math.random()*others.length)|0];goal=nearestNode(o.x,o.y);}
+  else goal=NODES[(Math.random()*NODES.length)|0];
+  const from=nearestNode(pp.x,pp.y);
+  if(goal===from)goal=NODES[(Math.random()*NODES.length)|0];
+  const path=bfs(from,goal).map(n=>NODE[n]);
+  pp.path=path;pp.pi=path.length>1?1:0;pp.state='walk';pp.cur=Math.max(pp.cur||0,0.35);
+}
 function peopleLoop(t){
   if(!document.body.classList.contains('viewmode')||MODE==='fp'){peopleRAF=0;return;}
   const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
+  // ---- conversations: two roamers paused near each other stop, face off and chat (speech dots) ----
+  roamers.forEach(pp=>pp._chat=false);
+  for(let i=0;i<roamers.length;i++)for(let j=i+1;j<roamers.length;j++){const a=roamers[i],b=roamers[j];
+    if(a.state==='pause'&&b.state==='pause'&&Math.hypot(a.x-b.x,a.y-b.y)<CHAT_RANGE){
+      a._chat=b._chat=true;a.dir=dir4(b.x-a.x,b.y-a.y);b.dir=dir4(a.x-b.x,a.y-b.y);
+      a.pauseDur=Math.max(a.pauseDur||0,a.pauseT+1.6);b.pauseDur=Math.max(b.pauseDur||0,b.pauseT+1.6);a.act=b.act='chat';}}
   PEOPLE.forEach(pp=>{
     if(pp.ph==null)pp.ph=(pp.id.charCodeAt(0)%12)*0.5;
-    let moving=false;
-    if(pp.roam){const tg=pp.roam[pp.ti||0];const dx=tg[0]-pp.x,dy=tg[1]-pp.y,d=Math.hypot(dx,dy);
-      if(d<0.12){pp.wait=(pp.wait||0)+dt;if(pp.wait>1.4){pp.wait=0;pp.ti=((pp.ti||0)+1)%pp.roam.length;}}
-      else{const sp=Math.min(1.7*dt,d);pp.x+=dx/d*sp;pp.y+=dy/d*sp;moving=true;pp.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);}}
-    if(moving){pp.ft=(pp.ft||0)+dt;if(pp.ft>0.13){pp.ft=0;pp.fi=((pp.fi==null?1:pp.fi)+1)%3;}}else pp.fi=1;
+    let moving=false, yoff=0;
+    if(pp.roam){
+      if(pp.state==null){pp.spd=1.35+Math.random()*0.5;pp.dist=0;enterPause(pp);pp.pauseT=Math.random()*pp.pauseDur;}
+      if(pp.state==='walk'){
+        const tgt=pp.path[pp.pi],dx=tgt[0]-pp.x,dy=tgt[1]-pp.y,d=Math.hypot(dx,dy),isLast=pp.pi>=pp.path.length-1;
+        let sp=pp.spd;if(isLast)sp=Math.min(sp,0.55+d*1.7);          // decelerate into the final node
+        pp.cur=Math.min(sp,(pp.cur||0.35)+dt*2.8);                   // accelerate from rest
+        const step=Math.min(pp.cur*dt,d);
+        if(d>1e-3){pp.x+=dx/d*step;pp.y+=dy/d*step;pp.dist+=step;pp.dir=dir4(dx,dy);}
+        moving=pp.cur>0.15;
+        if(d<0.1){if(isLast)enterPause(pp);else pp.pi++;}
+      } else { // pause
+        pp.pauseT+=dt;
+        if(pp.act==='look'){const p=pp.pauseT;pp.dir=p<0.7?pp.dir:p<1.3?2:p<1.9?3:0;}
+        if(pp.pauseT>=pp.pauseDur&&(!pp._chat||pp.pauseT>7))pickDest(pp);
+      }
+      if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.0;}
+      else{pp.fi=1;yoff=REDUCED?0:Math.sin(t/950+pp.ph)*0.45;}
+    } else { // seated persona — a small work-state machine: typing / reviewing / idle glance
+      pp.wst=pp.wst||{s:'type',t:0,d:2+(pp.id.charCodeAt(0)%3)};pp.wst.t+=dt;
+      if(pp.wst.t>=pp.wst.d){const o=['type','review','idle','type'];pp.wst.s=o[(Math.random()*o.length)|0];pp.wst.t=0;
+        pp.wst.d=pp.wst.s==='type'?2.2+Math.random()*2.4:pp.wst.s==='review'?1.8+Math.random()*1.6:1.4+Math.random()*1.8;}
+      pp.fi=1;pp.dir=0;
+      if(pp.wst.s==='idle'&&pp.wst.t>0.7&&pp.wst.t<1.3)pp.dir=(pp.id.charCodeAt(0)&1)?2:3;   // glance
+      if(pp.wst.s==='type')yoff=Math.abs(Math.sin(t/95+pp.ph))*0.7-0.15;                     // lean-in typing
+      else if(pp.wst.s==='review')yoff=0.9;                                                  // settle, head down
+      else yoff=REDUCED?0:Math.sin(t/1150+pp.ph)*0.45;                                       // breathing
+    }
     const g=document.getElementById('ps_'+pp.id);if(!g)return;
-    const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf;
-    const bounce=moving?(pp.fi===1?0:-2.2):(REDUCED?0:Math.sin(t/620+pp.ph)*0.7);
-    const X=q[0]-W/2,Y=q[1]-H+bounce,fi=pp.fi||0,dir=pp.dir||0;
-    const sv=g.querySelector('svg');if(sv){sv.setAttribute('x',X.toFixed(1));sv.setAttribute('y',Y.toFixed(1));sv.setAttribute('width',W.toFixed(1));sv.setAttribute('height',H.toFixed(1));sv.setAttribute('viewBox',`${fi*96} ${dir*96} 96 96`);}
+    const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,X=q[0]-W/2,Y=q[1]-H+yoff;
+    const sv=g.querySelector('svg');if(sv){sv.setAttribute('x',X.toFixed(1));sv.setAttribute('y',Y.toFixed(1));sv.setAttribute('width',W.toFixed(1));sv.setAttribute('height',H.toFixed(1));sv.setAttribute('viewBox',`${(pp.fi||0)*128} ${(pp.dir||0)*128} 128 128`);}
     const es=g.getElementsByTagName('ellipse');if(es[0]){es[0].setAttribute('cx',(q[0]+1).toFixed(1));es[0].setAttribute('cy',(q[1]+1).toFixed(1));es[0].setAttribute('rx',(13.8*pf).toFixed(1));es[0].setAttribute('ry',(4.6*pf).toFixed(1));}
     if(es[1]){es[1].setAttribute('cx',(q[0]+2*pf).toFixed(1));es[1].setAttribute('cy',q[1].toFixed(1));es[1].setAttribute('rx',(12*pf).toFixed(1));es[1].setAttribute('ry',(4*pf).toFixed(1));}
     const lb=document.getElementById('pe_'+pp.id);if(lb){lb.style.left=q[0].toFixed(1)+'px';lb.style.top=(q[1]-H-3).toFixed(1)+'px';}
+    // speech bubble (created / removed on demand; lives in the persistent overlay layer)
+    let sb=document.getElementById('sp_'+pp.id);
+    if(pp._chat){if(!sb){sb=document.createElement('div');sb.className='ov speech';sb.id='sp_'+pp.id;sb.innerHTML='<span class="bub"><i></i><i></i><i></i></span>';const ow=document.getElementById('ovwrap');if(ow)ow.appendChild(sb);}sb.style.left=(q[0]+7).toFixed(1)+'px';sb.style.top=(q[1]-H-9).toFixed(1)+'px';}
+    else if(sb)sb.remove();
   });
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
