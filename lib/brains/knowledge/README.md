@@ -108,20 +108,21 @@ catalog, not a new taxonomy — so the office avatars can be wired to their Brai
 (e.g. the LIVING-EXECS `attachBrain` slow-loop; see
 [`docs/avatars/AVATAR_SYSTEM_SPEC.md`](../../../docs/avatars/AVATAR_SYSTEM_SPEC.md)).
 
-|     Office avatar     |            Brain            |
-|-----------------------|-----------------------------|
-| Executive Advisor     | `executive_advisor`         |
-| Deal Sourcer          | `deal_sourcer`              |
-| Lead Generator        | `funnel_lead_gen`           |
-| SEO Disruptor         | `seo_disrupter`             |
-| Automater             | `automater_scrubber`        |
-| Legal Admin           | `legal_admin`               |
-| Curator               | `event_curator`             |
-| PR Director           | `marketing_pr`              |
-| Investor Relations    | `investor_relations`        |
-| Capital Connector     | `capital_connector`         |
-| Rainmaker             | `rainmaker`                 |
-| Capital Raiser        | `capital_raiser`            |
-| Earn (coin mascot)    | `earnest_fundmaker`         |
-| Office Manager        | — (front-of-house, no Brain)|
-| Workflow Instructor   | — (OS orchestration layer)  |
+|    Office avatar    |            Brain             |
+|---------------------|------------------------------|
+| Executive Advisor   | `executive_advisor`          |
+| Deal Sourcer        | `deal_sourcer`               |
+| Lead Generator      | `funnel_lead_gen`            |
+| SEO Disruptor       | `seo_disrupter`              |
+| Automater           | `automater_scrubber`         |
+| Legal Admin         | `legal_admin`                |
+| Curator             | `event_curator`              |
+| PR Director         | `marketing_pr`               |
+| Investor Relations  | `investor_relations`         |
+| Capital Connector   | `capital_connector`          |
+| Rainmaker           | `rainmaker`                  |
+| Capital Raiser      | `capital_raiser`             |
+| Earn (coin mascot)  | `earnest_fundmaker`          |
+| Office Manager      | — (front-of-house, no Brain) |
+| Workflow Instructor | — (OS orchestration layer)   |
+

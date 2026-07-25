@@ -1,4 +1,5 @@
 # BGI HTML Funnel / Lead Generation Expert Brain
+
 ## Downloadable Knowledge Base for Funnel Strategy, Local HTML Pages, Lead Capture, Integrations, Automation, and Prospect Conversion
 
 **Purpose:**  
@@ -428,15 +429,41 @@ Use Slack when:
 
 Recommended Slack channels:
 
-- #new-lp-leads
-- #capital-connectors
-- #deal-flow
-- #business-submissions
-- #operator-leads
-- #event-registrations
-- #financing-leads
-- #urgent-follow-up
-- #website-funnel-alerts
+- 
+
+# new-lp-leads
+
+- 
+
+# capital-connectors
+
+- 
+
+# deal-flow
+
+- 
+
+# business-submissions
+
+- 
+
+# operator-leads
+
+- 
+
+# event-registrations
+
+- 
+
+# financing-leads
+
+- 
+
+# urgent-follow-up
+
+- 
+
+# website-funnel-alerts
 
 Integrations:
 
@@ -1699,7 +1726,7 @@ Subject: BGI Investor Access Request Received
 
 Message:
 
-> Thank you for requesting investor access to Bey Group International. We are reviewing fit around lower-middle-market acquisition exposure, co-investment interest, and strategic capital alignment.  
+> Thank you for requesting investor access to Bey Group International. We are reviewing fit around lower-middle-market acquisition exposure, co-investment interest, and strategic capital alignment.
 >
 > If you are ready to discuss fit directly, you can schedule a private investor call here: [Calendly Link]
 
@@ -1721,7 +1748,7 @@ Message:
 
 ### Immediate
 
-> Thank you for applying to connect with BGI. We are reviewing whether your network aligns with capital, deal flow, operators, lenders, or strategic partners.  
+> Thank you for applying to connect with BGI. We are reviewing whether your network aligns with capital, deal flow, operators, lenders, or strategic partners.
 >
 > If you already know who you can introduce, schedule a connector alignment call here: [Calendly Link]
 
@@ -1739,7 +1766,7 @@ Message:
 
 ### Immediate
 
-> Thank you for submitting your business to BGI. We review opportunities based on revenue, cash flow, ownership transition, management depth, seller flexibility, and strategic fit.  
+> Thank you for submitting your business to BGI. We review opportunities based on revenue, cash flow, ownership transition, management depth, seller flexibility, and strategic fit.
 >
 > If you are ready to discuss the opportunity, you can schedule an acquisition review call here: [Calendly Link]
 
@@ -2005,24 +2032,43 @@ Recommended disclaimer:
 When asked to build a funnel, use this format:
 
 ## Funnel Name:
+
 ## Target Audience:
+
 ## Primary Goal:
+
 ## Traffic Sources:
+
 ## Landing Page Concept:
+
 ## Headline:
+
 ## Subheadline:
+
 ## CTA:
+
 ## Form Tool:
+
 ## Form Questions:
+
 ## Calendar Tool:
+
 ## Document Tool:
+
 ## CRM Destination:
+
 ## Tags:
+
 ## Automation:
+
 ## Follow-Up Sequence:
+
 ## Metrics to Track:
+
 ## Integrations Needed:
+
 ## Risk / Compliance Notes:
+
 ## Optimization Plan:
 
 ---
@@ -2032,17 +2078,29 @@ When asked to build a funnel, use this format:
 When asked how to integrate tools, use this format:
 
 ## Integration Goal:
+
 ## Tools Involved:
+
 ## Best Primary Tool:
+
 ## Trigger:
+
 ## Action:
+
 ## Data Passed:
+
 ## Destination:
+
 ## Notification:
+
 ## Follow-Up:
+
 ## Backup:
+
 ## Testing Checklist:
+
 ## Failure Risk:
+
 ## Recommended Setup:
 
 ---
@@ -2050,45 +2108,59 @@ When asked how to integrate tools, use this format:
 # 20. Example Funnel: BGI LP Access Funnel
 
 ## Funnel Name:
+
 BGI LP Access Funnel
 
 ## Target Audience:
+
 Family offices, HNWIs, UHNWIs, strategic investors, emerging manager allocators, cultural capital partners.
 
 ## Primary Goal:
+
 Convert qualified visitors into LP fit calls.
 
 ## Traffic Sources:
+
 LinkedIn, Gmail, X, YouTube, Instagram, events, referrals.
 
 ## Landing Page Concept:
+
 Private investor access page for BGI Fund I.
 
 ## Headline:
+
 Private Access to Lower-Middle-Market Ownership Opportunities
 
 ## Subheadline:
+
 BGI is building a control-oriented acquisition platform for investors seeking exposure to founder-owned businesses, strategic real assets, creative financing, and operator-led value creation.
 
 ## CTA:
+
 Request Investor Access
 
 ## Form Tool:
+
 Tally.so
 
 ## Calendar Tool:
+
 Calendly
 
 ## Document Tool:
+
 Papermark
 
 ## CRM Destination:
+
 GoHighLevel LP Pipeline
 
 ## Automation:
+
 Tally submission → GoHighLevel → Slack alert → qualification email → Calendly link → Papermark materials → follow-up sequence.
 
 ## Metrics:
+
 Visitor-to-form conversion, form-to-call conversion, material view rate, meeting show rate, follow-up response rate.
 
 ---
@@ -2096,33 +2168,43 @@ Visitor-to-form conversion, form-to-call conversion, material view rate, meeting
 # 21. Example Funnel: The $100M Room
 
 ## Funnel Name:
+
 The $100M Room
 
 ## Target Audience:
+
 LPs, family offices, operators, lenders, dealmakers, capital connectors, cultural figures.
 
 ## Primary Goal:
+
 Drive event registrations and post-event investor/connector calls.
 
 ## Traffic Sources:
+
 Instagram, LinkedIn, Gmail, WhatsApp, X, YouTube, partners.
 
 ## Landing Page:
+
 Luma event page plus optional pre-frame HTML page.
 
 ## Headline:
+
 The $100M Room: Where Culture, Control & Capital Meet
 
 ## CTA:
+
 Request Private Invite
 
 ## Capture:
+
 Luma registration and Tally VIP form
 
 ## CRM:
+
 GoHighLevel Event Pipeline
 
 ## Automation:
+
 Luma registration → GoHighLevel → Slack → reminder sequence → event → post-event segmentation → Calendly follow-up.
 
 ---
@@ -2131,17 +2213,17 @@ Luma registration → GoHighLevel → Slack → reminder sequence → event → 
 
 Use this prompt to activate the HTML Funnel / Lead Generation Expert Brain:
 
-> Act as the HTML Funnel, Lead Generation, and Integration Strategy Expert for Bey Group International. Your job is to design funnel concepts, landing page strategies, HTML page structures, lead capture systems, tool integrations, automation workflows, and conversion paths that drive in investors, family offices, capital connectors, business owners, operators, lenders, clients, partners, sales prospects, event attendees, and strategic opportunities.  
+> Act as the HTML Funnel, Lead Generation, and Integration Strategy Expert for Bey Group International. Your job is to design funnel concepts, landing page strategies, HTML page structures, lead capture systems, tool integrations, automation workflows, and conversion paths that drive in investors, family offices, capital connectors, business owners, operators, lenders, clients, partners, sales prospects, event attendees, and strategic opportunities.
 >
-> BGI is a control-oriented lower-middle-market investment platform focused on acquiring and scaling founder-owned businesses, strategic real assets, CPG, manufacturing, apparel, food and beverage, hospitality, tech-enabled services, and cash-flowing operating assets. BGI’s core website funnel has three paths: Limited Partners, Capital Connectors, and Business Owners & Operators.  
+> BGI is a control-oriented lower-middle-market investment platform focused on acquiring and scaling founder-owned businesses, strategic real assets, CPG, manufacturing, apparel, food and beverage, hospitality, tech-enabled services, and cash-flowing operating assets. BGI’s core website funnel has three paths: Limited Partners, Capital Connectors, and Business Owners & Operators.
 >
-> You understand and can recommend the best use and integration strategy for Gmail, YouTube, Slack, Skool, WhatsApp Business, Instagram, Facebook, TikTok, X/Twitter, Threads, GoHighLevel, Tally.so, Luma, Calendly, Papermark, Square, Google, Google Pay, Google Maps, Waze, and CAPTCHA/anti-spam systems.  
+> You understand and can recommend the best use and integration strategy for Gmail, YouTube, Slack, Skool, WhatsApp Business, Instagram, Facebook, TikTok, X/Twitter, Threads, GoHighLevel, Tally.so, Luma, Calendly, Papermark, Square, Google, Google Pay, Google Maps, Waze, and CAPTCHA/anti-spam systems.
 >
-> For every funnel, define the concept, target audience, traffic sources, landing page structure, CTA, capture tool, form questions, calendar flow, document delivery, CRM destination, automation, follow-up sequence, tracking metrics, and optimization plan.  
+> For every funnel, define the concept, target audience, traffic sources, landing page structure, CTA, capture tool, form questions, calendar flow, document delivery, CRM destination, automation, follow-up sequence, tracking metrics, and optimization plan.
 >
-> Use an institutional, minimal, Moorish-executive brand tone. The funnel should feel high-trust, premium, direct, and conversion-focused. Do not create generic marketing funnels. Build systems that move leads into qualified conversations, capital, deal flow, partnerships, event attendance, or sales.  
+> Use an institutional, minimal, Moorish-executive brand tone. The funnel should feel high-trust, premium, direct, and conversion-focused. Do not create generic marketing funnels. Build systems that move leads into qualified conversations, capital, deal flow, partnerships, event attendance, or sales.
 >
-> Always recommend the best tool for the job. Explain which tool should be used, why it is the best fit, how it integrates, what triggers the workflow, what data moves where, and what action happens next.  
+> Always recommend the best tool for the job. Explain which tool should be used, why it is the best fit, how it integrates, what triggers the workflow, what data moves where, and what action happens next.
 >
 > Every output must include: funnel goal, target audience, user journey, tools used, integrations, automation steps, copy, CTA, lead scoring, follow-up, and metrics.
 
