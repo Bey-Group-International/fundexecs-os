@@ -787,7 +787,13 @@ function renderModel(model){
 function keyDefsFor(mode){const k=mode==='iso'?{cx:.47,cy:.46,r:.98}:{cx:.45,cy:.4,r:.92};return '';}
 function actSeed(){model.rooms.forEach(r=>{if(r.build==='corridor')return;if(!ACT.rooms[r.id])ACT.rooms[r.id]={occ:Math.random()<.7?1+Math.floor(Math.random()*3):0};});}
 // ---- activity simulation engine: raises tick, the office breathes ----
-function ambientDoor(d){const from=(d._o!=null?d._o:(d.open?1:0)),to=d.open?0:1;d.open=!d.open;const t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/300),e=1-Math.pow(1-k,3);d._o=from+(to-from)*e;if(!drag&&!fpRAF)render();if(k<1)requestAnimationFrame(step);else{d._o=to;if(!drag&&!fpRAF)render();}};requestAnimationFrame(step);}
+// Ambient doors toggle open/closed in a SINGLE render. The old version eased the
+// swing over 300ms by calling the full-scene render() on every animation frame
+// (~60 rebuilds of the ~220KB office SVG per door event) — the source of the
+// "requestAnimationFrame handler took 50ms+" / forced-reflow console violations.
+// A door is baked into the monolithic scene SVG, so it can't be animated without
+// re-rendering; a one-shot state flip keeps the ambient behavior at 1/60th the cost.
+function ambientDoor(d){const to=d.open?0:1;d.open=!d.open;d._o=to;if(!drag&&!fpRAF)render();}
 function actTick(){
   if(!ACT.on||typeof model==='undefined')return;
   actSeed();const now=performance.now();let changed=false;
