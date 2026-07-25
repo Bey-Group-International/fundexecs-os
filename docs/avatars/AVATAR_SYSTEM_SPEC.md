@@ -10,12 +10,12 @@
 
 ## 0 · Design references & pillars
 
-| Reference | What we borrow |
-|-----------|----------------|
-| **The Sims** | Readable body archetypes, deep modular customization (clothing layers, morphs, palettes), autonomous "needs/moods" that drive idle life. |
-| **Boston Dynamics *Spot*** | Grounded, physically‑plausible locomotion — weight shift, foot placement, balance recovery, no foot‑slide. |
-| **WorkAdventure** | Social/isometric interaction grammar — proximity presence, "bubbles," lightweight status, spatial etiquette. |
-| **Sarsi‑style agents / agentic knowledge systems / FundExecs brain** | A compact sense→think→act loop with internal state, short‑term memory, introspection, and safe fallbacks. |
+|                              Reference                               |                                                              What we borrow                                                              |
+|----------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| **The Sims**                                                         | Readable body archetypes, deep modular customization (clothing layers, morphs, palettes), autonomous "needs/moods" that drive idle life. |
+| **Boston Dynamics *Spot***                                           | Grounded, physically‑plausible locomotion — weight shift, foot placement, balance recovery, no foot‑slide.                               |
+| **WorkAdventure**                                                    | Social/isometric interaction grammar — proximity presence, "bubbles," lightweight status, spatial etiquette.                             |
+| **Sarsi‑style agents / agentic knowledge systems / FundExecs brain** | A compact sense→think→act loop with internal state, short‑term memory, introspection, and safe fallbacks.                                |
 
 **Three pillars, in priority order**
 
@@ -52,12 +52,12 @@ flowchart LR
   SELF -->|state deltas| BUS
 ```
 
-| Module | Owns | Never touches | Primary owner |
-|--------|------|---------------|---------------|
-| **Appearance** | descriptor, meshes/sprites, materials, morphs, layer resolution | behavior logic | Artists |
-| **Animation** | rig, clip graph, blending, IK, procedural motion, expressions | goal reasoning | Animators / gameplay eng |
-| **Behavior** | perception, utility selection, fallbacks, nav requests | pixels, materials | Gameplay / AI eng |
-| **Self‑Model** | internal state, memory, introspection, LLM slow‑loop | rendering | AI eng |
+|     Module     |                              Owns                               |   Never touches   |      Primary owner       |
+|----------------|-----------------------------------------------------------------|-------------------|--------------------------|
+| **Appearance** | descriptor, meshes/sprites, materials, morphs, layer resolution | behavior logic    | Artists                  |
+| **Animation**  | rig, clip graph, blending, IK, procedural motion, expressions   | goal reasoning    | Animators / gameplay eng |
+| **Behavior**   | perception, utility selection, fallbacks, nav requests          | pixels, materials | Gameplay / AI eng        |
+| **Self‑Model** | internal state, memory, introspection, LLM slow‑loop            | rendering         | AI eng                   |
 
 **Contract between modules** — Behavior emits **AnimationIntents** (`{verb, target, params, urgency}`); Animation emits **AnimationEvents** (`footstep`, `clipEnded`, `reached`, `gestureDone`); Self‑Model emits **StateDeltas** (`{key, value, cause}`). All three flow on the bus and are the *only* cross‑module coupling.
 
@@ -73,14 +73,14 @@ flowchart LR
 
 ### 2.2 Body model
 
-| Attribute | Spec |
-|-----------|------|
-| Reference height | `1.55–1.95 m`, default `1.75 m`; mascot `1.2 m` sphere + limbs |
-| Proportion system | 7.0–7.5 heads, stylized; parameterized by morph sliders (§3.2) |
-| Build morphs | `shoulders, chest, waist, hips, limbLength, muscle, softness` ∈ [−1,1] |
+|     Attribute      |                                                                   Spec                                                                    |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| Reference height   | `1.55–1.95 m`, default `1.75 m`; mascot `1.2 m` sphere + limbs                                                                            |
+| Proportion system  | 7.0–7.5 heads, stylized; parameterized by morph sliders (§3.2)                                                                            |
+| Build morphs       | `shoulders, chest, waist, hips, limbLength, muscle, softness` ∈ [−1,1]                                                                    |
 | Skeleton (Phase 2) | Humanoid rig, ~55 bones (spine ×4, neck, head, clavicle/arm/hand ×2, leg/foot ×2, 15 finger bones optional), Mixamo/VRM‑compatible naming |
-| Face | 52 ARKit‑style blendshapes (subset of 20 required); eye + head look‑at bones |
-| LOD | LOD0 full rig+face; LOD1 no fingers/face micro; LOD2 billboard/imposter |
+| Face               | 52 ARKit‑style blendshapes (subset of 20 required); eye + head look‑at bones                                                              |
+| LOD                | LOD0 full rig+face; LOD1 no fingers/face micro; LOD2 billboard/imposter                                                                   |
 
 ### 2.3 Materials, lighting, environmental reactions
 
@@ -90,11 +90,11 @@ flowchart LR
 
 ### 2.4 Phased rendering (the hybrid roadmap)
 
-| Phase | Renderer | Body | Animation | Ships on |
-|-------|----------|------|-----------|----------|
-| **Phase 0 (today)** | SVG oblique 2.5D | walk atlas, 4‑dir × 3‑frame | distance‑based framing, corridor nav, seated states, conversations | `public/office/map.html` |
-| **Phase 1** | 2.5D **skeletal** (2D bone rig over the atlas art, or layered puppet) | modular 2D parts | procedural blend, 2‑bone IK (arm/leg), look‑at, gesture layer | web (Canvas/WebGL2), current office |
-| **Phase 2** | **3D** (Three.js / WebGL2, glTF + VRM) | full humanoid rig + blendshapes | full IK (foot/hand/look), animation graph, morph‑target expressions | web + native (shared core) |
+|        Phase        |                               Renderer                                |              Body               |                              Animation                              |              Ships on               |
+|---------------------|-----------------------------------------------------------------------|---------------------------------|---------------------------------------------------------------------|-------------------------------------|
+| **Phase 0 (today)** | SVG oblique 2.5D                                                      | walk atlas, 4‑dir × 3‑frame     | distance‑based framing, corridor nav, seated states, conversations  | `public/office/map.html`            |
+| **Phase 1**         | 2.5D **skeletal** (2D bone rig over the atlas art, or layered puppet) | modular 2D parts                | procedural blend, 2‑bone IK (arm/leg), look‑at, gesture layer       | web (Canvas/WebGL2), current office |
+| **Phase 2**         | **3D** (Three.js / WebGL2, glTF + VRM)                                | full humanoid rig + blendshapes | full IK (foot/hand/look), animation graph, morph‑target expressions | web + native (shared core)          |
 
 The **core (descriptor + brain + behavior)** is renderer‑agnostic and identical across phases. Migration = swap the Animation/Renderer adapters; Appearance descriptor extends (adds `rig`, `blendshapes`) without breaking Phase‑1 fields.
 
@@ -126,13 +126,13 @@ IDLE ──move──> ACCEL ──> WALK ──> DECEL ──> IDLE
 
 ### 3.3 Idle life, micro‑animation, gesture
 
-| Layer | Examples | Trigger |
-|-------|----------|---------|
-| Breathing | chest/shoulder bob (~0.2 Hz) | always (scaled by energy) |
-| Idle micro | weight shift, glance around, check watch/phone, adjust cuff | idle timers, low focus |
-| Seated work | typing lean‑in, document review, lean‑back think | seated behavior states |
-| Gesture (additive) | nod, point, shrug, count‑on‑fingers, "present" toward a screen | conversation / event reactions |
-| Reaction | brief celebrate (raise funded), concern (raise stalled), greet wave | Signal Bus events |
+|       Layer        |                              Examples                               |            Trigger             |
+|--------------------|---------------------------------------------------------------------|--------------------------------|
+| Breathing          | chest/shoulder bob (~0.2 Hz)                                        | always (scaled by energy)      |
+| Idle micro         | weight shift, glance around, check watch/phone, adjust cuff         | idle timers, low focus         |
+| Seated work        | typing lean‑in, document review, lean‑back think                    | seated behavior states         |
+| Gesture (additive) | nod, point, shrug, count‑on‑fingers, "present" toward a screen      | conversation / event reactions |
+| Reaction           | brief celebrate (raise funded), concern (raise stalled), greet wave | Signal Bus events              |
 
 All amplitudes tuned **restrained / institutional**; `prefers-reduced-motion` collapses idle + gesture layers to static poses.
 
@@ -242,11 +242,11 @@ flowchart TB
 
 ### 5.2 Perception modules
 
-| Module | Senses | Emits |
-|--------|--------|-------|
-| **Environment** | zone, walkability/NavMesh, nearby avatars & props, day/night | `context.zone`, `context.nearby`, `focusTarget` candidates |
-| **User** | click‑select, click‑to‑move, hover, "talk" | `signal:user.select`, `user.move`, `user.attention` |
-| **System** | activity engine (raise tick/funded/stalled), occupancy, external hooks | `signal:raise.*`, `room.occupancy`, `ext.*` |
+|     Module      |                                 Senses                                 |                           Emits                            |
+|-----------------|------------------------------------------------------------------------|------------------------------------------------------------|
+| **Environment** | zone, walkability/NavMesh, nearby avatars & props, day/night           | `context.zone`, `context.nearby`, `focusTarget` candidates |
+| **User**        | click‑select, click‑to‑move, hover, "talk"                             | `signal:user.select`, `user.move`, `user.attention`        |
+| **System**      | activity engine (raise tick/funded/stalled), occupancy, external hooks | `signal:raise.*`, `room.occupancy`, `ext.*`                |
 
 Perception is **throttled and budgeted** (spatial hash for `nearby`, event‑driven for system signals) — no per‑frame world scans.
 
@@ -335,16 +335,16 @@ window.FundExecsAvatars = {
 
 ### 7.1 Behavior catalog (starter set)
 
-| Behavior | Precondition | Effect | Animation intent |
-|----------|--------------|--------|------------------|
-| `Idle` | always | breathe + micro‑idle | `idle` |
-| `GoTo(zone)` | path exists | navigate corridor graph / NavMesh | `walk`, look‑ahead |
-| `WorkAtDesk` | at desk, energy>0.2 | type/review cycle, energy↓ focus↑ | `sit`, `type`, `review` |
-| `ObserveRaise` | raise active in zone | watch video wall, react to ticks | `walk`→`look_at(wall)`, `nod` |
-| `Converse(a)` | `a` nearby & free | face, exchange, speech bubble | `talk`, additive `gesture` |
-| `Greet(a)` | `a` enters proximity | brief wave/nod | additive `wave` |
-| `TakeBreak` | energy<0.3 | go to lounge, recover | `walk`, `sit`, `lean_back` |
-| `ReactToEvent(e)` | salient signal | celebrate/concern beat | additive reaction |
+|     Behavior      |     Precondition     |              Effect               |       Animation intent        |
+|-------------------|----------------------|-----------------------------------|-------------------------------|
+| `Idle`            | always               | breathe + micro‑idle              | `idle`                        |
+| `GoTo(zone)`      | path exists          | navigate corridor graph / NavMesh | `walk`, look‑ahead            |
+| `WorkAtDesk`      | at desk, energy>0.2  | type/review cycle, energy↓ focus↑ | `sit`, `type`, `review`       |
+| `ObserveRaise`    | raise active in zone | watch video wall, react to ticks  | `walk`→`look_at(wall)`, `nod` |
+| `Converse(a)`     | `a` nearby & free    | face, exchange, speech bubble     | `talk`, additive `gesture`    |
+| `Greet(a)`        | `a` enters proximity | brief wave/nod                    | additive `wave`               |
+| `TakeBreak`       | energy<0.3           | go to lounge, recover             | `walk`, `sit`, `lean_back`    |
+| `ReactToEvent(e)` | salient signal       | celebrate/concern beat            | additive reaction             |
 
 ### 7.2 Flow — user clicks an avatar
 
@@ -378,22 +378,22 @@ proximity(rainmaker, capital-raiser) < CHAT_RANGE and both paused
 
 ### 7.5 Introspection examples
 
-| Situation | `say` (local template) | `say` (LLM slow loop) |
-|-----------|------------------------|------------------------|
-| Walking to trading floor after a tick | "Going to check NOVA CAPITAL — it just moved." | "NOVA just ticked up, so I'm heading over to read the room before I ping Capital Raiser." |
-| Seated, low energy | "Wrapping up this review; I'm running low, break soon." | "Finishing this diligence pass — focus is holding but energy's low, I'll take a short break after." |
-| Idle, nothing salient | "Standing by — nothing pressing right now." | "Quiet moment; I'm holding at my desk until a raise moves or someone needs me." |
+|               Situation               |                 `say` (local template)                  |                                        `say` (LLM slow loop)                                        |
+|---------------------------------------|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| Walking to trading floor after a tick | "Going to check NOVA CAPITAL — it just moved."          | "NOVA just ticked up, so I'm heading over to read the room before I ping Capital Raiser."           |
+| Seated, low energy                    | "Wrapping up this review; I'm running low, break soon." | "Finishing this diligence pass — focus is holding but energy's low, I'll take a short break after." |
+| Idle, nothing salient                 | "Standing by — nothing pressing right now."             | "Quiet moment; I'm holding at my desk until a raise moves or someone needs me."                     |
 
 ---
 
 ## 8 · Performance & platform
 
-| Budget (mid‑tier laptop, 20 avatars) | Phase 1 (2.5D) | Phase 2 (3D) |
-|--------------------------------------|----------------|--------------|
-| Frame time for avatar system | ≤ 2 ms | ≤ 4 ms |
-| Brain fast loop | ≤ 0.5 ms (10 Hz, amortized) | same |
-| Draw | DOM/SVG or Canvas mutation, **no scene re‑render** | instanced skinned meshes + LOD |
-| Memory / avatar | < 50 KB state; atlas shared | shared rig + morph deltas |
+| Budget (mid‑tier laptop, 20 avatars) |                   Phase 1 (2.5D)                   |          Phase 2 (3D)          |
+|--------------------------------------|----------------------------------------------------|--------------------------------|
+| Frame time for avatar system         | ≤ 2 ms                                             | ≤ 4 ms                         |
+| Brain fast loop                      | ≤ 0.5 ms (10 Hz, amortized)                        | same                           |
+| Draw                                 | DOM/SVG or Canvas mutation, **no scene re‑render** | instanced skinned meshes + LOD |
+| Memory / avatar                      | < 50 KB state; atlas shared                        | shared rig + morph deltas      |
 
 - **Fast loop is decoupled from render** (fixed ~10 Hz tick; render interpolates). Pauses on `visibilitychange`; honors `prefers-reduced-motion`.
 - **Slow loop** is off the hot path: event‑driven, rate‑limited, cancellable; never blocks a frame.
@@ -403,14 +403,14 @@ proximity(rainmaker, capital-raiser) < CHAT_RANGE and both paused
 
 ## 9 · Implementation roadmap
 
-| Milestone | Deliverable | Owners |
-|-----------|-------------|--------|
-| **M0 — Extract core** | Pull brain + descriptor out of `map.html` into a renderer‑agnostic module; keep Phase‑0 sprites as the first adapter. | Eng |
-| **M1 — Self‑model v1** | Internal state, memory, utility selection, fallback; `onIntrospect` with templates; state chips on click. | AI eng |
-| **M2 — 2.5D skeletal** | 2D bone rig + modular layers + 2‑bone IK + gesture layer over persona art. | Artists + animators |
-| **M3 — Hooks + LLM slow loop** | `FundExecsAvatars` API; `attachBrain` to FundExecs/Claude; validation + rate limits. | AI eng |
-| **M4 — 3D pipeline** | glTF/VRM rig, blendshapes, full IK, PBR; renderer adapter; LOD. | 3D artists + eng |
-| **M5 — Polish** | Environmental reactions, expression tuning, native host, perf pass. | All |
+|           Milestone            |                                                      Deliverable                                                      |       Owners        |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------|---------------------|
+| **M0 — Extract core**          | Pull brain + descriptor out of `map.html` into a renderer‑agnostic module; keep Phase‑0 sprites as the first adapter. | Eng                 |
+| **M1 — Self‑model v1**         | Internal state, memory, utility selection, fallback; `onIntrospect` with templates; state chips on click.             | AI eng              |
+| **M2 — 2.5D skeletal**         | 2D bone rig + modular layers + 2‑bone IK + gesture layer over persona art.                                            | Artists + animators |
+| **M3 — Hooks + LLM slow loop** | `FundExecsAvatars` API; `attachBrain` to FundExecs/Claude; validation + rate limits.                                  | AI eng              |
+| **M4 — 3D pipeline**           | glTF/VRM rig, blendshapes, full IK, PBR; renderer adapter; LOD.                                                       | 3D artists + eng    |
+| **M5 — Polish**                | Environmental reactions, expression tuning, native host, perf pass.                                                   | All                 |
 
 **Definition of done per persona:** descriptor authored (appearance+behavior), silhouette‑legible at 32 px, locomotion/idle/seated/gesture verified, introspection returns a sensible `say` in ≥5 situations, reduced‑motion + perf budgets pass.
 
@@ -436,3 +436,4 @@ proximity(rainmaker, capital-raiser) < CHAT_RANGE and both paused
 2. Phase‑2 rig standard: **VRM** (avatar interop) vs plain glTF humanoid — affects customization tooling.
 3. How much user‑facing customization to expose vs. locked persona identity.
 4. Whether native delivery targets the Unity world (`office-unity-world.md`) or a shared WebGL host.
+
