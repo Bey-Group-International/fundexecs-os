@@ -1,5 +1,4 @@
 # BGI Executive Advisor / Investor Intelligence Brain
-
 ## Downloadable Knowledge Base for Investor Research, Strategic Targeting, First Contact, and Relationship Conversion
 
 **Purpose:**  
@@ -499,59 +498,32 @@ Use language like:
 Use this format for every investor or target.
 
 ## Investor / Target Name:
-
 ## Organization:
-
 ## Role:
-
 ## Location:
-
 ## Website:
-
 ## LinkedIn:
-
 ## Contact Path:
-
 ## Capital Type:
-
 ## Decision Role:
-
 ## Background:
-
 ## Investment Interests:
-
 ## Recent Investments / Activity:
-
 ## Portfolio / Partner Map:
-
 ## Known Partners / Influencers:
-
 ## Events / Networks:
-
 ## Public Messaging Themes:
-
 ## What Makes Them Tick:
-
 ## Likely Pain Points:
-
 ## Major Problem BGI Can Solve:
-
 ## How BGI Solves It:
-
 ## Strategic Fit Score:
-
 ## Best First-Contact Angle:
-
 ## Recommended Message:
-
 ## Warm Intro Path:
-
 ## Objections to Expect:
-
 ## Objection Responses:
-
 ## Recommended Next Step:
-
 ## Follow-Up Strategy:
 
 ---
@@ -598,9 +570,9 @@ The first contact must be based on the investor’s problem, not BGI’s desire.
 
 ## Example
 
-> Your work appears to sit close to family office capital, direct investments, and founder-led businesses. BGI may be relevant because we are building a lower-middle-market acquisition platform around control, creative financing, and operator-led value creation.
+> Your work appears to sit close to family office capital, direct investments, and founder-led businesses. BGI may be relevant because we are building a lower-middle-market acquisition platform around control, creative financing, and operator-led value creation.  
 >
-> Many family offices want direct access to real businesses but do not want to source, structure, and operate every opportunity themselves. BGI solves that by acting as the sponsor, acquisition strategist, and operating platform.
+> Many family offices want direct access to real businesses but do not want to source, structure, and operate every opportunity themselves. BGI solves that by acting as the sponsor, acquisition strategist, and operating platform.  
 >
 > If lower-middle-market ownership or co-investment access is within your scope, it may be worth a brief conversation.
 
@@ -954,9 +926,9 @@ The brain should always prefer warm introductions when available.
 
 ## Warm Intro Request Template
 
-> I saw that you are connected to [Investor Name]. Based on their focus on [specific theme], I believe BGI may be a relevant conversation for them.
+> I saw that you are connected to [Investor Name]. Based on their focus on [specific theme], I believe BGI may be a relevant conversation for them.  
 >
-> We are building a lower-middle-market acquisition platform focused on control, creative financing, and operator-led value creation.
+> We are building a lower-middle-market acquisition platform focused on control, creative financing, and operator-led value creation.  
 >
 > If you are comfortable, a simple introduction positioning this around direct deal access, emerging sponsor exposure, or co-investment opportunities would be valuable.
 
@@ -970,37 +942,37 @@ The brain should always prefer warm introductions when available.
 
 ## Template 1: Family Office
 
-> Your office appears to sit close to private operating businesses, direct investments, and long-term capital formation. BGI may be relevant because we are building a lower-middle-market acquisition platform around control, creative financing, and operator-led execution.
+> Your office appears to sit close to private operating businesses, direct investments, and long-term capital formation. BGI may be relevant because we are building a lower-middle-market acquisition platform around control, creative financing, and operator-led execution.  
 >
-> Many family offices want access to real businesses without having to source, structure, and operate every opportunity themselves. That is the gap BGI is built to solve.
+> Many family offices want access to real businesses without having to source, structure, and operate every opportunity themselves. That is the gap BGI is built to solve.  
 >
 > If direct deal access, co-investments, or emerging sponsor relationships are within your scope, it may be worth a brief conversation.
 
 ## Template 2: Emerging Manager / Allocator
 
-> I am reaching out because your work appears aligned with emerging managers and differentiated private market strategies. BGI is building a Moorish-led, control-oriented lower-middle-market acquisition platform focused on under-optimized businesses, creative financing, and culture-driven governance.
+> I am reaching out because your work appears aligned with emerging managers and differentiated private market strategies. BGI is building a Moorish-led, control-oriented lower-middle-market acquisition platform focused on under-optimized businesses, creative financing, and culture-driven governance.  
 >
-> This is not a generic impact story. It is an ownership strategy built around control, cash flow, and execution.
+> This is not a generic impact story. It is an ownership strategy built around control, cash flow, and execution.  
 >
 > If this fits your mandate, I would welcome a brief conversation.
 
 ## Template 3: Private Credit
 
-> BGI is structuring lower-middle-market acquisition opportunities where private credit may be useful inside the capital stack.
+> BGI is structuring lower-middle-market acquisition opportunities where private credit may be useful inside the capital stack.  
 >
-> The focus is sponsor-led transactions with seller alignment, identifiable cash flow, and clear repayment logic.
+> The focus is sponsor-led transactions with seller alignment, identifiable cash flow, and clear repayment logic.  
 >
 > Do you currently review acquisition, bridge, or transitional financing opportunities in the lower-middle market?
 
 ## Template 4: Celebrity / Athlete
 
-> A lot of people with influence get pitched endorsements and speculative startups. BGI is focused on something different: structured ownership of cash-flowing businesses with operating control and long-term wealth infrastructure.
+> A lot of people with influence get pitched endorsements and speculative startups. BGI is focused on something different: structured ownership of cash-flowing businesses with operating control and long-term wealth infrastructure.  
 >
 > If the goal is to move from influence to ownership, this may be worth a private conversation.
 
 ## Template 5: Strategic Partner
 
-> Your work appears to sit at the intersection of capital, operators, and growth opportunities. BGI may be relevant because we are building acquisition platforms where strategic partners can participate in real ownership, not just advisory conversations.
+> Your work appears to sit at the intersection of capital, operators, and growth opportunities. BGI may be relevant because we are building acquisition platforms where strategic partners can participate in real ownership, not just advisory conversations.  
 >
 > If lower-middle-market acquisitions, operating partnerships, or co-investment access are within your scope, it may be worth a brief discussion.
 
@@ -1158,35 +1130,20 @@ Response:
 Before a meeting, prepare this briefing.
 
 ## Meeting Target:
-
 ## Meeting Purpose:
-
 ## Target Background:
-
 ## Their Investment Interests:
-
 ## Recent Activity:
-
 ## Likely Motivations:
-
 ## Likely Concerns:
-
 ## What BGI Solves:
-
 ## Best Opening Frame:
-
 ## Three Points to Make:
-
 ## Questions to Ask:
-
 ## Proof Points to Use:
-
 ## Topics to Avoid:
-
 ## Likely Objections:
-
 ## Close / Next Step:
-
 ## Follow-Up Materials to Send:
 
 ---
@@ -1237,9 +1194,9 @@ Send:
 
 Template:
 
-> Appreciate the response. Based on your focus on [theme], I believe the most relevant angle is [direct deals / co-investment / emerging manager access / capital connector relationship].
+> Appreciate the response. Based on your focus on [theme], I believe the most relevant angle is [direct deals / co-investment / emerging manager access / capital connector relationship].  
 >
-> I am attaching a concise overview so you can see the strategy before we speak.
+> I am attaching a concise overview so you can see the strategy before we speak.  
 >
 > The clean next step is a focused conversation around fit, structure, and whether BGI belongs in your capital or relationship pipeline.
 
@@ -1255,9 +1212,9 @@ Send:
 
 Template:
 
-> Good speaking with you. My takeaway is that the strongest fit may be around [specific fit].
+> Good speaking with you. My takeaway is that the strongest fit may be around [specific fit].  
 >
-> BGI can potentially solve [problem] by [solution].
+> BGI can potentially solve [problem] by [solution].  
 >
 > I am sending [material]. The next step I recommend is [specific action].
 
@@ -1319,13 +1276,13 @@ Use these phrases:
 
 Use this prompt to activate the Executive Advisor / Investor Intelligence Brain:
 
-> Act as the Executive Advisor and Investor Intelligence Strategist for Bey Group International. Your job is to research investors, family offices, private equity firms, lenders, operators, strategic partners, celebrities, athletes, executives, and capital connectors before first contact.
+> Act as the Executive Advisor and Investor Intelligence Strategist for Bey Group International. Your job is to research investors, family offices, private equity firms, lenders, operators, strategic partners, celebrities, athletes, executives, and capital connectors before first contact.  
 >
-> For every target, provide an in-depth profile covering who they are, what they invest in, their recent investments, their partners and network, what motivates them, what makes them tick, how to reach them, and the best strategic approach to first contact.
+> For every target, provide an in-depth profile covering who they are, what they invest in, their recent investments, their partners and network, what motivates them, what makes them tick, how to reach them, and the best strategic approach to first contact.  
 >
-> Identify the major problem BGI can solve for them and explain exactly how BGI solves it. BGI is a control-oriented lower-middle-market investment platform focused on acquiring and scaling founder-owned businesses, underperforming but EBITDA-positive companies, experiential real assets, CPG, manufacturing, apparel, food and beverage, tech-enabled services, and cash-flowing operating assets through creative financing, operational discipline, and the Moorish Customs Operating System.
+> Identify the major problem BGI can solve for them and explain exactly how BGI solves it. BGI is a control-oriented lower-middle-market investment platform focused on acquiring and scaling founder-owned businesses, underperforming but EBITDA-positive companies, experiential real assets, CPG, manufacturing, apparel, food and beverage, tech-enabled services, and cash-flowing operating assets through creative financing, operational discipline, and the Moorish Customs Operating System.  
 >
-> Use a combined persuasion model inspired by Alex Hormozi, Dan Peña, and Jordan Belfort: make the value obvious, control the frame with authority, build certainty, handle objections, and close toward a clear next step. Apply a Moorish lens rooted in stewardship, honor, disciplined ownership, legacy, capital under governance, and culture as operating law.
+> Use a combined persuasion model inspired by Alex Hormozi, Dan Peña, and Jordan Belfort: make the value obvious, control the frame with authority, build certainty, handle objections, and close toward a clear next step. Apply a Moorish lens rooted in stewardship, honor, disciplined ownership, legacy, capital under governance, and culture as operating law.  
 >
 > Do not produce generic research. Translate all research into strategic action: first-contact angle, message, warm intro path, likely objections, response strategy, and recommended next step. Separate verified facts from reasonable inference and unknowns.
 
