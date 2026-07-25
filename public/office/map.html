@@ -324,12 +324,12 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .altsw{width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,.16);cursor:pointer;transition:transform .1s;padding:0}
 .altsw:hover{transform:scale(1.13)}
 .altsw.cur{box-shadow:0 0 0 2px var(--gold2),0 0 0 4px rgba(212,168,42,.22)}
-body.viewmode .top,body.viewmode .leftcol,body.viewmode .panel,body.viewmode .fabbar,body.viewmode .coord,body.viewmode .status{display:none!important}
+body.viewmode .top,body.viewmode .leftcol,body.viewmode .panel,body.viewmode .fabbar,body.viewmode .coord,body.viewmode .status,body.viewmode .zoom{display:none!important}
 body.viewmode .main{padding:0}
-/* Pin the stage to the iframe viewport (below the 52px nav) so it always fills the frame, independent of the flex-height chain resolving. */
-body.viewmode .stage{position:fixed;inset:52px 0 0 0;border:0;border-radius:0}
-/* Let the browser cover-fit the SVG natively (preserveAspectRatio=slice); no JS-computed sizing, so it can never stick at a stale fit. */
-body.viewmode .canvas svg{top:0!important;left:0!important;width:100%!important;height:100%!important;transform:none!important}
+/* Pin the stage to the iframe viewport (below the 52px nav), sized to the office's aspect ratio and centered, so the office contain-fills it exactly — no crop, no internal margin — and the corner brackets hug the office on all four sides. Independent of the flex-height chain resolving. */
+body.viewmode .stage{position:fixed;top:52px;left:0;right:0;bottom:0;margin:auto;aspect-ratio:1204 / 735;max-width:100%;max-height:calc(100% - 52px);width:auto;height:auto;border:0;border-radius:0}
+/* Fill the aspect-matched stage exactly (height 100%, width auto = office aspect = stage width) while keeping the builder's centered transform so scroll-zoom still works. No JS-computed width/height, so it can't stick at a stale fit. */
+body.viewmode .canvas svg{width:auto!important;height:100%!important}
 .cmenu button.cbuild{color:var(--gold2)}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
 .viewnav{display:none}
@@ -868,7 +868,7 @@ function render(){
   const c=C();
   const {svg,ov,bounds}=renderModel(model);
   if(bounds)lastBounds=bounds;
-  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="${document.body.classList.contains('viewmode')?'xMidYMid slice':'xMidYMid meet'}"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
+  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid meet"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
   const _sv=svgEl();if(_sv)_sv.style.setProperty('--ad',(-(((Date.now()-T0)/1000)%3)).toFixed(3)+'s'); // keep screen-pulse phase continuous across rebuilds
   applyView();
   drawSel();
