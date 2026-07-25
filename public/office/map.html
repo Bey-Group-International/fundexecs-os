@@ -326,8 +326,8 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .altsw.cur{box-shadow:0 0 0 2px var(--gold2),0 0 0 4px rgba(212,168,42,.22)}
 body.viewmode .top,body.viewmode .leftcol,body.viewmode .panel,body.viewmode .fabbar,body.viewmode .coord,body.viewmode .status{display:none!important}
 body.viewmode .main{padding:0}
-/* Pin the stage to the iframe viewport (below the 52px nav) so it always fills the frame, independent of the flex-height chain resolving. */
-body.viewmode .stage{position:fixed;inset:52px 0 0 0;border:0;border-radius:0}
+/* Pin the stage to the iframe viewport (below the 52px nav), sized to the office's aspect ratio and centered, so the office contain-fills it exactly — no crop, no internal margin — and the corner brackets hug the office on all four sides. Independent of the flex-height chain resolving. */
+body.viewmode .stage{position:fixed;top:52px;left:0;right:0;bottom:0;margin:auto;aspect-ratio:1204 / 735;max-width:100%;max-height:calc(100% - 52px);width:auto;height:auto;border:0;border-radius:0}
 /* Let the browser cover-fit the SVG natively (preserveAspectRatio=slice); no JS-computed sizing, so it can never stick at a stale fit. */
 body.viewmode .canvas svg{top:0!important;left:0!important;width:100%!important;height:100%!important;transform:none!important}
 .cmenu button.cbuild{color:var(--gold2)}
