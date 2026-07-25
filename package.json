@@ -35,10 +35,10 @@
   "license": "MIT",
   "name": "fundexecs-os",
   "overrides": {
-    "postcss": "^8.5.23",
-    "sharp": "^0.35.3",
+    "brace-expansion": "^5.0.8",
     "minimatch": "^10.0.3",
-    "brace-expansion": "^5.0.8"
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.3"
   },
   "private": true,
   "scripts": {
