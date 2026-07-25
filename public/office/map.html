@@ -755,13 +755,21 @@ function renderModel(model){
   }
   PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
-  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
+  model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}
+    // First-person frustum cull: a room whose every corner is behind the near plane
+    // projects to nothing, so skip its floor + walls entirely (pure perf, no visual change).
+    if(MODE==='fp'&&camF(r.x,r.y)<NEARP&&camF(r.x+r.w,r.y)<NEARP&&camF(r.x+r.w,r.y+r.d)<NEARP&&camF(r.x,r.y+r.d)<NEARP)return;
+    room(r.x,r.y,r.w,r.d,r.floor,r.label,r.pat);if(r.build==='trading')buildTradingFloor(r.x,r.y,r.w,r.d);if(r.build!=='corridor')drawRoomWalls(r);});
   drawManualWalls();
   // blocked (non-walkable) tiles
   const blk=model.blocked||{};if(MODE!=='fp')Object.keys(blk).forEach(k=>{const t=k.split(',');const tx=+t[0],ty=+t[1];const A=P(tx,ty),B=P(tx+1,ty),Cc=P(tx+1,ty+1),D=P(tx,ty+1);push(-6650+ty*.2,poly([A,B,Cc,D],'url(#blockHatch)','#ff5a6a',.7,.7));});
   // audio / meeting zones (translucent overlays)
   (model.zones||[]).forEach(z=>{if(z.hidden)return;const col=ZCOL[z.kind]||ZCOL.audio;if(MODE==='fp'){const sp=projFP([[z.x,z.y,.02],[z.x+z.w,z.y,.02],[z.x+z.w,z.y+z.d,.02],[z.x,z.y+z.d,.02]]);if(sp.length>=3)push(-8e5,poly(sp,col.fill,null,0,.55));return;}const A=P(z.x,z.y),B=P(z.x+z.w,z.y),Cc=P(z.x+z.w,z.y+z.d),D=P(z.x,z.y+z.d);push(-6600+z.y*.3,poly([A,B,Cc,D],col.fill,null,0,.95)+`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${col.stroke}" stroke-width="1.6" stroke-dasharray="7 5" opacity=".85"/>`);overlay(z.x+z.w/2,z.y+.55,2.1,`<span>${(z.label||ZLB[z.kind]||'ZONE').toUpperCase()}</span>`,'zonelabel z-'+z.kind,z.w,z.d);});
-  model.props.forEach(p=>{if(p.hidden)return;const rm=roomOf(p);if(rm&&hiddenRooms.has(rm.id))return;if(soloId&&(!rm||rm.id!==soloId))return;try{if(!PR[p.t])return;if(p.rot){const f=FOOT[p.t]||[1,1];ROT={cx:p.args[0]+f[0]/2,cy:p.args[1]+f[1]/2,cos:Math.cos(p.rot),sin:Math.sin(p.rot)};}CURP=p;PR[p.t](...p.args);CURP=null;ROT=null;const f=FOOT[p.t]||[1,1];if(p.action&&p.action!=='none'||p.link||p.note)overlay(p.args[0]+f[0]/2,p.args[1],1.5,`<span class="ib ib-${p.action||'link'}">${p.action==='seat'?'♟':p.action==='embed'?'▤':'★'}</span>`,'ibwrap');}catch(e){CURP=null;ROT=null;}});
+  model.props.forEach(p=>{if(p.hidden)return;const rm=roomOf(p);if(rm&&hiddenRooms.has(rm.id))return;if(soloId&&(!rm||rm.id!==soloId))return;
+    // First-person frustum cull: skip props whose whole footprint is behind the near plane
+    // (test the centre minus the footprint's half-diagonal — rotation-invariant, so p.rot is safe).
+    if(MODE==='fp'){const ff=FOOT[p.t]||[1,1];if(camF(p.args[0]+ff[0]/2,p.args[1]+ff[1]/2)<NEARP-Math.hypot(ff[0],ff[1])/2)return;}
+    try{if(!PR[p.t])return;if(p.rot){const f=FOOT[p.t]||[1,1];ROT={cx:p.args[0]+f[0]/2,cy:p.args[1]+f[1]/2,cos:Math.cos(p.rot),sin:Math.sin(p.rot)};}CURP=p;PR[p.t](...p.args);CURP=null;ROT=null;const f=FOOT[p.t]||[1,1];if(p.action&&p.action!=='none'||p.link||p.note)overlay(p.args[0]+f[0]/2,p.args[1],1.5,`<span class="ib ib-${p.action||'link'}">${p.action==='seat'?'♟':p.action==='embed'?'▤':'★'}</span>`,'ibwrap');}catch(e){CURP=null;ROT=null;}});
   draws.sort((a,b)=>a.k-b.k);
   // FundExecs persona teammates (2.5D): sprite + cast shadow are depth-sorted INTO the scene (push into
   // draws, so walls/desks occlude them), perspective-scaled by position; the name/status label floats in the
