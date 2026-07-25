@@ -335,6 +335,8 @@ body.viewmode .canvas svg{top:0!important;left:0!important;width:100%!important;
 .viewnav{display:none}
 body.viewmode .viewnav{display:flex;flex:none;height:52px;align-items:center;gap:16px;padding:0 16px;background:linear-gradient(180deg,rgba(18,28,50,.96),rgba(9,15,28,.96));border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(245,215,115,.06),0 10px 30px -18px #000;z-index:30}
 .viewnav .vhint{margin-left:auto;color:var(--faint);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.tbtn.save{background:linear-gradient(180deg,#1f7a44,#155f34);border-color:#2a7a4a;color:#eafff1}
+.tbtn.save:hover{background:linear-gradient(180deg,#279a55,#1a7a44);color:#fff;box-shadow:0 6px 16px -6px #0a3a20}
 </style>
 <div class="top">
   <div class="brand"><span class="bi"></span><span class="bt"><b>MAP BUILDER</b><small>FUNDEXECS OS</small></span></div>
@@ -342,7 +344,7 @@ body.viewmode .viewnav{display:flex;flex:none;height:52px;align-items:center;gap
   <button class="tbtn" id="btnUndo" title="Undo  ⌘Z">↶</button>
   <button class="tbtn" id="btnRedo" title="Redo  ⇧⌘Z">↷</button>
   <div class="spacer"></div>
-  <button class="tbtn gold" id="btnLayouts">◆ LAYOUTS</button>
+  <button class="tbtn save" id="btnSave" title="Save layout & return to the office view">✓ SAVE</button><button class="tbtn gold" id="btnLayouts">◆ LAYOUTS</button>
   <button class="tbtn" id="btnReset">RESET</button>
 </div>
 <div class="viewnav" id="viewnav">
@@ -1820,6 +1822,7 @@ const panelWrap=document.getElementById('panelWrap'),panelToggle=document.getEle
 let panelAnim;function togglePanel(force){const c=force!==undefined?force:!panelWrap.classList.contains('collapsed');panelWrap.classList.toggle('collapsed',c);panelCollapsed=c;panelToggle.title=(c?'Show':'Hide')+' inspector (I)';cancelAnimationFrame(panelAnim);const start=Date.now();const step=()=>{applyView();drawSel();if(Date.now()-start<300)panelAnim=requestAnimationFrame(step);};step();}
 panelToggle.onclick=()=>togglePanel();
 buildPal();buildPanel();render();pushHistory();enterView();
+document.getElementById('btnSave').onclick=function(){try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}toast('Saved');enterView();};
 </script>
 
 </body>
