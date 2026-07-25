@@ -326,12 +326,14 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .altsw.cur{box-shadow:0 0 0 2px var(--gold2),0 0 0 4px rgba(212,168,42,.22)}
 body.viewmode .top,body.viewmode .leftcol,body.viewmode .panel,body.viewmode .fabbar,body.viewmode .coord,body.viewmode .status,body.viewmode .zoom{display:none!important}
 body.viewmode .main{padding:0}
-/* Pin the stage to the full iframe viewport (below the 52px nav) so the office cover-fills the whole frame with no blank margins, independent of the flex-height chain. The office's native cover-fit (fitSvg) fills both axes and crops the overflow; the corner brackets sit at the frame edges. Scroll-zoom and pan still work via the builder's transform. */
-body.viewmode .stage{position:fixed;inset:52px 0 0 0;border:0;border-radius:0}
+/* Full-iframe stage (no nav bar). The office contain-fits it (meet) so the whole floor plan is visible; keeping the builder's centered transform means scroll-zoom and pan still work. */
+body.viewmode .stage{position:fixed;inset:0;border:0;border-radius:0}
+body.viewmode .canvas svg{width:100%!important;height:100%!important}
 .cmenu button.cbuild{color:var(--gold2)}
 .cmenu button.cbuild:hover{background:#2a2412;color:#fff}
-.viewnav{display:none}
-body.viewmode .viewnav{display:flex;flex:none;height:52px;align-items:center;gap:16px;padding:0 16px;background:linear-gradient(180deg,rgba(18,28,50,.96),rgba(9,15,28,.96));border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(245,215,115,.06),0 10px 30px -18px #000;z-index:30}
+/* Floating Top / 1st-person control overlaid on the top-right of the office (replaces the top nav bar). */
+.viewctl{display:none}
+body.viewmode .viewctl{display:flex;position:fixed;top:14px;right:14px;z-index:40;align-items:center;gap:10px;padding:7px 10px 7px 8px;border-radius:13px;background:linear-gradient(180deg,rgba(18,28,50,.82),rgba(9,15,28,.82));border:1px solid var(--line2);box-shadow:0 12px 30px -14px #000;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .tbtn.save{background:linear-gradient(180deg,#1f7a44,#155f34);border-color:#2a7a4a;color:#eafff1}
 .tbtn.save:hover{background:linear-gradient(180deg,#279a55,#1a7a44);color:#fff;box-shadow:0 6px 16px -6px #0a3a20}
 </style>
@@ -344,9 +346,7 @@ body.viewmode .viewnav{display:flex;flex:none;height:52px;align-items:center;gap
   <button class="tbtn save" id="btnSave" title="Save layout & return to the office view">✓ SAVE</button><button class="tbtn gold" id="btnLayouts">◆ LAYOUTS</button>
   <button class="tbtn" id="btnReset">RESET</button>
 </div>
-<div class="viewnav" id="viewnav">
-  <div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div>
-</div>
+<div class="viewctl" id="viewctl"><span class="brand"><span class="bi"></span></span><div class="seg"><button id="mRows" class="on">TOP</button><button id="mIso" title="First-person — WASD walk · drag to look · click to move · scroll to step">1ST PERSON</button></div></div>
 <div class="main">
   <div class="leftcol">
     <div class="bmhead"><span class="bmtitle">◆ BUILD MODE</span><button class="bmlayers" id="tabLayers" title="Layers panel"><svg viewBox="0 0 16 16"><path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg></button></div>
