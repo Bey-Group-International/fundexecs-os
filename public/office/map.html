@@ -295,6 +295,13 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .speech .bub i:nth-child(3){animation-delay:.36s}
 @keyframes chatdot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-1.5px)}}
 @media (prefers-reduced-motion:reduce){.speech .bub i{animation:none}}
+/* Intent bubble — hover/click an avatar to see what it's doing (no new panel; reuses the overlay layer). */
+.ibub{z-index:8;transform:translate(-50%,-100%)}
+.ibub{max-width:210px;font:600 8px ui-monospace,SFMono-Regular,monospace;letter-spacing:.01em;color:#eaf0ff;
+  background:rgba(11,18,32,.94);padding:4px 8px;border-radius:7px 7px 7px 2px;white-space:normal;line-height:1.35;
+  box-shadow:0 0 0 1px rgba(245,215,115,.34),0 6px 16px -8px #000}
+.ibub.pinned{box-shadow:0 0 0 1.4px var(--gold),0 6px 16px -8px #000}
+body.viewmode .canvas>svg g[id^="ps_"]{cursor:pointer}
 .zonelabel.z-focus span{color:#8ef0ad;border:1px solid #4ade80}
 .zonelabel.z-social span{color:#ffb0dc;border:1px solid #f472b6}
 .ibwrap{pointer-events:none}
@@ -946,6 +953,56 @@ let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:r
 const STRIDE=0.6, WALKSEQ=[1,0,1,2], CHAT_RANGE=3.8;   // distance-based ping-pong framing (no foot-slide)
 const dir4=(dx,dy)=>Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);
 const roamers=PEOPLE.filter(p=>p.roam);
+// ---- Legible intent: hover (or click to pin) an avatar to see what it's doing right now.
+// Reuses the overlay layer — no new panel. The local line is instant + deterministic; a click
+// asks the avatar's Brain (/api/avatars/introspect) for a richer line and swaps it in if it answers.
+const PBID=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+let intentHover=null,intentPin=null;
+function intentFor(pp){
+  if(pp._say)return pp._say;                       // Claude-enriched (set on click), else local template
+  const r=pp.r;
+  if(pp.roam){
+    if(pp._chat)return r+': syncing with a colleague';
+    if(pp.state==='walk')return r+': heading across the floor';
+    return r+': on the floor, taking a moment';
+  }
+  const w=pp.wst&&pp.wst.s;
+  if(w==='review')return r+': reviewing documents';
+  if(w==='idle')return r+': taking a beat at the desk';
+  return r+': heads-down, working';
+}
+function behaviorOf(pp){
+  if(pp.roam)return pp._chat?'converse':(pp.state==='walk'?'go_to':'idle');
+  const w=pp.wst&&pp.wst.s;return w==='review'?'review':w==='idle'?'idle':'work_at_desk';
+}
+function enrichIntent(pp){
+  try{fetch('/api/avatars/introspect',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({avatar:pp.id,behavior:behaviorOf(pp),nearby:pp._chat?['a colleague']:undefined})})
+    .then(r=>r.ok?r.json():null).then(d=>{if(d&&d.say&&intentPin===pp.id){pp._say=String(d.say).slice(0,160);paintIntent();}}).catch(()=>{});}catch(e){}
+}
+function paintIntent(){
+  const aid=intentPin||intentHover;let ib=document.getElementById('intentBubble');
+  if(aid&&PBID[aid]&&document.body.classList.contains('viewmode')&&MODE!=='fp'){
+    const pp=PBID[aid],q=P(pp.x,pp.y,0),pf=pscale(pp.y),H=44*pf,ow=document.getElementById('ovwrap');
+    if(!ow)return;
+    if(!ib){ib=document.createElement('div');ib.id='intentBubble';ib.className='ov ibub';ow.appendChild(ib);}
+    ib.classList.toggle('pinned',intentPin===aid);
+    ib.textContent=intentFor(pp);
+    ib.style.left=q[0].toFixed(1)+'px';ib.style.top=(q[1]-H-14).toFixed(1)+'px';
+  }else if(ib)ib.remove();
+}
+(function bindIntent(){
+  if(!canvas)return;
+  const gid=el=>{const g=el&&el.closest&&el.closest('g[id^="ps_"]');return g?g.id.slice(3):null;};
+  const on=()=>document.body.classList.contains('viewmode')&&MODE!=='fp';
+  canvas.addEventListener('mouseover',e=>{if(!on())return;const id=gid(e.target);if(id){intentHover=id;paintIntent();}});
+  canvas.addEventListener('mouseout',e=>{const id=gid(e.target);if(id&&intentHover===id){intentHover=null;paintIntent();}});
+  canvas.addEventListener('click',e=>{if(!on())return;const id=gid(e.target);
+    if(!id){if(intentPin){intentPin=null;paintIntent();}return;}
+    const pp=PBID[id];if(!pp)return;
+    if(intentPin===id){intentPin=null;pp._say=null;}else{intentPin=id;pp._say=null;enrichIntent(pp);}
+    paintIntent();});
+})();
 function enterPause(pp){pp.state='pause';pp.cur=0;pp.pauseT=0;pp.pauseDur=2.4+Math.random()*3.4;pp.act=Math.random()<0.55?'look':'idle';}
 function pickDest(pp){
   const others=roamers.filter(o=>o!==pp);
@@ -1007,6 +1064,7 @@ function peopleLoop(t){
     if(pp._chat){if(!sb){sb=document.createElement('div');sb.className='ov speech';sb.id='sp_'+pp.id;sb.innerHTML='<span class="bub"><i></i><i></i><i></i></span>';const ow=document.getElementById('ovwrap');if(ow)ow.appendChild(sb);}sb.style.left=(q[0]+7).toFixed(1)+'px';sb.style.top=(q[1]-H-9).toFixed(1)+'px';}
     else if(sb)sb.remove();
   });
+  paintIntent();   // keep the hovered/pinned intent bubble glued to its (possibly moving) avatar
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
 function startPeople(){if(REDUCED)return;if(!peopleRAF){peopleLast=performance.now();peopleRAF=requestAnimationFrame(peopleLoop);}}
