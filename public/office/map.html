@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>FundExecs OS — Virtual Office</title>
 </head>
-<body>
+<body class="office">
 <style>
 :root{
  --bg:#070c16;--pan:rgba(13,21,38,.72);--pan2:#0e1728;--line:#1c2e4a;--line2:#26406a;
@@ -165,6 +165,7 @@ body.previewing .fabbar{top:14px}
 .ptoggle span{font-size:15px;line-height:1;transition:transform .22s cubic-bezier(.4,0,.2,1)}
 .panel.collapsed .ptoggle span{transform:rotate(180deg)}
 .panel.collapsed .ptoggle{left:-27px;border-radius:9px}
+.ltoggle{display:none}
 .panel h3{color:var(--gold2);font-size:11px;letter-spacing:.13em;margin-bottom:4px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
 .panel .sub{color:var(--faint);font-size:9px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
 .panel label{display:block;font-size:9px;letter-spacing:.12em;color:var(--dim);margin:12px 0 4px;text-transform:uppercase}
@@ -362,6 +363,28 @@ body.viewmode .viewctl .seg button:hover{color:var(--gold2);border-color:var(--g
 body.viewmode .viewctl .seg button.on{color:#0b1220;background:radial-gradient(circle at 50% 32%,#f7e08a,#e2b53f);border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,215,115,.16),0 10px 24px -10px #000}
 .tbtn.save{background:linear-gradient(180deg,#1f7a44,#155f34);border-color:#2a7a4a;color:#eafff1}
 .tbtn.save:hover{background:linear-gradient(180deg,#279a55,#1a7a44);color:#fff;box-shadow:0 6px 16px -6px #0a3a20}
+/* ===== Hosted Build Mode: floating overlay over the live office ===== */
+body.office:not(.viewmode) .main{padding:0;gap:0;position:relative}
+body.office:not(.viewmode) .stage{position:fixed;inset:0;border:0;border-radius:0;z-index:1}
+body.office:not(.viewmode) .ambient,body.office:not(.viewmode) .vig{border-radius:0}
+/* Slim floating top toolbar */
+body.office:not(.viewmode) .top{position:fixed;top:10px;left:12px;right:12px;height:48px;padding:0 12px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,rgba(18,28,50,.78),rgba(9,15,28,.72));box-shadow:0 18px 44px -22px #000,inset 0 1px 0 rgba(245,215,115,.06);z-index:30}
+/* Left palette rail — floats, translucent, collapsible */
+body.office:not(.viewmode) .leftcol{position:fixed;top:68px;left:12px;bottom:14px;width:250px;z-index:22;transition:width .22s cubic-bezier(.4,0,.2,1),opacity .22s}
+body.office:not(.viewmode) .leftcol.collapsed{width:0}
+body.office:not(.viewmode) .leftcol.collapsed>.bmhead,body.office:not(.viewmode) .leftcol.collapsed>.bmtabs,body.office:not(.viewmode) .leftcol.collapsed>.bmsearch,body.office:not(.viewmode) .leftcol.collapsed>.bmbody,body.office:not(.viewmode) .leftcol.collapsed>.layers{opacity:0;pointer-events:none}
+body.office:not(.viewmode) .ltoggle{display:flex;position:absolute;top:14px;right:-13px;z-index:14;width:26px;height:40px;align-items:center;justify-content:center;background:linear-gradient(180deg,#17233c,#111b30);border:1px solid var(--line);border-left:0;color:var(--dim);border-radius:0 9px 9px 0;cursor:pointer;transition:color .12s,border-color .12s,background .12s;box-shadow:6px 0 16px -10px #000}
+body.office:not(.viewmode) .ltoggle:hover{color:var(--gold2);border-color:var(--goldsoft);background:linear-gradient(180deg,#1e2942,#121c31)}
+body.office:not(.viewmode) .ltoggle span{font-size:15px;line-height:1;transition:transform .22s cubic-bezier(.4,0,.2,1)}
+body.office:not(.viewmode) .leftcol.collapsed .ltoggle{right:-27px;border-radius:9px}
+body.office:not(.viewmode) .leftcol.collapsed .ltoggle span{transform:rotate(180deg)}
+/* Right inspector rail — floats, translucent (reuses .panel + .ptoggle collapse) */
+body.office:not(.viewmode) .panel{position:fixed;top:68px;right:12px;bottom:14px;width:266px;z-index:22}
+body.office:not(.viewmode) .panel.collapsed{width:0}
+/* Keep in-stage controls clear of the floating chrome */
+body.office:not(.viewmode) .fabbar{top:70px}
+body.office:not(.viewmode) .coord{left:274px}
+body.office:not(.viewmode) .zoom{right:290px}
 </style>
 <div class="top">
   <div class="brand"><span class="bi"></span><span class="bt"><b>MAP BUILDER</b><small>FUNDEXECS OS</small></span></div>
@@ -385,6 +408,7 @@ body.viewmode .viewctl .seg button.on{color:#0b1220;background:radial-gradient(c
     <div class="bmsearch" id="bmSearchWrap"><svg class="si" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input id="bmSearch" placeholder="Search assets…"></div>
     <div class="bmbody" id="bmbody"><div class="bmrail" id="bmrail"></div><div class="pal" id="pal"></div></div>
     <div class="layers" id="layers" style="display:none"></div>
+    <button class="ltoggle" id="leftToggle" title="Hide palette"><span>‹</span></button>
   </div>
   <div class="stage" id="stage">
     <div class="canvas" id="canvas"></div>
@@ -781,7 +805,7 @@ function renderModel(model){
   // FundExecs persona teammates (2.5D): sprite + cast shadow are depth-sorted INTO the scene (push into
   // draws, so walls/desks occlude them), perspective-scaled by position; the name/status label floats in the
   // overlay above furniture. Hosted view only.
-  if(document.body.classList.contains('viewmode')&&typeof PEOPLE!=='undefined'){
+  if(document.body.classList.contains('office')&&typeof PEOPLE!=='undefined'){
     PEOPLE.forEach(pp=>{if(pp.x==null){pp.x=20;pp.y=19;}const sc=STC[pp.s]||STC.available;
       if(MODE==='fp'){
         // First-person: upright billboard facing the camera. Feet stay on the correct floor point (depth), but
@@ -1015,7 +1039,7 @@ function pickDest(pp){
   pp.path=path;pp.pi=path.length>1?1:0;pp.state='walk';pp.cur=Math.max(pp.cur||0,0.35);
 }
 function peopleLoop(t){
-  if(!document.body.classList.contains('viewmode')||MODE==='fp'){peopleRAF=0;return;}
+  if(!document.body.classList.contains('office')||MODE==='fp'){peopleRAF=0;return;}
   const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
   // ---- conversations: two roamers paused near each other stop, face off and chat (speech dots) ----
   roamers.forEach(pp=>pp._chat=false);
@@ -2003,7 +2027,7 @@ function hideMenu(){cmenu.classList.remove('on');}
 // the menu is opened from the right-mouseup only when the drag didn't move (see openMenu).
 stageDom.addEventListener('contextmenu',e=>{e.preventDefault();});
 function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu();panX=0;panY=0;zoom=1.7;render();applyView();drawSel();if(typeof startPeople==='function')startPeople();requestAnimationFrame(()=>{applyView();drawSel();});}
-function exitView(){document.body.classList.remove('viewmode');panX=0;panY=0;zoom=1;refreshFab();render();applyView();drawSel();toast('Build mode');}
+function exitView(){document.body.classList.remove('viewmode');panX=0;panY=0;zoom=1;refreshFab();render();applyView();drawSel();if(typeof startPeople==='function')startPeople();toast('Build mode');}
 function openMenu(cx,cy){
   if(document.body.classList.contains('viewmode')){
     cmenu.innerHTML='<button data-a="__build" class="cbuild">◆ Build Mode</button><div class="csep"></div><button data-a="__reset">Reset view</button>';
@@ -2060,6 +2084,8 @@ if(window.ResizeObserver){try{new ResizeObserver(()=>{applyView();drawSel();}).o
 const panelWrap=document.getElementById('panelWrap'),panelToggle=document.getElementById('panelToggle');
 let panelAnim;function togglePanel(force){const c=force!==undefined?force:!panelWrap.classList.contains('collapsed');panelWrap.classList.toggle('collapsed',c);panelCollapsed=c;panelToggle.title=(c?'Show':'Hide')+' inspector (I)';cancelAnimationFrame(panelAnim);const start=Date.now();const step=()=>{applyView();drawSel();if(Date.now()-start<300)panelAnim=requestAnimationFrame(step);};step();}
 panelToggle.onclick=()=>togglePanel();
+const leftcolEl=document.querySelector('.leftcol'),leftToggle=document.getElementById('leftToggle');
+if(leftToggle)leftToggle.onclick=()=>{const c=!leftcolEl.classList.contains('collapsed');leftcolEl.classList.toggle('collapsed',c);leftToggle.title=(c?'Show':'Hide')+' palette';};
 buildPal();buildPanel();render();pushHistory();enterView();
 document.getElementById('btnSave').onclick=function(){try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}toast('Saved');enterView();};
 </script>
