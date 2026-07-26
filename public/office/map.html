@@ -947,6 +947,39 @@ function envTree(x,y,s,cfg){
 }
 // slab = flat ground rectangle at a fixed depth key (all behind the office floor)
 function envSlab(x,y,w,d,fill,key,op){push(key,poly([P(x,y),P(x+w,y),P(x+w,y+d),P(x,y+d)],fill,null,0,op));}
+// a street lamp (glows at night) and a park bench — proper sidewalk furniture
+function envLamp(x,y,cfg){box(x,y,0.16,0.16,2.2,'#3a4658',{topGrad:'url(#metalTop)'});
+  const c=P(x+0.08,y+0.08,2.35),lit=cfg.night;
+  push(y+0.4,`${lit?`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="8" fill="${cfg.lit||'#ffe6a8'}" opacity=".45" filter="url(#blur)"/>`:''}<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.3" fill="${lit?(cfg.lit||'#ffe6a8'):'#cdd6e2'}"/>`);}
+function envBench(x,y,cfg){box(x,y,1.5,0.46,0.24,'#6a4a30',{topGrad:'url(#woodTop)'});box(x,y,1.5,0.12,0.56,shade('#6a4a30',1.12),{topGrad:'url(#woodTop)'});}
+// a PROMINENT sidewalk: wide paved apron + paving detail + raised curb (2.5D lip)
+// + lamps/benches/planters + a crosswalk at the south entrance. modes: sidewalk |
+// promenade (water) | boardwalk (wood planks) | space (glowing tech walkway).
+function envSidewalk(cfg,fx,fy,fw,fh,mode){
+  const sw=mode==='boardwalk'?4:4.6,wcol=cfg.walk,x0=fx-sw,y0=fy-sw,x1=fx+fw+sw,y1=fy+fh+sw;
+  envSlab(x0,y0,x1-x0,y1-y0,wcol,-999000);
+  // paving slabs / planks (only the ring shows; office floor covers the middle)
+  let s=`<g stroke="${shade(wcol,mode==='boardwalk'?0.72:0.84)}" stroke-width="1" opacity="${mode==='boardwalk'?0.6:0.5}">`;
+  if(mode==='boardwalk'){for(let yy=y0+0.9;yy<y1;yy+=0.9){const a=P(x0,yy),b=P(x1,yy);s+=`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}"/>`;}}
+  else{for(let xx=x0+1.6;xx<x1-0.2;xx+=1.6){const a=P(xx,y0),b=P(xx,y1);s+=`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}"/>`;}
+       for(let yy=y0+1.6;yy<y1-0.2;yy+=1.6){const a=P(x0,yy),b=P(x1,yy);s+=`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}"/>`;}}
+  push(-998960,s+'</g>');
+  // raised curb around the outer edge — thin low boxes give a real 2.5D lip + shadow
+  const cc=mode==='space'?shade(wcol,1.4):mode==='boardwalk'?shade(wcol,0.8):shade(wcol,1.09);
+  box(x0,y0,x1-x0,0.34,0.3,cc);box(x0,y1-0.34,x1-x0,0.34,0.3,cc);box(x0,y0,0.34,y1-y0,0.3,cc);box(x1-0.34,y0,0.34,y1-y0,0.3,cc);
+  if(mode==='space'){const A=P(x0,y0),B=P(x1,y0),C2=P(x1,y1),D=P(x0,y1);push(-998955,`<polygon points="${pts([A,B,C2,D])}" fill="none" stroke="${cfg.lit}" stroke-width="2.4" opacity=".6" filter="url(#soft)"/>`);}
+  // furniture: lamps at corners + edge midpoints, benches + planters on the front walk
+  [[x0+1,y0+1],[x1-1.2,y0+1],[x0+1,y1-1.2],[x1-1.2,y1-1.2],[fx+fw/2,y0+1],[fx+fw/2,y1-1.2],[x0+1,fy+fh/2],[x1-1.2,fy+fh/2]].forEach(([lx,ly])=>envLamp(lx,ly,cfg));
+  if(mode!=='boardwalk'){envBench(fx+fw*0.26,y1-1.5,cfg);envBench(fx+fw*0.6,y1-1.5,cfg);}
+  envTree(x0+1,fy+fh*0.3,1.05,cfg);envTree(x1-2.1,fy+fh*0.62,1.05,cfg);envTree(fx+fw*0.42,y0+0.5,1,cfg);
+  // crosswalk (zebra) at the south entrance, painted onto the road
+  let cw='<g fill="#eef2f7" opacity=".72">';for(let i=0;i<7;i++){const bx=fx+fw/2-2.1+i*0.62,a=P(bx,y1+0.3),b=P(bx+0.34,y1+0.3),c2=P(bx+0.34,y1+3.6),d=P(bx,y1+3.6);cw+=`<polygon points="${pts([a,b,c2,d])}"/>`;}push(-999450,cw+'</g>');
+  return {x0,y0,x1,y1};
+}
+// a quiet natural apron (gravel/dirt) for nature themes — grounds the building
+// without a paved city sidewalk
+function envApron(cfg,fx,fy,fw,fh){const g=cfg.walk||'#a99a72',m=2.6;envSlab(fx-m,fy-m,fw+2*m,fh+2*m,g,-999000);
+  push(-998960,`<polygon points="${pts([P(fx-m,fy-m),P(fx+fw+m,fy-m),P(fx+fw+m,fy+fh+m),P(fx-m,fy+fh+m)])}" fill="none" stroke="${shade(g,0.82)}" stroke-width="1.2" opacity=".4"/>`);}
 function drawEnv(fx,fy,fw,fh){
   const cfg=ENV[currentEnv()]||ENV.nightCity, R=_envRng(currentEnv()+'|'+(fw|0)+'x'+(fh|0));
   const GX=fx-52,GY=fy-52,GW=fw+104,GH=fh+104;
@@ -957,7 +990,7 @@ function drawEnv(fx,fy,fw,fh){
   {const c=P(fx+fw/2,fy+fh/2,0),s=C();push(-999996,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+2).toFixed(1)}" rx="${((fw+fh)*s.UX*0.34).toFixed(1)}" ry="${((fw+fh)*s.UY*0.3).toFixed(1)}" fill="#04070d" opacity=".42" filter="url(#blur)"/>`);}
   const cxo=fx+fw/2,cyo=fy+fh/2,maxR=Math.hypot(GW,GH)/2;
   const NB=(x,y,w,d)=>{ // place a lot only if clear of the building + street keep-out
-    if(x+w>fx-8&&x<fx+fw+8&&y+d>fy-8&&y<fy+fh+8)return;
+    if(x+w>fx-13&&x<fx+fw+13&&y+d>fy-13&&y<fy+fh+13)return;
     if(R()<0.18)return envTree(x+w/2-0.7,y+d/2-0.7,1+R()*0.6,cfg);
     // balanced massing that RISES toward the distance → a skyline with depth
     const dist=Math.min(1,Math.hypot(x+w/2-cxo,y+d/2-cyo)/maxR);
@@ -967,40 +1000,40 @@ function drawEnv(fx,fy,fw,fh){
   };
   const cityLots=(x0,y0,x1,y1)=>{for(let gx=x0;gx<x1-3;gx+=5+R()*3.2){for(let gy=y0;gy<y1-3;gy+=5+R()*2.8){NB(gx,gy,2.6+R()*3.6,2.6+R()*2.8);}}};
   if(cfg.kind==='city'||cfg.kind==='space'){
-    // street ring meeting the building directly — no framing sidewalk
-    envSlab(fx-7,fy-7,fw+14,fh+14,cfg.road,-999500);
-    // dashed centre lines on the four road bands
+    // road ring OUTSIDE the sidewalk, then the prominent sidewalk hugging the building
+    envSlab(fx-11,fy-11,fw+22,fh+22,cfg.road,-999500);
     if(cfg.kind==='city'){const dl=(x0,y0,x1,y1)=>{const a=P(x0,y0),b=P(x1,y1);push(-999400,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.walk,1.15)}" stroke-width="1.4" stroke-dasharray="6 7" opacity=".7"/>`);};
-      dl(fx-5,fy-5,fx+fw+5,fy-5);dl(fx-5,fy+fh+5,fx+fw+5,fy+fh+5);dl(fx-5,fy-5,fx-5,fy+fh+5);dl(fx+fw+5,fy-5,fx+fw+5,fy+fh+5);}
+      dl(fx-7.6,fy-7.6,fx+fw+7.6,fy-7.6);dl(fx-7.6,fy+fh+7.6,fx+fw+7.6,fy+fh+7.6);dl(fx-7.6,fy-7.6,fx-7.6,fy+fh+7.6);dl(fx+fw+7.6,fy-7.6,fx+fw+7.6,fy+fh+7.6);}
+    envSidewalk(cfg,fx,fy,fw,fh,cfg.kind==='space'?'space':'sidewalk');
     // neighbouring blocks on all four sides (beyond the street)
-    cityLots(GX,GY,GX+GW,fy-8); cityLots(GX,fy+fh+8,GX+GW,GY+GH);
-    cityLots(GX,fy-8,fx-8,fy+fh+8); cityLots(fx+fw+8,fy-8,GX+GW,fy+fh+8);
-    if(cfg.kind==='space'){ // glowing platform edge instead of soil
-      const A=P(fx-4,fy-4),B=P(fx+fw+4,fy-4),Cc=P(fx+fw+4,fy+fh+4),D=P(fx-4,fy+fh+4);
-      push(-998900,`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${cfg.lit}" stroke-width="2" opacity=".5"/>`);}
+    cityLots(GX,GY,GX+GW,fy-13); cityLots(GX,fy+fh+13,GX+GW,GY+GH);
+    cityLots(GX,fy-13,fx-13,fy+fh+13); cityLots(fx+fw+13,fy-13,GX+GW,fy+fh+13);
   } else if(cfg.kind==='water'){
-    // land (base) with a promenade, then water filling the far/east side beyond a quay
-    const quay=fx+fw+6;
+    // land + promenade around the building, then water filling the east beyond a quay
+    const quay=fx+fw+9;
     envSlab(quay,GY,GX+GW-quay,GH,cfg.water,-999400);
-    envSlab(quay-2.4,GY,2.4,GH,shade(cfg.walk,0.9),-999300); // quay edge
-    // ripples on the water
+    envSidewalk(cfg,fx,fy,fw,fh,'promenade');
+    envSlab(quay-1.6,GY,1.6,GH,shade(cfg.walk,0.86),-999150); // quay edge
     for(let j=GY+4;j<GY+GH;j+=6){const a=P(quay+1,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.water,1.3)}" stroke-width="1.2" opacity=".22"/>`);}
-    cityLots(GX,GY,fx-8,GY+GH); cityLots(GX,GY,quay,fy-8); cityLots(GX,fy+fh+8,quay,GY+GH);
-    for(let k=0;k<5;k++)envBuilding(quay+3+k*6,fy+fh+3,3,2.2,0.3,cfg,R); // pier posts row (low)
+    cityLots(GX,GY,fx-13,GY+GH); cityLots(GX,GY,quay,fy-13); cityLots(GX,fy+fh+13,quay,GY+GH);
+    for(let k=0;k<5;k++)envBuilding(quay+3+k*6,fy+fh+5,3,2.2,0.3,cfg,R); // pier posts row (low)
   } else if(cfg.kind==='forest'){
-    // a path leading south
-    envSlab(fx+fw/2-1.4,fy+fh+2,2.8,GY+GH-(fy+fh+2),cfg.walk,-999100,0.9);
+    envApron(cfg,fx,fy,fw,fh);
+    // a path leading south from the apron
+    envSlab(fx+fw/2-1.4,fy+fh+2.6,2.8,GY+GH-(fy+fh+2.6),cfg.walk,-999100,0.9);
     for(let gx=GX;gx<GX+GW;gx+=3+R()*2.2){for(let gy=GY;gy<GY+GH;gy+=3+R()*2){
       if(gx>fx-6&&gx<fx+fw+6&&gy>fy-6&&gy<fy+fh+6)continue;
       if(Math.abs(gx-(fx+fw/2))<2.2&&gy>fy+fh)continue; // keep the path clear
       envTree(gx,gy,1.1+R()*0.9,cfg);}}
   } else if(cfg.kind==='coast'){
-    const shore=fy+fh+7;
+    const shore=fy+fh+9;
     envSlab(GX,shore,GW,GY+GH-shore,cfg.water,-999400);      // sea to the south
     envSlab(GX,shore-2.5,GW,2.5,shade(cfg.base,1.06),-999300);// wet-sand line
+    envSidewalk(cfg,fx,fy,fw,fh,'boardwalk');                // boardwalk apron
     for(let j=shore+3;j<GY+GH;j+=6){const a=P(GX+2,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#dff4fb" stroke-width="1.3" opacity=".3"/>`);}
-    for(let gx=GX;gx<GX+GW;gx+=6+R()*4){if(gx>fx-6&&gx<fx+fw+6)continue;if(R()<0.6)envTree(gx,fy-4-R()*6,1.2+R()*0.7,cfg);} // palms/greenery inland
+    for(let gx=GX;gx<GX+GW;gx+=6+R()*4){if(gx>fx-8&&gx<fx+fw+8)continue;if(R()<0.6)envTree(gx,fy-6-R()*6,1.2+R()*0.7,cfg);} // palms inland
   } else { // nature (mountain): meadow + distant ridges + scattered pines
+    envApron(cfg,fx,fy,fw,fh);
     // three ridge bands to the north (extruded rock with snow caps)
     for(let b=0;b<3;b++){const ry=fy-16-b*7,rh=5+b*2.5;let gx=GX;while(gx<GX+GW){const w=6+R()*7;const col=b===0?cfg.rock:shade(cfg.rock,0.86-b*0.06);envBuilding(gx,ry,w,4+R()*2,rh+R()*3,{roof:col,roof2:shade(col,0.94),winter:true,noWin:true},R);gx+=w+1+R()*2;}}
     for(let gx=GX;gx<GX+GW;gx+=4+R()*3){for(let gy=fy+fh+4;gy<GY+GH;gy+=4+R()*3){if(gx>fx-6&&gx<fx+fw+6&&gy<fy+fh+6)continue;if(R()<0.7)envTree(gx,gy,1.1+R()*0.8,cfg);}}
