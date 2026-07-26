@@ -1010,7 +1010,7 @@ function bfs(a,b){if(a===b)return[a];const prev={},q=[a],seen={};seen[a]=1;while
 // perspective scale: characters toward the back (small y) render a touch smaller than those in front.
 const pscale=y=>Math.max(.82,Math.min(1.14,.82+(y-2)/33*0.32));
 let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
-const STRIDE=0.6, WALKSEQ=[1,0,1,2], CHAT_RANGE=3.8;   // distance-based ping-pong framing (no foot-slide)
+const STRIDE=0.52, WALKSEQ=[1,0,1,2], CHAT_RANGE=3.8;   // distance-based ping-pong framing (no foot-slide); quicker cadence reads more natural
 const dir4=(dx,dy)=>Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);
 const roamers=PEOPLE.filter(p=>p.roam);
 // ---- Legible intent: hover (or click to pin) an avatar to see what it's doing right now.
@@ -1140,7 +1140,7 @@ function peopleLoop(t){
         if(pp.act==='look'){const p=pp.pauseT;pp.dir=p<0.7?pp.dir:p<1.3?2:p<1.9?3:0;}
         if(pp.pauseT>=pp.pauseDur&&(!pp._chat||pp.pauseT>7))pickDest(pp);
       }
-      if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.0;}
+      if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.25;}
       else{pp.fi=1;yoff=REDUCED?0:Math.sin(t/950+pp.ph)*0.45;}
     } else if(pp.deleg){ // delegated: walk out → work at the task spot → walk back to the desk
       if(pp.deleg.phase==='task'){
@@ -1164,7 +1164,7 @@ function peopleLoop(t){
           else{pp.x=pp.home[0];pp.y=pp.home[1];pp.deleg=null;pp.wst=null;pp.dir=0;pp.fi=1;}
         }else pp.pi++;}
       }
-      if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.0;}
+      if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.25;}
       else if(pp.deleg&&pp.deleg.phase!=='task'){pp.fi=1;}
     } else { // seated persona — a small work-state machine: typing / reviewing / idle glance
       if(pp.home==null)pp.home=[pp.x,pp.y];
