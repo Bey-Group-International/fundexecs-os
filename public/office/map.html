@@ -64,6 +64,10 @@ button{font-family:inherit}
 .tcard.wide .ic{width:19px;height:19px;color:var(--gold2)}
 .tcard.tool{background:linear-gradient(180deg,#132a2e,#0d1a1e);border-color:#2f5a62}
 .tcard.tool .ic{color:#7fd8e2}
+.envcard{padding:7px 6px;gap:6px}
+.envchip{width:100%;height:34px;border-radius:7px;border:1px solid var(--line);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 -8px 14px -8px rgba(0,0,0,.5)}
+.envcard.on{border-color:var(--gold);color:var(--gold2);box-shadow:inset 0 0 0 1px var(--goldsoft),0 8px 18px -12px #000}
+.envcard.on .envchip{border-color:var(--goldsoft)}
 .tcard.tool:hover{border-color:#7fd8e2}
 .tcard.on{border-color:var(--gold2);color:var(--gold2);box-shadow:inset 0 0 0 1px var(--goldsoft)}
 .envrow{display:flex;align-items:center;gap:8px;width:100%;padding:11px 12px;margin-bottom:7px;background:linear-gradient(180deg,#111d34,#0c1524);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:.12s}
@@ -142,7 +146,7 @@ body.previewing .fabbar{top:14px}
 .cityscape{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .cityscape>svg{position:absolute;top:50%;left:50%;width:150%;height:150%;transform:translate(-50%,-50%);will-change:transform}
 .canvas{position:absolute;inset:0;z-index:1}
-.canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto}
+.canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto;overflow:visible}
 #fx3d{position:absolute;inset:0;pointer-events:none;z-index:5}
 .ovwrap{position:absolute;top:50%;left:50%;transform-origin:center;pointer-events:none}
 .sel{position:absolute;inset:0;pointer-events:none;z-index:6}
@@ -900,46 +904,180 @@ const DEFS=`<defs>
 <pattern id="blockHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#ff5a6a" opacity=".1"/><line x1="0" y1="0" x2="0" y2="7" stroke="#ff5a6a" stroke-width="1.6" opacity=".55"/></pattern>
 </defs>`;
 
-// ---- City-skyline backdrop (hosted top view) --------------------------------
-// The office floor plan sits on a lit rooftop platform floating over a night-city
-// skyline. It's a FIXED backdrop layer (#cityscape) that always fills the stage —
-// the office SVG pans/zooms on top of it, so zooming out reveals an actual outside
-// environment (the surrounding city) instead of a flat blue void. Built ONCE at
-// load and set as static DOM, so it costs nothing at animation frame rate.
-const CITY_W=1600,CITY_H=1000;
-const CITY_DEFS=`<linearGradient id="cityNight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#060a16"/><stop offset=".32" stop-color="#0a1230"/><stop offset=".5" stop-color="#132449"/><stop offset=".6" stop-color="#1c3058"/><stop offset=".74" stop-color="#111d3c"/><stop offset="1" stop-color="#080e22"/></linearGradient><radialGradient id="cityGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4a6ea8" stop-opacity=".5"/><stop offset=".5" stop-color="#2a4676" stop-opacity=".2"/><stop offset="1" stop-color="#2a4676" stop-opacity="0"/></radialGradient>`;
+// ---- Outside-environment backdrops (hosted top view) ------------------------
+// The office floor plan sits on a lit platform floating over an "outside world".
+// It's a FIXED backdrop layer (#cityscape) that ALWAYS fully covers the stage, so
+// the office SVG pans/zooms on top of it and the member can never zoom out into a
+// blank void — there is always a surrounding environment. The chosen scene is
+// saved with the office model (model.env) and picked in Build Mode → Environ.
+// Scenes are built lazily (seeded PRNG → deterministic) and cached, so switching
+// costs nothing at animation frame rate.
+const SCENES=[['nightCity','Night City'],['dayCity','Day City'],['duskCity','Golden Hour'],['finance','Financial District'],['waterfront','Waterfront'],['mountain','Mountain Vista'],['forest','Forest'],['beach','Coastal Beach'],['winter','Winter City'],['space','Orbital']];
+const SCENES_MAP=Object.fromEntries(SCENES);
+// CSS gradient previews for the Environ picker chips
+const SCENE_SW={nightCity:'linear-gradient(135deg,#0f1a30,#1c2b47)',dayCity:'linear-gradient(135deg,#9fb3c8,#c9d6e2)',duskCity:'linear-gradient(135deg,#3a2c48,#6a4a55)',finance:'linear-gradient(135deg,#141d2b,#22314f)',waterfront:'linear-gradient(135deg,#1a2b47,#123a5a)',mountain:'linear-gradient(135deg,#6f9464,#8391a0)',forest:'linear-gradient(135deg,#3f6b47,#254a30)',beach:'linear-gradient(135deg,#e4d2a0,#2ea9c4)',winter:'linear-gradient(135deg,#cdd9e8,#eef4fb)',space:'linear-gradient(135deg,#0a0e1e,#20304e)'};
 function _mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
-function buildCityBackdrop(SW,SH){
-  const R=_mulberry32(0x5eed1517);
-  const hy=Math.round(SH*0.42);          // horizon band the skyline stands on
-  const out=[];
-  out.push(`<rect width="${SW}" height="${SH}" fill="url(#cityNight)"/>`);
-  out.push(`<ellipse cx="${(SW/2)|0}" cy="${hy}" rx="${(SW*0.74)|0}" ry="${(SH*0.4)|0}" fill="url(#cityGlow)"/>`);
-  // stars in the upper sky
-  let stars='';for(let i=0;i<90;i++){stars+=`<circle cx="${(R()*SW)|0}" cy="${(R()*(hy-30))|0}" r="${(R()*1.1+0.3).toFixed(2)}" fill="#cdd9f2" opacity="${(R()*0.5+0.18).toFixed(2)}"/>`;}
-  out.push(`<g>${stars}</g>`);
-  // faint far-city sprawl below the horizon (reads as a lit grid seen from height)
-  let far='';for(let i=0;i<220;i++){far+=`<rect x="${(R()*SW)|0}" y="${(hy+8+R()*(SH-hy-8))|0}" width="${(R()*2.4+0.8).toFixed(1)}" height="${(R()*2.4+0.8).toFixed(1)}" fill="${R()<0.5?'#ffcf82':'#8fc4ff'}" opacity="${(R()*0.12+0.05).toFixed(2)}"/>`;}
-  out.push(`<g>${far}</g>`);
-  // skyline layers, far (hazy, high) -> near (dark, low); windows on the two near layers
-  const layer=(base,fill,op,wmin,wmax,hmin,hmax,win)=>{
-    let g=`<g fill="${fill}" opacity="${op}">`,w='',x=-80;
-    while(x<SW+80){
-      const bw=Math.round(wmin+R()*(wmax-wmin)),bh=Math.round(hmin+R()*(hmax-hmin)),by=base-bh;
-      g+=`<rect x="${x}" y="${by}" width="${bw}" height="${bh+80}" rx="1.5"/>`;
-      if(R()<0.30){const cw=Math.round(bw*0.42),cx=x+Math.round((bw-cw)/2);g+=`<rect x="${cx}" y="${by-12}" width="${cw}" height="14"/>`;}
-      if(R()<0.16){const mx=x+Math.round(bw/2);g+=`<rect x="${mx-1}" y="${by-26}" width="2" height="26"/><circle cx="${mx}" cy="${by-27}" r="1.9" fill="#ff6a72" opacity=".85"/>`;}
-      if(win){const cell=8;for(let wy=by+7;wy<base-5;wy+=cell)for(let wx=x+5;wx<x+bw-8;wx+=cell){if(R()<0.30)w+=`<rect x="${wx}" y="${wy}" width="3.4" height="4.2" fill="${R()<0.62?'#ffd98a':'#9fd0ff'}" opacity="${(0.32+R()*0.5).toFixed(2)}"/>`;}}
-      x+=bw+Math.round(2+R()*11);
-    }
-    return g+'</g>'+(win?`<g>${w}</g>`:'');
-  };
-  out.push(layer(hy-2,'#16223f',0.55,44,112,30,86,false));
-  out.push(layer(hy+14,'#0f1a34',0.92,32,82,52,168,true));
-  out.push(layer(hy+40,'#080f20',1,36,96,40,140,true));
-  return out.join('');
+function _envRng(key){let h=5381;for(let i=0;i<key.length;i++)h=((h*33)^key.charCodeAt(i))>>>0;return _mulberry32(h^0x9e3779b9);}
+// ---- ENV: each theme is a CONTINUOUS top-down world drawn in the office's own
+// projection (drawEnv), so the office reads as a BUILDING grounded in a place —
+// streets, sidewalks, neighbouring rooftops, greenery/water — not a floor plan on
+// a picture. `base`/`far` also feed a matching haze backdrop (#cityscape) so the
+// world never ends in a void. kind selects the surroundings generator.
+const ENV={
+  nightCity :{kind:'city',   base:'#0d1526',far:'#080d1a',road:'#0a1120',walk:'#28324a',roof:'#17233d',roof2:'#1e2c48',green:'#28503a',lit:'#ffd98a',night:true},
+  dayCity   :{kind:'city',   base:'#c6d3df',far:'#aebccb',road:'#8790a0',walk:'#dde5ee',roof:'#b4c0ce',roof2:'#9fb0c2',green:'#5c9268'},
+  duskCity  :{kind:'city',   base:'#3c2e4a',far:'#241b33',road:'#241c30',walk:'#564a64',roof:'#4a3a58',roof2:'#392c46',green:'#3f5540',lit:'#ffc074',night:true},
+  finance   :{kind:'city',   base:'#141d2b',far:'#0d1420',road:'#0b111b',walk:'#39435a',roof:'#1b2740',roof2:'#22314f',green:'#28503a',lit:'#39e6a0',night:true,dense:true},
+  waterfront:{kind:'water',  base:'#182742',far:'#0e1830',road:'#101a2e',walk:'#33425e',roof:'#1e2d49',roof2:'#26385a',green:'#28503a',water:'#123a5a',lit:'#ffd98a',night:true},
+  mountain  :{kind:'nature', base:'#6f9464',far:'#5a7f5a',walk:'#c7bda0',road:'#8a7f66',roof:'#7a5a44',roof2:'#8a6a4e',green:'#3f6b47',green2:'#4f8a56',rock:'#8391a0',snow:'#eef4fb'},
+  forest    :{kind:'forest', base:'#3f6b47',far:'#2c4a33',walk:'#a99a72',road:'#7a6a4a',roof:'#6a4a34',roof2:'#7a5a3e',green:'#254a30',green2:'#356e3d'},
+  beach     :{kind:'coast',  base:'#e4d2a0',far:'#d8c48c',walk:'#efe2bc',road:'#cbb684',roof:'#c9a878',roof2:'#d8b98a',green:'#4f8a5a',water:'#2ea9c4'},
+  winter    :{kind:'city',   base:'#dce7f3',far:'#c6d4e4',road:'#a8b7c9',walk:'#eef4fb',roof:'#8493ab',roof2:'#9aa8bd',green:'#5a7a68',winter:true},
+  space     :{kind:'space',  base:'#0a0e1e',far:'#05060f',road:'#10182e',walk:'#1c2b47',roof:'#17233d',roof2:'#20304e',green:'#204a5a',lit:'#8fc4ff',night:true},
+};
+function currentEnv(){return (typeof model!=='undefined'&&model&&ENV[model.env])?model.env:'nightCity';}
+// Far-haze backdrop for the fixed #cityscape layer: a soft radial from the world's
+// base tone to its far tone, so beyond the drawn ground the world fades — never void.
+function envBackdropSVG(key){const e=ENV[key]||ENV.nightCity;let extra='';
+  if(e.kind==='space'){const R=_envRng('bg'+key);let s='';for(let i=0;i<120;i++)s+=`<circle cx="${(R()*100).toFixed(1)}" cy="${(R()*100).toFixed(1)}" r="${(R()*0.35+0.08).toFixed(2)}" fill="#eaf0ff" opacity="${(R()*0.6+0.2).toFixed(2)}"/>`;extra=s;}
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><defs><radialGradient id="ebg" cx="50%" cy="44%" r="75%"><stop offset="0" stop-color="${e.base}"/><stop offset=".55" stop-color="${e.base}"/><stop offset="1" stop-color="${e.far}"/></radialGradient></defs><rect width="100" height="100" fill="url(#ebg)"/>${extra}</svg>`;}
+function applyBackdrop(){if(typeof cityscape!=='undefined'&&cityscape)cityscape.innerHTML=envBackdropSVG(currentEnv());if(typeof applyView==='function')applyView();}
+function setEnv(key){if(!ENV[key]||!model)return;model.env=key;applyBackdrop();if(typeof render==='function')render();if(typeof save==='function')save();if(typeof pushHistory==='function')pushHistory();}
+// ---- world elements (projected, so they pan/zoom as one scene with the office) --
+// A neighbouring building seen from above: extruded roof + edge trim + a rooftop
+// unit, and (night) a warm rooftop glow. Depth-sorted normally so front lots sit in
+// front of the office and back lots behind — one coherent block.
+// rows of windows on the camera-facing (south) face — the face box() actually draws
+function facadeFace(x,y,w,d,h,col,cfg,R){
+  const TL=P(x,y+d,h),TR=P(x+w,y+d,h),BL=P(x,y+d,0),BR=P(x+w,y+d,0);
+  const L=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+  const cols=Math.max(2,Math.min(5,Math.round(w/1.3))),rows=Math.max(2,Math.min(7,Math.round(h/1.5)));
+  const dark=shade(col,cfg.night?0.5:0.82);let s='';
+  for(let r=0;r<rows;r++){const t0=r/rows+0.16/rows,t1=(r+1)/rows-0.16/rows;
+    for(let cN=0;cN<cols;cN++){const u0=cN/cols+0.2/cols,u1=(cN+1)/cols-0.2/cols;
+      const p0=L(L(TL,TR,u0),L(BL,BR,u0),t0),p1=L(L(TL,TR,u1),L(BL,BR,u1),t0),p2=L(L(TL,TR,u1),L(BL,BR,u1),t1),p3=L(L(TL,TR,u0),L(BL,BR,u0),t1);
+      const lit=cfg.night&&R()<0.42;
+      s+=`<polygon points="${pts([p0,p1,p2,p3])}" fill="${lit?(cfg.lit||'#ffd98a'):dark}" opacity="${lit?0.9:0.5}"/>`;}}
+  return s;
 }
-const CITYSCAPE_SVG=`<svg viewBox="0 0 ${CITY_W} ${CITY_H}" preserveAspectRatio="xMidYMid slice"><defs>${CITY_DEFS}</defs>${buildCityBackdrop(CITY_W,CITY_H)}</svg>`;
+function envBuilding(x,y,w,d,h,cfg,R){
+  const col=R()<0.5?cfg.roof:cfg.roof2;
+  const c=P(x+w/2,y+d/2,0),s=C();
+  push(-999997,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+3+h*0.4).toFixed(1)}" rx="${((w+d)*s.UX*0.26+h).toFixed(1)}" ry="${((w+d)*s.UY*0.22+h*0.4).toFixed(1)}" fill="#04070d" opacity=".34" filter="url(#blur)"/>`);
+  box(x,y,w,d,h,col);
+  let s2=(h>2.4&&!cfg.noWin)?facadeFace(x,y,w,d,h,col,cfg,R):'';
+  const A=P(x+0.35,y+0.35,h),B=P(x+w-0.35,y+0.35,h),Cc=P(x+w-0.35,y+d-0.35,h),D=P(x+0.35,y+d-0.35,h);
+  s2+=`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${shade(col,0.7)}" stroke-width="1"/>`;
+  if(cfg.winter)s2+=`<polygon points="${pts([P(x,y,h),P(x+w,y,h),P(x+w,y+d,h),P(x,y+d,h)])}" fill="#f4f9ff" opacity=".55"/>`;
+  if(cfg.night){const g=P(x+w/2,y+d/2,h);s2+=`<circle cx="${g[0].toFixed(1)}" cy="${g[1].toFixed(1)}" r="2.4" fill="${cfg.lit||'#ffd98a'}" opacity=".7" filter="url(#soft)"/>`;}
+  push(y+d/2+0.02,s2);
+  if(w>2.6&&d>2.4)box(x+w*0.28,y+d*0.28,Math.min(1.1,w*0.28),Math.min(0.9,d*0.28),0.5,shade(col,1.12),{z0:h});
+}
+function envTree(x,y,s,cfg){
+  box(x+s*0.44,y+s*0.44,s*0.14,s*0.14,s*0.55,'#5a4326');
+  const g=cfg.green2||cfg.green||'#356e3d',c=P(x+s*0.5,y+s*0.5,s*0.62);
+  push(y+s*0.5,`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${(s*7).toFixed(1)}" fill="${g}"/><circle cx="${(c[0]-s*2.6).toFixed(1)}" cy="${(c[1]-s*2).toFixed(1)}" r="${(s*4.4).toFixed(1)}" fill="${shade(g,1.16)}"/><circle cx="${(c[0]+s*2.8).toFixed(1)}" cy="${(c[1]-s*1).toFixed(1)}" r="${(s*3.6).toFixed(1)}" fill="${shade(g,0.86)}"/>`);
+}
+// slab = flat ground rectangle at a fixed depth key (all behind the office floor)
+function envSlab(x,y,w,d,fill,key,op){push(key,poly([P(x,y),P(x+w,y),P(x+w,y+d),P(x,y+d)],fill,null,0,op));}
+// a street lamp (glows at night) and a park bench — proper sidewalk furniture
+function envLamp(x,y,cfg){box(x,y,0.16,0.16,2.2,'#3a4658',{topGrad:'url(#metalTop)'});
+  const c=P(x+0.08,y+0.08,2.35),lit=cfg.night;
+  push(y+0.4,`${lit?`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="8" fill="${cfg.lit||'#ffe6a8'}" opacity=".45" filter="url(#blur)"/>`:''}<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.3" fill="${lit?(cfg.lit||'#ffe6a8'):'#cdd6e2'}"/>`);}
+function envBench(x,y,cfg){box(x,y,1.5,0.46,0.24,'#6a4a30',{topGrad:'url(#woodTop)'});box(x,y,1.5,0.12,0.56,shade('#6a4a30',1.12),{topGrad:'url(#woodTop)'});}
+// a PROMINENT sidewalk: wide paved apron + paving detail + raised curb (2.5D lip)
+// + lamps/benches/planters + a crosswalk at the south entrance. modes: sidewalk |
+// promenade (water) | boardwalk (wood planks) | space (glowing tech walkway).
+function envSidewalk(cfg,fx,fy,fw,fh,mode){
+  const sw=mode==='boardwalk'?4:4.6,wcol=cfg.walk,x0=fx-sw,y0=fy-sw,x1=fx+fw+sw,y1=fy+fh+sw;
+  envSlab(x0,y0,x1-x0,y1-y0,wcol,-999000);
+  // paving slabs / planks (only the ring shows; office floor covers the middle)
+  let s=`<g stroke="${shade(wcol,mode==='boardwalk'?0.72:0.84)}" stroke-width="1" opacity="${mode==='boardwalk'?0.6:0.5}">`;
+  if(mode==='boardwalk'){for(let yy=y0+0.9;yy<y1;yy+=0.9){const a=P(x0,yy),b=P(x1,yy);s+=`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}"/>`;}}
+  else{for(let xx=x0+1.6;xx<x1-0.2;xx+=1.6){const a=P(xx,y0),b=P(xx,y1);s+=`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}"/>`;}
+       for(let yy=y0+1.6;yy<y1-0.2;yy+=1.6){const a=P(x0,yy),b=P(x1,yy);s+=`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}"/>`;}}
+  push(-998960,s+'</g>');
+  // raised curb around the outer edge — thin low boxes give a real 2.5D lip + shadow
+  const cc=mode==='space'?shade(wcol,1.4):mode==='boardwalk'?shade(wcol,0.8):shade(wcol,1.09);
+  box(x0,y0,x1-x0,0.34,0.3,cc);box(x0,y1-0.34,x1-x0,0.34,0.3,cc);box(x0,y0,0.34,y1-y0,0.3,cc);box(x1-0.34,y0,0.34,y1-y0,0.3,cc);
+  if(mode==='space'){const A=P(x0,y0),B=P(x1,y0),C2=P(x1,y1),D=P(x0,y1);push(-998955,`<polygon points="${pts([A,B,C2,D])}" fill="none" stroke="${cfg.lit}" stroke-width="2.4" opacity=".6" filter="url(#soft)"/>`);}
+  // furniture: lamps at corners + edge midpoints, benches + planters on the front walk
+  [[x0+1,y0+1],[x1-1.2,y0+1],[x0+1,y1-1.2],[x1-1.2,y1-1.2],[fx+fw/2,y0+1],[fx+fw/2,y1-1.2],[x0+1,fy+fh/2],[x1-1.2,fy+fh/2]].forEach(([lx,ly])=>envLamp(lx,ly,cfg));
+  if(mode!=='boardwalk'){envBench(fx+fw*0.26,y1-1.5,cfg);envBench(fx+fw*0.6,y1-1.5,cfg);}
+  envTree(x0+1,fy+fh*0.3,1.05,cfg);envTree(x1-2.1,fy+fh*0.62,1.05,cfg);envTree(fx+fw*0.42,y0+0.5,1,cfg);
+  // crosswalk (zebra) at the south entrance, painted onto the road
+  let cw='<g fill="#eef2f7" opacity=".72">';for(let i=0;i<7;i++){const bx=fx+fw/2-2.1+i*0.62,a=P(bx,y1+0.3),b=P(bx+0.34,y1+0.3),c2=P(bx+0.34,y1+3.6),d=P(bx,y1+3.6);cw+=`<polygon points="${pts([a,b,c2,d])}"/>`;}push(-999450,cw+'</g>');
+  return {x0,y0,x1,y1};
+}
+// a quiet natural apron (gravel/dirt) for nature themes — grounds the building
+// without a paved city sidewalk
+function envApron(cfg,fx,fy,fw,fh){const g=cfg.walk||'#a99a72',m=2.6;envSlab(fx-m,fy-m,fw+2*m,fh+2*m,g,-999000);
+  push(-998960,`<polygon points="${pts([P(fx-m,fy-m),P(fx+fw+m,fy-m),P(fx+fw+m,fy+fh+m),P(fx-m,fy+fh+m)])}" fill="none" stroke="${shade(g,0.82)}" stroke-width="1.2" opacity=".4"/>`);}
+function drawEnv(fx,fy,fw,fh){
+  const cfg=ENV[currentEnv()]||ENV.nightCity, R=_envRng(currentEnv()+'|'+(fw|0)+'x'+(fh|0));
+  const GX=fx-52,GY=fy-52,GW=fw+104,GH=fh+104;
+  const bx0=fx-0.4,by0=fy-0.4,bx1=fx+fw+0.4,by1=fy+fh+0.4; // building footprint (+ hair)
+  // 1) ground base — huge, so pan/zoom never reveals emptiness (backdrop haze catches the rest)
+  envSlab(GX,GY,GW,GH,cfg.base,-1000000);
+  // 2) grounding shadow halo just beyond the footprint
+  {const c=P(fx+fw/2,fy+fh/2,0),s=C();push(-999996,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+2).toFixed(1)}" rx="${((fw+fh)*s.UX*0.34).toFixed(1)}" ry="${((fw+fh)*s.UY*0.3).toFixed(1)}" fill="#04070d" opacity=".42" filter="url(#blur)"/>`);}
+  const cxo=fx+fw/2,cyo=fy+fh/2,maxR=Math.hypot(GW,GH)/2;
+  const NB=(x,y,w,d)=>{ // place a lot only if clear of the building + street keep-out
+    if(x+w>fx-13&&x<fx+fw+13&&y+d>fy-13&&y<fy+fh+13)return;
+    if(R()<0.18)return envTree(x+w/2-0.7,y+d/2-0.7,1+R()*0.6,cfg);
+    // balanced massing that RISES toward the distance → a skyline with depth
+    const dist=Math.min(1,Math.hypot(x+w/2-cxo,y+d/2-cyo)/maxR);
+    const tower=R()<0.12+dist*0.24, base=(cfg.dense?3:2)+dist*(cfg.dense?7.5:5.5);
+    const h=(tower?base*1.7+R()*4:base*0.62+R()*2.2)+0.6;
+    envBuilding(x,y,w,d,h,cfg,R);
+  };
+  const cityLots=(x0,y0,x1,y1)=>{for(let gx=x0;gx<x1-3;gx+=5+R()*3.2){for(let gy=y0;gy<y1-3;gy+=5+R()*2.8){NB(gx,gy,2.6+R()*3.6,2.6+R()*2.8);}}};
+  if(cfg.kind==='city'||cfg.kind==='space'){
+    // road ring OUTSIDE the sidewalk, then the prominent sidewalk hugging the building
+    envSlab(fx-11,fy-11,fw+22,fh+22,cfg.road,-999500);
+    if(cfg.kind==='city'){const dl=(x0,y0,x1,y1)=>{const a=P(x0,y0),b=P(x1,y1);push(-999400,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.walk,1.15)}" stroke-width="1.4" stroke-dasharray="6 7" opacity=".7"/>`);};
+      dl(fx-7.6,fy-7.6,fx+fw+7.6,fy-7.6);dl(fx-7.6,fy+fh+7.6,fx+fw+7.6,fy+fh+7.6);dl(fx-7.6,fy-7.6,fx-7.6,fy+fh+7.6);dl(fx+fw+7.6,fy-7.6,fx+fw+7.6,fy+fh+7.6);}
+    envSidewalk(cfg,fx,fy,fw,fh,cfg.kind==='space'?'space':'sidewalk');
+    // neighbouring blocks on all four sides (beyond the street)
+    cityLots(GX,GY,GX+GW,fy-13); cityLots(GX,fy+fh+13,GX+GW,GY+GH);
+    cityLots(GX,fy-13,fx-13,fy+fh+13); cityLots(fx+fw+13,fy-13,GX+GW,fy+fh+13);
+  } else if(cfg.kind==='water'){
+    // land + promenade around the building, then water filling the east beyond a quay
+    const quay=fx+fw+9;
+    envSlab(quay,GY,GX+GW-quay,GH,cfg.water,-999400);
+    envSidewalk(cfg,fx,fy,fw,fh,'promenade');
+    envSlab(quay-1.6,GY,1.6,GH,shade(cfg.walk,0.86),-999150); // quay edge
+    for(let j=GY+4;j<GY+GH;j+=6){const a=P(quay+1,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.water,1.3)}" stroke-width="1.2" opacity=".22"/>`);}
+    cityLots(GX,GY,fx-13,GY+GH); cityLots(GX,GY,quay,fy-13); cityLots(GX,fy+fh+13,quay,GY+GH);
+    for(let k=0;k<5;k++)envBuilding(quay+3+k*6,fy+fh+5,3,2.2,0.3,cfg,R); // pier posts row (low)
+  } else if(cfg.kind==='forest'){
+    envApron(cfg,fx,fy,fw,fh);
+    // a path leading south from the apron
+    envSlab(fx+fw/2-1.4,fy+fh+2.6,2.8,GY+GH-(fy+fh+2.6),cfg.walk,-999100,0.9);
+    for(let gx=GX;gx<GX+GW;gx+=3+R()*2.2){for(let gy=GY;gy<GY+GH;gy+=3+R()*2){
+      if(gx>fx-6&&gx<fx+fw+6&&gy>fy-6&&gy<fy+fh+6)continue;
+      if(Math.abs(gx-(fx+fw/2))<2.2&&gy>fy+fh)continue; // keep the path clear
+      envTree(gx,gy,1.1+R()*0.9,cfg);}}
+  } else if(cfg.kind==='coast'){
+    const shore=fy+fh+9;
+    envSlab(GX,shore,GW,GY+GH-shore,cfg.water,-999400);      // sea to the south
+    envSlab(GX,shore-2.5,GW,2.5,shade(cfg.base,1.06),-999300);// wet-sand line
+    envSidewalk(cfg,fx,fy,fw,fh,'boardwalk');                // boardwalk apron
+    for(let j=shore+3;j<GY+GH;j+=6){const a=P(GX+2,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#dff4fb" stroke-width="1.3" opacity=".3"/>`);}
+    for(let gx=GX;gx<GX+GW;gx+=6+R()*4){if(gx>fx-8&&gx<fx+fw+8)continue;if(R()<0.6)envTree(gx,fy-6-R()*6,1.2+R()*0.7,cfg);} // palms inland
+  } else { // nature (mountain): meadow + distant ridges + scattered pines
+    envApron(cfg,fx,fy,fw,fh);
+    // three ridge bands to the north (extruded rock with snow caps)
+    for(let b=0;b<3;b++){const ry=fy-16-b*7,rh=5+b*2.5;let gx=GX;while(gx<GX+GW){const w=6+R()*7;const col=b===0?cfg.rock:shade(cfg.rock,0.86-b*0.06);envBuilding(gx,ry,w,4+R()*2,rh+R()*3,{roof:col,roof2:shade(col,0.94),winter:true,noWin:true},R);gx+=w+1+R()*2;}}
+    for(let gx=GX;gx<GX+GW;gx+=4+R()*3){for(let gy=fy+fh+4;gy<GY+GH;gy+=4+R()*3){if(gx>fx-6&&gx<fx+fw+6&&gy<fy+fh+6)continue;if(R()<0.7)envTree(gx,gy,1.1+R()*0.8,cfg);}}
+  }
+  // atmospheric haze: the distance fades toward the theme's far tone (clear over the
+  // office centre) — gives the 2.5D world real depth/air rather than a flat far field
+  {const c=P(fx+fw/2,fy+fh/2,0),s=C(),rx=(GW*0.6)*s.UX,ry=(GH*0.6)*s.UY,o=cfg.night?0.92:0.66;
+   push(9e5,`<radialGradient id="envhz" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="${cfg.far}" stop-opacity="0"/><stop offset=".48" stop-color="${cfg.far}" stop-opacity="0"/><stop offset="1" stop-color="${cfg.far}" stop-opacity="${o}"/></radialGradient><ellipse cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="url(#envhz)"/>`);}
+}
+// legacy alias (Environ picker still calls setEnv/currentEnv only)
+function sceneSVG(k){return envBackdropSVG(k);}
 
 const FLOORS=['gWood','gWood2','gAsh','gCream','gMarble','gConcrete','gStone','gSlate','gGreen','gTeal','gNavy','gBrick','gTradeFloor'];
 const PATS=['wood','parquet','tile','checker','stone','marble','carpet','none'];
@@ -966,13 +1104,13 @@ function renderModel(model){
   if(MODE==='fp'){ // first-person: single projected ground plane (sky is the SVG background)
     const gsp=projFP([[gx,gy,0],[gx+gw,gy,0],[gx+gw,gy+gh,0],[gx,gy+gh,0]]);if(gsp.length>=3)push(-1000002,poly(gsp,'url(#plazaGrad)'));
   } else {
-  // plaza
-  {const A=P(gx,gy),B=P(gx+gw,gy),Cc=P(gx+gw,gy+gh),D=P(gx,gy+gh);let s=poly([A,B,Cc,D],'url(#plazaGrad)');if(!MOVING){s+=`<g stroke="#2a3346" stroke-width=".6" opacity=".35">`;for(let i=0;i<=gw;i+=4){const a=P(gx+i,gy),b=P(gx+i,gy+gh);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}for(let j=0;j<=gh;j+=4){const a=P(gx,gy+j),b=P(gx+gw,gy+j);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}s+=`</g>`;}push(-10000,s);}
+  // continuous outside world (streets, neighbours, greenery/water) so the office
+  // reads as a building grounded in a place — drawn in-projection, behind the floor
+  drawEnv(fx,fy,fw,fh);
   {const A=P(fx,fy),B=P(fx+fw,fy),Cc=P(fx+fw,fy+fh),D=P(fx,fy+fh);push(-9999,poly([A,B,Cc,D],'url(#floorGrad)')+poly([A,B,Cc,D],'url(#floorSheen)',null,0,.42));}
   // tile grid (aligned to whole tiles)
   if(gridOn&&!MOVING){let s=`<g stroke="#33486a" stroke-width=".5" opacity=".5">`;const gx0=Math.ceil(fx),gx1=Math.floor(fx+fw),gy0=Math.ceil(fy),gy1=Math.floor(fy+fh);for(let i=gx0;i<=gx1;i++){const a=P(i,fy),b=P(i,fy+fh);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}for(let j=gy0;j<=gy1;j++){const a=P(fx,j),b=P(fx+fw,j);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}push(-9998,s+`</g>`);}
   }
-  PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
   model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}
     // First-person frustum cull: a room whose every corner is behind the near plane
@@ -1165,7 +1303,7 @@ function objXY(s){return isRect(s.kind)?[s.obj.x,s.obj.y]:[s.obj.args[0],s.obj.a
 function setXY(s,x,y){if(isRect(s.kind)){s.obj.x=x;s.obj.y=y;}else{s.obj.args[0]=x;s.obj.args[1]=y;}}
 function arrFor(kind){return kind==='room'?model.rooms:kind==='zone'?(model.zones||(model.zones=[])):model.props;}
 const canvas=document.getElementById('canvas'), selSvg=document.getElementById('sel'), panel=document.getElementById('panel'), statusEl=document.getElementById('status'), layersEl=document.getElementById('layers');
-const cityscape=document.getElementById('cityscape');if(cityscape)cityscape.innerHTML=CITYSCAPE_SVG; // fixed night-city backdrop behind the office
+const cityscape=document.getElementById('cityscape');applyBackdrop(); // fixed outside-environment backdrop behind the office (scene from model.env)
 function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}},400);}
 // ---- Placeholder teammates: a Spot-style "living" office in the hosted view ----
 // Sitters have a fixed x/y; roamers have a waypoint list and are lerped between points by a light RAF that
@@ -1979,7 +2117,7 @@ function applyMap(key){const M=MAPS[key],rooms=[],props=[];
   let ri=0,pi=0;rooms.forEach(r=>r.id='r'+(ri++));props.forEach(p=>p.id='p'+(pi++));
   return {rooms,props,zones:[],blocked:{},walls:{}};}
 function loadMap(key){const M=MAPS[key];if((model.rooms.length||model.props.length)&&!confirm('Load the '+M.label+' office? This replaces your current map.'))return;
-  fpStop();model=applyMap(key);uid=Math.max(model.rooms.length,model.props.length)+1;clearSel();
+  fpStop();const _env=currentEnv();model=applyMap(key);model.env=_env;applyBackdrop();uid=Math.max(model.rooms.length,model.props.length)+1;clearSel();
   MODE='top';mRows.classList.add('on');mIso.classList.remove('on');document.body.classList.remove('fpmode');
   panX=0;panY=0;zoom=1;YAW=0;soloId=null;collapsed={};document.getElementById('zl').textContent='100%';
   render();buildPanel();drawSel();pushHistory();toast(M.label+' loaded');}
@@ -2003,7 +2141,8 @@ function validate(m){if(!m||typeof m!=='object'||!Array.isArray(m.rooms)||!Array
   const zones=(Array.isArray(m.zones)?m.zones:[]).slice(0,160).map((z,i)=>{z=(z&&typeof z==='object')?z:{};z.id=z.id||'z'+i;z.x=num(z.x,0,-200,600);z.y=num(z.y,0,-200,600);z.w=num(z.w,3,1,180);z.d=num(z.d,3,1,180);if(!ZCOL[z.kind])z.kind='audio';return z;});
   const blocked=(m.blocked&&typeof m.blocked==='object'&&!Array.isArray(m.blocked))?m.blocked:{};
   const walls=(m.walls&&typeof m.walls==='object'&&!Array.isArray(m.walls))?m.walls:{};
-  return rooms.length?{rooms,props,zones,blocked,walls}:null;}
+  const env=(typeof m.env==='string'&&SCENES_MAP[m.env])?m.env:'nightCity';
+  return rooms.length?{rooms,props,zones,blocked,walls,env}:null;}
 function nestExport(){const out={version:1,zones:[]};model.rooms.forEach(r=>{const zp=model.props.filter(p=>{const x=p.args[0],y=p.args[1];return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d;});out.zones.push({label:r.label,rect:[r.x,r.y,r.w,r.d],floor:r.floor,pat:r.pat,...(r.build?{build:r.build}:{}),props:zp.map(p=>[p.t,...p.args])});});return out;}
 function flatExport(){return {version:1,rooms:model.rooms,props:model.props};}
 // ---- Spot-style Build Mode: Add / Floorplan / Environment / Brand ----
@@ -2067,12 +2206,17 @@ function buildFloorTab(){
 const AMBOPTS=[['day','Day'],['dusk','Dusk'],['night','Night']];
 function buildEnvTab(){
   const row=(id,label,desc,on)=>`<button class="envrow${on?' on':''}" id="${id}"><span class="er-l"><b>${label}</b><small>${desc}</small></span><span class="er-t">${on?'ON':'OFF'}</span></button>`;
-  let h=`<div class="tsec"><div class="gh">Scene</div>`+
+  const env=currentEnv();
+  let h=`<div class="tsec"><div class="gh">Outside Environment</div><div class="tgrid envgrid">`+
+    SCENES.map(([k,l])=>`<button class="tcard envcard${env===k?' on':''}" data-env="${k}"><span class="envchip" style="background:${SCENE_SW[k]}"></span><span>${l}</span></button>`).join('')+
+    `</div><div class="hint" style="margin-top:8px;padding:0 2px">The backdrop the office floats over. Saved with this office — everyone sees it.</div></div>`;
+  h+=`<div class="tsec"><div class="gh">Scene</div>`+
     row('enGrid','Tile grid','Show the floor grid',gridOn)+
     row('enSnap','Snap to grid','Objects snap to whole tiles',snap)+
     row('enLive','Live activity','Raise stations tick, office breathes',ACT.on)+`</div>`;
   h+=`<div class="tsec"><div class="gh">Ambience</div><div class="tgrid">`+AMBOPTS.map(([k,l])=>`<button class="tcard${AMBIENT===k?' on':''}" data-amb="${k}">${icon(k==='night'?'lamp':k==='dusk'?'fireplace':'entry')}<span>${l}</span></button>`).join('')+`</div></div>`;
   pal.innerHTML=h;
+  pal.querySelectorAll('[data-env]').forEach(b=>b.onclick=()=>{setEnv(b.dataset.env);buildEnvTab();toast(SCENES_MAP[b.dataset.env]+' backdrop');});
   document.getElementById('enGrid').onclick=()=>{gridOn=!gridOn;render();buildEnvTab();};
   document.getElementById('enSnap').onclick=()=>{snap=!snap;buildEnvTab();};
   document.getElementById('enLive').onclick=()=>{ACT.on=!ACT.on;render();buildEnvTab();toast(ACT.on?'Live activity on':'Live activity paused');};
