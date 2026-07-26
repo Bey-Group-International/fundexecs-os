@@ -64,6 +64,10 @@ button{font-family:inherit}
 .tcard.wide .ic{width:19px;height:19px;color:var(--gold2)}
 .tcard.tool{background:linear-gradient(180deg,#132a2e,#0d1a1e);border-color:#2f5a62}
 .tcard.tool .ic{color:#7fd8e2}
+.envcard{padding:7px 6px;gap:6px}
+.envchip{width:100%;height:34px;border-radius:7px;border:1px solid var(--line);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 -8px 14px -8px rgba(0,0,0,.5)}
+.envcard.on{border-color:var(--gold);color:var(--gold2);box-shadow:inset 0 0 0 1px var(--goldsoft),0 8px 18px -12px #000}
+.envcard.on .envchip{border-color:var(--goldsoft)}
 .tcard.tool:hover{border-color:#7fd8e2}
 .tcard.on{border-color:var(--gold2);color:var(--gold2);box-shadow:inset 0 0 0 1px var(--goldsoft)}
 .envrow{display:flex;align-items:center;gap:8px;width:100%;padding:11px 12px;margin-bottom:7px;background:linear-gradient(180deg,#111d34,#0c1524);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:.12s}
@@ -867,46 +871,96 @@ const DEFS=`<defs>
 <pattern id="blockHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#ff5a6a" opacity=".1"/><line x1="0" y1="0" x2="0" y2="7" stroke="#ff5a6a" stroke-width="1.6" opacity=".55"/></pattern>
 </defs>`;
 
-// ---- City-skyline backdrop (hosted top view) --------------------------------
-// The office floor plan sits on a lit rooftop platform floating over a night-city
-// skyline. It's a FIXED backdrop layer (#cityscape) that always fills the stage —
-// the office SVG pans/zooms on top of it, so zooming out reveals an actual outside
-// environment (the surrounding city) instead of a flat blue void. Built ONCE at
-// load and set as static DOM, so it costs nothing at animation frame rate.
+// ---- Outside-environment backdrops (hosted top view) ------------------------
+// The office floor plan sits on a lit platform floating over an "outside world".
+// It's a FIXED backdrop layer (#cityscape) that ALWAYS fully covers the stage, so
+// the office SVG pans/zooms on top of it and the member can never zoom out into a
+// blank void — there is always a surrounding environment. The chosen scene is
+// saved with the office model (model.env) and picked in Build Mode → Environ.
+// Scenes are built lazily (seeded PRNG → deterministic) and cached, so switching
+// costs nothing at animation frame rate.
 const CITY_W=1600,CITY_H=1000;
-const CITY_DEFS=`<linearGradient id="cityNight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#060a16"/><stop offset=".32" stop-color="#0a1230"/><stop offset=".5" stop-color="#132449"/><stop offset=".6" stop-color="#1c3058"/><stop offset=".74" stop-color="#111d3c"/><stop offset="1" stop-color="#080e22"/></linearGradient><radialGradient id="cityGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4a6ea8" stop-opacity=".5"/><stop offset=".5" stop-color="#2a4676" stop-opacity=".2"/><stop offset="1" stop-color="#2a4676" stop-opacity="0"/></radialGradient>`;
+const SCENES=[['nightCity','Night City'],['dayCity','Day City'],['duskCity','Golden Hour'],['finance','Financial District'],['waterfront','Waterfront'],['mountain','Mountain Vista'],['forest','Forest'],['beach','Coastal Beach'],['winter','Winter City'],['space','Orbital']];
+const SCENES_MAP=Object.fromEntries(SCENES);
+// CSS gradient previews for the Environ picker chips
+const SCENE_SW={nightCity:'linear-gradient(180deg,#0a1230,#1c3058)',dayCity:'linear-gradient(180deg,#5fa8e6,#c3e5f6)',duskCity:'linear-gradient(180deg,#361f5c,#ff9d5c 85%)',finance:'linear-gradient(180deg,#08131f,#0e3a4a)',waterfront:'linear-gradient(180deg,#14264c,#0a1526)',mountain:'linear-gradient(180deg,#8fb6d8,#3c5f57)',forest:'linear-gradient(180deg,#bfe0cf,#274a30)',beach:'linear-gradient(180deg,#7fd6e6,#e7d4a8)',winter:'linear-gradient(180deg,#c4d3e6,#eef4fb)',space:'radial-gradient(circle at 50% 38%,#20295a,#05060f)'};
 function _mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
-function buildCityBackdrop(SW,SH){
-  const R=_mulberry32(0x5eed1517);
-  const hy=Math.round(SH*0.42);          // horizon band the skyline stands on
-  const out=[];
-  out.push(`<rect width="${SW}" height="${SH}" fill="url(#cityNight)"/>`);
-  out.push(`<ellipse cx="${(SW/2)|0}" cy="${hy}" rx="${(SW*0.74)|0}" ry="${(SH*0.4)|0}" fill="url(#cityGlow)"/>`);
-  // stars in the upper sky
-  let stars='';for(let i=0;i<90;i++){stars+=`<circle cx="${(R()*SW)|0}" cy="${(R()*(hy-30))|0}" r="${(R()*1.1+0.3).toFixed(2)}" fill="#cdd9f2" opacity="${(R()*0.5+0.18).toFixed(2)}"/>`;}
-  out.push(`<g>${stars}</g>`);
-  // faint far-city sprawl below the horizon (reads as a lit grid seen from height)
-  let far='';for(let i=0;i<220;i++){far+=`<rect x="${(R()*SW)|0}" y="${(hy+8+R()*(SH-hy-8))|0}" width="${(R()*2.4+0.8).toFixed(1)}" height="${(R()*2.4+0.8).toFixed(1)}" fill="${R()<0.5?'#ffcf82':'#8fc4ff'}" opacity="${(R()*0.12+0.05).toFixed(2)}"/>`;}
-  out.push(`<g>${far}</g>`);
-  // skyline layers, far (hazy, high) -> near (dark, low); windows on the two near layers
-  const layer=(base,fill,op,wmin,wmax,hmin,hmax,win)=>{
-    let g=`<g fill="${fill}" opacity="${op}">`,w='',x=-80;
-    while(x<SW+80){
-      const bw=Math.round(wmin+R()*(wmax-wmin)),bh=Math.round(hmin+R()*(hmax-hmin)),by=base-bh;
-      g+=`<rect x="${x}" y="${by}" width="${bw}" height="${bh+80}" rx="1.5"/>`;
-      if(R()<0.30){const cw=Math.round(bw*0.42),cx=x+Math.round((bw-cw)/2);g+=`<rect x="${cx}" y="${by-12}" width="${cw}" height="14"/>`;}
-      if(R()<0.16){const mx=x+Math.round(bw/2);g+=`<rect x="${mx-1}" y="${by-26}" width="2" height="26"/><circle cx="${mx}" cy="${by-27}" r="1.9" fill="#ff6a72" opacity=".85"/>`;}
-      if(win){const cell=8;for(let wy=by+7;wy<base-5;wy+=cell)for(let wx=x+5;wx<x+bw-8;wx+=cell){if(R()<0.30)w+=`<rect x="${wx}" y="${wy}" width="3.4" height="4.2" fill="${R()<0.62?'#ffd98a':'#9fd0ff'}" opacity="${(0.32+R()*0.5).toFixed(2)}"/>`;}}
-      x+=bw+Math.round(2+R()*11);
-    }
-    return g+'</g>'+(win?`<g>${w}</g>`:'');
-  };
-  out.push(layer(hy-2,'#16223f',0.55,44,112,30,86,false));
-  out.push(layer(hy+14,'#0f1a34',0.92,32,82,52,168,true));
-  out.push(layer(hy+40,'#080f20',1,36,96,40,140,true));
-  return out.join('');
+function _rngFor(key){let h=5381;for(let i=0;i<key.length;i++)h=((h*33)^key.charCodeAt(i))>>>0;return _mulberry32(h^0x9e3779b9);}
+// ---- scene primitives -------------------------------------------------------
+function _stars(R,W,x0,y0,x1,y1,n,col){let s='';for(let i=0;i<n;i++)s+=`<circle cx="${(x0+R()*(x1-x0))|0}" cy="${(y0+R()*(y1-y0))|0}" r="${(R()*1.1+0.3).toFixed(2)}" fill="${col}" opacity="${(R()*0.5+0.18).toFixed(2)}"/>`;return `<g>${s}</g>`;}
+function _sprawl(R,W,H,hy,n){let s='';for(let i=0;i<n;i++)s+=`<rect x="${(R()*W)|0}" y="${(hy+8+R()*(H-hy-8))|0}" width="${(R()*2.4+0.8).toFixed(1)}" height="${(R()*2.4+0.8).toFixed(1)}" fill="${R()<0.5?'#ffcf82':'#8fc4ff'}" opacity="${(R()*0.12+0.05).toFixed(2)}"/>`;return `<g>${s}</g>`;}
+function _sun(cx,cy,r,col,glow){return `<circle cx="${cx}" cy="${cy}" r="${(r*3)|0}" fill="${glow}" opacity=".16"/><circle cx="${cx}" cy="${cy}" r="${(r*1.8)|0}" fill="${glow}" opacity=".26"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}"/>`;}
+function _cloud(cx,cy,s,col,op){return `<g fill="${col}" opacity="${op}"><ellipse cx="${cx}" cy="${cy}" rx="${(48*s)|0}" ry="${(16*s)|0}"/><ellipse cx="${(cx-32*s)|0}" cy="${(cy+6*s)|0}" rx="${(30*s)|0}" ry="${(12*s)|0}"/><ellipse cx="${(cx+34*s)|0}" cy="${(cy+5*s)|0}" rx="${(28*s)|0}" ry="${(12*s)|0}"/></g>`;}
+function _flakes(R,W,H,n,col){let s='';for(let i=0;i<n;i++)s+=`<circle cx="${(R()*W)|0}" cy="${(R()*H)|0}" r="${(R()*2+0.8).toFixed(1)}" fill="${col}" opacity="${(R()*0.5+0.3).toFixed(2)}"/>`;return `<g>${s}</g>`;}
+// city building layer; `win` is the per-window lit probability (0 = none)
+function _skyline(R,W,base,fill,op,wmin,wmax,hmin,hmax,win,warmP){
+  let g=`<g fill="${fill}" opacity="${op}">`,w='',x=-80;
+  while(x<W+80){
+    const bw=Math.round(wmin+R()*(wmax-wmin)),bh=Math.round(hmin+R()*(hmax-hmin)),by=base-bh;
+    g+=`<rect x="${x}" y="${by}" width="${bw}" height="${bh+140}" rx="1.5"/>`;
+    if(R()<0.28){const cw=Math.round(bw*0.42),cx=x+Math.round((bw-cw)/2);g+=`<rect x="${cx}" y="${by-12}" width="${cw}" height="14"/>`;}
+    if(win&&R()<0.15){const mx=x+Math.round(bw/2);g+=`<rect x="${mx-1}" y="${by-26}" width="2" height="26"/><circle cx="${mx}" cy="${by-27}" r="1.9" fill="#ff6a72" opacity=".85"/>`;}
+    if(win){const cell=8;for(let wy=by+7;wy<base-5;wy+=cell)for(let wx=x+5;wx<x+bw-8;wx+=cell){if(R()<win)w+=`<rect x="${wx}" y="${wy}" width="3.4" height="4.2" fill="${R()<warmP?'#ffd98a':'#9fd0ff'}" opacity="${(0.32+R()*0.5).toFixed(2)}"/>`;}}
+    x+=bw+Math.round(2+R()*11);
+  }
+  return g+'</g>'+(win?`<g>${w}</g>`:'');
 }
-const CITYSCAPE_SVG=`<svg viewBox="0 0 ${CITY_W} ${CITY_H}" preserveAspectRatio="xMidYMid slice"><defs>${CITY_DEFS}</defs>${buildCityBackdrop(CITY_W,CITY_H)}</svg>`;
+function _ridge(R,W,base,amp,peaks,fill,op,snowCol){
+  let pts=[`-60 ${base+700}`,`-60 ${base}`],snow='';const step=W/peaks;
+  for(let i=0;i<=peaks;i++){const px=Math.round(i*step+(R()-0.5)*step*0.5),py=Math.round(base-amp*(0.35+R()*0.65));pts.push(`${px} ${py}`);
+    if(snowCol&&py<base-amp*0.5)snow+=`<polygon points="${px-16} ${py+24}, ${px} ${py}, ${px+16} ${py+24}, ${px+7} ${py+17}, ${px} ${py+26}, ${px-7} ${py+17}" fill="${snowCol}" opacity=".9"/>`;}
+  pts.push(`${W+60} ${base}`,`${W+60} ${base+700}`);
+  return `<polygon points="${pts.join(' ')}" fill="${fill}" opacity="${op}"/>${snow}`;
+}
+function _conifers(R,W,base,h0,h1,fill,op){let g=`<g fill="${fill}" opacity="${op}">`,x=-20;
+  while(x<W+20){const h=h0+R()*(h1-h0),wd=h*0.55;g+=`<polygon points="${(x-wd/2)|0} ${base}, ${x|0} ${(base-h)|0}, ${(x+wd/2)|0} ${base}"/>`;x+=wd*0.5+R()*8;}
+  return g+'</g>';}
+// ---- the 10 scenes ----------------------------------------------------------
+function buildScene(key,W,H){
+  const R=_rngFor(key),id=n=>`sc_${key}_${n}`;
+  const lg=(n,st)=>`<linearGradient id="${id(n)}" x1="0" y1="0" x2="0" y2="1">${st}</linearGradient>`;
+  const rg=(n,col,o)=>`<radialGradient id="${id(n)}" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${col}" stop-opacity="${o}"/><stop offset=".55" stop-color="${col}" stop-opacity="${(o*0.4).toFixed(2)}"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient>`;
+  const fill=n=>`url(#${id(n)})`,bg=n=>`<rect width="${W}" height="${H}" fill="${fill(n)}"/>`;
+  let defs='',b='';
+  if(key==='nightCity'){const hy=(H*0.42)|0;
+    defs=lg('s','<stop offset="0" stop-color="#060a16"/><stop offset=".32" stop-color="#0a1230"/><stop offset=".5" stop-color="#132449"/><stop offset=".6" stop-color="#1c3058"/><stop offset=".74" stop-color="#111d3c"/><stop offset="1" stop-color="#080e22"/>')+rg('g','#4a6ea8',0.5);
+    b=bg('s')+`<ellipse cx="${W/2}" cy="${hy}" rx="${(W*0.74)|0}" ry="${(H*0.4)|0}" fill="${fill('g')}"/>`+_stars(R,W,0,0,W,hy-30,90,'#cdd9f2')+_sprawl(R,W,H,hy,220)+_skyline(R,W,hy-2,'#16223f',0.55,44,112,30,86,0,0)+_skyline(R,W,hy+14,'#0f1a34',0.92,32,82,52,168,0.3,0.62)+_skyline(R,W,hy+40,'#080f20',1,36,96,40,140,0.32,0.62);
+  }else if(key==='dayCity'){const hy=(H*0.46)|0;
+    defs=lg('s','<stop offset="0" stop-color="#4b9fe0"/><stop offset=".5" stop-color="#8ec6ee"/><stop offset="1" stop-color="#cfe8f6"/>')+rg('g','#fff7d8',0.9);
+    b=bg('s')+`<circle cx="${(W*0.76)|0}" cy="${(H*0.2)|0}" r="150" fill="${fill('g')}"/>`+_sun((W*0.76)|0,(H*0.2)|0,34,'#fff4c8','#ffe89a')+_cloud((W*0.24)|0,(H*0.16)|0,1.4,'#ffffff',0.9)+_cloud((W*0.55)|0,(H*0.26)|0,1.1,'#ffffff',0.8)+_cloud((W*0.88)|0,(H*0.34)|0,1.2,'#eef6fd',0.75)+`<rect x="0" y="${hy-40}" width="${W}" height="120" fill="#e8f3fb" opacity=".5"/>`+_skyline(R,W,hy+2,'#9db6d2',0.7,44,110,30,96,0,0)+_skyline(R,W,hy+18,'#7793b6',0.9,34,84,52,176,0,0)+_skyline(R,W,hy+42,'#5f7da3',1,36,96,40,150,0,0);
+  }else if(key==='duskCity'){const hy=(H*0.48)|0;
+    defs=lg('s','<stop offset="0" stop-color="#241246"/><stop offset=".4" stop-color="#7a3b6a"/><stop offset=".7" stop-color="#f5804e"/><stop offset=".86" stop-color="#ffc06a"/><stop offset="1" stop-color="#ffd98c"/>')+rg('g','#ffd27a',0.95);
+    b=bg('s')+`<circle cx="${W/2}" cy="${(hy-10)|0}" r="220" fill="${fill('g')}"/>`+_sun((W/2)|0,(hy-6)|0,48,'#ffe6a6','#ffcf7a')+_stars(R,W,0,0,W,hy*0.5,40,'#ffe9c8')+_skyline(R,W,hy+2,'#5a3550',0.6,44,112,30,92,0,0)+_skyline(R,W,hy+18,'#33223e',0.9,34,84,52,180,0.22,0.82)+_skyline(R,W,hy+44,'#1c1226',1,36,96,40,150,0.26,0.82);
+  }else if(key==='finance'){const hy=(H*0.36)|0;
+    defs=lg('s','<stop offset="0" stop-color="#05101c"/><stop offset=".45" stop-color="#0a2436"/><stop offset=".62" stop-color="#0e4152"/><stop offset="1" stop-color="#061019"/>')+rg('g','#2fd3c0',0.4);
+    b=bg('s')+`<ellipse cx="${W/2}" cy="${hy}" rx="${(W*0.8)|0}" ry="${(H*0.4)|0}" fill="${fill('g')}"/>`+_stars(R,W,0,0,W,hy-30,60,'#bfeaf2')+_sprawl(R,W,H,hy,180)+_skyline(R,W,hy-2,'#123243',0.6,26,64,60,150,0,0)+_skyline(R,W,hy+16,'#0b2130',0.94,22,54,90,260,0.42,0.4)+_skyline(R,W,hy+46,'#050f18',1,26,66,70,210,0.44,0.4)+`<g opacity=".8"><rect x="0" y="${(hy+150)|0}" width="${W}" height="16" fill="#04121a"/><g fill="#39e6a0">`+Array.from({length:60},(_,i)=>`<rect x="${(i*28+ (R()*10|0))}" y="${(hy+153)|0}" width="12" height="8" opacity="${R()<0.5?0.9:0.4}"/>`).join('')+`</g></g>`;
+  }else if(key==='waterfront'){const hy=(H*0.4)|0;
+    defs=lg('s','<stop offset="0" stop-color="#0a1430"/><stop offset=".5" stop-color="#17305a"/><stop offset="1" stop-color="#20406e"/>')+lg('w','<stop offset="0" stop-color="#12294a"/><stop offset="1" stop-color="#081422"/>')+rg('g','#5a7fb0',0.5);
+    const sky=_skyline(R,W,hy+2,'#12233f',0.9,32,84,44,150,0.34,0.6);
+    b=bg('s')+`<ellipse cx="${W/2}" cy="${hy}" rx="${(W*0.7)|0}" ry="${(H*0.34)|0}" fill="${fill('g')}"/>`+_stars(R,W,0,0,W,hy-40,70,'#cdd9f2')+_skyline(R,W,hy-2,'#16223f',0.5,44,112,26,80,0,0)+sky+`<rect x="0" y="${hy+2}" width="${W}" height="${H-hy}" fill="${fill('w')}"/>`+`<g transform="translate(0 ${(2*(hy+2))|0}) scale(1 -1)" opacity=".2">${sky}</g>`+`<g stroke="#8fb2d8" stroke-width="1.4" opacity=".18">`+Array.from({length:14},(_,i)=>`<line x1="0" y1="${(hy+18+i*((H-hy)/14))|0}" x2="${W}" y2="${(hy+18+i*((H-hy)/14))|0}"/>`).join('')+`</g>`;
+  }else if(key==='mountain'){const hy=(H*0.5)|0;
+    defs=lg('s','<stop offset="0" stop-color="#6ea3d6"/><stop offset=".55" stop-color="#a9c9e6"/><stop offset="1" stop-color="#e6f0f6"/>')+rg('g','#fff7e0',0.85)+lg('f','<stop offset="0" stop-color="#3f6157"/><stop offset="1" stop-color="#2c463f"/>');
+    b=bg('s')+`<circle cx="${(W*0.72)|0}" cy="${(H*0.22)|0}" r="120" fill="${fill('g')}"/>`+_sun((W*0.72)|0,(H*0.22)|0,30,'#fffbe8','#fff0c0')+_cloud((W*0.3)|0,(H*0.2)|0,1.3,'#ffffff',0.85)+_cloud((W*0.6)|0,(H*0.3)|0,1,'#f2f8fd',0.7)+_ridge(R,W,hy,150,7,'#7f9fc0',0.7,'#eef4fb')+_ridge(R,W,hy+40,210,6,'#5a7a94',0.9,'#eaf2fb')+_ridge(R,W,hy+110,240,5,'#33544c',1,'#e8f0f6')+`<rect x="0" y="${(hy+180)|0}" width="${W}" height="${H}" fill="${fill('f')}"/>`;
+  }else if(key==='forest'){const hy=(H*0.5)|0;
+    defs=lg('s','<stop offset="0" stop-color="#a7d0c4"/><stop offset=".5" stop-color="#d8ecdd"/><stop offset="1" stop-color="#f0ead6"/>')+rg('g','#fff6d8',0.7);
+    b=bg('s')+`<circle cx="${(W*0.3)|0}" cy="${(H*0.24)|0}" r="90" fill="${fill('g')}"/>`+_sun((W*0.3)|0,(H*0.24)|0,22,'#fffdf0','#fff0c8')+`<g fill="#ffffff" opacity=".4"><ellipse cx="${(W*0.5)|0}" cy="${(hy-20)|0}" rx="${(W*0.5)|0}" ry="26"/><ellipse cx="${(W*0.3)|0}" cy="${(hy+10)|0}" rx="${(W*0.4)|0}" ry="20"/></g>`+_conifers(R,W,hy+20,60,120,'#6f9e7c',0.7)+_conifers(R,W,hy+70,90,180,'#43734f',0.92)+_conifers(R,W,hy+140,120,240,'#254a30',1);
+  }else if(key==='beach'){const hy=(H*0.46)|0;
+    defs=lg('s','<stop offset="0" stop-color="#4fbfe0"/><stop offset=".6" stop-color="#a9e4ee"/><stop offset="1" stop-color="#ffe7c0"/>')+lg('w','<stop offset="0" stop-color="#2ea9c4"/><stop offset="1" stop-color="#1a6f96"/>')+rg('g','#fff3cf',0.95);
+    b=bg('s')+`<circle cx="${W/2}" cy="${(hy-30)|0}" r="150" fill="${fill('g')}"/>`+_sun((W/2)|0,(hy-26)|0,40,'#fff6d6','#ffe6a0')+_cloud((W*0.2)|0,(H*0.16)|0,1.2,'#ffffff',0.85)+_cloud((W*0.82)|0,(H*0.2)|0,1.1,'#ffffff',0.8)+`<rect x="0" y="${hy}" width="${W}" height="${H-hy}" fill="${fill('w')}"/>`+`<polygon points="${(W/2-70)|0} ${hy}, ${(W/2+70)|0} ${hy}, ${(W/2+130)|0} ${(H*0.8)|0}, ${(W/2-130)|0} ${(H*0.8)|0}" fill="#ffe9b0" opacity=".35"/>`+`<g stroke="#eaf7fb" stroke-width="1.6" opacity=".28">`+Array.from({length:12},(_,i)=>`<line x1="0" y1="${(hy+16+i*((H-hy)/12))|0}" x2="${W}" y2="${(hy+16+i*((H-hy)/12))|0}"/>`).join('')+`</g>`+`<rect x="0" y="${(H-46)|0}" width="${W}" height="46" fill="#e7d3a4"/>`;
+  }else if(key==='winter'){const hy=(H*0.46)|0;
+    defs=lg('s','<stop offset="0" stop-color="#a7bcd6"/><stop offset=".5" stop-color="#cad9e8"/><stop offset="1" stop-color="#eef4fb"/>')+rg('g','#ffffff',0.8);
+    b=bg('s')+`<circle cx="${(W*0.7)|0}" cy="${(H*0.22)|0}" r="120" fill="${fill('g')}"/>`+`<g>`+_skyline(R,W,hy+2,'#8493ab',0.6,44,110,30,96,0,0)+`</g>`+_skyline(R,W,hy+20,'#6c7c95',0.9,34,84,52,168,0.16,0.7)+_skyline(R,W,hy+46,'#54637d',1,36,96,40,150,0.18,0.7)+`<g fill="#eef4fb">`+Array.from({length:34},()=>{const x=(R()*W)|0,y=(hy+R()*90)|0,w=(20+R()*40)|0;return `<rect x="${x}" y="${y}" width="${w}" height="6" rx="3"/>`;}).join('')+`</g>`+`<rect x="0" y="${(H-40)|0}" width="${W}" height="40" fill="#eef4fb"/>`+_flakes(R,W,H,120,'#f4f9ff');
+  }else{ // space / orbital
+    defs=rg('s','#1a2350',1)+rg('n','#6a3ba0',0.5)+rg('a','#4aa0ff',0.6)+lg('p','<stop offset="0" stop-color="#3a6ea0"/><stop offset=".5" stop-color="#22406e"/><stop offset="1" stop-color="#101f38"/>');
+    b=`<rect width="${W}" height="${H}" fill="#05060f"/>`+`<rect width="${W}" height="${H}" fill="${fill('s')}" opacity=".5"/>`+`<ellipse cx="${(W*0.3)|0}" cy="${(H*0.35)|0}" rx="${(W*0.4)|0}" ry="${(H*0.3)|0}" fill="${fill('n')}"/>`+_stars(R,W,0,0,W,H,260,'#eaf0ff')+_stars(R,W,0,0,W,H,60,'#bcd4ff')+`<circle cx="${(W*0.82)|0}" cy="${(H*0.86)|0}" r="360" fill="${fill('a')}" opacity=".4"/>`+`<circle cx="${(W*0.82)|0}" cy="${(H*0.9)|0}" r="330" fill="${fill('p')}"/>`+`<g fill="#2b4d78" opacity=".55"><ellipse cx="${(W*0.82)|0}" cy="${(H*0.82)|0}" rx="300" ry="34"/><ellipse cx="${(W*0.82)|0}" cy="${(H*0.9)|0}" rx="320" ry="30"/></g>`+`<g fill="#dfe8ff" opacity=".9">`+Array.from({length:5},()=>`<rect x="${(R()*W)|0}" y="${(R()*H*0.55)|0}" width="${(3+R()*3)|0}" height="${(3+R()*3)|0}"/>`).join('')+`</g>`;
+  }
+  return `<defs>${defs}</defs>${b}`;
+}
+const SCENE_CACHE={};
+function sceneSVG(key){if(!SCENES_MAP[key])key='nightCity';if(!SCENE_CACHE[key])SCENE_CACHE[key]=`<svg viewBox="0 0 ${CITY_W} ${CITY_H}" preserveAspectRatio="xMidYMid slice">${buildScene(key,CITY_W,CITY_H)}</svg>`;return SCENE_CACHE[key];}
+function currentEnv(){return (typeof model!=='undefined'&&model&&SCENES_MAP[model.env])?model.env:'nightCity';}
+function applyBackdrop(){if(typeof cityscape!=='undefined'&&cityscape){cityscape.innerHTML=sceneSVG(currentEnv());if(typeof applyView==='function')applyView();}}
+function setEnv(key){if(!SCENES_MAP[key]||!model)return;model.env=key;applyBackdrop();if(typeof save==='function')save();if(typeof pushHistory==='function')pushHistory();}
 
 const FLOORS=['gWood','gWood2','gAsh','gCream','gMarble','gConcrete','gStone','gSlate','gGreen','gTeal','gNavy','gBrick','gTradeFloor'];
 const PATS=['wood','parquet','tile','checker','stone','marble','carpet','none'];
@@ -1126,7 +1180,7 @@ function objXY(s){return isRect(s.kind)?[s.obj.x,s.obj.y]:[s.obj.args[0],s.obj.a
 function setXY(s,x,y){if(isRect(s.kind)){s.obj.x=x;s.obj.y=y;}else{s.obj.args[0]=x;s.obj.args[1]=y;}}
 function arrFor(kind){return kind==='room'?model.rooms:kind==='zone'?(model.zones||(model.zones=[])):model.props;}
 const canvas=document.getElementById('canvas'), selSvg=document.getElementById('sel'), panel=document.getElementById('panel'), statusEl=document.getElementById('status'), layersEl=document.getElementById('layers');
-const cityscape=document.getElementById('cityscape');if(cityscape)cityscape.innerHTML=CITYSCAPE_SVG; // fixed night-city backdrop behind the office
+const cityscape=document.getElementById('cityscape');applyBackdrop(); // fixed outside-environment backdrop behind the office (scene from model.env)
 function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}},400);}
 // ---- Placeholder teammates: a Spot-style "living" office in the hosted view ----
 // Sitters have a fixed x/y; roamers have a waypoint list and are lerped between points by a light RAF that
@@ -1937,7 +1991,7 @@ function applyMap(key){const M=MAPS[key],rooms=[],props=[];
   let ri=0,pi=0;rooms.forEach(r=>r.id='r'+(ri++));props.forEach(p=>p.id='p'+(pi++));
   return {rooms,props,zones:[],blocked:{},walls:{}};}
 function loadMap(key){const M=MAPS[key];if((model.rooms.length||model.props.length)&&!confirm('Load the '+M.label+' office? This replaces your current map.'))return;
-  fpStop();model=applyMap(key);uid=Math.max(model.rooms.length,model.props.length)+1;clearSel();
+  fpStop();const _env=currentEnv();model=applyMap(key);model.env=_env;applyBackdrop();uid=Math.max(model.rooms.length,model.props.length)+1;clearSel();
   MODE='top';mRows.classList.add('on');mIso.classList.remove('on');document.body.classList.remove('fpmode');
   panX=0;panY=0;zoom=1;YAW=0;soloId=null;collapsed={};document.getElementById('zl').textContent='100%';
   render();buildPanel();drawSel();pushHistory();toast(M.label+' loaded');}
@@ -1961,7 +2015,8 @@ function validate(m){if(!m||typeof m!=='object'||!Array.isArray(m.rooms)||!Array
   const zones=(Array.isArray(m.zones)?m.zones:[]).slice(0,160).map((z,i)=>{z=(z&&typeof z==='object')?z:{};z.id=z.id||'z'+i;z.x=num(z.x,0,-200,600);z.y=num(z.y,0,-200,600);z.w=num(z.w,3,1,180);z.d=num(z.d,3,1,180);if(!ZCOL[z.kind])z.kind='audio';return z;});
   const blocked=(m.blocked&&typeof m.blocked==='object'&&!Array.isArray(m.blocked))?m.blocked:{};
   const walls=(m.walls&&typeof m.walls==='object'&&!Array.isArray(m.walls))?m.walls:{};
-  return rooms.length?{rooms,props,zones,blocked,walls}:null;}
+  const env=(typeof m.env==='string'&&SCENES_MAP[m.env])?m.env:'nightCity';
+  return rooms.length?{rooms,props,zones,blocked,walls,env}:null;}
 function nestExport(){const out={version:1,zones:[]};model.rooms.forEach(r=>{const zp=model.props.filter(p=>{const x=p.args[0],y=p.args[1];return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d;});out.zones.push({label:r.label,rect:[r.x,r.y,r.w,r.d],floor:r.floor,pat:r.pat,...(r.build?{build:r.build}:{}),props:zp.map(p=>[p.t,...p.args])});});return out;}
 function flatExport(){return {version:1,rooms:model.rooms,props:model.props};}
 // ---- Spot-style Build Mode: Add / Floorplan / Environment / Brand ----
@@ -2012,12 +2067,17 @@ function buildFloorTab(){
 const AMBOPTS=[['day','Day'],['dusk','Dusk'],['night','Night']];
 function buildEnvTab(){
   const row=(id,label,desc,on)=>`<button class="envrow${on?' on':''}" id="${id}"><span class="er-l"><b>${label}</b><small>${desc}</small></span><span class="er-t">${on?'ON':'OFF'}</span></button>`;
-  let h=`<div class="tsec"><div class="gh">Scene</div>`+
+  const env=currentEnv();
+  let h=`<div class="tsec"><div class="gh">Outside Environment</div><div class="tgrid envgrid">`+
+    SCENES.map(([k,l])=>`<button class="tcard envcard${env===k?' on':''}" data-env="${k}"><span class="envchip" style="background:${SCENE_SW[k]}"></span><span>${l}</span></button>`).join('')+
+    `</div><div class="hint" style="margin-top:8px;padding:0 2px">The backdrop the office floats over. Saved with this office — everyone sees it.</div></div>`;
+  h+=`<div class="tsec"><div class="gh">Scene</div>`+
     row('enGrid','Tile grid','Show the floor grid',gridOn)+
     row('enSnap','Snap to grid','Objects snap to whole tiles',snap)+
     row('enLive','Live activity','Raise stations tick, office breathes',ACT.on)+`</div>`;
   h+=`<div class="tsec"><div class="gh">Ambience</div><div class="tgrid">`+AMBOPTS.map(([k,l])=>`<button class="tcard${AMBIENT===k?' on':''}" data-amb="${k}">${icon(k==='night'?'lamp':k==='dusk'?'fireplace':'entry')}<span>${l}</span></button>`).join('')+`</div></div>`;
   pal.innerHTML=h;
+  pal.querySelectorAll('[data-env]').forEach(b=>b.onclick=()=>{setEnv(b.dataset.env);buildEnvTab();toast(SCENES_MAP[b.dataset.env]+' backdrop');});
   document.getElementById('enGrid').onclick=()=>{gridOn=!gridOn;render();buildEnvTab();};
   document.getElementById('enSnap').onclick=()=>{snap=!snap;buildEnvTab();};
   document.getElementById('enLive').onclick=()=>{ACT.on=!ACT.on;render();buildEnvTab();toast(ACT.on?'Live activity on':'Live activity paused');};
