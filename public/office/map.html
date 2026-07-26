@@ -1107,7 +1107,7 @@ if(model&&Array.isArray(model.props))model.props=model.props.filter(p=>!(p&&p.t=
 let sel=null, selSet=[], snap=true, uid=100, zoom=1;
 let armed=null, lastDown=null; // armed = the object unlocked for movement via double-click; single-click only selects
 let soloId=null, collapsed={}, renaming=null, dragRow=null, walkMode=false, clipboard=null, guides=[], suppressMenu=false;
-let buildMode=false, buildTool='wall', buildHover=null;
+let buildMode=false, buildTool='wall', buildHover=null, matBrush=null;
 let panX=0, panY=0, panelCollapsed=false, gridOn=true;
 let layFilter='', layOrder=[], lastLayerIdx=-1;
 let lastBounds={fx:0,fy:0,fw:20,fh:20};
@@ -1548,6 +1548,7 @@ stageDom.addEventListener('mousedown',e=>{
   const [wx,wy]=worldFrom(sx,sy);
   if(walkMode){e.preventDefault();const erase=e.button===2||e.altKey;const key=TSNAP(wx)+','+TSNAP(wy);const cur=!!(model.blocked&&model.blocked[key]);const val=erase?false:!cur;drag={mode:'walk',val};paintTile(wx,wy,val);render();return;}
   if(buildMode){e.preventDefault();const erase=e.button===2||e.altKey;
+    if(buildTool==='mat'){const r=roomAtPoint(wx,wy);if(r&&applyMat(r)){render();pushHistory();}else if(!r)toast('Click inside a room');return;}
     if(buildTool==='door'){if(placeDoor(wx,wy,erase)){render();pushHistory();}return;}
     drag={mode:'build',val:!erase};paintWall(wx,wy,!erase);render();return;}
   if(armed&&sel&&armed===sel.obj){ // transform handles work only on an armed (movement-unlocked) object
@@ -1918,6 +1919,11 @@ function setAmbient(k){AMBIENT=k;const el=document.getElementById('ambient');if(
   el.style.background=k==='dusk'?'radial-gradient(120% 90% at 50% 120%,rgba(255,150,60,.16),rgba(120,40,80,.10) 60%,rgba(20,20,50,.14))':k==='night'?'linear-gradient(180deg,rgba(20,34,80,.34),rgba(8,14,34,.42))':'transparent';
   el.style.boxShadow=k==='night'?'inset 0 0 160px rgba(4,8,20,.7)':k==='dusk'?'inset 0 0 140px rgba(60,20,40,.4)':'none';}
 function enterBuild(tool){buildMode=true;buildTool=tool;walkMode=false;clearSel();buildPanel();drawSel();stageDom.style.cursor='crosshair';toast((tool==='door'?'Place doors':'Draw walls')+' — Esc to finish');}
+// ---- surface paint: apply a floor/wall/door variation to a room by clicking it ----
+function roomAtPoint(wx,wy){for(let i=model.rooms.length-1;i>=0;i--){const r=model.rooms[i];if(!r.hidden&&r.build!=='corridor'&&wx>=r.x&&wx<=r.x+r.w&&wy>=r.y&&wy<=r.y+r.d)return r;}return null;}
+function applyMat(r){if(!r||!matBrush)return false;const b=matBrush;if(b.kind==='floor'){r.floor=b.value.f;r.pat=b.value.p;}else if(b.kind==='wall')r.wall=b.value;else if(b.kind==='door')r.doorStyle=b.value;else return false;return true;}
+function enterMat(kind,value,label){buildMode=true;buildTool='mat';matBrush={kind,value};walkMode=false;clearSel();buildPanel();drawSel();stageDom.style.cursor='crosshair';toast('Click a room to apply '+label+' — Esc to finish');}
+function surfClick(kind,value,label){if(sel&&sel.kind==='room'){matBrush={kind,value};if(applyMat(sel.obj)){matBrush=null;render();buildPanel();drawSel();pushHistory();toast(label+' applied');}}else enterMat(kind,value,label);}
 function enterWalk(){walkMode=true;buildMode=false;clearSel();buildPanel();drawSel();stageDom.style.cursor='cell';toast('Paint walkable tiles — Esc to finish');}
 function exitModes(){if(!buildMode&&!walkMode)return false;buildMode=false;walkMode=false;buildHover=null;walkHover=null;stageDom.style.cursor='';drawSel();toast('Done');return true;}
 function wireCards(){pal.querySelectorAll('.tcard').forEach(b=>{if(!(b.dataset.map||b.dataset.room||b.dataset.zone||b.dataset.tpl||b.dataset.prop))return;const kind=b.dataset.map?'map':b.dataset.room?'room':b.dataset.zone?'zone':b.dataset.tpl?'tpl':'prop';const val=b.dataset.map||b.dataset.tpl||b.dataset.prop||'';b.addEventListener('mousedown',e=>{if(e.button!==0)return;e.preventDefault();palDrag={kind,val,sx:e.clientX,sy:e.clientY,moved:false,ghost:null,label:b.innerHTML};});});}
@@ -1950,11 +1956,19 @@ function buildFloorTab(){
     <button class="tcard tool" id="ftWalk">${icon('spawn')}<span>Walkable Tiles</span></button>
     <button class="tcard tool" id="ftClear">${icon('barrier')}<span>Clear Walls</span></button></div>
     <div class="hint" style="margin-top:8px;padding:0 2px">Pick a tool, draw on the floor, press <span class="kbd">Esc</span> to finish.</div></div>`;
+  // ---- surface variations (apply to a room by clicking it) ----
+  h+=`<div class="tsec"><div class="gh">Floor Styles</div><div class="matgrid" id="bfFloor">`+FLOOR_PRESETS.map((pr,i)=>`<button class="mat${matBrush&&matBrush.kind==='floor'&&matBrush.value===pr?' on':''}" data-fp="${i}" title="${pr.n}"><span class="msw" style="background:${FLOOR_SW[pr.f]}"></span><small>${pr.n}</small></button>`).join('')+`</div></div>`;
+  h+=`<div class="tsec"><div class="gh">Wall Finishes</div><div class="matgrid" id="bfWall">`+WALLFINS.map(f=>`<button class="mat${matBrush&&matBrush.kind==='wall'&&matBrush.value===f?' on':''}" data-wf="${f}"><span class="msw" style="background:${WALL_SW[f]}"></span><small>${WALL_LB[f]}</small></button>`).join('')+`</div></div>`;
+  h+=`<div class="tsec"><div class="gh">Door Styles</div><div class="matgrid" id="bfDoor">`+DOOR_STYLES.map(d=>`<button class="mat${matBrush&&matBrush.kind==='door'&&matBrush.value===d?' on':''}" data-ds="${d}"><small>${DOOR_LB[d]}</small></button>`).join('')+`</div>
+    <div class="hint" style="margin-top:8px;padding:0 2px">Pick a surface, then click a room to apply it — or select a room first to apply instantly.</div></div>`;
   pal.innerHTML=h; wireCards();
   document.getElementById('ftWall').onclick=()=>enterBuild('wall');
   document.getElementById('ftDoor').onclick=()=>enterBuild('door');
   document.getElementById('ftWalk').onclick=()=>enterWalk();
   document.getElementById('ftClear').onclick=()=>{if(model.walls&&Object.keys(model.walls).length){model.walls={};render();pushHistory();toast('Cleared walls');}else toast('No drawn walls');};
+  pal.querySelectorAll('#bfFloor .mat').forEach(b=>b.onclick=()=>{const pr=FLOOR_PRESETS[+b.dataset.fp];surfClick('floor',pr,pr.n);renderBuild();});
+  pal.querySelectorAll('#bfWall .mat').forEach(b=>b.onclick=()=>{surfClick('wall',b.dataset.wf,WALL_LB[b.dataset.wf]);renderBuild();});
+  pal.querySelectorAll('#bfDoor .mat').forEach(b=>b.onclick=()=>{surfClick('door',b.dataset.ds,DOOR_LB[b.dataset.ds]);renderBuild();});
 }
 const AMBOPTS=[['day','Day'],['dusk','Dusk'],['night','Night']];
 function buildEnvTab(){
@@ -2361,7 +2375,7 @@ let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='f
 // coordinate readout
 const coordEl=document.getElementById('coord');
 const stageEl=document.getElementById('stage');
-stageEl.addEventListener('mousemove',e=>{if(MODE==='fp'){coordEl.innerHTML=`cam <b>${CAM.x.toFixed(1)}</b>,<b>${CAM.y.toFixed(1)}</b> · ∠ <b>${Math.round(((CAM.yaw*180/Math.PI)%360+360)%360)}°</b>`;return;}const [sx,sy]=screenToSvg(e.clientX,e.clientY);const [wx,wy]=worldFrom(sx,sy);coordEl.innerHTML=`x <b>${wx.toFixed(1)}</b> · y <b>${wy.toFixed(1)}</b>`+(YAW?` · ∠ <b>${Math.round(((YAW*180/Math.PI)%360+360)%360)}°</b>`:'');if(walkMode){const tx=Math.floor(wx),ty=Math.floor(wy);walkHover={tx,ty,valid:tileInRoom(tx,ty)};drawSel();return;}if(buildMode){if(buildTool==='wall')buildHover={kind:'wall',e:nearestEdge(wx,wy)};else{const s=nearestRoomSide(wx,wy);buildHover=s?{kind:'door',s}:null;}drawSel();return;}if(!drag){const sr=stageDom.getBoundingClientRect();const arm=armed&&sel&&armed===sel.obj;const top=hit(sx,sy);stageEl.style.cursor=(arm&&nearRotate(e.clientX-sr.left,e.clientY-sr.top))?'grab':(arm&&nearHandle(sx,sy))?'nwse-resize':doorAt(wx,wy)?'pointer':(top&&top.obj===armed)?'move':top?'pointer':'';}});
+stageEl.addEventListener('mousemove',e=>{if(MODE==='fp'){coordEl.innerHTML=`cam <b>${CAM.x.toFixed(1)}</b>,<b>${CAM.y.toFixed(1)}</b> · ∠ <b>${Math.round(((CAM.yaw*180/Math.PI)%360+360)%360)}°</b>`;return;}const [sx,sy]=screenToSvg(e.clientX,e.clientY);const [wx,wy]=worldFrom(sx,sy);coordEl.innerHTML=`x <b>${wx.toFixed(1)}</b> · y <b>${wy.toFixed(1)}</b>`+(YAW?` · ∠ <b>${Math.round(((YAW*180/Math.PI)%360+360)%360)}°</b>`:'');if(walkMode){const tx=Math.floor(wx),ty=Math.floor(wy);walkHover={tx,ty,valid:tileInRoom(tx,ty)};drawSel();return;}if(buildMode){if(buildTool==='wall')buildHover={kind:'wall',e:nearestEdge(wx,wy)};else if(buildTool==='door'){const s=nearestRoomSide(wx,wy);buildHover=s?{kind:'door',s}:null;}else buildHover=null;drawSel();return;}if(!drag){const sr=stageDom.getBoundingClientRect();const arm=armed&&sel&&armed===sel.obj;const top=hit(sx,sy);stageEl.style.cursor=(arm&&nearRotate(e.clientX-sr.left,e.clientY-sr.top))?'grab':(arm&&nearHandle(sx,sy))?'nwse-resize':doorAt(wx,wy)?'pointer':(top&&top.obj===armed)?'move':top?'pointer':'';}});
 stageEl.addEventListener('mouseleave',()=>{if(walkHover||buildHover){walkHover=null;buildHover=null;drawSel();}});
 // ---- right-click context menu ----
 const cmenu=document.createElement('div');cmenu.className='cmenu';document.body.appendChild(cmenu);
