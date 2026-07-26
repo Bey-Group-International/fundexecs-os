@@ -36,24 +36,29 @@ export const BODY_TYPES: readonly AvatarOption[] = [
   { id: "broad", label: "Broad" },
 ] as const;
 
-/** Curated, contrast-checked skin tones. */
+/** Curated, contrast-checked skin tones (10). */
 export const SKIN_TONES: readonly AvatarColorOption[] = [
   { id: "porcelain", label: "Porcelain", hex: "#f4d9c4" },
   { id: "fair", label: "Fair", hex: "#efc0a0" },
+  { id: "light", label: "Light", hex: "#e3aa82" },
   { id: "tan", label: "Tan", hex: "#d8a074" },
   { id: "olive", label: "Olive", hex: "#c68b6a" },
+  { id: "honey", label: "Honey", hex: "#b3793f" },
   { id: "brown", label: "Brown", hex: "#a3663f" },
+  { id: "umber", label: "Umber", hex: "#82502f" },
   { id: "espresso", label: "Espresso", hex: "#71442a" },
   { id: "deep", label: "Deep", hex: "#4d2c1b" },
 ] as const;
 
-/** Hair silhouettes. `bald` intentionally paints no hair. */
+/** Hair silhouettes (10). `bald` intentionally paints no hair. */
 export const HAIR_STYLES: readonly AvatarOption[] = [
   { id: "bald", label: "Bald" },
   { id: "buzz", label: "Buzz" },
   { id: "short", label: "Short" },
   { id: "side", label: "Side part" },
   { id: "curly", label: "Curly" },
+  { id: "afro", label: "Afro" },
+  { id: "spiky", label: "Spiky" },
   { id: "bun", label: "Top bun" },
   { id: "ponytail", label: "Ponytail" },
   { id: "long", label: "Long" },
@@ -86,14 +91,18 @@ export const EXPRESSIONS: readonly AvatarOption[] = [
   { id: "focused", label: "Focused" },
 ] as const;
 
-/** Office attire. Each outfit resolves its shape in the renderer; color below. */
+/** Office attire (10). Each outfit resolves its shape in the renderer; color below. */
 export const OUTFITS: readonly AvatarOption[] = [
   { id: "suit", label: "Two-piece suit" },
   { id: "blazer", label: "Blazer & tee" },
   { id: "shirt", label: "Dress shirt" },
+  { id: "polo", label: "Polo" },
+  { id: "tee", label: "T-shirt" },
   { id: "turtleneck", label: "Turtleneck" },
-  { id: "dress", label: "Sheath dress" },
+  { id: "sweater", label: "Sweater" },
+  { id: "vest", label: "Suit vest" },
   { id: "hoodie", label: "Quarter-zip" },
+  { id: "dress", label: "Sheath dress" },
 ] as const;
 
 /** Curated garment palette (primary fill), contrast-checked against the floor. */
@@ -108,13 +117,56 @@ export const OUTFIT_COLORS: readonly AvatarColorOption[] = [
   { id: "teal", label: "Teal", hex: "#1f5158" },
 ] as const;
 
-/** A held/worn accessory. `none` paints nothing. */
-export const ACCESSORIES: readonly AvatarOption[] = [
+/** Eyewear (10). `none` paints nothing. */
+export const EYEWEAR: readonly AvatarOption[] = [
   { id: "none", label: "None" },
   { id: "glasses", label: "Glasses" },
+  { id: "round", label: "Round" },
   { id: "sunglasses", label: "Sunglasses" },
-  { id: "headset", label: "Headset" },
+  { id: "aviators", label: "Aviators" },
+  { id: "readers", label: "Readers" },
+  { id: "monocle", label: "Monocle" },
+  { id: "goggles", label: "Goggles" },
+  { id: "visor", label: "Visor" },
+  { id: "eyepatch", label: "Eyepatch" },
+] as const;
+
+/** Headwear (10). `none` paints nothing; some hats hide the hair top. */
+export const HEADWEAR: readonly AvatarOption[] = [
+  { id: "none", label: "None" },
+  { id: "cap", label: "Ball cap" },
+  { id: "beanie", label: "Beanie" },
+  { id: "fedora", label: "Fedora" },
+  { id: "beret", label: "Beret" },
+  { id: "headband", label: "Headband" },
+  { id: "headphones", label: "Headphones" },
+  { id: "hardhat", label: "Hard hat" },
+  { id: "sunvisor", label: "Sun visor" },
+  { id: "crown", label: "Crown" },
+] as const;
+
+/** Worn accessories (10) — neck/chest/wrist items. `none` paints nothing. */
+export const ACCESSORIES: readonly AvatarOption[] = [
+  { id: "none", label: "None" },
   { id: "lanyard", label: "Lanyard" },
+  { id: "tie_clip", label: "Tie clip" },
+  { id: "scarf", label: "Scarf" },
+  { id: "watch", label: "Watch" },
+  { id: "necklace", label: "Necklace" },
+  { id: "earrings", label: "Earrings" },
+  { id: "lapel_pin", label: "Lapel pin" },
+  { id: "suspenders", label: "Suspenders" },
+  { id: "badge", label: "Badge" },
+] as const;
+
+/** A held prop, carried in one hand — mirrors how each persona holds a role
+ * item (clipboard, money bag). `none` paints empty hands. */
+export const HOLDING: readonly AvatarOption[] = [
+  { id: "none", label: "Nothing" },
+  { id: "briefcase", label: "Briefcase" },
+  { id: "coffee", label: "Coffee" },
+  { id: "tablet", label: "Tablet" },
+  { id: "phone", label: "Phone" },
 ] as const;
 
 /** Presence status — mirrors the office roster's status ring (STC in map.html). */
@@ -140,7 +192,10 @@ export interface AvatarConfig {
   expression: string;
   outfit: string;
   outfitColor: string;
-  accessory: string;
+  eyewear: string;
+  headwear: string;
+  accessories: string;
+  holding: string;
   status: string;
 }
 
@@ -156,7 +211,10 @@ export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
   expression: "neutral",
   outfit: "suit",
   outfitColor: "navy",
-  accessory: "none",
+  eyewear: "none",
+  headwear: "none",
+  accessories: "none",
+  holding: "none",
   status: "available",
 };
 
@@ -204,6 +262,17 @@ export function normalizeAvatarConfig(input: unknown): AvatarConfig {
 
   const rawName = typeof src.displayName === "string" ? src.displayName : "";
 
+  // Back-compat: an older config carried a single `accessory` id spanning eyewear,
+  // headwear, and worn items. Fan it out to the new fields when the new ones are
+  // absent, so a saved character keeps its glasses / headset / lanyard.
+  const legacy = typeof src.accessory === "string" ? src.accessory : "";
+  const src2: Record<string, unknown> = { ...src };
+  if (src2.eyewear === undefined && (legacy === "glasses" || legacy === "sunglasses")) src2.eyewear = legacy;
+  if (src2.headwear === undefined && legacy === "headset") src2.headwear = "headphones";
+  if (src2.accessories === undefined && legacy === "lanyard") src2.accessories = "lanyard";
+  const field2 = (catalog: readonly AvatarOption[], key: OptionKey): string =>
+    isOptionId(catalog, src2[key]) ? (src2[key] as string) : DEFAULT_AVATAR_CONFIG[key];
+
   return {
     v: AVATAR_CONFIG_VERSION,
     displayName: rawName.trim().slice(0, MAX_DISPLAY_NAME),
@@ -215,7 +284,10 @@ export function normalizeAvatarConfig(input: unknown): AvatarConfig {
     expression: field(EXPRESSIONS, "expression"),
     outfit: field(OUTFITS, "outfit"),
     outfitColor: field(OUTFIT_COLORS, "outfitColor"),
-    accessory: field(ACCESSORIES, "accessory"),
+    eyewear: field2(EYEWEAR, "eyewear"),
+    headwear: field2(HEADWEAR, "headwear"),
+    accessories: field2(ACCESSORIES, "accessories"),
+    holding: field(HOLDING, "holding"),
     status: field(STATUSES, "status"),
   };
 }
