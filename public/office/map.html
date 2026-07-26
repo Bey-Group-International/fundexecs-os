@@ -638,8 +638,8 @@ function floorPattern(x,y,w,d,type){if(MOVING||type==='none')return;
 // soft contact shadow (ambient occlusion) banding the inner edges where walls meet the floor — two batched paths
 function floorAO(x,y,w,d){if(MOVING)return;const fp=MODE==='fp';
   const mk=rects=>{let dd='';rects.forEach(([ax,ay,ww,dh])=>{let pp;if(fp){pp=projFP([[x+ax,y+ay,0],[x+ax+ww,y+ay,0],[x+ax+ww,y+ay+dh,0],[x+ax,y+ay+dh,0]]);if(pp.length<3)return;}else pp=[P(x+ax,y+ay),P(x+ax+ww,y+ay),P(x+ax+ww,y+ay+dh),P(x+ax,y+ay+dh)];dd+='M'+pp.map(p2=>p2[0].toFixed(1)+' '+p2[1].toFixed(1)).join('L')+'Z';});return dd;};
-  const t1=.16,t2=.55;
-  push(fp?-9.97e5:(-6890+y*.5),`<path d="${mk([[0,0,w,t2],[0,d-t2,w,t2],[0,0,t2,d],[w-t2,0,t2,d]])}" fill="rgba(6,12,22,.08)"/><path d="${mk([[0,0,w,t1],[0,d-t1,w,t1],[0,0,t1,d],[w-t1,0,t1,d]])}" fill="rgba(6,12,22,.15)"/>`);}
+  const t1=.16,t2=.6;
+  push(fp?-9.97e5:(-6890+y*.5),`<path d="${mk([[0,0,w,t2],[0,d-t2,w,t2],[0,0,t2,d],[w-t2,0,t2,d]])}" fill="rgba(6,12,22,.11)"/><path d="${mk([[0,0,w,t1],[0,d-t1,w,t1],[0,0,t1,d],[w-t1,0,t1,d]])}" fill="rgba(6,12,22,.2)"/>`);}
 function room(x,y,w,d,grad,label,pat='carpet'){if(MODE==='fp'){const sp=projFP([[x,y,0],[x+w,y,0],[x+w,y+d,0],[x,y+d,0]]);if(sp.length>=3)push(-1e6,poly(sp,`url(#${grad})`)+poly(sp,'url(#floorSheen)',null,0,.22));floorPattern(x,y,w,d,pat);floorAO(x,y,w,d);const cl=projFP([[x,y,WH],[x+w,y,WH],[x+w,y+d,WH],[x,y+d,WH]]);if(cl.length>=3)push(-9.99e5,poly(cl,'url(#ceilGrad)')+poly(cl,'url(#ceilTex)',null,0,.5));return;}const A=P(x,y),B=P(x+w,y),Cc=P(x+w,y+d),D=P(x,y+d);push(-8000+y*.5,poly([A,B,Cc,D],`url(#${grad})`)+poly([A,B,Cc,D],'url(#floorSheen)',null,0,.28));downlight(x+.4,y+.4,w-.8,d-.8);floorPattern(x,y,w,d,pat);floorAO(x,y,w,d);
   // inlaid perimeter border — a subtle framed accent that reads as an inlay / threshold
   if(w>1.6&&d>1.6){const i=.42,A2=P(x+i,y+i),B2=P(x+w-i,y+i),C2=P(x+w-i,y+d-i),D2=P(x+i,y+d-i);push(-6885+y*.5,poly([A2,B2,C2,D2],'none','#ffffff',.8,.12)+poly([A,B,Cc,D],'none','#d4a82a',1,.22));}
@@ -712,7 +712,19 @@ function sideInfo(r,side){
   return {horiz:false,a:r.y,len:r.d,c:r.x+r.w,nx:1,ny:0};
 }
 function wallSeg(si,from,to,z0,z1,col,opt){const len=to-from;if(len<=0.02)return;if(si.horiz)box(from,si.c-WT/2,len,WT,z1-z0,col,{z0,tex:1,...(opt||{})});else box(si.c-WT/2,from,WT,len,z1-z0,col,{z0,tex:1,...(opt||{})});}
-function glassSeg(si,from,to,z0,z1){const len=to-from;if(len<=0.02)return;const o={z0,topGrad:'url(#glassTop)',fGrad:'url(#glassR)',lGrad:'url(#glassL)',rGrad:'url(#glassR)',stroke:'#dfeefa66',sw:.7};if(si.horiz)box(from,si.c-WT/2,len,WT,z1-z0,'#8fbfe0',o);else box(si.c-WT/2,from,WT,len,z1-z0,'#8fbfe0',o);}
+// opaque window band — a framed, sky-tinted glazing that reads as a window but is NOT see-through
+// (solid glazing panel + sill/head/jamb frame + centre mullion). Replaces the old transparent glass strip.
+function opaqueWindow(si,from,to,fin,WCOL,topO){
+  wallSeg(si,from,to,0,SILL,WCOL,topO);                              // wall below the sill
+  wallSeg(si,from,to,SILL,HEAD,'#aecbe4',{topGrad:'url(#skyGrad)'}); // opaque sky-tinted glazing (no alpha)
+  wallSeg(si,from,to,HEAD,WH,WCOL,topO);                             // wall above the head
+  wallSeg(si,from,to,WH-0.14,WH,fin.cap,{topGrad:fin.top});          // crown cap
+  wallSeg(si,from,to,SILL-0.05,SILL+0.05,fin.cap);                   // sill ledge
+  wallSeg(si,from,to,HEAD-0.05,HEAD,fin.jamb);                       // head trim
+  wallSeg(si,from,from+0.09,SILL,HEAD,fin.jamb);                     // left jamb
+  wallSeg(si,to-0.09,to,SILL,HEAD,fin.jamb);                         // right jamb
+  const m=(from+to)/2;if(to-from>1.3)wallSeg(si,m-0.04,m+0.04,SILL,HEAD,fin.jamb); // centre mullion on wide panes
+}
 function autoDoorSide(r){const cx=YAWC.x,cy=YAWC.y,dx=cx-(r.x+r.w/2),dy=cy-(r.y+r.d/2);return Math.abs(dx)>Math.abs(dy)?(dx>0?'E':'W'):(dy>0?'S':'N');}
 // frac: 0 = closed (leaf across the opening) … 1 = fully swung open
 function drawDoorLeaf(si,at,frac){const g0=si.a+Math.max(0,at-DW/2);const hx=si.horiz?g0:si.c,hy=si.horiz?si.c:g0;const sign=(si.horiz?-si.ny:-si.nx)>0?1:-1;const A=(0.95*sign*(si.horiz?1:-1))*(frac||0);ROT={cx:hx,cy:hy,cos:Math.cos(A),sin:Math.sin(A)};const lw=DW*0.9;
@@ -722,7 +734,7 @@ function drawDoorLeaf(si,at,frac){const g0=si.a+Math.max(0,at-DW/2);const hx=si.
 const LOWH=0.55; // near-side curb height: every room keeps 4 walls, interior stays visible
 // ---- wall finishes: painted plaster, warm, sage, the original slate, brick, glass partition ----
 const WALLFIN={
-  plaster:{base:'#ccd3e0',ext:'#c1c9d7',top:'url(#wallTopL)',skirt:'#8f98ab',cap:'#f0f3f8',jamb:'#aab3c4'},
+  plaster:{base:'#c3ccda',ext:'#b3bccd',top:'url(#wallTopL)',skirt:'#868fa3',cap:'#eef1f7',jamb:'#a2acbe'},
   warm:{base:'#e0d6c3',ext:'#d6cab4',top:'url(#wallTopW)',skirt:'#a89a7d',cap:'#f3ecdc',jamb:'#c3b596'},
   sage:{base:'#aecdb1',ext:'#a3c2a6',top:'url(#wallTopSage)',skirt:'#7d9c80',cap:'#d9e9da',jamb:'#8fb193'},
   slate:{base:'#3d496a',ext:'#394564',top:'url(#wallTop)',skirt:'#232c42',cap:'#525f82',jamb:'#525f82'},
@@ -747,10 +759,11 @@ function drawRoomWalls(r){
     const cuts=doors.filter(d=>d.side===side).map(d=>{const at=si.len*(d.at!=null?d.at:0.5);return {c0:Math.max(0,at-DW/2),c1:Math.min(si.len,at+DW/2),door:d};}).sort((a,b)=>a.c0-b.c0);
     let segs=[],cur=0;cuts.forEach(c=>{if(c.c0>cur+0.02)segs.push([cur,c.c0]);cur=Math.max(cur,c.c1);});if(cur<si.len-0.02)segs.push([cur,si.len]);if(!cuts.length)segs=[[0,si.len]];
     segs.forEach(([s0,s1])=>{const from=si.a+s0,to=si.a+s1;if(to-from<0.03)return;
-      if(fin.glass){ // framed glass partition
-        wallSeg(si,from,to,0.16,H,'#8fbfe0',{topGrad:'url(#glassTop)',fGrad:'url(#glassR)',lGrad:'url(#glassL)',rGrad:'url(#glassR)',stroke:'#dfeefadd',sw:1});
+      if(fin.glass){ // frosted glass partition — reads as glass but is opaque (no see-through)
+        wallSeg(si,from,to,0,0.16,fin.skirt,{topGrad:'url(#metalTop)'});
+        wallSeg(si,from,to,0.16,H,'#cddeeb',{topGrad:'url(#metalTop)'});
         if(!near)wallSeg(si,from,to,H-0.1,H,fin.cap,{topGrad:'url(#metalTop)'});
-      } else if(!near&&ext&&!cuts.length){wallSeg(si,from,to,0,SILL,WCOL,topO);glassSeg(si,from,to,SILL,HEAD);wallSeg(si,from,to,HEAD,WH,WCOL,topO);wallSeg(si,from,to,WH-0.14,WH,fin.cap,{topGrad:fin.top});}
+      } else if(!near&&ext&&!cuts.length){opaqueWindow(si,from,to,fin,WCOL,topO);}
       else{wallSeg(si,from,to,0,H,WCOL,topO);if(!near)wallSeg(si,from,to,WH-0.14,WH,fin.cap,{topGrad:fin.top});} // crown molding cap
       // baseboard / skirting — a proud band at the floor line with a lighter reveal above it
       wallSeg(si,from,to,0,0.15,fin.skirt);wallSeg(si,from,to,0.14,0.18,fin.cap);});
@@ -926,7 +939,7 @@ function actSeed(){model.rooms.forEach(r=>{if(r.build==='corridor')return;if(!AC
 // re-rendering; a one-shot state flip keeps the ambient behavior at 1/60th the cost.
 function ambientDoor(d){const to=d.open?0:1;d.open=!d.open;d._o=to;if(!drag&&!fpRAF)render();}
 function actTick(){
-  if(!ACT.on||typeof model==='undefined')return;
+  if(!ACT.on||typeof model==='undefined'||document.hidden)return; // don't rebuild the scene while the tab is hidden
   actSeed();const now=performance.now();let changed=false;
   // a raise moves: % climbs, station pulses, leaderboard re-ranks on next paint
   const raises=model.props.filter(p=>p.t==='raise'&&!p.hidden&&!ACT.ext['raise:'+p.id]);
@@ -1029,7 +1042,7 @@ const DEFAULT={rooms:[
 ],zones:[],blocked:{}};
 // ===================== EDITOR =====================
 const T0=Date.now(); // global clock so CSS screen-pulse survives SVG re-renders
-let model=load()||JSON.parse(JSON.stringify(DEFAULT));
+let model=validate(load())||JSON.parse(JSON.stringify(DEFAULT));
 // Drop the deprecated "FundExecs OS" reception sign from any stale saved layout in localStorage.
 if(model&&Array.isArray(model.props))model.props=model.props.filter(p=>!(p&&p.t==='text'&&/FundExecs OS/i.test((p.args&&p.args[3])||'')));
 let sel=null, selSet=[], snap=true, uid=100, zoom=1;
@@ -1288,7 +1301,7 @@ const snapv=v=>snap?Math.round(v):Math.round(v*100)/100;
 const TSNAP=v=>Math.round(v); // always-tile snap (for tile-based tools)
 // ---- undo / redo ----
 function pushHistory(){history=history.slice(0,hpos+1);history.push(JSON.stringify(model));if(history.length>80)history.shift();hpos=history.length-1;}
-function restore(js){model=JSON.parse(js);clearSel();render();buildPanel();drawSel();}
+function restore(js){try{const m=validate(JSON.parse(js));if(m)model=m;}catch(e){}clearSel();render();buildPanel();drawSel();}
 function undo(){if(hpos>0){hpos--;restore(history[hpos]);toast('Undo');}}
 function redo(){if(hpos<history.length-1){hpos++;restore(history[hpos]);toast('Redo');}}
 
@@ -1298,7 +1311,8 @@ let MOVING=false,_mvT=0;
 function renderMoving(){MOVING=true;render();clearTimeout(_mvT);_mvT=setTimeout(()=>{MOVING=false;render();},110);}
 function render(){
   const c=C();
-  const {svg,ov,bounds}=renderModel(model);
+  let out;try{out=renderModel(model);}catch(e){console.warn('office: render skipped',e);return;} // keep last good frame on a bad model
+  const {svg,ov,bounds}=out;
   if(bounds)lastBounds=bounds;
   // Hosted view fills the frame (cover / slice); the builder contains the whole plan (meet).
   canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid ${viewPar()}"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
@@ -1775,10 +1789,17 @@ function layStore(){try{return JSON.parse(localStorage.getItem('fx_layouts')||'{
 function laySave(n){const s=layStore();s[n]=JSON.parse(JSON.stringify({rooms:model.rooms,props:model.props,zones:model.zones||[],blocked:model.blocked||{},walls:model.walls||{}}));try{localStorage.setItem('fx_layouts',JSON.stringify(s));}catch(e){}}
 function layDel(n){const s=layStore();delete s[n];try{localStorage.setItem('fx_layouts',JSON.stringify(s));}catch(e){}}
 // ---- data helpers ----
-function validate(m){if(!m||!Array.isArray(m.rooms)||!Array.isArray(m.props))return null;
-  m.rooms.forEach((r,i)=>{r.id=r.id||'r'+i;r.x=+r.x||0;r.y=+r.y||0;r.w=Math.max(1,+r.w||4);r.d=Math.max(1,+r.d||4);r.floor=r.floor||'gStone';r.pat=r.pat||'carpet';r.wall=r.wall||'plaster';if(!/^(open|members|private)$/.test(r.access||''))r.access='open';r.label=r.label||'ROOM';if(r.build!=='trading'&&r.build!=='corridor')r.build=null;});
-  m.props=m.props.filter(p=>p&&PR[p.t]&&Array.isArray(p.args));
-  return {rooms:m.rooms,props:m.props};}
+// Normalises a model from any untrusted source (localStorage, import, restore). Returns a clean
+// model or null if unusable. Clamps sizes/positions and caps counts so a malformed or pathological
+// layout can never blow up the renderer (huge loops) or crash it (NaN geometry).
+function validate(m){if(!m||typeof m!=='object'||!Array.isArray(m.rooms)||!Array.isArray(m.props))return null;
+  const num=(v,def,lo,hi)=>{v=+v;if(!isFinite(v))v=def;return Math.max(lo,Math.min(hi,v));};
+  const rooms=m.rooms.slice(0,160).map((r,i)=>{r=(r&&typeof r==='object')?r:{};r.id=r.id||'r'+i;r.x=num(r.x,0,-200,600);r.y=num(r.y,0,-200,600);r.w=num(r.w,4,1,180);r.d=num(r.d,4,1,180);r.floor=r.floor||'gStone';r.pat=r.pat||'carpet';r.wall=r.wall||'plaster';if(!/^(open|members|private)$/.test(r.access||''))r.access='open';r.label=String(r.label==null?'ROOM':r.label);if(r.build!=='trading'&&r.build!=='corridor')r.build=null;if(r.doors&&!Array.isArray(r.doors))delete r.doors;return r;});
+  const props=m.props.filter(p=>p&&PR[p.t]&&Array.isArray(p.args)).slice(0,800).map(p=>{p.args=p.args.map((a,i)=>i<2?num(a,0,-500,900):a);return p;});
+  const zones=(Array.isArray(m.zones)?m.zones:[]).slice(0,160).map((z,i)=>{z=(z&&typeof z==='object')?z:{};z.id=z.id||'z'+i;z.x=num(z.x,0,-200,600);z.y=num(z.y,0,-200,600);z.w=num(z.w,3,1,180);z.d=num(z.d,3,1,180);if(!ZCOL[z.kind])z.kind='audio';return z;});
+  const blocked=(m.blocked&&typeof m.blocked==='object'&&!Array.isArray(m.blocked))?m.blocked:{};
+  const walls=(m.walls&&typeof m.walls==='object'&&!Array.isArray(m.walls))?m.walls:{};
+  return rooms.length?{rooms,props,zones,blocked,walls}:null;}
 function nestExport(){const out={version:1,zones:[]};model.rooms.forEach(r=>{const zp=model.props.filter(p=>{const x=p.args[0],y=p.args[1];return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d;});out.zones.push({label:r.label,rect:[r.x,r.y,r.w,r.d],floor:r.floor,pat:r.pat,...(r.build?{build:r.build}:{}),props:zp.map(p=>[p.t,...p.args])});});return out;}
 function flatExport(){return {version:1,rooms:model.rooms,props:model.props};}
 // ---- Spot-style Build Mode: Add / Floorplan / Environment / Brand ----
@@ -2281,7 +2302,7 @@ document.getElementById('btnRedo').onclick=redo;
 const layModal=document.getElementById('layModal');
 function renderLayList(){const s=layStore(),keys=Object.keys(s).sort(),el=document.getElementById('layList');
   el.innerHTML=keys.length?keys.map(k=>`<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:#0a1120;border:1px solid var(--line);border-radius:9px;margin-bottom:6px"><b style="flex:1;color:var(--ink);font-size:12px">${k}</b><span style="color:var(--faint);font-size:9px">${s[k].rooms.length}R·${s[k].props.length}P</span><button class="tbtn" data-load="${k}">LOAD</button><button class="tbtn" data-del="${k}" style="color:#ff9aa5;border-color:#7a2f3a;padding:8px 10px">✕</button></div>`).join(''):`<div class="hint" style="color:var(--faint)">No saved layouts yet — name one above and Save Current.</div>`;
-  el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{const m=layStore()[b.dataset.load];if(m){model=JSON.parse(JSON.stringify({rooms:m.rooms,props:m.props,zones:m.zones||[],blocked:m.blocked||{},walls:m.walls||{}}));clearSel();render();buildPanel();drawSel();pushHistory();layModal.classList.remove('on');toast('Loaded '+b.dataset.load);}});
+  el.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>{const src=layStore()[b.dataset.load];const m=src&&validate(JSON.parse(JSON.stringify(src)));if(m){model=m;clearSel();render();buildPanel();drawSel();pushHistory();layModal.classList.remove('on');toast('Loaded '+b.dataset.load);}else toast('Layout unreadable');});
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{layDel(b.dataset.del);renderLayList();toast('Deleted layout');});}
 document.getElementById('btnLayouts').onclick=()=>{document.getElementById('layName').value='';renderLayList();layModal.classList.add('on');};
 document.getElementById('layClose').onclick=()=>layModal.classList.remove('on');
