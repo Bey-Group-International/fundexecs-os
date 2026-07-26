@@ -5,11 +5,12 @@ A phased plan for evolving the FundExecs OS Virtual Office (`app/(app)/office`,
 grounded in what the codebase already has.
 
 > **Positioning:** Spot now markets itself as a *"virtual workspace for humans
-> **and AI agents**."* FundExecs OS is already deeper on the agent axis (persona
-> teammates with introspection + delegation + Brains). The goal is **not** to
-> clone Spot — it is to reach parity on the spatial/presence basics we lack while
-> keeping our agent lead. Where Spot has humans in a room, we have humans *and* a
-> living AI staff.
+>
+>> **and AI agents**."* FundExecs OS is already deeper on the agent axis (persona
+>> teammates with introspection + delegation + Brains). The goal is **not** to
+>> clone Spot — it is to reach parity on the spatial/presence basics we lack while
+>> keeping our agent lead. Where Spot has humans in a room, we have humans *and* a
+>> living AI staff.
 
 ---
 
@@ -17,22 +18,22 @@ grounded in what the codebase already has.
 
 What Spot does, and where we stand today.
 
-| Spot capability | FundExecs OS today | Gap |
-| --- | --- | --- |
-| Avatar-based spatial office (2.5D) | ✅ `map.html` — top-down + first-person, cover-fit stage | — |
-| Build mode (floorplan, rooms, doors, props, zones, branding, ambience) | ✅ Full Build Mode + layers panel + brand/environment tabs + saved layouts | — |
-| Customizable personal avatar | ✅ Character Studio (`office/builder`) → `office_member_prefs.avatar` | Not yet shown in the office |
-| Presence status (available/busy/away/dnd) | ✅ status rings on persona avatars | Only on AI personas, not the user/teammates |
-| "See who's around" (live humans) | ❌ single-user + AI NPCs only | **Multiplayer presence** |
-| Move your avatar around | ❌ user has no in-world avatar | **You on the floor** |
-| Proximity **spatial audio/video** | ❌ | **Spatial A/V** (highest infra cost) |
-| Meetings without links (walk into a room → session) | Partial — `/meetings`, `/meeting-room` exist but aren't wired to the floor | **In-room meetings** |
-| In-office chat + search | ❌ (app has `/inbox`, not in-office chat) | **Office chat** |
-| Reactions / emotes / high-fives | ❌ | **Reactions** |
-| Screenshare / whiteboard / shared browser | ❌ in office (elsewhere in app) | Later |
-| Locked rooms / knock-to-enter | ❌ | Later (with meetings) |
-| Live activity on the walls | Dormant `postMessage({type:'fx-activity'})` hook in `map.html` | Wire it up |
-| AI teammates that *do things* | ✅ intent bubbles (`/api/avatars/introspect`), delegation, corridor pathfinding | **Our differentiator — extend, don't rebuild** |
+|                            Spot capability                             |                               FundExecs OS today                               |                      Gap                       |
+|------------------------------------------------------------------------|--------------------------------------------------------------------------------|------------------------------------------------|
+| Avatar-based spatial office (2.5D)                                     | ✅ `map.html` — top-down + first-person, cover-fit stage                        | —                                              |
+| Build mode (floorplan, rooms, doors, props, zones, branding, ambience) | ✅ Full Build Mode + layers panel + brand/environment tabs + saved layouts      | —                                              |
+| Customizable personal avatar                                           | ✅ Character Studio (`office/builder`) → `office_member_prefs.avatar`           | Not yet shown in the office                    |
+| Presence status (available/busy/away/dnd)                              | ✅ status rings on persona avatars                                              | Only on AI personas, not the user/teammates    |
+| "See who's around" (live humans)                                       | ❌ single-user + AI NPCs only                                                   | **Multiplayer presence**                       |
+| Move your avatar around                                                | ❌ user has no in-world avatar                                                  | **You on the floor**                           |
+| Proximity **spatial audio/video**                                      | ❌                                                                              | **Spatial A/V** (highest infra cost)           |
+| Meetings without links (walk into a room → session)                    | Partial — `/meetings`, `/meeting-room` exist but aren't wired to the floor     | **In-room meetings**                           |
+| In-office chat + search                                                | ❌ (app has `/inbox`, not in-office chat)                                       | **Office chat**                                |
+| Reactions / emotes / high-fives                                        | ❌                                                                              | **Reactions**                                  |
+| Screenshare / whiteboard / shared browser                              | ❌ in office (elsewhere in app)                                                 | Later                                          |
+| Locked rooms / knock-to-enter                                          | ❌                                                                              | Later (with meetings)                          |
+| Live activity on the walls                                             | Dormant `postMessage({type:'fx-activity'})` hook in `map.html`                 | Wire it up                                     |
+| AI teammates that *do things*                                          | ✅ intent bubbles (`/api/avatars/introspect`), delegation, corridor pathfinding | **Our differentiator — extend, don't rebuild** |
 
 **Decisions locked for this round**
 
@@ -133,3 +134,4 @@ Highest cost, deferred deliberately.
   rooms mean locked.
 - **Agent lead is the moat.** Every phase should make humans and the AI staff
   share one legible space — not bolt humans onto a separate system.
+
