@@ -1015,8 +1015,7 @@ function actTick(){
       changed=true;}
     else if(st.funded&&Math.random()<.12){st.pct=5+Math.floor(Math.random()*18);st.funded=false;st.pulse=now;ACT.feed.push({t:Date.now(),type:'round',text:(p.args[2]||'Company')+' opened a new round'});changed=true;}
   }
-  // ambient: a door swings now and then
-  if(Math.random()<.1){const cand=[];model.rooms.forEach(r=>{if(!r.hidden&&r.doors)r.doors.forEach(d=>cand.push(d));});if(cand.length)ambientDoor(cand[Math.floor(Math.random()*cand.length)]);}
+  // doors are now driven by proximity (updateDoors) — no random ambient swinging
   // ambient life: the desk is home base, but a real office is never frozen — now and then a seated
   // exec steps away, either called up to work a live raise (app-style activity) or just moving about
   // (coffee, a stretch, a lap), then returns. Capped so most execs stay at their desks.
@@ -1169,6 +1168,47 @@ const EDGE={nA:['nB'],nB:['nA','nC','nV'],nC:['nB','nD'],nD:['nC'],nV:['nB','nF'
 const NODES=Object.keys(NODE);
 function nearestNode(x,y){let best=NODES[0],bd=1e9;for(const n of NODES){const d=(NODE[n][0]-x)**2+(NODE[n][1]-y)**2;if(d<bd){bd=d;best=n;}}return best;}
 function bfs(a,b){if(a===b)return[a];const prev={},q=[a],seen={};seen[a]=1;while(q.length){const u=q.shift();for(const v of(EDGE[u]||[])){if(!seen[v]){seen[v]=1;prev[v]=u;if(v===b){const path=[v];let c=v;while(c!==a){c=prev[c];path.unshift(c);}return path;}q.push(v);}}}return[a];}
+// ---- wall-aware pathfinding: A* over a fine walkable grid. CAMWALLS already carries the office walls
+// with gaps at each doorway, so routing forces every trip through a real door; corridors/rooms are open
+// floor. Shared by roamers, delegated execs and the member's own avatar (replaces the old node-graph +
+// naive line-of-sight, which cut straight across walls). ----
+const PF_CELL=0.5;
+function pfInRoom(x,y){return model.rooms.some(r=>!r.hidden&&x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d);}
+function pfWalkable(x,y){if(!pfInRoom(x,y))return false;const tx=Math.floor(x),ty=Math.floor(y);return !(model.blocked&&model.blocked[tx+','+ty]);}
+function pfWallHit(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;return false;} // true = a wall blocks this segment
+function pfSegOK(ax,ay,bx,by){if(pfWallHit(ax,ay,bx,by))return false;const n=Math.ceil(Math.hypot(bx-ax,by-ay)/(PF_CELL*0.9));for(let i=0;i<=n;i++){const t=i/n;if(!pfWalkable(ax+(bx-ax)*t,ay+(by-ay)*t))return false;}return true;}
+function pfSnap(x,y){if(pfWalkable(x,y))return [x,y];for(let r=1;r<=10;r++)for(let a=0;a<12;a++){const ang=a/12*6.2832,nx=x+Math.cos(ang)*r*PF_CELL,ny=y+Math.sin(ang)*r*PF_CELL;if(pfWalkable(nx,ny))return [nx,ny];}return [x,y];}
+function pfSimplify(pts){if(pts.length<=2)return pts;const out=[pts[0]];let i=0;while(i<pts.length-1){let j=pts.length-1;for(;j>i+1;j--){if(pfSegOK(pts[i][0],pts[i][1],pts[j][0],pts[j][1]))break;}out.push(pts[j]);i=j;}return out;}
+function pathfind(sx,sy,gx,gy){
+  if(!CAMWALLS.length)buildFPWalls();
+  const S=pfSnap(sx,sy),G=pfSnap(gx,gy),cq=v=>Math.round(v/PF_CELL),cw=c=>c*PF_CELL;
+  const gc=[cq(G[0]),cq(G[1])],sc=[cq(S[0]),cq(S[1])],goalK=gc[0]+','+gc[1];
+  if(pfSegOK(sx,sy,gx,gy))return [[sx,sy],[gx,gy]];              // clear straight shot
+  const g={},f={},came=new Map(),open=new Map();
+  const h=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1])*PF_CELL;
+  const sk=sc[0]+','+sc[1];g[sk]=0;f[sk]=h(sc,gc);open.set(sk,sc);
+  const NB=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];let iter=0;
+  while(open.size&&iter++<8000){
+    let bk=null,bf=1e18;for(const [k] of open){const v=f[k];if(v<bf){bf=v;bk=k;}}
+    const cur=open.get(bk);open.delete(bk);
+    if(bk===goalK){const cells=[];let k=bk;while(k){const c=k.split(',').map(Number);cells.unshift([cw(c[0]),cw(c[1])]);k=came.get(k);}return pfSimplify([[sx,sy],...cells,[gx,gy]]);}
+    const cwx=cw(cur[0]),cwy=cw(cur[1]);
+    for(const [ox,oy] of NB){
+      const nx=cur[0]+ox,ny=cur[1]+oy,nk=nx+','+ny,nwx=cw(nx),nwy=cw(ny);
+      if(!pfWalkable(nwx,nwy)||pfWallHit(cwx,cwy,nwx,nwy))continue;
+      if(ox&&oy){if(!pfWalkable(cw(nx),cwy)||!pfWalkable(cwx,cw(ny)))continue;if(pfWallHit(cwx,cwy,cw(nx),cwy)||pfWallHit(cwx,cwy,cwx,cw(ny)))continue;}
+      const ng=g[bk]+Math.hypot(ox,oy)*PF_CELL;
+      if(g[nk]==null||ng<g[nk]){g[nk]=ng;f[nk]=ng+h([nx,ny],gc);came.set(nk,bk);open.set(nk,[nx,ny]);}
+    }
+  }
+  return null;   // unreachable
+}
+// ---- doors that open as anyone (teammate, the member's avatar, or the first-person camera) approaches,
+// and close again once they've passed. Eases each door's open fraction (d._o) toward its proximity target. ----
+const DOOR_OPEN_R=1.9, DOOR_CLOSE_R=2.7;
+function doorSeg(r,d){const si=sideInfo(r,d.side),at=si.len*(d.at!=null?d.at:0.5),a0=Math.max(0,at-DW/2),a1=Math.min(si.len,at+DW/2);return si.horiz?[si.a+a0,si.c,si.a+a1,si.c]:[si.c,si.a+a0,si.c,si.a+a1];}
+function nearestAgentDist(px,py){let m=1e9;if(typeof PEOPLE!=='undefined')for(const p of PEOPLE){if(p.x==null)continue;const d=Math.hypot(p.x-px,p.y-py);if(d<m)m=d;}if(typeof YOU!=='undefined'&&YOU.active){const d=Math.hypot(YOU.x-px,YOU.y-py);if(d<m)m=d;}if(MODE==='fp'){const d=Math.hypot(CAM.x-px,CAM.y-py);if(d<m)m=d;}return m;}
+function updateDoors(dt){let changed=false;model.rooms.forEach(r=>{if(r.hidden||!r.doors)return;r.doors.forEach(d=>{const p=doorWorld(r,d),dist=nearestAgentDist(p[0],p[1]);if(d._tgt==null)d._tgt=d.open?1:0;if(dist<DOOR_OPEN_R)d._tgt=1;else if(dist>DOOR_CLOSE_R)d._tgt=0;let o=d._o!=null?d._o:(d.open?1:0);if(Math.abs(o-d._tgt)>0.008){o+=(d._tgt-o)*Math.min(1,dt*7);d._o=o;d.open=o>0.5;changed=true;}});});return changed;}
 // perspective scale: characters toward the back (small y) render a touch smaller than those in front.
 const pscale=y=>Math.max(.82,Math.min(1.14,.82+(y-2)/33*0.32));
 let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -1202,9 +1242,8 @@ function delegateAvatar(idOrRole,opts={}){
   pp.home=pp.home||[pp.x,pp.y];
   // default target: the nearest trading-floor node (a short, purposeful trip); the app can name one
   const goal=(opts.target&&NODE[opts.target])?opts.target:FLOOR_NODES.reduce((a,n)=>{const d=(NODE[n][0]-pp.x)**2+(NODE[n][1]-pp.y)**2;return d<a.d?{n,d}:a;},{n:FLOOR_NODES[0],d:1e9}).n;
-  const wp=doorWaypoint(execRoomAt(pp.x,pp.y));
-  const from=nearestNode(wp?wp[0]:pp.x,wp?wp[1]:pp.y);
-  pp.path=[[pp.x,pp.y],...(wp?[wp]:[]),...nodesToPts(bfs(from,goal))];
+  const gp=NODE[goal]||[pp.x,pp.y];
+  pp.path=pathfind(pp.x,pp.y,gp[0],gp[1])||[[pp.x,pp.y],gp];   // wall-aware: routes out through the doorway
   pp.pi=1;pp.cur=0.35;pp.dist=pp.dist||0;pp.spd=1.8+Math.random()*0.5;   // brisk, on-a-mission
   pp.deleg={phase:'out',goal,kind:opts.kind||'task',wander:!!opts.wander,label:opts.label||'',t:0,dur:opts.dur||(4.5+Math.random()*4.5)};
   startPeople();return true;}
@@ -1219,10 +1258,9 @@ const YOU={active:false,x:16,y:24,dir:0,dist:0,svg:'',name:'You',status:'#34d399
 function youSpawn(){const n=NODE.nM||[16,24];YOU.x=n[0];YOU.y=n[1];YOU.path=null;YOU.pi=0;YOU.cur=0;}
 function lineClear(x0,y0,x1,y1){const n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/0.5));for(let i=0;i<=n;i++){const t=i/n;if(!tileInRoom(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;}
 function walkYouTo(wx,wy){
-  if(!YOU.active||!tileInRoom(wx,wy))return false;
-  if(lineClear(YOU.x,YOU.y,wx,wy)){YOU.path=[[YOU.x,YOU.y],[wx,wy]];}
-  else{const from=nearestNode(YOU.x,YOU.y),goal=nearestNode(wx,wy);YOU.path=[[YOU.x,YOU.y],...nodesToPts(bfs(from,goal)),[wx,wy]];}
-  YOU.pi=1;YOU.cur=Math.max(YOU.cur,0.35);startPeople();return true;}
+  if(!YOU.active||!pfInRoom(wx,wy))return false;
+  const path=pathfind(YOU.x,YOU.y,wx,wy);if(!path)return false;   // wall-aware: routes through doorways, never across walls
+  YOU.path=path;YOU.pi=1;YOU.cur=Math.max(YOU.cur,0.35);startPeople();return true;}
 function stepYou(dt,t){
   if(!YOU.active)return;
   let moving=false,yoff=0;
@@ -1318,14 +1356,15 @@ function pickDest(pp){
   let goal; // ~40% of the time, head toward a colleague to spark a conversation; else a random node
   if(others.length&&Math.random()<0.4){const o=others[(Math.random()*others.length)|0];goal=nearestNode(o.x,o.y);}
   else goal=NODES[(Math.random()*NODES.length)|0];
-  const from=nearestNode(pp.x,pp.y);
-  if(goal===from)goal=NODES[(Math.random()*NODES.length)|0];
-  const path=bfs(from,goal).map(n=>NODE[n]);
-  pp.path=path;pp.pi=path.length>1?1:0;pp.state='walk';pp.cur=Math.max(pp.cur||0,0.35);
+  const gp=Array.isArray(goal)?goal:NODE[goal];
+  const path=pathfind(pp.x,pp.y,gp[0],gp[1]);
+  if(path&&path.length>1){pp.path=path;pp.pi=1;pp.state='walk';pp.cur=Math.max(pp.cur||0,0.35);}
+  else enterPause(pp);   // unreachable or already there → take a beat, then re-pick
 }
 function peopleLoop(t){
   if(!document.body.classList.contains('office')||MODE==='fp'){peopleRAF=0;return;}
   const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
+  if(updateDoors(dt))render();   // doors ease open/closed as avatars approach/leave; re-render only while animating
   // ---- conversations: two roamers paused near each other stop, face off and chat (speech dots) ----
   roamers.forEach(pp=>pp._chat=false);
   for(let i=0;i<roamers.length;i++)for(let j=i+1;j<roamers.length;j++){const a=roamers[i],b=roamers[j];
@@ -1358,9 +1397,7 @@ function peopleLoop(t){
         if(pp.deleg.wander){pp.dir=(pp.deleg.t%3<1.5)?2:3;yoff=REDUCED?0:Math.sin(t/900+pp.ph)*0.5;}  // relaxed, looking around
         else{pp.dir=0;yoff=Math.abs(Math.sin(t/95+pp.ph))*0.6-0.15;}                                    // heads-down on the floor
         if(pp.deleg.t>=pp.deleg.dur){                                              // done → head home
-          const wp=doorWaypoint(execRoomAt(pp.home[0],pp.home[1]));
-          const from=nearestNode(pp.x,pp.y),goalN=nearestNode(wp?wp[0]:pp.home[0],wp?wp[1]:pp.home[1]);
-          pp.path=[[pp.x,pp.y],...nodesToPts(bfs(from,goalN)),...(wp?[wp]:[]),[pp.home[0],pp.home[1]]];
+          pp.path=pathfind(pp.x,pp.y,pp.home[0],pp.home[1])||[[pp.x,pp.y],[pp.home[0],pp.home[1]]];   // routes back in through the doorway
           pp.pi=1;pp.cur=0.35;pp.deleg.phase='back';}
       } else {                                                                     // walking out / back
         const tgt=pp.path[pp.pi],dx=tgt[0]-pp.x,dy=tgt[1]-pp.y,d=Math.hypot(dx,dy),isLast=pp.pi>=pp.path.length-1;
@@ -1643,6 +1680,8 @@ function buildFPWalls(){const segs=[],solids=(L,gaps)=>{const out=[];let cur=0;g
   if(maxx>minx){const m=0.12,X0=minx-m,Y0=miny-m,X1=maxx+m,Y1=maxy+m;segs.push([X0,Y0,X1,Y0],[X1,Y0,X1,Y1],[X1,Y1,X0,Y1],[X0,Y1,X0,Y0]);}
   CAMWALLS=segs;}
 function fpBlocked(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;
+  // closed doors are solid until they open (they auto-open on approach, so this is just the safety net)
+  for(const r of model.rooms){if(r.hidden||!r.doors)continue;for(const d of r.doors){const o=d._o!=null?d._o:(d.open?1:0);if(o>0.35)continue;const s=doorSeg(r,d);if(segCross(ax,ay,bx,by,s[0],s[1],s[2],s[3]))return true;}}
   // solid avatars: the first-person camera can't walk through a teammate
   if(typeof PEOPLE!=='undefined'){for(const p of PEOPLE){if(p.x==null)continue;const dx=bx-p.x,dy=by-p.y;if(dx*dx+dy*dy<0.42*0.42)return true;}}
   return false;}
@@ -1652,6 +1691,7 @@ function camStep(fwd,strafe){const cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);con
 // smooth, held-key walking so movement is continuous instead of steppy
 let fpShift=false;const fpKeys=new Set();let fpRAF=0,fpLast=0;
 function fpLoop(t){if(MODE!=='fp'||!fpKeys.size){fpRAF=0;return;}const dt=Math.min(0.05,((t-fpLast)||16)/1000);fpLast=t;
+  updateDoors(dt);   // doors open as you walk up to them (rendered by renderMoving below)
   const spd=(fpShift?7.5:4.2)*dt,turn=2.4*dt;let fwd=0,str=0;
   if(fpKeys.has('w')||fpKeys.has('arrowup'))fwd+=1;
   if(fpKeys.has('s')||fpKeys.has('arrowdown'))fwd-=1;
@@ -2438,7 +2478,7 @@ let panelAnim;function togglePanel(force){const c=force!==undefined?force:!panel
 panelToggle.onclick=()=>togglePanel();
 const leftcolEl=document.querySelector('.leftcol'),leftToggle=document.getElementById('leftToggle');
 if(leftToggle)leftToggle.onclick=()=>{const c=!leftcolEl.classList.contains('collapsed');leftcolEl.classList.toggle('collapsed',c);leftToggle.title=(c?'Show':'Hide')+' palette';};
-buildPal();buildPanel();render();pushHistory();enterView();
+buildFPWalls();buildPal();buildPanel();render();pushHistory();enterView();
 document.getElementById('btnSave').onclick=function(){try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}toast('Saved');enterView();};
 // Tell the embedding /office page we're ready, so it can hand us the member's
 // saved character via postMessage('fx-you'). Harmless when opened standalone.
@@ -2518,7 +2558,7 @@ function fx3dRender(){
 // FP doesn't run peopleLoop, and render() only fires on camera movement. Cheap: ~15 textured quads/frame.
 // Self-stops when we leave FP or the tab is hidden; respects reduced-motion.
 let fx3dAnim=0;
-function fx3dAnimLoop(){ if(MODE!=='fp'||document.hidden){fx3dAnim=0;return;} fx3dRender(); fx3dAnim=requestAnimationFrame(fx3dAnimLoop); }
+function fx3dAnimLoop(){ if(MODE!=='fp'||document.hidden){fx3dAnim=0;return;} if(updateDoors(1/60))render(); fx3dRender(); fx3dAnim=requestAnimationFrame(fx3dAnimLoop); }
 function fx3dStartAnim(){ if(REDUCED)return; if(!fx3dAnim)fx3dAnim=requestAnimationFrame(fx3dAnimLoop); }
 function fx3dStopAnim(){ cancelAnimationFrame(fx3dAnim); fx3dAnim=0; }
 </script>
