@@ -6,9 +6,12 @@ import {
   BODY_TYPES,
   DEFAULT_AVATAR_CONFIG,
   EXPRESSIONS,
+  EYEWEAR,
   FACIAL_HAIR,
   HAIR_COLORS,
   HAIR_STYLES,
+  HEADWEAR,
+  HOLDING,
   MAX_DISPLAY_NAME,
   OUTFITS,
   OUTFIT_COLORS,
@@ -21,7 +24,7 @@ import {
   type AvatarConfig,
   type AvatarOption,
 } from "@/lib/office/avatarConfig";
-import { AvatarPaperDoll } from "@/components/office/AvatarPaperDoll";
+import { AvatarSprite } from "@/components/office/AvatarSprite";
 import { saveAvatarConfig } from "./actions";
 
 const labelCls = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
@@ -63,7 +66,10 @@ export function CharacterBuilder({
       expression: randomFrom(EXPRESSIONS),
       outfit: randomFrom(OUTFITS),
       outfitColor: randomFrom(OUTFIT_COLORS),
-      accessory: randomFrom(ACCESSORIES),
+      eyewear: randomFrom(EYEWEAR),
+      headwear: randomFrom(HEADWEAR),
+      accessories: randomFrom(ACCESSORIES),
+      holding: randomFrom(HOLDING),
     }));
     setError("");
   }
@@ -103,7 +109,7 @@ export function CharacterBuilder({
                   "radial-gradient(120% 90% at 50% 20%, rgba(245,215,115,0.06), transparent 60%)",
               }}
             />
-            <AvatarPaperDoll config={config} size={220} showStatusRing />
+            <AvatarSprite config={config} size={200} className="relative" />
           </div>
           <div className="flex items-center gap-3 border-t border-line px-4 py-3">
             <span
@@ -190,7 +196,16 @@ export function CharacterBuilder({
         <Group title="Wardrobe">
           <ChipRow label="Outfit" options={OUTFITS} value={config.outfit} onChange={(v) => set("outfit", v)} />
           <SwatchRow label="Outfit color" options={OUTFIT_COLORS} value={config.outfitColor} onChange={(v) => set("outfitColor", v)} />
-          <ChipRow label="Accessory" options={ACCESSORIES} value={config.accessory} onChange={(v) => set("accessory", v)} />
+        </Group>
+
+        <Group title="Eyewear & headwear">
+          <ChipRow label="Eyewear" options={EYEWEAR} value={config.eyewear} onChange={(v) => set("eyewear", v)} />
+          <ChipRow label="Headwear" options={HEADWEAR} value={config.headwear} onChange={(v) => set("headwear", v)} />
+        </Group>
+
+        <Group title="Accessories">
+          <ChipRow label="Worn" options={ACCESSORIES} value={config.accessories} onChange={(v) => set("accessories", v)} />
+          <ChipRow label="Holding" options={HOLDING} value={config.holding} onChange={(v) => set("holding", v)} />
         </Group>
       </div>
     </div>

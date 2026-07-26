@@ -4,9 +4,12 @@ import {
   BODY_TYPES,
   DEFAULT_AVATAR_CONFIG,
   EXPRESSIONS,
+  EYEWEAR,
   FACIAL_HAIR,
   HAIR_COLORS,
   HAIR_STYLES,
+  HEADWEAR,
+  HOLDING,
   MAX_DISPLAY_NAME,
   OUTFITS,
   OUTFIT_COLORS,
@@ -29,9 +32,15 @@ const CATALOGS = [
   ["expression", EXPRESSIONS],
   ["outfit", OUTFITS],
   ["outfitColor", OUTFIT_COLORS],
-  ["accessory", ACCESSORIES],
+  ["eyewear", EYEWEAR],
+  ["headwear", HEADWEAR],
+  ["accessories", ACCESSORIES],
+  ["holding", HOLDING],
   ["status", STATUSES],
 ] as const;
+
+const TEN = ["skin", "hair", "outfit", "eyewear", "headwear", "accessories"] as const;
+const TEN_CATALOGS = { skin: SKIN_TONES, hair: HAIR_STYLES, outfit: OUTFITS, eyewear: EYEWEAR, headwear: HEADWEAR, accessories: ACCESSORIES };
 
 describe("avatarConfig · catalogs", () => {
   it("every catalog has unique, non-empty ids and labels", () => {
@@ -91,7 +100,10 @@ describe("avatarConfig · normalizeAvatarConfig", () => {
       expression: "smile",
       outfit: "dress",
       outfitColor: "plum",
-      accessory: "glasses",
+      eyewear: "aviators",
+      headwear: "fedora",
+      accessories: "scarf",
+      holding: "coffee",
       status: "busy",
     });
     expect(c.v).toBe(AVATAR_CONFIG_VERSION);
@@ -100,9 +112,25 @@ describe("avatarConfig · normalizeAvatarConfig", () => {
       skin: "deep",
       hair: "curly",
       outfit: "dress",
-      accessory: "glasses",
+      eyewear: "aviators",
+      headwear: "fedora",
+      accessories: "scarf",
+      holding: "coffee",
       status: "busy",
     });
+  });
+
+  it("offers exactly 10 variations for each customization category", () => {
+    for (const key of TEN) expect(TEN_CATALOGS[key]).toHaveLength(10);
+  });
+
+  it("migrates a legacy single `accessory` id into the split fields", () => {
+    expect(normalizeAvatarConfig({ accessory: "glasses" }).eyewear).toBe("glasses");
+    expect(normalizeAvatarConfig({ accessory: "sunglasses" }).eyewear).toBe("sunglasses");
+    expect(normalizeAvatarConfig({ accessory: "headset" }).headwear).toBe("headphones");
+    expect(normalizeAvatarConfig({ accessory: "lanyard" }).accessories).toBe("lanyard");
+    // an explicit new-field value wins over the legacy fan-out
+    expect(normalizeAvatarConfig({ accessory: "glasses", eyewear: "round" }).eyewear).toBe("round");
   });
 
   it("trims and length-caps the display name", () => {
