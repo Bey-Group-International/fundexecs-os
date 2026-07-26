@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 // definite basis for a percentage child, so the iframe would collapse to its
 // 150px default). With a real height the iframe fills the content area and the
 // map (which cover-fits internally) fills the frame. Opens in a clean view
-// (Top / 1st-person nav); right-click surfaces Build Mode.
+// (Top / 1st-person nav); right-click surfaces Build Mode and Character Studio
+// (the latter navigates the app to /office/builder — see map.html openMenu()).
 export default function OfficePage() {
   return (
     <div className="h-[calc(100dvh-8rem)] min-h-[420px] w-full overflow-hidden rounded-xl border border-[#1c2e4a] bg-[#070c16]">

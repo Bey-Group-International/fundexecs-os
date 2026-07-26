@@ -2,6 +2,8 @@
 // Hand-authored to mirror supabase/migrations. Regenerate from a live project
 // with `npm run db:types` (supabase gen types) once a DB is provisioned.
 
+import type { AvatarConfig } from "@/lib/office/avatarConfig";
+
 export type Hub = "build" | "source" | "run" | "execute";
 
 export type AgentKey =
@@ -2279,6 +2281,18 @@ type TableShape<Row> = {
   Relationships: [];
 };
 
+// Per-member Virtual Office preferences (supabase/migrations
+// 20260720130000 + …140000 avatar + …150000 portrait_url). `avatar` holds the
+// member's Character Builder config (lib/office/avatarConfig.ts).
+export type OfficeMemberPref = {
+  organization_id: string;
+  principal_id: string;
+  analytics_opt_in: boolean;
+  avatar: AvatarConfig | null;
+  portrait_url: string | null;
+  updated_at: string;
+};
+
 // ── New tables added by platform feature optimization migrations ──────────────
 
 export type Envelope = {
@@ -2715,6 +2729,7 @@ export type Database = {
       fin_invoice_lines: TableShape<FinInvoiceLine>;
       fin_payments: TableShape<FinPayment>;
       fin_payment_allocations: TableShape<FinPaymentAllocation>;
+      office_member_prefs: TableShape<OfficeMemberPref>;
     };
     Views: Record<string, never>;
     Functions: {
