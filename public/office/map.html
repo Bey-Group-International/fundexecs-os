@@ -967,9 +967,8 @@ function drawEnv(fx,fy,fw,fh){
   };
   const cityLots=(x0,y0,x1,y1)=>{for(let gx=x0;gx<x1-3;gx+=5+R()*3.2){for(let gy=y0;gy<y1-3;gy+=5+R()*2.8){NB(gx,gy,2.6+R()*3.6,2.6+R()*2.8);}}};
   if(cfg.kind==='city'||cfg.kind==='space'){
-    // street ring: base | road(3..7) | sidewalk(0..3) | building, via nested slabs
+    // street ring meeting the building directly — no framing sidewalk
     envSlab(fx-7,fy-7,fw+14,fh+14,cfg.road,-999500);
-    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);
     // dashed centre lines on the four road bands
     if(cfg.kind==='city'){const dl=(x0,y0,x1,y1)=>{const a=P(x0,y0),b=P(x1,y1);push(-999400,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.walk,1.15)}" stroke-width="1.4" stroke-dasharray="6 7" opacity=".7"/>`);};
       dl(fx-5,fy-5,fx+fw+5,fy-5);dl(fx-5,fy+fh+5,fx+fw+5,fy+fh+5);dl(fx-5,fy-5,fx-5,fy+fh+5);dl(fx+fw+5,fy-5,fx+fw+5,fy+fh+5);}
@@ -983,14 +982,12 @@ function drawEnv(fx,fy,fw,fh){
     // land (base) with a promenade, then water filling the far/east side beyond a quay
     const quay=fx+fw+6;
     envSlab(quay,GY,GX+GW-quay,GH,cfg.water,-999400);
-    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);           // building promenade
     envSlab(quay-2.4,GY,2.4,GH,shade(cfg.walk,0.9),-999300); // quay edge
     // ripples on the water
     for(let j=GY+4;j<GY+GH;j+=6){const a=P(quay+1,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.water,1.3)}" stroke-width="1.2" opacity=".22"/>`);}
     cityLots(GX,GY,fx-8,GY+GH); cityLots(GX,GY,quay,fy-8); cityLots(GX,fy+fh+8,quay,GY+GH);
     for(let k=0;k<5;k++)envBuilding(quay+3+k*6,fy+fh+3,3,2.2,0.3,cfg,R); // pier posts row (low)
   } else if(cfg.kind==='forest'){
-    envSlab(fx-2.5,fy-2.5,fw+5,fh+5,cfg.walk,-999000);       // clearing round the building
     // a path leading south
     envSlab(fx+fw/2-1.4,fy+fh+2,2.8,GY+GH-(fy+fh+2),cfg.walk,-999100,0.9);
     for(let gx=GX;gx<GX+GW;gx+=3+R()*2.2){for(let gy=GY;gy<GY+GH;gy+=3+R()*2){
@@ -1001,11 +998,9 @@ function drawEnv(fx,fy,fw,fh){
     const shore=fy+fh+7;
     envSlab(GX,shore,GW,GY+GH-shore,cfg.water,-999400);      // sea to the south
     envSlab(GX,shore-2.5,GW,2.5,shade(cfg.base,1.06),-999300);// wet-sand line
-    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);           // boardwalk
     for(let j=shore+3;j<GY+GH;j+=6){const a=P(GX+2,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#dff4fb" stroke-width="1.3" opacity=".3"/>`);}
     for(let gx=GX;gx<GX+GW;gx+=6+R()*4){if(gx>fx-6&&gx<fx+fw+6)continue;if(R()<0.6)envTree(gx,fy-4-R()*6,1.2+R()*0.7,cfg);} // palms/greenery inland
   } else { // nature (mountain): meadow + distant ridges + scattered pines
-    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);
     // three ridge bands to the north (extruded rock with snow caps)
     for(let b=0;b<3;b++){const ry=fy-16-b*7,rh=5+b*2.5;let gx=GX;while(gx<GX+GW){const w=6+R()*7;const col=b===0?cfg.rock:shade(cfg.rock,0.86-b*0.06);envBuilding(gx,ry,w,4+R()*2,rh+R()*3,{roof:col,roof2:shade(col,0.94),winter:true,noWin:true},R);gx+=w+1+R()*2;}}
     for(let gx=GX;gx<GX+GW;gx+=4+R()*3){for(let gy=fy+fh+4;gy<GY+GH;gy+=4+R()*3){if(gx>fx-6&&gx<fx+fw+6&&gy<fy+fh+6)continue;if(R()<0.7)envTree(gx,gy,1.1+R()*0.8,cfg);}}
