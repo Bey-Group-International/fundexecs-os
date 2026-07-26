@@ -738,23 +738,51 @@ function opaqueWindow(si,from,to,fin,WCOL,topO){
 }
 function autoDoorSide(r){const cx=YAWC.x,cy=YAWC.y,dx=cx-(r.x+r.w/2),dy=cy-(r.y+r.d/2);return Math.abs(dx)>Math.abs(dy)?(dx>0?'E':'W'):(dy>0?'S':'N');}
 // frac: 0 = closed (leaf across the opening) … 1 = fully swung open
-function drawDoorLeaf(si,at,frac){const g0=si.a+Math.max(0,at-DW/2);const hx=si.horiz?g0:si.c,hy=si.horiz?si.c:g0;const sign=(si.horiz?-si.ny:-si.nx)>0?1:-1;const A=(0.95*sign*(si.horiz?1:-1))*(frac||0);ROT={cx:hx,cy:hy,cos:Math.cos(A),sin:Math.sin(A)};const lw=DW*0.9;
-  if(si.horiz)box(hx,hy-0.045,lw,0.09,1.85,'#5a4732',{topGrad:'url(#woodTop)'});else box(hx-0.045,hy,0.09,lw,1.85,'#5a4732',{topGrad:'url(#woodTop)'});
-  const kx=si.horiz?hx+lw-0.14:hx-0.07,ky=si.horiz?hy-0.07:hy+lw-0.14;box(kx,ky,0.14,0.14,0.05,'#d4a82a',{z0:0.92,topGrad:'url(#metalTop)'}); // latch knob
-  ROT=null;}
+// ---- 10 door styles (per room via r.doorStyle) ----
+const DOOR_STYLES=['single','double','glass','doubleglass','sliding','barn','arched','french','metal','saloon'];
+const DOOR_LB={single:'Single',double:'Double',glass:'Glass',doubleglass:'Dbl Glass',sliding:'Sliding',barn:'Barn',arched:'Arched',french:'French',metal:'Metal',saloon:'Saloon'};
+// frac: 0 closed … 1 fully open (swing / slide depending on style)
+function drawDoor(si,at,frac,style){
+  frac=frac||0;if(!DOOR_LB[style])style='single';
+  const g0=si.a+Math.max(0,at-DW/2),g1=si.a+Math.min(si.len,at+DW/2),span=g1-g0;if(span<0.2)return;
+  const sign=(si.horiz?-si.ny:-si.nx)>0?1:-1,A0=0.95*sign*(si.horiz?1:-1);
+  const along=p=>si.horiz?[p,si.c]:[si.c,p];
+  const leaf=(start,L,z0,h,col,top,texUrl)=>{if(L<=0||h<=0)return;const o={z0,topGrad:top};if(texUrl){o.tex=1;o.texUrl=texUrl;}if(si.horiz)box(start,si.c-0.045,L,0.09,h,col,o);else box(si.c-0.045,start,0.09,L,h,col,o);};
+  const knob=(pos,z)=>{const kx=si.horiz?pos-0.07:si.c-0.07,ky=si.horiz?si.c-0.07:pos-0.07;box(kx,ky,0.14,0.14,0.05,'#d4a82a',{z0:z,topGrad:'url(#metalTop)'});};
+  const rot=(pivot,ang)=>{const p=along(pivot);ROT={cx:p[0],cy:p[1],cos:Math.cos(ang),sin:Math.sin(ang)};};
+  const WD='#5a4732',WT_='url(#woodTop)',GL='#cddeeb',MT='url(#metalTop)',ME='#8a929c',MU='#3a4048';
+  if(style==='sliding'){const s=g0+frac*span*0.96;leaf(s,span*0.98,0,2.0,GL,MT);leaf(s,span*0.98,1.98,0.06,ME,MT);return;}
+  if(style==='barn'){leaf(g0-0.3,span+0.6,2.12,0.06,'#3a3f47',MT);const s=g0-0.08+frac*span*0.98;leaf(s,span*1.04,0,2.05,WD,WT_,'url(#panelTex)');knob(s+0.24,2.0);knob(s+span*0.8,2.0);return;}
+  if(style==='saloon'){const L=span/2*0.9;rot(g0,A0*frac);leaf(g0,L,0.5,1.0,WD,WT_);ROT=null;rot(g1,-A0*frac);leaf(g1-L,L,0.5,1.0,WD,WT_);ROT=null;return;}
+  if(style==='double'||style==='doubleglass'||style==='french'){const glass=style!=='double',col=glass?GL:WD,top=glass?MT:WT_,L=span/2*0.94,h=2.0;
+    rot(g0,A0*frac);leaf(g0,L,0,h,col,top);if(style==='french'){leaf(g0+L*0.5-0.02,0.04,0,h,MU,MT);leaf(g0,L,h*0.5-0.02,0.04,MU,MT);}knob(g0+L-0.05,0.95);ROT=null;
+    rot(g1,-A0*frac);leaf(g1-L,L,0,h,col,top);if(style==='french'){leaf(g1-L*0.5-0.02,0.04,0,h,MU,MT);leaf(g1-L,L,h*0.5-0.02,0.04,MU,MT);}knob(g1-L+0.05,0.95);ROT=null;return;}
+  // single-leaf: single, glass, metal, arched
+  const col=style==='glass'?GL:style==='metal'?ME:WD,top=style==='glass'||style==='metal'?MT:WT_,tex=style==='metal'?'url(#metalTex)':null,L=span*0.92,h=style==='arched'?1.78:2.0;
+  rot(g0,A0*frac);
+  leaf(g0,L,0,h,col,top,tex);
+  if(style==='metal'){leaf(g0+L*0.22,0.03,0.35,h-0.7,MU,MT);leaf(g0+L*0.55,0.03,0.35,h-0.7,MU,MT);}
+  if(style==='arched'&&MODE!=='fp'){const R=L/2,N=8,pp=[];for(let i=0;i<=N;i++){const th=Math.PI*i/N,ax=g0+R-R*Math.cos(th),zz=h+R*Math.sin(th)*0.68;pp.push(P(...along(ax),zz));}pp.push(P(...along(g0+L),h));pp.push(P(...along(g0),h));const cw=along(g0+R);push(cw[0],cw[1],poly(pp,shade(WD,1.14),shade(WD,.6),.6));}
+  knob(g0+L-0.05,0.95);
+  ROT=null;
+}
 const LOWH=1.15; // near-side wall height: a real waist-high enclosing wall (was a 0.55 curb) — rooms read fully enclosed on all four sides while staying low enough to see furniture/avatars over
-// ---- wall finishes: painted plaster, warm, sage, the original slate, brick, glass partition ----
+// ---- wall finishes (10): plaster, warm, sage, slate(navy), brick, glass, wood panel, marble, concrete, metal ----
 const WALLFIN={
   plaster:{base:'#c3ccda',ext:'#b3bccd',top:'url(#wallTopL)',skirt:'#868fa3',cap:'#eef1f7',jamb:'#a2acbe'},
   warm:{base:'#e0d6c3',ext:'#d6cab4',top:'url(#wallTopW)',skirt:'#a89a7d',cap:'#f3ecdc',jamb:'#c3b596'},
   sage:{base:'#aecdb1',ext:'#a3c2a6',top:'url(#wallTopSage)',skirt:'#7d9c80',cap:'#d9e9da',jamb:'#8fb193'},
   slate:{base:'#3d496a',ext:'#394564',top:'url(#wallTop)',skirt:'#232c42',cap:'#525f82',jamb:'#525f82'},
   brick:{base:'#b5735a',ext:'#a9694f',top:'url(#wallTopBr)',skirt:'#7a4a38',cap:'#caa06a',jamb:'#8f5238',tex:'url(#brickTex)'},
-  glass:{base:'#8fbfe0',ext:'#8fbfe0',top:'url(#glassTop)',skirt:'#5a678e',cap:'#aab3c4',jamb:'#7b8bb0',glass:true}
+  glass:{base:'#8fbfe0',ext:'#8fbfe0',top:'url(#glassTop)',skirt:'#5a678e',cap:'#aab3c4',jamb:'#7b8bb0',glass:true},
+  wood:{base:'#9a6b3f',ext:'#8e6339',top:'url(#wallTopWood)',skirt:'#5c3d22',cap:'#c39a63',jamb:'#785030',tex:'url(#panelTex)'},
+  marble:{base:'#dfe4ec',ext:'#d4dae4',top:'url(#wallTopL)',skirt:'#9aa4b6',cap:'#f4f7fb',jamb:'#c2cad8',tex:'url(#marbleTex)'},
+  concrete:{base:'#b8bfc8',ext:'#acb4be',top:'url(#wallTopL)',skirt:'#7b8590',cap:'#d2d8df',jamb:'#98a1ad',tex:'url(#concreteTex)'},
+  metal:{base:'#aeb6bf',ext:'#a4acb6',top:'url(#metalTop)',skirt:'#6e7681',cap:'#cbd2d9',jamb:'#8b929c',tex:'url(#metalTex)'}
 };
-const WALLFINS=['plaster','warm','sage','slate','brick','glass'];
-const WALL_LB={plaster:'Plaster',warm:'Warm',sage:'Sage',slate:'Slate',brick:'Brick',glass:'Glass'};
-const WALL_SW={plaster:'#ccd3e0',warm:'#e0d6c3',sage:'#aecdb1',slate:'#3d496a',brick:'#b5735a',glass:'#9fd0ea'};
+const WALLFINS=['plaster','warm','sage','slate','brick','glass','wood','marble','concrete','metal'];
+const WALL_LB={plaster:'Plaster',warm:'Warm',sage:'Sage',slate:'Navy',brick:'Brick',glass:'Glass',wood:'Wood',marble:'Marble',concrete:'Concrete',metal:'Metal'};
+const WALL_SW={plaster:'#ccd3e0',warm:'#e0d6c3',sage:'#aecdb1',slate:'#3d496a',brick:'#b5735a',glass:'#9fd0ea',wood:'#9a6b3f',marble:'#e2e6ec',concrete:'#b8bfc8',metal:'#b7bec7'};
 function drawRoomWalls(r){
   const fin=WALLFIN[r.wall]||WALLFIN.plaster;
   const doors=(r.doors&&r.doors.length)?r.doors:[{side:autoDoorSide(r),at:0.5}];
@@ -788,7 +816,7 @@ function drawRoomWalls(r){
         wallSeg(si,g0-0.07,g0+0.07,0,WH,fin.jamb);wallSeg(si,g1-0.07,g1+0.07,0,WH,fin.jamb);
         wallSeg(si,g0,g1,HEAD,WH,WCOL,topO);wallSeg(si,g0,g1,WH-0.14,WH,fin.cap,{topGrad:fin.top});
       }
-      drawDoorLeaf(si,atAbs,door._o!=null?door._o:(door.open?1:0));});
+      drawDoor(si,atAbs,door._o!=null?door._o:(door.open?1:0),r.doorStyle);});
   });
   // corner posts / columns — pillars where walls meet so the room reads solidly enclosed
   [[r.x,r.y,'N','W'],[r.x+r.w,r.y,'N','E'],[r.x+r.w,r.y+r.d,'S','E'],[r.x,r.y+r.d,'S','W']].forEach(([cx,cy,sA,sB])=>{
@@ -856,6 +884,11 @@ const DEFS=`<defs>
 <linearGradient id="wallTopBr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c58a6e"/><stop offset="1" stop-color="#a06a50"/></linearGradient>
 <linearGradient id="wallTopSage" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c2d6c4"/><stop offset="1" stop-color="#9db89f"/></linearGradient>
 <pattern id="brickTex" width="22" height="12" patternUnits="userSpaceOnUse"><rect width="22" height="12" fill="none"/><path d="M0 0H22M0 6H22M0 12H22" stroke="#00000022" stroke-width="1.1"/><path d="M0 0V6M11 6V12M22 0V6" stroke="#00000022" stroke-width="1.1"/><path d="M0 .6H22M0 6.6H22" stroke="#ffffff26" stroke-width=".8"/></pattern>
+<pattern id="panelTex" width="15" height="8" patternUnits="userSpaceOnUse"><rect width="15" height="8" fill="none"/><path d="M0 0V8" stroke="#0000003a" stroke-width="1.4"/><path d="M1.3 0V8" stroke="#ffffff26" stroke-width="1"/></pattern>
+<pattern id="concreteTex" width="19" height="19" patternUnits="userSpaceOnUse"><rect width="19" height="19" fill="none"/><circle cx="4" cy="5" r=".65" fill="#00000022"/><circle cx="13" cy="9" r=".5" fill="#0000001c"/><circle cx="8" cy="15" r=".55" fill="#0000001c"/><circle cx="16" cy="3" r=".5" fill="#ffffff1c"/><circle cx="10" cy="6" r=".4" fill="#ffffff14"/></pattern>
+<pattern id="metalTex" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="none"/><path d="M0 0V6M3 0V6" stroke="#ffffff14" stroke-width=".5"/><path d="M1.5 0V6M4.5 0V6" stroke="#00000012" stroke-width=".5"/></pattern>
+<pattern id="marbleTex" width="46" height="46" patternUnits="userSpaceOnUse"><rect width="46" height="46" fill="none"/><path d="M2 32 Q16 20 24 28 T44 16" stroke="#7f90ac33" stroke-width="1" fill="none"/><path d="M8 8 Q18 18 34 7" stroke="#75859e22" stroke-width=".8" fill="none"/></pattern>
+<linearGradient id="wallTopWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9814e"/><stop offset="1" stop-color="#7f5a32"/></linearGradient>
 <linearGradient id="rugRoyal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a4f8a"/><stop offset="1" stop-color="#232f5e"/></linearGradient>
 <linearGradient id="rugSage" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5f8a6a"/><stop offset="1" stop-color="#3f6349"/></linearGradient>
 <linearGradient id="rugRose" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a5a6a"/><stop offset="1" stop-color="#6f3c49"/></linearGradient>
@@ -866,6 +899,12 @@ const DEFS=`<defs>
 
 const FLOORS=['gWood','gWood2','gAsh','gCream','gMarble','gConcrete','gStone','gSlate','gGreen','gTeal','gNavy','gBrick','gTradeFloor'];
 const PATS=['wood','parquet','tile','checker','stone','marble','carpet','none'];
+// 10 curated one-click floor styles (colour + texture together); manual pickers stay available
+const FLOOR_PRESETS=[
+ {n:'Herringbone Oak',f:'gWood',p:'parquet'},{n:'Carrara Marble',f:'gMarble',p:'marble'},{n:'Marble Check',f:'gMarble',p:'checker'},
+ {n:'Polished Concrete',f:'gConcrete',p:'none'},{n:'Navy Carpet',f:'gNavy',p:'carpet'},{n:'Terrazzo',f:'gCream',p:'tile'},
+ {n:'Slate Tile',f:'gSlate',p:'tile'},{n:'Warm Parquet',f:'gWood2',p:'parquet'},{n:'Sage Carpet',f:'gGreen',p:'carpet'},{n:'Walnut Plank',f:'gWood2',p:'wood'}
+];
 const ZKINDS=['audio','meeting','focus','social'];
 const ZLB={audio:'Audio',meeting:'Meeting',focus:'Focus',social:'Social'};
 const ZCOL={audio:{fill:'rgba(56,208,255,.13)',stroke:'#38d0ff'},meeting:{fill:'rgba(212,168,42,.14)',stroke:'#d4a82a'},focus:{fill:'rgba(74,222,128,.12)',stroke:'#4ade80'},social:{fill:'rgba(244,114,182,.14)',stroke:'#f472b6'}};
@@ -1021,15 +1060,15 @@ window.FundExecsActivity={
 
 // ===================== DEFAULT MODEL =====================
 const DEFAULT={rooms:[
- {id:'r0',label:'CEO OFFICE',x:2,y:2,w:9,d:7,floor:'gWood',pat:'wood',wall:'warm',access:'private',build:null,doors:[{side:'S',at:0.5}]},
- {id:'r1',label:'BOARDROOM',x:12,y:2,w:8,d:7,floor:'gMarble',pat:'marble',wall:'plaster',access:'private',build:null,doors:[{side:'S',at:0.5}]},
- {id:'r2',label:'OPERATIONS HUB',x:21,y:2,w:9,d:7,floor:'gAsh',pat:'parquet',wall:'sage',build:null,doors:[{side:'S',at:0.5}]},
- {id:'r3',label:'RESEARCH HUB',x:31,y:2,w:9,d:7,floor:'gTeal',pat:'carpet',wall:'plaster',build:null,doors:[{side:'S',at:0.5}]},
- {id:'r4',label:'LEGAL DEPARTMENT',x:2,y:11,w:11,d:7,floor:'gWood2',pat:'wood',wall:'brick',build:null,doors:[{side:'S',at:0.5},{side:'E',at:0.62}]},
- {id:'r5',label:'MARKETING DEPARTMENT',x:15,y:11,w:12,d:7,floor:'gCream',pat:'tile',wall:'plaster',build:null,doors:[{side:'S',at:0.5},{side:'W',at:0.4}]},
- {id:'r6',label:'INVESTORS LOUNGE',x:28,y:11,w:12,d:7,floor:'gNavy',pat:'carpet',wall:'warm',access:'members',build:null,doors:[{side:'S',at:0.5}]},
+ {id:'r0',label:'CEO OFFICE',x:2,y:2,w:9,d:7,floor:'gWood',pat:'wood',wall:'wood',doorStyle:'french',access:'private',build:null,doors:[{side:'S',at:0.5}]},
+ {id:'r1',label:'BOARDROOM',x:12,y:2,w:8,d:7,floor:'gMarble',pat:'marble',wall:'marble',doorStyle:'double',access:'private',build:null,doors:[{side:'S',at:0.5}]},
+ {id:'r2',label:'OPERATIONS HUB',x:21,y:2,w:9,d:7,floor:'gAsh',pat:'parquet',wall:'sage',doorStyle:'glass',build:null,doors:[{side:'S',at:0.5}]},
+ {id:'r3',label:'RESEARCH HUB',x:31,y:2,w:9,d:7,floor:'gTeal',pat:'carpet',wall:'concrete',doorStyle:'sliding',build:null,doors:[{side:'S',at:0.5}]},
+ {id:'r4',label:'LEGAL DEPARTMENT',x:2,y:11,w:11,d:7,floor:'gWood2',pat:'wood',wall:'brick',doorStyle:'arched',build:null,doors:[{side:'S',at:0.5},{side:'E',at:0.62}]},
+ {id:'r5',label:'MARKETING DEPARTMENT',x:15,y:11,w:12,d:7,floor:'gCream',pat:'tile',wall:'plaster',doorStyle:'metal',build:null,doors:[{side:'S',at:0.5},{side:'W',at:0.4}]},
+ {id:'r6',label:'INVESTORS LOUNGE',x:28,y:11,w:12,d:7,floor:'gNavy',pat:'carpet',wall:'metal',doorStyle:'doubleglass',access:'members',build:null,doors:[{side:'S',at:0.5}]},
  {id:'r7',label:'TRADING FLOOR',x:2,y:20,w:38,d:8,floor:'gTradeFloor',pat:'carpet',build:'trading',doors:[{side:'N',at:0.06},{side:'N',at:0.94},{side:'S',at:0.5}]},
- {id:'r8',label:'RECEPTION',x:2,y:30,w:38,d:5,floor:'gConcrete',pat:'stone',build:null,doors:[{side:'N',at:0.5}]},
+ {id:'r8',label:'RECEPTION',x:2,y:30,w:38,d:5,floor:'gConcrete',pat:'stone',wall:'marble',doorStyle:'barn',build:null,doors:[{side:'N',at:0.5}]},
  {id:'rc1',label:'HALLWAY N',x:2,y:9,w:38,d:2,floor:'gConcrete',pat:'stone',build:'corridor'},
  {id:'rc2',label:'HALLWAY MID',x:2,y:18,w:38,d:2,floor:'gConcrete',pat:'stone',build:'corridor'},
  {id:'rc3',label:'HALLWAY S',x:2,y:28,w:38,d:2,floor:'gConcrete',pat:'stone',build:'corridor'},
@@ -1864,7 +1903,7 @@ function layDel(n){const s=layStore();delete s[n];try{localStorage.setItem('fx_l
 // layout can never blow up the renderer (huge loops) or crash it (NaN geometry).
 function validate(m){if(!m||typeof m!=='object'||!Array.isArray(m.rooms)||!Array.isArray(m.props))return null;
   const num=(v,def,lo,hi)=>{v=+v;if(!isFinite(v))v=def;return Math.max(lo,Math.min(hi,v));};
-  const rooms=m.rooms.slice(0,160).map((r,i)=>{r=(r&&typeof r==='object')?r:{};r.id=r.id||'r'+i;r.x=num(r.x,0,-200,600);r.y=num(r.y,0,-200,600);r.w=num(r.w,4,1,180);r.d=num(r.d,4,1,180);r.floor=r.floor||'gStone';r.pat=r.pat||'carpet';r.wall=r.wall||'plaster';if(!/^(open|members|private)$/.test(r.access||''))r.access='open';r.label=String(r.label==null?'ROOM':r.label);if(r.build!=='trading'&&r.build!=='corridor')r.build=null;if(r.doors&&!Array.isArray(r.doors))delete r.doors;return r;});
+  const rooms=m.rooms.slice(0,160).map((r,i)=>{r=(r&&typeof r==='object')?r:{};r.id=r.id||'r'+i;r.x=num(r.x,0,-200,600);r.y=num(r.y,0,-200,600);r.w=num(r.w,4,1,180);r.d=num(r.d,4,1,180);r.floor=r.floor||'gStone';r.pat=r.pat||'carpet';r.wall=r.wall||'plaster';if(!DOOR_LB[r.doorStyle])r.doorStyle='single';if(!/^(open|members|private)$/.test(r.access||''))r.access='open';r.label=String(r.label==null?'ROOM':r.label);if(r.build!=='trading'&&r.build!=='corridor')r.build=null;if(r.doors&&!Array.isArray(r.doors))delete r.doors;return r;});
   const props=m.props.filter(p=>p&&PR[p.t]&&Array.isArray(p.args)).slice(0,800).map(p=>{p.args=p.args.map((a,i)=>i<2?num(a,0,-500,900):a);return p;});
   const zones=(Array.isArray(m.zones)?m.zones:[]).slice(0,160).map((z,i)=>{z=(z&&typeof z==='object')?z:{};z.id=z.id||'z'+i;z.x=num(z.x,0,-200,600);z.y=num(z.y,0,-200,600);z.w=num(z.w,3,1,180);z.d=num(z.d,3,1,180);if(!ZCOL[z.kind])z.kind='audio';return z;});
   const blocked=(m.blocked&&typeof m.blocked==='object'&&!Array.isArray(m.blocked))?m.blocked:{};
@@ -2120,18 +2159,22 @@ function renderInspector(){
   if(s.kind==='room'){const o=s.obj;
     panel.innerHTML=`<h3><span class="chip room">Room</span></h3><div class="sub">${o.label||'—'}</div>
     <label>Name</label><input id="f_label" value="${(o.label||'').replace(/"/g,'&quot;')}">
+    <label>Floor style</label><div class="matgrid" id="fpre">${FLOOR_PRESETS.map((pr,i)=>`<button class="mat ${(pr.f===o.floor&&pr.p===o.pat)?'on':''}" data-i="${i}" title="${pr.n}"><span class="msw" style="background:${FLOOR_SW[pr.f]}"></span><small>${pr.n}</small></button>`).join('')}</div>
     <label>Floor material</label><div class="matgrid" id="mat">${FLOORS.map(f=>`<button class="mat ${f===o.floor?'on':''}" data-f="${f}"><span class="msw" style="background:${FLOOR_SW[f]}"></span><small>${FLOOR_LB[f]}</small></button>`).join('')}</div>
     <label>Flooring pattern</label><div class="patgrid" id="pat">${PATS.map(p=>`<button class="pat ${p===o.pat?'on':''}" data-p="${p}"><span class="ppv" style="background:${PAT_PV[p]}"></span><small>${PAT_LB[p]}</small></button>`).join('')}</div>
     <label>Wall finish</label><div class="matgrid" id="wall">${WALLFINS.map(f=>`<button class="mat ${f===(o.wall||'plaster')?'on':''}" data-w="${f}"><span class="msw" style="background:${WALL_SW[f]}"></span><small>${WALL_LB[f]}</small></button>`).join('')}</div>
+    <label>Door style</label><div class="matgrid" id="dstyle">${DOOR_STYLES.map(d=>`<button class="mat ${d===(o.doorStyle||'single')?'on':''}" data-d="${d}"><small>${DOOR_LB[d]}</small></button>`).join('')}</div>
     <label>Access</label><div class="segm" id="seg_access"><button data-v="open" class="${(o.access||'open')==='open'?'on':''}">Open</button><button data-v="members" class="${o.access==='members'?'on':''}">Members</button><button data-v="private" class="${o.access==='private'?'on':''}">Private</button></div>
     <label>Layout</label><div class="segm" id="seg_build"><button data-v="" class="${!o.build?'on':''}">Room</button><button data-v="corridor" class="${o.build==='corridor'?'on':''}">Corridor</button><button data-v="trading" class="${o.build==='trading'?'on':''}">Trading</button></div>
     ${altSectionHTML(s)}
     <div class="hint" style="margin-top:14px">Double-click on the canvas to unlock movement, then drag to move · drag the gold corner to resize. <b>Access</b> tags the room (a lock badge marks members-only or private spaces).</div>
     <button class="dup" id="f_dup">⧉ DUPLICATE</button><button class="del" id="f_del">DELETE ROOM</button>`;
     document.getElementById('f_label').oninput=e=>{o.label=e.target.value;render();drawSel();};
+    document.querySelectorAll('#fpre .mat').forEach(b=>b.onclick=()=>{const pr=FLOOR_PRESETS[+b.dataset.i];o.floor=pr.f;o.pat=pr.p;render();buildPanel();drawSel();});
     document.querySelectorAll('#mat .mat').forEach(b=>b.onclick=()=>{o.floor=b.dataset.f;render();buildPanel();drawSel();});
     document.querySelectorAll('#pat .pat').forEach(b=>b.onclick=()=>{o.pat=b.dataset.p;render();buildPanel();drawSel();});
     document.querySelectorAll('#wall .mat').forEach(b=>b.onclick=()=>{o.wall=b.dataset.w;render();buildPanel();drawSel();});
+    document.querySelectorAll('#dstyle .mat').forEach(b=>b.onclick=()=>{o.doorStyle=b.dataset.d;render();buildPanel();drawSel();});
     segm('seg_access',v=>{o.access=v;if(v==='private'&&o.doors)o.doors.forEach(d=>{d.open=false;d._o=0;});render();drawSel();});
     segm('seg_build',v=>{o.build=v||null;render();drawSel();});
     document.getElementById('f_dup').onclick=dupSel;document.getElementById('f_del').onclick=delSel;
