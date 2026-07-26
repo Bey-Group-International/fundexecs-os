@@ -138,8 +138,10 @@ body.previewing .fabbar{top:14px}
 .pitem:hover .ic{color:var(--gold2)}
 .pitem.wide{grid-column:span 2;flex-direction:row;justify-content:center;gap:9px;padding:11px;background:linear-gradient(180deg,#17233c,#111b30);color:var(--gold2)}
 .pitem.wide .ic{color:var(--gold2)}
-.stage{flex:1;position:relative;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:radial-gradient(120% 120% at 50% -5%,#0e1a30,#070c16 70%);box-shadow:inset 0 0 0 1px rgba(245,215,115,.04),0 30px 80px -44px #000}
-.canvas{position:absolute;inset:0}
+.stage{flex:1;position:relative;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:radial-gradient(120% 95% at 50% 12%,#17253f 0%,#0c1533 46%,#070c1c 100%);box-shadow:inset 0 0 0 1px rgba(245,215,115,.04),0 30px 80px -44px #000}
+.cityscape{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.cityscape>svg{position:absolute;top:50%;left:50%;width:150%;height:150%;transform:translate(-50%,-50%);will-change:transform}
+.canvas{position:absolute;inset:0;z-index:1}
 .canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto}
 #fx3d{position:absolute;inset:0;pointer-events:none;z-index:5}
 .ovwrap{position:absolute;top:50%;left:50%;transform-origin:center;pointer-events:none}
@@ -415,6 +417,7 @@ body.office:not(.viewmode) .zoom{right:290px}
     <button class="ltoggle" id="leftToggle" title="Hide palette"><span>‹</span></button>
   </div>
   <div class="stage" id="stage">
+    <div class="cityscape" id="cityscape"></div>
     <div class="canvas" id="canvas"></div>
     <canvas id="fx3d"></canvas>
     <div class="ambient" id="ambient"></div>
@@ -864,6 +867,47 @@ const DEFS=`<defs>
 <pattern id="blockHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#ff5a6a" opacity=".1"/><line x1="0" y1="0" x2="0" y2="7" stroke="#ff5a6a" stroke-width="1.6" opacity=".55"/></pattern>
 </defs>`;
 
+// ---- City-skyline backdrop (hosted top view) --------------------------------
+// The office floor plan sits on a lit rooftop platform floating over a night-city
+// skyline. It's a FIXED backdrop layer (#cityscape) that always fills the stage —
+// the office SVG pans/zooms on top of it, so zooming out reveals an actual outside
+// environment (the surrounding city) instead of a flat blue void. Built ONCE at
+// load and set as static DOM, so it costs nothing at animation frame rate.
+const CITY_W=1600,CITY_H=1000;
+const CITY_DEFS=`<linearGradient id="cityNight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#060a16"/><stop offset=".32" stop-color="#0a1230"/><stop offset=".5" stop-color="#132449"/><stop offset=".6" stop-color="#1c3058"/><stop offset=".74" stop-color="#111d3c"/><stop offset="1" stop-color="#080e22"/></linearGradient><radialGradient id="cityGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4a6ea8" stop-opacity=".5"/><stop offset=".5" stop-color="#2a4676" stop-opacity=".2"/><stop offset="1" stop-color="#2a4676" stop-opacity="0"/></radialGradient>`;
+function _mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function buildCityBackdrop(SW,SH){
+  const R=_mulberry32(0x5eed1517);
+  const hy=Math.round(SH*0.42);          // horizon band the skyline stands on
+  const out=[];
+  out.push(`<rect width="${SW}" height="${SH}" fill="url(#cityNight)"/>`);
+  out.push(`<ellipse cx="${(SW/2)|0}" cy="${hy}" rx="${(SW*0.74)|0}" ry="${(SH*0.4)|0}" fill="url(#cityGlow)"/>`);
+  // stars in the upper sky
+  let stars='';for(let i=0;i<90;i++){stars+=`<circle cx="${(R()*SW)|0}" cy="${(R()*(hy-30))|0}" r="${(R()*1.1+0.3).toFixed(2)}" fill="#cdd9f2" opacity="${(R()*0.5+0.18).toFixed(2)}"/>`;}
+  out.push(`<g>${stars}</g>`);
+  // faint far-city sprawl below the horizon (reads as a lit grid seen from height)
+  let far='';for(let i=0;i<220;i++){far+=`<rect x="${(R()*SW)|0}" y="${(hy+8+R()*(SH-hy-8))|0}" width="${(R()*2.4+0.8).toFixed(1)}" height="${(R()*2.4+0.8).toFixed(1)}" fill="${R()<0.5?'#ffcf82':'#8fc4ff'}" opacity="${(R()*0.12+0.05).toFixed(2)}"/>`;}
+  out.push(`<g>${far}</g>`);
+  // skyline layers, far (hazy, high) -> near (dark, low); windows on the two near layers
+  const layer=(base,fill,op,wmin,wmax,hmin,hmax,win)=>{
+    let g=`<g fill="${fill}" opacity="${op}">`,w='',x=-80;
+    while(x<SW+80){
+      const bw=Math.round(wmin+R()*(wmax-wmin)),bh=Math.round(hmin+R()*(hmax-hmin)),by=base-bh;
+      g+=`<rect x="${x}" y="${by}" width="${bw}" height="${bh+80}" rx="1.5"/>`;
+      if(R()<0.30){const cw=Math.round(bw*0.42),cx=x+Math.round((bw-cw)/2);g+=`<rect x="${cx}" y="${by-12}" width="${cw}" height="14"/>`;}
+      if(R()<0.16){const mx=x+Math.round(bw/2);g+=`<rect x="${mx-1}" y="${by-26}" width="2" height="26"/><circle cx="${mx}" cy="${by-27}" r="1.9" fill="#ff6a72" opacity=".85"/>`;}
+      if(win){const cell=8;for(let wy=by+7;wy<base-5;wy+=cell)for(let wx=x+5;wx<x+bw-8;wx+=cell){if(R()<0.30)w+=`<rect x="${wx}" y="${wy}" width="3.4" height="4.2" fill="${R()<0.62?'#ffd98a':'#9fd0ff'}" opacity="${(0.32+R()*0.5).toFixed(2)}"/>`;}}
+      x+=bw+Math.round(2+R()*11);
+    }
+    return g+'</g>'+(win?`<g>${w}</g>`:'');
+  };
+  out.push(layer(hy-2,'#16223f',0.55,44,112,30,86,false));
+  out.push(layer(hy+14,'#0f1a34',0.92,32,82,52,168,true));
+  out.push(layer(hy+40,'#080f20',1,36,96,40,140,true));
+  return out.join('');
+}
+const CITYSCAPE_SVG=`<svg viewBox="0 0 ${CITY_W} ${CITY_H}" preserveAspectRatio="xMidYMid slice"><defs>${CITY_DEFS}</defs>${buildCityBackdrop(CITY_W,CITY_H)}</svg>`;
+
 const FLOORS=['gWood','gWood2','gAsh','gCream','gMarble','gConcrete','gStone','gSlate','gGreen','gTeal','gNavy','gBrick','gTradeFloor'];
 const PATS=['wood','parquet','tile','checker','stone','marble','carpet','none'];
 const ZKINDS=['audio','meeting','focus','social'];
@@ -1083,6 +1127,7 @@ function objXY(s){return isRect(s.kind)?[s.obj.x,s.obj.y]:[s.obj.args[0],s.obj.a
 function setXY(s,x,y){if(isRect(s.kind)){s.obj.x=x;s.obj.y=y;}else{s.obj.args[0]=x;s.obj.args[1]=y;}}
 function arrFor(kind){return kind==='room'?model.rooms:kind==='zone'?(model.zones||(model.zones=[])):model.props;}
 const canvas=document.getElementById('canvas'), selSvg=document.getElementById('sel'), panel=document.getElementById('panel'), statusEl=document.getElementById('status'), layersEl=document.getElementById('layers');
+const cityscape=document.getElementById('cityscape');if(cityscape)cityscape.innerHTML=CITYSCAPE_SVG; // fixed night-city backdrop behind the office
 function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}},400);}
 // ---- Placeholder teammates: a Spot-style "living" office in the hosted view ----
 // Sitters have a fixed x/y; roamers have a waypoint list and are lerped between points by a light RAF that
@@ -1384,7 +1429,11 @@ function render(){
   const {svg,ov,bounds}=out;
   if(bounds)lastBounds=bounds;
   // Hosted view fills the frame (cover / slice); the builder contains the whole plan (meet).
-  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid ${viewPar()}"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
+  // Top view is transparent over the fixed #cityscape skyline layer (the "outside
+  // environment" revealed on zoom-out); first-person paints its own opaque sky.
+  const bg=MODE==='fp'?`<rect width="${c.SW}" height="${c.SH}" fill="url(#fpSky)"/>`:'';
+  if(cityscape)cityscape.style.display=MODE==='fp'?'none':'block';
+  canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid ${viewPar()}">${bg}${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
   const _sv=svgEl();if(_sv)_sv.style.setProperty('--ad',(-(((Date.now()-T0)/1000)%3)).toFixed(3)+'s'); // keep screen-pulse phase continuous across rebuilds
   fx3dRender();
   applyView();
@@ -1419,7 +1468,10 @@ function viewPar(){
 function fitSvg(sv){const c=C();const cw=canvas.clientWidth,ch=canvas.clientHeight;if(!cw||!ch)return;const wider=cw/ch>c.SW/c.SH;
   // cover-fit: fill the stage on both axes; overflow is cropped in the hosted view and reachable via pan/zoom in build mode
   if(wider){sv.style.width='100%';sv.style.height='auto';}else{sv.style.width='auto';sv.style.height='100%';}}
-function applyView(){const sv=svgEl();if(sv){fitSvg(sv);sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}fitOverlay();drawMinimap();}
+function applyView(){const sv=svgEl();if(sv){fitSvg(sv);sv.style.transform=`translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`;}
+  // distant city drifts gently with pan/zoom for depth (fraction of the office motion)
+  const cs=cityscape&&cityscape.firstElementChild;if(cs)cs.style.transform=`translate(calc(-50% + ${(panX*0.12).toFixed(1)}px), calc(-50% + ${(panY*0.12).toFixed(1)}px)) scale(${(1+(zoom-1)*0.05).toFixed(3)})`;
+  fitOverlay();drawMinimap();}
 function fitOverlay(){const sv=svgEl();if(!sv)return;const ow=document.getElementById('ovwrap');const r=sv.getBoundingClientRect();const c=C();
   // Match the overlay scale to how the svg content actually fits, so labels stay glued: slice→cover ratio
   // (max axis), viewmode meet→contain ratio (min axis), builder→width (its svg element matches content aspect).
@@ -2309,7 +2361,7 @@ mRows.onclick=()=>viewSwitch(()=>{fpStop();MODE='top';mRows.classList.add('on');
 mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();});
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
-function zoomAt(clientX,clientY,nz){nz=Math.max(.45,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
+function zoomAt(clientX,clientY,nz){const zmin=document.body.classList.contains('viewmode')?0.6:0.45;nz=Math.max(zmin,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
 function setZoom(z){const st=stageDom.getBoundingClientRect();zoomAt(st.left+st.width/2,st.top+st.height/2,z);}
 document.getElementById('zIn').onclick=()=>setZoom(zoom+.2);
 document.getElementById('zOut').onclick=()=>setZoom(zoom-.2);
