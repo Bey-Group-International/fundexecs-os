@@ -742,7 +742,7 @@ function drawDoorLeaf(si,at,frac){const g0=si.a+Math.max(0,at-DW/2);const hx=si.
   if(si.horiz)box(hx,hy-0.045,lw,0.09,1.85,'#5a4732',{topGrad:'url(#woodTop)'});else box(hx-0.045,hy,0.09,lw,1.85,'#5a4732',{topGrad:'url(#woodTop)'});
   const kx=si.horiz?hx+lw-0.14:hx-0.07,ky=si.horiz?hy-0.07:hy+lw-0.14;box(kx,ky,0.14,0.14,0.05,'#d4a82a',{z0:0.92,topGrad:'url(#metalTop)'}); // latch knob
   ROT=null;}
-const LOWH=0.55; // near-side curb height: every room keeps 4 walls, interior stays visible
+const LOWH=1.15; // near-side wall height: a real waist-high enclosing wall (was a 0.55 curb) — rooms read fully enclosed on all four sides while staying low enough to see furniture/avatars over
 // ---- wall finishes: painted plaster, warm, sage, the original slate, brick, glass partition ----
 const WALLFIN={
   plaster:{base:'#c3ccda',ext:'#b3bccd',top:'url(#wallTopL)',skirt:'#868fa3',cap:'#eef1f7',jamb:'#a2acbe'},
@@ -773,9 +773,9 @@ function drawRoomWalls(r){
       if(fin.glass){ // frosted glass partition — reads as glass but is opaque (no see-through)
         wallSeg(si,from,to,0,0.16,fin.skirt,{topGrad:'url(#metalTop)'});
         wallSeg(si,from,to,0.16,H,'#cddeeb',{topGrad:'url(#metalTop)'});
-        if(!near)wallSeg(si,from,to,H-0.1,H,fin.cap,{topGrad:'url(#metalTop)'});
+        wallSeg(si,from,to,H-0.1,H,fin.cap,{topGrad:'url(#metalTop)'});
       } else if(!near&&ext&&!cuts.length){opaqueWindow(si,from,to,fin,WCOL,topO);}
-      else{wallSeg(si,from,to,0,H,WCOL,topO);if(!near)wallSeg(si,from,to,WH-0.14,WH,fin.cap,{topGrad:fin.top});} // crown molding cap
+      else{wallSeg(si,from,to,0,H,WCOL,topO);wallSeg(si,from,to,(near?H:WH)-0.14,(near?H:WH),fin.cap,{topGrad:fin.top});} // coping cap (crown on full walls, top rail on the low enclosing wall)
       // baseboard / skirting — a proud band at the floor line with a lighter reveal above it
       wallSeg(si,from,to,0,0.15,fin.skirt);wallSeg(si,from,to,0.14,0.18,fin.cap);});
     cuts.forEach(({c0,c1,door})=>{const g0=si.a+c0,g1=si.a+c1,atAbs=(c0+c1)/2;
@@ -792,9 +792,9 @@ function drawRoomWalls(r){
   });
   // corner posts / columns — pillars where walls meet so the room reads solidly enclosed
   [[r.x,r.y,'N','W'],[r.x+r.w,r.y,'N','E'],[r.x+r.w,r.y+r.d,'S','E'],[r.x,r.y+r.d,'S','W']].forEach(([cx,cy,sA,sB])=>{
-    const low=nearMap[sA]||nearMap[sB],ph=low?LOWH+0.02:WH;
+    const low=nearMap[sA]||nearMap[sB],ph=low?LOWH+0.04:WH;
     box(cx-0.11,cy-0.11,0.22,0.22,ph,fin.base,{topGrad:fin.top});
-    if(!low)box(cx-0.13,cy-0.13,0.26,0.26,0.15,fin.cap,{z0:WH-0.15,topGrad:fin.top});});
+    box(cx-0.13,cy-0.13,0.26,0.26,low?0.1:0.15,fin.cap,{z0:ph-(low?0.1:0.15),topGrad:fin.top});});
 }
 // ---- room access badge: a floating lock/members chip over the door for gated rooms ----
 function drawAccessBadge(r){if(MODE==='fp')return;const priv=r.access==='private';const doors=(r.doors&&r.doors.length)?r.doors:[{side:autoDoorSide(r),at:0.5}];const p=doorWorld(r,doors[0]);overlay(p[0],p[1]-0.1,2.25,`<span>${priv?'🔒':'👥'} ${priv?'PRIVATE':'MEMBERS'}</span>`,'acbadge '+(priv?'private':'members'));}
