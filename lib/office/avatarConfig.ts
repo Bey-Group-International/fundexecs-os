@@ -12,9 +12,9 @@
 //     deterministic (same config → same avatar on every client).
 //   • Small + versioned: the whole character is a handful of string ids plus a
 //     schema version, cheap to store in jsonb and forward-compatible.
-//   • Renderer-agnostic data: this module holds ZERO DOM/SVG — the layered
-//     paper-doll renderer (components/office/AvatarPaperDoll.tsx) reads the
-//     resolved catalog values. The same config could later drive a richer rig.
+//   • Renderer-agnostic data: this module holds ZERO drawing code — the pixel
+//     sprite generator (lib/office/avatarSprite.ts) reads the resolved catalog
+//     values. The same config could later drive a richer rig.
 
 export const AVATAR_CONFIG_VERSION = 1 as const;
 

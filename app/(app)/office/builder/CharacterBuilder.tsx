@@ -21,7 +21,7 @@ import {
   type AvatarConfig,
   type AvatarOption,
 } from "@/lib/office/avatarConfig";
-import { AvatarPaperDoll } from "@/components/office/AvatarPaperDoll";
+import { AvatarSprite } from "@/components/office/AvatarSprite";
 import { saveAvatarConfig } from "./actions";
 
 const labelCls = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
@@ -103,7 +103,7 @@ export function CharacterBuilder({
                   "radial-gradient(120% 90% at 50% 20%, rgba(245,215,115,0.06), transparent 60%)",
               }}
             />
-            <AvatarPaperDoll config={config} size={220} showStatusRing />
+            <AvatarSprite config={config} size={200} className="relative" />
           </div>
           <div className="flex items-center gap-3 border-t border-line px-4 py-3">
             <span

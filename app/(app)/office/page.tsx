@@ -1,7 +1,6 @@
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { normalizeAvatarConfig, statusHex } from "@/lib/office/avatarConfig";
-import { renderAvatarPaperDollSvg } from "@/lib/office/avatarPaperDoll";
 import { OfficeFrame, type YouAvatar } from "./OfficeFrame";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +11,10 @@ export const dynamic = "force-dynamic";
 // Character Studio (which navigates the app to /office/builder).
 //
 // If the member has designed a character (Character Studio → office_member_prefs
-// .avatar), we render it here with the SHARED paper-doll builder and hand the
-// markup to the map, which places it on the floor as a movable "you". No saved
-// character → the office runs as before and the right-click Studio invites them.
+// .avatar), we hand its config to OfficeFrame, which rasterizes the shared
+// pixel-art sprite atlas in the browser and posts it to the map, where it walks
+// the floor as a movable "you". No saved character → the office runs as before
+// and the right-click Studio invites them to make one.
 export default async function OfficePage() {
   const you = await loadYou();
   return <OfficeFrame you={you} />;
@@ -36,11 +36,5 @@ async function loadYou(): Promise<YouAvatar | null> {
   if (!saved) return null;
 
   const config = normalizeAvatarConfig(saved);
-  return {
-    // Inner markup only (no <svg> wrapper) — the map embeds it in its own scene
-    // <svg>. No ground shadow: the map paints its own depth-consistent shadow.
-    svg: renderAvatarPaperDollSvg(config, { inner: true, showShadow: false }),
-    name: config.displayName || "You",
-    status: statusHex(config),
-  };
+  return { config, name: config.displayName || "You", status: statusHex(config) };
 }

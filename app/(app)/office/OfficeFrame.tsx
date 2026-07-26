@@ -1,27 +1,38 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { avatarAtlasDataURL } from "@/lib/office/avatarSprite";
+import type { AvatarConfig } from "@/lib/office/avatarConfig";
 
 export interface YouAvatar {
-  svg: string;
+  config: AvatarConfig;
   name: string;
   status: string;
 }
 
-// Client wrapper around the office iframe. Its only job beyond hosting the frame
-// is to hand the member's saved character (pre-rendered app-side) into the
-// self-contained map via postMessage. Delivery is race-proof two ways: we reply
-// to the map's `fx-office-ready` handshake, and we also (re)post on iframe load
-// and whenever the avatar prop changes.
+// Client wrapper around the office iframe. It generates the member's saved
+// character into a 16-bit sprite ATLAS (PNG data URL, via the shared generator)
+// in the browser and hands it into the self-contained map via postMessage —
+// which renders it exactly like the AI-staff sprites. Delivery is race-proof two
+// ways: we reply to the map's `fx-office-ready` handshake, and we also (re)post
+// on iframe load and whenever the avatar changes.
 export function OfficeFrame({ you }: { you: YouAvatar | null }) {
   const ref = useRef<HTMLIFrameElement>(null);
 
+  // Rasterizing the atlas touches a canvas, so it only runs in the browser.
+  const payload = useMemo(() => {
+    if (!you) return null;
+    const atlas = avatarAtlasDataURL(you.config);
+    if (!atlas) return null;
+    return { type: "fx-you" as const, atlas, name: you.name, status: you.status };
+  }, [you]);
+
   useEffect(() => {
-    if (!you) return;
+    if (!payload) return;
     const iframe = ref.current;
     if (!iframe) return;
     const origin = window.location.origin;
-    const post = () => iframe.contentWindow?.postMessage({ type: "fx-you", ...you }, origin);
+    const post = () => iframe.contentWindow?.postMessage(payload, origin);
 
     const onReady = (e: MessageEvent) => {
       if (e.origin === origin && e.data?.type === "fx-office-ready") post();
@@ -34,7 +45,7 @@ export function OfficeFrame({ you }: { you: YouAvatar | null }) {
       window.removeEventListener("message", onReady);
       iframe.removeEventListener("load", post);
     };
-  }, [you]);
+  }, [payload]);
 
   return (
     <div className="h-[calc(100dvh-8rem)] min-h-[420px] w-full overflow-hidden rounded-xl border border-[#1c2e4a] bg-[#070c16]">
