@@ -37,7 +37,7 @@ export function OfficeFrame({ you }: { you: YouAvatar | null }) {
   }, [you]);
 
   return (
-    <div className="h-[calc(100dvh-8rem)] min-h-[420px] w-full overflow-hidden rounded-xl border border-[#1c2e4a] bg-[#070c16]">
+    <div className="h-[calc(100dvh-8rem)] min-h-[420px] w-full overflow-hidden bg-[#070c16]">
       <iframe
         ref={ref}
         src="/office/map.html"

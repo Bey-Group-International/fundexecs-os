@@ -146,7 +146,7 @@ body.previewing .fabbar{top:14px}
 .cityscape{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .cityscape>svg{position:absolute;top:50%;left:50%;width:150%;height:150%;transform:translate(-50%,-50%);will-change:transform}
 .canvas{position:absolute;inset:0;z-index:1}
-.canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto}
+.canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto;overflow:visible}
 #fx3d{position:absolute;inset:0;pointer-events:none;z-index:5}
 .ovwrap{position:absolute;top:50%;left:50%;transform-origin:center;pointer-events:none}
 .sel{position:absolute;inset:0;pointer-events:none;z-index:6}
@@ -879,88 +879,121 @@ const DEFS=`<defs>
 // saved with the office model (model.env) and picked in Build Mode → Environ.
 // Scenes are built lazily (seeded PRNG → deterministic) and cached, so switching
 // costs nothing at animation frame rate.
-const CITY_W=1600,CITY_H=1000;
 const SCENES=[['nightCity','Night City'],['dayCity','Day City'],['duskCity','Golden Hour'],['finance','Financial District'],['waterfront','Waterfront'],['mountain','Mountain Vista'],['forest','Forest'],['beach','Coastal Beach'],['winter','Winter City'],['space','Orbital']];
 const SCENES_MAP=Object.fromEntries(SCENES);
 // CSS gradient previews for the Environ picker chips
-const SCENE_SW={nightCity:'linear-gradient(180deg,#0a1230,#1c3058)',dayCity:'linear-gradient(180deg,#5fa8e6,#c3e5f6)',duskCity:'linear-gradient(180deg,#361f5c,#ff9d5c 85%)',finance:'linear-gradient(180deg,#08131f,#0e3a4a)',waterfront:'linear-gradient(180deg,#14264c,#0a1526)',mountain:'linear-gradient(180deg,#8fb6d8,#3c5f57)',forest:'linear-gradient(180deg,#bfe0cf,#274a30)',beach:'linear-gradient(180deg,#7fd6e6,#e7d4a8)',winter:'linear-gradient(180deg,#c4d3e6,#eef4fb)',space:'radial-gradient(circle at 50% 38%,#20295a,#05060f)'};
+const SCENE_SW={nightCity:'linear-gradient(135deg,#0f1a30,#1c2b47)',dayCity:'linear-gradient(135deg,#9fb3c8,#c9d6e2)',duskCity:'linear-gradient(135deg,#3a2c48,#6a4a55)',finance:'linear-gradient(135deg,#141d2b,#22314f)',waterfront:'linear-gradient(135deg,#1a2b47,#123a5a)',mountain:'linear-gradient(135deg,#6f9464,#8391a0)',forest:'linear-gradient(135deg,#3f6b47,#254a30)',beach:'linear-gradient(135deg,#e4d2a0,#2ea9c4)',winter:'linear-gradient(135deg,#cdd9e8,#eef4fb)',space:'linear-gradient(135deg,#0a0e1e,#20304e)'};
 function _mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
-function _rngFor(key){let h=5381;for(let i=0;i<key.length;i++)h=((h*33)^key.charCodeAt(i))>>>0;return _mulberry32(h^0x9e3779b9);}
-// ---- scene primitives -------------------------------------------------------
-function _stars(R,W,x0,y0,x1,y1,n,col){let s='';for(let i=0;i<n;i++)s+=`<circle cx="${(x0+R()*(x1-x0))|0}" cy="${(y0+R()*(y1-y0))|0}" r="${(R()*1.1+0.3).toFixed(2)}" fill="${col}" opacity="${(R()*0.5+0.18).toFixed(2)}"/>`;return `<g>${s}</g>`;}
-function _sprawl(R,W,H,hy,n){let s='';for(let i=0;i<n;i++)s+=`<rect x="${(R()*W)|0}" y="${(hy+8+R()*(H-hy-8))|0}" width="${(R()*2.4+0.8).toFixed(1)}" height="${(R()*2.4+0.8).toFixed(1)}" fill="${R()<0.5?'#ffcf82':'#8fc4ff'}" opacity="${(R()*0.12+0.05).toFixed(2)}"/>`;return `<g>${s}</g>`;}
-function _sun(cx,cy,r,col,glow){return `<circle cx="${cx}" cy="${cy}" r="${(r*3)|0}" fill="${glow}" opacity=".16"/><circle cx="${cx}" cy="${cy}" r="${(r*1.8)|0}" fill="${glow}" opacity=".26"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}"/>`;}
-function _cloud(cx,cy,s,col,op){return `<g fill="${col}" opacity="${op}"><ellipse cx="${cx}" cy="${cy}" rx="${(48*s)|0}" ry="${(16*s)|0}"/><ellipse cx="${(cx-32*s)|0}" cy="${(cy+6*s)|0}" rx="${(30*s)|0}" ry="${(12*s)|0}"/><ellipse cx="${(cx+34*s)|0}" cy="${(cy+5*s)|0}" rx="${(28*s)|0}" ry="${(12*s)|0}"/></g>`;}
-function _flakes(R,W,H,n,col){let s='';for(let i=0;i<n;i++)s+=`<circle cx="${(R()*W)|0}" cy="${(R()*H)|0}" r="${(R()*2+0.8).toFixed(1)}" fill="${col}" opacity="${(R()*0.5+0.3).toFixed(2)}"/>`;return `<g>${s}</g>`;}
-// city building layer; `win` is the per-window lit probability (0 = none)
-function _skyline(R,W,base,fill,op,wmin,wmax,hmin,hmax,win,warmP){
-  let g=`<g fill="${fill}" opacity="${op}">`,w='',x=-80;
-  while(x<W+80){
-    const bw=Math.round(wmin+R()*(wmax-wmin)),bh=Math.round(hmin+R()*(hmax-hmin)),by=base-bh;
-    g+=`<rect x="${x}" y="${by}" width="${bw}" height="${bh+140}" rx="1.5"/>`;
-    if(R()<0.28){const cw=Math.round(bw*0.42),cx=x+Math.round((bw-cw)/2);g+=`<rect x="${cx}" y="${by-12}" width="${cw}" height="14"/>`;}
-    if(win&&R()<0.15){const mx=x+Math.round(bw/2);g+=`<rect x="${mx-1}" y="${by-26}" width="2" height="26"/><circle cx="${mx}" cy="${by-27}" r="1.9" fill="#ff6a72" opacity=".85"/>`;}
-    if(win){const cell=8;for(let wy=by+7;wy<base-5;wy+=cell)for(let wx=x+5;wx<x+bw-8;wx+=cell){if(R()<win)w+=`<rect x="${wx}" y="${wy}" width="3.4" height="4.2" fill="${R()<warmP?'#ffd98a':'#9fd0ff'}" opacity="${(0.32+R()*0.5).toFixed(2)}"/>`;}}
-    x+=bw+Math.round(2+R()*11);
+function _envRng(key){let h=5381;for(let i=0;i<key.length;i++)h=((h*33)^key.charCodeAt(i))>>>0;return _mulberry32(h^0x9e3779b9);}
+// ---- ENV: each theme is a CONTINUOUS top-down world drawn in the office's own
+// projection (drawEnv), so the office reads as a BUILDING grounded in a place —
+// streets, sidewalks, neighbouring rooftops, greenery/water — not a floor plan on
+// a picture. `base`/`far` also feed a matching haze backdrop (#cityscape) so the
+// world never ends in a void. kind selects the surroundings generator.
+const ENV={
+  nightCity :{kind:'city',   base:'#0d1526',far:'#080d1a',road:'#0a1120',walk:'#28324a',roof:'#17233d',roof2:'#1e2c48',green:'#28503a',lit:'#ffd98a',night:true},
+  dayCity   :{kind:'city',   base:'#c6d3df',far:'#aebccb',road:'#8790a0',walk:'#dde5ee',roof:'#b4c0ce',roof2:'#9fb0c2',green:'#5c9268'},
+  duskCity  :{kind:'city',   base:'#3c2e4a',far:'#241b33',road:'#241c30',walk:'#564a64',roof:'#4a3a58',roof2:'#392c46',green:'#3f5540',lit:'#ffc074',night:true},
+  finance   :{kind:'city',   base:'#141d2b',far:'#0d1420',road:'#0b111b',walk:'#39435a',roof:'#1b2740',roof2:'#22314f',green:'#28503a',lit:'#39e6a0',night:true,dense:true},
+  waterfront:{kind:'water',  base:'#182742',far:'#0e1830',road:'#101a2e',walk:'#33425e',roof:'#1e2d49',roof2:'#26385a',green:'#28503a',water:'#123a5a',lit:'#ffd98a',night:true},
+  mountain  :{kind:'nature', base:'#6f9464',far:'#5a7f5a',walk:'#c7bda0',road:'#8a7f66',roof:'#7a5a44',roof2:'#8a6a4e',green:'#3f6b47',green2:'#4f8a56',rock:'#8391a0',snow:'#eef4fb'},
+  forest    :{kind:'forest', base:'#3f6b47',far:'#2c4a33',walk:'#a99a72',road:'#7a6a4a',roof:'#6a4a34',roof2:'#7a5a3e',green:'#254a30',green2:'#356e3d'},
+  beach     :{kind:'coast',  base:'#e4d2a0',far:'#d8c48c',walk:'#efe2bc',road:'#cbb684',roof:'#c9a878',roof2:'#d8b98a',green:'#4f8a5a',water:'#2ea9c4'},
+  winter    :{kind:'city',   base:'#dce7f3',far:'#c6d4e4',road:'#a8b7c9',walk:'#eef4fb',roof:'#8493ab',roof2:'#9aa8bd',green:'#5a7a68',winter:true},
+  space     :{kind:'space',  base:'#0a0e1e',far:'#05060f',road:'#10182e',walk:'#1c2b47',roof:'#17233d',roof2:'#20304e',green:'#204a5a',lit:'#8fc4ff',night:true},
+};
+function currentEnv(){return (typeof model!=='undefined'&&model&&ENV[model.env])?model.env:'nightCity';}
+// Far-haze backdrop for the fixed #cityscape layer: a soft radial from the world's
+// base tone to its far tone, so beyond the drawn ground the world fades — never void.
+function envBackdropSVG(key){const e=ENV[key]||ENV.nightCity;let extra='';
+  if(e.kind==='space'){const R=_envRng('bg'+key);let s='';for(let i=0;i<120;i++)s+=`<circle cx="${(R()*100).toFixed(1)}" cy="${(R()*100).toFixed(1)}" r="${(R()*0.35+0.08).toFixed(2)}" fill="#eaf0ff" opacity="${(R()*0.6+0.2).toFixed(2)}"/>`;extra=s;}
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><defs><radialGradient id="ebg" cx="50%" cy="44%" r="75%"><stop offset="0" stop-color="${e.base}"/><stop offset=".55" stop-color="${e.base}"/><stop offset="1" stop-color="${e.far}"/></radialGradient></defs><rect width="100" height="100" fill="url(#ebg)"/>${extra}</svg>`;}
+function applyBackdrop(){if(typeof cityscape!=='undefined'&&cityscape)cityscape.innerHTML=envBackdropSVG(currentEnv());if(typeof applyView==='function')applyView();}
+function setEnv(key){if(!ENV[key]||!model)return;model.env=key;applyBackdrop();if(typeof render==='function')render();if(typeof save==='function')save();if(typeof pushHistory==='function')pushHistory();}
+// ---- world elements (projected, so they pan/zoom as one scene with the office) --
+// A neighbouring building seen from above: extruded roof + edge trim + a rooftop
+// unit, and (night) a warm rooftop glow. Depth-sorted normally so front lots sit in
+// front of the office and back lots behind — one coherent block.
+function envBuilding(x,y,w,d,h,cfg,R){
+  const col=R()<0.5?cfg.roof:cfg.roof2;
+  const c=P(x+w/2,y+d/2,0),s=C();
+  push(-999997,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+3).toFixed(1)}" rx="${((w+d)*s.UX*0.24).toFixed(1)}" ry="${((w+d)*s.UY*0.2).toFixed(1)}" fill="#04070d" opacity=".28" filter="url(#blur)"/>`);
+  box(x,y,w,d,h,col);
+  const A=P(x+0.35,y+0.35,h),B=P(x+w-0.35,y+0.35,h),Cc=P(x+w-0.35,y+d-0.35,h),D=P(x+0.35,y+d-0.35,h);
+  let s2=`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${shade(col,0.7)}" stroke-width="1"/>`;
+  if(cfg.winter)s2+=`<polygon points="${pts([P(x,y,h),P(x+w,y,h),P(x+w,y+d,h),P(x,y+d,h)])}" fill="#f4f9ff" opacity=".55"/>`;
+  if(cfg.night){const g=P(x+w/2,y+d/2,h);s2+=`<circle cx="${g[0].toFixed(1)}" cy="${g[1].toFixed(1)}" r="2.4" fill="${cfg.lit||'#ffd98a'}" opacity=".75"/>`;}
+  push(y+d/2+0.02,s2);
+  if(w>2.6&&d>2.4)box(x+w*0.28,y+d*0.28,Math.min(1.1,w*0.28),Math.min(0.9,d*0.28),0.6,shade(col,1.12),{z0:h});
+}
+function envTree(x,y,s,cfg){
+  box(x+s*0.44,y+s*0.44,s*0.14,s*0.14,s*0.55,'#5a4326');
+  const g=cfg.green2||cfg.green||'#356e3d',c=P(x+s*0.5,y+s*0.5,s*0.62);
+  push(y+s*0.5,`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${(s*7).toFixed(1)}" fill="${g}"/><circle cx="${(c[0]-s*2.6).toFixed(1)}" cy="${(c[1]-s*2).toFixed(1)}" r="${(s*4.4).toFixed(1)}" fill="${shade(g,1.16)}"/><circle cx="${(c[0]+s*2.8).toFixed(1)}" cy="${(c[1]-s*1).toFixed(1)}" r="${(s*3.6).toFixed(1)}" fill="${shade(g,0.86)}"/>`);
+}
+// slab = flat ground rectangle at a fixed depth key (all behind the office floor)
+function envSlab(x,y,w,d,fill,key,op){push(key,poly([P(x,y),P(x+w,y),P(x+w,y+d),P(x,y+d)],fill,null,0,op));}
+function drawEnv(fx,fy,fw,fh){
+  const cfg=ENV[currentEnv()]||ENV.nightCity, R=_envRng(currentEnv()+'|'+(fw|0)+'x'+(fh|0));
+  const GX=fx-52,GY=fy-52,GW=fw+104,GH=fh+104;
+  const bx0=fx-0.4,by0=fy-0.4,bx1=fx+fw+0.4,by1=fy+fh+0.4; // building footprint (+ hair)
+  // 1) ground base — huge, so pan/zoom never reveals emptiness (backdrop haze catches the rest)
+  envSlab(GX,GY,GW,GH,cfg.base,-1000000);
+  // 2) grounding shadow halo just beyond the footprint
+  {const c=P(fx+fw/2,fy+fh/2,0),s=C();push(-999996,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+2).toFixed(1)}" rx="${((fw+fh)*s.UX*0.34).toFixed(1)}" ry="${((fw+fh)*s.UY*0.3).toFixed(1)}" fill="#04070d" opacity=".42" filter="url(#blur)"/>`);}
+  const NB=(x,y,w,d)=>{ // place a lot only if clear of the building + street keep-out
+    if(x+w>fx-8&&x<fx+fw+8&&y+d>fy-8&&y<fy+fh+8)return;
+    if(R()<0.22)envTree(x+w/2-0.7,y+d/2-0.7,1+R()*0.6,cfg);
+    else envBuilding(x,y,w,d,(cfg.dense?2.4:1.4)+R()*(cfg.dense?4.5:3),cfg,R);
+  };
+  const cityLots=(x0,y0,x1,y1)=>{for(let gx=x0;gx<x1-3;gx+=5+R()*3.5){for(let gy=y0;gy<y1-3;gy+=5+R()*3){NB(gx,gy,2.6+R()*3.4,2.6+R()*2.6);}}};
+  if(cfg.kind==='city'||cfg.kind==='space'){
+    // street ring: base | road(3..7) | sidewalk(0..3) | building, via nested slabs
+    envSlab(fx-7,fy-7,fw+14,fh+14,cfg.road,-999500);
+    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);
+    // dashed centre lines on the four road bands
+    if(cfg.kind==='city'){const dl=(x0,y0,x1,y1)=>{const a=P(x0,y0),b=P(x1,y1);push(-999400,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.walk,1.15)}" stroke-width="1.4" stroke-dasharray="6 7" opacity=".7"/>`);};
+      dl(fx-5,fy-5,fx+fw+5,fy-5);dl(fx-5,fy+fh+5,fx+fw+5,fy+fh+5);dl(fx-5,fy-5,fx-5,fy+fh+5);dl(fx+fw+5,fy-5,fx+fw+5,fy+fh+5);}
+    // neighbouring blocks on all four sides (beyond the street)
+    cityLots(GX,GY,GX+GW,fy-8); cityLots(GX,fy+fh+8,GX+GW,GY+GH);
+    cityLots(GX,fy-8,fx-8,fy+fh+8); cityLots(fx+fw+8,fy-8,GX+GW,fy+fh+8);
+    if(cfg.kind==='space'){ // glowing platform edge instead of soil
+      const A=P(fx-4,fy-4),B=P(fx+fw+4,fy-4),Cc=P(fx+fw+4,fy+fh+4),D=P(fx-4,fy+fh+4);
+      push(-998900,`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${cfg.lit}" stroke-width="2" opacity=".5"/>`);}
+  } else if(cfg.kind==='water'){
+    // land (base) with a promenade, then water filling the far/east side beyond a quay
+    const quay=fx+fw+6;
+    envSlab(quay,GY,GX+GW-quay,GH,cfg.water,-999400);
+    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);           // building promenade
+    envSlab(quay-2.4,GY,2.4,GH,shade(cfg.walk,0.9),-999300); // quay edge
+    // ripples on the water
+    for(let j=GY+4;j<GY+GH;j+=6){const a=P(quay+1,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${shade(cfg.water,1.3)}" stroke-width="1.2" opacity=".22"/>`);}
+    cityLots(GX,GY,fx-8,GY+GH); cityLots(GX,GY,quay,fy-8); cityLots(GX,fy+fh+8,quay,GY+GH);
+    for(let k=0;k<5;k++)envBuilding(quay+3+k*6,fy+fh+3,3,2.2,0.3,cfg,R); // pier posts row (low)
+  } else if(cfg.kind==='forest'){
+    envSlab(fx-2.5,fy-2.5,fw+5,fh+5,cfg.walk,-999000);       // clearing round the building
+    // a path leading south
+    envSlab(fx+fw/2-1.4,fy+fh+2,2.8,GY+GH-(fy+fh+2),cfg.walk,-999100,0.9);
+    for(let gx=GX;gx<GX+GW;gx+=3+R()*2.2){for(let gy=GY;gy<GY+GH;gy+=3+R()*2){
+      if(gx>fx-6&&gx<fx+fw+6&&gy>fy-6&&gy<fy+fh+6)continue;
+      if(Math.abs(gx-(fx+fw/2))<2.2&&gy>fy+fh)continue; // keep the path clear
+      envTree(gx,gy,1.1+R()*0.9,cfg);}}
+  } else if(cfg.kind==='coast'){
+    const shore=fy+fh+7;
+    envSlab(GX,shore,GW,GY+GH-shore,cfg.water,-999400);      // sea to the south
+    envSlab(GX,shore-2.5,GW,2.5,shade(cfg.base,1.06),-999300);// wet-sand line
+    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);           // boardwalk
+    for(let j=shore+3;j<GY+GH;j+=6){const a=P(GX+2,j),b=P(GX+GW-2,j);push(-999350,`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#dff4fb" stroke-width="1.3" opacity=".3"/>`);}
+    for(let gx=GX;gx<GX+GW;gx+=6+R()*4){if(gx>fx-6&&gx<fx+fw+6)continue;if(R()<0.6)envTree(gx,fy-4-R()*6,1.2+R()*0.7,cfg);} // palms/greenery inland
+  } else { // nature (mountain): meadow + distant ridges + scattered pines
+    envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);
+    // three ridge bands to the north (extruded rock with snow caps)
+    for(let b=0;b<3;b++){const ry=fy-16-b*7,rh=5+b*2.5;let gx=GX;while(gx<GX+GW){const w=6+R()*7;const col=b===0?cfg.rock:shade(cfg.rock,0.86-b*0.06);envBuilding(gx,ry,w,4+R()*2,rh+R()*3,{roof:col,roof2:shade(col,0.94),winter:true},R);gx+=w+1+R()*2;}}
+    for(let gx=GX;gx<GX+GW;gx+=4+R()*3){for(let gy=fy+fh+4;gy<GY+GH;gy+=4+R()*3){if(gx>fx-6&&gx<fx+fw+6&&gy<fy+fh+6)continue;if(R()<0.7)envTree(gx,gy,1.1+R()*0.8,cfg);}}
   }
-  return g+'</g>'+(win?`<g>${w}</g>`:'');
 }
-function _ridge(R,W,base,amp,peaks,fill,op,snowCol){
-  let pts=[`-60 ${base+700}`,`-60 ${base}`],snow='';const step=W/peaks;
-  for(let i=0;i<=peaks;i++){const px=Math.round(i*step+(R()-0.5)*step*0.5),py=Math.round(base-amp*(0.35+R()*0.65));pts.push(`${px} ${py}`);
-    if(snowCol&&py<base-amp*0.5)snow+=`<polygon points="${px-16} ${py+24}, ${px} ${py}, ${px+16} ${py+24}, ${px+7} ${py+17}, ${px} ${py+26}, ${px-7} ${py+17}" fill="${snowCol}" opacity=".9"/>`;}
-  pts.push(`${W+60} ${base}`,`${W+60} ${base+700}`);
-  return `<polygon points="${pts.join(' ')}" fill="${fill}" opacity="${op}"/>${snow}`;
-}
-function _conifers(R,W,base,h0,h1,fill,op){let g=`<g fill="${fill}" opacity="${op}">`,x=-20;
-  while(x<W+20){const h=h0+R()*(h1-h0),wd=h*0.55;g+=`<polygon points="${(x-wd/2)|0} ${base}, ${x|0} ${(base-h)|0}, ${(x+wd/2)|0} ${base}"/>`;x+=wd*0.5+R()*8;}
-  return g+'</g>';}
-// ---- the 10 scenes ----------------------------------------------------------
-function buildScene(key,W,H){
-  const R=_rngFor(key),id=n=>`sc_${key}_${n}`;
-  const lg=(n,st)=>`<linearGradient id="${id(n)}" x1="0" y1="0" x2="0" y2="1">${st}</linearGradient>`;
-  const rg=(n,col,o)=>`<radialGradient id="${id(n)}" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${col}" stop-opacity="${o}"/><stop offset=".55" stop-color="${col}" stop-opacity="${(o*0.4).toFixed(2)}"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient>`;
-  const fill=n=>`url(#${id(n)})`,bg=n=>`<rect width="${W}" height="${H}" fill="${fill(n)}"/>`;
-  let defs='',b='';
-  if(key==='nightCity'){const hy=(H*0.42)|0;
-    defs=lg('s','<stop offset="0" stop-color="#060a16"/><stop offset=".32" stop-color="#0a1230"/><stop offset=".5" stop-color="#132449"/><stop offset=".6" stop-color="#1c3058"/><stop offset=".74" stop-color="#111d3c"/><stop offset="1" stop-color="#080e22"/>')+rg('g','#4a6ea8',0.5);
-    b=bg('s')+`<ellipse cx="${W/2}" cy="${hy}" rx="${(W*0.74)|0}" ry="${(H*0.4)|0}" fill="${fill('g')}"/>`+_stars(R,W,0,0,W,hy-30,90,'#cdd9f2')+_sprawl(R,W,H,hy,220)+_skyline(R,W,hy-2,'#16223f',0.55,44,112,30,86,0,0)+_skyline(R,W,hy+14,'#0f1a34',0.92,32,82,52,168,0.3,0.62)+_skyline(R,W,hy+40,'#080f20',1,36,96,40,140,0.32,0.62);
-  }else if(key==='dayCity'){const hy=(H*0.46)|0;
-    defs=lg('s','<stop offset="0" stop-color="#4b9fe0"/><stop offset=".5" stop-color="#8ec6ee"/><stop offset="1" stop-color="#cfe8f6"/>')+rg('g','#fff7d8',0.9);
-    b=bg('s')+`<circle cx="${(W*0.76)|0}" cy="${(H*0.2)|0}" r="150" fill="${fill('g')}"/>`+_sun((W*0.76)|0,(H*0.2)|0,34,'#fff4c8','#ffe89a')+_cloud((W*0.24)|0,(H*0.16)|0,1.4,'#ffffff',0.9)+_cloud((W*0.55)|0,(H*0.26)|0,1.1,'#ffffff',0.8)+_cloud((W*0.88)|0,(H*0.34)|0,1.2,'#eef6fd',0.75)+`<rect x="0" y="${hy-40}" width="${W}" height="120" fill="#e8f3fb" opacity=".5"/>`+_skyline(R,W,hy+2,'#9db6d2',0.7,44,110,30,96,0,0)+_skyline(R,W,hy+18,'#7793b6',0.9,34,84,52,176,0,0)+_skyline(R,W,hy+42,'#5f7da3',1,36,96,40,150,0,0);
-  }else if(key==='duskCity'){const hy=(H*0.48)|0;
-    defs=lg('s','<stop offset="0" stop-color="#241246"/><stop offset=".4" stop-color="#7a3b6a"/><stop offset=".7" stop-color="#f5804e"/><stop offset=".86" stop-color="#ffc06a"/><stop offset="1" stop-color="#ffd98c"/>')+rg('g','#ffd27a',0.95);
-    b=bg('s')+`<circle cx="${W/2}" cy="${(hy-10)|0}" r="220" fill="${fill('g')}"/>`+_sun((W/2)|0,(hy-6)|0,48,'#ffe6a6','#ffcf7a')+_stars(R,W,0,0,W,hy*0.5,40,'#ffe9c8')+_skyline(R,W,hy+2,'#5a3550',0.6,44,112,30,92,0,0)+_skyline(R,W,hy+18,'#33223e',0.9,34,84,52,180,0.22,0.82)+_skyline(R,W,hy+44,'#1c1226',1,36,96,40,150,0.26,0.82);
-  }else if(key==='finance'){const hy=(H*0.36)|0;
-    defs=lg('s','<stop offset="0" stop-color="#05101c"/><stop offset=".45" stop-color="#0a2436"/><stop offset=".62" stop-color="#0e4152"/><stop offset="1" stop-color="#061019"/>')+rg('g','#2fd3c0',0.4);
-    b=bg('s')+`<ellipse cx="${W/2}" cy="${hy}" rx="${(W*0.8)|0}" ry="${(H*0.4)|0}" fill="${fill('g')}"/>`+_stars(R,W,0,0,W,hy-30,60,'#bfeaf2')+_sprawl(R,W,H,hy,180)+_skyline(R,W,hy-2,'#123243',0.6,26,64,60,150,0,0)+_skyline(R,W,hy+16,'#0b2130',0.94,22,54,90,260,0.42,0.4)+_skyline(R,W,hy+46,'#050f18',1,26,66,70,210,0.44,0.4)+`<g opacity=".8"><rect x="0" y="${(hy+150)|0}" width="${W}" height="16" fill="#04121a"/><g fill="#39e6a0">`+Array.from({length:60},(_,i)=>`<rect x="${(i*28+ (R()*10|0))}" y="${(hy+153)|0}" width="12" height="8" opacity="${R()<0.5?0.9:0.4}"/>`).join('')+`</g></g>`;
-  }else if(key==='waterfront'){const hy=(H*0.4)|0;
-    defs=lg('s','<stop offset="0" stop-color="#0a1430"/><stop offset=".5" stop-color="#17305a"/><stop offset="1" stop-color="#20406e"/>')+lg('w','<stop offset="0" stop-color="#12294a"/><stop offset="1" stop-color="#081422"/>')+rg('g','#5a7fb0',0.5);
-    const sky=_skyline(R,W,hy+2,'#12233f',0.9,32,84,44,150,0.34,0.6);
-    b=bg('s')+`<ellipse cx="${W/2}" cy="${hy}" rx="${(W*0.7)|0}" ry="${(H*0.34)|0}" fill="${fill('g')}"/>`+_stars(R,W,0,0,W,hy-40,70,'#cdd9f2')+_skyline(R,W,hy-2,'#16223f',0.5,44,112,26,80,0,0)+sky+`<rect x="0" y="${hy+2}" width="${W}" height="${H-hy}" fill="${fill('w')}"/>`+`<g transform="translate(0 ${(2*(hy+2))|0}) scale(1 -1)" opacity=".2">${sky}</g>`+`<g stroke="#8fb2d8" stroke-width="1.4" opacity=".18">`+Array.from({length:14},(_,i)=>`<line x1="0" y1="${(hy+18+i*((H-hy)/14))|0}" x2="${W}" y2="${(hy+18+i*((H-hy)/14))|0}"/>`).join('')+`</g>`;
-  }else if(key==='mountain'){const hy=(H*0.5)|0;
-    defs=lg('s','<stop offset="0" stop-color="#6ea3d6"/><stop offset=".55" stop-color="#a9c9e6"/><stop offset="1" stop-color="#e6f0f6"/>')+rg('g','#fff7e0',0.85)+lg('f','<stop offset="0" stop-color="#3f6157"/><stop offset="1" stop-color="#2c463f"/>');
-    b=bg('s')+`<circle cx="${(W*0.72)|0}" cy="${(H*0.22)|0}" r="120" fill="${fill('g')}"/>`+_sun((W*0.72)|0,(H*0.22)|0,30,'#fffbe8','#fff0c0')+_cloud((W*0.3)|0,(H*0.2)|0,1.3,'#ffffff',0.85)+_cloud((W*0.6)|0,(H*0.3)|0,1,'#f2f8fd',0.7)+_ridge(R,W,hy,150,7,'#7f9fc0',0.7,'#eef4fb')+_ridge(R,W,hy+40,210,6,'#5a7a94',0.9,'#eaf2fb')+_ridge(R,W,hy+110,240,5,'#33544c',1,'#e8f0f6')+`<rect x="0" y="${(hy+180)|0}" width="${W}" height="${H}" fill="${fill('f')}"/>`;
-  }else if(key==='forest'){const hy=(H*0.5)|0;
-    defs=lg('s','<stop offset="0" stop-color="#a7d0c4"/><stop offset=".5" stop-color="#d8ecdd"/><stop offset="1" stop-color="#f0ead6"/>')+rg('g','#fff6d8',0.7);
-    b=bg('s')+`<circle cx="${(W*0.3)|0}" cy="${(H*0.24)|0}" r="90" fill="${fill('g')}"/>`+_sun((W*0.3)|0,(H*0.24)|0,22,'#fffdf0','#fff0c8')+`<g fill="#ffffff" opacity=".4"><ellipse cx="${(W*0.5)|0}" cy="${(hy-20)|0}" rx="${(W*0.5)|0}" ry="26"/><ellipse cx="${(W*0.3)|0}" cy="${(hy+10)|0}" rx="${(W*0.4)|0}" ry="20"/></g>`+_conifers(R,W,hy+20,60,120,'#6f9e7c',0.7)+_conifers(R,W,hy+70,90,180,'#43734f',0.92)+_conifers(R,W,hy+140,120,240,'#254a30',1);
-  }else if(key==='beach'){const hy=(H*0.46)|0;
-    defs=lg('s','<stop offset="0" stop-color="#4fbfe0"/><stop offset=".6" stop-color="#a9e4ee"/><stop offset="1" stop-color="#ffe7c0"/>')+lg('w','<stop offset="0" stop-color="#2ea9c4"/><stop offset="1" stop-color="#1a6f96"/>')+rg('g','#fff3cf',0.95);
-    b=bg('s')+`<circle cx="${W/2}" cy="${(hy-30)|0}" r="150" fill="${fill('g')}"/>`+_sun((W/2)|0,(hy-26)|0,40,'#fff6d6','#ffe6a0')+_cloud((W*0.2)|0,(H*0.16)|0,1.2,'#ffffff',0.85)+_cloud((W*0.82)|0,(H*0.2)|0,1.1,'#ffffff',0.8)+`<rect x="0" y="${hy}" width="${W}" height="${H-hy}" fill="${fill('w')}"/>`+`<polygon points="${(W/2-70)|0} ${hy}, ${(W/2+70)|0} ${hy}, ${(W/2+130)|0} ${(H*0.8)|0}, ${(W/2-130)|0} ${(H*0.8)|0}" fill="#ffe9b0" opacity=".35"/>`+`<g stroke="#eaf7fb" stroke-width="1.6" opacity=".28">`+Array.from({length:12},(_,i)=>`<line x1="0" y1="${(hy+16+i*((H-hy)/12))|0}" x2="${W}" y2="${(hy+16+i*((H-hy)/12))|0}"/>`).join('')+`</g>`+`<rect x="0" y="${(H-46)|0}" width="${W}" height="46" fill="#e7d3a4"/>`;
-  }else if(key==='winter'){const hy=(H*0.46)|0;
-    defs=lg('s','<stop offset="0" stop-color="#a7bcd6"/><stop offset=".5" stop-color="#cad9e8"/><stop offset="1" stop-color="#eef4fb"/>')+rg('g','#ffffff',0.8);
-    b=bg('s')+`<circle cx="${(W*0.7)|0}" cy="${(H*0.22)|0}" r="120" fill="${fill('g')}"/>`+`<g>`+_skyline(R,W,hy+2,'#8493ab',0.6,44,110,30,96,0,0)+`</g>`+_skyline(R,W,hy+20,'#6c7c95',0.9,34,84,52,168,0.16,0.7)+_skyline(R,W,hy+46,'#54637d',1,36,96,40,150,0.18,0.7)+`<g fill="#eef4fb">`+Array.from({length:34},()=>{const x=(R()*W)|0,y=(hy+R()*90)|0,w=(20+R()*40)|0;return `<rect x="${x}" y="${y}" width="${w}" height="6" rx="3"/>`;}).join('')+`</g>`+`<rect x="0" y="${(H-40)|0}" width="${W}" height="40" fill="#eef4fb"/>`+_flakes(R,W,H,120,'#f4f9ff');
-  }else{ // space / orbital
-    defs=rg('s','#1a2350',1)+rg('n','#6a3ba0',0.5)+rg('a','#4aa0ff',0.6)+lg('p','<stop offset="0" stop-color="#3a6ea0"/><stop offset=".5" stop-color="#22406e"/><stop offset="1" stop-color="#101f38"/>');
-    b=`<rect width="${W}" height="${H}" fill="#05060f"/>`+`<rect width="${W}" height="${H}" fill="${fill('s')}" opacity=".5"/>`+`<ellipse cx="${(W*0.3)|0}" cy="${(H*0.35)|0}" rx="${(W*0.4)|0}" ry="${(H*0.3)|0}" fill="${fill('n')}"/>`+_stars(R,W,0,0,W,H,260,'#eaf0ff')+_stars(R,W,0,0,W,H,60,'#bcd4ff')+`<circle cx="${(W*0.82)|0}" cy="${(H*0.86)|0}" r="360" fill="${fill('a')}" opacity=".4"/>`+`<circle cx="${(W*0.82)|0}" cy="${(H*0.9)|0}" r="330" fill="${fill('p')}"/>`+`<g fill="#2b4d78" opacity=".55"><ellipse cx="${(W*0.82)|0}" cy="${(H*0.82)|0}" rx="300" ry="34"/><ellipse cx="${(W*0.82)|0}" cy="${(H*0.9)|0}" rx="320" ry="30"/></g>`+`<g fill="#dfe8ff" opacity=".9">`+Array.from({length:5},()=>`<rect x="${(R()*W)|0}" y="${(R()*H*0.55)|0}" width="${(3+R()*3)|0}" height="${(3+R()*3)|0}"/>`).join('')+`</g>`;
-  }
-  return `<defs>${defs}</defs>${b}`;
-}
-const SCENE_CACHE={};
-function sceneSVG(key){if(!SCENES_MAP[key])key='nightCity';if(!SCENE_CACHE[key])SCENE_CACHE[key]=`<svg viewBox="0 0 ${CITY_W} ${CITY_H}" preserveAspectRatio="xMidYMid slice">${buildScene(key,CITY_W,CITY_H)}</svg>`;return SCENE_CACHE[key];}
-function currentEnv(){return (typeof model!=='undefined'&&model&&SCENES_MAP[model.env])?model.env:'nightCity';}
-function applyBackdrop(){if(typeof cityscape!=='undefined'&&cityscape){cityscape.innerHTML=sceneSVG(currentEnv());if(typeof applyView==='function')applyView();}}
-function setEnv(key){if(!SCENES_MAP[key]||!model)return;model.env=key;applyBackdrop();if(typeof save==='function')save();if(typeof pushHistory==='function')pushHistory();}
+// legacy alias (Environ picker still calls setEnv/currentEnv only)
+function sceneSVG(k){return envBackdropSVG(k);}
 
 const FLOORS=['gWood','gWood2','gAsh','gCream','gMarble','gConcrete','gStone','gSlate','gGreen','gTeal','gNavy','gBrick','gTradeFloor'];
 const PATS=['wood','parquet','tile','checker','stone','marble','carpet','none'];
@@ -981,13 +1014,13 @@ function renderModel(model){
   if(MODE==='fp'){ // first-person: single projected ground plane (sky is the SVG background)
     const gsp=projFP([[gx,gy,0],[gx+gw,gy,0],[gx+gw,gy+gh,0],[gx,gy+gh,0]]);if(gsp.length>=3)push(-1000002,poly(gsp,'url(#plazaGrad)'));
   } else {
-  // plaza
-  {const A=P(gx,gy),B=P(gx+gw,gy),Cc=P(gx+gw,gy+gh),D=P(gx,gy+gh);let s=poly([A,B,Cc,D],'url(#plazaGrad)');if(!MOVING){s+=`<g stroke="#2a3346" stroke-width=".6" opacity=".35">`;for(let i=0;i<=gw;i+=4){const a=P(gx+i,gy),b=P(gx+i,gy+gh);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}for(let j=0;j<=gh;j+=4){const a=P(gx,gy+j),b=P(gx+gw,gy+j);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}s+=`</g>`;}push(-10000,s);}
+  // continuous outside world (streets, neighbours, greenery/water) so the office
+  // reads as a building grounded in a place — drawn in-projection, behind the floor
+  drawEnv(fx,fy,fw,fh);
   {const A=P(fx,fy),B=P(fx+fw,fy),Cc=P(fx+fw,fy+fh),D=P(fx,fy+fh);push(-9999,poly([A,B,Cc,D],'url(#floorGrad)')+poly([A,B,Cc,D],'url(#floorSheen)',null,0,.42));}
   // tile grid (aligned to whole tiles)
   if(gridOn&&!MOVING){let s=`<g stroke="#33486a" stroke-width=".5" opacity=".5">`;const gx0=Math.ceil(fx),gx1=Math.floor(fx+fw),gy0=Math.ceil(fy),gy1=Math.floor(fy+fh);for(let i=gx0;i<=gx1;i++){const a=P(i,fy),b=P(i,fy+fh);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}for(let j=gy0;j<=gy1;j++){const a=P(fx,j),b=P(fx+fw,j);s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;}push(-9998,s+`</g>`);}
   }
-  PR.plant(fx+.5,fy+fh-1.5,1.35);PR.plant(fx+fw-1.7,fy+.5,1.35);PR.plant(fx+.5,fy+.5,1.2);PR.plant(fx+fw-1.7,fy+fh-1.7,1.35);
   const hiddenRooms=new Set();
   model.rooms.forEach(r=>{if(r.hidden||(soloId&&r.id!==soloId)){hiddenRooms.add(r.id);return;}
     // First-person frustum cull: a room whose every corner is behind the near plane
