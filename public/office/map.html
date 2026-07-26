@@ -1364,7 +1364,7 @@ function peopleLoop(t){
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
 function startPeople(){if(REDUCED)return;if(!peopleRAF){peopleLast=performance.now();peopleRAF=requestAnimationFrame(peopleLoop);}}
-document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(peopleRAF);peopleRAF=0;}else startPeople();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(peopleRAF);peopleRAF=0;fx3dStopAnim();}else{startPeople();if(MODE==='fp')fx3dStartAnim();}});
 function load(){try{['fx_map','fx_map_v3','fx_map_v4','fx_map_v5','fx_map_v6','fx_map_v7','fx_map_v8'].forEach(k=>localStorage.removeItem(k));const s=localStorage.getItem('fx_map_v9');return s?JSON.parse(s):null;}catch(e){return null;}}
 const snapv=v=>snap?Math.round(v):Math.round(v*100)/100;
 const TSNAP=v=>Math.round(v); // always-tile snap (for tile-based tools)
@@ -2305,8 +2305,8 @@ refreshFab();
 const mRows=document.getElementById('mRows'),mIso=document.getElementById('mIso');
 // Graceful top-down <-> first-person switch: brief fade+blur so the projection change doesn't hard-cut.
 function viewSwitch(fn){const st=stageDom;if(!st||(typeof REDUCED!=='undefined'&&REDUCED)){fn();return;}st.style.transition='opacity .16s ease,filter .16s ease';st.style.opacity='0';st.style.filter='blur(4px)';setTimeout(()=>{fn();requestAnimationFrame(()=>{st.style.opacity='1';st.style.filter='blur(0)';setTimeout(()=>{st.style.transition='';st.style.filter='';},240);});},150);}
-mRows.onclick=()=>viewSwitch(()=>{fpStop();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
-mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();});
+mRows.onclick=()=>viewSwitch(()=>{fpStop();fx3dStopAnim();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
+mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();fx3dStartAnim();});
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
 function zoomAt(clientX,clientY,nz){nz=Math.max(.45,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
@@ -2442,12 +2442,19 @@ function fx3dRender(){
   gl.uniform3fv(_fx.U.uL,L.L);gl.uniform3fv(_fx.U.uLcol,L.col);gl.uniform1f(_fx.U.uAmb,L.amb);gl.uniform3fv(_fx.U.uRim,L.rim);gl.uniform1f(_fx.U.uRimK,L.rimk);
   gl.bindBuffer(gl.ARRAY_BUFFER,_fx.buf);
   gl.vertexAttribPointer(_fx.aPos,2,gl.FLOAT,false,16,0);gl.vertexAttribPointer(_fx.aUV,2,gl.FLOAT,false,16,8);
+  const now=performance.now()/1000;
   const list=FX3D_LIST.slice().sort((a,b)=>b.cf-a.cf); // painter's order: far first
   for(const it of list){
     const tex=_fx.tex[it.k]; if(!tex||!tex.alb||!tex.nrm){fx3dLoad(it.k);continue;}
     const u0=(it.fi*256+52)/768,u1=(it.fi*256+52+152)/768,v0=0,v1=256/1024;
-    const qw=it.h*0.5938,qx=it.x+(it.w-qw)/2;   // match SVG "meet" fit (152/256 aspect) centred in the box
-    const P0=map(qx,it.y),P1=map(qx+qw,it.y),P2=map(qx,it.y+it.h),P3=map(qx+qw,it.y+it.h);
+    const qw=it.h*0.5938,qx0=it.x+(it.w-qw)/2;   // match SVG "meet" fit (152/256 aspect) centred in the box
+    // idle life: gentle breathing (vertical scale about the planted feet) + a faint sway. Feet stay put;
+    // the torso rises ~1.8% on the inhale. Per-avatar phase from the key so nobody breathes in unison.
+    const ph=(it.k.charCodeAt(0)*7+it.k.charCodeAt(it.k.length-1)*13)%100/10;
+    const breathe=REDUCED?0:(Math.sin(now*1.15+ph)*0.5+0.5);
+    const sway=REDUCED?0:Math.sin(now*0.6+ph)*0.004*it.h;
+    const feetY=it.y+it.h, topY=feetY-it.h*(1+breathe*0.018), qx=qx0+sway;
+    const P0=map(qx,topY),P1=map(qx+qw,topY),P2=map(qx,feetY),P3=map(qx+qw,feetY);
     const d=new Float32Array([P0[0],P0[1],u0,v0, P1[0],P1[1],u1,v0, P2[0],P2[1],u0,v1, P1[0],P1[1],u1,v0, P3[0],P3[1],u1,v1, P2[0],P2[1],u0,v1]);
     gl.bufferData(gl.ARRAY_BUFFER,d,gl.STREAM_DRAW);
     gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex.alb);gl.uniform1i(_fx.U.uAlb,0);
@@ -2455,6 +2462,13 @@ function fx3dRender(){
     gl.drawArrays(gl.TRIANGLES,0,6);
   }
 }
+// Continuous redraw so first-person avatars stay alive (breathing/sway) even when the camera is still —
+// FP doesn't run peopleLoop, and render() only fires on camera movement. Cheap: ~15 textured quads/frame.
+// Self-stops when we leave FP or the tab is hidden; respects reduced-motion.
+let fx3dAnim=0;
+function fx3dAnimLoop(){ if(MODE!=='fp'||document.hidden){fx3dAnim=0;return;} fx3dRender(); fx3dAnim=requestAnimationFrame(fx3dAnimLoop); }
+function fx3dStartAnim(){ if(REDUCED)return; if(!fx3dAnim)fx3dAnim=requestAnimationFrame(fx3dAnimLoop); }
+function fx3dStopAnim(){ cancelAnimationFrame(fx3dAnim); fx3dAnim=0; }
 </script>
 
 </body>
