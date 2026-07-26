@@ -141,6 +141,7 @@ body.previewing .fabbar{top:14px}
 .stage{flex:1;position:relative;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:radial-gradient(120% 120% at 50% -5%,#0e1a30,#070c16 70%);box-shadow:inset 0 0 0 1px rgba(245,215,115,.04),0 30px 80px -44px #000}
 .canvas{position:absolute;inset:0}
 .canvas>svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(var(--z,1));width:auto;height:96%;image-rendering:auto}
+#fx3d{position:absolute;inset:0;pointer-events:none;z-index:5}
 .ovwrap{position:absolute;top:50%;left:50%;transform-origin:center;pointer-events:none}
 .sel{position:absolute;inset:0;pointer-events:none;z-index:6}
 .brk{position:absolute;width:26px;height:26px;pointer-events:none;z-index:5;opacity:.5}
@@ -415,6 +416,7 @@ body.office:not(.viewmode) .zoom{right:290px}
   </div>
   <div class="stage" id="stage">
     <div class="canvas" id="canvas"></div>
+    <canvas id="fx3d"></canvas>
     <div class="ambient" id="ambient"></div>
     <div class="fabbar" id="fabbar">
       <button data-fab="select" class="on" title="Select"><svg viewBox="0 0 20 20"><path d="M4 3l6 14 2-6 6-2z"/></svg></button>
@@ -452,6 +454,14 @@ body.office:not(.viewmode) .zoom{right:290px}
 const TOP={UX:30,UY:20,VZ:10,OX:-28,OY:10,SW:1204,SH:735,mode:'top'};   // 2.5D overhead — landscape framing to fill wide stages
 const FP={FOCAL:680,OX:870,OY:612,SW:1740,SH:1150,mode:'fp'};              // first-person perspective
 let MODE='top';
+let FX3D_ON=false,FX3D_LIST=[];   // WebGL per-pixel reactive-lighting layer (first-person avatars)
+const _fx={gl:null,prog:null,buf:null,U:{},tex:{},inited:false};
+const FX_ROLES=['automater','capital-connector','capital-raiser','curator','deal-sourcer','earn','executive-advisor','investor-relations','lead-generator','legal-admin','office-manager','pr-director','rainmaker','seo-disruptor','workflow-instructor'];
+const FX_LIGHT={
+  day:{L:[-0.35,0.72,0.60],col:[1.00,0.98,0.92],amb:0.62,rim:[1.0,0.96,0.86],rimk:0.22},
+  dusk:{L:[0.55,0.35,0.55],col:[1.05,0.80,0.55],amb:0.46,rim:[1.0,0.78,0.50],rimk:0.34},
+  night:{L:[-0.45,0.45,0.72],col:[0.55,0.66,0.95],amb:0.34,rim:[0.60,0.75,1.00],rimk:0.42},
+};
 const C=()=>MODE==='fp'?FP:TOP;
 let ROT=null; // {cx,cy,cos,sin} — active world-space rotation while drawing a prop
 let YAW=0, YAWC={x:0,y:0}; // retained (scene centre); top-down has no orbit
@@ -862,7 +872,7 @@ const ZCOL={audio:{fill:'rgba(56,208,255,.13)',stroke:'#38d0ff'},meeting:{fill:'
 const PROP_TYPES=['desk','chair','plant','sofa','armchair','coffee','conf','books','cabinet','board','recep','stool','bar','lamp','printer','rack','rug','glass','art','whiteboard','wallscreen'];
 
 function renderModel(model){
-  draws=[];overlays=[];
+  draws=[];overlays=[];FX3D_LIST=[];
   // floor bounds from rooms
   let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
   model.rooms.forEach(r=>{minx=Math.min(minx,r.x);miny=Math.min(miny,r.y);maxx=Math.max(maxx,r.x+r.w);maxy=Math.max(maxy,r.y+r.d);});
@@ -919,7 +929,8 @@ function renderModel(model){
         // and drawn ON TOP of furniture (large sort key) so they're never hidden. SVG name/status label above.
         const cf=camF(pp.x,pp.y);if(cf<0.4)return;const feet=P(pp.x,pp.y,0);const nat=1.7*C().FOCAL/cf;const Hpx=Math.max(96,Math.min(560,nat*1.3));
         const W=Hpx*0.6,X=feet[0]-W/2,Y=feet[1]-Hpx,fp=Math.max(9,Math.min(17,Hpx*0.1)),lw=pp.r.length*fp*0.6+16,ly=Y-fp*0.6,ffi=(pp.fi!=null?pp.fi:1);
-        push(5e5-cf,`<g><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${Hpx.toFixed(1)}" viewBox="${ffi*256+52} 0 152 256" preserveAspectRatio="xMidYMax meet"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="768" height="1024" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.5)) saturate(1) contrast(1.06) brightness(1.03)"/></svg><g transform="translate(${feet[0].toFixed(1)},${ly.toFixed(1)})"><rect x="${(-lw/2).toFixed(1)}" y="${(-fp-4).toFixed(1)}" width="${lw.toFixed(1)}" height="${(fp+7).toFixed(1)}" rx="3" fill="rgba(11,18,32,.88)" stroke="rgba(245,215,115,.3)" stroke-width="0.6"/><circle cx="${(-lw/2+fp*0.8).toFixed(1)}" cy="${(-fp*0.4-0.5).toFixed(1)}" r="${(fp*0.28).toFixed(1)}" fill="${sc}"/><text x="${(fp*0.5).toFixed(1)}" y="${(-fp*0.4).toFixed(1)}" text-anchor="middle" font-family="ui-monospace,monospace" font-weight="700" font-size="${fp.toFixed(1)}" fill="#eaf0ff" dominant-baseline="central">${pp.r}</text></g></g>`);
+        const _spr=FX3D_ON?(FX3D_LIST.push({k:pp.k,x:X,y:Y,w:W,h:Hpx,fi:ffi,cf}),''):`<svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${Hpx.toFixed(1)}" viewBox="${ffi*256+52} 0 152 256" preserveAspectRatio="xMidYMax meet"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="768" height="1024" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.5)) saturate(1) contrast(1.06) brightness(1.03)"/></svg>`;
+        push(5e5-cf,`<g>${_spr}<g transform="translate(${feet[0].toFixed(1)},${ly.toFixed(1)})"><rect x="${(-lw/2).toFixed(1)}" y="${(-fp-4).toFixed(1)}" width="${lw.toFixed(1)}" height="${(fp+7).toFixed(1)}" rx="3" fill="rgba(11,18,32,.88)" stroke="rgba(245,215,115,.3)" stroke-width="0.6"/><circle cx="${(-lw/2+fp*0.8).toFixed(1)}" cy="${(-fp*0.4-0.5).toFixed(1)}" r="${(fp*0.28).toFixed(1)}" fill="${sc}"/><text x="${(fp*0.5).toFixed(1)}" y="${(-fp*0.4).toFixed(1)}" text-anchor="middle" font-family="ui-monospace,monospace" font-weight="700" font-size="${fp.toFixed(1)}" fill="#eaf0ff" dominant-baseline="central">${pp.r}</text></g></g>`);
       } else {
         const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,dir=pp.dir||0,fi=pp.fi!=null?pp.fi:1,X=q[0]-W/2,Y=q[1]-H;
         push(pp.x,pp.y,`<g id="ps_${pp.id}"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}" viewBox="${fi*256} ${dir*256} 256 256"><image href="/assets/fundexecs/characters/${pp.k}/walk.png" width="768" height="1024" style="filter:drop-shadow(0 1px 1.4px rgba(0,0,0,.5)) saturate(1) contrast(1.06) brightness(1.03)"/></svg></g>`);
@@ -1375,6 +1386,7 @@ function render(){
   // Hosted view fills the frame (cover / slice); the builder contains the whole plan (meet).
   canvas.innerHTML=`<svg viewBox="0 0 ${c.SW} ${c.SH}" preserveAspectRatio="xMidYMid ${viewPar()}"><rect width="${c.SW}" height="${c.SH}" fill="${MODE==='fp'?'url(#fpSky)':'#0b1220'}"/>${DEFS}${svg}</svg><div class="ovwrap" id="ovwrap">${ov}</div>`;
   const _sv=svgEl();if(_sv)_sv.style.setProperty('--ad',(-(((Date.now()-T0)/1000)%3)).toFixed(3)+'s'); // keep screen-pulse phase continuous across rebuilds
+  fx3dRender();
   applyView();
   drawSel();
   const nz=(model.zones||[]).length;
@@ -2379,6 +2391,70 @@ document.getElementById('btnSave').onclick=function(){try{localStorage.setItem('
 // Tell the embedding /office page we're ready, so it can hand us the member's
 // saved character via postMessage('fx-you'). Harmless when opened standalone.
 try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'fx-office-ready'},location.origin);}catch(_){}
+
+// ===== FX3D — WebGL per-pixel reactive lighting for first-person avatars =====
+// The office SVG is rebuilt every render(), which would destroy a nested WebGL context, so this
+// is a persistent overlay <canvas> aligned to the scene via the SVG's getScreenCTM() (which carries
+// the viewBox fit + CSS zoom/pan). It draws teammate billboards lit per-pixel from a silhouette-
+// derived normal map, with the light keyed to the office AMBIENT (day/dusk/night). First-person only:
+// in FP avatars already draw on top, so there is no occlusion to preserve. Falls back to the plain
+// SVG sprite when WebGL is unavailable (FX3D_ON stays false). _fx/FX_ROLES/FX_LIGHT declared up top.
+function fx3dInit(){
+  const cv=document.getElementById('fx3d'); if(!cv)return false;
+  let gl; try{gl=cv.getContext('webgl',{premultipliedAlpha:false,alpha:true,antialias:true})||cv.getContext('experimental-webgl');}catch(e){}
+  if(!gl)return false;
+  const vs=`attribute vec2 aPos;attribute vec2 aUV;uniform vec2 uRes;varying vec2 vUV;void main(){vec2 c=(aPos/uRes)*2.0-1.0;c.y=-c.y;gl_Position=vec4(c,0.0,1.0);vUV=aUV;}`;
+  const fs=`precision mediump float;varying vec2 vUV;uniform sampler2D uAlb;uniform sampler2D uNrm;uniform vec3 uL;uniform vec3 uLcol;uniform float uAmb;uniform vec3 uRim;uniform float uRimK;void main(){vec4 a=texture2D(uAlb,vUV);if(a.a<0.02)discard;vec3 n=normalize(texture2D(uNrm,vUV).xyz*2.0-1.0);float ndl=max(dot(n,normalize(uL)),0.0);float rim=pow(clamp(1.0-n.z,0.0,1.0),2.0)*uRimK;vec3 lit=a.rgb*(uAmb+uLcol*ndl)+uRim*rim;gl_FragColor=vec4(lit,a.a);}`;
+  const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o;};
+  const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,vs));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog,gl.LINK_STATUS))return false;
+  gl.useProgram(prog);
+  const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  const aPos=gl.getAttribLocation(prog,'aPos'),aUV=gl.getAttribLocation(prog,'aUV');
+  gl.enableVertexAttribArray(aPos);gl.enableVertexAttribArray(aUV);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  const U={};['uRes','uAlb','uNrm','uL','uLcol','uAmb','uRim','uRimK'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+  _fx.gl=gl;_fx.prog=prog;_fx.buf=buf;_fx.aPos=aPos;_fx.aUV=aUV;_fx.U=U;_fx.inited=true;
+  FX_ROLES.forEach(fx3dLoad);
+  return true;
+}
+function fx3dLoad(k){
+  if(_fx.tex[k])return; _fx.tex[k]={alb:null,nrm:null};
+  const gl=_fx.gl;
+  const mk=(url,slot)=>{const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);_fx.tex[k][slot]=t;};img.src=url;};
+  mk('/assets/fundexecs/characters/'+k+'/walk.png','alb');
+  mk('/assets/fundexecs/characters/'+k+'/normal.png','nrm');
+}
+function fx3dRender(){
+  if(!_fx.inited){ if(!fx3dInit()){FX3D_ON=false;return;} FX3D_ON=true; }
+  const gl=_fx.gl,cv=gl.canvas;
+  const stage=document.getElementById('stage'); if(!stage)return; const rect=stage.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const W=Math.max(1,Math.round(rect.width*dpr)),H=Math.max(1,Math.round(rect.height*dpr));
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
+  gl.viewport(0,0,W,H);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+  if(MODE!=='fp'||!FX3D_LIST.length)return;
+  const svg=canvas.querySelector('svg'); if(!svg||!svg.getScreenCTM)return; const m=svg.getScreenCTM(); if(!m)return;
+  const ox=rect.left,oy=rect.top;
+  const map=(vx,vy)=>[(m.a*vx+m.c*vy+m.e-ox)*dpr,(m.b*vx+m.d*vy+m.f-oy)*dpr];
+  gl.useProgram(_fx.prog);gl.uniform2f(_fx.U.uRes,W,H);
+  const L=FX_LIGHT[(typeof AMBIENT!=='undefined'&&FX_LIGHT[AMBIENT])?AMBIENT:'day'];
+  gl.uniform3fv(_fx.U.uL,L.L);gl.uniform3fv(_fx.U.uLcol,L.col);gl.uniform1f(_fx.U.uAmb,L.amb);gl.uniform3fv(_fx.U.uRim,L.rim);gl.uniform1f(_fx.U.uRimK,L.rimk);
+  gl.bindBuffer(gl.ARRAY_BUFFER,_fx.buf);
+  gl.vertexAttribPointer(_fx.aPos,2,gl.FLOAT,false,16,0);gl.vertexAttribPointer(_fx.aUV,2,gl.FLOAT,false,16,8);
+  const list=FX3D_LIST.slice().sort((a,b)=>b.cf-a.cf); // painter's order: far first
+  for(const it of list){
+    const tex=_fx.tex[it.k]; if(!tex||!tex.alb||!tex.nrm){fx3dLoad(it.k);continue;}
+    const u0=(it.fi*256+52)/768,u1=(it.fi*256+52+152)/768,v0=0,v1=256/1024;
+    const qw=it.h*0.5938,qx=it.x+(it.w-qw)/2;   // match SVG "meet" fit (152/256 aspect) centred in the box
+    const P0=map(qx,it.y),P1=map(qx+qw,it.y),P2=map(qx,it.y+it.h),P3=map(qx+qw,it.y+it.h);
+    const d=new Float32Array([P0[0],P0[1],u0,v0, P1[0],P1[1],u1,v0, P2[0],P2[1],u0,v1, P1[0],P1[1],u1,v0, P3[0],P3[1],u1,v1, P2[0],P2[1],u0,v1]);
+    gl.bufferData(gl.ARRAY_BUFFER,d,gl.STREAM_DRAW);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex.alb);gl.uniform1i(_fx.U.uAlb,0);
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,tex.nrm);gl.uniform1i(_fx.U.uNrm,1);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+  }
+}
 </script>
 
 </body>
