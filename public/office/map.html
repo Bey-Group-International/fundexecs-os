@@ -292,6 +292,7 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .plabel{z-index:6}
 .plabel .pnm{display:inline-flex;align-items:center;gap:4px;font:700 7px ui-monospace,SFMono-Regular,monospace;letter-spacing:.02em;color:#eaf0ff;background:rgba(11,18,32,.86);padding:1px 6px 1px 4px;border-radius:5px;white-space:nowrap;box-shadow:0 0 0 1px rgba(245,215,115,.28)}
 .plabel .pdot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 1.5px #0b1220}
+.plabel .pnm.you{color:#0b1220;background:linear-gradient(180deg,#f5d773,#e6c25a);box-shadow:0 0 0 1px rgba(245,215,115,.55)}
 .speech{z-index:7}
 .speech .bub{display:inline-flex;gap:3px;align-items:center;background:rgba(11,18,32,.9);padding:3px 6px;border-radius:7px 7px 7px 2px;box-shadow:0 0 0 1px rgba(245,215,115,.24),0 4px 10px -5px #000}
 .speech .bub i{width:3px;height:3px;border-radius:50%;background:#9fb2d4;animation:chatdot 1.25s infinite}
@@ -936,6 +937,14 @@ function renderModel(model){
         overlays.push(`<div class="ov plabel" id="pe_${pp.id}" style="left:${q[0].toFixed(1)}px;top:${(q[1]-H-3).toFixed(1)}px"><span class="pnm"><i class="pdot" style="background:${sc}"></i>${pp.r}</span></div>`);
       }
     });
+    // "You" — the member's own paper-doll, depth-sorted onto the floor (top-down
+    // only; in first person you don't see yourself). Same shadow + floating label
+    // treatment as the persona teammates; the RAF (stepYou) slides it on a walk.
+    if(YOU.active&&MODE!=='fp'&&YOU.svg){
+      const q=P(YOU.x,YOU.y,0),pf=pscale(YOU.y),H=54*pf,W=H*200/260,X=q[0]-W/2,Y=q[1]-H;
+      push(YOU.x,YOU.y,`<g id="ps_you"><ellipse cx="${(q[0]+1).toFixed(1)}" cy="${(q[1]+1).toFixed(1)}" rx="${(13.8*pf).toFixed(1)}" ry="${(4.6*pf).toFixed(1)}" fill="rgba(0,0,0,.18)"/><ellipse cx="${(q[0]+2*pf).toFixed(1)}" cy="${q[1].toFixed(1)}" rx="${(12*pf).toFixed(1)}" ry="${(4*pf).toFixed(1)}" fill="rgba(0,0,0,.4)"/><svg class="youdoll" x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}" viewBox="0 0 200 260" preserveAspectRatio="xMidYMax meet">${YOU.svg}</svg></g>`);
+      overlays.push(`<div class="ov plabel" id="pe_you" style="left:${q[0].toFixed(1)}px;top:${(q[1]-H-3).toFixed(1)}px"><span class="pnm you"><i class="pdot" style="background:${YOU.status}"></i>${YOU.name}</span></div>`);
+    }
   }
   return {svg:draws.map(o=>o.svg).join(""),ov:overlays.join(""),bounds:{fx,fy,fw,fh}};
 }
@@ -1155,6 +1164,51 @@ function delegateAvatar(idOrRole,opts={}){
   pp.deleg={phase:'out',goal,kind:opts.kind||'task',wander:!!opts.wander,label:opts.label||'',t:0,dur:opts.dur||(4.5+Math.random()*4.5)};
   startPeople();return true;}
 function recallAvatar(idOrRole){const key=String(idOrRole).toLowerCase();const pp=PBID[idOrRole]||PEOPLE.find(p=>p.k===idOrRole||p.id===key||p.r.toLowerCase()===key);if(pp&&pp.deleg&&pp.deleg.phase==='task')pp.deleg.dur=pp.deleg.t;return !!pp;}
+// ---- "You": the signed-in member's own avatar on the floor. Its look is the
+// Character Studio paper-doll, rendered app-side by the SHARED SVG builder
+// (lib/office/avatarPaperDoll.ts) and handed in as ready markup via
+// postMessage({type:'fx-you', svg, name, status}) from the /office page — so this
+// self-contained map needs no bundler. Click any floor point to walk there;
+// pathing reuses the same corridor graph + walkable check as the AI staff. ----
+const YOU={active:false,x:16,y:24,dir:0,dist:0,svg:'',name:'You',status:'#34d399',path:null,pi:0,cur:0};
+function youSpawn(){const n=NODE.nM||[16,24];YOU.x=n[0];YOU.y=n[1];YOU.path=null;YOU.pi=0;YOU.cur=0;}
+function lineClear(x0,y0,x1,y1){const n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/0.5));for(let i=0;i<=n;i++){const t=i/n;if(!tileInRoom(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;}
+function walkYouTo(wx,wy){
+  if(!YOU.active||!tileInRoom(wx,wy))return false;
+  if(lineClear(YOU.x,YOU.y,wx,wy)){YOU.path=[[YOU.x,YOU.y],[wx,wy]];}
+  else{const from=nearestNode(YOU.x,YOU.y),goal=nearestNode(wx,wy);YOU.path=[[YOU.x,YOU.y],...nodesToPts(bfs(from,goal)),[wx,wy]];}
+  YOU.pi=1;YOU.cur=Math.max(YOU.cur,0.35);startPeople();return true;}
+function stepYou(dt,t){
+  if(!YOU.active)return;
+  let moving=false,yoff=0;
+  if(YOU.path&&YOU.pi<YOU.path.length){
+    const tgt=YOU.path[YOU.pi],dx=tgt[0]-YOU.x,dy=tgt[1]-YOU.y,d=Math.hypot(dx,dy),isLast=YOU.pi>=YOU.path.length-1;
+    let sp=2.0;if(isLast)sp=Math.min(sp,0.55+d*1.7);
+    YOU.cur=Math.min(sp,(YOU.cur||0.35)+dt*2.8);
+    const step=Math.min(YOU.cur*dt,d);
+    if(d>1e-3){YOU.x+=dx/d*step;YOU.y+=dy/d*step;YOU.dist+=step;YOU.dir=dir4(dx,dy);}
+    moving=YOU.cur>0.15;
+    if(d<0.1){if(isLast){YOU.path=null;YOU.cur=0;}else YOU.pi++;}
+  }
+  if(moving)yoff=-Math.abs(Math.sin((YOU.dist/STRIDE)*Math.PI))*1.25;
+  else yoff=REDUCED?0:Math.sin(t/1000)*0.4;
+  const g=document.getElementById('ps_you');if(!g)return;
+  const q=P(YOU.x,YOU.y,0),pf=pscale(YOU.y),H=54*pf,W=H*200/260,X=q[0]-W/2,Y=q[1]-H+yoff;
+  const sv=g.querySelector('svg.youdoll');if(sv){sv.setAttribute('x',X.toFixed(1));sv.setAttribute('y',Y.toFixed(1));sv.setAttribute('width',W.toFixed(1));sv.setAttribute('height',H.toFixed(1));}
+  const es=g.getElementsByTagName('ellipse');
+  if(es[0]){es[0].setAttribute('cx',(q[0]+1).toFixed(1));es[0].setAttribute('cy',(q[1]+1).toFixed(1));es[0].setAttribute('rx',(13.8*pf).toFixed(1));es[0].setAttribute('ry',(4.6*pf).toFixed(1));}
+  if(es[1]){es[1].setAttribute('cx',(q[0]+2*pf).toFixed(1));es[1].setAttribute('cy',q[1].toFixed(1));es[1].setAttribute('rx',(12*pf).toFixed(1));es[1].setAttribute('ry',(4*pf).toFixed(1));}
+  const lb=document.getElementById('pe_you');if(lb){lb.style.left=q[0].toFixed(1)+'px';lb.style.top=(q[1]-H-3).toFixed(1)+'px';}
+}
+function setYou(d){
+  if(!d||!d.svg)return;
+  YOU.svg=String(d.svg);
+  YOU.name=String(d.name||'You').slice(0,40);
+  YOU.status=/^#[0-9a-f]{6}$/i.test(String(d.status||''))?d.status:'#34d399';
+  if(!YOU.active){YOU.active=true;youSpawn();}
+  if(document.body.classList.contains('office')&&MODE!=='fp'){render();drawSel();startPeople();}
+}
+window.addEventListener('message',e=>{if(e.origin!==location.origin)return;const d=e.data;if(d&&d.type==='fx-you')setYou(d);});
 let intentHover=null,intentPin=null;
 function intentFor(pp){
   if(pp._say)return pp._say;                       // Claude-enriched (set on click), else local template
@@ -1205,7 +1259,10 @@ function paintIntent(){
   canvas.addEventListener('mouseover',e=>{if(!on())return;const id=gid(e.target);if(id){intentHover=id;paintIntent();}});
   canvas.addEventListener('mouseout',e=>{const id=gid(e.target);if(id&&intentHover===id){intentHover=null;paintIntent();}});
   canvas.addEventListener('click',e=>{if(!on())return;const id=gid(e.target);
-    if(!id){if(intentPin){intentPin=null;paintIntent();}return;}
+    if(!id){if(intentPin){intentPin=null;paintIntent();}
+      // a genuine click on the floor (not a pan-drag) walks YOU to that spot
+      if(!dragMoved&&YOU.active){const [sx,sy]=screenToSvg(e.clientX,e.clientY);const [wx,wy]=worldFrom(sx,sy);walkYouTo(wx,wy);}
+      return;}
     const pp=PBID[id];if(!pp)return;
     if(intentPin===id){intentPin=null;pp._say=null;}else{intentPin=id;pp._say=null;enrichIntent(pp);}
     paintIntent();});
@@ -1302,6 +1359,7 @@ function peopleLoop(t){
     for(let j=0;j<PEOPLE.length;j++){if(i===j)continue;const b=PEOPLE[j];if(b.x==null)continue;
       const dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy;
       if(d2>1e-4&&d2<MIND*MIND){const d=Math.sqrt(d2),push=(MIND-d)*((b.roam||b.deleg)?0.5:0.9)/d;a.x+=dx*push;a.y+=dy*push;}}}
+  stepYou(dt,t);   // slide the member's own avatar along its current walk path
   paintIntent();   // keep the hovered/pinned intent bubble glued to its (possibly moving) avatar
   peopleRAF=requestAnimationFrame(peopleLoop);
 }
@@ -2330,6 +2388,9 @@ const leftcolEl=document.querySelector('.leftcol'),leftToggle=document.getElemen
 if(leftToggle)leftToggle.onclick=()=>{const c=!leftcolEl.classList.contains('collapsed');leftcolEl.classList.toggle('collapsed',c);leftToggle.title=(c?'Show':'Hide')+' palette';};
 buildPal();buildPanel();render();pushHistory();enterView();
 document.getElementById('btnSave').onclick=function(){try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}toast('Saved');enterView();};
+// Tell the embedding /office page we're ready, so it can hand us the member's
+// saved character via postMessage('fx-you'). Harmless when opened standalone.
+try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'fx-office-ready'},location.origin);}catch(_){}
 
 // ===== FX3D — WebGL per-pixel reactive lighting for first-person avatars =====
 // The office SVG is rebuilt every render(), which would destroy a nested WebGL context, so this
