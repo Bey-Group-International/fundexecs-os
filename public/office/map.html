@@ -914,17 +914,31 @@ function setEnv(key){if(!ENV[key]||!model)return;model.env=key;applyBackdrop();i
 // A neighbouring building seen from above: extruded roof + edge trim + a rooftop
 // unit, and (night) a warm rooftop glow. Depth-sorted normally so front lots sit in
 // front of the office and back lots behind — one coherent block.
+// rows of windows on the camera-facing (south) face — the face box() actually draws
+function facadeFace(x,y,w,d,h,col,cfg,R){
+  const TL=P(x,y+d,h),TR=P(x+w,y+d,h),BL=P(x,y+d,0),BR=P(x+w,y+d,0);
+  const L=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+  const cols=Math.max(2,Math.min(5,Math.round(w/1.3))),rows=Math.max(2,Math.min(7,Math.round(h/1.5)));
+  const dark=shade(col,cfg.night?0.5:0.82);let s='';
+  for(let r=0;r<rows;r++){const t0=r/rows+0.16/rows,t1=(r+1)/rows-0.16/rows;
+    for(let cN=0;cN<cols;cN++){const u0=cN/cols+0.2/cols,u1=(cN+1)/cols-0.2/cols;
+      const p0=L(L(TL,TR,u0),L(BL,BR,u0),t0),p1=L(L(TL,TR,u1),L(BL,BR,u1),t0),p2=L(L(TL,TR,u1),L(BL,BR,u1),t1),p3=L(L(TL,TR,u0),L(BL,BR,u0),t1);
+      const lit=cfg.night&&R()<0.42;
+      s+=`<polygon points="${pts([p0,p1,p2,p3])}" fill="${lit?(cfg.lit||'#ffd98a'):dark}" opacity="${lit?0.9:0.5}"/>`;}}
+  return s;
+}
 function envBuilding(x,y,w,d,h,cfg,R){
   const col=R()<0.5?cfg.roof:cfg.roof2;
   const c=P(x+w/2,y+d/2,0),s=C();
-  push(-999997,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+3).toFixed(1)}" rx="${((w+d)*s.UX*0.24).toFixed(1)}" ry="${((w+d)*s.UY*0.2).toFixed(1)}" fill="#04070d" opacity=".28" filter="url(#blur)"/>`);
+  push(-999997,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+3+h*0.4).toFixed(1)}" rx="${((w+d)*s.UX*0.26+h).toFixed(1)}" ry="${((w+d)*s.UY*0.22+h*0.4).toFixed(1)}" fill="#04070d" opacity=".34" filter="url(#blur)"/>`);
   box(x,y,w,d,h,col);
+  let s2=(h>2.4&&!cfg.noWin)?facadeFace(x,y,w,d,h,col,cfg,R):'';
   const A=P(x+0.35,y+0.35,h),B=P(x+w-0.35,y+0.35,h),Cc=P(x+w-0.35,y+d-0.35,h),D=P(x+0.35,y+d-0.35,h);
-  let s2=`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${shade(col,0.7)}" stroke-width="1"/>`;
+  s2+=`<polygon points="${pts([A,B,Cc,D])}" fill="none" stroke="${shade(col,0.7)}" stroke-width="1"/>`;
   if(cfg.winter)s2+=`<polygon points="${pts([P(x,y,h),P(x+w,y,h),P(x+w,y+d,h),P(x,y+d,h)])}" fill="#f4f9ff" opacity=".55"/>`;
-  if(cfg.night){const g=P(x+w/2,y+d/2,h);s2+=`<circle cx="${g[0].toFixed(1)}" cy="${g[1].toFixed(1)}" r="2.4" fill="${cfg.lit||'#ffd98a'}" opacity=".75"/>`;}
+  if(cfg.night){const g=P(x+w/2,y+d/2,h);s2+=`<circle cx="${g[0].toFixed(1)}" cy="${g[1].toFixed(1)}" r="2.4" fill="${cfg.lit||'#ffd98a'}" opacity=".7" filter="url(#soft)"/>`;}
   push(y+d/2+0.02,s2);
-  if(w>2.6&&d>2.4)box(x+w*0.28,y+d*0.28,Math.min(1.1,w*0.28),Math.min(0.9,d*0.28),0.6,shade(col,1.12),{z0:h});
+  if(w>2.6&&d>2.4)box(x+w*0.28,y+d*0.28,Math.min(1.1,w*0.28),Math.min(0.9,d*0.28),0.5,shade(col,1.12),{z0:h});
 }
 function envTree(x,y,s,cfg){
   box(x+s*0.44,y+s*0.44,s*0.14,s*0.14,s*0.55,'#5a4326');
@@ -941,12 +955,17 @@ function drawEnv(fx,fy,fw,fh){
   envSlab(GX,GY,GW,GH,cfg.base,-1000000);
   // 2) grounding shadow halo just beyond the footprint
   {const c=P(fx+fw/2,fy+fh/2,0),s=C();push(-999996,`<ellipse cx="${c[0].toFixed(1)}" cy="${(c[1]+2).toFixed(1)}" rx="${((fw+fh)*s.UX*0.34).toFixed(1)}" ry="${((fw+fh)*s.UY*0.3).toFixed(1)}" fill="#04070d" opacity=".42" filter="url(#blur)"/>`);}
+  const cxo=fx+fw/2,cyo=fy+fh/2,maxR=Math.hypot(GW,GH)/2;
   const NB=(x,y,w,d)=>{ // place a lot only if clear of the building + street keep-out
     if(x+w>fx-8&&x<fx+fw+8&&y+d>fy-8&&y<fy+fh+8)return;
-    if(R()<0.22)envTree(x+w/2-0.7,y+d/2-0.7,1+R()*0.6,cfg);
-    else envBuilding(x,y,w,d,(cfg.dense?2.4:1.4)+R()*(cfg.dense?4.5:3),cfg,R);
+    if(R()<0.18)return envTree(x+w/2-0.7,y+d/2-0.7,1+R()*0.6,cfg);
+    // balanced massing that RISES toward the distance → a skyline with depth
+    const dist=Math.min(1,Math.hypot(x+w/2-cxo,y+d/2-cyo)/maxR);
+    const tower=R()<0.12+dist*0.24, base=(cfg.dense?3:2)+dist*(cfg.dense?7.5:5.5);
+    const h=(tower?base*1.7+R()*4:base*0.62+R()*2.2)+0.6;
+    envBuilding(x,y,w,d,h,cfg,R);
   };
-  const cityLots=(x0,y0,x1,y1)=>{for(let gx=x0;gx<x1-3;gx+=5+R()*3.5){for(let gy=y0;gy<y1-3;gy+=5+R()*3){NB(gx,gy,2.6+R()*3.4,2.6+R()*2.6);}}};
+  const cityLots=(x0,y0,x1,y1)=>{for(let gx=x0;gx<x1-3;gx+=5+R()*3.2){for(let gy=y0;gy<y1-3;gy+=5+R()*2.8){NB(gx,gy,2.6+R()*3.6,2.6+R()*2.8);}}};
   if(cfg.kind==='city'||cfg.kind==='space'){
     // street ring: base | road(3..7) | sidewalk(0..3) | building, via nested slabs
     envSlab(fx-7,fy-7,fw+14,fh+14,cfg.road,-999500);
@@ -988,9 +1007,13 @@ function drawEnv(fx,fy,fw,fh){
   } else { // nature (mountain): meadow + distant ridges + scattered pines
     envSlab(fx-3,fy-3,fw+6,fh+6,cfg.walk,-999000);
     // three ridge bands to the north (extruded rock with snow caps)
-    for(let b=0;b<3;b++){const ry=fy-16-b*7,rh=5+b*2.5;let gx=GX;while(gx<GX+GW){const w=6+R()*7;const col=b===0?cfg.rock:shade(cfg.rock,0.86-b*0.06);envBuilding(gx,ry,w,4+R()*2,rh+R()*3,{roof:col,roof2:shade(col,0.94),winter:true},R);gx+=w+1+R()*2;}}
+    for(let b=0;b<3;b++){const ry=fy-16-b*7,rh=5+b*2.5;let gx=GX;while(gx<GX+GW){const w=6+R()*7;const col=b===0?cfg.rock:shade(cfg.rock,0.86-b*0.06);envBuilding(gx,ry,w,4+R()*2,rh+R()*3,{roof:col,roof2:shade(col,0.94),winter:true,noWin:true},R);gx+=w+1+R()*2;}}
     for(let gx=GX;gx<GX+GW;gx+=4+R()*3){for(let gy=fy+fh+4;gy<GY+GH;gy+=4+R()*3){if(gx>fx-6&&gx<fx+fw+6&&gy<fy+fh+6)continue;if(R()<0.7)envTree(gx,gy,1.1+R()*0.8,cfg);}}
   }
+  // atmospheric haze: the distance fades toward the theme's far tone (clear over the
+  // office centre) — gives the 2.5D world real depth/air rather than a flat far field
+  {const c=P(fx+fw/2,fy+fh/2,0),s=C(),rx=(GW*0.6)*s.UX,ry=(GH*0.6)*s.UY,o=cfg.night?0.92:0.66;
+   push(9e5,`<radialGradient id="envhz" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="${cfg.far}" stop-opacity="0"/><stop offset=".48" stop-color="${cfg.far}" stop-opacity="0"/><stop offset="1" stop-color="${cfg.far}" stop-opacity="${o}"/></radialGradient><ellipse cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="url(#envhz)"/>`);}
 }
 // legacy alias (Environ picker still calls setEnv/currentEnv only)
 function sceneSVG(k){return envBackdropSVG(k);}
