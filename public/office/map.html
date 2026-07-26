@@ -2229,9 +2229,9 @@ function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu
 function exitView(){document.body.classList.remove('viewmode');panX=0;panY=0;zoom=1;refreshFab();render();applyView();drawSel();if(typeof startPeople==='function')startPeople();toast('Build mode');}
 function openMenu(cx,cy){
   if(document.body.classList.contains('viewmode')){
-    cmenu.innerHTML='<button data-a="__build" class="cbuild">◆ Build Mode</button><div class="csep"></div><button data-a="__reset">Reset view</button>';
-    cmenu.style.left=Math.min(cx,innerWidth-186)+'px';cmenu.style.top=Math.min(cy,innerHeight-96)+'px';cmenu.classList.add('on');
-    cmenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{const a=b.dataset.a;hideMenu();if(a==='__build')exitView();else if(a==='__reset'){panX=0;panY=0;zoom=1.7;YAW=0;applyView();drawSel();}});
+    cmenu.innerHTML='<button data-a="__build" class="cbuild">◆ Build Mode</button><button data-a="__studio" class="cbuild">✦ Character Studio</button><div class="csep"></div><button data-a="__reset">Reset view</button>';
+    cmenu.style.left=Math.min(cx,innerWidth-186)+'px';cmenu.style.top=Math.min(cy,innerHeight-124)+'px';cmenu.classList.add('on');
+    cmenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{const a=b.dataset.a;hideMenu();if(a==='__build')exitView();else if(a==='__studio'){try{(window.top||window).location.href='/office/builder';}catch(_){location.href='/office/builder';}}else if(a==='__reset'){panX=0;panY=0;zoom=1.7;YAW=0;applyView();drawSel();}});
     return;
   }
   if(walkMode||buildMode)return;
