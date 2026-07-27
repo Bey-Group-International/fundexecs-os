@@ -1365,15 +1365,19 @@ function bfs(a,b){if(a===b)return[a];const prev={},q=[a],seen={};seen[a]=1;while
 // with gaps at each doorway, so routing forces every trip through a real door; corridors/rooms are open
 // floor. Shared by roamers, delegated execs and the member's own avatar (replaces the old node-graph +
 // naive line-of-sight, which cut straight across walls). ----
-const PF_CELL=0.5;
+const PF_CELL=0.5, PF_CLEAR=0.34;   // routes must stay PF_CLEAR off any wall so they can't hug a wall or cut through the corner where two walls meet — every trip is forced through a real door opening
 function pfInRoom(x,y){return model.rooms.some(r=>!r.hidden&&x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d);}
 function pfWalkable(x,y){if(!pfInRoom(x,y))return false;const tx=Math.floor(x),ty=Math.floor(y);return !(model.blocked&&model.blocked[tx+','+ty]);}
+function ptSegDist(px,py,x1,y1,x2,y2){const vx=x2-x1,vy=y2-y1,wx=px-x1,wy=py-y1;const c1=vx*wx+vy*wy;if(c1<=0)return Math.hypot(px-x1,py-y1);const c2=vx*vx+vy*vy;if(c2<=c1)return Math.hypot(px-x2,py-y2);const t=c1/c2;return Math.hypot(px-(x1+t*vx),py-(y1+t*vy));}
+let pfClearMemo=new Map();
+function pfClear(x,y){const k=Math.round(x/0.25)+','+Math.round(y/0.25);let v=pfClearMemo.get(k);if(v!==undefined)return v;let m=1e9;for(const w of CAMWALLS){const d=ptSegDist(x,y,w[0],w[1],w[2],w[3]);if(d<m){m=d;if(m<PF_CLEAR)break;}}v=m>=PF_CLEAR;pfClearMemo.set(k,v);return v;}
+function pfNav(x,y){return pfWalkable(x,y)&&pfClear(x,y);}   // walkable AND clear of walls — used only for routing
 function pfWallHit(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;return false;} // true = a wall blocks this segment
-function pfSegOK(ax,ay,bx,by){if(pfWallHit(ax,ay,bx,by))return false;const n=Math.ceil(Math.hypot(bx-ax,by-ay)/(PF_CELL*0.9));for(let i=0;i<=n;i++){const t=i/n;if(!pfWalkable(ax+(bx-ax)*t,ay+(by-ay)*t))return false;}return true;}
-function pfSnap(x,y){if(pfWalkable(x,y))return [x,y];for(let r=1;r<=10;r++)for(let a=0;a<12;a++){const ang=a/12*6.2832,nx=x+Math.cos(ang)*r*PF_CELL,ny=y+Math.sin(ang)*r*PF_CELL;if(pfWalkable(nx,ny))return [nx,ny];}return [x,y];}
+function pfSegOK(ax,ay,bx,by){if(pfWallHit(ax,ay,bx,by))return false;const n=Math.ceil(Math.hypot(bx-ax,by-ay)/(PF_CELL*0.9));for(let i=0;i<=n;i++){const t=i/n;if(!pfNav(ax+(bx-ax)*t,ay+(by-ay)*t))return false;}return true;}
+function pfSnap(x,y){if(pfNav(x,y))return [x,y];for(let r=1;r<=14;r++)for(let a=0;a<16;a++){const ang=a/16*6.2832,nx=x+Math.cos(ang)*r*PF_CELL,ny=y+Math.sin(ang)*r*PF_CELL;if(pfNav(nx,ny))return [nx,ny];}return [x,y];}
 function pfSimplify(pts){if(pts.length<=2)return pts;const out=[pts[0]];let i=0;while(i<pts.length-1){let j=pts.length-1;for(;j>i+1;j--){if(pfSegOK(pts[i][0],pts[i][1],pts[j][0],pts[j][1]))break;}out.push(pts[j]);i=j;}return out;}
 function pathfind(sx,sy,gx,gy){
-  if(!CAMWALLS.length)buildFPWalls();
+  buildFPWalls();   // always rebuild from the current model so routes respect the latest walls/doors (never stale)
   const S=pfSnap(sx,sy),G=pfSnap(gx,gy),cq=v=>Math.round(v/PF_CELL),cw=c=>c*PF_CELL;
   const gc=[cq(G[0]),cq(G[1])],sc=[cq(S[0]),cq(S[1])],goalK=gc[0]+','+gc[1];
   if(pfSegOK(sx,sy,gx,gy))return [[sx,sy],[gx,gy]];              // clear straight shot
@@ -1388,8 +1392,8 @@ function pathfind(sx,sy,gx,gy){
     const cwx=cw(cur[0]),cwy=cw(cur[1]);
     for(const [ox,oy] of NB){
       const nx=cur[0]+ox,ny=cur[1]+oy,nk=nx+','+ny,nwx=cw(nx),nwy=cw(ny);
-      if(!pfWalkable(nwx,nwy)||pfWallHit(cwx,cwy,nwx,nwy))continue;
-      if(ox&&oy){if(!pfWalkable(cw(nx),cwy)||!pfWalkable(cwx,cw(ny)))continue;if(pfWallHit(cwx,cwy,cw(nx),cwy)||pfWallHit(cwx,cwy,cwx,cw(ny)))continue;}
+      if(!pfNav(nwx,nwy)||pfWallHit(cwx,cwy,nwx,nwy))continue;
+      if(ox&&oy){if(!pfNav(cw(nx),cwy)||!pfNav(cwx,cw(ny)))continue;if(pfWallHit(cwx,cwy,cw(nx),cwy)||pfWallHit(cwx,cwy,cwx,cw(ny)))continue;}
       const ng=g[bk]+Math.hypot(ox,oy)*PF_CELL;
       if(g[nk]==null||ng<g[nk]){g[nk]=ng;f[nk]=ng+h([nx,ny],gc);came.set(nk,bk);open.set(nk,[nx,ny]);}
     }
@@ -1436,7 +1440,9 @@ function delegateAvatar(idOrRole,opts={}){
   // default target: the nearest trading-floor node (a short, purposeful trip); the app can name one
   const goal=(opts.target&&NODE[opts.target])?opts.target:FLOOR_NODES.reduce((a,n)=>{const d=(NODE[n][0]-pp.x)**2+(NODE[n][1]-pp.y)**2;return d<a.d?{n,d}:a;},{n:FLOOR_NODES[0],d:1e9}).n;
   const gp=NODE[goal]||[pp.x,pp.y];
-  pp.path=pathfind(pp.x,pp.y,gp[0],gp[1])||[[pp.x,pp.y],gp];   // wall-aware: routes out through the doorway
+  const outPath=pathfind(pp.x,pp.y,gp[0],gp[1]);   // wall-aware: routes out through the doorway
+  if(!outPath)return false;                        // no legal route (never straight-line through a wall) — stay seated
+  pp.path=outPath;
   pp.pi=1;pp.cur=0.35;pp.dist=pp.dist||0;pp.spd=1.8+Math.random()*0.5;   // brisk, on-a-mission
   pp.deleg={phase:'out',goal,kind:opts.kind||'task',wander:!!opts.wander,label:opts.label||'',t:0,dur:opts.dur||(4.5+Math.random()*4.5)};
   startPeople();return true;}
@@ -1558,13 +1564,14 @@ function paintIntent(){
     if(intentPin===id){intentPin=null;pp._say=null;}else{intentPin=id;pp._say=null;enrichIntent(pp);}
     paintIntent();});
 })();
-function enterPause(pp){pp.state='pause';pp.cur=0;pp.pauseT=0;pp.pauseDur=2.4+Math.random()*3.4;pp.act=Math.random()<0.55?'look':'idle';}
+const ROAM_ACTS=['look','idle','turn','stretch','phone','look','idle'];   // weighted toward calm glances/breathing
+function enterPause(pp){pp.state='pause';pp.cur=0;pp.pauseT=0;pp.pauseDur=2.4+Math.random()*3.4;pp.act=ROAM_ACTS[(Math.random()*ROAM_ACTS.length)|0];}
 function pickDest(pp){
-  const others=roamers.filter(o=>o!==pp);
-  let goal; // ~40% of the time, head toward a colleague to spark a conversation; else a random node
-  if(others.length&&Math.random()<0.4){const o=others[(Math.random()*others.length)|0];goal=nearestNode(o.x,o.y);}
-  else goal=NODES[(Math.random()*NODES.length)|0];
-  const gp=Array.isArray(goal)?goal:NODE[goal];
+  const others=roamers.filter(o=>o!==pp),zs=(model.zones||[]).filter(z=>!z.hidden);
+  let gp; // gather in a zone · head toward a colleague to spark a chat · else a random hallway node
+  if(zs.length&&Math.random()<0.35){const z=zs[(Math.random()*zs.length)|0];gp=[z.x+z.w/2+(Math.random()-0.5)*Math.max(0,z.w-1),z.y+z.d/2+(Math.random()-0.5)*Math.max(0,z.d-1)];}
+  else if(others.length&&Math.random()<0.4){const o=others[(Math.random()*others.length)|0];gp=NODE[nearestNode(o.x,o.y)];}
+  else gp=NODE[NODES[(Math.random()*NODES.length)|0]];
   const path=pathfind(pp.x,pp.y,gp[0],gp[1]);
   if(path&&path.length>1){pp.path=path;pp.pi=1;pp.state='walk';pp.cur=Math.max(pp.cur||0,0.35);}
   else enterPause(pp);   // unreachable or already there → take a beat, then re-pick
@@ -1573,12 +1580,12 @@ function peopleLoop(t){
   if(!document.body.classList.contains('office')||MODE==='fp'){peopleRAF=0;return;}
   const dt=Math.min(0.05,((t-peopleLast)||16)/1000);peopleLast=t;
   if(updateDoors(dt))render();   // doors ease open/closed as avatars approach/leave; re-render only while animating
-  // ---- conversations: two roamers paused near each other stop, face off and chat (speech dots) ----
+  // ---- conversations: paused roamers near each other form a huddle — everyone faces the group's centre and chats (speech dots) ----
   roamers.forEach(pp=>pp._chat=false);
-  for(let i=0;i<roamers.length;i++)for(let j=i+1;j<roamers.length;j++){const a=roamers[i],b=roamers[j];
-    if(a.state==='pause'&&b.state==='pause'&&Math.hypot(a.x-b.x,a.y-b.y)<CHAT_RANGE){
-      a._chat=b._chat=true;a.dir=dir4(b.x-a.x,b.y-a.y);b.dir=dir4(a.x-b.x,a.y-b.y);
-      a.pauseDur=Math.max(a.pauseDur||0,a.pauseT+1.6);b.pauseDur=Math.max(b.pauseDur||0,b.pauseT+1.6);a.act=b.act='chat';}}
+  for(let i=0;i<roamers.length;i++){const a=roamers[i];if(a.state!=='pause')continue;
+    const grp=[a];for(let j=0;j<roamers.length;j++){if(j!==i){const b=roamers[j];if(b.state==='pause'&&Math.hypot(a.x-b.x,a.y-b.y)<CHAT_RANGE)grp.push(b);}}
+    if(grp.length>=2){let cx=0,cy=0;grp.forEach(p=>{cx+=p.x;cy+=p.y;});cx/=grp.length;cy/=grp.length;
+      grp.forEach(p=>{p._chat=true;p.dir=dir4(cx-p.x,cy-p.y);p.pauseDur=Math.max(p.pauseDur||0,p.pauseT+1.8);p.act='chat';});}}
   PEOPLE.forEach(pp=>{
     if(pp.ph==null)pp.ph=(pp.id.charCodeAt(0)%12)*0.5;
     let moving=false, yoff=0;
@@ -1592,21 +1599,29 @@ function peopleLoop(t){
         if(d>1e-3){pp.x+=dx/d*step;pp.y+=dy/d*step;pp.dist+=step;pp.dir=dir4(dx,dy);}
         moving=pp.cur>0.15;
         if(d<0.1){if(isLast)enterPause(pp);else pp.pi++;}
-      } else { // pause
-        pp.pauseT+=dt;
-        if(pp.act==='look'){const p=pp.pauseT;pp.dir=p<0.7?pp.dir:p<1.3?2:p<1.9?3:0;}
+      } else { // pause — varied idles, and a glance at a passing member
+        pp.pauseT+=dt;const p=pp.pauseT;
+        if(typeof YOU!=='undefined'&&YOU.active&&Math.hypot(pp.x-YOU.x,pp.y-YOU.y)<3.2){pp.dir=dir4(YOU.x-pp.x,YOU.y-pp.y);pp._chat=true;pp.pauseDur=Math.max(pp.pauseDur,p+1.2);}
+        else if(pp.act==='look')pp.dir=p<0.7?pp.dir:p<1.3?2:p<1.9?3:0;
+        else if(pp.act==='turn')pp.dir=Math.floor(p*1.3)%4;
+        else if(pp.act==='phone')pp.dir=0;
         if(pp.pauseT>=pp.pauseDur&&(!pp._chat||pp.pauseT>7))pickDest(pp);
       }
       if(moving){pp.fi=WALKSEQ[Math.floor(pp.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((pp.dist/STRIDE)*Math.PI))*1.25;}
-      else{pp.fi=1;yoff=REDUCED?0:Math.sin(t/950+pp.ph)*0.45;}
+      else{pp.fi=1;
+        if(pp.act==='stretch'){const s=Math.max(0,Math.sin((pp.pauseT/Math.max(0.1,pp.pauseDur))*Math.PI));yoff=REDUCED?0:(-2.2*s+Math.sin(t/950+pp.ph)*0.3);}   // reach up mid-pause
+        else if(pp.act==='phone')yoff=REDUCED?0:0.6+Math.sin(t/700+pp.ph)*0.2;                                                                                 // head down at phone
+        else yoff=REDUCED?0:Math.sin(t/950+pp.ph)*0.45;}                                                                                                        // breathing
     } else if(pp.deleg){ // delegated: walk out → work at the task spot → walk back to the desk
       if(pp.deleg.phase==='task'){
         pp.deleg.t+=dt;pp.fi=1;
         if(pp.deleg.wander){pp.dir=(pp.deleg.t%3<1.5)?2:3;yoff=REDUCED?0:Math.sin(t/900+pp.ph)*0.5;}  // relaxed, looking around
         else{pp.dir=0;yoff=Math.abs(Math.sin(t/95+pp.ph))*0.6-0.15;}                                    // heads-down on the floor
         if(pp.deleg.t>=pp.deleg.dur){                                              // done → head home
-          pp.path=pathfind(pp.x,pp.y,pp.home[0],pp.home[1])||[[pp.x,pp.y],[pp.home[0],pp.home[1]]];   // routes back in through the doorway
-          pp.pi=1;pp.cur=0.35;pp.deleg.phase='back';}
+          const back=pathfind(pp.x,pp.y,pp.home[0],pp.home[1]);   // routes back in through the doorway
+          if(back){pp.path=back;pp.pi=1;pp.cur=0.35;pp.deleg.phase='back';}
+          else{pp.x=pp.home[0];pp.y=pp.home[1];pp.deleg=null;pp.wst=null;pp.dir=0;pp.fi=1;}   // unroutable → settle at desk (never straight-line through a wall)
+        }
       } else {                                                                     // walking out / back
         const tgt=pp.path[pp.pi],dx=tgt[0]-pp.x,dy=tgt[1]-pp.y,d=Math.hypot(dx,dy),isLast=pp.pi>=pp.path.length-1;
         let sp=pp.spd||1.3;if(isLast)sp=Math.min(sp,0.55+d*1.7);
@@ -1627,17 +1642,20 @@ function peopleLoop(t){
       if(pp.wst.t>=pp.wst.d){const o=['type','review','idle','type'];pp.wst.s=o[(Math.random()*o.length)|0];pp.wst.t=0;
         pp.wst.d=pp.wst.s==='type'?2.2+Math.random()*2.4:pp.wst.s==='review'?1.8+Math.random()*1.6:1.4+Math.random()*1.8;}
       pp.fi=1;pp.dir=0;
-      if(pp.wst.s==='idle'&&pp.wst.t>0.7&&pp.wst.t<1.3)pp.dir=(pp.id.charCodeAt(0)&1)?2:3;   // glance
+      if(typeof YOU!=='undefined'&&YOU.active&&Math.hypot(pp.x-YOU.x,pp.y-YOU.y)<3.4)pp.dir=dir4(YOU.x-pp.x,YOU.y-pp.y);   // glance up at a passing member
+      else if(pp.wst.s==='idle'&&pp.wst.t>0.7&&pp.wst.t<1.3)pp.dir=(pp.id.charCodeAt(0)&1)?2:3;   // glance
       if(pp.wst.s==='type')yoff=Math.abs(Math.sin(t/95+pp.ph))*0.7-0.15;                     // lean-in typing
       else if(pp.wst.s==='review')yoff=0.9;                                                  // settle, head down
       else yoff=REDUCED?0:Math.sin(t/1150+pp.ph)*0.45;                                       // breathing
     }
     const g=document.getElementById('ps_'+pp.id);if(!g)return;
     const q=P(pp.x,pp.y,0),pf=pscale(pp.y),W=44*pf,H=44*pf,X=q[0]-W/2,Y=q[1]-H+yoff;
-    const sv=g.querySelector('svg');if(sv){sv.setAttribute('x',X.toFixed(1));sv.setAttribute('y',Y.toFixed(1));sv.setAttribute('width',W.toFixed(1));sv.setAttribute('height',H.toFixed(1));sv.setAttribute('viewBox',`${(pp.fi||0)*256} ${(pp.dir||0)*256} 256 256`);}
-    const es=g.getElementsByTagName('ellipse');if(es[0]){es[0].setAttribute('cx',(q[0]+1).toFixed(1));es[0].setAttribute('cy',(q[1]+1).toFixed(1));es[0].setAttribute('rx',(13.8*pf).toFixed(1));es[0].setAttribute('ry',(4.6*pf).toFixed(1));}
-    if(es[1]){es[1].setAttribute('cx',(q[0]+2*pf).toFixed(1));es[1].setAttribute('cy',q[1].toFixed(1));es[1].setAttribute('rx',(12*pf).toFixed(1));es[1].setAttribute('ry',(4*pf).toFixed(1));}
-    const lb=document.getElementById('pe_'+pp.id);if(lb){lb.style.left=q[0].toFixed(1)+'px';lb.style.top=(q[1]-H-3).toFixed(1)+'px';}
+    // write-cached attribute setter: only touch the DOM when a value actually changed (idle avatars end up writing ~1 attr/frame instead of 13)
+    const c=pp._dw||(pp._dw={}),sa=(el,pfx,n,v)=>{const k=pfx+n;if(c[k]!==v){c[k]=v;el.setAttribute(n,v);}};
+    const sv=g.querySelector('svg');if(sv){sa(sv,'s','x',X.toFixed(1));sa(sv,'s','y',Y.toFixed(1));sa(sv,'s','width',W.toFixed(1));sa(sv,'s','height',H.toFixed(1));sa(sv,'s','viewBox',`${(pp.fi||0)*256} ${(pp.dir||0)*256} 256 256`);}
+    const es=g.getElementsByTagName('ellipse');if(es[0]){sa(es[0],'a','cx',(q[0]+1).toFixed(1));sa(es[0],'a','cy',(q[1]+1).toFixed(1));sa(es[0],'a','rx',(13.8*pf).toFixed(1));sa(es[0],'a','ry',(4.6*pf).toFixed(1));}
+    if(es[1]){sa(es[1],'b','cx',(q[0]+2*pf).toFixed(1));sa(es[1],'b','cy',q[1].toFixed(1));sa(es[1],'b','rx',(12*pf).toFixed(1));sa(es[1],'b','ry',(4*pf).toFixed(1));}
+    const lb=document.getElementById('pe_'+pp.id);if(lb){const ll=q[0].toFixed(1)+'px',lt=(q[1]-H-3).toFixed(1)+'px';if(c.ll!==ll){c.ll=ll;lb.style.left=ll;}if(c.lt!==lt){c.lt=lt;lb.style.top=lt;}}
     // speech bubble (created / removed on demand; lives in the persistent overlay layer)
     let sb=document.getElementById('sp_'+pp.id);
     if(pp._chat){if(!sb){sb=document.createElement('div');sb.className='ov speech';sb.id='sp_'+pp.id;sb.innerHTML='<span class="bub"><i></i><i></i><i></i></span>';const ow=document.getElementById('ovwrap');if(ow)ow.appendChild(sb);}sb.style.left=(q[0]+7).toFixed(1)+'px';sb.style.top=(q[1]-H-9).toFixed(1)+'px';}
@@ -1648,7 +1666,13 @@ function peopleLoop(t){
   for(let i=0;i<PEOPLE.length;i++){const a=PEOPLE[i];if(!(a.roam||a.deleg)||a.x==null)continue;
     for(let j=0;j<PEOPLE.length;j++){if(i===j)continue;const b=PEOPLE[j];if(b.x==null)continue;
       const dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy;
-      if(d2>1e-4&&d2<MIND*MIND){const d=Math.sqrt(d2),push=(MIND-d)*((b.roam||b.deleg)?0.5:0.9)/d;a.x+=dx*push;a.y+=dy*push;}}}
+      if(d2>1e-4&&d2<MIND*MIND){const d=Math.sqrt(d2),push=(MIND-d)*((b.roam||b.deleg)?0.5:0.9)/d;const nx=a.x+dx*push,ny=a.y+dy*push;
+        if(pfWalkable(nx,ny)&&!pfWallHit(a.x,a.y,nx,ny)){a.x=nx;a.y=ny;}}}}   // never let the crowd-shove push an avatar through a wall
+  // hard containment guard: a moving avatar keeps its last on-floor position and reverts if any frame
+  // ever lands it off the floor or across a wall — so avatars can only ever travel rooms/corridors/doors.
+  for(const p of PEOPLE){if(!(p.roam||p.deleg)||p.x==null)continue;
+    if(pfWalkable(p.x,p.y))p._lg=[p.x,p.y];        // remember last on-floor spot
+    else if(p._lg){p.x=p._lg[0];p.y=p._lg[1];}}    // a frame ever off the floor snaps back (paths already avoid walls/corners)
   stepYou(dt,t);   // slide the member's own avatar along its current walk path
   paintIntent();   // keep the hovered/pinned intent bubble glued to its (possibly moving) avatar
   peopleRAF=requestAnimationFrame(peopleLoop);
@@ -1887,7 +1911,7 @@ function buildFPWalls(){const segs=[],solids=(L,gaps)=>{const out=[];let cur=0;g
   let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
   model.rooms.forEach(r=>{if(r.hidden)return;minx=Math.min(minx,r.x);miny=Math.min(miny,r.y);maxx=Math.max(maxx,r.x+r.w);maxy=Math.max(maxy,r.y+r.d);});
   if(maxx>minx){const m=0.12,X0=minx-m,Y0=miny-m,X1=maxx+m,Y1=maxy+m;segs.push([X0,Y0,X1,Y0],[X1,Y0,X1,Y1],[X1,Y1,X0,Y1],[X0,Y1,X0,Y0]);}
-  CAMWALLS=segs;}
+  CAMWALLS=segs;pfClearMemo=new Map();}
 function fpBlocked(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;
   // closed doors are solid until they open (they auto-open on approach, so this is just the safety net)
   for(const r of model.rooms){if(r.hidden||!r.doors)continue;for(const d of r.doors){const o=d._o!=null?d._o:(d.open?1:0);if(o>0.35)continue;const s=doorSeg(r,d);if(segCross(ax,ay,bx,by,s[0],s[1],s[2],s[3]))return true;}}
