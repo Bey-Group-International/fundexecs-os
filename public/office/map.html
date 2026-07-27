@@ -1435,6 +1435,7 @@ const pscale=y=>Math.max(.82,Math.min(1.14,.82+(y-2)/33*0.32));
 let peopleRAF=0,peopleLast=0;const REDUCED=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const STRIDE=0.52, WALKSEQ=[1,0,1,2], CHAT_RANGE=3.8;   // distance-based ping-pong framing (no foot-slide); quicker cadence reads more natural
 const dir4=(dx,dy)=>Math.abs(dx)>Math.abs(dy)?(dx>0?3:2):(dy>0?0:1);
+const DIR_YAW=[0,Math.PI,-Math.PI/2,Math.PI/2]; // sprite facing (0=+y,1=-y,2=-x,3=+x) -> matching first-person camera yaw
 const roamers=PEOPLE.filter(p=>p.roam);
 // ---- Legible intent: hover (or click to pin) an avatar to see what it's doing right now.
 // Reuses the overlay layer — no new panel. The local line is instant + deterministic; a click
@@ -1973,7 +1974,10 @@ window.addEventListener('mouseup',e=>{
   drag=null;dragMoved=false;if(guides.length){guides=[];drawSel();}
 });
 // ---------- first-person camera controls ----------
-let camAnim=null,CAMWALLS=[];
+let camAnim=null,CAMWALLS=[],CAMBOX=[];
+// Solid furniture the first-person walker can't pass through (walls/doors/boundary are handled separately).
+// Flat, wall-mounted, overhead, or purely decorative props are omitted so they don't create phantom blockers.
+const FP_SOLID=new Set(['desk','deskexec','deskL','standdesk','chair','execchair','conf','roundtable','cafetable','squaretable','recep','credenza','coffee','sidetable','stool','bench','sofa','armchair','loveseat','ottoman','booth','counter','bar','hoststand','poseur','cabinet','vault','fridge','vending','kiosk','printer','water','planter','shelf','wardrobe','media','fireplace','podium','locker','sculpture','tree','column','divider','raise']);
 // ---- first-person wall collision: solid walls, open only at doorways / halls / corridors ----
 function segCross(ax,ay,bx,by,cx,cy,dx,dy){const d1=(dx-cx)*(ay-cy)-(dy-cy)*(ax-cx),d2=(dx-cx)*(by-cy)-(dy-cy)*(bx-cx),d3=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax),d4=(bx-ax)*(dy-ay)-(by-ay)*(dx-ax);return ((d1>0)!==(d2>0))&&((d3>0)!==(d4>0));}
 function buildFPWalls(){const segs=[],solids=(L,gaps)=>{const out=[];let cur=0;gaps.sort((a,b)=>a[0]-b[0]).forEach(([a,b])=>{if(a>cur+0.01)out.push([cur,a]);cur=Math.max(cur,b);});if(cur<L-0.01)out.push([cur,L]);return out;};
@@ -1988,12 +1992,23 @@ function buildFPWalls(){const segs=[],solids=(L,gaps)=>{const out=[];let cur=0;g
   let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
   model.rooms.forEach(r=>{if(r.hidden)return;minx=Math.min(minx,r.x);miny=Math.min(miny,r.y);maxx=Math.max(maxx,r.x+r.w);maxy=Math.max(maxy,r.y+r.d);});
   if(maxx>minx){const m=0.12,X0=minx-m,Y0=miny-m,X1=maxx+m,Y1=maxy+m;segs.push([X0,Y0,X1,Y0],[X1,Y0,X1,Y1],[X1,Y1,X0,Y1],[X0,Y1,X0,Y0]);}
+  // Solid furniture as oriented boxes (centre + half-extents + rotation), tested as "no-entry" volumes in
+  // first-person so the walker can't pass through a desk/table/sofa. A small pad keeps the camera off the edge.
+  const boxes=[],PAD=0.16;
+  model.props.forEach(p=>{if(p.hidden||!FP_SOLID.has(p.t))return;const rm=roomOf(p);if(rm&&rm.hidden)return;
+    const f=FOOT[p.t]||[1,1],rot=p.rot||0;boxes.push({cx:p.args[0]+f[0]/2,cy:p.args[1]+f[1]/2,hw:f[0]/2+PAD,hd:f[1]/2+PAD,c:Math.cos(rot),s:Math.sin(rot)});});
+  CAMBOX=boxes;
   CAMWALLS=segs;pfClearMemo=new Map();}
+// destination point inside a solid furniture box (transformed into the box's local frame)?
+function inBox(b,px,py){const dx=px-b.cx,dy=py-b.cy,lx=dx*b.c+dy*b.s,ly=-dx*b.s+dy*b.c;return Math.abs(lx)<=b.hw&&Math.abs(ly)<=b.hd;}
 function fpBlocked(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;
   // closed doors are solid until they open (they auto-open on approach, so this is just the safety net)
   for(const r of model.rooms){if(r.hidden||!r.doors)continue;for(const d of r.doors){const o=d._o!=null?d._o:(d.open?1:0);if(o>0.35)continue;const s=doorSeg(r,d);if(segCross(ax,ay,bx,by,s[0],s[1],s[2],s[3]))return true;}}
   // solid avatars: the first-person camera can't walk through a teammate
   if(typeof PEOPLE!=='undefined'){for(const p of PEOPLE){if(p.x==null)continue;const dx=bx-p.x,dy=by-p.y;if(dx*dx+dy*dy<0.42*0.42)return true;}}
+  // solid furniture (first-person only): block entering a box from outside, but never trap someone who
+  // began inside one — so a spawn that lands on a footprint can always walk back out.
+  if(MODE==='fp'){for(const b of CAMBOX){if(inBox(b,bx,by)&&!inBox(b,ax,ay))return true;}}
   return false;}
 function resolveMove(x0,y0,x1,y1){if(!fpBlocked(x0,y0,x1,y1))return [x1,y1];if(x1!==x0&&!fpBlocked(x0,y0,x1,y0))return [x1,y0];if(y1!==y0&&!fpBlocked(x0,y0,x0,y1))return [x0,y1];return [x0,y0];} // slide along the wall, else block
 function camGlideTo(tx,ty){const sx=CAM.x,sy=CAM.y,dx=tx-sx,dy=ty-sy,raw=Math.hypot(dx,dy);if(raw<0.05)return;const travel=Math.max(0,Math.min(raw-0.7,9));const ux=dx/raw,uy=dy/raw,ex=sx+ux*travel,ey=sy+uy*travel;cancelAnimationFrame(camAnim);const t0=performance.now(),dur=Math.min(650,150+travel*55);const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);const nx=sx+(ex-sx)*e,ny=sy+(ey-sy)*e;const px=CAM.x,py=CAM.y,[rx,ry]=resolveMove(px,py,nx,ny);CAM.x=rx;CAM.y=ry;renderMoving();const stuck=rx===px&&ry===py&&(nx!==px||ny!==py);if(k<1&&!stuck)camAnim=requestAnimationFrame(step);};camAnim=requestAnimationFrame(step);}
@@ -2058,11 +2073,17 @@ stageDom.addEventListener('touchmove',fpTouchMove,{passive:false});
 stageDom.addEventListener('touchend',fpTouchEnd,{passive:false});
 stageDom.addEventListener('touchcancel',fpTouchEnd,{passive:false});
 function enterFP(){cancelAnimationFrame(camAnim);buildFPWalls();CAM.z=EYE;CAM.pitch=0;fpBob=0;
-  // Spawn centrally among the team so teammates are nearby and clearly visible from the start.
-  const rs=model.rooms.filter(r=>r.build!=='corridor');let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
-  rs.forEach(r=>{mnx=Math.min(mnx,r.x);mxx=Math.max(mxx,r.x+r.w);mny=Math.min(mny,r.y);mxy=Math.max(mxy,r.y+r.d);});
-  if(mnx>mxx){mnx=2;mxx=40;mny=2;mxy=35;}
-  CAM.x=(mnx+mxx)/2;CAM.y=(mny+mxy)/2;CAM.yaw=Math.PI; // office center, looking north across the rooms
+  // Unified view: stand exactly where the top-down "you" avatar is, facing the same way, so toggling
+  // views never moves you. Cancel any in-progress top-down walk so we don't keep sliding after entry.
+  if(typeof YOU!=='undefined'&&YOU.active){YOU.path=null;YOU.pi=0;
+    CAM.x=YOU.x;CAM.y=YOU.y;CAM.yaw=DIR_YAW[YOU.dir||0];
+  }else{
+    // No personal avatar placed: fall back to the office centre, looking north across the rooms.
+    const rs=model.rooms.filter(r=>r.build!=='corridor');let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
+    rs.forEach(r=>{mnx=Math.min(mnx,r.x);mxx=Math.max(mxx,r.x+r.w);mny=Math.min(mny,r.y);mxy=Math.max(mxy,r.y+r.d);});
+    if(mnx>mxx){mnx=2;mxx=40;mny=2;mxy=35;}
+    CAM.x=(mnx+mxx)/2;CAM.y=(mny+mxy)/2;CAM.yaw=Math.PI;
+  }
   // Touch devices get the on-screen joystick and a touch-worded control hint.
   if(TOUCH)document.body.classList.add('fptouch');
   const hud=document.getElementById('fphud');if(hud)hud.innerHTML=TOUCH?'<b>joystick</b> walk · <b>drag</b> look · <b>tap</b> move to':'<b>WASD</b> walk · <b>drag</b> look · <b>click</b> move to · <b>scroll</b> step · <b>←/→</b> turn';
@@ -2793,7 +2814,11 @@ refreshFab();
 const mRows=document.getElementById('mRows'),mIso=document.getElementById('mIso');
 // Graceful top-down <-> first-person switch: brief fade+blur so the projection change doesn't hard-cut.
 function viewSwitch(fn){const st=stageDom;if(!st||(typeof REDUCED!=='undefined'&&REDUCED)){fn();return;}st.style.transition='opacity .16s ease,filter .16s ease';st.style.opacity='0';st.style.filter='blur(4px)';setTimeout(()=>{fn();requestAnimationFrame(()=>{st.style.opacity='1';st.style.filter='blur(0)';setTimeout(()=>{st.style.transition='';st.style.filter='';},240);});},150);}
-mRows.onclick=()=>viewSwitch(()=>{fpStop();fx3dStopAnim();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode','fptouch');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
+mRows.onclick=()=>viewSwitch(()=>{
+  // Unified view: leaving first-person drops the "you" avatar wherever the camera walked to, facing the
+  // same way, so top-down picks up exactly where first-person left off.
+  if(MODE==='fp'&&typeof YOU!=='undefined'&&YOU.active){YOU.x=CAM.x;YOU.y=CAM.y;YOU.dir=dir4(Math.sin(CAM.yaw),Math.cos(CAM.yaw));YOU.path=null;YOU.pi=0;}
+  fpStop();fx3dStopAnim();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode','fptouch');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
 mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();fx3dStartAnim();});
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
