@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { avatarAtlasDataURL } from "@/lib/office/avatarSprite";
+import { getCharacterPreset } from "@/lib/office/characterPresets";
 import type { AvatarConfig } from "@/lib/office/avatarConfig";
 
 export interface YouAvatar {
@@ -19,12 +20,20 @@ export interface YouAvatar {
 export function OfficeFrame({ you }: { you: YouAvatar | null }) {
   const ref = useRef<HTMLIFrameElement>(null);
 
-  // Rasterizing the atlas touches a canvas, so it only runs in the browser.
+  // Two atlas sources feed the same office renderer:
+  //  • a chosen ready-made preset → its pre-rendered walk.png URL (crisp, so we
+  //    ask the map to render it smoothly), or
+  //  • a custom character → the procedural atlas rasterized in-browser (low-res
+  //    pixel art, rendered pixelated).
   const payload = useMemo(() => {
     if (!you) return null;
+    const presetAtlas = getCharacterPreset(you.config.preset)?.atlas;
+    if (presetAtlas) {
+      return { type: "fx-you" as const, atlas: presetAtlas, smooth: true, name: you.name, status: you.status };
+    }
     const atlas = avatarAtlasDataURL(you.config);
     if (!atlas) return null;
-    return { type: "fx-you" as const, atlas, name: you.name, status: you.status };
+    return { type: "fx-you" as const, atlas, smooth: false, name: you.name, status: you.status };
   }, [you]);
 
   useEffect(() => {

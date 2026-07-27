@@ -24,7 +24,9 @@ import {
   type AvatarConfig,
   type AvatarOption,
 } from "@/lib/office/avatarConfig";
+import { CHARACTER_PRESETS, getCharacterPreset } from "@/lib/office/characterPresets";
 import { AvatarSprite } from "@/components/office/AvatarSprite";
+import { PresetSprite } from "@/components/office/PresetSprite";
 import { saveAvatarConfig } from "./actions";
 
 const labelCls = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
@@ -46,18 +48,42 @@ export function CharacterBuilder({
   const [saved, setSaved] = useState<AvatarConfig | null>(hasSaved ? initial : null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  // The custom sprite builder is secondary — hidden unless the member opts in
+  // (or already has a custom, preset-less character saved).
+  const [showCustom, setShowCustom] = useState(!initial.preset);
+
+  const preset = getCharacterPreset(config.preset);
 
   const dirty = useMemo(
     () => saved === null || JSON.stringify(saved) !== JSON.stringify(config),
     [saved, config],
   );
 
+  // Name/status don't affect which sprite renders, so they never clear a preset.
   const set = <K extends keyof AvatarConfig>(key: K, value: AvatarConfig[K]) =>
     setConfig((c) => ({ ...c, [key]: value }));
 
+  // Editing any appearance field means the member wants a custom look, so drop
+  // the ready-made preset (the procedural sprite takes over).
+  const setLook = <K extends keyof AvatarConfig>(key: K, value: AvatarConfig[K]) =>
+    setConfig((c) => ({ ...c, preset: "", [key]: value }));
+
+  function pickPreset(id: string) {
+    setConfig((c) => ({ ...c, preset: id }));
+    setError("");
+  }
+
   function shuffle() {
+    if (config.preset) {
+      // In preset mode, shuffle picks a different ready-made character.
+      const others = CHARACTER_PRESETS.filter((p) => p.id !== config.preset);
+      const pick = others[Math.floor(Math.random() * others.length)] ?? CHARACTER_PRESETS[0];
+      pickPreset(pick.id);
+      return;
+    }
     setConfig((c) => ({
       ...c,
+      preset: "",
       body: randomFrom(BODY_TYPES),
       skin: randomFrom(SKIN_TONES),
       hair: randomFrom(HAIR_STYLES),
@@ -109,7 +135,11 @@ export function CharacterBuilder({
                   "radial-gradient(120% 90% at 50% 20%, rgba(245,215,115,0.06), transparent 60%)",
               }}
             />
-            <AvatarSprite config={config} size={200} className="relative" />
+            {preset ? (
+              <PresetSprite atlas={preset.atlas} size={200} className="relative" />
+            ) : (
+              <AvatarSprite config={config} size={200} className="relative" />
+            )}
           </div>
           <div className="flex items-center gap-3 border-t border-line px-4 py-3">
             <span
@@ -184,29 +214,98 @@ export function CharacterBuilder({
           <StatusRow value={config.status} onChange={(v) => set("status", v)} />
         </Group>
 
-        <Group title="Appearance">
-          <ChipRow label="Build" options={BODY_TYPES} value={config.body} onChange={(v) => set("body", v)} />
-          <SwatchRow label="Skin tone" options={SKIN_TONES} value={config.skin} onChange={(v) => set("skin", v)} />
-          <ChipRow label="Hair" options={HAIR_STYLES} value={config.hair} onChange={(v) => set("hair", v)} />
-          <SwatchRow label="Hair color" options={HAIR_COLORS} value={config.hairColor} onChange={(v) => set("hairColor", v)} />
-          <ChipRow label="Facial hair" options={FACIAL_HAIR} value={config.facialHair} onChange={(v) => set("facialHair", v)} />
-          <ChipRow label="Expression" options={EXPRESSIONS} value={config.expression} onChange={(v) => set("expression", v)} />
+        {/* ── Ready-made characters (primary) ── */}
+        <Group title="Choose your character">
+          <p className="-mt-1 text-xs text-fg-secondary">
+            Pick a ready-made office character. It walks the floor in full 16-bit style.
+          </p>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {CHARACTER_PRESETS.map((p) => {
+              const active = p.id === config.preset;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => pickPreset(p.id)}
+                  className={`group flex flex-col items-center gap-1.5 rounded-lg border p-2 transition ${
+                    active
+                      ? "border-gold-400 bg-gold-500/10 ring-1 ring-gold-500/40"
+                      : "border-line hover:border-gold-500/40"
+                  }`}
+                >
+                  <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-md bg-[#070c16]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.portrait}
+                      alt={p.label}
+                      className="h-full w-full object-contain"
+                      style={{ filter: "drop-shadow(0 2px 2px rgba(0,0,0,.4))" }}
+                    />
+                  </span>
+                  <span
+                    className={`text-center text-[10px] leading-tight ${
+                      active ? "text-gold-200" : "text-fg-secondary"
+                    }`}
+                  >
+                    {p.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </Group>
 
-        <Group title="Wardrobe">
-          <ChipRow label="Outfit" options={OUTFITS} value={config.outfit} onChange={(v) => set("outfit", v)} />
-          <SwatchRow label="Outfit color" options={OUTFIT_COLORS} value={config.outfitColor} onChange={(v) => set("outfitColor", v)} />
-        </Group>
+        {/* ── Custom sprite builder (secondary) ── */}
+        <div className="fx-card p-4">
+          <button
+            type="button"
+            onClick={() => setShowCustom((s) => !s)}
+            aria-expanded={showCustom}
+            className="flex w-full items-center justify-between gap-2 text-left"
+          >
+            <span className="font-display text-sm font-semibold text-fg-primary">
+              Build your own instead
+            </span>
+            <span className="font-mono text-xs text-fg-muted">{showCustom ? "▾" : "▸"}</span>
+          </button>
+          {!config.preset && !showCustom ? (
+            <p className="mt-1 text-xs text-fg-muted">Custom sprite in use — expand to edit.</p>
+          ) : null}
+          {config.preset ? (
+            <p className="mt-1 text-xs text-fg-muted">
+              Editing any option below switches you to a custom sprite.
+            </p>
+          ) : null}
 
-        <Group title="Eyewear & headwear">
-          <ChipRow label="Eyewear" options={EYEWEAR} value={config.eyewear} onChange={(v) => set("eyewear", v)} />
-          <ChipRow label="Headwear" options={HEADWEAR} value={config.headwear} onChange={(v) => set("headwear", v)} />
-        </Group>
+          {showCustom ? (
+            <div className="mt-4 flex flex-col gap-6">
+              <Subgroup title="Appearance">
+                <ChipRow label="Build" options={BODY_TYPES} value={config.body} onChange={(v) => setLook("body", v)} />
+                <SwatchRow label="Skin tone" options={SKIN_TONES} value={config.skin} onChange={(v) => setLook("skin", v)} />
+                <ChipRow label="Hair" options={HAIR_STYLES} value={config.hair} onChange={(v) => setLook("hair", v)} />
+                <SwatchRow label="Hair color" options={HAIR_COLORS} value={config.hairColor} onChange={(v) => setLook("hairColor", v)} />
+                <ChipRow label="Facial hair" options={FACIAL_HAIR} value={config.facialHair} onChange={(v) => setLook("facialHair", v)} />
+                <ChipRow label="Expression" options={EXPRESSIONS} value={config.expression} onChange={(v) => setLook("expression", v)} />
+              </Subgroup>
 
-        <Group title="Accessories">
-          <ChipRow label="Worn" options={ACCESSORIES} value={config.accessories} onChange={(v) => set("accessories", v)} />
-          <ChipRow label="Holding" options={HOLDING} value={config.holding} onChange={(v) => set("holding", v)} />
-        </Group>
+              <Subgroup title="Wardrobe">
+                <ChipRow label="Outfit" options={OUTFITS} value={config.outfit} onChange={(v) => setLook("outfit", v)} />
+                <SwatchRow label="Outfit color" options={OUTFIT_COLORS} value={config.outfitColor} onChange={(v) => setLook("outfitColor", v)} />
+              </Subgroup>
+
+              <Subgroup title="Eyewear & headwear">
+                <ChipRow label="Eyewear" options={EYEWEAR} value={config.eyewear} onChange={(v) => setLook("eyewear", v)} />
+                <ChipRow label="Headwear" options={HEADWEAR} value={config.headwear} onChange={(v) => setLook("headwear", v)} />
+              </Subgroup>
+
+              <Subgroup title="Accessories">
+                <ChipRow label="Worn" options={ACCESSORIES} value={config.accessories} onChange={(v) => setLook("accessories", v)} />
+                <ChipRow label="Holding" options={HOLDING} value={config.holding} onChange={(v) => setLook("holding", v)} />
+              </Subgroup>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -216,6 +315,15 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   return (
     <section className="fx-card p-4">
       <h2 className="mb-3 font-display text-sm font-semibold text-fg-primary">{title}</h2>
+      <div className="flex flex-col gap-4">{children}</div>
+    </section>
+  );
+}
+
+function Subgroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">{title}</h3>
       <div className="flex flex-col gap-4">{children}</div>
     </section>
   );

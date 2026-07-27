@@ -16,6 +16,8 @@
 //     sprite generator (lib/office/avatarSprite.ts) reads the resolved catalog
 //     values. The same config could later drive a richer rig.
 
+import { isCharacterPreset } from "./characterPresets";
+
 export const AVATAR_CONFIG_VERSION = 1 as const;
 
 /** One selectable option in an appearance catalog. */
@@ -193,6 +195,13 @@ export const STATUSES: readonly AvatarColorOption[] = [
 export interface AvatarConfig {
   v: typeof AVATAR_CONFIG_VERSION;
   displayName: string;
+  /**
+   * A ready-made character preset id (lib/office/characterPresets). When set to
+   * a known preset, the office renders that pre-drawn walk atlas and the
+   * appearance fields below are ignored for rendering (but retained, so a member
+   * can switch back to a custom look without losing it). Empty = custom sprite.
+   */
+  preset: string;
   body: string;
   skin: string;
   hair: string;
@@ -212,6 +221,7 @@ export interface AvatarConfig {
 export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
   v: AVATAR_CONFIG_VERSION,
   displayName: "",
+  preset: "",
   body: "regular",
   skin: "tan",
   hair: "short",
@@ -285,6 +295,7 @@ export function normalizeAvatarConfig(input: unknown): AvatarConfig {
   return {
     v: AVATAR_CONFIG_VERSION,
     displayName: rawName.trim().slice(0, MAX_DISPLAY_NAME),
+    preset: isCharacterPreset(src.preset) ? (src.preset as string) : "",
     body: field(BODY_TYPES, "body"),
     skin: field(SKIN_TONES, "skin"),
     hair: field(HAIR_STYLES, "hair"),
