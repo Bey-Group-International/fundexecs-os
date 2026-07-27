@@ -52,7 +52,7 @@ describe("sanitizeSvg", () => {
     expect(sanitizeSvg("")).toBeNull();
   });
 
-  it("extracts the svg from surrounding prose and code fences", () => {
+  it("extracts a clean svg from surrounding prose and code fences", () => {
     const raw = "Here you go:\n```svg\n<svg viewBox=\"0 0 512 512\"><rect/></svg>\n```\nEnjoy!";
     const out = sanitizeSvg(raw);
     expect(out).not.toBeNull();
@@ -62,29 +62,32 @@ describe("sanitizeSvg", () => {
     expect(out).not.toMatch(/Enjoy/);
   });
 
-  it("strips scripts, event handlers, and external references", () => {
-    const raw =
-      '<svg viewBox="0 0 512 512" onload="steal()">' +
-      '<script>alert(1)</script>' +
-      '<image href="https://evil.example/x.png"/>' +
-      '<a href="javascript:alert(2)"><circle onclick="x()" r="5"/></a>' +
-      "</svg>";
-    const out = sanitizeSvg(raw)!;
-    expect(out).not.toMatch(/<script/i);
-    expect(out).not.toMatch(/<image/i);
-    expect(out).not.toMatch(/onload/i);
-    expect(out).not.toMatch(/onclick/i);
-    expect(out).not.toMatch(/javascript:/i);
-    expect(out).not.toMatch(/evil\.example/i);
+  // Reject-on-match: any dangerous construct fails the whole SVG (returns null)
+  // rather than being partially cleaned.
+  it.each([
+    ["a script element", '<svg><script>alert(1)</script></svg>'],
+    ["a script end tag with odd whitespace", '<svg></script\t\n bar></svg>'],
+    ["an inline event handler", '<svg onload="steal()"><rect/></svg>'],
+    ["a handler on a child", '<svg><circle onclick="x()" r="5"/></svg>'],
+    ["an <image> element", '<svg><image href="https://evil.example/x.png"/></svg>'],
+    ["a <foreignObject>", '<svg><foreignObject><body/></foreignObject></svg>'],
+    ["a <use> external ref", '<svg><use href="#g"/></svg>'],
+    ["an <a> hyperlink", '<svg><a href="https://x"><rect/></a></svg>'],
+    ["a javascript: url", '<svg><rect fill="url(javascript:alert(1))"/></svg>'],
+    ["a vbscript: url", '<svg><rect fill="vbscript:msgbox(1)"/></svg>'],
+    ["a nested data: uri", '<svg><rect fill="data:text/html,x"/></svg>'],
+    ["any href attribute", '<svg><rect href="#g"/></svg>'],
+  ])("rejects %s", (_label, raw) => {
+    expect(sanitizeSvg(raw)).toBeNull();
   });
 
-  it("keeps in-document url refs and adds a missing xmlns", () => {
+  it("accepts a clean gradient-referencing svg and adds a missing xmlns", () => {
     const raw =
       '<svg viewBox="0 0 512 512"><defs><linearGradient id="g"/></defs>' +
-      '<rect fill="url(#g)"/><use href="#g"/></svg>';
+      '<rect fill="url(#g)"/><circle r="5"/></svg>';
     const out = sanitizeSvg(raw)!;
+    expect(out).not.toBeNull();
     expect(out).toMatch(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
-    expect(out).toMatch(/href="#g"/);
     expect(out).toMatch(/url\(#g\)/);
   });
 

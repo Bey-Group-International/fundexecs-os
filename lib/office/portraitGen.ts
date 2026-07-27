@@ -39,8 +39,9 @@ const SYSTEM = [
   "  clean dark outline. Limited, warm, harmonious palette.",
   "- A simple flat background shape (no photo realism).",
   "- Use ONLY <path>, <rect>, <circle>, <ellipse>, <polygon>, <g>, and",
-  "  <linearGradient>/<radialGradient> in <defs>. No <image>, no <foreignObject>,",
-  "  no <script>, no external references, no event handlers, no <text>.",
+  "  <linearGradient>/<radialGradient> in <defs>. Reference gradients only via",
+  '  fill="url(#id)". Do NOT use <image>, <use>, <a>, <text>, <foreignObject>,',
+  "  <script>, href/xlink:href, external references, or event handlers.",
 ].join("\n");
 
 /** Claude-backed portrait generator: prompts the model for a single SVG. */
@@ -74,15 +75,40 @@ class AnthropicPortraitGenerator implements PortraitGenerator {
   }
 }
 
+// Constructs that must never appear in a portrait we accept. We do NOT try to
+// clean model output by stripping these — regex-based HTML filtering is
+// notoriously bypassable (CodeQL's js/bad-tag-filter). Instead we REJECT the
+// whole SVG if any is present and let the caller regenerate. The portrait is
+// also only ever rendered through <img>/`data:` (see the action), which itself
+// blocks scripting and external fetches; this validation is a second layer.
+const FORBIDDEN: readonly RegExp[] = [
+  /<\s*\/?\s*script/i, // scripting (open OR close tag, any whitespace)
+  /<\s*foreignobject/i, // arbitrary embedded HTML
+  /<\s*image/i, // raster/external image refs
+  /<\s*use\b/i, // <use> can pull external refs
+  /<\s*a\b/i, // hyperlinks / navigation
+  /<\s*text\b/i, // we ask for shapes only, not text
+  /<!\s*doctype/i, // DOCTYPE / entity tricks
+  /<!\s*entity/i,
+  /\son[a-z-]+\s*=/i, // any inline event handler (onload, onclick, …)
+  /(?:xlink:)?href\s*=/i, // no external OR in-doc links; gradients use fill="url(#id)"
+  /javascript:/i,
+  /vbscript:/i,
+  /data:/i, // no nested data: URIs
+];
+
 /**
- * Extract and sanitize an SVG document from arbitrary model output. Returns null
- * when no `<svg>` is present. Removes script elements, inline event handlers,
- * `javascript:` URLs, and external/foreign references, then guarantees an
- * `xmlns`. Pure and total — safe to unit-test without a network call.
+ * Extract an SVG document from arbitrary model output and validate it against an
+ * allowlist by REJECTION: returns the SVG string only when it is free of every
+ * forbidden construct, otherwise null (no <svg> found, or something unsafe is
+ * present). Guarantees an `xmlns`. Pure and total — safe to unit-test without a
+ * network call. Intentionally does no partial cleaning: a portrait is either
+ * entirely safe or regenerated.
  */
 export function sanitizeSvg(raw: string): string | null {
   if (typeof raw !== "string") return null;
-  // Strip a ```svg / ``` code fence if the model added one.
+  // Drop a ```svg / ``` code fence if the model wrapped its answer in one. This
+  // targets backticks only — it is not markup filtering.
   const fenced = raw.replace(/```(?:svg|xml|html)?/gi, "");
   const start = fenced.search(/<svg[\s>]/i);
   if (start === -1) return null;
@@ -91,24 +117,11 @@ export function sanitizeSvg(raw: string): string | null {
 
   let svg = fenced.slice(start, end + "</svg>".length);
 
-  // Defense in depth (the app renders via <img>, which already blocks script):
-  svg = svg
-    // Drop <script>…</script> and <foreignObject>…</foreignObject> blocks.
-    .replace(/<script[\s\S]*?<\/script\s*>/gi, "")
-    .replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, "")
-    // Drop <image> and self-closing <script/> tags.
-    .replace(/<image\b[^>]*\/?>/gi, "")
-    .replace(/<script\b[^>]*\/?>/gi, "")
-    // Strip inline event handlers: on…="…" / on…='…'.
-    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
-    // Neutralize javascript: URLs anywhere they appear.
-    .replace(/javascript:/gi, "")
-    // Remove external references in href / xlink:href (keep in-doc `#id` refs).
-    .replace(/\s(?:xlink:href|href)\s*=\s*"(?!#)[^"]*"/gi, "")
-    .replace(/\s(?:xlink:href|href)\s*=\s*'(?!#)[^']*'/gi, "");
+  // Reject rather than sanitize: any forbidden construct fails the whole SVG.
+  for (const bad of FORBIDDEN) {
+    if (bad.test(svg)) return null;
+  }
 
-  if (!/^<svg[\s>]/i.test(svg)) return null;
   if (!/\sxmlns\s*=/.test(svg)) {
     svg = svg.replace(/^<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
   }

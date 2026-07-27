@@ -7,8 +7,6 @@ import { normalizeAvatarConfig, type AvatarConfig } from "@/lib/office/avatarCon
 import { resolvePortraitGenerator } from "@/lib/office/portraitGen";
 import { portraitPromptFor } from "@/lib/office/portraitPrompt";
 
-const PORTRAIT_BUCKET = "office-portraits";
-
 // Persist the member's Virtual Office character onto their own
 // `office_member_prefs` row (avatar jsonb column, reserved for exactly this by
 // migration 20260720140000). The input is always re-normalized server-side, so
@@ -49,11 +47,13 @@ export async function saveAvatarConfig(
 // roster card; the procedural sprite (avatarSprite.ts) still walks the floor.
 //
 // Flow: build a persona-style prompt from the (re-normalized) config → ask
-// Claude to draw the character as a sanitized SVG → upload it to the public
-// office-portraits bucket at `${orgId}/${principalId}.svg` (RLS pins that path
-// to the caller) → stash its public URL on the member's office_member_prefs row.
-// Degrades cleanly: when no Anthropic key is configured, returns a friendly
-// error instead of throwing, so the button can explain that the feature is off.
+// Claude to draw the character as an SVG, validated by rejection → encode it as
+// a `data:` URI and stash that on the member's office_member_prefs row. The
+// `data:` URI is rendered only via <img>, which blocks SVG scripting and
+// external fetches, and browsers refuse to open `data:` documents top-level —
+// so there is no navigable, script-capable URL anywhere. Degrades cleanly: when
+// no Anthropic key is configured, returns a friendly error instead of throwing,
+// so the button can explain that the feature is off.
 export async function generateAvatarPortrait(
   input: AvatarConfig,
 ): Promise<{ error?: string; url?: string }> {
@@ -78,29 +78,16 @@ export async function generateAvatarPortrait(
     return { error: `Couldn't generate a portrait. ${detail}`.slice(0, 240) };
   }
 
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+
   const supabase = await createServerClient();
-  const path = `${ctx.orgId}/${ctx.userId}.svg`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(PORTRAIT_BUCKET)
-    .upload(path, svg, { contentType: "image/svg+xml", upsert: true });
-  if (uploadError) return { error: uploadError.message };
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(PORTRAIT_BUCKET).getPublicUrl(path);
-
-  // The filename is stable (one portrait per member), so bust the CDN/browser
-  // cache with the upload time; the stored value is versioned the same way.
-  const versionedUrl = `${publicUrl}?v=${Date.now()}`;
-
   const { error: saveError } = await supabase
     .from("office_member_prefs")
     .upsert(
       {
         organization_id: ctx.orgId,
         principal_id: ctx.userId,
-        portrait_url: versionedUrl,
+        portrait_url: dataUrl,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "organization_id,principal_id" },
@@ -109,5 +96,5 @@ export async function generateAvatarPortrait(
 
   revalidatePath("/office/builder");
   revalidatePath("/office");
-  return { url: versionedUrl };
+  return { url: dataUrl };
 }
