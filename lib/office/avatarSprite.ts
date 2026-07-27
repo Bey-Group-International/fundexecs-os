@@ -111,18 +111,24 @@ const HEAD_BANDS: [number, number, number][] = [
 
 function drawHeadOval(p: Painter, pal: Palette, fill: string) {
   const { top, cx } = HEAD;
-  for (const [dy, hw, h] of HEAD_BANDS) p.blk(cx - hw, top + dy, hw * 2, h, fill, pal.ink);
+  // Outline only the SILHOUETTE, not each band: draw a dark base 1px larger, then
+  // the fill on top. Stacked fills leave no internal horizontal lines (the old
+  // per-band blk() drew ink between every band → a venetian-blind face).
+  for (const [dy, hw, h] of HEAD_BANDS) p.r(cx - hw - 1, top + dy, hw * 2 + 2, h, pal.ink);
+  const f = HEAD_BANDS[0], l = HEAD_BANDS[HEAD_BANDS.length - 1];
+  p.r(cx - f[1] - 1, top + f[0] - 1, f[1] * 2 + 2, 1, pal.ink); // top cap
+  p.r(cx - l[1] - 1, top + l[0] + l[2], l[1] * 2 + 2, 1, pal.ink); // bottom cap
+  for (const [dy, hw, h] of HEAD_BANDS) p.r(cx - hw, top + dy, hw * 2, h, fill);
 }
 
 function drawHeadShade(p: Painter, pal: Palette, facing: Facing) {
   const { top, cx } = HEAD;
   if (facing === "up") { p.r(cx - 18, top + 34, 36, 6, pal.hairSh); return; }
-  // key light top-left; shadow back-right; jaw/neck occlusion + dither falloff
-  p.r(cx - 16, top + 12, 10, 6, pal.skinHi);
-  p.dither(cx - 18, top + 18, 6, 12, pal.skinHi, pal.skin);
-  p.r(cx + 8, top + 14, 9, 22, pal.skinSh);
-  p.dither(cx + 4, top + 16, 4, 18, pal.skinSh, pal.skin);
-  p.r(cx - 15, top + 38, 30, 3, pal.skinSh); // under-jaw occlusion
+  // Restrained shading: a subtle top-left highlight + a thin shaded right edge,
+  // kept minimal so it reads clean at this size (no busy face smudge).
+  p.r(cx - 15, top + 10, 8, 3, pal.skinHi); // forehead highlight
+  p.r(cx + 14, top + 12, 3, 20, pal.skinSh); // thin right-side shadow
+  p.r(cx - 13, top + 41, 26, 2, pal.skinSh); // soft under-jaw (below the mouth)
 }
 
 // Ears (down + side).
@@ -166,8 +172,7 @@ function drawHairFront(p: Painter, c: AvatarConfig, pal: Palette, side: boolean)
   p.blk(cx - 24, top + 2, 48, 12, pal.hair, pal.ink);
   p.r(cx - 24, top + 12, 6, 14, pal.hair); // left temple
   p.r(cx + 18, top + 12, 6, 14, pal.hair); // right temple
-  p.r(cx - 18, top + 2, 16, 4, pal.hairHi); // crown sheen
-  p.r(cx + 8, top + 3, 8, 10, pal.hairSh); // back shadow
+  p.r(cx - 16, top + 1, 12, 3, pal.hairHi); // crown sheen (subtle, top-left)
   if (c.hair === "short") p.r(cx - 20, top + 12, 40, 4, pal.hair);
   else if (c.hair === "side") { p.r(cx - 8, top + 12, 26, 5, pal.hairHi); p.r(cx - 20, top + 12, 12, 4, pal.hair); }
   else if (c.hair === "curly") { for (let i = -22; i <= 16; i += 8) p.blk(cx + i, top - 3, 11, 10, pal.hair, pal.ink); p.r(cx - 18, top + 2, 14, 3, pal.hairHi); }
@@ -206,9 +211,8 @@ function drawFaceDown(p: Painter, c: AvatarConfig, pal: Palette) {
   else { p.r(cx - 15, eyeY - 5, 9, 2, ink); p.r(cx + 6, eyeY - 5, 9, 2, ink); }
   eye(p, pal, cx - 14, eyeY);
   eye(p, pal, cx + 6, eyeY);
-  // nose
-  p.r(cx - 1, eyeY + 8, 3, 5, pal.skinSh);
-  p.r(cx - 2, eyeY + 12, 5, 1, pal.skinSh);
+  // nose (small, no wide base)
+  p.r(cx - 1, eyeY + 8, 2, 4, pal.skinSh);
   // mouth
   const my = eyeY + 18;
   if (c.expression === "smile") { p.r(cx - 7, my, 14, 2, ink); p.r(cx - 9, my - 2, 2, 2, ink); p.r(cx + 7, my - 2, 2, 2, ink); p.r(cx - 5, my + 2, 10, 1, "#c8776f"); }
@@ -344,7 +348,7 @@ function drawAccessory(p: Painter, c: AvatarConfig, pal: Palette, side: boolean)
 }
 
 // ── body ─────────────────────────────────────────────────────────────────────
-const BUILD: Record<string, number> = { slim: 40, regular: 48, broad: 56 };
+const BUILD: Record<string, number> = { slim: 36, regular: 42, broad: 50 };
 function legPhase(frame: number): number { return frame === 0 ? -1 : frame === 2 ? 1 : 0; }
 
 // Held prop, carried in the (screen-)right hand for down/side; mirrored for the
@@ -439,14 +443,14 @@ function drawBodyFrontBack(p: Painter, c: AvatarConfig, pal: Palette, back: bool
   p.blk(cx - 6, 50, 12, 10, pal.skin, pal.ink);
   p.r(cx - 6, 50, 12, 3, pal.skinSh);
 
-  // arms + hands (attach below the shoulder step)
-  p.blk(x0 - 7, torsoTop + 6, 9, 28, pal.fit, pal.ink);
-  p.blk(cx + w / 2 - 2, torsoTop + 6, 9, 28, pal.fit, pal.ink);
-  p.r(x0 - 7, torsoTop + 7, 2, 22, pal.fitHi);
-  p.r(cx + w / 2 + 5, torsoTop + 7, 2, 22, pal.fitSh);
-  p.blk(x0 - 6, torsoTop + 32, 7, 7, pal.skin, pal.ink);
-  p.blk(cx + w / 2 - 1, torsoTop + 32, 7, 7, pal.skin, pal.ink);
-  if (c.holding !== "none") drawProp(p, c, pal, cx + w / 2 + 2, torsoTop + 36);
+  // arms + hands — tucked against the torso so the shoulders don't read broad
+  p.blk(x0 - 4, torsoTop + 6, 8, 28, pal.fit, pal.ink);
+  p.blk(cx + w / 2 - 4, torsoTop + 6, 8, 28, pal.fit, pal.ink);
+  p.r(x0 - 4, torsoTop + 7, 2, 22, pal.fitHi);
+  p.r(cx + w / 2 + 2, torsoTop + 7, 2, 22, pal.fitSh);
+  p.blk(x0 - 3, torsoTop + 32, 7, 7, pal.skin, pal.ink);
+  p.blk(cx + w / 2 - 3, torsoTop + 32, 7, 7, pal.skin, pal.ink);
+  if (c.holding !== "none") drawProp(p, c, pal, cx + w / 2, torsoTop + 36);
 }
 
 function drawBodySide(p: Painter, c: AvatarConfig, pal: Palette, frame: number) {
