@@ -25,7 +25,7 @@ import {
   type AvatarOption,
 } from "@/lib/office/avatarConfig";
 import { AvatarSprite } from "@/components/office/AvatarSprite";
-import { saveAvatarConfig } from "./actions";
+import { generateAvatarPortrait, saveAvatarConfig } from "./actions";
 
 const labelCls = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
 
@@ -36,9 +36,13 @@ function randomFrom<T extends AvatarOption>(catalog: readonly T[]): string {
 export function CharacterBuilder({
   initial,
   hasSaved,
+  portraitUrl = null,
+  portraitEnabled = false,
 }: {
   initial: AvatarConfig;
   hasSaved: boolean;
+  portraitUrl?: string | null;
+  portraitEnabled?: boolean;
 }) {
   const [config, setConfig] = useState<AvatarConfig>(initial);
   // The last snapshot known to be persisted (null until the first save), used to
@@ -46,6 +50,13 @@ export function CharacterBuilder({
   const [saved, setSaved] = useState<AvatarConfig | null>(hasSaved ? initial : null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+
+  // AI portrait — the "hero" rendering derived from this character. Generation
+  // runs server-side (the provider key never reaches the browser); the sprite
+  // keeps walking the floor regardless.
+  const [portrait, setPortrait] = useState<string | null>(portraitUrl);
+  const [portraitError, setPortraitError] = useState("");
+  const [portraitPending, startPortrait] = useTransition();
 
   const dirty = useMemo(
     () => saved === null || JSON.stringify(saved) !== JSON.stringify(config),
@@ -91,6 +102,18 @@ export function CharacterBuilder({
         setConfig(res.config);
         setSaved(res.config);
       }
+    });
+  }
+
+  function generatePortrait() {
+    setPortraitError("");
+    startPortrait(async () => {
+      const res = await generateAvatarPortrait(config);
+      if (res.error) {
+        setPortraitError(res.error);
+        return;
+      }
+      if (res.url) setPortrait(res.url);
     });
   }
 
@@ -163,6 +186,14 @@ export function CharacterBuilder({
             </p>
           ) : null}
         </div>
+
+        <PortraitPanel
+          enabled={portraitEnabled}
+          url={portrait}
+          pending={portraitPending}
+          error={portraitError}
+          onGenerate={generatePortrait}
+        />
       </div>
 
       {/* ── Controls ── */}
@@ -208,6 +239,68 @@ export function CharacterBuilder({
           <ChipRow label="Holding" options={HOLDING} value={config.holding} onChange={(v) => set("holding", v)} />
         </Group>
       </div>
+    </div>
+  );
+}
+
+function PortraitPanel({
+  enabled,
+  url,
+  pending,
+  error,
+  onGenerate,
+}: {
+  enabled: boolean;
+  url: string | null;
+  pending: boolean;
+  error: string;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="mt-4 rounded-lg border border-line p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className={labelCls}>AI portrait</span>
+        <span className="rounded-full border border-gold-500/30 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+          Premium
+        </span>
+      </div>
+
+      <div className="relative aspect-square w-full overflow-hidden rounded-md bg-[#070c16]">
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="AI portrait of your character" className="h-full w-full object-contain" />
+        ) : (
+          <div className="grid h-full w-full place-items-center px-4 text-center">
+            <p className="text-xs text-fg-muted">
+              {pending
+                ? "Painting your portrait…"
+                : "Generate a premium portrait of your character."}
+            </p>
+          </div>
+        )}
+        {pending ? (
+          <div className="pointer-events-none absolute inset-0 animate-pulse bg-gold-500/5" />
+        ) : null}
+      </div>
+
+      <button
+        onClick={onGenerate}
+        disabled={pending || !enabled}
+        className="mt-2 w-full rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-200 transition hover:border-gold-500/60 hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending ? "Generating…" : url ? "Regenerate portrait" : "Generate portrait"}
+      </button>
+
+      {!enabled ? (
+        <p className="mt-1.5 text-[11px] text-fg-muted">
+          Portrait generation isn&apos;t enabled in this deployment yet.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="mt-1.5 text-xs text-status-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
