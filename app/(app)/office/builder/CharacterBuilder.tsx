@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   ACCESSORIES,
   BODY_TYPES,
@@ -48,6 +49,7 @@ export function CharacterBuilder({
   const [saved, setSaved] = useState<AvatarConfig | null>(hasSaved ? initial : null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   // The custom sprite builder is secondary — hidden unless the member opts in
   // (or already has a custom, preset-less character saved).
   const [showCustom, setShowCustom] = useState(!initial.preset);
@@ -117,6 +119,10 @@ export function CharacterBuilder({
         setConfig(res.config);
         setSaved(res.config);
       }
+      // Land the freshly-saved character in the office: the save action already
+      // revalidated /office, so navigating there re-renders with the new avatar
+      // (which then spawns and frames in the CEO office).
+      router.push("/office");
     });
   }
 
@@ -169,7 +175,7 @@ export function CharacterBuilder({
             disabled={pending || !dirty}
             className="fx-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pending ? "Saving…" : dirty ? "Save character" : "Saved ✓"}
+            {pending ? "Saving…" : dirty ? "Save & enter office" : "Saved ✓"}
           </button>
           <div className="flex gap-2">
             <button
