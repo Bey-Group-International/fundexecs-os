@@ -15,12 +15,12 @@ model onto the floor.
 
 ## 1 · What Meshy gives you, and how it fits
 
-| Meshy capability | Endpoint (verify against current docs) | Use here |
-| --- | --- | --- |
-| **Text → 3D** | `POST /openapi/v2/text-to-3d` | Generate a character from a text prompt built out of the member's `AvatarConfig` labels. |
-| **Image → 3D** | `POST /openapi/v1/image-to-3d` | Turn a reference image (e.g. the procedural sprite, or an uploaded photo) into a 3D model. Best fidelity to the existing look. |
-| **Rigging / animation** | `POST /openapi/v1/rigging` | Auto-rig a humanoid model and apply walk/idle animations for the floor. |
-| **Text → texture / remesh** | texture / remesh endpoints | Re-skin or lighten a base body mesh per member instead of a full regen (cheaper). |
+|      Meshy capability       | Endpoint (verify against current docs) |                                                            Use here                                                            |
+|-----------------------------|----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| **Text → 3D**               | `POST /openapi/v2/text-to-3d`          | Generate a character from a text prompt built out of the member's `AvatarConfig` labels.                                       |
+| **Image → 3D**              | `POST /openapi/v1/image-to-3d`         | Turn a reference image (e.g. the procedural sprite, or an uploaded photo) into a 3D model. Best fidelity to the existing look. |
+| **Rigging / animation**     | `POST /openapi/v1/rigging`             | Auto-rig a humanoid model and apply walk/idle animations for the floor.                                                        |
+| **Text → texture / remesh** | texture / remesh endpoints             | Re-skin or lighten a base body mesh per member instead of a full regen (cheaper).                                              |
 
 Output formats: **GLB** (use this — web-native), FBX, USDZ, OBJ. Generation is
 **asynchronous**: create a task → poll (or receive a webhook) → download the
@@ -146,14 +146,14 @@ Recommendation: ship **A** first (fidelity win, zero office-runtime risk), keep
 
 The scaffolding from the (removed) AI-portrait attempt maps cleanly onto Meshy:
 
-| Concern | Reuse / add |
-| --- | --- |
-| Prompt from the character | A `meshyPromptFor(config)` builder — same idea as the old `portraitPrompt.ts`: turn `AvatarConfig` catalog **labels** (skin/hair/outfit/…) into a text prompt (Text→3D), or pass the sprite PNG (Image→3D). |
-| Provider resolution | `resolveMeshyGenerator()` keyed on `MESHY_API_KEY`, returning `null` when unset (degrade cleanly). |
-| Server action | A `generateAvatarModel(config)` server action in `app/(app)/office/builder/actions.ts`, alongside `saveAvatarConfig`. |
-| Storage | The **`office-portraits`** public bucket + the **`office_member_prefs.portrait_url`** column already exist (migrations `20260720150000`). Store the GLB (or baked atlas) there and reuse `portrait_url`, or add a parallel `model_url` column if you keep both. |
-| Studio UI | A "Generate 3D character" button + status/preview panel in `CharacterBuilder.tsx`, disabled when `MESHY_API_KEY` is unset. |
-| Async | Persist a `generating | ready | failed` state on the member's row so the Studio can show progress across the multi-minute job (see §4.1). |
+|          Concern          |                                                                                                                           Reuse / add                                                                                                                           |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Prompt from the character | A `meshyPromptFor(config)` builder — same idea as the old `portraitPrompt.ts`: turn `AvatarConfig` catalog **labels** (skin/hair/outfit/…) into a text prompt (Text→3D), or pass the sprite PNG (Image→3D).                                                     |
+| Provider resolution       | `resolveMeshyGenerator()` keyed on `MESHY_API_KEY`, returning `null` when unset (degrade cleanly).                                                                                                                                                              |
+| Server action             | A `generateAvatarModel(config)` server action in `app/(app)/office/builder/actions.ts`, alongside `saveAvatarConfig`.                                                                                                                                           |
+| Storage                   | The **`office-portraits`** public bucket + the **`office_member_prefs.portrait_url`** column already exist (migrations `20260720150000`). Store the GLB (or baked atlas) there and reuse `portrait_url`, or add a parallel `model_url` column if you keep both. |
+| Studio UI                 | A "Generate 3D character" button + status/preview panel in `CharacterBuilder.tsx`, disabled when `MESHY_API_KEY` is unset.                                                                                                                                      |
+| Async                     | Persist a `generating | ready | failed` state on the member's row so the Studio can show progress across the multi-minute job (see §4.1).                                                                                                                       |
 
 Keep the procedural sprite as the **fallback and the on-floor default** until a
 generated character is confirmed good — same hybrid discipline as before.
@@ -183,3 +183,4 @@ generated character is confirmed good — same hybrid discipline as before.
 - [ ] Studio button + progress/preview panel, disabled when unconfigured (§6)
 - [ ] Render path: bake-to-atlas (A) or three.js (B) (§5)
 - [ ] Per-user generation cap + webhook endpoint (§4.1, §7)
+
