@@ -46,7 +46,7 @@ secret — mirroring how `ANTHROPIC_API_KEY` / `APOLLO_API_KEY` are handled:
 
 ```bash
 # Meshy.ai 3D character generation (server-only, OPTIONAL). When set, the
-# Character Studio can generate a 3D model from a member's avatar. Without it,
+# Character Selector can generate a 3D model from a member's avatar. Without it,
 # the feature stays disabled and the procedural pixel sprite is used.
 MESHY_API_KEY=
 # Optional — override the model/quality tier or polling budget.

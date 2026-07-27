@@ -1,5 +1,5 @@
 // lib/office/characterPresets.ts
-// The ready-made office characters a member can pick in the Character Studio.
+// The ready-made office characters a member can pick in the Character Selector.
 // Each preset points at a pre-rendered walk ATLAS in the office's canonical
 // format (768×1024, 3 cols × 4 rows of 256px cells; rows = down/up/left/right,
 // 3 walk frames) — the exact layout the office floor renders for staff and for

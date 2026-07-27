@@ -1425,10 +1425,11 @@ function delegateAvatar(idOrRole,opts={}){
   pp.deleg={phase:'out',goal,kind:opts.kind||'task',wander:!!opts.wander,label:opts.label||'',t:0,dur:opts.dur||(4.5+Math.random()*4.5)};
   startPeople();return true;}
 function recallAvatar(idOrRole){const key=String(idOrRole).toLowerCase();const pp=PBID[idOrRole]||PEOPLE.find(p=>p.k===idOrRole||p.id===key||p.r.toLowerCase()===key);if(pp&&pp.deleg&&pp.deleg.phase==='task')pp.deleg.dur=pp.deleg.t;return !!pp;}
-// ---- "You": the signed-in member's own avatar on the floor. Its look is the
-// Character Studio pixel-art sprite, generated app-side by the SHARED generator
-// (lib/office/avatarSprite.ts) into a 16-bit walk ATLAS (same 3×4 / 256px layout
-// as the persona walk.png sheets) and handed in as a PNG data URL via
+// ---- "You": the signed-in member's own avatar on the floor. Its look comes
+// from the Character Selector — either a ready-made character's walk.png atlas
+// or the custom procedural sprite (lib/office/avatarSprite.ts) — a 16-bit walk
+// ATLAS (same 3×4 / 256px layout as the persona walk.png sheets) handed in as an
+// atlas URL / PNG data URL via
 // postMessage({type:'fx-you', atlas, name, status}) from the /office page — so
 // this self-contained map needs no bundler. It renders exactly like the AI
 // staff (image atlas + dir/frame). Click any floor point to walk there; pathing
@@ -2626,7 +2627,7 @@ function enterView(){document.body.classList.add('viewmode');clearSel();hideMenu
 function exitView(){document.body.classList.remove('viewmode');panX=0;panY=0;zoom=1;refreshFab();render();applyView();drawSel();if(typeof startPeople==='function')startPeople();toast('Build mode');}
 function openMenu(cx,cy){
   if(document.body.classList.contains('viewmode')){
-    cmenu.innerHTML='<button data-a="__build" class="cbuild">◆ Build Mode</button><button data-a="__studio" class="cbuild">✦ Character Studio</button><div class="csep"></div><button data-a="__reset">Reset view</button>';
+    cmenu.innerHTML='<button data-a="__build" class="cbuild">◆ Build Mode</button><button data-a="__studio" class="cbuild">✦ Character Selector</button><div class="csep"></div><button data-a="__reset">Reset view</button>';
     cmenu.style.left=Math.min(cx,innerWidth-186)+'px';cmenu.style.top=Math.min(cy,innerHeight-124)+'px';cmenu.classList.add('on');
     cmenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{const a=b.dataset.a;hideMenu();if(a==='__build')exitView();else if(a==='__studio'){try{(window.top||window).location.href='/office/builder';}catch(_){location.href='/office/builder';}}else if(a==='__reset'){panX=0;panY=0;zoom=1.7;YAW=0;applyView();drawSel();}});
     return;

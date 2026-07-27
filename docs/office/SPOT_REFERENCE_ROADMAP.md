@@ -22,7 +22,7 @@ What Spot does, and where we stand today.
 |------------------------------------------------------------------------|--------------------------------------------------------------------------------|------------------------------------------------|
 | Avatar-based spatial office (2.5D)                                     | ✅ `map.html` — top-down + first-person, cover-fit stage                        | —                                              |
 | Build mode (floorplan, rooms, doors, props, zones, branding, ambience) | ✅ Full Build Mode + layers panel + brand/environment tabs + saved layouts      | —                                              |
-| Customizable personal avatar                                           | ✅ Character Studio (`office/builder`) → `office_member_prefs.avatar`           | Not yet shown in the office                    |
+| Customizable personal avatar                                           | ✅ Character Selector (`office/builder`) → `office_member_prefs.avatar`         | Not yet shown in the office                    |
 | Presence status (available/busy/away/dnd)                              | ✅ status rings on persona avatars                                              | Only on AI personas, not the user/teammates    |
 | "See who's around" (live humans)                                       | ❌ single-user + AI NPCs only                                                   | **Multiplayer presence**                       |
 | Move your avatar around                                                | ❌ user has no in-world avatar                                                  | **You on the floor**                           |
