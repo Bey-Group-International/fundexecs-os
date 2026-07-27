@@ -1306,6 +1306,10 @@ let armed=null, lastDown=null; // armed = the object unlocked for movement via d
 let soloId=null, collapsed={}, renaming=null, dragRow=null, walkMode=false, clipboard=null, guides=[], suppressMenu=false;
 let buildMode=false, buildTool='wall', buildHover=null, matBrush=null;
 let panX=0, panY=0, panelCollapsed=false, gridOn=true;
+// The office should open framed on the member's own avatar. `userTookControl`
+// flips true the moment the member pans / zooms / walks, after which we stop
+// auto-framing and leave the camera where they put it.
+let userTookControl=false;
 let layFilter='', layOrder=[], lastLayerIdx=-1;
 let lastBounds={fx:0,fy:0,fw:20,fh:20};
 let history=[], hpos=-1, dragMoved=false, rafQ=false, lastE=null, saveT;
@@ -1466,6 +1470,7 @@ function youSpawn(){YOU.x=YOU_SPAWN[0];YOU.y=YOU_SPAWN[1];YOU.dir=0;YOU.path=nul
 function lineClear(x0,y0,x1,y1){const n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/0.5));for(let i=0;i<=n;i++){const t=i/n;if(!tileInRoom(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;}
 function walkYouTo(wx,wy){
   if(!YOU.active||!pfInRoom(wx,wy))return false;
+  userTookControl=true;   // member is driving now — stop auto-framing
   const path=pathfind(YOU.x,YOU.y,wx,wy);if(!path)return false;   // wall-aware: routes through doorways, never across walls
   YOU.path=path;YOU.pi=1;YOU.cur=Math.max(YOU.cur,0.35);startPeople();return true;}
 function stepYou(dt,t){
@@ -1492,7 +1497,7 @@ function stepYou(dt,t){
 }
 function setYou(d){
   if(!d||!d.atlas)return;
-  const firstSpawn=!YOU.active;   // center the opening shot on the CEO office once
+  const firstSpawn=!YOU.active;   // frame the opening shot on the avatar (CEO office)
   YOU.atlas=String(d.atlas);
   YOU.smooth=!!d.smooth;
   YOU.name=String(d.name||'You').slice(0,40);
@@ -1502,7 +1507,7 @@ function setYou(d){
     render();drawSel();startPeople();
     // On first appearance, frame the CEO office (the member's starting point) so
     // the user sees their character there instead of the trading floor.
-    if(firstSpawn&&typeof panToWorld==='function')requestAnimationFrame(()=>panToWorld(YOU.x,YOU.y));
+    if(firstSpawn){requestAnimationFrame(frameYou);setTimeout(frameYou,120);setTimeout(frameYou,400);setTimeout(frameYou,800);}
   }
 }
 window.addEventListener('message',e=>{if(e.origin!==location.origin)return;const d=e.data;if(d&&d.type==='fx-you')setYou(d);});
@@ -1723,6 +1728,17 @@ function drawMinimap(){const cv=document.getElementById('minimap');if(!cv)return
   else if(sv){const st=stageDom.getBoundingClientRect();const cs=[[st.left,st.top],[st.right,st.top],[st.right,st.bottom],[st.left,st.bottom]].map(([px,py])=>{const q=screenToSvg(px,py);return worldFrom(q[0],q[1]);});const vx0=Math.min(...cs.map(c=>c[0])),vx1=Math.max(...cs.map(c=>c[0])),vy0=Math.min(...cs.map(c=>c[1])),vy1=Math.max(...cs.map(c=>c[1]));ctx.strokeStyle='rgba(245,215,115,.9)';ctx.lineWidth=1.4;ctx.strokeRect(X(vx0),Y(vy0),(vx1-vx0)*sc,(vy1-vy0)*sc);ctx.fillStyle='rgba(245,215,115,.08)';ctx.fillRect(X(vx0),Y(vy0),(vx1-vx0)*sc,(vy1-vy0)*sc);}
 }
 function panToWorld(wx,wy){const sp=worldToStage(wx,wy);const st=stageDom.getBoundingClientRect();panX+=(st.width/2-sp[0]);panY+=(st.height/2-sp[1]);applyView();drawSel();}
+// Center the top-down view on the member's avatar. Bails (to retry later) until
+// the stage has a real size, so it survives the iframe's initial 0-size layout;
+// re-runs on resize until the member takes control. Resets pan first so the
+// centering is absolute regardless of any earlier (wrong-size) attempt.
+function frameYou(){
+  if(userTookControl||!YOU.active||MODE==='fp'||!document.body.classList.contains('office'))return;
+  const st=stageDom.getBoundingClientRect();
+  if(st.width<4||st.height<4)return;
+  panX=0;panY=0;applyView();
+  panToWorld(YOU.x,YOU.y);
+}
 function svgEl(){return canvas.querySelector('svg');}
 // Hosted-view fit: fill the frame (slice) while the whole office stays visible; if the frame is far
 // off the office's aspect (ultrawide or portrait), covering would crop rooms, so contain instead (meet).
@@ -1819,8 +1835,8 @@ function nearRotate(mx,my){ // stage-screen distance to selected prop's rotate h
 }
 stageDom.addEventListener('mousedown',e=>{
   if(MODE==='fp'){e.preventDefault();dragMoved=false;drag={mode:'look',sx0:e.clientX,sy0:e.clientY,yaw0:CAM.yaw,pitch0:CAM.pitch};stageDom.style.cursor='grabbing';return;}
-  if(document.body.classList.contains('viewmode')&&e.button===0){e.preventDefault();dragMoved=false;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
-  if(e.button===1){e.preventDefault();dragMoved=false;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
+  if(document.body.classList.contains('viewmode')&&e.button===0){e.preventDefault();dragMoved=false;userTookControl=true;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
+  if(e.button===1){e.preventDefault();dragMoved=false;userTookControl=true;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
   if(e.button===2&&!walkMode&&!buildMode){
     dragMoved=false;drag={mode:'orbit',sx0:e.clientX,sy0:e.clientY,yaw0:YAW,tilt0:TILT};stageDom.style.cursor='grabbing';return; // right-drag orbits (↔) + tilts (↕); plain right-click → context menu
   }
@@ -2701,7 +2717,7 @@ mRows.onclick=()=>viewSwitch(()=>{fpStop();fx3dStopAnim();MODE='top';mRows.class
 mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();fx3dStartAnim();});
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
-function zoomAt(clientX,clientY,nz){const zmin=document.body.classList.contains('viewmode')?0.6:0.45;nz=Math.max(zmin,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
+function zoomAt(clientX,clientY,nz){const zmin=document.body.classList.contains('viewmode')?0.6:0.45;nz=Math.max(zmin,Math.min(4,+(+nz).toFixed(3)));if(nz===zoom)return;userTookControl=true;const st=stageDom.getBoundingClientRect();const scx=st.left+st.width/2,scy=st.top+st.height/2;const oldCx=scx+panX,oldCy=scy+panY,k=nz/zoom;panX=(clientX-(clientX-oldCx)*k)-scx;panY=(clientY-(clientY-oldCy)*k)-scy;zoom=nz;document.getElementById('zl').textContent=Math.round(zoom*100)+'%';applyView();drawSel();}
 function setZoom(z){const st=stageDom.getBoundingClientRect();zoomAt(st.left+st.width/2,st.top+st.height/2,z);}
 document.getElementById('zIn').onclick=()=>setZoom(zoom+.2);
 document.getElementById('zOut').onclick=()=>setZoom(zoom-.2);
@@ -2771,7 +2787,7 @@ document.getElementById('layClose').onclick=()=>layModal.classList.remove('on');
 document.getElementById('laySaveBtn').onclick=()=>{const n=document.getElementById('layName').value.trim();if(!n){toast('Name it first');return;}laySave(n);renderLayList();document.getElementById('layName').value='';toast('Saved '+n);};
 window.addEventListener('resize',()=>{applyView();drawSel();});
 // Embedded iframes do not always fire window resize when the host relayouts; a ResizeObserver on the stage guarantees the map re-fits to its real size instead of sticking at a stale (tiny) fit.
-if(window.ResizeObserver){try{new ResizeObserver(()=>{applyView();drawSel();}).observe(document.getElementById('stage'));}catch(e){}}
+if(window.ResizeObserver){try{new ResizeObserver(()=>{applyView();drawSel();if(typeof frameYou==='function')frameYou();}).observe(document.getElementById('stage'));}catch(e){}}
 // collapsible inspector panel
 const panelWrap=document.getElementById('panelWrap'),panelToggle=document.getElementById('panelToggle');
 let panelAnim;function togglePanel(force){const c=force!==undefined?force:!panelWrap.classList.contains('collapsed');panelWrap.classList.toggle('collapsed',c);panelCollapsed=c;panelToggle.title=(c?'Show':'Hide')+' inspector (I)';cancelAnimationFrame(panelAnim);const start=Date.now();const step=()=>{applyView();drawSel();if(Date.now()-start<300)panelAnim=requestAnimationFrame(step);};step();}
