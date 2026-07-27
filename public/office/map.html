@@ -280,6 +280,11 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .fpmode #fphud{display:block;position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:rgba(11,18,32,.85);border:1px solid var(--line2);border-radius:9px;padding:8px 15px;font-size:11px;color:var(--dim);letter-spacing:.03em;pointer-events:none;z-index:6;white-space:nowrap}
 .fpmode #fphud b{color:var(--gold2)}
 .fpmode .canvas{cursor:grab}
+.fpmode #stage{touch-action:none}   /* claim touches for walk/look instead of browser scroll/zoom */
+#fpjoy{display:none}
+.fpmode.fptouch #fpjoy{display:block;position:absolute;left:24px;bottom:26px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(24,36,58,.42),rgba(11,18,32,.62));border:1px solid var(--line2);z-index:7;touch-action:none;box-shadow:0 12px 32px -16px #000,inset 0 0 22px -8px rgba(0,0,0,.6)}
+.fpmode.fptouch #fphud{bottom:26px;left:auto;right:24px;transform:none}
+#fpjoy .nub{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;background:radial-gradient(circle at 40% 34%,rgba(245,215,115,.96),rgba(212,168,42,.82));border:1px solid rgba(255,235,170,.7);box-shadow:0 5px 14px -5px #000;will-change:transform}
 .reclabel .rec{color:#f5d773;font-size:1em;font-weight:800;display:inline-flex;align-items:center;gap:.5em;white-space:nowrap}
 .reclabel .bar{width:.9em;height:.9em;position:static;transform:none;background:linear-gradient(0deg,#d4a82a 0 40%,transparent 0) 0 100%/4px 100% no-repeat,linear-gradient(0deg,#d4a82a 0 70%,transparent 0) 5px 100%/4px 100% no-repeat,linear-gradient(0deg,#d4a82a 0 100%,transparent 0) 10px 100%/4px 100% no-repeat}
 .welcomelabel span{color:#f5d773;font-size:10px;font-weight:800;letter-spacing:.3em;background:#141c2ecc;border:1px solid #d4a82a;border-radius:4px;padding:3px 9px}
@@ -437,6 +442,7 @@ body.office:not(.viewmode) .zoom{right:290px}
     </div>
     <svg class="sel" id="sel"></svg>
     <div id="fpcross"></div>
+    <div id="fpjoy" aria-hidden="true"><div class="nub" id="fpnub"></div></div>
     <div id="fphud"><b>WASD</b> walk · <b>drag</b> look · <b>click</b> move to · <b>scroll</b> step · <b>←/→</b> turn</div>
     <div class="brk tl"></div><div class="brk tr"></div><div class="brk bl"></div><div class="brk br"></div>
     <div class="vig"></div>
@@ -472,18 +478,21 @@ const FX_LIGHT={
 const C=()=>MODE==='fp'?FP:TOP;
 let ROT=null; // {cx,cy,cos,sin} — active world-space rotation while drawing a prop
 let YAW=0, YAWC={x:0,y:0}; // retained (scene centre); top-down has no orbit
-let CAM={x:20,y:33,z:1.62,yaw:Math.PI}; // first-person camera: floor pos, eye height, look yaw
+let CAM={x:20,y:33,z:1.62,yaw:Math.PI,pitch:0}; // first-person camera: floor pos, eye height, look yaw, vertical look (screen-px shear)
 const NEARP=0.12;
+const EYE=1.62,TAU=Math.PI*2,PITCHMAX=250;                 // base eye height, tau, max look up/down shear
+const clampPitch=p=>p<-PITCHMAX?-PITCHMAX:p>PITCHMAX?PITCHMAX:p;
+const fpOY=()=>FP.OY+CAM.pitch;                            // horizon line shifts with vertical look
 function rotW(x,y){if(ROT){const dx=x-ROT.cx,dy=y-ROT.cy;return [ROT.cx+dx*ROT.cos-dy*ROT.sin,ROT.cy+dx*ROT.sin+dy*ROT.cos];}return [x,y];}
 function P(x,y,z=0){const c=C();[x,y]=rotW(x,y);
-  if(MODE==='fp'){const dx=x-CAM.x,dy=y-CAM.y,cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const f=Math.max(dx*sn+dy*cs,0.05),r=dy*sn-dx*cs,u=z-CAM.z;return [c.OX+(r/f)*c.FOCAL,c.OY-(u/f)*c.FOCAL];}
+  if(MODE==='fp'){const dx=x-CAM.x,dy=y-CAM.y,cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const f=Math.max(dx*sn+dy*cs,0.05),r=dy*sn-dx*cs,u=z-CAM.z;return [c.OX+(r/f)*c.FOCAL,fpOY()-(u/f)*c.FOCAL];}
   if(YAW){const dx=x-YAWC.x,dy=y-YAWC.y,cs=Math.cos(YAW),sn=Math.sin(YAW);x=YAWC.x+dx*cs-dy*sn;y=YAWC.y+dx*sn+dy*cs;} // top-down orbit
   return [c.OX+x*c.UX,c.OY+y*c.UY-z*c.VZ];}
 function camF(x,y){[x,y]=rotW(x,y);const dx=x-CAM.x,dy=y-CAM.y;return dx*Math.sin(CAM.yaw)+dy*Math.cos(CAM.yaw);}
 // perspective polygon projection with near-plane clipping — for floors & box faces in FP
-function projFP(ptsW){const c=C(),cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const cam=ptsW.map(([x,y,z])=>{[x,y]=rotW(x,y);const dx=x-CAM.x,dy=y-CAM.y;return {f:dx*sn+dy*cs,r:dy*sn-dx*cs,u:z-CAM.z};});const out=[];for(let i=0;i<cam.length;i++){const A=cam[i],B=cam[(i+1)%cam.length];const Ain=A.f>=NEARP,Bin=B.f>=NEARP;if(Ain)out.push(A);if(Ain!==Bin){const t=(NEARP-A.f)/(B.f-A.f);out.push({f:NEARP,r:A.r+(B.r-A.r)*t,u:A.u+(B.u-A.u)*t});}}return out.map(p=>[c.OX+(p.r/p.f)*c.FOCAL,c.OY-(p.u/p.f)*c.FOCAL]);}
+function projFP(ptsW){const c=C(),cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const cam=ptsW.map(([x,y,z])=>{[x,y]=rotW(x,y);const dx=x-CAM.x,dy=y-CAM.y;return {f:dx*sn+dy*cs,r:dy*sn-dx*cs,u:z-CAM.z};});const out=[];for(let i=0;i<cam.length;i++){const A=cam[i],B=cam[(i+1)%cam.length];const Ain=A.f>=NEARP,Bin=B.f>=NEARP;if(Ain)out.push(A);if(Ain!==Bin){const t=(NEARP-A.f)/(B.f-A.f);out.push({f:NEARP,r:A.r+(B.r-A.r)*t,u:A.u+(B.u-A.u)*t});}}return out.map(p=>[c.OX+(p.r/p.f)*c.FOCAL,fpOY()-(p.u/p.f)*c.FOCAL]);}
 const FOOT={desk:[2.1,1.05],chair:[.85,.85],plant:[1,1],sofa:[2.3,1],armchair:[1,1],coffee:[1.3,.9],conf:[3,2.6],books:[1.6,.6],cabinet:[.9,.7],board:[3,.5],recep:[4,1.4],stool:[.5,.5],bar:[3,.8],lamp:[.6,.6],printer:[.9,.8],rug:[3,2],glass:[3,.5],spawn:[1,1],entry:[1,1],raise:[2,1.7],jumbo:[28,2],booth:[1.4,1.4],walltv:[2.6,.4],divider:[2.4,.24],water:[.7,.7],flip:[1,.7],credenza:[2.4,.7],podium:[.9,.7],vault:[1.4,.8],column:[.8,.8],tree:[1.4,1.4],bench:[2.2,.7],kiosk:[.8,.6],vending:[1,.8],fridge:[1,.8],counter:[2.4,.7],locker:[1.6,.5],flag:[.6,.6],barrier:[.5,.5],deskL:[2.4,1.6],fireplace:[1.8,.6],media:[2.2,.5],roundtable:[2.6,2.6],cafetable:[1.1,1.1],deskexec:[2.6,1.2],logo:[.9,.3],execchair:[.85,.85],loveseat:[1.6,1],ottoman:[.9,.9],squaretable:[2,2],poseur:[1.2,1.2],sidetable:[.8,.8],standdesk:[2,1],cactus:[.7,.7],planter:[2,.6],shelf:[1.2,.5],wardrobe:[1.1,.6],floorlamp:[.6,.6],uplight:[.5,.5],sculpture:[.8,.8],hoststand:[.9,.6],art:[1.4,.3],whiteboard:[2.4,.35],wallscreen:[2.6,.35]};
-function worldFrom(sx,sy){const c=C();if(MODE==='fp'){const rr=(sx-c.OX)/c.FOCAL,uu=-(sy-c.OY)/c.FOCAL;if(uu>-1e-3)return [CAM.x,CAM.y];const cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const f=-CAM.z/uu;return [CAM.x+f*(sn-rr*cs),CAM.y+f*(cs+rr*sn)];}
+function worldFrom(sx,sy){const c=C();if(MODE==='fp'){const rr=(sx-c.OX)/c.FOCAL,uu=-(sy-fpOY())/c.FOCAL;if(uu>-1e-3)return [CAM.x,CAM.y];const cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const f=-CAM.z/uu;return [CAM.x+f*(sn-rr*cs),CAM.y+f*(cs+rr*sn)];}
   let rx=(sx-c.OX)/c.UX, ry=(sy-c.OY)/c.UY;
   if(YAW){const dx=rx-YAWC.x,dy=ry-YAWC.y,cs=Math.cos(-YAW),sn=Math.sin(-YAW);rx=YAWC.x+dx*cs-dy*sn;ry=YAWC.y+dx*sn+dy*cs;}
   return [rx,ry];}
@@ -1765,7 +1774,7 @@ function nearRotate(mx,my){ // stage-screen distance to selected prop's rotate h
   const {hp}=propRotHandle(sel.obj);return Math.hypot(mx-hp[0],my-hp[1])<16;
 }
 stageDom.addEventListener('mousedown',e=>{
-  if(MODE==='fp'){e.preventDefault();dragMoved=false;drag={mode:'look',sx0:e.clientX,sy0:e.clientY,yaw0:CAM.yaw};stageDom.style.cursor='grabbing';return;}
+  if(MODE==='fp'){e.preventDefault();dragMoved=false;drag={mode:'look',sx0:e.clientX,sy0:e.clientY,yaw0:CAM.yaw,pitch0:CAM.pitch};stageDom.style.cursor='grabbing';return;}
   if(document.body.classList.contains('viewmode')&&e.button===0){e.preventDefault();dragMoved=false;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
   if(e.button===1){e.preventDefault();dragMoved=false;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
   if(e.button===2&&!walkMode&&!buildMode){
@@ -1815,7 +1824,7 @@ function applyDrag(){
   rafQ=false;if(!drag||!lastE)return;
   if(drag.mode==='tap')return; // selected-but-not-armed: ignore drag (movement is locked until double-click)
   if(drag.mode==='pan'){panX=drag.px0+(lastE.clientX-drag.sx0);panY=drag.py0+(lastE.clientY-drag.sy0);dragMoved=true;applyView();drawSel();return;}
-  if(drag.mode==='look'){CAM.yaw=drag.yaw0-(lastE.clientX-drag.sx0)*0.005;if(Math.abs(lastE.clientX-drag.sx0)+Math.abs(lastE.clientY-drag.sy0)>4)dragMoved=true;renderMoving();return;}
+  if(drag.mode==='look'){CAM.yaw=drag.yaw0-(lastE.clientX-drag.sx0)*0.005;CAM.pitch=clampPitch(drag.pitch0+(lastE.clientY-drag.sy0)*1.1);if(Math.abs(lastE.clientX-drag.sx0)+Math.abs(lastE.clientY-drag.sy0)>4)dragMoved=true;renderMoving();return;}
   if(drag.mode==='orbit'){YAW=drag.yaw0+(lastE.clientX-drag.sx0)*0.006;YAW=((YAW%(2*Math.PI))+2*Math.PI)%(2*Math.PI);if(Math.abs(lastE.clientX-drag.sx0)>3){dragMoved=true;suppressMenu=true;}renderMoving();drawSel();return;}
   const [sx,sy]=screenToSvg(lastE.clientX,lastE.clientY);const [wx,wy]=worldFrom(sx,sy);
   if(drag.mode==='marquee'){const sr=stageDom.getBoundingClientRect();marquee.x1=lastE.clientX-sr.left;marquee.y1=lastE.clientY-sr.top;dragMoved=true;drawSel();return;}
@@ -1868,30 +1877,74 @@ function fpBlocked(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,
 function resolveMove(x0,y0,x1,y1){if(!fpBlocked(x0,y0,x1,y1))return [x1,y1];if(x1!==x0&&!fpBlocked(x0,y0,x1,y0))return [x1,y0];if(y1!==y0&&!fpBlocked(x0,y0,x0,y1))return [x0,y1];return [x0,y0];} // slide along the wall, else block
 function camGlideTo(tx,ty){const sx=CAM.x,sy=CAM.y,dx=tx-sx,dy=ty-sy,raw=Math.hypot(dx,dy);if(raw<0.05)return;const travel=Math.max(0,Math.min(raw-0.7,9));const ux=dx/raw,uy=dy/raw,ex=sx+ux*travel,ey=sy+uy*travel;cancelAnimationFrame(camAnim);const t0=performance.now(),dur=Math.min(650,150+travel*55);const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);const nx=sx+(ex-sx)*e,ny=sy+(ey-sy)*e;const px=CAM.x,py=CAM.y,[rx,ry]=resolveMove(px,py,nx,ny);CAM.x=rx;CAM.y=ry;renderMoving();const stuck=rx===px&&ry===py&&(nx!==px||ny!==py);if(k<1&&!stuck)camAnim=requestAnimationFrame(step);};camAnim=requestAnimationFrame(step);}
 function camStep(fwd,strafe){const cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw);const nx=CAM.x+fwd*sn-strafe*cs,ny=CAM.y+fwd*cs+strafe*sn;const [rx,ry]=resolveMove(CAM.x,CAM.y,nx,ny);CAM.x=rx;CAM.y=ry;cancelAnimationFrame(camAnim);renderMoving();}
-// smooth, held-key walking so movement is continuous instead of steppy
-let fpShift=false;const fpKeys=new Set();let fpRAF=0,fpLast=0;
-function fpLoop(t){if(MODE!=='fp'||!fpKeys.size){fpRAF=0;return;}const dt=Math.min(0.05,((t-fpLast)||16)/1000);fpLast=t;
+// smooth, held-input walking so movement is continuous instead of steppy. One rAF loop serves
+// keyboard (WASD/arrows) AND the mobile joystick (fpJoy, an analog {fwd,str} vector, magnitude ≤1).
+let fpShift=false;const fpKeys=new Set();let fpRAF=0,fpLast=0,fpJoy=null,fpBob=0;
+const fpActive=()=>fpKeys.size||(fpJoy&&(fpJoy.fwd||fpJoy.str));
+function fpLoop(t){if(MODE!=='fp'||!fpActive()){fpRAF=0;fpBob=0;CAM.z=EYE;return;}
+  const dt=Math.min(0.05,((t-fpLast)||16)/1000);fpLast=t;
   updateDoors(dt);   // doors open as you walk up to them (rendered by renderMoving below)
-  const spd=(fpShift?7.5:4.2)*dt,turn=2.4*dt;let fwd=0,str=0;
+  const turn=2.4*dt;let fwd=0,str=0,analog=1;
   if(fpKeys.has('w')||fpKeys.has('arrowup'))fwd+=1;
   if(fpKeys.has('s')||fpKeys.has('arrowdown'))fwd-=1;
   if(fpKeys.has('a'))str-=1;
   if(fpKeys.has('d'))str+=1;
   if(fpKeys.has('arrowleft'))CAM.yaw+=turn;
   if(fpKeys.has('arrowright'))CAM.yaw-=turn;
-  if(fwd||str){const cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw),m=Math.hypot(fwd,str)||1;fwd/=m;str/=m;const nx=CAM.x+(fwd*sn-str*cs)*spd,ny=CAM.y+(fwd*cs+str*sn)*spd;const [rx,ry]=resolveMove(CAM.x,CAM.y,nx,ny);CAM.x=rx;CAM.y=ry;}
+  if(fpJoy){fwd+=fpJoy.fwd;str+=fpJoy.str;const jm=Math.hypot(fpJoy.fwd,fpJoy.str);if(jm)analog=Math.min(1,jm);} // analog speed from push depth
+  if(fwd||str){const cs=Math.cos(CAM.yaw),sn=Math.sin(CAM.yaw),m=Math.hypot(fwd,str)||1;fwd/=m;str/=m;
+    const spd=(fpShift?7.5:4.2)*analog*dt;
+    const nx=CAM.x+(fwd*sn-str*cs)*spd,ny=CAM.y+(fwd*cs+str*sn)*spd;const [rx,ry]=resolveMove(CAM.x,CAM.y,nx,ny);CAM.x=rx;CAM.y=ry;
+    if(!REDUCED){fpBob+=spd*3.4;CAM.z=EYE+Math.sin(fpBob)*0.028;}else CAM.z=EYE;   // subtle walking head-bob
+  }else CAM.z=EYE;
+  CAM.yaw=((CAM.yaw%TAU)+TAU)%TAU;                 // keep yaw bounded so long sessions never lose float precision
   renderMoving();fpRAF=requestAnimationFrame(fpLoop);}
-function fpKeyDown(k){cancelAnimationFrame(camAnim);if(!fpKeys.has(k)){fpKeys.add(k);if(!fpRAF){fpLast=performance.now();fpRAF=requestAnimationFrame(fpLoop);}}}
+function fpKick(){if(!fpRAF){fpLast=performance.now();fpRAF=requestAnimationFrame(fpLoop);}}
+function fpKeyDown(k){cancelAnimationFrame(camAnim);if(!fpKeys.has(k)){fpKeys.add(k);fpKick();}}
 function fpKeyUp(k){fpKeys.delete(k);}
-function fpStop(){fpKeys.clear();fpShift=false;cancelAnimationFrame(fpRAF);fpRAF=0;}
+function fpStop(){fpKeys.clear();fpShift=false;fpJoy=null;fpBob=0;CAM.z=EYE;if(typeof setNub==='function')setNub(0,0);cancelAnimationFrame(fpRAF);fpRAF=0;}
 window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='shift')fpShift=false;fpKeyUp(k);});
 window.addEventListener('blur',fpStop);
-function enterFP(){cancelAnimationFrame(camAnim);buildFPWalls();CAM.z=1.62;
+// ---------- first-person touch controls (mobile) ----------
+// Left-thumb virtual joystick walks; a drag anywhere else looks (yaw + pitch); a tap moves-to.
+// Multi-touch aware: joystick and look tracked by separate touch identifiers so both work at once.
+const TOUCH=(typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches)||('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+const JOYR=48;
+function setNub(dx,dy){const n=document.getElementById('fpnub');if(n)n.style.transform=`translate(${dx.toFixed(0)}px,${dy.toFixed(0)}px)`;}
+let joyId=null,joyCx=0,joyCy=0,lookId=null,lookX0=0,lookY0=0,lookYaw0=0,lookPitch0=0,lookMoved=false;
+function fpTouchStart(e){if(MODE!=='fp')return;e.preventDefault();
+  for(const t of e.changedTouches){
+    const je=document.getElementById('fpjoy'),jr=je&&je.getBoundingClientRect();
+    const inJoy=jr&&t.clientX>=jr.left-24&&t.clientX<=jr.right+24&&t.clientY>=jr.top-24&&t.clientY<=jr.bottom+24;
+    if(inJoy&&joyId===null){joyId=t.identifier;joyCx=jr.left+jr.width/2;joyCy=jr.top+jr.height/2;fpJoy={fwd:0,str:0};cancelAnimationFrame(camAnim);fpKick();}
+    else if(lookId===null){lookId=t.identifier;lookX0=t.clientX;lookY0=t.clientY;lookYaw0=CAM.yaw;lookPitch0=CAM.pitch;lookMoved=false;}
+  }
+}
+function fpTouchMove(e){if(MODE!=='fp')return;e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier===joyId){let dx=t.clientX-joyCx,dy=t.clientY-joyCy;const m=Math.hypot(dx,dy);if(m>JOYR){dx=dx/m*JOYR;dy=dy/m*JOYR;}setNub(dx,dy);fpJoy={str:dx/JOYR,fwd:-dy/JOYR};fpKick();}
+    else if(t.identifier===lookId){const dx=t.clientX-lookX0,dy=t.clientY-lookY0;CAM.yaw=lookYaw0-dx*0.005;CAM.pitch=clampPitch(lookPitch0+dy*1.1);if(Math.abs(dx)+Math.abs(dy)>6)lookMoved=true;if(!fpRAF)renderMoving();} // the walk loop already renders when active
+  }
+}
+function fpTouchEnd(e){if(MODE!=='fp')return;
+  for(const t of e.changedTouches){
+    if(t.identifier===joyId){joyId=null;fpJoy=null;setNub(0,0);}
+    else if(t.identifier===lookId){if(!lookMoved){const [sx,sy]=screenToSvg(t.clientX,t.clientY);const [wx,wy]=worldFrom(sx,sy);camGlideTo(wx,wy);}lookId=null;}
+  }
+}
+stageDom.addEventListener('touchstart',fpTouchStart,{passive:false});
+stageDom.addEventListener('touchmove',fpTouchMove,{passive:false});
+stageDom.addEventListener('touchend',fpTouchEnd,{passive:false});
+stageDom.addEventListener('touchcancel',fpTouchEnd,{passive:false});
+function enterFP(){cancelAnimationFrame(camAnim);buildFPWalls();CAM.z=EYE;CAM.pitch=0;fpBob=0;
   // Spawn centrally among the team so teammates are nearby and clearly visible from the start.
   const rs=model.rooms.filter(r=>r.build!=='corridor');let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
   rs.forEach(r=>{mnx=Math.min(mnx,r.x);mxx=Math.max(mxx,r.x+r.w);mny=Math.min(mny,r.y);mxy=Math.max(mxy,r.y+r.d);});
   if(mnx>mxx){mnx=2;mxx=40;mny=2;mxy=35;}
   CAM.x=(mnx+mxx)/2;CAM.y=(mny+mxy)/2;CAM.yaw=Math.PI; // office center, looking north across the rooms
+  // Touch devices get the on-screen joystick and a touch-worded control hint.
+  if(TOUCH)document.body.classList.add('fptouch');
+  const hud=document.getElementById('fphud');if(hud)hud.innerHTML=TOUCH?'<b>joystick</b> walk · <b>drag</b> look · <b>tap</b> move to':'<b>WASD</b> walk · <b>drag</b> look · <b>click</b> move to · <b>scroll</b> step · <b>←/→</b> turn';
 }
 function finishMarquee(){
   if(!marquee)return;
@@ -1921,7 +1974,7 @@ function applyGuides(prim,dx,dy){
   return{dx,dy};
 }
 window.addEventListener('keydown',e=>{
-  const typing=/INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  const ae=document.activeElement;const typing=!!ae&&/INPUT|TEXTAREA/.test(ae.tagName);
   if(MODE==='fp'&&!typing){const k=e.key.toLowerCase();
     if(k==='shift'){fpShift=true;return;}
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){e.preventDefault();fpKeyDown(k);return;}}
@@ -2600,7 +2653,7 @@ refreshFab();
 const mRows=document.getElementById('mRows'),mIso=document.getElementById('mIso');
 // Graceful top-down <-> first-person switch: brief fade+blur so the projection change doesn't hard-cut.
 function viewSwitch(fn){const st=stageDom;if(!st||(typeof REDUCED!=='undefined'&&REDUCED)){fn();return;}st.style.transition='opacity .16s ease,filter .16s ease';st.style.opacity='0';st.style.filter='blur(4px)';setTimeout(()=>{fn();requestAnimationFrame(()=>{st.style.opacity='1';st.style.filter='blur(0)';setTimeout(()=>{st.style.transition='';st.style.filter='';},240);});},150);}
-mRows.onclick=()=>viewSwitch(()=>{fpStop();fx3dStopAnim();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
+mRows.onclick=()=>viewSwitch(()=>{fpStop();fx3dStopAnim();MODE='top';mRows.classList.add('on');mIso.classList.remove('on');panX=0;panY=0;zoom=document.body.classList.contains('viewmode')?1.7:1;document.body.classList.remove('fpmode','fptouch');render();buildPanel();drawSel();if(typeof startPeople==='function')startPeople();});
 mIso.onclick=()=>viewSwitch(()=>{MODE='fp';mIso.classList.add('on');mRows.classList.remove('on');panX=0;panY=0;zoom=1;clearSel();enterFP();document.body.classList.add('fpmode');render();buildPanel();drawSel();fx3dStartAnim();});
 // GRID / WALK / BUILD / LIVE toolbar controls removed — grid stays on, live activity stays on by default
 // zoom (about a client point, keeping that point stable)
@@ -2609,7 +2662,7 @@ function setZoom(z){const st=stageDom.getBoundingClientRect();zoomAt(st.left+st.
 document.getElementById('zIn').onclick=()=>setZoom(zoom+.2);
 document.getElementById('zOut').onclick=()=>setZoom(zoom-.2);
 document.getElementById('zFit').onclick=()=>{panX=0;panY=0;zoom=1;YAW=0;document.getElementById('zl').textContent='100%';render();toast('View reset');};
-let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='fp'){camStep(-e.deltaY*0.006,0);return;}const sv=svgEl();if(sv)sv.style.transition='none';const d=Math.max(-0.4,Math.min(0.4,-e.deltaY*0.0016));zoomAt(e.clientX,e.clientY,zoom+d);clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);},{passive:false});
+let wheelT;stageDom.addEventListener('wheel',e=>{e.preventDefault();if(MODE==='fp'){const st=Math.max(-0.9,Math.min(0.9,-e.deltaY*0.006));camStep(st,0);return;} /* clamp so a big trackpad fling can't teleport through the office */const sv=svgEl();if(sv)sv.style.transition='none';const d=Math.max(-0.4,Math.min(0.4,-e.deltaY*0.0016));zoomAt(e.clientX,e.clientY,zoom+d);clearTimeout(wheelT);wheelT=setTimeout(()=>{const s=svgEl();if(s)s.style.transition='';},160);},{passive:false});
 // coordinate readout
 const coordEl=document.getElementById('coord');
 const stageEl=document.getElementById('stage');
@@ -2653,7 +2706,7 @@ function menuAction(a){
 // reset
 document.getElementById('btnReset').onclick=()=>{if(!confirm('Reset to the default FundExecs office? This clears your changes and the view.'))return;
   model=JSON.parse(JSON.stringify(DEFAULT));clearSel();fpStop();
-  MODE='top';mRows.classList.add('on');mIso.classList.remove('on');document.body.classList.remove('fpmode');
+  MODE='top';mRows.classList.add('on');mIso.classList.remove('on');document.body.classList.remove('fpmode','fptouch');
   panX=0;panY=0;zoom=1;YAW=0;soloId=null;collapsed={};lastLayerIdx=-1;
   layFilter='';{const sb=document.getElementById('laySearch');if(sb)sb.value='';}
   gridOn=true;snap=true;AMBIENT='day';setAmbient('day');document.body.classList.remove('previewing');refreshFab();
@@ -2696,8 +2749,16 @@ try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'fx
 // SVG sprite when WebGL is unavailable (FX3D_ON stays false). _fx/FX_ROLES/FX_LIGHT declared up top.
 function fx3dInit(){
   const cv=document.getElementById('fx3d'); if(!cv)return false;
+  // A lost GL context (tab backgrounding, GPU reset, mobile memory pressure) would otherwise leave
+  // avatars invisible forever. Hook once: on loss, drop the dead handles so the next frame re-inits;
+  // on restore, force a fresh init. Textures are re-uploaded by fx3dLoad since _fx.tex is cleared.
+  if(!_fx.ctxHooked){
+    cv.addEventListener('webglcontextlost',e=>{e.preventDefault();_fx.inited=false;_fx.tex={};FX3D_ON=false;},false);
+    cv.addEventListener('webglcontextrestored',()=>{_fx.inited=false;_fx.tex={};},false);
+    _fx.ctxHooked=true;
+  }
   let gl; try{gl=cv.getContext('webgl',{premultipliedAlpha:false,alpha:true,antialias:true})||cv.getContext('experimental-webgl');}catch(e){}
-  if(!gl)return false;
+  if(!gl||gl.isContextLost&&gl.isContextLost())return false;
   const vs=`attribute vec2 aPos;attribute vec2 aUV;uniform vec2 uRes;varying vec2 vUV;void main(){vec2 c=(aPos/uRes)*2.0-1.0;c.y=-c.y;gl_Position=vec4(c,0.0,1.0);vUV=aUV;}`;
   const fs=`precision mediump float;varying vec2 vUV;uniform sampler2D uAlb;uniform sampler2D uNrm;uniform vec3 uL;uniform vec3 uLcol;uniform float uAmb;uniform vec3 uRim;uniform float uRimK;void main(){vec4 a=texture2D(uAlb,vUV);if(a.a<0.02)discard;vec3 n=normalize(texture2D(uNrm,vUV).xyz*2.0-1.0);float ndl=max(dot(n,normalize(uL)),0.0);float rim=pow(clamp(1.0-n.z,0.0,1.0),2.0)*uRimK;vec3 lit=a.rgb*(uAmb+uLcol*ndl)+uRim*rim;gl_FragColor=vec4(lit,a.a);}`;
   const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o;};
