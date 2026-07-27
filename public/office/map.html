@@ -2310,6 +2310,15 @@ const bmrail=document.getElementById('bmrail'), bmtabs=document.getElementById('
 function setAmbient(k){AMBIENT=k;const el=document.getElementById('ambient');if(!el)return;
   el.style.background=k==='dusk'?'radial-gradient(120% 90% at 50% 120%,rgba(255,150,60,.16),rgba(120,40,80,.10) 60%,rgba(20,20,50,.14))':k==='night'?'linear-gradient(180deg,rgba(20,34,80,.34),rgba(8,14,34,.42))':'transparent';
   el.style.boxShadow=k==='night'?'inset 0 0 160px rgba(4,8,20,.7)':k==='dusk'?'inset 0 0 140px rgba(60,20,40,.4)':'none';}
+// ---- self-aware day/night: drive AMBIENT from the VIEWER's local clock --------
+// new Date() reads the browser's own timezone, so each member sees the office lit
+// to their local time of day. Checked on load + every minute; only re-touches the
+// scene when the phase actually flips. A manual Ambience pick turns Auto off.
+let AMBIENT_AUTO=(()=>{try{const v=localStorage.getItem('fx_amb_auto');return v==null?true:v==='1';}catch(_){return true;}})();
+function ambientPhase(d){const h=(d||new Date()).getHours();if(h>=8&&h<17)return 'day';if((h>=6&&h<8)||(h>=17&&h<20))return 'dusk';return 'night';}
+function ambientLabel(){const d=new Date(),p=ambientPhase(d);let t;try{t=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}catch(_){t=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}return p.charAt(0).toUpperCase()+p.slice(1)+' · '+t;}
+function setAmbientAuto(on){AMBIENT_AUTO=on;try{localStorage.setItem('fx_amb_auto',on?'1':'0');}catch(_){}if(on)setAmbient(ambientPhase());}
+function tickAmbient(){if(!AMBIENT_AUTO)return;const p=ambientPhase();if(p!==AMBIENT){setAmbient(p);if(buildTab==='env'&&!layersView&&typeof buildEnvTab==='function')buildEnvTab();}}
 function enterBuild(tool){buildMode=true;buildTool=tool;walkMode=false;clearSel();buildPanel();drawSel();stageDom.style.cursor='crosshair';toast((tool==='door'?'Place doors':'Draw walls')+' — Esc to finish');}
 // ---- surface paint: apply a floor/wall/door variation to a room by clicking it ----
 function roomAtPoint(wx,wy){for(let i=model.rooms.length-1;i>=0;i--){const r=model.rooms[i];if(!r.hidden&&r.build!=='corridor'&&wx>=r.x&&wx<=r.x+r.w&&wy>=r.y&&wy<=r.y+r.d)return r;}return null;}
@@ -2373,13 +2382,16 @@ function buildEnvTab(){
     row('enGrid','Tile grid','Show the floor grid',gridOn)+
     row('enSnap','Snap to grid','Objects snap to whole tiles',snap)+
     row('enLive','Live activity','Raise stations tick, office breathes',ACT.on)+`</div>`;
-  h+=`<div class="tsec"><div class="gh">Ambience</div><div class="tgrid">`+AMBOPTS.map(([k,l])=>`<button class="tcard${AMBIENT===k?' on':''}" data-amb="${k}">${icon(k==='night'?'lamp':k==='dusk'?'fireplace':'entry')}<span>${l}</span></button>`).join('')+`</div></div>`;
+  h+=`<div class="tsec"><div class="gh">Ambience</div>`+
+    row('enAuto','Auto day / night',AMBIENT_AUTO?('Follows your local time · '+ambientLabel()):'Set the lighting manually below',AMBIENT_AUTO)+
+    `<div class="tgrid" style="margin-top:7px">`+AMBOPTS.map(([k,l])=>`<button class="tcard${!AMBIENT_AUTO&&AMBIENT===k?' on':''}" data-amb="${k}">${icon(k==='night'?'lamp':k==='dusk'?'fireplace':'entry')}<span>${l}</span></button>`).join('')+`</div></div>`;
   pal.innerHTML=h;
   pal.querySelectorAll('[data-env]').forEach(b=>b.onclick=()=>{setEnv(b.dataset.env);buildEnvTab();toast(SCENES_MAP[b.dataset.env]+' backdrop');});
   document.getElementById('enGrid').onclick=()=>{gridOn=!gridOn;render();buildEnvTab();};
   document.getElementById('enSnap').onclick=()=>{snap=!snap;buildEnvTab();};
   document.getElementById('enLive').onclick=()=>{ACT.on=!ACT.on;render();buildEnvTab();toast(ACT.on?'Live activity on':'Live activity paused');};
-  pal.querySelectorAll('[data-amb]').forEach(b=>b.onclick=()=>{setAmbient(b.dataset.amb);buildEnvTab();});
+  document.getElementById('enAuto').onclick=()=>{setAmbientAuto(!AMBIENT_AUTO);buildEnvTab();toast(AMBIENT_AUTO?'Auto day/night on':'Manual ambience');};
+  pal.querySelectorAll('[data-amb]').forEach(b=>b.onclick=()=>{setAmbientAuto(false);setAmbient(b.dataset.amb);buildEnvTab();});
 }
 function buildBrandTab(){
   let h=`<div class="tsec"><div class="gh">Brand Accent</div><div class="altrow" style="padding:0 2px">`+
@@ -2815,7 +2827,7 @@ document.getElementById('btnReset').onclick=()=>{if(!confirm('Reset to the defau
   MODE='top';mRows.classList.add('on');mIso.classList.remove('on');document.body.classList.remove('fpmode','fptouch');
   panX=0;panY=0;zoom=1;YAW=0;TILT=TILT_DEF;soloId=null;collapsed={};lastLayerIdx=-1;
   layFilter='';{const sb=document.getElementById('laySearch');if(sb)sb.value='';}
-  gridOn=true;snap=true;AMBIENT='day';setAmbient('day');document.body.classList.remove('previewing');refreshFab();
+  gridOn=true;snap=true;setAmbient(AMBIENT_AUTO?ambientPhase():'day');document.body.classList.remove('previewing');refreshFab();
   document.getElementById('zl').textContent='100%';
   if(panelCollapsed)togglePanel(false);
   render();buildPanel();drawSel();pushHistory();toast('Reset to default');};
@@ -2841,6 +2853,9 @@ panelToggle.onclick=()=>togglePanel();
 const leftcolEl=document.querySelector('.leftcol'),leftToggle=document.getElementById('leftToggle');
 if(leftToggle)leftToggle.onclick=()=>{const c=!leftcolEl.classList.contains('collapsed');leftcolEl.classList.toggle('collapsed',c);leftToggle.title=(c?'Show':'Hide')+' palette';};
 buildFPWalls();buildPal();buildPanel();render();pushHistory();enterView();
+// self-aware day/night: light to the viewer's local time now, then re-check each minute
+if(AMBIENT_AUTO)setAmbient(ambientPhase());
+setInterval(tickAmbient,60000);
 document.getElementById('btnSave').onclick=function(){try{localStorage.setItem('fx_map_v9',JSON.stringify(model));}catch(e){}toast('Saved');enterView();};
 // Tell the embedding /office page we're ready, so it can hand us the member's
 // saved character via postMessage('fx-you'). Harmless when opened standalone.
