@@ -1450,8 +1450,13 @@ function recallAvatar(idOrRole){const key=String(idOrRole).toLowerCase();const p
 // this self-contained map needs no bundler. It renders exactly like the AI
 // staff (image atlas + dir/frame). Click any floor point to walk there; pathing
 // reuses the same corridor graph + walkable check as the AI staff. ----
-const YOU={active:false,x:16,y:24,dir:0,fi:1,dist:0,atlas:'',smooth:false,name:'You',status:'#34d399',path:null,pi:0,cur:0};
-function youSpawn(){const n=NODE.nM||[16,24];YOU.x=n[0];YOU.y=n[1];YOU.path=null;YOU.pi=0;YOU.cur=0;}
+// The member's own avatar STARTS in the CEO office (room r0: x2–11, y2–9) — the
+// user character's home base. (6.5, 5) is the room's horizontal centre, on the
+// clear strip just in front of the exec desk, facing the south door; from there
+// the member can click anywhere to walk out onto the floor.
+const YOU_SPAWN=[6.5,5];
+const YOU={active:false,x:YOU_SPAWN[0],y:YOU_SPAWN[1],dir:0,fi:1,dist:0,atlas:'',smooth:false,name:'You',status:'#34d399',path:null,pi:0,cur:0};
+function youSpawn(){YOU.x=YOU_SPAWN[0];YOU.y=YOU_SPAWN[1];YOU.dir=0;YOU.path=null;YOU.pi=0;YOU.cur=0;}
 function lineClear(x0,y0,x1,y1){const n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/0.5));for(let i=0;i<=n;i++){const t=i/n;if(!tileInRoom(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;}
 function walkYouTo(wx,wy){
   if(!YOU.active||!pfInRoom(wx,wy))return false;
@@ -1481,12 +1486,18 @@ function stepYou(dt,t){
 }
 function setYou(d){
   if(!d||!d.atlas)return;
+  const firstSpawn=!YOU.active;   // center the opening shot on the CEO office once
   YOU.atlas=String(d.atlas);
   YOU.smooth=!!d.smooth;
   YOU.name=String(d.name||'You').slice(0,40);
   YOU.status=/^#[0-9a-f]{6}$/i.test(String(d.status||''))?d.status:'#34d399';
   if(!YOU.active){YOU.active=true;youSpawn();}
-  if(document.body.classList.contains('office')&&MODE!=='fp'){render();drawSel();startPeople();}
+  if(document.body.classList.contains('office')&&MODE!=='fp'){
+    render();drawSel();startPeople();
+    // On first appearance, frame the CEO office (the member's starting point) so
+    // the user sees their character there instead of the trading floor.
+    if(firstSpawn&&typeof panToWorld==='function')requestAnimationFrame(()=>panToWorld(YOU.x,YOU.y));
+  }
 }
 window.addEventListener('message',e=>{if(e.origin!==location.origin)return;const d=e.data;if(d&&d.type==='fx-you')setYou(d);});
 let intentHover=null,intentPin=null;
