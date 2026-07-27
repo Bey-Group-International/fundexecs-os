@@ -1514,6 +1514,17 @@ function stepYou(dt,t){
   }
   if(moving){YOU.fi=WALKSEQ[Math.floor(YOU.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((YOU.dist/STRIDE)*Math.PI))*1.25;}
   else{YOU.fi=1;yoff=REDUCED?0:Math.sin(t/1000)*0.4;}
+  // Depth-correct occlusion without per-frame full renders (which cause jank):
+  // the avatar's paint order is fixed at the last render(), so it would wrongly
+  // pass in front of / behind furniture as it walks, popping only when some
+  // other event happens to re-sort. Re-sort the scene when the avatar crosses a
+  // depth (y) row or comes to rest — a few renders/sec while walking — then let
+  // the per-frame attribute update below keep motion smooth in between.
+  const yb=moving?Math.round(YOU.y):null;
+  if((moving&&yb!==YOU._yb)||(!moving&&YOU._wasMoving)){
+    YOU._yb=yb;YOU._wasMoving=moving;render();drawSel();return;   // render() re-inserts ps_you at the correct depth + position
+  }
+  YOU._wasMoving=moving;
   const g=document.getElementById('ps_you');if(!g)return;
   const q=P(YOU.x,YOU.y,0),pf=pscale(YOU.y),W=48*pf,H=48*pf,X=q[0]-W/2,Y=q[1]-H+yoff;
   const sv=g.querySelector('svg.youdoll');if(sv){sv.setAttribute('x',X.toFixed(1));sv.setAttribute('y',Y.toFixed(1));sv.setAttribute('width',W.toFixed(1));sv.setAttribute('height',H.toFixed(1));sv.setAttribute('viewBox',`${(YOU.fi||0)*256} ${(YOU.dir||0)*256} 256 256`);}
