@@ -1494,14 +1494,15 @@ function stepYou(dt,t){
   if(kx||ky){
     if(!CAMWALLS.length)buildFPWalls();
     const m=Math.hypot(kx,ky);kx/=m;ky/=m;
-    const dist=3.2*dt, px=YOU.x, py=YOU.y;   // ~3.2 tiles/sec
+    const spd=youKeys.has('shift')?5.6:3.2;   // hold Shift to sprint
+    const dist=spd*dt, px=YOU.x, py=YOU.y;
     let [rx,ry]=resolveMove(YOU.x,YOU.y,YOU.x+kx*dist,YOU.y+ky*dist);   // slide along walls
     if(!pfWalkable(rx,ry)){                                             // keep on the floor
       if(pfWalkable(rx,py))ry=py; else if(pfWalkable(px,ry))rx=px; else {rx=px;ry=py;}
     }
     YOU.x=rx;YOU.y=ry;YOU.dir=dir4(kx,ky);
     moving=(Math.abs(rx-px)+Math.abs(ry-py))>1e-4;
-    if(moving){YOU.dist+=Math.hypot(rx-px,ry-py);panToWorld(YOU.x,YOU.y);}   // follow-cam so you never walk off-screen
+    if(moving){YOU.dist+=Math.hypot(rx-px,ry-py);followYou(0.2);}   // eased follow-cam so you never walk off-screen
   } else if(YOU.path&&YOU.pi<YOU.path.length){
     const tgt=YOU.path[YOU.pi],dx=tgt[0]-YOU.x,dy=tgt[1]-YOU.y,d=Math.hypot(dx,dy),isLast=YOU.pi>=YOU.path.length-1;
     let sp=2.0;if(isLast)sp=Math.min(sp,0.55+d*1.7);
@@ -1754,6 +1755,9 @@ function drawMinimap(){const cv=document.getElementById('minimap');if(!cv)return
   else if(sv){const st=stageDom.getBoundingClientRect();const cs=[[st.left,st.top],[st.right,st.top],[st.right,st.bottom],[st.left,st.bottom]].map(([px,py])=>{const q=screenToSvg(px,py);return worldFrom(q[0],q[1]);});const vx0=Math.min(...cs.map(c=>c[0])),vx1=Math.max(...cs.map(c=>c[0])),vy0=Math.min(...cs.map(c=>c[1])),vy1=Math.max(...cs.map(c=>c[1]));ctx.strokeStyle='rgba(245,215,115,.9)';ctx.lineWidth=1.4;ctx.strokeRect(X(vx0),Y(vy0),(vx1-vx0)*sc,(vy1-vy0)*sc);ctx.fillStyle='rgba(245,215,115,.08)';ctx.fillRect(X(vx0),Y(vy0),(vx1-vx0)*sc,(vy1-vy0)*sc);}
 }
 function panToWorld(wx,wy){const sp=worldToStage(wx,wy);const st=stageDom.getBoundingClientRect();panX+=(st.width/2-sp[0]);panY+=(st.height/2-sp[1]);applyView();drawSel();}
+// Eased follow: pan a fraction k toward centering (wx,wy) each frame, so the
+// camera trails the avatar smoothly instead of snapping rigidly to it.
+function followYou(k){const sp=worldToStage(YOU.x,YOU.y);const st=stageDom.getBoundingClientRect();if(st.width<4)return;panX+=(st.width/2-sp[0])*k;panY+=(st.height/2-sp[1])*k;applyView();drawSel();}
 // Center the top-down view on the member's avatar. Bails (to retry later) until
 // the stage has a real size, so it survives the iframe's initial 0-size layout;
 // re-runs on resize until the member takes control. Resets pan first so the
@@ -2067,6 +2071,7 @@ window.addEventListener('keydown',e=>{
   // Top-down: WASD / arrow keys drive the member's own avatar around the office.
   if(MODE!=='fp'&&YOU.active&&document.body.classList.contains('viewmode')&&!typing){
     const k=e.key.toLowerCase();
+    if(k==='shift'){youKeys.add('shift');return;}   // hold to sprint
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){e.preventDefault();userTookControl=true;youKeyDown(k);return;}}
   const meta=e.metaKey||e.ctrlKey;
   if(meta&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return;}
