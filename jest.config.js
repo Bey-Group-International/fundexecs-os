@@ -5,8 +5,5 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
-    // `server-only` is a Next.js build-time guard with no Node entrypoint; stub
-    // it so server modules can be unit-tested directly under jest.
-    '^server-only$': '<rootDir>/test/stubs/server-only.js',
   },
 };

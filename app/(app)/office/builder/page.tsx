@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { normalizeAvatarConfig } from "@/lib/office/avatarConfig";
-import { portraitGenerationConfigured } from "@/lib/office/portraitGen";
 import { CharacterBuilder } from "./CharacterBuilder";
 
 export const dynamic = "force-dynamic";
@@ -23,16 +22,14 @@ export default async function CharacterBuilderPage() {
   const [{ data: prefRow }, { data: principalRow }] = await Promise.all([
     supabase
       .from("office_member_prefs")
-      .select("avatar, portrait_url")
+      .select("avatar")
       .eq("organization_id", ctx.orgId)
       .eq("principal_id", ctx.userId)
       .maybeSingle(),
     supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
   ]);
 
-  const prefs = prefRow as { avatar: unknown; portrait_url: string | null } | null;
-  const saved = prefs?.avatar ?? null;
-  const portraitUrl = prefs?.portrait_url ?? null;
+  const saved = (prefRow as { avatar: unknown } | null)?.avatar ?? null;
   const fullName = (principalRow as { full_name: string | null } | null)?.full_name ?? "";
 
   // Hydrate: prefer the saved character; seed an unsaved builder's name from the
@@ -64,12 +61,7 @@ export default async function CharacterBuilderPage() {
         </p>
       </header>
 
-      <CharacterBuilder
-        initial={initial}
-        hasSaved={hasSaved}
-        portraitUrl={portraitUrl}
-        portraitEnabled={portraitGenerationConfigured()}
-      />
+      <CharacterBuilder initial={initial} hasSaved={hasSaved} />
     </div>
   );
 }
