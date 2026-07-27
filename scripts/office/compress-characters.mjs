@@ -15,8 +15,14 @@ for (const slug of fs.readdirSync(ROOT).sort()) {
   if (!fs.statSync(dir).isDirectory()) continue;
   for (const file of ["walk.png", "portrait.png"]) {
     const p = path.join(dir, file);
-    if (!fs.existsSync(p)) continue;
-    const src = fs.readFileSync(p);
+    // Read directly (no existsSync check-then-use, which trips a TOCTOU race
+    // warning); skip the file if it isn't there.
+    let src;
+    try {
+      src = fs.readFileSync(p);
+    } catch {
+      continue;
+    }
     const out = await sharp(src)
       .png({ palette: true, colours: 256, dither: 0, effort: 10, compressionLevel: 9 })
       .toBuffer();
