@@ -53,10 +53,10 @@ export default async function CharacterBuilderPage() {
           </Link>
         </div>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
-          Character studio
+          Character selector
         </h1>
         <p className="mt-2 max-w-prose text-sm text-fg-secondary">
-          Design the character that represents you in the office. Pick a look, save it, and it
+          Choose the character that represents you in the office. Pick one, save it, and it
           becomes your presence on the floor.
         </p>
       </header>

@@ -142,8 +142,20 @@ describe("avatarConfig · normalizeAvatarConfig", () => {
     expect(normalizeAvatarConfig({ displayName: 123 }).displayName).toBe("");
   });
 
+  it("keeps a known character preset id and rejects unknown ones", () => {
+    expect(normalizeAvatarConfig({ preset: "auburn-hoodie" }).preset).toBe("auburn-hoodie");
+    expect(normalizeAvatarConfig({ preset: "not-a-real-preset" }).preset).toBe("");
+    expect(normalizeAvatarConfig({ preset: 42 }).preset).toBe("");
+    expect(normalizeAvatarConfig({}).preset).toBe("");
+  });
+
   it("is idempotent", () => {
-    const once = normalizeAvatarConfig({ body: "slim", outfit: "hoodie", displayName: " Jo " });
+    const once = normalizeAvatarConfig({
+      body: "slim",
+      outfit: "hoodie",
+      displayName: " Jo ",
+      preset: "blue-shirt",
+    });
     expect(normalizeAvatarConfig(once)).toEqual(once);
   });
 });

@@ -8,13 +8,13 @@ export const dynamic = "force-dynamic";
 // The virtual office is a self-contained map app served as a static asset
 // (public/office/map.html) and embedded via an iframe (OfficeFrame). Opens in a
 // clean view (Top / 1st-person nav); right-click surfaces Build Mode and
-// Character Studio (which navigates the app to /office/builder).
+// Character Selector (which navigates the app to /office/builder).
 //
-// If the member has designed a character (Character Studio → office_member_prefs
-// .avatar), we hand its config to OfficeFrame, which rasterizes the shared
-// pixel-art sprite atlas in the browser and posts it to the map, where it walks
-// the floor as a movable "you". No saved character → the office runs as before
-// and the right-click Studio invites them to make one.
+// If the member has chosen a character (Character Selector → office_member_prefs
+// .avatar), we hand its config to OfficeFrame, which posts the character's walk
+// atlas to the map, where it walks the floor as a movable "you". No saved
+// character → the office runs as before and the right-click Selector invites
+// them to pick one.
 export default async function OfficePage() {
   const you = await loadYou();
   return <OfficeFrame you={you} />;

@@ -16,6 +16,8 @@
 //     sprite generator (lib/office/avatarSprite.ts) reads the resolved catalog
 //     values. The same config could later drive a richer rig.
 
+import { isCharacterPreset } from "./characterPresets";
+
 export const AVATAR_CONFIG_VERSION = 1 as const;
 
 /** One selectable option in an appearance catalog. */
@@ -105,7 +107,10 @@ export const OUTFITS: readonly AvatarOption[] = [
   { id: "dress", label: "Sheath dress" },
 ] as const;
 
-/** Curated garment palette (primary fill), contrast-checked against the floor. */
+/** Curated garment palette (primary fill), contrast-checked against the floor.
+ * The second row mirrors the FundExecs persona signature hues so a member can
+ * dress in the staff palette (Curator violet, Lead-Gen orange, PR magenta,
+ * Capital-Raiser gold, Exec/SEO royal, Rainmaker emerald). */
 export const OUTFIT_COLORS: readonly AvatarColorOption[] = [
   { id: "charcoal", label: "Charcoal", hex: "#2b3240" },
   { id: "navy", label: "Navy", hex: "#1e3a5f" },
@@ -115,6 +120,12 @@ export const OUTFIT_COLORS: readonly AvatarColorOption[] = [
   { id: "camel", label: "Camel", hex: "#8a6a3f" },
   { id: "plum", label: "Plum", hex: "#4a2f52" },
   { id: "teal", label: "Teal", hex: "#1f5158" },
+  { id: "violet", label: "Violet", hex: "#5b3f8f" },
+  { id: "royal", label: "Royal", hex: "#2f56a8" },
+  { id: "emerald", label: "Emerald", hex: "#227a4e" },
+  { id: "gold", label: "Gold", hex: "#b5892a" },
+  { id: "orange", label: "Orange", hex: "#c0602a" },
+  { id: "magenta", label: "Magenta", hex: "#a83a72" },
 ] as const;
 
 /** Eyewear (10). `none` paints nothing. */
@@ -184,6 +195,13 @@ export const STATUSES: readonly AvatarColorOption[] = [
 export interface AvatarConfig {
   v: typeof AVATAR_CONFIG_VERSION;
   displayName: string;
+  /**
+   * A ready-made character preset id (lib/office/characterPresets). When set to
+   * a known preset, the office renders that pre-drawn walk atlas and the
+   * appearance fields below are ignored for rendering (but retained, so a member
+   * can switch back to a custom look without losing it). Empty = custom sprite.
+   */
+  preset: string;
   body: string;
   skin: string;
   hair: string;
@@ -203,6 +221,7 @@ export interface AvatarConfig {
 export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
   v: AVATAR_CONFIG_VERSION,
   displayName: "",
+  preset: "",
   body: "regular",
   skin: "tan",
   hair: "short",
@@ -276,6 +295,7 @@ export function normalizeAvatarConfig(input: unknown): AvatarConfig {
   return {
     v: AVATAR_CONFIG_VERSION,
     displayName: rawName.trim().slice(0, MAX_DISPLAY_NAME),
+    preset: isCharacterPreset(src.preset) ? (src.preset as string) : "",
     body: field(BODY_TYPES, "body"),
     skin: field(SKIN_TONES, "skin"),
     hair: field(HAIR_STYLES, "hair"),
