@@ -1356,15 +1356,19 @@ function bfs(a,b){if(a===b)return[a];const prev={},q=[a],seen={};seen[a]=1;while
 // with gaps at each doorway, so routing forces every trip through a real door; corridors/rooms are open
 // floor. Shared by roamers, delegated execs and the member's own avatar (replaces the old node-graph +
 // naive line-of-sight, which cut straight across walls). ----
-const PF_CELL=0.5;
+const PF_CELL=0.5, PF_CLEAR=0.34;   // routes must stay PF_CLEAR off any wall so they can't hug a wall or cut through the corner where two walls meet — every trip is forced through a real door opening
 function pfInRoom(x,y){return model.rooms.some(r=>!r.hidden&&x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.d);}
 function pfWalkable(x,y){if(!pfInRoom(x,y))return false;const tx=Math.floor(x),ty=Math.floor(y);return !(model.blocked&&model.blocked[tx+','+ty]);}
+function ptSegDist(px,py,x1,y1,x2,y2){const vx=x2-x1,vy=y2-y1,wx=px-x1,wy=py-y1;const c1=vx*wx+vy*wy;if(c1<=0)return Math.hypot(px-x1,py-y1);const c2=vx*vx+vy*vy;if(c2<=c1)return Math.hypot(px-x2,py-y2);const t=c1/c2;return Math.hypot(px-(x1+t*vx),py-(y1+t*vy));}
+let pfClearMemo=new Map();
+function pfClear(x,y){const k=Math.round(x/0.25)+','+Math.round(y/0.25);let v=pfClearMemo.get(k);if(v!==undefined)return v;let m=1e9;for(const w of CAMWALLS){const d=ptSegDist(x,y,w[0],w[1],w[2],w[3]);if(d<m){m=d;if(m<PF_CLEAR)break;}}v=m>=PF_CLEAR;pfClearMemo.set(k,v);return v;}
+function pfNav(x,y){return pfWalkable(x,y)&&pfClear(x,y);}   // walkable AND clear of walls — used only for routing
 function pfWallHit(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;return false;} // true = a wall blocks this segment
-function pfSegOK(ax,ay,bx,by){if(pfWallHit(ax,ay,bx,by))return false;const n=Math.ceil(Math.hypot(bx-ax,by-ay)/(PF_CELL*0.9));for(let i=0;i<=n;i++){const t=i/n;if(!pfWalkable(ax+(bx-ax)*t,ay+(by-ay)*t))return false;}return true;}
-function pfSnap(x,y){if(pfWalkable(x,y))return [x,y];for(let r=1;r<=10;r++)for(let a=0;a<12;a++){const ang=a/12*6.2832,nx=x+Math.cos(ang)*r*PF_CELL,ny=y+Math.sin(ang)*r*PF_CELL;if(pfWalkable(nx,ny))return [nx,ny];}return [x,y];}
+function pfSegOK(ax,ay,bx,by){if(pfWallHit(ax,ay,bx,by))return false;const n=Math.ceil(Math.hypot(bx-ax,by-ay)/(PF_CELL*0.9));for(let i=0;i<=n;i++){const t=i/n;if(!pfNav(ax+(bx-ax)*t,ay+(by-ay)*t))return false;}return true;}
+function pfSnap(x,y){if(pfNav(x,y))return [x,y];for(let r=1;r<=14;r++)for(let a=0;a<16;a++){const ang=a/16*6.2832,nx=x+Math.cos(ang)*r*PF_CELL,ny=y+Math.sin(ang)*r*PF_CELL;if(pfNav(nx,ny))return [nx,ny];}return [x,y];}
 function pfSimplify(pts){if(pts.length<=2)return pts;const out=[pts[0]];let i=0;while(i<pts.length-1){let j=pts.length-1;for(;j>i+1;j--){if(pfSegOK(pts[i][0],pts[i][1],pts[j][0],pts[j][1]))break;}out.push(pts[j]);i=j;}return out;}
 function pathfind(sx,sy,gx,gy){
-  if(!CAMWALLS.length)buildFPWalls();
+  buildFPWalls();   // always rebuild from the current model so routes respect the latest walls/doors (never stale)
   const S=pfSnap(sx,sy),G=pfSnap(gx,gy),cq=v=>Math.round(v/PF_CELL),cw=c=>c*PF_CELL;
   const gc=[cq(G[0]),cq(G[1])],sc=[cq(S[0]),cq(S[1])],goalK=gc[0]+','+gc[1];
   if(pfSegOK(sx,sy,gx,gy))return [[sx,sy],[gx,gy]];              // clear straight shot
@@ -1379,8 +1383,8 @@ function pathfind(sx,sy,gx,gy){
     const cwx=cw(cur[0]),cwy=cw(cur[1]);
     for(const [ox,oy] of NB){
       const nx=cur[0]+ox,ny=cur[1]+oy,nk=nx+','+ny,nwx=cw(nx),nwy=cw(ny);
-      if(!pfWalkable(nwx,nwy)||pfWallHit(cwx,cwy,nwx,nwy))continue;
-      if(ox&&oy){if(!pfWalkable(cw(nx),cwy)||!pfWalkable(cwx,cw(ny)))continue;if(pfWallHit(cwx,cwy,cw(nx),cwy)||pfWallHit(cwx,cwy,cwx,cw(ny)))continue;}
+      if(!pfNav(nwx,nwy)||pfWallHit(cwx,cwy,nwx,nwy))continue;
+      if(ox&&oy){if(!pfNav(cw(nx),cwy)||!pfNav(cwx,cw(ny)))continue;if(pfWallHit(cwx,cwy,cw(nx),cwy)||pfWallHit(cwx,cwy,cwx,cw(ny)))continue;}
       const ng=g[bk]+Math.hypot(ox,oy)*PF_CELL;
       if(g[nk]==null||ng<g[nk]){g[nk]=ng;f[nk]=ng+h([nx,ny],gc);came.set(nk,bk);open.set(nk,[nx,ny]);}
     }
@@ -1427,7 +1431,9 @@ function delegateAvatar(idOrRole,opts={}){
   // default target: the nearest trading-floor node (a short, purposeful trip); the app can name one
   const goal=(opts.target&&NODE[opts.target])?opts.target:FLOOR_NODES.reduce((a,n)=>{const d=(NODE[n][0]-pp.x)**2+(NODE[n][1]-pp.y)**2;return d<a.d?{n,d}:a;},{n:FLOOR_NODES[0],d:1e9}).n;
   const gp=NODE[goal]||[pp.x,pp.y];
-  pp.path=pathfind(pp.x,pp.y,gp[0],gp[1])||[[pp.x,pp.y],gp];   // wall-aware: routes out through the doorway
+  const outPath=pathfind(pp.x,pp.y,gp[0],gp[1]);   // wall-aware: routes out through the doorway
+  if(!outPath)return false;                        // no legal route (never straight-line through a wall) — stay seated
+  pp.path=outPath;
   pp.pi=1;pp.cur=0.35;pp.dist=pp.dist||0;pp.spd=1.8+Math.random()*0.5;   // brisk, on-a-mission
   pp.deleg={phase:'out',goal,kind:opts.kind||'task',wander:!!opts.wander,label:opts.label||'',t:0,dur:opts.dur||(4.5+Math.random()*4.5)};
   startPeople();return true;}
@@ -1585,8 +1591,10 @@ function peopleLoop(t){
         if(pp.deleg.wander){pp.dir=(pp.deleg.t%3<1.5)?2:3;yoff=REDUCED?0:Math.sin(t/900+pp.ph)*0.5;}  // relaxed, looking around
         else{pp.dir=0;yoff=Math.abs(Math.sin(t/95+pp.ph))*0.6-0.15;}                                    // heads-down on the floor
         if(pp.deleg.t>=pp.deleg.dur){                                              // done → head home
-          pp.path=pathfind(pp.x,pp.y,pp.home[0],pp.home[1])||[[pp.x,pp.y],[pp.home[0],pp.home[1]]];   // routes back in through the doorway
-          pp.pi=1;pp.cur=0.35;pp.deleg.phase='back';}
+          const back=pathfind(pp.x,pp.y,pp.home[0],pp.home[1]);   // routes back in through the doorway
+          if(back){pp.path=back;pp.pi=1;pp.cur=0.35;pp.deleg.phase='back';}
+          else{pp.x=pp.home[0];pp.y=pp.home[1];pp.deleg=null;pp.wst=null;pp.dir=0;pp.fi=1;}   // unroutable → settle at desk (never straight-line through a wall)
+        }
       } else {                                                                     // walking out / back
         const tgt=pp.path[pp.pi],dx=tgt[0]-pp.x,dy=tgt[1]-pp.y,d=Math.hypot(dx,dy),isLast=pp.pi>=pp.path.length-1;
         let sp=pp.spd||1.3;if(isLast)sp=Math.min(sp,0.55+d*1.7);
@@ -1628,7 +1636,13 @@ function peopleLoop(t){
   for(let i=0;i<PEOPLE.length;i++){const a=PEOPLE[i];if(!(a.roam||a.deleg)||a.x==null)continue;
     for(let j=0;j<PEOPLE.length;j++){if(i===j)continue;const b=PEOPLE[j];if(b.x==null)continue;
       const dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy;
-      if(d2>1e-4&&d2<MIND*MIND){const d=Math.sqrt(d2),push=(MIND-d)*((b.roam||b.deleg)?0.5:0.9)/d;a.x+=dx*push;a.y+=dy*push;}}}
+      if(d2>1e-4&&d2<MIND*MIND){const d=Math.sqrt(d2),push=(MIND-d)*((b.roam||b.deleg)?0.5:0.9)/d;const nx=a.x+dx*push,ny=a.y+dy*push;
+        if(pfWalkable(nx,ny)&&!pfWallHit(a.x,a.y,nx,ny)){a.x=nx;a.y=ny;}}}}   // never let the crowd-shove push an avatar through a wall
+  // hard containment guard: a moving avatar keeps its last on-floor position and reverts if any frame
+  // ever lands it off the floor or across a wall — so avatars can only ever travel rooms/corridors/doors.
+  for(const p of PEOPLE){if(!(p.roam||p.deleg)||p.x==null)continue;
+    if(pfWalkable(p.x,p.y))p._lg=[p.x,p.y];        // remember last on-floor spot
+    else if(p._lg){p.x=p._lg[0];p.y=p._lg[1];}}    // a frame ever off the floor snaps back (paths already avoid walls/corners)
   stepYou(dt,t);   // slide the member's own avatar along its current walk path
   paintIntent();   // keep the hovered/pinned intent bubble glued to its (possibly moving) avatar
   peopleRAF=requestAnimationFrame(peopleLoop);
@@ -1867,7 +1881,7 @@ function buildFPWalls(){const segs=[],solids=(L,gaps)=>{const out=[];let cur=0;g
   let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
   model.rooms.forEach(r=>{if(r.hidden)return;minx=Math.min(minx,r.x);miny=Math.min(miny,r.y);maxx=Math.max(maxx,r.x+r.w);maxy=Math.max(maxy,r.y+r.d);});
   if(maxx>minx){const m=0.12,X0=minx-m,Y0=miny-m,X1=maxx+m,Y1=maxy+m;segs.push([X0,Y0,X1,Y0],[X1,Y0,X1,Y1],[X1,Y1,X0,Y1],[X0,Y1,X0,Y0]);}
-  CAMWALLS=segs;}
+  CAMWALLS=segs;pfClearMemo=new Map();}
 function fpBlocked(ax,ay,bx,by){for(const w of CAMWALLS)if(segCross(ax,ay,bx,by,w[0],w[1],w[2],w[3]))return true;
   // closed doors are solid until they open (they auto-open on approach, so this is just the safety net)
   for(const r of model.rooms){if(r.hidden||!r.doors)continue;for(const d of r.doors){const o=d._o!=null?d._o:(d.open?1:0);if(o>0.35)continue;const s=doorSeg(r,d);if(segCross(ax,ay,bx,by,s[0],s[1],s[2],s[3]))return true;}}
