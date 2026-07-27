@@ -1467,6 +1467,14 @@ function recallAvatar(idOrRole){const key=String(idOrRole).toLowerCase();const p
 const YOU_SPAWN=[6.5,5];
 const YOU={active:false,x:YOU_SPAWN[0],y:YOU_SPAWN[1],dir:0,fi:1,dist:0,atlas:'',smooth:false,name:'You',status:'#34d399',path:null,pi:0,cur:0};
 function youSpawn(){YOU.x=YOU_SPAWN[0];YOU.y=YOU_SPAWN[1];YOU.dir=0;YOU.path=null;YOU.pi=0;YOU.cur=0;}
+// ---- keyboard / arrow-key control for the member's own avatar (top-down) ----
+// Held WASD/arrow keys drive continuous, wall-aware movement in stepYou. This
+// runs on the existing people RAF; youKick() makes sure the loop is alive even
+// if it had idled (or reduced-motion never started it).
+const youKeys=new Set();
+function youKick(){if(!peopleRAF){peopleLast=performance.now();peopleRAF=requestAnimationFrame(peopleLoop);}}
+function youKeyDown(k){if(!youKeys.has(k)){youKeys.add(k);YOU.path=null;YOU.cur=0;youKick();}}
+function youKeyUp(k){youKeys.delete(k);}
 function lineClear(x0,y0,x1,y1){const n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/0.5));for(let i=0;i<=n;i++){const t=i/n;if(!tileInRoom(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;}
 function walkYouTo(wx,wy){
   if(!YOU.active||!pfInRoom(wx,wy))return false;
@@ -1476,7 +1484,25 @@ function walkYouTo(wx,wy){
 function stepYou(dt,t){
   if(!YOU.active)return;
   let moving=false,yoff=0;
-  if(YOU.path&&YOU.pi<YOU.path.length){
+  // Keyboard/arrow control takes priority — continuous, wall-aware, and keeps a
+  // stable facing (no per-waypoint direction flicker), with the camera following.
+  let kx=0,ky=0;
+  if(youKeys.has('arrowup')||youKeys.has('w'))ky-=1;
+  if(youKeys.has('arrowdown')||youKeys.has('s'))ky+=1;
+  if(youKeys.has('arrowleft')||youKeys.has('a'))kx-=1;
+  if(youKeys.has('arrowright')||youKeys.has('d'))kx+=1;
+  if(kx||ky){
+    if(!CAMWALLS.length)buildFPWalls();
+    const m=Math.hypot(kx,ky);kx/=m;ky/=m;
+    const dist=3.2*dt, px=YOU.x, py=YOU.y;   // ~3.2 tiles/sec
+    let [rx,ry]=resolveMove(YOU.x,YOU.y,YOU.x+kx*dist,YOU.y+ky*dist);   // slide along walls
+    if(!pfWalkable(rx,ry)){                                             // keep on the floor
+      if(pfWalkable(rx,py))ry=py; else if(pfWalkable(px,ry))rx=px; else {rx=px;ry=py;}
+    }
+    YOU.x=rx;YOU.y=ry;YOU.dir=dir4(kx,ky);
+    moving=(Math.abs(rx-px)+Math.abs(ry-py))>1e-4;
+    if(moving){YOU.dist+=Math.hypot(rx-px,ry-py);panToWorld(YOU.x,YOU.y);}   // follow-cam so you never walk off-screen
+  } else if(YOU.path&&YOU.pi<YOU.path.length){
     const tgt=YOU.path[YOU.pi],dx=tgt[0]-YOU.x,dy=tgt[1]-YOU.y,d=Math.hypot(dx,dy),isLast=YOU.pi>=YOU.path.length-1;
     let sp=2.0;if(isLast)sp=Math.min(sp,0.55+d*1.7);
     YOU.cur=Math.min(sp,(YOU.cur||0.35)+dt*2.8);
@@ -1963,8 +1989,8 @@ function fpKick(){if(!fpRAF){fpLast=performance.now();fpRAF=requestAnimationFram
 function fpKeyDown(k){cancelAnimationFrame(camAnim);if(!fpKeys.has(k)){fpKeys.add(k);fpKick();}}
 function fpKeyUp(k){fpKeys.delete(k);}
 function fpStop(){fpKeys.clear();fpShift=false;fpJoy=null;fpBob=0;CAM.z=EYE;if(typeof setNub==='function')setNub(0,0);cancelAnimationFrame(fpRAF);fpRAF=0;}
-window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='shift')fpShift=false;fpKeyUp(k);});
-window.addEventListener('blur',fpStop);
+window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='shift')fpShift=false;fpKeyUp(k);youKeyUp(k);});
+window.addEventListener('blur',()=>{fpStop();youKeys.clear();});
 // ---------- first-person touch controls (mobile) ----------
 // Left-thumb virtual joystick walks; a drag anywhere else looks (yaw + pitch); a tap moves-to.
 // Multi-touch aware: joystick and look tracked by separate touch identifiers so both work at once.
@@ -2038,6 +2064,10 @@ window.addEventListener('keydown',e=>{
   if(MODE==='fp'&&!typing){const k=e.key.toLowerCase();
     if(k==='shift'){fpShift=true;return;}
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){e.preventDefault();fpKeyDown(k);return;}}
+  // Top-down: WASD / arrow keys drive the member's own avatar around the office.
+  if(MODE!=='fp'&&YOU.active&&document.body.classList.contains('viewmode')&&!typing){
+    const k=e.key.toLowerCase();
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){e.preventDefault();userTookControl=true;youKeyDown(k);return;}}
   const meta=e.metaKey||e.ctrlKey;
   if(meta&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return;}
   if(meta&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return;}
