@@ -1,9 +1,10 @@
 // lib/office/portraitPrompt.ts
 // Turns a member's AvatarConfig into a text prompt for the AI portrait
-// generator (lib/office/imagegen.ts). The portrait is the "hero" rendering of a
-// character — a persona-style pixel-art bust shown in the Character Studio and
-// on the roster card — while the procedural sprite (lib/office/avatarSprite.ts)
-// keeps walking the floor. Both read the same config, so the two stay in sync.
+// generator (lib/office/portraitGen.ts), which asks Claude to draw the character
+// as an SVG. The portrait is the "hero" rendering of a character — a persona-
+// style vector bust shown in the Character Studio and on the roster card — while
+// the procedural sprite (lib/office/avatarSprite.ts) keeps walking the floor.
+// Both read the same config, so the two stay in sync.
 //
 // Pure + deterministic: given a config it returns the same string, with no I/O.
 // It only reads the shared catalogs so the wording always tracks the labels a
@@ -34,13 +35,14 @@ function labelOf(catalog: readonly AvatarOption[], id: string): string {
 }
 
 /** The visual style contract that makes a portrait read like the office cast:
- * 16-bit chibi pixel-art, big rounded head, thick outline, soft warm shading. */
+ * a flat-vector chibi bust with a big rounded head, clean outline, and soft warm
+ * cel shading. Phrased for an SVG illustrator (see portraitGen.ts). */
 const STYLE_PREAMBLE =
-  "16-bit chibi pixel-art business character portrait, single character, " +
-  "front-facing bust from the chest up, big rounded friendly head, large " +
-  "expressive eyes, thick dark outline, soft cel shading with warm highlights, " +
-  "clean limited palette, crisp pixels, centered composition, flat plain " +
-  "transparent background, no text, no watermark, no border";
+  "Draw a flat-vector chibi business-character portrait as an SVG: a single " +
+  "character, front-facing bust from the chest up, big rounded friendly head, " +
+  "large expressive eyes, clean dark outline, soft cel shading with warm " +
+  "highlights, a limited harmonious palette, centered on a simple flat " +
+  "background";
 
 /**
  * Build the portrait generation prompt for a character. The result is a compact,

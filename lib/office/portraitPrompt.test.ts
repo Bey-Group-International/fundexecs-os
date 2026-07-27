@@ -7,10 +7,10 @@ const cfg = (over: Partial<AvatarConfig> = {}): AvatarConfig => ({
 });
 
 describe("portraitPromptFor", () => {
-  it("always leads with the pixel-art style contract", () => {
+  it("always leads with the vector/SVG style contract", () => {
     const p = portraitPromptFor(cfg());
-    expect(p).toMatch(/pixel-art/i);
-    expect(p).toMatch(/transparent background/i);
+    expect(p).toMatch(/svg/i);
+    expect(p).toMatch(/flat-vector|cel shading/i);
   });
 
   it("describes the resolved appearance in plain words", () => {

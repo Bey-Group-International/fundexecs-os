@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { normalizeAvatarConfig, type AvatarConfig } from "@/lib/office/avatarConfig";
-import { resolveImageGenerator } from "@/lib/office/imagegen";
+import { resolvePortraitGenerator } from "@/lib/office/portraitGen";
 import { portraitPromptFor } from "@/lib/office/portraitPrompt";
 
 const PORTRAIT_BUCKET = "office-portraits";
@@ -48,12 +48,12 @@ export async function saveAvatarConfig(
 // it. The portrait is the "hero" rendering shown in the Studio and on the
 // roster card; the procedural sprite (avatarSprite.ts) still walks the floor.
 //
-// Flow: build a persona-style prompt from the (re-normalized) config → call the
-// configured image provider → upload the PNG to the public office-portraits
-// bucket at `${orgId}/${principalId}.png` (RLS pins that path to the caller) →
-// stash its public URL on the member's office_member_prefs row. Degrades
-// cleanly: when no provider is configured, returns a friendly error instead of
-// throwing, so the button can explain that the feature is off.
+// Flow: build a persona-style prompt from the (re-normalized) config → ask
+// Claude to draw the character as a sanitized SVG → upload it to the public
+// office-portraits bucket at `${orgId}/${principalId}.svg` (RLS pins that path
+// to the caller) → stash its public URL on the member's office_member_prefs row.
+// Degrades cleanly: when no Anthropic key is configured, returns a friendly
+// error instead of throwing, so the button can explain that the feature is off.
 export async function generateAvatarPortrait(
   input: AvatarConfig,
 ): Promise<{ error?: string; url?: string }> {
@@ -61,7 +61,7 @@ export async function generateAvatarPortrait(
   if (!ctx) return { error: "Not authenticated" };
   if (!ctx.orgId) return { error: "No active organization" };
 
-  const generator = resolveImageGenerator();
+  const generator = resolvePortraitGenerator();
   if (!generator) {
     return { error: "AI portraits aren't configured for this deployment yet." };
   }
@@ -69,25 +69,21 @@ export async function generateAvatarPortrait(
   const config = normalizeAvatarConfig(input);
   const prompt = portraitPromptFor(config);
 
-  let png: Buffer;
+  let svg: string;
   try {
-    const image = await generator.generate(prompt, {
-      size: "1024x1024",
-      background: "transparent",
-      signal: AbortSignal.timeout(90_000),
-    });
-    png = Buffer.from(image.base64, "base64");
+    const portrait = await generator.generate(prompt, AbortSignal.timeout(120_000));
+    svg = portrait.svg;
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Unknown error";
     return { error: `Couldn't generate a portrait. ${detail}`.slice(0, 240) };
   }
 
   const supabase = await createServerClient();
-  const path = `${ctx.orgId}/${ctx.userId}.png`;
+  const path = `${ctx.orgId}/${ctx.userId}.svg`;
 
   const { error: uploadError } = await supabase.storage
     .from(PORTRAIT_BUCKET)
-    .upload(path, png, { contentType: "image/png", upsert: true });
+    .upload(path, svg, { contentType: "image/svg+xml", upsert: true });
   if (uploadError) return { error: uploadError.message };
 
   const {

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { normalizeAvatarConfig } from "@/lib/office/avatarConfig";
-import { imageGenerationConfigured } from "@/lib/office/imagegen";
+import { portraitGenerationConfigured } from "@/lib/office/portraitGen";
 import { CharacterBuilder } from "./CharacterBuilder";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +68,7 @@ export default async function CharacterBuilderPage() {
         initial={initial}
         hasSaved={hasSaved}
         portraitUrl={portraitUrl}
-        portraitEnabled={imageGenerationConfigured()}
+        portraitEnabled={portraitGenerationConfigured()}
       />
     </div>
   );
