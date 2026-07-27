@@ -43,14 +43,20 @@ export interface PixelSink {
 }
 
 // ── color ────────────────────────────────────────────────────────────────────
+// Warm-biased tonal shift, matching the persona art's hand-shaded feel: shadows
+// lean warm (blue drops fastest, red is preserved) and highlights warm up (red
+// rises fastest). amt > 0 lightens, amt < 0 darkens.
 function shade(hex: string, amt: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return hex;
   const n = parseInt(m[1], 16);
   const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  const r = c(((n >> 16) & 255) + 255 * amt);
-  const g = c(((n >> 8) & 255) + 255 * amt);
-  const b = c((n & 255) + 255 * amt);
+  let rk = 1, gk = 1, bk = 1;
+  if (amt < 0) { rk = 0.82; gk = 1.0; bk = 1.28; } // shadow: keep red, drop blue
+  else { rk = 1.18; gk = 1.02; bk = 0.8; } // highlight: warm up
+  const r = c(((n >> 16) & 255) + 255 * amt * rk);
+  const g = c(((n >> 8) & 255) + 255 * amt * gk);
+  const b = c((n & 255) + 255 * amt * bk);
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
@@ -68,9 +74,9 @@ function paletteFor(c: AvatarConfig): Palette {
     hair, hairSh: shade(hair, -0.16), hairHi: shade(hair, 0.14),
     fit, fitSh: shade(fit, -0.14), fitHi: shade(fit, 0.12), fitDp: shade(fit, -0.28),
     shirt: "#eef2f7", shirtSh: "#c2ccd8",
-    ink: shade(fit, -0.62) === fit ? "#161018" : "#171019",
-    rim: "#f3efe6",
-    shoe: "#181820", shoeHi: "#33333f",
+    ink: "#20161a",
+    rim: "#f6ead2",
+    shoe: "#20181c", shoeHi: "#3a3040",
   };
 }
 
@@ -100,13 +106,19 @@ class Painter {
 }
 
 const CX = 64;
+// Chibi layout (persona-matched): a big rounded head, short stubby legs, chunky
+// torso. Body anchors are constants so proportions stay coherent everywhere.
+const NECK_Y = 52;
+const TORSO_TOP = 60;
+const TORSO_H = 34;
+const LEG_H = 20;
 
 // ── head ─────────────────────────────────────────────────────────────────────
-const HEAD = { top: 10, cx: CX };
-// [dyFromTop, halfWidth, height] — a rounded oval with crown + tapered jaw.
+const HEAD = { top: 8, cx: CX };
+// [dyFromTop, halfWidth, height] — a big rounded oval with crown + tapered jaw.
 const HEAD_BANDS: [number, number, number][] = [
-  [0, 14, 3], [3, 18, 3], [6, 21, 3], [9, 23, 4],
-  [13, 24, 20], [33, 23, 3], [36, 21, 3], [39, 17, 4], [43, 12, 3],
+  [0, 16, 3], [3, 20, 3], [6, 24, 3], [9, 26, 4],
+  [13, 27, 22], [35, 26, 3], [38, 24, 3], [41, 20, 4], [45, 14, 3],
 ];
 
 function drawHeadOval(p: Painter, pal: Palette, fill: string) {
@@ -348,7 +360,7 @@ function drawAccessory(p: Painter, c: AvatarConfig, pal: Palette, side: boolean)
 }
 
 // ── body ─────────────────────────────────────────────────────────────────────
-const BUILD: Record<string, number> = { slim: 36, regular: 42, broad: 50 };
+const BUILD: Record<string, number> = { slim: 40, regular: 46, broad: 54 };
 function legPhase(frame: number): number { return frame === 0 ? -1 : frame === 2 ? 1 : 0; }
 
 // Held prop, carried in the (screen-)right hand for down/side; mirrored for the
@@ -395,27 +407,29 @@ function drawBodyFrontBack(p: Painter, c: AvatarConfig, pal: Palette, back: bool
   const cx = CX;
   const w = BUILD[c.body] ?? BUILD.regular;
   const x0 = cx - w / 2;
-  const torsoTop = 58, torsoH = 40, torsoBot = torsoTop + torsoH;
+  const torsoTop = TORSO_TOP, torsoH = TORSO_H, torsoBot = torsoTop + torsoH;
   const isDress = c.outfit === "dress";
-  const ph = legPhase(frame);
+  const lh = LEG_H;
+  // pronounced stride: one leg reaches forward (longer), the other lifts.
+  const lStep = frame === 0 ? 3 : frame === 2 ? -3 : 0;
+  const rStep = frame === 2 ? 3 : frame === 0 ? -3 : 0;
 
   // legs / skirt
   if (isDress) {
-    p.blk(cx - w / 2 - 2, torsoBot - 2, w + 4, 18, pal.fit, pal.ink);
-    p.r(cx - 2, torsoBot, 4, 16, pal.fitSh);
-    p.blk(cx - 12, torsoBot + 14, 10, 10, pal.skin, pal.ink);
-    p.blk(cx + 2, torsoBot + 14, 10, 10, pal.skin, pal.ink);
-    p.blk(cx - 13, torsoBot + 22, 12, 5, pal.shoe, pal.ink);
-    p.blk(cx + 1, torsoBot + 22, 12, 5, pal.shoe, pal.ink);
+    p.blk(cx - w / 2 - 2, torsoBot - 2, w + 4, 16, pal.fit, pal.ink);
+    p.r(cx - 2, torsoBot, 4, 14, pal.fitSh);
+    p.blk(cx - 11, torsoBot + 12, 9, 8 + lStep, pal.skin, pal.ink);
+    p.blk(cx + 2, torsoBot + 12, 9, 8 + rStep, pal.skin, pal.ink);
+    p.blk(cx - 12, torsoBot + 18 + lStep, 11, 5, pal.shoe, pal.ink);
+    p.blk(cx + 1, torsoBot + 18 + rStep, 11, 5, pal.shoe, pal.ink);
   } else {
-    const lh = 24;
-    p.blk(cx - 13, torsoBot - 2 + (ph < 0 ? 2 : 0), 12, lh - (ph < 0 ? 2 : 0), pal.fit, pal.ink);
-    p.blk(cx + 1, torsoBot - 2 + (ph > 0 ? 2 : 0), 12, lh - (ph > 0 ? 2 : 0), pal.fit, pal.ink);
-    p.r(cx - 2, torsoBot, 1, lh - 4, pal.fitSh); p.r(cx + 1, torsoBot, 1, lh - 4, pal.fitSh); // inseam
-    p.r(cx - 12, torsoBot, 2, lh - 6, pal.fitHi); // outer leg light
-    p.blk(cx - 14, torsoBot + lh - 4, 14, 6, pal.shoe, pal.ink);
-    p.blk(cx, torsoBot + lh - 4, 14, 6, pal.shoe, pal.ink);
-    p.r(cx - 13, torsoBot + lh - 3, 5, 1, pal.shoeHi); p.r(cx + 1, torsoBot + lh - 3, 5, 1, pal.shoeHi);
+    p.blk(cx - 12, torsoBot - 2, 11, lh + lStep, pal.fit, pal.ink);
+    p.blk(cx + 1, torsoBot - 2, 11, lh + rStep, pal.fit, pal.ink);
+    p.r(cx - 2, torsoBot, 1, lh - 6, pal.fitSh); p.r(cx + 1, torsoBot, 1, lh - 6, pal.fitSh); // inseam
+    p.r(cx - 11, torsoBot, 2, lh - 8, pal.fitHi); // outer leg light
+    p.blk(cx - 13, torsoBot - 2 + lh + lStep - 4, 13, 6, pal.shoe, pal.ink);
+    p.blk(cx, torsoBot - 2 + lh + rStep - 4, 13, 6, pal.shoe, pal.ink);
+    p.r(cx - 12, torsoBot - 1 + lh + lStep - 4, 5, 1, pal.shoeHi); p.r(cx + 1, torsoBot - 1 + lh + rStep - 4, 5, 1, pal.shoeHi);
   }
 
   // torso with sloped (stepped) shoulders
@@ -440,38 +454,41 @@ function drawBodyFrontBack(p: Painter, c: AvatarConfig, pal: Palette, back: bool
   }
 
   // neck
-  p.blk(cx - 6, 50, 12, 10, pal.skin, pal.ink);
-  p.r(cx - 6, 50, 12, 3, pal.skinSh);
+  p.blk(cx - 6, NECK_Y, 12, 10, pal.skin, pal.ink);
+  p.r(cx - 6, NECK_Y, 12, 3, pal.skinSh);
 
-  // arms + hands — tucked against the torso so the shoulders don't read broad
-  p.blk(x0 - 4, torsoTop + 6, 8, 28, pal.fit, pal.ink);
-  p.blk(cx + w / 2 - 4, torsoTop + 6, 8, 28, pal.fit, pal.ink);
-  p.r(x0 - 4, torsoTop + 7, 2, 22, pal.fitHi);
-  p.r(cx + w / 2 + 2, torsoTop + 7, 2, 22, pal.fitSh);
-  p.blk(x0 - 3, torsoTop + 32, 7, 7, pal.skin, pal.ink);
-  p.blk(cx + w / 2 - 3, torsoTop + 32, 7, 7, pal.skin, pal.ink);
-  if (c.holding !== "none") drawProp(p, c, pal, cx + w / 2, torsoTop + 36);
+  // arms + hands — tucked to the torso, swinging opposite the legs for a livelier walk
+  const lArm = frame === 2 ? 2 : frame === 0 ? -1 : 0;
+  const rArm = frame === 0 ? 2 : frame === 2 ? -1 : 0;
+  p.blk(x0 - 4, torsoTop + 7 + lArm, 8, 24, pal.fit, pal.ink);
+  p.blk(cx + w / 2 - 4, torsoTop + 7 + rArm, 8, 24, pal.fit, pal.ink);
+  p.r(x0 - 4, torsoTop + 8 + lArm, 2, 18, pal.fitHi);
+  p.r(cx + w / 2 + 2, torsoTop + 8 + rArm, 2, 18, pal.fitSh);
+  p.blk(x0 - 3, torsoTop + 30 + lArm, 7, 7, pal.skin, pal.ink);
+  p.blk(cx + w / 2 - 3, torsoTop + 30 + rArm, 7, 7, pal.skin, pal.ink);
+  if (c.holding !== "none") drawProp(p, c, pal, cx + w / 2, torsoTop + 34 + rArm);
 }
 
 function drawBodySide(p: Painter, c: AvatarConfig, pal: Palette, frame: number) {
   const cx = CX;
   const w = Math.round((BUILD[c.body] ?? BUILD.regular) * 0.66);
   const x0 = cx - w / 2 + 2;
-  const torsoTop = 58, torsoH = 40, torsoBot = torsoTop + torsoH;
+  const torsoTop = TORSO_TOP, torsoH = TORSO_H, torsoBot = torsoTop + torsoH;
   const ph = legPhase(frame);
   const isDress = c.outfit === "dress";
+  const lh = LEG_H;
+  const sw = ph * 5; // stronger front/back swing
 
   if (isDress) {
-    p.blk(cx - w / 2, torsoBot - 2, w + 4, 18, pal.fit, pal.ink);
-    p.blk(cx - 2 + ph * 3, torsoBot + 14, 10, 10, pal.skin, pal.ink);
-    p.blk(cx - 4 + ph * 3, torsoBot + 22, 15, 5, pal.shoe, pal.ink);
+    p.blk(cx - w / 2, torsoBot - 2, w + 4, 16, pal.fit, pal.ink);
+    p.blk(cx - 2 + sw, torsoBot + 12, 10, 10, pal.skin, pal.ink);
+    p.blk(cx - 4 + sw, torsoBot + 20, 15, 5, pal.shoe, pal.ink);
   } else {
-    const lh = 24;
-    p.blk(cx - 8 - ph * 3, torsoBot - 2, 12, lh, pal.fitSh, pal.ink); // back leg
-    p.blk(cx - 2 + ph * 3, torsoBot - 2, 12, lh, pal.fit, pal.ink);   // front leg
-    p.blk(cx - 10 - ph * 3, torsoBot + lh - 4, 16, 6, pal.shoe, pal.ink);
-    p.blk(cx - 2 + ph * 3, torsoBot + lh - 4, 17, 6, pal.shoe, pal.ink);
-    p.r(cx - 1 + ph * 3, torsoBot + lh - 3, 6, 1, pal.shoeHi);
+    p.blk(cx - 7 - sw, torsoBot - 2, 12, lh, pal.fitSh, pal.ink); // back leg
+    p.blk(cx - 2 + sw, torsoBot - 2, 12, lh, pal.fit, pal.ink);   // front leg
+    p.blk(cx - 9 - sw, torsoBot - 2 + lh - 4, 16, 6, pal.shoe, pal.ink);
+    p.blk(cx - 2 + sw, torsoBot - 2 + lh - 4, 17, 6, pal.shoe, pal.ink);
+    p.r(cx - 1 + sw, torsoBot - 3 + lh - 4, 6, 1, pal.shoeHi);
   }
 
   p.blk(x0, torsoTop, w, torsoH, pal.fit, pal.ink);
@@ -481,10 +498,10 @@ function drawBodySide(p: Painter, c: AvatarConfig, pal: Palette, frame: number) 
   p.r(x0 + 2, torsoBot - 4, w - 4, 3, pal.fitSh);
   if (c.outfit === "suit") p.r(cx + 4, torsoTop + 3, 3, 18, "#b3402f");
 
-  // neck + one visible arm swinging
-  p.blk(cx - 2, 50, 10, 10, pal.skin, pal.ink);
-  const armX = cx - 4 + (ph > 0 ? 5 : -2);
-  p.blk(armX, torsoTop + 2, 9, 30, pal.fitSh, pal.ink);
+  // neck + one visible arm swinging (opposite the front leg)
+  p.blk(cx - 2, NECK_Y, 10, 10, pal.skin, pal.ink);
+  const armX = cx - 4 + (ph > 0 ? 6 : ph < 0 ? -3 : 1);
+  p.blk(armX, torsoTop + 6, 9, 26, pal.fitSh, pal.ink);
   p.blk(armX + 1, torsoTop + 30, 7, 7, pal.skin, pal.ink);
   if (c.holding !== "none") drawProp(p, c, pal, armX + 4, torsoTop + 34);
 }
@@ -561,24 +578,38 @@ function renderPartsCell(config: AvatarConfig, facing: Facing, frame: number): C
   return cv;
 }
 
-// Stamp a light rim outline (silhouette dilated by 1 native px) then the parts.
+// A soft outline behind the parts, closer to the persona look than a bright
+// sticker halo: a thin DARK warm outer edge (all 8 directions) for definition on
+// the floor, plus a faint warm rim on the top-left light side only.
 function compositeWithHalo(dest: Ctx2D, cell: Canvas, ox: number, oy: number, rim: string) {
-  const sil = makeCanvas(CELL, CELL);
-  if (sil) {
-    const sctx = sil.getContext("2d");
-    if (sctx) {
-      sctx.imageSmoothingEnabled = false;
-      sctx.drawImage(cell, 0, 0);
-      sctx.globalCompositeOperation = "source-in";
-      sctx.fillStyle = rim;
-      sctx.fillRect(0, 0, CELL, CELL);
-      const o = UNIT;
-      const offs: [number, number][] = [[-o, 0], [o, 0], [0, -o], [0, o], [-o, -o], [o, -o], [-o, o], [o, o]];
-      dest.save();
-      dest.globalAlpha = 0.9;
-      for (const [dx, dy] of offs) dest.drawImage(sil, ox + dx, oy + dy);
-      dest.restore();
-    }
+  const silhouette = (color: string): Canvas | null => {
+    const sil = makeCanvas(CELL, CELL);
+    const sctx = sil?.getContext("2d");
+    if (!sil || !sctx) return null;
+    sctx.imageSmoothingEnabled = false;
+    sctx.drawImage(cell, 0, 0);
+    sctx.globalCompositeOperation = "source-in";
+    sctx.fillStyle = color;
+    sctx.fillRect(0, 0, CELL, CELL);
+    return sil;
+  };
+  const o = UNIT;
+  // soft dark outer edge (warm near-black)
+  const dark = silhouette("#20161a");
+  if (dark) {
+    dest.save();
+    dest.globalAlpha = 0.55;
+    for (const [dx, dy] of [[-o, 0], [o, 0], [0, -o], [0, o], [-o, -o], [o, -o], [-o, o], [o, o]] as [number, number][])
+      dest.drawImage(dark, ox + dx, oy + dy);
+    dest.restore();
+  }
+  // faint warm rim on the lit (top-left) side only
+  const warm = silhouette(rim);
+  if (warm) {
+    dest.save();
+    dest.globalAlpha = 0.4;
+    for (const [dx, dy] of [[-o, 0], [0, -o]] as [number, number][]) dest.drawImage(warm, ox + dx, oy + dy);
+    dest.restore();
   }
   dest.drawImage(cell, ox, oy);
 }

@@ -105,7 +105,10 @@ export const OUTFITS: readonly AvatarOption[] = [
   { id: "dress", label: "Sheath dress" },
 ] as const;
 
-/** Curated garment palette (primary fill), contrast-checked against the floor. */
+/** Curated garment palette (primary fill), contrast-checked against the floor.
+ * The second row mirrors the FundExecs persona signature hues so a member can
+ * dress in the staff palette (Curator violet, Lead-Gen orange, PR magenta,
+ * Capital-Raiser gold, Exec/SEO royal, Rainmaker emerald). */
 export const OUTFIT_COLORS: readonly AvatarColorOption[] = [
   { id: "charcoal", label: "Charcoal", hex: "#2b3240" },
   { id: "navy", label: "Navy", hex: "#1e3a5f" },
@@ -115,6 +118,12 @@ export const OUTFIT_COLORS: readonly AvatarColorOption[] = [
   { id: "camel", label: "Camel", hex: "#8a6a3f" },
   { id: "plum", label: "Plum", hex: "#4a2f52" },
   { id: "teal", label: "Teal", hex: "#1f5158" },
+  { id: "violet", label: "Violet", hex: "#5b3f8f" },
+  { id: "royal", label: "Royal", hex: "#2f56a8" },
+  { id: "emerald", label: "Emerald", hex: "#227a4e" },
+  { id: "gold", label: "Gold", hex: "#b5892a" },
+  { id: "orange", label: "Orange", hex: "#c0602a" },
+  { id: "magenta", label: "Magenta", hex: "#a83a72" },
 ] as const;
 
 /** Eyewear (10). `none` paints nothing. */
