@@ -87,7 +87,7 @@ already-merged history. So each run must detect which situation it's in:
      (rebase/merge `origin/main` if it's behind).
    - If **no open** PR exists (last one merged, or first run of a new cycle):
      start fresh — `git checkout -B claude/fundexecs-office-automation-ui3w6h origin/main`.
-   Ensure deps are installed (`npm ci` if `node_modules` is missing).
+     Ensure deps are installed (`npm ci` if `node_modules` is missing).
 2. Determine the next run number `N` = (highest `Run #N` in
    `docs/office/AUTOMATION_LOG.md`) + 1. Skim recent entries to avoid repeating.
    The log lives in `main`, so it survives across cycles.
@@ -103,7 +103,7 @@ already-merged history. So each run must detect which situation it's in:
 8. Ensure there is exactly **one open draft PR** into `main` for the branch:
    - Open PR already exists → leave it; refresh its summary if helpful.
    - No open PR → **create a new draft PR** (this is the new cycle's PR).
-   Never reuse a merged PR. Never merge the PR yourself.
+     Never reuse a merged PR. Never merge the PR yourself.
 9. End the run. Do not schedule anything — the Routine handles cadence.
 
 ## Notes
