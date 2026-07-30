@@ -58,7 +58,9 @@ jobs:
           git config user.email "noreply@anthropic.com"
 
       - name: Hourly office enhancement
-        uses: anthropics/claude-code-action@v1
+        # Pinned to a commit SHA (CodeQL: pin non-immutable third-party actions).
+        # be7b93b = tag v1 (v1.0.183). Bump the SHA to move to a newer release.
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
