@@ -108,9 +108,11 @@ already-merged history. So each run must detect which situation it's in:
 
 ## Notes
 
-- Cadence: hourly, Mon–Fri, 9am–6pm US Central, via a Routine (cron
-  `0 14-23 * * 1-5` UTC). The window follows a fixed UTC schedule, so in US
-  Central winter (CST) it shifts to ~8am–5pm local; that's fine.
+- Cadence & driver: hourly, Mon–Fri, 9am–6pm US Central, via the GitHub Actions
+  workflow `.github/workflows/office-hourly.yml` (cron `7 14-23 * * 1-5` UTC).
+  The window follows a fixed UTC schedule, so in US Central winter (CST) it
+  shifts to ~8am–5pm local; that's fine. The workflow needs one repo secret,
+  `ANTHROPIC_API_KEY`; it can also be run on demand from the Actions tab.
 - The point is steady, safe compounding polish — not big swings. When in doubt,
   do less, but do it well and leave the tree greener than you found it.
 

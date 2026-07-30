@@ -6,6 +6,21 @@ are not numbered runs). Run numbers persist across PR cycles.
 
 ---
 
+## Maintenance — 2026-07-30 — Durable scheduler (GitHub Actions)
+
+- Replaced the session-based in-memory scheduler (which kept getting wiped when
+  the session churned) with a committed GitHub Actions workflow,
+  `.github/workflows/office-hourly.yml` (cron `7 14-23 * * 1-5` UTC = 9am–6pm
+  US Central, Mon–Fri). It runs this same AUTOMATION.md workflow via
+  `anthropics/claude-code-action@v1` and survives restarts / runs indefinitely.
+- One-time setup: add repo secret `ANTHROPIC_API_KEY`. Until then the workflow
+  is installed and scheduled but each run will fail at the Claude step.
+- Uses the default `GITHUB_TOKEN`; external review apps still run on its PRs.
+  Upgrade to a GitHub App token only if in-repo `on: pull_request` checks are
+  added later (documented in the workflow file).
+
+---
+
 ## Maintenance — 2026-07-30 — PR cycle reset
 
 - Run #1's rolling PR (#975) was **merged** into `main`. Per the branch rules a

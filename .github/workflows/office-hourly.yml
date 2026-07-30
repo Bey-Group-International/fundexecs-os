@@ -1,0 +1,111 @@
+name: Office hourly enhancement
+
+# Durable replacement for the session-based scheduler. Every hour during
+# business hours it makes ONE small, verified improvement to the virtual office
+# (/office) and folds it into a rolling draft PR, following
+# docs/office/AUTOMATION.md. Nothing merges automatically.
+#
+# Cadence: cron is UTC. 14–23 UTC = 9am–6pm US Central during CDT (UTC−5).
+# In US Central winter (CST, UTC−6) the window shifts to ~8am–5pm local.
+#
+# Setup (one-time): add repo secret ANTHROPIC_API_KEY
+#   (Settings → Secrets and variables → Actions → New repository secret).
+# You can also run it on demand from the Actions tab (workflow_dispatch).
+#
+# Note on CI triggering: this uses the default GITHUB_TOKEN. External review
+# apps (Vercel, CodeRabbit, Spotless) still run on the PR it opens because they
+# react to PR webhooks. If you later add in-repo `on: pull_request` Actions
+# checks that must run on these bot PRs, switch to a GitHub App token via
+# actions/create-github-app-token@v2 and pass it as `github_token`.
+
+on:
+  schedule:
+    - cron: "7 14-23 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# Never let two runs edit the branch at once; let an in-flight run finish.
+concurrency:
+  group: office-hourly
+  cancel-in-progress: false
+
+jobs:
+  enhance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git identity
+        run: |
+          git config user.name "Claude"
+          git config user.email "noreply@anthropic.com"
+
+      - name: Hourly office enhancement
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          claude_args: |
+            --max-turns 50
+            --allowedTools "Read,Edit,Write,Bash,Glob,Grep"
+          prompt: |
+            Perform ONE small enhancement run on the FundExecs virtual office.
+            Read docs/office/AUTOMATION.md FIRST and follow it EXACTLY — it is
+            the source of truth, including its "PR cycles" section. Summary:
+
+            1. `git fetch origin main`. Determine PR state for branch
+               `claude/fundexecs-office-automation-ui3w6h`:
+               - If an OPEN pull request exists for it → check it out and bring
+                 it up to date with origin/main.
+               - If NO open PR exists (previous one merged/closed, or none yet)
+                 → start a NEW cycle:
+                 `git checkout -B claude/fundexecs-office-automation-ui3w6h origin/main`.
+               Use `gh` (GH_TOKEN is set) to inspect PR state.
+            2. Next run number N = (highest `Run #N` in
+               docs/office/AUTOMATION_LOG.md) + 1. Skim recent entries.
+            3. Focus area = N mod 4 (0=visual/graphics, 1=performance/load,
+               2=UX/interactivity, 3=accessibility/code-quality). Pick ONE
+               small, safe, high-value improvement. Grep to confirm it isn't
+               already done. Prefer public/office/map.html; also
+               app/(app)/office, components/office, lib/office.
+            4. Make the change — small and reviewable.
+            5. Verify GREEN before committing:
+               `npm run lint && npm run typecheck && npm test && npm run build`.
+               If YOUR change breaks any gate and you can't fix it fast, revert
+               it, log a skip, and stop. Never commit red. Never add
+               dependencies or external assets. Don't touch auth or Supabase
+               schema.
+            6. Prepend a log entry (newest first) to
+               docs/office/AUTOMATION_LOG.md: run #N, date, focus, what changed,
+               files, verify result.
+            7. Commit as `Office (auto #N): <summary>`. Push:
+               `git push -u origin claude/fundexecs-office-automation-ui3w6h`
+               (add `--force-with-lease` ONLY when you reset the branch for a
+               new cycle in step 1, and only after confirming the remote branch
+               is an ancestor of origin/main).
+            8. Ensure exactly ONE open DRAFT PR into main for the branch: if one
+               is open, leave it (refresh its summary if useful); if none, create
+               a NEW draft PR with `gh pr create --draft --base main`. Never
+               reuse a merged PR. Never merge it yourself.
+
+            If no clearly safe improvement is available this run, prepend a short
+            "skipped" note to the log and stop without code changes.
