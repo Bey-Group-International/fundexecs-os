@@ -28,12 +28,12 @@ verified green, committed, and folded into a single rolling draft PR.
 Rotate the focus area each run so improvements stay balanced. Pick the area by
 run number `N` (see the log): `N mod 4`.
 
-| N mod 4 | Focus | Examples |
-|---------|-------|----------|
-| 0 | **Visual & graphics polish** | lighting, textures, furniture detail, avatars, day/night gradients, shadows, cohesive palette |
-| 1 | **Performance & load** | shrink/dedupe CSS & JS in map.html, fewer reflows/repaints, `requestAnimationFrame` hygiene, asset/atlas size, lazy work off the hot path |
-| 2 | **UX & interactivity** | camera/controls feel, mobile & touch, build mode, character selector, hover/focus affordances, empty/loading states |
-| 3 | **Accessibility & code quality** | keyboard nav, ARIA/roles, contrast, `prefers-reduced-motion`, readable/refactored sections, comments, tests in `lib/office` |
+| N mod 4 |              Focus               |                                                                 Examples                                                                  |
+|---------|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| 0       | **Visual & graphics polish**     | lighting, textures, furniture detail, avatars, day/night gradients, shadows, cohesive palette                                             |
+| 1       | **Performance & load**           | shrink/dedupe CSS & JS in map.html, fewer reflows/repaints, `requestAnimationFrame` hygiene, asset/atlas size, lazy work off the hot path |
+| 2       | **UX & interactivity**           | camera/controls feel, mobile & touch, build mode, character selector, hover/focus affordances, empty/loading states                       |
+| 3       | **Accessibility & code quality** | keyboard nav, ARIA/roles, contrast, `prefers-reduced-motion`, readable/refactored sections, comments, tests in `lib/office`               |
 
 If the chosen area has no clearly safe, high-value change this run, you may pick
 the next area in rotation — but note in the log why you skipped.
@@ -48,11 +48,11 @@ the next area in rotation — but note in the log why you skipped.
    - `npm run typecheck`
    - `npm test`
    - `npm run build`
-   If any of these was already failing on the branch *before* your change,
-   note it and proceed only if your change is unrelated and doesn't worsen it.
-   If **your** change breaks any of them and you can't fix it quickly, revert
-   your change, log the attempt as skipped, and end the run cleanly. **Never
-   commit a red build.**
+     If any of these was already failing on the branch *before* your change,
+     note it and proceed only if your change is unrelated and doesn't worsen it.
+     If **your** change breaks any of them and you can't fix it quickly, revert
+     your change, log the attempt as skipped, and end the run cleanly. **Never
+     commit a red build.**
 3. **Changelog every run.** Prepend an entry to `docs/office/AUTOMATION_LOG.md`
    (newest first) — run number, date, focus area, what changed, files, verify
    result. This is how the next run knows where things stand.
@@ -91,3 +91,4 @@ the next area in rotation — but note in the log why you skipped.
   Central winter (CST) it shifts to ~8am–5pm local; that's fine.
 - The point is steady, safe compounding polish — not big swings. When in doubt,
   do less, but do it well and leave the tree greener than you found it.
+
