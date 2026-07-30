@@ -1,7 +1,20 @@
 # Virtual Office — Hourly Enhancement Log
 
 Newest first. One entry per automated run. See `AUTOMATION.md` for the rules.
-The next run number is the top entry's number + 1.
+The next run number is the highest `Run #N` in this log + 1 (maintenance notes
+are not numbered runs). Run numbers persist across PR cycles.
+
+---
+
+## Maintenance — 2026-07-30 — PR cycle reset
+
+- Run #1's rolling PR (#975) was **merged** into `main`. Per the branch rules a
+  merged PR is finished and must not be reused, so the automation now handles
+  **PR cycles**: when no open PR exists, a run resets the branch to `origin/main`
+  and opens a *new* draft PR; when one is open, runs keep accumulating onto it.
+- Updated `AUTOMATION.md` (new "PR cycles" section + revised per-run workflow)
+  and this log's run-numbering rule. The hourly schedule was updated to match.
+- Next office run is **#2** (focus: `2 mod 4` = UX & interactivity).
 
 ---
 

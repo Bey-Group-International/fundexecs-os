@@ -65,23 +65,45 @@ the next area in rotation — but note in the log why you skipped.
 6. **Idempotent-ish.** Before adding something, check it isn't already there
    (fresh sessions can repeat themselves). Grep first.
 
+## PR cycles (important — the rolling PR gets merged periodically)
+
+The branch `claude/fundexecs-office-automation-ui3w6h` carries **one open draft
+PR at a time**. A reviewer will periodically merge that PR into `main`. Once a PR
+is **merged it is finished** — never reuse it, and never stack new commits on
+already-merged history. So each run must detect which situation it's in:
+
+- **Open PR exists** for the branch → keep accumulating onto it (fast-forward /
+  normal push).
+- **No open PR** (the last one merged, or none yet) → you are starting a **new
+  cycle**: reset the branch to the latest `main` and, after your change, open a
+  **new** draft PR. Because the branch's prior commits are all already in `main`,
+  a `git push --force-with-lease` to reset it is expected and safe.
+
 ## Workflow each run
 
-1. `git fetch origin` and check out **`claude/fundexecs-office-automation-ui3w6h`**
-   (this is the working branch; keep using it). Make sure you're up to date.
-2. Read the top of `docs/office/AUTOMATION_LOG.md` to get the next run number
-   `N` and see what recent runs did (avoid repeating).
+1. `git fetch origin main` and determine PR state for the branch
+   `claude/fundexecs-office-automation-ui3w6h`:
+   - If an **open** PR exists: check the branch out and bring it up to date
+     (rebase/merge `origin/main` if it's behind).
+   - If **no open** PR exists (last one merged, or first run of a new cycle):
+     start fresh — `git checkout -B claude/fundexecs-office-automation-ui3w6h origin/main`.
+     Ensure deps are installed (`npm ci` if `node_modules` is missing).
+2. Determine the next run number `N` = (highest `Run #N` in
+   `docs/office/AUTOMATION_LOG.md`) + 1. Skim recent entries to avoid repeating.
+   The log lives in `main`, so it survives across cycles.
 3. Choose the focus area via `N mod 4`. Decide on ONE small improvement. Grep to
    confirm it isn't already done.
 4. Make the change (prefer `map.html`; other office files as appropriate).
 5. Verify: `npm run lint && npm run typecheck && npm test && npm run build`.
 6. Prepend a log entry to `docs/office/AUTOMATION_LOG.md`.
-7. Commit with a clear message (`Office (auto #N): <summary>`), push to the
-   working branch with `git push -u origin <branch>` (retry with backoff on
-   network errors).
-8. Ensure the rolling **draft** PR into `main` exists and is open; if not,
-   create it (draft). Do not open a second PR — reuse the existing one. Do not
-   merge it. Keep the PR body's summary current if helpful.
+7. Commit with a clear message (`Office (auto #N): <summary>`), then push to the
+   working branch: `git push -u origin claude/fundexecs-office-automation-ui3w6h`
+   (add `--force-with-lease` when you reset the branch in step 1). Retry with
+   exponential backoff on network errors.
+8. Ensure there is exactly **one open draft PR** into `main` for the branch:
+   - Open PR already exists → leave it; refresh its summary if helpful.
+   - No open PR → **create a new draft PR** (this is the new cycle's PR).
+     Never reuse a merged PR. Never merge the PR yourself.
 9. End the run. Do not schedule anything — the Routine handles cadence.
 
 ## Notes
