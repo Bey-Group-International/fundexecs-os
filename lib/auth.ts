@@ -23,26 +23,34 @@ const perRequest: typeof cache =
 export const getSessionContext = perRequest(async (): Promise<SessionContext | null> => {
   if (!hasSupabaseServerEnv()) return null;
 
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  // An unreachable auth backend (paused Supabase project, DNS/network outage)
+  // must degrade to "no session", not throw — a throw here 500s every page
+  // that checks auth, including /login and the public landing page.
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
 
-  const { data: membership } = await supabase
-    .from("organization_members")
-    .select("organization_id, role")
-    .eq("principal_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    const { data: membership } = await supabase
+      .from("organization_members")
+      .select("organization_id, role")
+      .eq("principal_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-  return {
-    userId: user.id,
-    email: user.email ?? "",
-    orgId: membership?.organization_id ?? null,
-    role: (membership?.role as MemberRole) ?? null,
-  };
+    return {
+      userId: user.id,
+      email: user.email ?? "",
+      orgId: membership?.organization_id ?? null,
+      role: (membership?.role as MemberRole) ?? null,
+    };
+  } catch (err) {
+    console.warn("getSessionContext: auth backend unreachable", err);
+    return null;
+  }
 });
 
 /**
