@@ -3,7 +3,14 @@
 // needs the operator's attention — pending approvals, overdue diligence,
 // IC-ready deals, and open critical/high risks. The Run hub turns evaluation
 // work into conviction; the inbox turns that conviction (plus the workflow
-// approval queue) into a short, actionable list with a deep link per item.
+// approval queue) into a short, actionable list.
+//
+// Approvals are decided *in* the inbox, so an approval row ships with the
+// payload that decision needs — the pending approval id, how sensitive the
+// action is, the agent's own detail, and an excerpt of what it produced (see
+// `InboxApprovalMeta`). Everything is resolved server-side at fetch time, so
+// opening a row's detail is instant and clearing it never leaves the page; the
+// per-item deep link stays as an escape hatch to the full workflow.
 //
 // I/O lives in `getInbox` / `getInboxCount`; the shaping and counting is kept in
 // pure, side-effect-free helpers (`inboxTotal`, `dealToIcReadyItem`,
@@ -13,7 +20,9 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getRunConviction } from "@/lib/run-conviction";
 import { isOverdue } from "@/lib/diligence-templates";
 import type { DealConviction } from "@/lib/run-conviction";
-import type { Deal, DiligenceItem, Task } from "@/lib/supabase/database.types";
+import type { Deal, DiligenceItem, Hub, Json, Task } from "@/lib/supabase/database.types";
+import { AGENT_BY_KEY } from "@/lib/agents";
+import { HUB_BY_KEY } from "@/lib/hubs";
 
 // React's per-request `cache` is provided by the Next.js runtime; fall back to
 // an identity wrapper outside it (e.g. unit tests) so this module loads anywhere.
@@ -25,6 +34,39 @@ const cache: <T extends (...args: never[]) => unknown>(fn: T) => T =
 /** The visual weight / accent color an inbox row carries. */
 export type InboxTone = "approval" | "overdue" | "ready" | "risk";
 
+/** How sensitive an approval is — drives the extra confirm before approving. */
+export type ApprovalRisk = "high" | "medium" | "low";
+
+/**
+ * Everything a `needsApproval` row needs to be *decided in the inbox*, without
+ * navigating anywhere. Present only on approval rows, and only once the row has
+ * a still-pending `approvals` record to act on — a row without one falls back to
+ * its deep link, so the inbox degrades rather than offering a dead button.
+ *
+ * Resolved on the server at fetch time (not lazily on expand) so opening a row's
+ * detail is instant: there is no request between the click and the content.
+ */
+export interface InboxApprovalMeta {
+  /** The pending `approvals` row — what `decideApproval` acts on. */
+  approvalId: string;
+  /** The owning task — what a dismiss acts on. */
+  taskId: string;
+  /** Display name of the executive that raised it (e.g. "Associate"). */
+  agentLabel: string | null;
+  /** That executive's accent color, for the dot on the row. */
+  agentColor: string | null;
+  /** Human label of the owning hub (e.g. "Execute"). */
+  hubLabel: string | null;
+  /** Outward-facing / capital-moving work is high — it needs a second confirm. */
+  risk: ApprovalRisk;
+  /** When the approval was raised, ISO — rendered as "requested 2h ago". */
+  requestedAt: string | null;
+  /** The agent's own words about what it wants to do, if the task carries them. */
+  detail: string | null;
+  /** A short excerpt of what the agent produced, pulled from the task result. */
+  preview: string | null;
+}
+
 /** A single actionable line in the inbox. */
 export interface InboxItem {
   /** Stable, unique within its group (and across the inbox). */
@@ -35,6 +77,11 @@ export interface InboxItem {
   /** Where clicking the row takes the operator. */
   href: string;
   tone: InboxTone;
+  /**
+   * Set on `needsApproval` rows that can be decided inline. Absent on every
+   * other tone, and on an approval row with no pending `approvals` record.
+   */
+  approval?: InboxApprovalMeta;
 }
 
 /** The inbox, grouped by the kind of action required. */
@@ -81,10 +128,67 @@ export function isInboxOverdue(
   return isOverdue(item, todayIso);
 }
 
-/** A workflow awaiting approval → an inbox row linking to its session. */
-export function workflowToApprovalItem(
-  task: Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">,
-): InboxItem {
+/**
+ * How sensitive an approval is, from the hub that owns it. Outward-facing work
+ * (Execute — anything that reaches a counterparty or moves capital) is high and
+ * takes a second confirm before it clears; Run is medium; everything else is
+ * routine. Shared with the mobile approvals flow so both surfaces gate on the
+ * same rule.
+ */
+export function riskForHub(hub: Hub | null): ApprovalRisk {
+  if (hub === "execute") return "high";
+  if (hub === "run") return "medium";
+  return "low";
+}
+
+// Keys a task's freeform `result` JSON may use for its human-readable output,
+// in the order we prefer them.
+const PREVIEW_KEYS = ["summary", "text", "output", "body", "message", "content", "draft"] as const;
+
+/** Longest excerpt of agent output we inline on a row before it needs the full view. */
+const PREVIEW_LIMIT = 600;
+
+/**
+ * Pull a short human-readable excerpt out of a task's freeform `result` JSON, so
+ * the operator can see what they are approving without opening the workflow.
+ * Returns null when the result carries no prose (e.g. a pure data payload).
+ */
+export function approvalPreview(result: Json | null): string | null {
+  if (!result) return null;
+  if (typeof result === "string") return result.slice(0, PREVIEW_LIMIT) || null;
+  if (typeof result === "object" && !Array.isArray(result)) {
+    const r = result as Record<string, unknown>;
+    for (const key of PREVIEW_KEYS) {
+      const v = r[key];
+      if (typeof v === "string" && v.trim()) return v.slice(0, PREVIEW_LIMIT);
+    }
+  }
+  return null;
+}
+
+/**
+ * A task awaiting approval, plus the columns the inbox needs to let the operator
+ * decide it in place. The extra fields are optional so the pure shaper stays
+ * callable with the lightweight task shape (and the roll-up tests keep working):
+ * a candidate with no `approvalId` simply produces a deep-link-only row.
+ */
+export interface ApprovalCandidate
+  extends Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description"> {
+  hub?: Hub | null;
+  result?: Json | null;
+  created_at?: string | null;
+  /** Id of the still-pending `approvals` row for this task, when there is one. */
+  approvalId?: string | null;
+}
+
+/**
+ * A workflow awaiting approval → an inbox row. When the candidate carries a
+ * pending approval id, the row also carries the payload that lets it be
+ * approved / rejected / sent back *from the inbox*; `href` remains as the
+ * "open the full workflow" escape hatch rather than the only way to act.
+ */
+export function workflowToApprovalItem(task: ApprovalCandidate): InboxItem {
+  const agent = task.assigned_agent ? AGENT_BY_KEY[task.assigned_agent] : undefined;
   const agentName = task.assigned_agent ? String(task.assigned_agent).replace(/_/g, " ") : null;
   const subtitle = agentName
     ? `Raised by ${agentName} · awaiting your approval`
@@ -97,6 +201,10 @@ export function workflowToApprovalItem(
     : descPath?.startsWith("/")
       ? descPath
       : "/workspace";
+  const hub = task.hub ?? null;
+  // A description that is really a deep-link path is routing, not prose — it is
+  // already consumed by `href`, so don't repeat it as the item's detail text.
+  const detail = descPath && !descPath.startsWith("/") ? descPath : null;
   return {
     id: `approval:${task.id}`,
     kind: "approval",
@@ -104,6 +212,21 @@ export function workflowToApprovalItem(
     subtitle,
     href,
     tone: "approval",
+    ...(task.approvalId
+      ? {
+          approval: {
+            approvalId: task.approvalId,
+            taskId: task.id,
+            agentLabel: agent?.name ?? null,
+            agentColor: agent?.color ?? null,
+            hubLabel: hub ? HUB_BY_KEY[hub]?.label ?? null : null,
+            risk: riskForHub(hub),
+            requestedAt: task.created_at ?? null,
+            detail,
+            preview: approvalPreview(task.result ?? null),
+          },
+        }
+      : {}),
   };
 }
 
@@ -213,7 +336,7 @@ export function isPrematureFollowupPack(
  */
 export function buildInbox(
   deals: DealConviction[],
-  awaitingApproval: Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[],
+  awaitingApproval: ApprovalCandidate[],
   todayIso: string,
   meetings: InboxMeeting[] = [],
   nowIso: string = `${todayIso}T00:00:00.000Z`,
@@ -254,21 +377,20 @@ export function buildInbox(
 
 /**
  * Fetch the awaiting-approval workflows for an org: top-level tasks (no parent)
- * whose status gates on a human decision. Returns the lightweight shape the
- * inbox needs.
+ * whose status gates on a human decision, with the agent's own detail and the
+ * output it produced. Everything except the approval id — see
+ * `attachPendingApprovals` for that, which only the full inbox needs.
  */
-async function fetchAwaitingApproval(
-  orgId: string,
-): Promise<Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[]> {
+async function fetchAwaitingApproval(orgId: string): Promise<ApprovalCandidate[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("tasks")
-    .select("id, title, session_id, assigned_agent, description")
+    .select("id, title, session_id, assigned_agent, description, hub, result, created_at")
     .eq("organization_id", orgId)
     .is("parent_task_id", null)
     .eq("status", "awaiting_approval")
     .order("created_at", { ascending: false });
-  const rows = (data ?? []) as Pick<Task, "id" | "title" | "session_id" | "assigned_agent" | "description">[];
+  const rows = (data ?? []) as ApprovalCandidate[];
   // Deduplicate by title — multiple pending approvals with identical titles
   // are the same logical action queued more than once. Keep the most recent.
   const seen = new Set<string>();
@@ -278,6 +400,39 @@ async function fetchAwaitingApproval(
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * Pair each awaiting task with its still-pending `approvals` row.
+ *
+ * This is what makes the inbox self-sufficient: with the approval id in hand the
+ * row can be approved / rejected / sent back in place, and since it arrives with
+ * the rest of the row, opening a detail costs no round-trip. A task with no
+ * pending approval still comes back (it is genuinely waiting on the operator) —
+ * just without the inline decision payload, so its row falls back to its link.
+ *
+ * Split out from the fetch above because the sidebar badge only counts these —
+ * it renders on every page and has no use for the ids.
+ */
+async function attachPendingApprovals(
+  orgId: string,
+  rows: ApprovalCandidate[],
+): Promise<ApprovalCandidate[]> {
+  if (rows.length === 0) return rows;
+  const supabase = await createServerClient();
+  // Scoped to this org as well as the task ids, so a decision surfaced here can
+  // only ever be this org's.
+  const { data } = await supabase
+    .from("approvals")
+    .select("id, task_id")
+    .eq("organization_id", orgId)
+    .eq("decision", "pending")
+    .in("task_id", rows.map((r) => r.id));
+  const approvalByTask = new Map<string, string>();
+  for (const a of (data ?? []) as { id: string; task_id: string }[]) {
+    if (!approvalByTask.has(a.task_id)) approvalByTask.set(a.task_id, a.id);
+  }
+  return rows.map((r) => ({ ...r, approvalId: approvalByTask.get(r.id) ?? null }));
 }
 
 /**
@@ -314,7 +469,13 @@ export const getInbox = cache(async function getInbox(orgId: string): Promise<In
       fetchAwaitingApproval(orgId),
       fetchUnfinishedMeetings(orgId),
     ]);
-    return buildInbox(conviction.deals, awaitingApproval, todayIso, meetings, nowIso);
+    return buildInbox(
+      conviction.deals,
+      await attachPendingApprovals(orgId, awaitingApproval),
+      todayIso,
+      meetings,
+      nowIso,
+    );
   } catch {
     return EMPTY_INBOX;
   }

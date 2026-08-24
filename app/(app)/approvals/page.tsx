@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { AgentKey, Hub, Json } from "@/lib/supabase/database.types";
+import { approvalPreview, riskForHub } from "@/lib/inbox";
 import { MobileApprovalsFlow, type ApprovalItem } from "@/components/mobile/MobileApprovalsFlow";
 
 export const metadata: Metadata = {
@@ -14,30 +15,12 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-// Outward-facing / capital-moving hubs are the sensitive ones.
-function riskForHub(hub: string | null): "high" | "medium" | "low" {
-  if (hub === "execute") return "high";
-  if (hub === "run") return "medium";
-  return "low";
-}
-
-// Pull a short human-readable preview out of a task's freeform `result` JSON.
-function previewOf(result: Json | null): string | null {
-  if (!result) return null;
-  if (typeof result === "string") return result.slice(0, 600);
-  if (typeof result === "object" && !Array.isArray(result)) {
-    const r = result as Record<string, unknown>;
-    for (const key of ["summary", "text", "output", "body", "message", "content", "draft"]) {
-      const v = r[key];
-      if (typeof v === "string" && v.trim()) return v.slice(0, 600);
-    }
-  }
-  return null;
-}
-
 // The mobile Approvals decision flow — a dedicated on-the-go surface for
-// clearing sign-offs between meetings. Reuses the same approvals data + engine
-// as the desktop inbox; the desktop experience is untouched.
+// clearing sign-offs between meetings. It is the same decision as the one in the
+// desktop inbox's "Needs you" lane: same `approvals` rows, same `decideApproval`
+// engine, and — via `riskForHub` / `approvalPreview` from lib/inbox — the same
+// risk banding and output excerpt, so one approval reads and grades identically
+// wherever the operator meets it.
 export default async function ApprovalsPage() {
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
@@ -86,7 +69,7 @@ export default async function ApprovalsPage() {
         approvalId: approvalByTask.get(t.id)!,
         title: t.title,
         description: t.description,
-        preview: previewOf(t.result),
+        preview: approvalPreview(t.result),
         agentLabel: agent?.name ?? "Earn",
         agentColor: agent?.color ?? null,
         risk: riskForHub(t.hub),

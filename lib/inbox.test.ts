@@ -6,6 +6,8 @@ import {
   isInboxEmpty,
   isInboxOverdue,
   workflowToApprovalItem,
+  approvalPreview,
+  riskForHub,
   diligenceToOverdueItem,
   dealToIcReadyItem,
   riskToInboxItem,
@@ -162,6 +164,95 @@ describe("inboxTotal & isInboxEmpty", () => {
     };
     expect(inboxTotal(inbox)).toBe(7);
     expect(isInboxEmpty(inbox)).toBe(false);
+  });
+});
+
+// --- Deciding an approval in the inbox --------------------------------------
+//
+// The inbox is the only place approvals get cleared, so an approval row has to
+// carry everything the decision needs: the pending approval id, how sensitive
+// the action is, and enough of the agent's output to judge it — all resolved on
+// the server so opening the detail costs no round-trip.
+
+describe("riskForHub", () => {
+  it("grades outward-facing / capital-moving work as high", () => {
+    expect(riskForHub("execute")).toBe("high");
+  });
+  it("grades evaluation work as medium", () => {
+    expect(riskForHub("run")).toBe("medium");
+  });
+  it("grades everything else — and an unknown hub — as routine", () => {
+    expect(riskForHub("source")).toBe("low");
+    expect(riskForHub("build")).toBe("low");
+    expect(riskForHub(null)).toBe("low");
+  });
+});
+
+describe("approvalPreview", () => {
+  it("returns a plain string result as-is", () => {
+    expect(approvalPreview("The memo draft")).toBe("The memo draft");
+  });
+  it("prefers summary over the other prose keys", () => {
+    expect(approvalPreview({ body: "body text", summary: "the summary" })).toBe("the summary");
+  });
+  it("falls through to the next prose key when the preferred one is blank", () => {
+    expect(approvalPreview({ summary: "   ", draft: "the draft" })).toBe("the draft");
+  });
+  it("caps the excerpt at 600 characters", () => {
+    expect(approvalPreview({ summary: "x".repeat(900) })).toHaveLength(600);
+  });
+  it("is null for a result with no prose, an array, or nothing at all", () => {
+    expect(approvalPreview({ score: 4, ok: true })).toBeNull();
+    expect(approvalPreview(["a", "b"])).toBeNull();
+    expect(approvalPreview(null)).toBeNull();
+    expect(approvalPreview("")).toBeNull();
+  });
+});
+
+describe("workflowToApprovalItem — inline decision payload", () => {
+  it("carries the approval id, risk, and output excerpt when there is a pending approval", () => {
+    const item = workflowToApprovalItem({
+      ...task({ id: "t9", title: "Send the LP update", session_id: "s9" }),
+      hub: "execute",
+      result: { summary: "Draft LP update for Q2." },
+      created_at: "2026-06-20T09:00:00.000Z",
+      approvalId: "appr-1",
+    });
+    expect(item.approval).toMatchObject({
+      approvalId: "appr-1",
+      taskId: "t9",
+      risk: "high",
+      hubLabel: expect.any(String),
+      requestedAt: "2026-06-20T09:00:00.000Z",
+      preview: "Draft LP update for Q2.",
+    });
+    // The deep link survives as an escape hatch, not as the only way to act.
+    expect(item.href).toBe("/session/s9");
+  });
+
+  it("omits the payload without a pending approval, so the row falls back to its link", () => {
+    const item = workflowToApprovalItem({ ...task({ id: "t10" }), hub: "execute", approvalId: null });
+    expect(item.approval).toBeUndefined();
+    expect(item.href).toBe("/workspace");
+  });
+
+  it("does not repeat a deep-link description as detail text", () => {
+    // Marketplace interest tasks encode the listing path in `description`; it is
+    // already consumed by `href` and would read as gibberish in the detail panel.
+    const item = workflowToApprovalItem({
+      ...task({ id: "t11", description: "/marketplace/listing-3" }),
+      approvalId: "appr-2",
+    });
+    expect(item.href).toBe("/marketplace/listing-3");
+    expect(item.approval?.detail).toBeNull();
+  });
+
+  it("keeps a real description as the detail the operator reads before deciding", () => {
+    const item = workflowToApprovalItem({
+      ...task({ id: "t12", description: "Reply to Acme on the data-room request." }),
+      approvalId: "appr-3",
+    });
+    expect(item.approval?.detail).toBe("Reply to Acme on the data-room request.");
   });
 });
 
