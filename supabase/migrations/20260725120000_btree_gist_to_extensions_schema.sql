@@ -25,6 +25,17 @@ begin
     return;
   end if;
 
+  -- Absent entirely. Not reachable by running the migrations in order — the
+  -- previous one provisions it with CREATE EXTENSION IF NOT EXISTS, and dropping
+  -- it afterwards would have taken the exclusion constraint with it — but a
+  -- relocation that silently leaves a database without the operator classes the
+  -- overlap guard depends on is worth one extra branch. Creating it here puts it
+  -- straight into the right schema.
+  if not exists (select 1 from pg_extension where extname = 'btree_gist') then
+    create extension btree_gist with schema extensions;
+    return;
+  end if;
+
   if exists (
     select 1
       from pg_extension e
