@@ -157,20 +157,33 @@ export function localToIso(date: string, time: string, timezone: string): string
   return new Date(asUtc - offset).toISOString();
 }
 
+// Constructing an Intl.DateTimeFormat is expensive relative to formatting with
+// one, and the scheduling-link slot engine resolves offsets thousands of times
+// per page (two lookups per candidate slot). Formatters are immutable and
+// keyed only by zone, so one per zone is safe to keep.
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function offsetFormatter(timezone: string): Intl.DateTimeFormat {
+  const cached = offsetFormatters.get(timezone);
+  if (cached) return cached;
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  offsetFormatters.set(timezone, dtf);
+  return dtf;
+}
+
 /** Offset (ms) of a zone at an instant: (wall clock in zone) - UTC. */
 function timezoneOffsetMs(instant: Date, timezone: string): number {
   try {
-    const dtf = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-    const parts = dtf.formatToParts(instant);
+    const parts = offsetFormatter(timezone).formatToParts(instant);
     const map: Record<string, number> = {};
     for (const p of parts) {
       if (p.type !== "literal") map[p.type] = Number(p.value);

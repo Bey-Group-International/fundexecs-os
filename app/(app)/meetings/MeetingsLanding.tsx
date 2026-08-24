@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { MeetingLobby } from "./MeetingLobby";
 import { MeetingsCalendar } from "./MeetingsCalendar";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
+import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import type { PastMeeting } from "./PastMeetingsList";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 
@@ -44,6 +45,9 @@ export function MeetingsLanding({
   return (
     <div className="flex flex-col gap-8">
       <MeetingLobby onScheduleLater={() => setCalendarOpen(true)} />
+      {/* Booking link sits between "start a meeting" and "meetings you have":
+          it's how meetings arrive when someone else picks the time. */}
+      <SchedulingLinkCard />
       <UpcomingMeetingsList initialMeetings={initialUpcoming} />
 
       {calendarOpen && mounted
