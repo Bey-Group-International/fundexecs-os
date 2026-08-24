@@ -8,6 +8,7 @@ import {
   groupSlotsByDate,
   isReservedSlug,
   isSlotAvailable,
+  isValidTimezone,
   mergeAvailability,
   normalizeSlug,
   parseAvailability,
@@ -277,6 +278,26 @@ describe("isSlotAvailable", () => {
         availability: [{ day: 2, start: "00:00", end: "01:00" }],
       }),
     ).toBe(true);
+  });
+});
+
+describe("isValidTimezone", () => {
+  it("accepts real IANA zones", () => {
+    expect(isValidTimezone("America/New_York")).toBe(true);
+    expect(isValidTimezone("Asia/Tokyo")).toBe(true);
+    expect(isValidTimezone("UTC")).toBe(true);
+  });
+
+  it("rejects anything this runtime cannot resolve", () => {
+    // A bogus zone stored on a page would silently generate every slot in UTC,
+    // so it must never survive validation.
+    expect(isValidTimezone("Mars/Olympus_Mons")).toBe(false);
+    expect(isValidTimezone("America/Nowhere")).toBe(false);
+    expect(isValidTimezone("")).toBe(false);
+    expect(isValidTimezone("   ")).toBe(false);
+    expect(isValidTimezone(null)).toBe(false);
+    expect(isValidTimezone(undefined)).toBe(false);
+    expect(isValidTimezone(42)).toBe(false);
   });
 });
 

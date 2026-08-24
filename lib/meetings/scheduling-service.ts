@@ -32,6 +32,7 @@ import {
   generateSlots,
   isReservedSlug,
   isSlotAvailable,
+  isValidTimezone,
   normalizeSlug,
   parseAvailability,
   suggestSlug,
@@ -91,8 +92,21 @@ export async function getOrCreatePageForUser(
   let page = existing.data as SchedulingPage | null;
 
   if (!page) {
-    const desired = suggestSlug({ displayName: ctx.displayName, email: ctx.email, userId: ctx.userId });
-    const display = ctx.displayName?.trim() || ctx.email?.split("@")[0] || "FundExecs member";
+    // The caller rarely knows the member's real name, but their principal row
+    // does — and this name is what every invitee sees on the public booking
+    // page, so falling back to the email local part ("a.lovelace") is a poor
+    // last resort rather than a first choice.
+    let displayName = ctx.displayName?.trim() || "";
+    if (!displayName) {
+      const { data } = await table(client, "principals")
+        .select("full_name")
+        .eq("id", ctx.userId)
+        .maybeSingle();
+      displayName = (data as { full_name: string | null } | null)?.full_name?.trim() || "";
+    }
+
+    const desired = suggestSlug({ displayName, email: ctx.email, userId: ctx.userId });
+    const display = displayName || ctx.email?.split("@")[0] || "FundExecs member";
 
     // Two members can race for the same handle between the probe and the
     // INSERT, and the probe can be blind entirely without a service role. The
@@ -111,7 +125,7 @@ export async function getOrCreatePageForUser(
           organization_id: ctx.orgId,
           slug,
           display_name: display,
-          timezone: ctx.timezone?.trim() || "UTC",
+          timezone: isValidTimezone(ctx.timezone) ? ctx.timezone!.trim() : "UTC",
           availability: DEFAULT_AVAILABILITY as unknown as Json,
         } as never)
         .select(PAGE_COLUMNS)

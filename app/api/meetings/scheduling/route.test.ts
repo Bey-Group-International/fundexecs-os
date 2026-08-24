@@ -17,7 +17,7 @@ jest.mock("@/lib/supabase/server", () => ({
 }));
 
 import { NextRequest } from "next/server";
-import { PATCH } from "./route";
+import { GET, PATCH } from "./route";
 
 type Row = Record<string, unknown>;
 
@@ -66,6 +66,10 @@ function failing(error: { code: string; message: string }) {
     maybeSingle: async () => ({ data: null, error }),
   };
   return f;
+}
+
+function getRequest(url: string): NextRequest {
+  return new NextRequest(url, { method: "GET" });
 }
 
 function request(body: unknown): NextRequest {
@@ -143,5 +147,75 @@ describe("PATCH /api/meetings/scheduling", () => {
     serverFrom.mockImplementation(() => builderFor([PAGE]));
     const res = await PATCH(request({ availability: [{ day: 1, start: "17:00", end: "09:00" }] }));
     expect(res.status).toBe(422);
+  });
+});
+
+describe("GET /api/meetings/scheduling — first-run page creation", () => {
+  // The server cannot know a member's timezone, and the page it creates carries
+  // their published availability. Defaulting to UTC would advertise weekday 9–5
+  // UTC — a 4am start for a US host — so the browser reports it on first load.
+  it("creates the page in the member's own timezone and real name", async () => {
+    const created: Row[] = [];
+    serverFrom.mockImplementation((table: string) => {
+      if (table === "scheduling_pages") {
+        const b = builderFor([]) as Record<string, unknown>;
+        const insert = (payload: Row) => {
+          created.push(payload);
+          return builderFor([{ ...PAGE, ...payload }]);
+        };
+        // First call is the "does a page exist?" lookup, which must miss.
+        return { ...b, insert, maybeSingle: async () => ({ data: null, error: null }) };
+      }
+      if (table === "principals") return builderFor([{ full_name: "Ada Lovelace" }]);
+      return builderFor([]);
+    });
+    serviceFrom.mockImplementation(() => builderFor([]));
+
+    const res = await GET(getRequest("http://localhost/api/meetings/scheduling?timezone=Asia/Tokyo"));
+
+    expect(res.status).toBe(200);
+    expect(created).toHaveLength(1);
+    expect(created[0].timezone).toBe("Asia/Tokyo");
+    // Not the email local part — this name is what every invitee sees.
+    expect(created[0].display_name).toBe("Ada Lovelace");
+    expect(created[0].slug).toBe("ada-lovelace");
+  });
+
+  it("falls back to UTC when the reported timezone is not a real zone", async () => {
+    const created: Row[] = [];
+    serverFrom.mockImplementation((table: string) => {
+      if (table === "scheduling_pages") {
+        const b = builderFor([]) as Record<string, unknown>;
+        return {
+          ...b,
+          insert: (payload: Row) => {
+            created.push(payload);
+            return builderFor([{ ...PAGE, ...payload }]);
+          },
+          maybeSingle: async () => ({ data: null, error: null }),
+        };
+      }
+      if (table === "principals") return builderFor([{ full_name: null }]);
+      return builderFor([]);
+    });
+    serviceFrom.mockImplementation(() => builderFor([]));
+
+    const res = await GET(getRequest("http://localhost/api/meetings/scheduling?timezone=Mars%2FOlympus_Mons"));
+
+    expect(res.status).toBe(200);
+    expect(created[0].timezone).toBe("UTC");
+  });
+
+  it("leaves an existing page's timezone alone", async () => {
+    serverFrom.mockImplementation((table: string) =>
+      builderFor(table === "scheduling_pages" ? [PAGE] : []),
+    );
+    serviceFrom.mockImplementation(() => builderFor([]));
+
+    const res = await GET(getRequest("http://localhost/api/meetings/scheduling?timezone=Asia/Tokyo"));
+
+    expect(res.status).toBe(200);
+    // PAGE is stored as UTC; the query param must not silently rewrite it.
+    expect((await res.json()).page.timezone).toBe("UTC");
   });
 });

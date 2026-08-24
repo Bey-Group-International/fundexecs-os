@@ -43,16 +43,23 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const auth = await requireOrgContext();
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+    // Only meaningful on the very first call, which creates the page. The server
+    // cannot know the member's timezone, and defaulting to UTC would publish
+    // weekday 9–5 UTC as their availability — offering a US host 4am starts.
+    // Ignored once the page exists; changing zone later goes through PATCH.
+    const timezone = req.nextUrl.searchParams.get("timezone");
 
     const supabase = await createServerClient();
     const { page, eventTypes } = await getOrCreatePageForUser(supabase, {
       userId: auth.ctx.userId,
       orgId: auth.ctx.orgId,
       email: auth.ctx.email,
+      timezone,
     });
     const bookings = await listBookingsForHost(supabase, auth.ctx.userId);
 
