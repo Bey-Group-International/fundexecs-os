@@ -2410,6 +2410,71 @@ export type LiveMeeting = {
   created_at: string;
 };
 
+// ── Scheduling links (migration 20260722120000_scheduling_links) ─────────────
+// A member's public booking page, the meeting types bookable on it, and the
+// slots invitees have claimed. `availability` holds SchedulingAvailabilityRule[]
+// (lib/meetings/scheduling.ts).
+export type SchedulingPage = {
+  id: string;
+  user_id: string;
+  organization_id: string | null;
+  slug: string;
+  display_name: string;
+  headline: string | null;
+  bio: string | null;
+  timezone: string;
+  availability: Json;
+  buffer_minutes: number;
+  min_notice_minutes: number;
+  booking_window_days: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SchedulingEventType = {
+  id: string;
+  page_id: string;
+  user_id: string;
+  organization_id: string | null;
+  slug: string;
+  title: string;
+  description: string | null;
+  duration_minutes: number;
+  slot_interval_minutes: number;
+  meeting_type: string;
+  requires_approval: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SchedulingBookingStatus = "pending" | "confirmed" | "declined" | "cancelled";
+
+export type SchedulingBooking = {
+  id: string;
+  page_id: string;
+  event_type_id: string;
+  host_user_id: string;
+  organization_id: string | null;
+  meeting_id: string | null;
+  invitee_name: string;
+  invitee_email: string;
+  invitee_notes: string | null;
+  invitee_timezone: string;
+  starts_at: string;
+  ends_at: string;
+  status: SchedulingBookingStatus;
+  cancelled_by: "host" | "invitee" | null;
+  cancellation_reason: string | null;
+  manage_token: string;
+  rescheduled_at: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type LiveMeetingParticipant = {
   id: string;
   meeting_id: string;
@@ -2682,6 +2747,9 @@ export type Database = {
       live_meeting_participants: TableShape<LiveMeetingParticipant>;
       live_meeting_transcripts: TableShape<LiveMeetingTranscript>;
       live_meeting_reports: TableShape<LiveMeetingReport>;
+      scheduling_pages: TableShape<SchedulingPage>;
+      scheduling_event_types: TableShape<SchedulingEventType>;
+      scheduling_bookings: TableShape<SchedulingBooking>;
       meeting_notes: TableShape<MeetingNote>;
       agent_memories: TableShape<AgentMemory>;
       pipeline_stages: TableShape<PipelineStage>;

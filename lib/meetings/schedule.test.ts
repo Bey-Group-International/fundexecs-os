@@ -65,6 +65,26 @@ describe("time helpers", () => {
     // Fall-back 2026: clocks go 02:00 EDT -> 01:00 EST on 2026-11-01.
     expect(localToIso("2026-11-01", "03:00", "America/New_York")).toBe("2026-11-01T08:00:00.000Z"); // EST -5
   });
+
+  // Regression: on Node 20's ICU, `hour12: false` renders midnight-in-zone as
+  // hour "24", and feeding that to Date.UTC rolls it to the next day — which
+  // resolved every 00:00 local time a full day early. Invisible on Node 22+,
+  // where the same formatter reports "00", so these pin the contract directly.
+  it("resolves midnight local time in a zone ahead of UTC", () => {
+    expect(localToIso("2026-03-03", "00:00", "Asia/Tokyo")).toBe("2026-03-02T15:00:00.000Z");
+    expect(localToIso("2026-03-03", "00:30", "Asia/Tokyo")).toBe("2026-03-02T15:30:00.000Z");
+  });
+
+  it("resolves midnight local time in a zone behind UTC", () => {
+    expect(localToIso("2026-07-10", "00:00", "America/New_York")).toBe("2026-07-10T04:00:00.000Z");
+    expect(localToIso("2026-07-10", "00:00", "America/Los_Angeles")).toBe("2026-07-10T07:00:00.000Z");
+  });
+
+  it("keeps midnight distinct from the following midnight", () => {
+    const first = localToIso("2026-03-03", "00:00", "Asia/Tokyo");
+    const next = localToIso("2026-03-04", "00:00", "Asia/Tokyo");
+    expect(new Date(next).getTime() - new Date(first).getTime()).toBe(24 * 3600_000);
+  });
 });
 
 describe("deriveMeetingStatus", () => {

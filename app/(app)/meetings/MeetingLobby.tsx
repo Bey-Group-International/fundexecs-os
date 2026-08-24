@@ -156,7 +156,7 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
 
           {/* Capability strip */}
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-[var(--fg-muted)]">
-            {["Live transcription", "AI-generated notes", "Action items", "Calendar sync"].map((f) => (
+            {["Live transcription", "AI-generated notes", "Action items", "Scheduling links"].map((f) => (
               <span key={f} className="inline-flex items-center gap-1.5">
                 <CheckIcon />
                 {f}

@@ -157,27 +157,47 @@ export function localToIso(date: string, time: string, timezone: string): string
   return new Date(asUtc - offset).toISOString();
 }
 
+// Constructing an Intl.DateTimeFormat is expensive relative to formatting with
+// one, and the scheduling-link slot engine resolves offsets thousands of times
+// per page (two lookups per candidate slot). Formatters are immutable and
+// keyed only by zone, so one per zone is safe to keep.
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function offsetFormatter(timezone: string): Intl.DateTimeFormat {
+  const cached = offsetFormatters.get(timezone);
+  if (cached) return cached;
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    // hourCycle "h23" (00–23), NOT hour12:false. On Node 20's ICU the latter
+    // resolves to the h24 cycle, which renders midnight as hour "24" — see the
+    // normalization below for why that is not merely cosmetic.
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  offsetFormatters.set(timezone, dtf);
+  return dtf;
+}
+
 /** Offset (ms) of a zone at an instant: (wall clock in zone) - UTC. */
 function timezoneOffsetMs(instant: Date, timezone: string): number {
   try {
-    const dtf = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-    const parts = dtf.formatToParts(instant);
+    const parts = offsetFormatter(timezone).formatToParts(instant);
     const map: Record<string, number> = {};
     for (const p of parts) {
       if (p.type !== "literal") map[p.type] = Number(p.value);
     }
-    // Some Intl implementations render midnight as hour "24"; pass it straight to
-    // Date.UTC, which normalizes 24:00 to 00:00 of the following day (mapping it to
-    // 0 without rolling the day would skew the offset by ~24h).
+    // Belt and braces for an implementation that renders midnight as hour "24"
+    // anyway. Measured behaviour (Node 20 ICU, Asia/Tokyo): the instant that is
+    // 2026-03-03 00:00 local formats as day 03 hour 24 — the day *being
+    // started*, not the one ending. So 24 maps to 0 keeping the day; letting
+    // Date.UTC roll it forward instead would overstate the offset by 24h and
+    // resolve every midnight-local time a full day early.
+    if (map.hour === 24) map.hour = 0;
     const asUtc = Date.UTC(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
     return asUtc - instant.getTime();
   } catch {
