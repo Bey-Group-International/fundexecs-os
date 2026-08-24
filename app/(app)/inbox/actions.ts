@@ -9,6 +9,8 @@ import { getActiveMandate } from "@/lib/mandates";
 import { dispatchAction } from "@/lib/integrations";
 import { orgConnectedChannels } from "@/lib/integrations/gateway";
 import { recordDispatch } from "@/lib/integrations/log";
+import { decideApproval } from "@/lib/engine";
+import { recordOperatorFeedback } from "@/lib/team-tasks";
 import { computePriority, fallbackSummary, draftReply, smartReplies } from "@/lib/inbox/intelligence";
 import { INBOX_CHANNELS } from "@/lib/inbox/channels";
 import type {
@@ -1081,6 +1083,76 @@ export async function clearInbox(opts?: { category?: InboxCategory }): Promise<{
     .eq("status", "open");
   const { error } = await (opts?.category ? base.eq("category", opts.category) : base);
   if (error) { console.error("[clearInbox]", error.message); return { ok: false }; }
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Deciding an approval from the inbox.
+//
+// The inbox is the one place approvals get cleared, so the decision has to land
+// here rather than on a workflow page the operator has to navigate to. This is
+// the same `decideApproval` engine entrypoint the mobile flow and /api/approve
+// use — one decision path means one idempotency guard, one execution, one audit
+// trail, no matter which surface the operator decided from.
+// ---------------------------------------------------------------------------
+export type InboxApprovalDecision = "approved" | "rejected" | "regenerate";
+
+export async function decideInboxApproval(
+  approvalId: string,
+  decision: InboxApprovalDecision,
+  note?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!approvalId) return { ok: false, error: "Missing approval." };
+  const auth = await requireOrgContext();
+  if (!auth.ok) return { ok: false, error: "Not authorized." };
+  const supabase = await createServerClient();
+  const orgId = auth.ctx.orgId;
+
+  // Confirm the approval is this org's before handing it to the engine, which
+  // looks it up by id alone. RLS already scopes the read, but an explicit check
+  // keeps a wrong/stale id from the client a clean "not found" rather than
+  // depending on policy configuration to be the only guard.
+  const { data: owned } = await supabase
+    .from("approvals")
+    .select("id, decision")
+    .eq("organization_id", orgId)
+    .eq("id", approvalId)
+    .maybeSingle();
+  if (!owned) return { ok: false, error: "This approval is no longer available." };
+  if ((owned as { decision: string }).decision !== "pending") {
+    // Someone (or another tab) already decided it. Treat as success so the row
+    // clears rather than stranding the operator on an item that is settled.
+    revalidatePath("/inbox");
+    return { ok: true };
+  }
+
+  try {
+    await decideApproval({ supabase, orgId, actorId: auth.ctx.userId }, { approvalId, decision, note });
+  } catch (e) {
+    console.error("[decideInboxApproval]", e instanceof Error ? e.message : e);
+    return { ok: false, error: "Couldn't record that decision. Try again." };
+  }
+
+  // Learning signal — same taxonomy the mobile approvals flow records, scoped to
+  // the inbox so the two surfaces stay distinguishable in the feedback data.
+  await recordOperatorFeedback(supabase, [
+    {
+      organizationId: orgId,
+      principalId: auth.ctx.userId,
+      signal:
+        decision === "approved"
+          ? "approval_approved"
+          : decision === "regenerate"
+            ? "approval_regenerate"
+            : "approval_rejected",
+      subject: "Inbox approval decision",
+      scope: "inbox/approvals",
+      agent: "associate",
+    },
+  ]);
+
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   return { ok: true };
