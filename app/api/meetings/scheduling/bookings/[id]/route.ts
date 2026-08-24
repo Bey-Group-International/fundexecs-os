@@ -47,6 +47,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
+    // A booking that is already declined or cancelled has nothing left to act
+    // on. Without this, a second tab (or a double click) would fall through to
+    // the no-op cancel below and still email the invitee "your meeting was
+    // cancelled" about a booking that was actually declined.
+    if (ctx.booking.status === "declined" || ctx.booking.status === "cancelled") {
+      return NextResponse.json(
+        {
+          error: `This booking was already ${ctx.booking.status}.`,
+          booking: serializeBooking({ ...ctx.booking, event_title: ctx.eventType.title }),
+        },
+        { status: 409 },
+      );
+    }
+
     let next = ctx;
     let emailKind: Parameters<typeof sendBookingEmails>[0];
 

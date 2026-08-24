@@ -10,7 +10,8 @@
 // `rescheduleBooking` re-derive the open slots from the host's own rules before
 // writing, so a stale or hand-crafted request can't claim a time the page never
 // offered.
-import type { createServerClient, createServiceClient } from "@/lib/supabase/server";
+import type { createServerClient } from "@/lib/supabase/server";
+import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import type {
   Database,
   Json,
@@ -50,6 +51,12 @@ const BOOKING_COLUMNS =
 /** Longest meeting the platform allows — bounds every "started before" lookback. */
 const MAX_MEETING_MINUTES = 480;
 
+/**
+ * Ceiling on rows read per busy lookup. Sized well above any plausible number
+ * of commitments in one booking window; exceeding it is logged, never silent.
+ */
+const BUSY_ROW_CAP = 2000;
+
 type TableName = keyof Database["public"]["Tables"];
 
 /**
@@ -84,20 +91,51 @@ export async function getOrCreatePageForUser(
   let page = existing.data as SchedulingPage | null;
 
   if (!page) {
-    const slug = await uniqueSlug(client, suggestSlug({ displayName: ctx.displayName, email: ctx.email, userId: ctx.userId }));
-    const insert = await table(client, "scheduling_pages")
-      .insert({
-        user_id: ctx.userId,
-        organization_id: ctx.orgId,
-        slug,
-        display_name: ctx.displayName?.trim() || ctx.email?.split("@")[0] || "FundExecs member",
-        timezone: ctx.timezone?.trim() || "UTC",
-        availability: DEFAULT_AVAILABILITY as unknown as Json,
-      } as never)
-      .select(PAGE_COLUMNS)
-      .single();
-    if (insert.error) throw new Error(insert.error.message);
-    page = insert.data as SchedulingPage;
+    const desired = suggestSlug({ displayName: ctx.displayName, email: ctx.email, userId: ctx.userId });
+    const display = ctx.displayName?.trim() || ctx.email?.split("@")[0] || "FundExecs member";
+
+    // Two members can race for the same handle between the probe and the
+    // INSERT, and the probe can be blind entirely without a service role. The
+    // UNIQUE index is the real arbiter, so lose gracefully and try again rather
+    // than 500ing a member out of ever having a scheduling page.
+    let inserted: SchedulingPage | null = null;
+    let lastError = "";
+    for (let attempt = 0; attempt < 5 && !inserted; attempt++) {
+      const slug =
+        attempt === 0
+          ? await uniqueSlug(client, desired)
+          : `${normalizeSlug(desired) || "member"}-${generateManageToken().slice(0, 6)}`;
+      const insert = await table(client, "scheduling_pages")
+        .insert({
+          user_id: ctx.userId,
+          organization_id: ctx.orgId,
+          slug,
+          display_name: display,
+          timezone: ctx.timezone?.trim() || "UTC",
+          availability: DEFAULT_AVAILABILITY as unknown as Json,
+        } as never)
+        .select(PAGE_COLUMNS)
+        .single();
+      if (!insert.error) {
+        inserted = insert.data as SchedulingPage;
+        break;
+      }
+      lastError = insert.error.message;
+      // 23505 on this table is either the slug clashing (retry with a random
+      // suffix) or user_id clashing because a concurrent request already made
+      // this member's page — in which case just read theirs.
+      if (insert.error.code !== "23505") throw new Error(insert.error.message);
+      const existing = await table(client, "scheduling_pages")
+        .select(PAGE_COLUMNS)
+        .eq("user_id", ctx.userId)
+        .maybeSingle();
+      if (existing.data) {
+        inserted = existing.data as SchedulingPage;
+        break;
+      }
+    }
+    if (!inserted) throw new Error(lastError || "Could not create a scheduling page.");
+    page = inserted;
 
     // Starter event types, so a brand-new link is immediately bookable.
     const seed = DEFAULT_EVENT_TYPES.map((t, index) => ({
@@ -129,6 +167,37 @@ export async function listEventTypes(client: SchedulingClient, pageId: string): 
 }
 
 /**
+ * A client that can see every scheduling page, for handle-uniqueness checks.
+ *
+ * `slug` is UNIQUE across the whole table, but the RLS policy is
+ * `user_id = auth.uid()` — so a request-scoped client cannot see anyone else's
+ * page and would report every handle as free, right up until the INSERT raises
+ * a unique violation. Probing needs the service role. It returns nothing but
+ * "taken or not" about a handle that is public by construction.
+ *
+ * Where the service role isn't configured (local dev), this falls back to the
+ * caller's client; `slugTaken` callers still handle the unique violation, so
+ * the outcome is a clear error rather than a wrong answer.
+ */
+function slugProbeClient(fallback: SchedulingClient): SchedulingClient {
+  return hasSupabaseServiceEnv() ? createServiceClient() : fallback;
+}
+
+/** Whether a handle already belongs to a page other than `excludePageId`. */
+export async function slugTaken(
+  client: SchedulingClient,
+  slug: string,
+  excludePageId?: string | null,
+): Promise<boolean> {
+  const { data } = await table(slugProbeClient(client), "scheduling_pages")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  const row = data as { id: string } | null;
+  return !!row && row.id !== excludePageId;
+}
+
+/**
  * A free handle derived from `desired`, suffixed (-2, -3, …) until it doesn't
  * collide with an existing page or a reserved word.
  */
@@ -137,9 +206,7 @@ export async function uniqueSlug(client: SchedulingClient, desired: string, excl
   for (let attempt = 0; attempt < 50; attempt++) {
     const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`;
     if (isReservedSlug(candidate)) continue;
-    const { data } = await table(client, "scheduling_pages").select("id").eq("slug", candidate).maybeSingle();
-    const row = data as { id: string } | null;
-    if (!row || row.id === excludePageId) return candidate;
+    if (!(await slugTaken(client, candidate, excludePageId))) return candidate;
   }
   // 50 collisions on one handle is implausible; fall back to something unique.
   return `${base}-${generateManageToken().slice(0, 6)}`;
@@ -187,15 +254,30 @@ export async function busyIntervals(
       .neq("status", "ended")
       .gte("scheduled_at", lookback)
       .lt("scheduled_at", opts.toIso)
-      .limit(500),
+      .order("scheduled_at", { ascending: true })
+      .limit(BUSY_ROW_CAP),
     table(client, "scheduling_bookings")
       .select("id, starts_at, ends_at")
       .eq("host_user_id", opts.hostUserId)
       .in("status", ["pending", "confirmed"])
       .gte("starts_at", lookback)
       .lt("starts_at", opts.toIso)
-      .limit(500),
+      .order("starts_at", { ascending: true })
+      .limit(BUSY_ROW_CAP),
   ]);
+
+  // Truncation here would silently stop blocking real commitments, so it is
+  // loud rather than invisible. Hitting this means a host has more than
+  // BUSY_ROW_CAP items in one window and the cap needs raising or the busy
+  // lookup needs paging.
+  for (const [label, res] of [["live_meetings", meetings], ["scheduling_bookings", bookings]] as const) {
+    if ((res.data?.length ?? 0) >= BUSY_ROW_CAP) {
+      console.warn(
+        `[scheduling] busyIntervals hit the ${BUSY_ROW_CAP}-row cap on ${label} for host ${opts.hostUserId}; ` +
+          "some commitments may not be blocking slots.",
+      );
+    }
+  }
 
   const out: BusyInterval[] = [];
 
@@ -333,6 +415,20 @@ export class SlotUnavailableError extends Error {
 }
 
 /**
+ * Postgres exclusion-constraint violation. The database rejected a booking that
+ * overlaps one the host already holds — the race the pre-flight slot check
+ * cannot close on its own (see migration 20260724120000). To the invitee this
+ * is the same outcome as a slot that filled a moment earlier.
+ */
+const EXCLUSION_VIOLATION = "23P01";
+
+function isOverlapViolation(error: { code?: string | null } | null | undefined): boolean {
+  return error?.code === EXCLUSION_VIOLATION;
+}
+
+const SLOT_TAKEN_MESSAGE = "That time was just taken. Please pick another.";
+
+/**
  * Create the meeting room a confirmed booking gets. Written directly rather
  * than through `saveScheduledMeeting` because the invitee is anonymous: there
  * is no acting org member to attribute an audit entry to, and the host — not
@@ -453,6 +549,7 @@ export async function createBooking(
     // The booking row is the record of truth; a room without one would be an
     // orphan on the host's calendar.
     if (meeting) await table(client, "live_meetings").delete().eq("id", meeting.id);
+    if (isOverlapViolation(error)) throw new SlotUnavailableError(SLOT_TAKEN_MESSAGE);
     throw new Error(error.message);
   }
 
@@ -530,11 +627,21 @@ export async function approveBooking(client: SchedulingClient, ctx: BookingConte
     booking: ctx.booking,
   });
 
-  const updated = await updateBookingRow(client, ctx.booking.id, {
-    status: "confirmed",
-    meeting_id: meeting.id,
-    decided_at: new Date().toISOString(),
-  });
+  // Same cleanup contract as createBooking: if the booking can't be confirmed,
+  // the room must not survive. Left behind it would sit on the host's calendar
+  // attached to nothing, block the slot a second time, and be duplicated by the
+  // next approve attempt.
+  let updated: SchedulingBooking;
+  try {
+    updated = await updateBookingRow(client, ctx.booking.id, {
+      status: "confirmed",
+      meeting_id: meeting.id,
+      decided_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    await table(client, "live_meetings").delete().eq("id", meeting.id);
+    throw err;
+  }
 
   return { ...ctx, booking: updated, roomCode: meeting.roomCode };
 }
@@ -627,7 +734,10 @@ async function updateBookingRow(
     .eq("id", bookingId)
     .select(BOOKING_COLUMNS)
     .single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isOverlapViolation(error)) throw new SlotUnavailableError(SLOT_TAKEN_MESSAGE);
+    throw new Error(error.message);
+  }
   return data as unknown as SchedulingBooking;
 }
 
