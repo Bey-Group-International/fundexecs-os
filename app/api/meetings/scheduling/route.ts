@@ -16,6 +16,7 @@ import {
 import {
   getOrCreatePageForUser,
   listBookingsForHost,
+  slugTaken,
   serializeBooking,
   serializeEventType,
   serializeHostPage,
@@ -87,10 +88,14 @@ export async function PATCH(req: NextRequest) {
       if (!slug) return NextResponse.json({ error: "Choose a link ending with letters or numbers." }, { status: 422 });
       if (isReservedSlug(slug)) return NextResponse.json({ error: `"${slug}" is reserved. Pick another.` }, { status: 422 });
       // Handles are unique platform-wide, so a clash is the user's to resolve —
-      // silently suffixing it would hand them a link they didn't ask for.
+      // silently suffixing it would hand them a link they didn't ask for. The
+      // probe runs service-role via slugTaken: this client only sees the
+      // caller's own page under RLS, so it would report every other member's
+      // handle as free and turn the 409 below into a 500 from the unique index.
       if (slug !== page.slug) {
-        const { data: taken } = await supabase.from("scheduling_pages").select("id").eq("slug", slug).maybeSingle();
-        if (taken) return NextResponse.json({ error: `"${slug}" is already taken.` }, { status: 409 });
+        if (await slugTaken(supabase, slug, page.id)) {
+          return NextResponse.json({ error: `"${slug}" is already taken.` }, { status: 409 });
+        }
         update.slug = slug;
       }
     }
@@ -124,7 +129,14 @@ export async function PATCH(req: NextRequest) {
       .eq("id", page.id)
       .select("*")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      // Lost the race between the probe and the UPDATE — same user-facing
+      // outcome as the check above, never a leaked constraint name.
+      if (error.code === "23505") {
+        return NextResponse.json({ error: `"${update.slug}" is already taken.` }, { status: 409 });
+      }
+      throw new Error(error.message);
+    }
 
     const saved = data as unknown as Parameters<typeof serializeHostPage>[0];
     return NextResponse.json({

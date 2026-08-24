@@ -21,6 +21,8 @@ import { PATCH } from "./route";
 
 type Row = Record<string, unknown>;
 
+const deletes: Record<string, string[]> = {};
+
 function makeClient(tables: Record<string, Row[]>) {
   const updates: Record<string, Row[]> = {};
   const inserts: Record<string, Row[]> = {};
@@ -28,10 +30,17 @@ function makeClient(tables: Record<string, Row[]>) {
 
   const from = (name: string) => {
     let rows = [...(tables[name] ?? [])];
+    let deleting = false;
+    const recordDelete = () => {
+      if (deleting) deletes[name] = [...(deletes[name] ?? []), ...rows.map((r) => String(r.id))];
+    };
     const builder: Record<string, unknown> = {
       select: () => builder,
       eq: (col: string, val: unknown) => {
         rows = rows.filter((r) => r[col] === val);
+        // A delete is expressed as .delete().eq(...), so the rows it actually
+        // removes are only known once the filter has been applied.
+        recordDelete();
         return builder;
       },
       neq: () => builder,
@@ -44,6 +53,9 @@ function makeClient(tables: Record<string, Row[]>) {
       insert: (payload: Row) => {
         const row = { id: `${name}-${++seq}`, ...payload };
         inserts[name] = [...(inserts[name] ?? []), row];
+        // Persist so a later from() on the same table can see it — the
+        // orphan-cleanup path deletes a row it inserted earlier in the request.
+        tables[name] = [...(tables[name] ?? []), row];
         rows = [row];
         return builder;
       },
@@ -52,7 +64,10 @@ function makeClient(tables: Record<string, Row[]>) {
         rows = rows.map((r) => ({ ...r, ...payload }));
         return builder;
       },
-      delete: () => builder,
+      delete: () => {
+        deleting = true;
+        return builder;
+      },
       maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
       single: async () => ({ data: rows[0] ?? null, error: null }),
       then: (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null }),
@@ -135,6 +150,7 @@ const params = Promise.resolve({ id: "b-1" });
 
 beforeEach(() => {
   jest.clearAllMocks();
+  for (const key of Object.keys(deletes)) delete deletes[key];
   authMock.mockResolvedValue({
     ok: true,
     ctx: { orgId: "org-1", userId: "host-1", email: "ada@fund.test", role: "owner" },
@@ -217,6 +233,64 @@ describe("PATCH /api/meetings/scheduling/bookings/[id]", () => {
     expect(updates.live_meetings[0].deleted_at).toBeTruthy();
     expect(updates.scheduling_bookings[0]).toMatchObject({ status: "cancelled", cancelled_by: "host" });
     expect(sendBookingEmails).toHaveBeenCalledWith("cancelled_by_host", expect.anything());
+  });
+
+  it("refuses to act on an already-declined booking instead of emailing a contradiction", async () => {
+    const { client, updates } = makeClient(tables({ status: "declined" }));
+    serviceClient.mockReturnValue(client);
+
+    const res = await PATCH(request({ action: "cancel" }), { params });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/already declined/i);
+    // The invitee must not be told their meeting was cancelled when it was declined.
+    expect(sendBookingEmails).not.toHaveBeenCalled();
+    expect(updates.scheduling_bookings).toBeUndefined();
+  });
+
+  it("refuses to act on an already-cancelled booking", async () => {
+    const { client } = makeClient(tables({ status: "cancelled" }));
+    serviceClient.mockReturnValue(client);
+
+    const res = await PATCH(request({ action: "cancel" }), { params });
+
+    expect(res.status).toBe(409);
+    expect(sendBookingEmails).not.toHaveBeenCalled();
+  });
+
+  it("cleans up the room when confirming an approved booking fails", async () => {
+    const base = tables();
+    const { client, inserts } = makeClient(base);
+    // Fail the booking UPDATE only, after the room has been created.
+    const realFrom = client.from;
+    client.from = (name: string) => {
+      const builder = realFrom(name) as Record<string, unknown>;
+      if (name === "scheduling_bookings") {
+        const update = builder.update as (p: Row) => unknown;
+        // The whole chain after .update() has to keep returning the failing
+        // builder — handing back the original one would resolve successfully.
+        const failing: Record<string, unknown> = {
+          select: () => failing,
+          eq: () => failing,
+          single: async () => ({ data: null, error: { message: "write failed", code: "XX000" } }),
+          maybeSingle: async () => ({ data: null, error: { message: "write failed", code: "XX000" } }),
+        };
+        builder.update = (p: Row) => {
+          update(p);
+          return failing;
+        };
+      }
+      return builder;
+    };
+    serviceClient.mockReturnValue(client);
+
+    const res = await PATCH(request({ action: "approve" }), { params });
+
+    expect(res.status).toBe(500);
+    // The room was created, so it must also have been deleted — an orphan would
+    // sit on the host's calendar and block the slot twice.
+    expect(inserts.live_meetings).toHaveLength(1);
+    expect(deletes.live_meetings).toContain(inserts.live_meetings[0].id);
   });
 
   it("refuses to approve a request whose slot the host has since filled", async () => {
