@@ -80,9 +80,16 @@ function makeClient(tables: Record<string, Row[]>) {
 
 const ALL_WEEK = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "00:00", end: "23:45" }));
 
-function nextSlotIso(offsetMinutes = 180): string {
-  const t = Date.now() + offsetMinutes * 60_000;
-  return new Date(Math.ceil(t / (15 * 60_000)) * 15 * 60_000).toISOString();
+/**
+ * A slot start that is always valid: 10:00 UTC two days out. Not derived from
+ * the current time — "now + Nh rounded up" drifts into the end of the fixture's
+ * 00:00–23:45 window late in the day, where no slot can *start*, so the suite
+ * would fail only when run in that hour.
+ */
+function nextSlotIso(dayOffset = 2): string {
+  const d = new Date(Date.now() + dayOffset * 86_400_000);
+  d.setUTCHours(10, 0, 0, 0);
+  return d.toISOString();
 }
 
 function tables(bookingOverrides: Row = {}) {

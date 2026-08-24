@@ -29,7 +29,13 @@ export function SchedulingLinkCard() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/meetings/scheduling", { cache: "no-store" });
+      // The zone is read here rather than from state: it only matters on the
+      // first call, which creates the page, and waiting for an effect to
+      // populate state would race that creation.
+      const res = await fetch(
+        `/api/meetings/scheduling?timezone=${encodeURIComponent(detectTimezone())}`,
+        { cache: "no-store" },
+      );
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? "Could not load your scheduling link.");

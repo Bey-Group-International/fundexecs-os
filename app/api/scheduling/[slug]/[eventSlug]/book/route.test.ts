@@ -121,10 +121,17 @@ function tables(overrides: Partial<Record<string, Row[]>> = {}) {
   } as Record<string, Row[]>;
 }
 
-/** A quarter-hour boundary comfortably in the future, matching the slot grid. */
-function nextSlotIso(offsetMinutes = 120): string {
-  const t = Date.now() + offsetMinutes * 60_000;
-  return new Date(Math.ceil(t / (15 * 60_000)) * 15 * 60_000).toISOString();
+/**
+ * A slot start that is always valid: 10:00 UTC two days out. Deliberately not
+ * derived from the current time — "now + 2h rounded up" drifts into the end of
+ * the fixture's 00:00–23:45 window late in the day, where no slot can *start*
+ * (a 15-minute meeting at 23:45 would run past the window), so the suite would
+ * fail only when run in that hour.
+ */
+function nextSlotIso(dayOffset = 2): string {
+  const d = new Date(Date.now() + dayOffset * 86_400_000);
+  d.setUTCHours(10, 0, 0, 0);
+  return d.toISOString();
 }
 
 function request(body: unknown): NextRequest {

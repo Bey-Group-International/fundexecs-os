@@ -326,6 +326,21 @@ export function groupSlotsByDate(slots: SlotWindow[], timezone: string): Array<{
   return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, s]) => ({ date, slots: s }));
 }
 
+/**
+ * Whether a string is an IANA zone this runtime actually knows. Guards the one
+ * place a timezone arrives from the browser: a page stored with a bogus zone
+ * would silently generate every slot in UTC.
+ */
+export function isValidTimezone(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The viewer's own timezone, with a safe fallback where Intl is unavailable. */
 export function detectTimezone(): string {
   try {
