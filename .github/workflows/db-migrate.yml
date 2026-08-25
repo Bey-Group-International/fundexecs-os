@@ -92,14 +92,28 @@ jobs:
             exit 1
           }
 
+          # Normalize before parsing. The CLI decorates this table and has
+          # changed how: it now wraps every cell in backticks (`20260825170000`
+          # rather than 20260825170000), which silently broke the match below
+          # and reported all 237 migrations missing. Stripping the decoration
+          # leaves the parse depending only on the column layout, which is the
+          # part that is actually load-bearing.
+          sed -e 's/\x1b\[[0-9;]*m//g' -e 's/`//g' /tmp/migration-list.txt > /tmp/migration-list-clean.txt
+
+          # Collect first, annotate later. A broken parse makes every migration
+          # look missing, and emitting the per-migration error inside this loop
+          # meant a parse bug shouted 237 wrong diagnoses before the guard below
+          # got to say what had actually happened.
           missing=0
+          missing_list=""
           for file in supabase/migrations/*.sql; do
             version="$(basename "$file" | cut -d_ -f1)"
             # `migration list` prints local and remote columns; a version present
             # remotely appears in the remote column of its row.
-            if ! grep -qE "^[[:space:]]*${version}[[:space:]]*\|[[:space:]]*${version}[[:space:]]*\|" /tmp/migration-list.txt; then
-              echo "::error title=Migration not applied::${version} ($(basename "$file")) is in the repo but not in the production history."
+            if ! grep -qE "^[[:space:]]*${version}[[:space:]]*\|[[:space:]]*${version}[[:space:]]*\|" /tmp/migration-list-clean.txt; then
               missing=$((missing + 1))
+              missing_list="${missing_list}${version} ($(basename "$file"))
+"
             fi
           done
 
@@ -116,6 +130,9 @@ jobs:
           fi
 
           if [ "$missing" -gt 0 ]; then
+            printf '%s' "$missing_list" | while IFS= read -r entry; do
+              [ -n "$entry" ] && echo "::error title=Migration not applied::${entry} is in the repo but not in the production history."
+            done
             echo "::error::${missing} of ${total} migration(s) are missing from production. The schema does not match the merged code."
             echo "--- supabase migration list --linked ---"
             cat /tmp/migration-list.txt
