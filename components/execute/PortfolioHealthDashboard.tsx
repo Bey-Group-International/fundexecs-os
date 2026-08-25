@@ -123,7 +123,7 @@ export function PortfolioHealthDashboard({ healthScore, assets, riskAlerts, tota
   if (assets.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-line bg-surface-1 p-10 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-400">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-300">
           ◇
         </div>
         <p className="mt-3 text-sm font-medium text-fg-primary">Portfolio health score builds here</p>

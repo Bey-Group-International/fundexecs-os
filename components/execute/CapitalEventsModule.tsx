@@ -142,7 +142,7 @@ export async function ExecuteCapitalEventsModule({ orgId }: { orgId: string }) {
       {/* Upcoming call */}
       {summary.upcoming ? (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-2.5 text-sm text-gold-200">
-          <span className="font-mono text-xs text-gold-400">↑ DUE</span>
+          <span className="font-mono text-xs text-gold-300">↑ DUE</span>
           <span>
             Capital call of <span className="font-medium">{usd(summary.upcoming.amount)}</span>
             {summary.upcoming.fundName ? ` · ${summary.upcoming.fundName}` : ""} on {shortDate(summary.upcoming.date)}

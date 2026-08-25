@@ -179,7 +179,7 @@ export function SourceSearch({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ AI Sourcing Search
           </span>
           {!live ? (
@@ -234,7 +234,7 @@ export function SourceSearch({
           <button
             type="submit"
             disabled={busy || !prompt.trim()}
-            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
           >
             {busy ? "Working…" : "Search"}
           </button>
@@ -297,7 +297,7 @@ export function SourceSearch({
               return (
                 <div key={s.id} className="rounded-2xl border border-line bg-surface-1 p-4">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                       {humanize(s.entities)} · {s.agentName}
                     </span>
                     {added[s.id] != null ? (
@@ -353,7 +353,7 @@ export function SourceSearch({
                     <button
                       type="button"
                       onClick={() => addGroup(s)}
-                      className="mt-3 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+                      className="mt-3 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
                       disabled={groupSel === 0 || adding.has(s.id)}
                     >
                       {adding.has(s.id) ? "Adding…" : `Add ${groupSel} to pipeline`}

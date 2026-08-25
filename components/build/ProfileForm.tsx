@@ -84,7 +84,7 @@ function Field({
       <span className="flex items-center gap-1.5 text-fg-secondary">
         {label}
         {hint && (
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             {hint}
           </span>
         )}

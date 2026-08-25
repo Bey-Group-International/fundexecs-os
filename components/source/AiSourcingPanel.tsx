@@ -122,7 +122,7 @@ export function AiSourcingPanel({
   return (
     <div className="mb-5 rounded-2xl border border-gold-500/25 bg-gradient-to-b from-gold-500/[0.06] to-transparent p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           ✶ AI Sourcing
         </span>
         <span className="text-xs text-fg-muted">· {agentName}</span>
@@ -260,7 +260,7 @@ export function AiSourcingPanel({
             type="button"
             onClick={addSelected}
             disabled={pending}
-            className="mt-1 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+            className="mt-1 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
           >
             Add {selected.size} to pipeline
           </button>

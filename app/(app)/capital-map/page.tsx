@@ -77,7 +77,7 @@ export default async function CapitalMapPage() {
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-6 animate-fade-up">
-        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_10px_2px_rgba(212,175,106,0.6)]" />
           Capital Map
         </span>
@@ -95,7 +95,7 @@ export default async function CapitalMapPage() {
 
       <section className="mt-12">
         <header className="mb-6">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Allocator Directory
           </span>
           <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">

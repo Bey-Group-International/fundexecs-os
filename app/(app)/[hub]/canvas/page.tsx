@@ -91,7 +91,7 @@ export default async function CanvasPage(props: PageProps) {
                 className={[
                   "rounded px-2 py-0.5 text-xs transition",
                   c.id === canvasId
-                    ? "bg-gold-400/20 text-gold-400"
+                    ? "bg-gold-400/20 text-gold-300"
                     : "text-fg-muted hover:bg-surface-2 hover:text-fg-primary",
                 ].join(" ")}
               >
@@ -110,7 +110,7 @@ export default async function CanvasPage(props: PageProps) {
           />
           <button
             type="submit"
-            className="h-7 rounded bg-gold-400/10 px-3 text-xs font-medium text-gold-400 transition hover:bg-gold-400/20"
+            className="h-7 rounded bg-gold-400/10 px-3 text-xs font-medium text-gold-300 transition hover:bg-gold-400/20"
           >
             + Canvas
           </button>

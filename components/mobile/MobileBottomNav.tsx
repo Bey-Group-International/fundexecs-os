@@ -36,7 +36,7 @@ export function MobileBottomNav({
     return (
       <span className="relative flex flex-col items-center justify-center gap-1">
         {active && <span aria-hidden className="absolute -top-[11px] h-1 w-6 rounded-full bg-gradient-to-r from-gold-300 to-gold-500" />}
-        <span className={`relative transition-colors ${active ? "text-gold-400" : "text-fg-muted"}`}>
+        <span className={`relative transition-colors ${active ? "text-gold-300" : "text-fg-muted"}`}>
           <Icon width={22} height={22} />
           {badge ? (
             <span className="absolute -right-2.5 -top-1.5 flex min-w-[16px] items-center justify-center rounded-full bg-status-danger px-1 text-[11px] font-semibold leading-[16px] text-white ring-2 ring-surface-1">

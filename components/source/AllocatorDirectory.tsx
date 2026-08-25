@@ -131,7 +131,7 @@ function InviteLPModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface-1 p-6 shadow-2xl">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="font-mono text-sm font-semibold text-fg-primary">Invite LP to Onboard</h2>

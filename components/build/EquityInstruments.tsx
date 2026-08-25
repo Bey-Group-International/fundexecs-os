@@ -122,7 +122,7 @@ function VestingCalc() {
 
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
-      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">Vesting</h4>
+      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-300">Vesting</h4>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Units granted">
           <input type="number" step="any" min={0} value={totalUnits} onChange={(e) => setTotalUnits(e.target.value)} className={inputClass} />
@@ -189,7 +189,7 @@ function ConvertibleCalc() {
 
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
-      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">SAFE / Note conversion</h4>
+      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-300">SAFE / Note conversion</h4>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Instrument">
           <select value={type} onChange={(e) => setType(e.target.value as InstrumentType)} className={inputClass}>
@@ -262,7 +262,7 @@ function StockCompCalc() {
 
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
-      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">ASC 718 expense</h4>
+      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-300">ASC 718 expense</h4>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Units">
           <input type="number" step="any" min={0} value={unitsGranted} onChange={(e) => setUnitsGranted(e.target.value)} className={inputClass} />

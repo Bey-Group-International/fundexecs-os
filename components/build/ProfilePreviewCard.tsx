@@ -105,7 +105,7 @@ export function ProfilePreviewCard({
             href={/^[a-z][a-z0-9+.-]*:\/\//i.test(website) ? website : `https://${website}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-gold-400 transition hover:text-gold-300"
+            className="text-xs text-gold-300 transition hover:text-gold-300"
           >
             {website} ↗
           </a>

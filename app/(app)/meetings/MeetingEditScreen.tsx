@@ -347,7 +347,7 @@ export function MeetingEditScreen({
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 backdrop-blur-sm sm:items-start sm:p-6"
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-900/40 backdrop-blur-sm sm:items-start sm:p-6"
     >
       <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface-1)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border sm:border-[var(--line)]">
         {/* Header — GCal keeps only Close (left) and a prominent Save (right). */}
@@ -368,7 +368,7 @@ export function MeetingEditScreen({
               <button
                 type="button"
                 onClick={() => onSaved(savedResult)}
-                className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-500)]"
+                className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--gold-500)]"
               >
                 Done
               </button>
@@ -388,7 +388,7 @@ export function MeetingEditScreen({
                   type="button"
                   onClick={() => void submit(false)}
                   disabled={busy !== null}
-                  className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-500)] disabled:opacity-50"
+                  className="rounded-full bg-[var(--gold-400)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--gold-500)] disabled:opacity-50"
                 >
                   {busy === "save" ? "Saving…" : mode === "edit" ? "Save" : "Schedule"}
                 </button>

@@ -131,7 +131,7 @@ function buildDimensions(investor: Investor, thesis: InvestmentThesis): Dimensio
 
 const STATUS_META = {
   pass: { icon: "✓", tone: "text-emerald-400", bg: "bg-emerald-400/10 border-emerald-400/30" },
-  partial: { icon: "~", tone: "text-gold-400", bg: "bg-gold-400/10 border-gold-400/30" },
+  partial: { icon: "~", tone: "text-gold-300", bg: "bg-gold-400/10 border-gold-400/30" },
   fail: { icon: "✗", tone: "text-status-danger", bg: "bg-status-danger/10 border-status-danger/30" },
   unknown: { icon: "?", tone: "text-fg-muted", bg: "bg-surface-2 border-line" },
 };
@@ -140,7 +140,7 @@ export function ThesisAlignmentBreakdown({ investor, thesis }: Props) {
   if (!thesis) {
     return (
       <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Thesis Alignment
         </h3>
         <p className="text-sm text-fg-muted">
@@ -165,13 +165,13 @@ export function ThesisAlignmentBreakdown({ investor, thesis }: Props) {
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Thesis Alignment
         </h3>
         <div className="flex items-center gap-2">
           <span
             className={`font-mono text-sm font-bold ${
-              score >= 70 ? "text-emerald-400" : score >= 35 ? "text-gold-400" : "text-fg-muted"
+              score >= 70 ? "text-emerald-400" : score >= 35 ? "text-gold-300" : "text-fg-muted"
             }`}
           >
             {score}

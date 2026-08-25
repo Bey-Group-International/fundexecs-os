@@ -33,7 +33,7 @@ export function ReferralLink({ code }: { code: string }) {
         <button
           type="button"
           onClick={() => copy(link, "link")}
-          className="shrink-0 rounded-md bg-gold-400 px-3 py-2 text-xs font-medium text-surface-0 transition hover:bg-gold-300"
+          className="shrink-0 rounded-md bg-gold-400 px-3 py-2 text-xs font-medium text-on-gold transition hover:bg-gold-300"
         >
           {copied === "link" ? "Copied!" : "Copy link"}
         </button>

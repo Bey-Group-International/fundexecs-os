@@ -12,7 +12,7 @@ export interface CommTemplate {
 }
 
 const TYPE_STYLES: Record<CommTemplate["type"], { label: string; cls: string }> = {
-  quarterly_update:    { label: "Quarterly Update",    cls: "bg-amber-900/30 text-gold-400 border-amber-700/30" },
+  quarterly_update:    { label: "Quarterly Update",    cls: "bg-amber-900/30 text-gold-300 border-amber-700/30" },
   capital_call:        { label: "Capital Call",        cls: "bg-emerald-900/30 text-emerald-300 border-emerald-700/30" },
   distribution_notice: { label: "Distribution Notice", cls: "bg-blue-900/30 text-blue-300 border-blue-700/30" },
   annual_report:       { label: "Annual Report",       cls: "bg-purple-900/30 text-purple-300 border-purple-700/30" },

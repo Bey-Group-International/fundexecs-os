@@ -321,7 +321,7 @@ export function DataRoomViewer({
           {sidebarOpen ? (
             <button
               type="button"
-              className="fixed inset-0 z-20 bg-black/40 lg:hidden"
+              className="fixed inset-0 z-20 bg-slate-900/40 lg:hidden"
               onClick={() => setSidebarOpen(false)}
               aria-label="Close navigation"
             />

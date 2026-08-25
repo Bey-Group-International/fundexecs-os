@@ -36,7 +36,7 @@ export function DiligenceTemplatePicker({ deals }: { deals: Deal[] }) {
           </option>
         ))}
       </select>
-      <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+      <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300">
         Apply template
       </button>
     </ActionForm>

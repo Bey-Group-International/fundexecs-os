@@ -14,7 +14,7 @@ export interface OutreachItem {
 
 const BUCKETS: { priority: 1 | 2 | 3; label: string; headerCls: string; dotCls: string }[] = [
   { priority: 1, label: "High Priority", headerCls: "text-emerald-300", dotCls: "bg-emerald-300" },
-  { priority: 2, label: "Medium Priority", headerCls: "text-gold-400", dotCls: "bg-gold-400" },
+  { priority: 2, label: "Medium Priority", headerCls: "text-gold-300", dotCls: "bg-gold-400" },
   { priority: 3, label: "Low Priority", headerCls: "text-fg-muted", dotCls: "bg-fg-muted" },
 ];
 

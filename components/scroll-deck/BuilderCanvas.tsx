@@ -185,7 +185,7 @@ function SectionCard({
           <button
             type="button"
             onClick={onAccept}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition-colors hover:bg-gold-300"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-on-gold transition-colors hover:bg-gold-300"
           >
             <CircleCheckIcon className="h-3.5 w-3.5" />
             Accept edit

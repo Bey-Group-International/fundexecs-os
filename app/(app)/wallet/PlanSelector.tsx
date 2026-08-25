@@ -47,7 +47,7 @@ function ComputeLayerGraphic({ featured = false }: { featured?: boolean }) {
           cx={x}
           cy={[58, 40, 40, 23, 23, 28, 45, 61][i]}
           r={featured ? 3.5 : 2.8}
-          className={featured ? "drop-shadow-[0_0_8px_rgba(118,185,0,0.95)]" : ""}
+          className={featured ? "drop-shadow-[0_0_8px_rgb(var(--fx-accent-rgb)/0.378)]" : ""}
           fill="currentColor"
           fillOpacity={featured ? 0.95 : 0.55}
         />
@@ -122,7 +122,7 @@ export function PlanSelector({
       ) : null}
       {/* Billing interval toggle */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-xl border border-neural-400/25 bg-black/70 p-0.5 shadow-[inset_0_1px_0_rgba(199,255,107,0.08)]">
+        <div className="inline-flex rounded-xl border border-neural-400/25 bg-surface-0 p-0.5 shadow-[inset_0_1px_0_rgb(var(--fx-accent-rgb)/0.08)]">
           {(["monthly", "annual"] as PlanInterval[]).map((opt) => (
             <button
               key={opt}
@@ -131,7 +131,7 @@ export function PlanSelector({
               aria-pressed={interval === opt}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition ${
                 interval === opt
-                  ? "bg-neural-400 text-black shadow-[0_0_18px_rgba(118,185,0,0.35)]"
+                  ? "bg-neural-400 text-white shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.147)]"
                   : "text-fg-secondary hover:text-fg-primary"
               }`}
             >
@@ -158,7 +158,7 @@ export function PlanSelector({
               key={p.key}
               data-active={isCurrent || isRecommended ? "true" : undefined}
               className={`fx-neural-card group flex flex-col p-5 ${
-                isRecommended ? "border-neural-400/60 shadow-[0_18px_60px_-34px_rgba(118,185,0,0.95)]" : ""
+                isRecommended ? "border-neural-400/60 shadow-[0_18px_60px_-34px_rgb(var(--fx-accent-rgb)/0.378)]" : ""
               }`}
             >
               {(isCurrent || isRecommended) && (
@@ -166,7 +166,7 @@ export function PlanSelector({
                   className={`absolute -top-2 right-4 z-10 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.16em] ${
                     isCurrent
                       ? "border border-status-success/40 bg-status-success/10 text-status-success"
-                      : "border border-neural-400/50 bg-black text-neural-300 shadow-[0_0_18px_rgba(118,185,0,0.35)]"
+                      : "border border-neural-400/50 bg-surface-1 text-neural-300 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.147)]"
                   }`}
                 >
                   {isCurrent ? "Current plan" : "Recommended"}
@@ -214,7 +214,7 @@ export function PlanSelector({
                 className={`relative z-10 mt-5 overflow-hidden rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-60 ${
                   isCurrent
                     ? "border border-neural-400/20 text-fg-muted"
-                    : "bg-neural-400 text-black shadow-[0_0_22px_rgba(118,185,0,0.28)] hover:bg-neural-300"
+                    : "bg-neural-400 text-white shadow-[0_0_22px_rgb(var(--fx-accent-rgb)/0.118)] hover:bg-neural-300"
                 }`}
               >
                 {isCurrent ? "Active" : busy ? "Activating…" : `Choose ${p.name}`}

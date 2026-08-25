@@ -50,7 +50,7 @@ export function MarketplaceFilters({
   return (
     <aside className="fx-card animate-fade-up p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">Refine</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">Refine</p>
         {active ? (
           <button
             type="button"

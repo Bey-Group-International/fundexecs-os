@@ -44,7 +44,7 @@ function StepIndicator({ current }: { current: number }) {
                   done
                     ? "border-gold-500 bg-gold-500 text-[var(--color-surface-0)]"
                     : active
-                      ? "border-gold-400 bg-gold-400/10 text-gold-400"
+                      ? "border-gold-400 bg-gold-400/10 text-gold-300"
                       : "border-[var(--color-line)] bg-[var(--color-surface-1)] text-[var(--color-fg-muted)]",
                 ].join(" ")}
                 aria-current={active ? "step" : undefined}
@@ -71,7 +71,7 @@ function StepIndicator({ current }: { current: number }) {
               <span
                 className={[
                   "font-mono text-[11px] uppercase tracking-widest",
-                  active ? "text-gold-400" : "text-[var(--color-fg-muted)]",
+                  active ? "text-gold-300" : "text-[var(--color-fg-muted)]",
                 ].join(" ")}
               >
                 {label}
@@ -260,7 +260,7 @@ function Step2Recipients({ recipients, onChange, onBack, onNext }: Step2Props) {
             className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-1)] p-4"
           >
             <div className="mb-3 flex items-center justify-between">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+              <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
                 Signer {r.routingOrder}
               </span>
               {recipients.length > 1 && (
@@ -389,7 +389,7 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
     <section className="flex flex-col gap-6">
       {/* Document summary */}
       <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-1)] p-5">
-        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-300">
           Document
         </p>
         <p className="text-base font-semibold text-[var(--color-fg-primary)]">{state.title}</p>
@@ -405,7 +405,7 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
 
       {/* Recipients summary */}
       <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-1)] p-5">
-        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-300">
           Signers
         </p>
         <ol className="flex flex-col gap-2">
@@ -555,7 +555,7 @@ export function EnvelopeWizard() {
   return (
     <div className="fx-ambient mx-auto max-w-2xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Envelopes
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-[var(--color-fg-primary)]">

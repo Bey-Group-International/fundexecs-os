@@ -59,11 +59,11 @@ export function AiFieldWand({
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-gold-500/25 bg-gold-500/5 p-3">
       {label ? (
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           {label}
         </span>
       ) : (
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           ✦ AI Field Wand
         </span>
       )}
@@ -91,7 +91,7 @@ export function AiFieldWand({
           onClick={handleExtract}
           disabled={loading || !description.trim()}
           title="Fill fields with AI (⌘↵)"
-          className="shrink-0 self-start rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-black transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          className="shrink-0 self-start rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
         >
           {loading ? "…" : "✦ Fill"}
         </button>

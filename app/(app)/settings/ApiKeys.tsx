@@ -81,7 +81,7 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
         }
         className="rounded-xl border border-line bg-surface-1 p-4"
       >
-        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-300">
           New API key
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -98,7 +98,7 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
                 onClick={() => setMode(m)}
                 className={`px-3 py-2 text-xs font-medium capitalize transition ${
                   mode === m
-                    ? "bg-gold-500 text-surface-0"
+                    ? "bg-gold-500 text-on-gold"
                     : "bg-surface-0 text-fg-secondary hover:text-fg-primary"
                 }`}
               >
@@ -110,7 +110,7 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
           <button
             type="submit"
             disabled={pending}
-            className="shrink-0 rounded-md bg-gold-500 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-400 disabled:opacity-60"
+            className="shrink-0 rounded-md bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:opacity-60"
           >
             {pending ? "Generating…" : "Generate key"}
           </button>

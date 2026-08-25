@@ -176,7 +176,7 @@ const FIELD =
   "w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none focus:ring-1 focus:ring-gold-500/40";
 const LABEL = "mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 const BTN =
-  "inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-on-gold transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50";
 
 function FormError({ message }: { message: string | null }) {
   if (!message) return null;
@@ -835,7 +835,7 @@ function AgingSummary({
           </div>
         ))}
         <div className="rounded-lg border border-gold-500/30 bg-gold-500/8 px-3 py-2.5">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Total AR
           </p>
           <p className="mt-1 font-mono text-sm tabular-nums text-gold-200">

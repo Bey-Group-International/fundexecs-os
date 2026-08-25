@@ -91,7 +91,7 @@ export function ExecutiveSprite({
         style={{ background: `radial-gradient(circle at 50% 30%, ${character.themeColor}33, transparent 58%)` }}
       />
       <span className="relative">{character.fallbackInitials}</span>
-      <span className="absolute bottom-1 h-1 w-8 rounded-full bg-black/50" />
+      <span className="absolute bottom-1 h-1 w-8 rounded-full bg-slate-900/25" />
     </span>
   );
 

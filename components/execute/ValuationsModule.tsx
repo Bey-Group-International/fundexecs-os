@@ -99,7 +99,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {portfolio.length >= 2 ? (
         <div className="mb-4 rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
           <div className="flex items-baseline justify-between">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Portfolio value over time
             </span>
             <span
@@ -120,7 +120,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {/* Valuation policy — 409A-style freshness discipline over the marks */}
       <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Valuation policy
           </span>
           <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
@@ -160,7 +160,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {fair.length > 0 ? (
         <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               409A fair-value engine
             </span>
             <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">

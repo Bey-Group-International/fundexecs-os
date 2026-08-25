@@ -9,13 +9,13 @@ import type { SkillRunView } from "@/lib/skills/store";
 
 const TIER_STYLE: Record<number, string> = {
   1: "border-status-success/40 text-status-success",
-  2: "border-gold-500/50 text-gold-400",
+  2: "border-gold-500/50 text-gold-300",
   3: "border-status-danger/50 text-status-danger",
 };
 const TIER_LABEL: Record<number, string> = { 1: "Internal", 2: "External", 3: "Capital-binding" };
 
 const STATUS_STYLES: Record<string, string> = {
-  succeeded: "text-gold-400",
+  succeeded: "text-gold-300",
   failed: "text-fg-muted",
   rejected: "text-status-danger",
 };

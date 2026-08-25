@@ -178,7 +178,7 @@ function ProviderForm({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
         ref={dialogRef}
         role="dialog"
@@ -289,7 +289,7 @@ function ProviderForm({
               <button
                 type="submit"
                 disabled={pending}
-                className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black hover:bg-gold-400 disabled:opacity-60"
+                className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold hover:bg-gold-400 disabled:opacity-60"
               >
                 {pending ? "Saving…" : isEdit ? "Save" : "Add Provider"}
               </button>
@@ -438,7 +438,7 @@ function ProviderSlideOver({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div ref={slideRef} role="dialog" aria-modal="true" aria-labelledby="provider-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
@@ -652,7 +652,7 @@ export function ServiceProviderDirectory({ providers: initialProviders }: Props)
           <button
             type="button"
             onClick={() => setShowAddForm(true)}
-            className="rounded-lg bg-gold-500 px-3 py-1.5 font-mono text-[11px] font-semibold text-black hover:bg-gold-400"
+            className="rounded-lg bg-gold-500 px-3 py-1.5 font-mono text-[11px] font-semibold text-on-gold hover:bg-gold-400"
           >
             + Add Provider
           </button>

@@ -21,7 +21,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
   const r = size / 2 - 6;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - value / 100);
-  const tone = value >= 85 ? "text-emerald-400" : value >= 35 ? "text-gold-400" : "text-fg-muted";
+  const tone = value >= 85 ? "text-emerald-400" : value >= 35 ? "text-gold-300" : "text-fg-muted";
   return (
     <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }} className="-rotate-90">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-line" />
@@ -57,7 +57,7 @@ function Sparkline({ scores }: { scores: number[] }) {
   return (
     <div className="flex items-center gap-3">
       <svg viewBox={`0 0 ${w} ${h}`} className="h-9 w-40 overflow-visible">
-        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="2" className="text-gold-400" />
+        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="2" className="text-gold-300" />
       </svg>
       <span className={`font-mono text-[11px] ${delta >= 0 ? "text-emerald-300" : "text-status-danger"}`}>
         {delta >= 0 ? "+" : ""}
@@ -70,7 +70,7 @@ function Sparkline({ scores }: { scores: number[] }) {
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{children}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">{children}</h3>
       {action}
     </div>
   );
@@ -205,7 +205,7 @@ function Underwriting({ data }: { data: WarRoom }) {
         </select>
         <input name="projected_irr" placeholder="IRR %" className={`${fieldClass} w-20`} inputMode="decimal" />
         <input name="projected_moic" placeholder="MOIC" className={`${fieldClass} w-20`} inputMode="decimal" />
-        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300">
           Add case
         </button>
       </ActionForm>
@@ -325,7 +325,7 @@ function Diligence({ data }: { data: WarRoom }) {
             </option>
           ))}
         </select>
-        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300">
           Add
         </button>
       </ActionForm>
@@ -441,7 +441,7 @@ export function DealWarRoom({ data }: { data: WarRoom }) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/run/strategy" className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400">
+        <Link href="/run/strategy" className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300">
           ← Run hub
         </Link>
         <div className="flex flex-wrap items-center justify-end gap-2">

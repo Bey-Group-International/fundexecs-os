@@ -25,7 +25,7 @@ export interface ApprovalItem {
 
 const RISK: Record<string, { label: string; cls: string }> = {
   high: { label: "High-sensitivity", cls: "border-status-danger/45 text-status-danger" },
-  medium: { label: "Review", cls: "border-gold-500/45 text-gold-400" },
+  medium: { label: "Review", cls: "border-gold-500/45 text-gold-300" },
   low: { label: "Routine", cls: "border-status-success/45 text-status-success" },
 };
 
@@ -175,7 +175,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
       <header className="pt-1">
         <div className="flex items-end justify-between">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Approvals</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">Approvals</p>
             <h1 className="mt-0.5 font-display text-2xl font-semibold tracking-tight text-fg-primary">
               {remaining} to decide
             </h1>
@@ -219,7 +219,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
             transition: dragging ? "none" : "transform 0.3s cubic-bezier(0.22,1,0.36,1)",
             touchAction: "pan-y",
           }}
-          className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl border border-line bg-surface-1 shadow-[0_20px_60px_-30px_rgb(0_0_0/0.7)]"
+          className="absolute inset-0 flex flex-col overflow-hidden rounded-3xl border border-line bg-surface-1 shadow-[0_20px_60px_-30px_rgb(15_23_42/0.16)]"
         >
           {/* Swipe intent overlays */}
           <span aria-hidden className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-status-success px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider text-status-success" style={{ opacity: approveHint, transform: `rotate(-12deg)` }}>
@@ -247,7 +247,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
             {current.preview && (
               <div className="mt-3 rounded-2xl border border-line/70 bg-surface-0/60 p-3">
                 <p className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                  <EarnIcon width={12} height={12} className="text-gold-400" /> What Earn produced
+                  <EarnIcon width={12} height={12} className="text-gold-300" /> What Earn produced
                 </p>
                 <p className="line-clamp-6 whitespace-pre-wrap text-[12.5px] leading-snug text-fg-primary">{current.preview}</p>
               </div>

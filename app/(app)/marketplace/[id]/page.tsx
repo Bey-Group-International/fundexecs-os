@@ -178,7 +178,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
       {/* Header */}
       <div className="mb-6 animate-fade-up">
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
             {listing.organizations?.name ?? "Unknown firm"}
           </span>
           <TierBadge tier={ownerTier} />
@@ -262,7 +262,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
               {isOwner ? (
                 <Link
                   href="/marketplace"
-                  className="mt-3 inline-block text-xs text-gold-400 underline underline-offset-2 hover:text-gold-300"
+                  className="mt-3 inline-block text-xs text-gold-300 underline underline-offset-2 hover:text-gold-300"
                 >
                   Edit listing →
                 </Link>
@@ -307,7 +307,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
                 <form action={updateListingStatus}>
                   <input type="hidden" name="id" value={listing.id} />
                   <input type="hidden" name="current" value={listing.status} />
-                  <button className="w-full rounded-md bg-gold-500 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-400">
+                  <button className="w-full rounded-md bg-gold-500 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-400">
                     {NEXT_LABEL[listing.status]}
                   </button>
                 </form>

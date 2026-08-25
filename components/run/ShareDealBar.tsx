@@ -83,7 +83,7 @@ export function ShareDealBar({ dealId }: { dealId: string }) {
 
       {result ? (
         <div className="mt-4 flex flex-col gap-3 border-t border-line pt-3">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
             {result.matched > 0
               ? `Alerted ${result.matched} matching firm${result.matched === 1 ? "" : "s"}`
               : "No ecosystem matches yet — your link is live"}

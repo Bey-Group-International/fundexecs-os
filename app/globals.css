@@ -3,54 +3,70 @@
 @tailwind utilities;
 
 :root {
-  --fx-color-scheme: dark;
-  --fx-surface-0: 5 9 18;
-  --fx-surface-1: 10 17 31;
-  --fx-surface-2: 16 27 46;
-  --fx-surface-3: 24 40 66;
-  --fx-line: 38 61 92;
-  --fx-fg-primary: 241 247 255;
-  --fx-fg-secondary: 197 210 228;
-  --fx-fg-muted: 154 172 197;
-  /* Neural/data-terminal accent — sky blue for grid lines and tech surfaces */
-  --fx-accent-300: 125 211 252;
-  --fx-accent-400: 56 189 248;
+  --fx-color-scheme: light;
+  /* Surface ramp — bright, blue-tinted paper. 0 is the page, 1 the card, and
+     2/3 the raised and pressed states. Kept clearly separated so panels read as
+     panels on a light page instead of dissolving into it. */
+  --fx-surface-0: 240 245 252;
+  --fx-surface-1: 255 255 255;
+  --fx-surface-2: 228 237 249;
+  --fx-surface-3: 210 224 243;
+  /* A visible hairline, not a whisper — borders have to hold a card together
+     without the shadows a dark theme leans on. */
+  --fx-line: 176 195 220;
+  /* Text: near-black primary, and a muted tone still at ~5:1 on the page so the
+     smallest labels stay readable. */
+  --fx-fg-primary: 9 20 38;
+  --fx-fg-secondary: 51 70 99;
+  --fx-fg-muted: 88 108 138;
+  /* Neural / data-terminal accent — saturated blue. Every step is dark enough
+     to carry white text, because these are fills as often as they are labels;
+     300 is the deepest (text) and 500 the brightest (buttons). */
+  --fx-accent-300: 30 64 175;
+  --fx-accent-400: 29 78 216;
   --fx-accent-500: 37 99 235;
-  --fx-accent-rgb: 56 189 248;
-  --fx-accent-strong-rgb: 37 99 235;
-  /* Gold — investment-bank warm gold for financial numbers and CTAs */
-  --fx-gold-300: 245 215 115;
-  --fx-gold-400: 212 168 42;
-  --fx-gold-500: 158 120 15;
-  --fx-gold-rgb: 212 168 42;
+  --fx-accent-rgb: 29 78 216;
+  --fx-accent-strong-rgb: 30 64 175;
+  /* Gold — a genuinely bright amber. Any amber dark enough to carry white text
+     has gone brown by the time it gets there, so the warm accent keeps its
+     saturation and takes dark ink instead: 300 is the text step (4.9:1 on the
+     page), 400/500 are fills that pair with --fx-on-gold. */
+  --fx-gold-300: 180 83 9;
+  --fx-gold-400: 217 119 6;
+  --fx-gold-500: 245 158 11;
+  --fx-gold-rgb: 217 119 6;
+  /* Ink for anything sitting on an amber fill — 8:1 on gold-400 and up. */
+  --fx-on-gold: 34 20 4;
   --background: rgb(var(--fx-surface-0));
   --foreground: rgb(var(--fx-fg-primary));
 
   /* Semantic design-token aliases — consumed by lib/design-tokens.ts.
      These resolve to fully-formed color values (not bare RGB triplets) so
      they can be used directly in non-Tailwind contexts (SVG, Canvas, etc.). */
-  --surface-0: rgb(5 9 18);
-  --surface-1: rgb(10 17 31);
-  --surface-2: rgb(16 27 46);
-  --surface-3: rgb(24 40 66);
-  --line: rgb(38 61 92);
-  --fg-primary: rgb(241 247 255);
-  --fg-secondary: rgb(197 210 228);
-  --fg-muted: rgb(154 172 197);
-  --gold-300: rgb(125 211 252);
-  --gold-400: rgb(56 189 248);
+  --surface-0: rgb(240 245 252);
+  --surface-1: rgb(255 255 255);
+  --surface-2: rgb(228 237 249);
+  --surface-3: rgb(210 224 243);
+  --line: rgb(176 195 220);
+  --fg-primary: rgb(9 20 38);
+  --fg-secondary: rgb(51 70 99);
+  --fg-muted: rgb(88 108 138);
+  --gold-300: rgb(30 64 175);
+  --gold-400: rgb(29 78 216);
   --gold-500: rgb(37 99 235);
-  --status-success: #5FB87A;
-  --status-warning: #D6A24A;
-  --status-danger: #D46A5A;
-  --status-info: #5B9BD5;
+  /* Status tones, re-saturated for a light page — the dark theme's pastels
+     wash out to nothing on white. */
+  --status-success: #12784A;
+  --status-warning: #A45C07;
+  --status-danger: #C0332B;
+  --status-info: #1D4ED8;
 }
 
-/* The platform ships one scheme: the bold, high-contrast command-center
-   palette above. There is no day/night switch and no OS-driven variant — a
-   single vibrant surface ramp keeps every label readable on every device. */
+/* The platform ships one scheme: the bold, vibrant daylight palette above.
+   There is no day/night switch and no OS-driven variant — every surface renders
+   light, so wording keeps the same contrast on every device. */
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -70,7 +86,7 @@ body {
    to electric blue and floats the card a hair. */
 @layer components {
   .fx-card {
-    @apply rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 shadow-[0_1px_2px_rgb(0_0_0/0.25)];
+    @apply rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 shadow-[0_1px_2px_rgb(15_23_42/0.10)];
   }
   .fx-card-hover {
     @apply transition duration-200 hover:-translate-y-px hover:border-gold-500/45 hover:shadow-[0_10px_30px_-16px_rgb(var(--fx-accent-rgb)/0.55)];
@@ -82,7 +98,7 @@ body {
     @apply fx-focus transition duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .fx-btn-primary {
-    @apply fx-btn rounded-lg bg-gold-400 px-4 py-2 text-sm font-semibold text-surface-0 hover:bg-gold-300;
+    @apply fx-btn rounded-lg bg-gold-400 px-4 py-2 text-sm font-semibold text-on-gold hover:bg-gold-500;
   }
   .fx-btn-secondary {
     @apply fx-btn rounded-lg border border-line px-4 py-2 text-sm text-fg-secondary hover:bg-surface-2 hover:text-fg-primary;
@@ -90,7 +106,7 @@ body {
   /* Glass panel — for the hero/anchor surfaces that should feel set back behind
      a pane of frosted glass. */
   .fx-glass {
-    @apply rounded-2xl border border-line/70 bg-surface-1/65 shadow-[0_1px_2px_rgb(0_0_0/0.24)] backdrop-blur-xl;
+    @apply rounded-2xl border border-line/70 bg-surface-1/65 shadow-[0_1px_2px_rgb(15_23_42/0.10)] backdrop-blur-xl;
   }
   /* KPI tile — a compact stat cell for the summary rows above each workspace.
      Slightly brighter top edge so a row of them reads as a single instrument
@@ -128,7 +144,7 @@ body {
     background: radial-gradient(55% 65% at 50% 20%, rgb(var(--fx-accent-rgb) / 0.24), transparent 72%);
   }
   .fx-neural-card {
-    @apply relative overflow-hidden rounded-2xl border border-neural-400/20 bg-[linear-gradient(180deg,rgb(var(--fx-surface-1)/0.96),rgb(var(--fx-surface-0)/0.88))] shadow-[inset_0_1px_0_rgb(var(--fx-accent-rgb)/0.14),0_1px_2px_rgb(0_0_0/0.28)] transition duration-300;
+    @apply relative overflow-hidden rounded-2xl border border-neural-400/20 bg-[linear-gradient(180deg,rgb(var(--fx-surface-1)/0.96),rgb(var(--fx-surface-0)/0.88))] shadow-[inset_0_1px_0_rgb(var(--fx-accent-rgb)/0.14),0_1px_2px_rgb(15_23_42/0.10)] transition duration-300;
   }
   .fx-neural-card::before {
     content: "";
@@ -558,12 +574,16 @@ body {
    the text high-contrast on its own (the gradient stays within the gold/neural
    luminance band) and avoid placing essential meaning in color alone. */
 .fx-text-gradient {
+  /* Its own vivid ramp rather than gold→accent: blending a deep amber into a
+     deep blue crosses through mud, which is exactly what a headline must not
+     do. Blue → violet → magenta stays saturated the whole way across, and every
+     stop clears 5:1 on the page so the words stay readable, not just pretty. */
   background-image: linear-gradient(
     100deg,
-    rgb(var(--fx-gold-300)),
-    rgb(var(--fx-gold-400)),
-    rgb(var(--fx-accent-300)),
-    rgb(var(--fx-gold-300))
+    rgb(29 78 216),
+    rgb(109 40 217),
+    rgb(190 24 93),
+    rgb(29 78 216)
   );
   background-size: 300% 100%;
   background-position: 0% 50%;

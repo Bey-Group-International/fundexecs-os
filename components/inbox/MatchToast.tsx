@@ -87,11 +87,11 @@ export function MatchToast({ alert }: { alert: MatchToastAlert | null }) {
           className="block w-full px-3.5 py-3 pr-8 text-left transition hover:bg-surface-2"
         >
           <div className="flex items-start gap-2.5">
-            <span aria-hidden className="mt-0.5 text-base text-gold-400">
+            <span aria-hidden className="mt-0.5 text-base text-gold-300">
               ◈
             </span>
             <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
                 Earn · new match
               </p>
               <p className="mt-1 truncate text-sm font-medium text-fg-primary">{alert.title}</p>

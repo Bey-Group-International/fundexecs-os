@@ -17,7 +17,7 @@ export function TemplatePicker({
   const [preview, setPreview] = useState<string | null>(null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="flex w-full max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl border border-line bg-surface-0 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -40,7 +40,7 @@ export function TemplatePicker({
           <div className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3">
             {sectionTemplates.length > 0 && (
               <>
-                <p className="mb-1 px-1 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                <p className="mb-1 px-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                   For this section
                 </p>
                 {sectionTemplates.map((t) => (
@@ -88,7 +88,7 @@ export function TemplatePicker({
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {preview ? (
               <>
-                <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">Preview</p>
+                <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-300">Preview</p>
                 <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-fg-secondary">
                   {DOCUMENT_TEMPLATE_LIBRARY.find((t) => t.id === preview)?.content ?? ""}
                 </pre>

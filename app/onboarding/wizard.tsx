@@ -251,7 +251,7 @@ export default function OnboardingWizard({
       {/* Step 1 — User profile */}
       {step === 1 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             Your profile
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -319,7 +319,7 @@ export default function OnboardingWizard({
       {/* Step 2 — Org identity */}
       {step === 2 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             Build · Identity
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -365,7 +365,7 @@ export default function OnboardingWizard({
       {/* Step 3 — Operator role */}
       {step === 3 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             Build · Role
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -419,7 +419,7 @@ export default function OnboardingWizard({
       {/* Step 4 — Strategy */}
       {step === 4 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             Build · Strategy
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -448,7 +448,7 @@ export default function OnboardingWizard({
       {/* Step 5 — First hub */}
       {step === 5 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             Activation
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -477,7 +477,7 @@ export default function OnboardingWizard({
       {/* Step 6 — Mandate (optional) */}
       {step === 6 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             Activation · Mandate
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -585,7 +585,7 @@ export default function OnboardingWizard({
             onClick={() => setStep((s) => s + 1)}
             disabled={!canNext() || pending}
             type="button"
-            className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
+            className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-on-gold transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
           >
             Continue
           </button>
@@ -603,7 +603,7 @@ export default function OnboardingWizard({
               onClick={() => handleSubmit()}
               disabled={!canNext() || pending}
               type="button"
-              className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-surface-0 transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
+              className="rounded-md bg-gold-400 px-5 py-2 text-sm font-medium text-on-gold transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 disabled:cursor-not-allowed disabled:opacity-30"
             >
               {pending ? "Creating…" : "Launch workspace"}
             </button>

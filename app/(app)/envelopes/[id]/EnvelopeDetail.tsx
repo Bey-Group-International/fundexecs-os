@@ -413,7 +413,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       <header className="fx-glass p-5 sm:p-6">
         <Link
           href="/envelopes"
-          className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400 hover:underline"
+          className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300 hover:underline"
         >
           ← Documents &amp; Signatures
         </Link>
@@ -443,7 +443,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
                 type="button"
                 onClick={handleSend}
                 disabled={isPending}
-                className="inline-flex items-center gap-2 rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                className="inline-flex items-center gap-2 rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-medium text-on-gold shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400 hover:shadow-[0_12px_28px_-14px_rgb(var(--fx-accent-rgb)/0.95)] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
               >
                 {isPending ? (
                   "Sending…"
@@ -512,7 +512,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       {/* ------------------------------------------------------------------ */}
       {envelope.status === "completed" && (
         <div className="fx-card p-5">
-          <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Completed
           </p>
           <p className="text-sm text-fg-primary">

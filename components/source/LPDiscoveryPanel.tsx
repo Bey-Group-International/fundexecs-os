@@ -24,19 +24,19 @@ function fmtUsd(n: number): string {
 
 function fitColor(score: number): string {
   if (score >= 70) return "text-emerald-300";
-  if (score >= 40) return "text-gold-400";
+  if (score >= 40) return "text-gold-300";
   return "text-fg-muted";
 }
 
 function warmthLabel(w: number): { label: string; cls: string } {
   if (w >= 70) return { label: "Committed", cls: "bg-emerald-300/10 text-emerald-300 border border-emerald-300/20" };
-  if (w >= 40) return { label: "Active", cls: "bg-gold-400/10 text-gold-400 border border-gold-400/20" };
+  if (w >= 40) return { label: "Active", cls: "bg-gold-400/10 text-gold-300 border border-gold-400/20" };
   return { label: "Warm", cls: "bg-fg-muted/10 text-fg-muted border border-line" };
 }
 
 function priorityLabel(p: number): { label: string; cls: string } {
   if (p === 1) return { label: "High", cls: "bg-emerald-300/10 text-emerald-300 border border-emerald-300/20" };
-  if (p === 2) return { label: "Med", cls: "bg-gold-400/10 text-gold-400 border border-gold-400/20" };
+  if (p === 2) return { label: "Med", cls: "bg-gold-400/10 text-gold-300 border border-gold-400/20" };
   return { label: "Low", cls: "bg-fg-muted/10 text-fg-muted border border-line" };
 }
 

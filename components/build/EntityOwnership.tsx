@@ -495,7 +495,7 @@ export function EntityOwnership({
         </select>
         <input name="units" type="number" step="any" placeholder="Units" className={inputClass} />
         <input name="ownership_pct" type="number" step="any" placeholder="Own %" className={inputClass} />
-        <button className="rounded-md bg-gold-400 px-3 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">Add</button>
+        <button className="rounded-md bg-gold-400 px-3 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300">Add</button>
       </form>
 
       {/* Quick add stakeholder + share class */}
@@ -550,7 +550,7 @@ export function EntityOwnership({
 
       {/* Earn draft */}
       <div className="mt-2 rounded-xl border border-gold-500/30 bg-gold-500/5 p-3">
-        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-400">Draft with Earn</p>
+        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">Draft with Earn</p>
         <textarea
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
@@ -563,7 +563,7 @@ export function EntityOwnership({
             type="button"
             onClick={draft}
             disabled={pending || !desc.trim()}
-            className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+            className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
           >
             {pending ? "Earn is building…" : "✶ Build cap table"}
           </button>

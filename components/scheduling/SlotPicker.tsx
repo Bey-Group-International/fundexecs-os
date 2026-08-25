@@ -101,7 +101,7 @@ export function SlotPicker({
                   aria-pressed={isSelected}
                   className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
                     isSelected
-                      ? "border-[var(--gold-400)] bg-[var(--gold-400)] text-black"
+                      ? "border-[var(--gold-400)] bg-[var(--gold-400)] text-white"
                       : "border-[var(--line)] bg-[var(--surface-1)] text-[var(--fg-primary)] hover:border-[var(--gold-400)]"
                   }`}
                 >

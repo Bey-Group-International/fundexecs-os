@@ -64,7 +64,7 @@ export const DOC_TYPE_ICONS: Record<DocType, string> = {
 
 export const DOC_TYPE_COLORS: Record<DocType, string> = {
   note: "text-slate-400",
-  ic_memo: "text-gold-400",
+  ic_memo: "text-gold-300",
   fund_thesis: "text-emerald-400",
   deal_memo: "text-blue-400",
   diligence_report: "text-amber-400",

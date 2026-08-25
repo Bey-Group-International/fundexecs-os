@@ -36,7 +36,7 @@ function CreateInvestorForm() {
         <input name="typical_check_min" inputMode="numeric" placeholder="Min check" className={inputClass} />
         <input name="typical_check_max" inputMode="numeric" placeholder="Max check" className={inputClass} />
       </div>
-      <button className="rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-400">
+      <button className="rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400">
         Add investor
       </button>
     </form>
@@ -53,7 +53,7 @@ function CreateDealForm() {
         <input name="target_amount" inputMode="numeric" placeholder="Target amount" className={inputClass} />
       </div>
       <input name="source" placeholder="Source, broker, or referral" className={inputClass} />
-      <button className="rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-400">
+      <button className="rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400">
         Add deal
       </button>
     </form>
@@ -69,7 +69,7 @@ function CreateFundForm() {
         <input name="target_size" inputMode="numeric" placeholder="Target raise" className={inputClass} />
         <input name="committed_capital" inputMode="numeric" placeholder="Committed capital" className={inputClass} />
       </div>
-      <button className="rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-400">
+      <button className="rounded-lg bg-gold-500 px-3 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400">
         Create fund
       </button>
     </form>
@@ -112,7 +112,7 @@ function QuickActionPanel({ view }: { view: WorkspaceViewModel }) {
         <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">
           Quick action
         </h2>
-        <Link href={view.primaryAction.href} className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+        <Link href={view.primaryAction.href} className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
           {view.primaryAction.label} →
         </Link>
       </div>
@@ -132,7 +132,7 @@ export function WorkspacePage({ view, data }: { view: WorkspaceViewModel; data: 
       <header className="fx-glass mb-6 p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               {view.eyebrow}
             </p>
             <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">

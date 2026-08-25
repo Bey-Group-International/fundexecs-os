@@ -233,7 +233,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ Outreach Studio
           </span>
           {!live ? (
@@ -250,7 +250,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
 
       {/* Build from template */}
       <section className="rounded-2xl border border-gold-500/25 bg-gradient-to-b from-gold-500/[0.06] to-transparent p-4">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           Build a sequence
         </span>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -263,7 +263,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
               className="rounded-xl border border-line bg-surface-1 p-3 text-left transition hover:border-gold-500/40 disabled:opacity-50"
             >
               <span className="block text-sm font-medium text-fg-primary">{t.name}</span>
-              <span className="mt-0.5 block font-mono text-[11px] uppercase tracking-wider text-gold-400">
+              <span className="mt-0.5 block font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 {humanize(t.channel)}
               </span>
               <span className="mt-1 block text-xs text-fg-secondary">{t.description}</span>
@@ -341,7 +341,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
             <ol className="mt-3 space-y-2">
               {active.steps.map((st) => (
                 <li key={st.id} className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 p-2.5">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[11px] text-surface-0">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[11px] text-on-gold">
                     {st.step_order}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -363,7 +363,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
 
           {/* Enroll */}
           <div className="rounded-2xl border border-line bg-surface-1 p-4">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Enroll a target
             </span>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -397,7 +397,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
                 type="button"
                 onClick={enrollTarget}
                 disabled={busy || !enrollName.trim()}
-                className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+                className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
               >
                 Enroll
               </button>
@@ -406,7 +406,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
 
           {/* Enrollments + progress */}
           <div className="rounded-2xl border border-line bg-surface-1 p-4">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Enrollments
             </span>
             {enrollments.length ? (

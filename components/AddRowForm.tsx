@@ -120,7 +120,7 @@ export default function AddRowForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save"}
         </button>

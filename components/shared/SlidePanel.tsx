@@ -49,7 +49,7 @@ export function SlidePanel({
       aria-modal="true"
       aria-label={title}
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"
     >
       <div
         onClick={(e) => e.stopPropagation()}

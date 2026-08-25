@@ -38,7 +38,7 @@ function NoDeals({ what }: { what: string }) {
     <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
       <p className="max-w-sm text-sm text-fg-secondary">
         No deals to {what} yet. Move a deal into evaluation from the{" "}
-        <Link href="/source/deal_pipeline" className="text-gold-400 hover:underline">
+        <Link href="/source/deal_pipeline" className="text-gold-300 hover:underline">
           deal pipeline
         </Link>{" "}
         first.
@@ -122,7 +122,7 @@ export async function RunDiligenceModule({ orgId }: { orgId: string }) {
                 </option>
               ))}
             </select>
-            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300">
               Add
             </button>
           </ActionForm>

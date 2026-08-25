@@ -257,7 +257,7 @@ const SessionRow = memo(function SessionRow({
         }`}
       >
         {s.pinned ? (
-          <span className="shrink-0 text-[11px] leading-none text-gold-400" title="Pinned">
+          <span className="shrink-0 text-[11px] leading-none text-gold-300" title="Pinned">
             📌
           </span>
         ) : (
@@ -550,7 +550,7 @@ function SidebarPanel({
               onClick={() => setNewGroupOpen((v) => !v)}
               aria-label="New group"
               title="New group"
-              className="font-mono text-xs leading-none text-fg-muted transition hover:text-gold-400"
+              className="font-mono text-xs leading-none text-fg-muted transition hover:text-gold-300"
             >
               +
             </button>
@@ -590,7 +590,7 @@ function SidebarPanel({
                       }))
                     }
                     aria-expanded={!isGroupCollapsed}
-                    className="flex w-full items-center justify-between rounded-md px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-gold-400 transition hover:bg-surface-2"
+                    className="flex w-full items-center justify-between rounded-md px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-gold-300 transition hover:bg-surface-2"
                   >
                     <span className="truncate">{sec.label}</span>
                     <span className="text-fg-muted">{isGroupCollapsed ? "▸" : "▾"}</span>
@@ -651,7 +651,7 @@ function SidebarPanel({
               <span className="block truncate text-xs font-semibold text-fg-primary">
                 {name}
               </span>
-              <span className="block truncate text-[11px] text-gold-400/70">
+              <span className="block truncate text-[11px] text-gold-300/70">
                 {planName} plan
               </span>
             </span>
@@ -756,7 +756,7 @@ export function AppSidebar(props: AppSidebarProps) {
           <div
             aria-hidden
             onClick={() => setOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm motion-safe:animate-fade-up"
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm motion-safe:animate-fade-up"
           />
           <aside id="fx-mobile-nav" className="fixed inset-y-0 left-0 flex w-[260px] max-w-[80vw] flex-col border-r border-line/60 bg-surface-1 shadow-2xl motion-safe:animate-slide-in-left">
             <SidebarPanel {...props} />

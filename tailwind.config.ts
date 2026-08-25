@@ -5,8 +5,9 @@ import type { Config } from "tailwindcss";
 // Grotesk / DM Sans / JetBrains Mono type stack. The six per-agent colors are
 // preserved for agent identity.
 const config: Config = {
-  // Class-driven, and <html> always carries `dark` — the platform has a single
-  // bold palette, so a dark: utility must never flip with the OS preference.
+  // Class-driven, and nothing ever sets the `dark` class — the platform has a
+  // single bold daylight palette, so a dark: utility must never fire, least of
+  // all off the viewer's OS preference.
   darkMode: "class",
   content: [
     "./app/**/*.{ts,tsx}",
@@ -27,6 +28,9 @@ const config: Config = {
           tertiary: "rgb(var(--fx-surface-3) / <alpha-value>)",
         },
         line: "rgb(var(--fx-line) / <alpha-value>)",
+        // Ink for content sitting on an amber fill — the warm accent is bright
+        // enough that white would not clear contrast on it.
+        "on-gold": "rgb(var(--fx-on-gold) / <alpha-value>)",
         border: {
           DEFAULT: "rgb(var(--fx-line) / <alpha-value>)",
           secondary: "rgb(var(--fx-line) / <alpha-value>)",

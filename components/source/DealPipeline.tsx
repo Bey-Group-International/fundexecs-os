@@ -270,7 +270,7 @@ function DealSlideOver({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
       <div role="dialog" aria-modal="true" aria-labelledby="deal-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
@@ -532,7 +532,7 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
@@ -599,7 +599,7 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
             <button
               type="submit"
               disabled={pending}
-              className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black hover:bg-gold-400 disabled:opacity-60"
+              className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold hover:bg-gold-400 disabled:opacity-60"
             >
               {pending ? "Saving…" : "Add Deal"}
             </button>
@@ -725,7 +725,7 @@ export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="rounded-lg bg-gold-500 px-3 py-1.5 font-mono text-[11px] font-semibold text-black hover:bg-gold-400"
+            className="rounded-lg bg-gold-500 px-3 py-1.5 font-mono text-[11px] font-semibold text-on-gold hover:bg-gold-400"
           >
             + Add Deal
           </button>

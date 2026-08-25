@@ -275,7 +275,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
             }}
             className={`rounded-md px-4 py-1.5 text-sm transition ${
               active === t.key
-                ? "bg-gold-400 font-medium text-surface-0 shadow-[0_4px_14px_-6px_rgba(212,175,106,0.7)]"
+                ? "bg-gold-400 font-medium text-on-gold shadow-[0_4px_14px_-6px_rgba(212,175,106,0.7)]"
                 : "text-fg-secondary hover:text-fg-primary"
             }`}
           >
@@ -342,7 +342,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgb(var(--fx-accent-rgb)/0.16),transparent_34%)]" />
           <div className="relative grid gap-5 md:grid-cols-[1fr_220px] md:items-center">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
                 {tab.label} graph activation
               </p>
               <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -395,7 +395,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
 
               {tracePath ? (
                 <div className="mt-2 rounded-lg border border-gold-500/30 bg-gold-500/[0.06] px-2 py-1.5">
-                  <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     Path · {tracePath.length - 1} hop{tracePath.length - 1 === 1 ? "" : "s"}
                   </p>
                   <p className="mt-0.5 text-xs text-fg-secondary">

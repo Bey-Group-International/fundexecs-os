@@ -29,7 +29,7 @@ export function MobileQuickAction({ open, onClose }: { open: boolean; onClose: (
                 }}
                 className="fx-tap group flex items-center gap-3.5 rounded-2xl border border-line/60 bg-surface-0/60 px-3.5 py-3 transition active:scale-[0.99] active:bg-surface-2"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gold-500/25 bg-gold-500/[0.08] text-gold-400 transition group-hover:border-gold-500/45">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gold-500/25 bg-gold-500/[0.08] text-gold-300 transition group-hover:border-gold-500/45">
                   <Icon width={20} height={20} />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -43,7 +43,7 @@ export function MobileQuickAction({ open, onClose }: { open: boolean; onClose: (
                   </span>
                   <span className="mt-0.5 block truncate text-[12px] text-fg-secondary">{a.hint}</span>
                 </span>
-                <span aria-hidden className="text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-400">
+                <span aria-hidden className="text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-300">
                   ›
                 </span>
               </Link>

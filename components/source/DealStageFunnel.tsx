@@ -10,7 +10,7 @@ export interface FunnelStage {
 
 function conversionColor(rate: number): string {
   if (rate >= 50) return "text-emerald-300";
-  if (rate >= 25) return "text-gold-400";
+  if (rate >= 25) return "text-gold-300";
   return "text-status-danger";
 }
 

@@ -46,7 +46,7 @@ export function ArtifactModal({
       aria-modal="true"
       aria-label={title}
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 backdrop-blur-sm sm:p-8"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 backdrop-blur-sm sm:p-8"
     >
       <div
         onClick={(e) => e.stopPropagation()}

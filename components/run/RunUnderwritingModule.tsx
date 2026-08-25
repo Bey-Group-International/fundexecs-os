@@ -63,7 +63,7 @@ function NoDeals({ what }: { what: string }) {
     <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
       <p className="max-w-sm text-sm text-fg-secondary">
         No deals to {what} yet. Move a deal into evaluation from the{" "}
-        <Link href="/source/deal_pipeline" className="text-gold-400 hover:underline">
+        <Link href="/source/deal_pipeline" className="text-gold-300 hover:underline">
           deal pipeline
         </Link>{" "}
         first.
@@ -111,7 +111,7 @@ function ScenarioComparison({ dealId, cases }: { dealId: string; cases: Underwri
           {rows.map((r) => (
             <tr key={r.scenario} className={`border-b border-line/40 ${r.uw ? "" : "opacity-40"}`}>
               <td className="py-1.5 pr-3">
-                <span className="uppercase tracking-wider text-gold-400">{r.scenario}</span>
+                <span className="uppercase tracking-wider text-gold-300">{r.scenario}</span>
               </td>
               <td className="py-1.5 pr-3 text-fg-primary">{r.irrPct != null ? `${r.irrPct}%` : "—"}</td>
               <td className={`py-1.5 pr-3 ${r.irrDeltaPct != null ? deltaTone(r.irrDeltaPct) : "text-fg-muted"}`}>
@@ -138,7 +138,7 @@ function CaseControls({ uw }: { uw: Underwriting }) {
     <div className="rounded-lg border border-line/60 bg-surface-2 p-3">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm text-fg-primary">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">{uw.scenario}</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">{uw.scenario}</span>
           <span className="ml-2 text-fg-secondary">{uw.name}</span>
         </span>
         <div className="flex flex-wrap items-center gap-2">
@@ -306,7 +306,7 @@ export async function RunUnderwritingModule({ orgId }: { orgId: string }) {
               className={`${fieldClass} w-24`}
               inputMode="decimal"
             />
-            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300">
               Add case
             </button>
           </ActionForm>

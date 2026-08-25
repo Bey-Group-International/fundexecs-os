@@ -25,14 +25,14 @@ export function HottestCapital({ entries }: { entries: CapitalMapEntry[] }) {
           <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
           Hottest capital
         </h2>
-        <Link href="/capital-map" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+        <Link href="/capital-map" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
           Capital Map →
         </Link>
       </div>
       {entries.length === 0 ? (
         <p className="text-sm text-fg-muted">
           No investors scored yet — add LPs in Source › LP Pipeline, then the{" "}
-          <Link href="/capital-map" className="text-gold-400 hover:underline">
+          <Link href="/capital-map" className="text-gold-300 hover:underline">
             Capital Map
           </Link>{" "}
           ranks them here by warmth.
@@ -87,7 +87,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
           Pending gates
         </h2>
         {approvals.length > 0 ? (
-          <Link href="/grid/review" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/grid/review" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
             Review →
           </Link>
         ) : null}

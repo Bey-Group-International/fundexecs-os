@@ -17,7 +17,7 @@ function Tile({ label, value }: { label: string; value: number }) {
 
 function intentClass(intent: number): string {
   if (intent >= 70) return "bg-gold-500/20 text-gold-300 border-gold-500/50";
-  if (intent >= 40) return "bg-surface-2 text-gold-400 border-line";
+  if (intent >= 40) return "bg-surface-2 text-gold-300 border-line";
   return "bg-surface-2 text-ink-400 border-line/60";
 }
 

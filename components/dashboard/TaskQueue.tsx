@@ -13,7 +13,7 @@ export function TaskQueue({ tasks }: { tasks: Task[] }) {
     <section className="fx-card p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">Task queue</h2>
-        <Link href="/workspace" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+        <Link href="/workspace" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
           Open Earn →
         </Link>
       </div>

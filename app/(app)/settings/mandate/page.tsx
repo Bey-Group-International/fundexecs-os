@@ -31,7 +31,7 @@ export default async function MandatePage() {
   return (
     <div className="mx-auto max-w-xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Earn mandate
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">

@@ -128,7 +128,7 @@ export default async function PortfolioPage() {
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Portfolio
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -145,7 +145,7 @@ export default async function PortfolioPage() {
       {data.hasData && (
         <section className="mt-12">
           <header className="mb-4">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Forcastr-style modeling
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -172,7 +172,7 @@ export default async function PortfolioPage() {
       {data.hasData && (
         <section className="mt-12">
           <header className="mb-6">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Health Dashboard
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -194,7 +194,7 @@ export default async function PortfolioPage() {
       {fundKPIs.length > 0 && (
         <section className="mt-12">
           <header className="mb-4">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               FundWave-style KPIs
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -211,7 +211,7 @@ export default async function PortfolioPage() {
       {data.hasData && valuationRecords.length > 0 && (
         <section className="mt-12">
           <header className="mb-4">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               ForgeGlobal-style 409A
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -228,7 +228,7 @@ export default async function PortfolioPage() {
       {contracts.length > 0 && (
         <section className="mt-12">
           <header className="mb-6">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Execute
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">

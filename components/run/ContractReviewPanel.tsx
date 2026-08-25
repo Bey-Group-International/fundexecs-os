@@ -80,7 +80,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
     <div className="flex flex-col gap-6">
       {/* Input */}
       <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           M&amp;A Contract Review
         </h3>
 

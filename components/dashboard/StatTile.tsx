@@ -67,7 +67,7 @@ export function StatTile({
       {/* Ghost watermark number — subtle depth layer */}
       <span
         aria-hidden
-        className="pointer-events-none absolute bottom-1.5 right-3 select-none font-display text-[2rem] font-bold leading-none text-gold-400/6 transition-colors duration-300 group-hover:text-gold-400/12"
+        className="pointer-events-none absolute bottom-1.5 right-3 select-none font-display text-[2rem] font-bold leading-none text-gold-300/6 transition-colors duration-300 group-hover:text-gold-300/12"
       >
         {value}
       </span>

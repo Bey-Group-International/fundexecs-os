@@ -72,7 +72,7 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Exit Scenarios
           </h3>
           <p className="mt-0.5 text-xs text-fg-muted">

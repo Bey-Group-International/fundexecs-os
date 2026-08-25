@@ -121,7 +121,7 @@ function ContractDetail({ contract, days }: { contract: Contract; days: number |
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
+            className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
           >
             Open document <span aria-hidden>↗</span>
           </a>
@@ -183,7 +183,7 @@ function ContractRow({
           <span
             aria-hidden
             className={`inline-block font-mono text-[11px] text-fg-muted transition-transform ${
-              open ? "rotate-90 text-gold-400" : ""
+              open ? "rotate-90 text-gold-300" : ""
             }`}
           >
             →

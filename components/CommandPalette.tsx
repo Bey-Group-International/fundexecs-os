@@ -116,7 +116,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
       role="dialog"
       aria-modal="true"
@@ -125,7 +125,7 @@ export function CommandPalette({
       <div
         ref={dialogRef}
         onKeyDown={onTrapKeyDown}
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-line/85 bg-surface-1/98 shadow-[0_30px_80px_-30px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-line/85 bg-surface-1/98 shadow-[0_30px_80px_-30px_rgb(15_23_42/0.18)] backdrop-blur-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <input

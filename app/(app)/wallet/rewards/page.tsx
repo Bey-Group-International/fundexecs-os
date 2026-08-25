@@ -93,7 +93,7 @@ export default async function WalletRewardsPage() {
       </div>
 
       {/* Execution rewards — streaks, ranks, milestones, hub achievements. */}
-      <h2 className="mb-4 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+      <h2 className="mb-4 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
         Execution rewards
       </h2>
       <GamificationPanel />

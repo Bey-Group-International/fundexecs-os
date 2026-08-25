@@ -19,7 +19,7 @@ const TIER_STYLE: Record<ReputationTier, string> = {
   verified: "border-neural-400/30 bg-neural-400/[0.06] text-neural-300",
   established: "border-neural-400/45 bg-neural-400/10 text-neural-300",
   principal:
-    "border-neural-400/60 bg-neural-400/15 text-neural-200 shadow-[0_0_12px_rgba(118,185,0,0.25)]",
+    "border-neural-400/60 bg-neural-400/15 text-neural-200 shadow-[0_0_12px_rgb(var(--fx-accent-rgb)/0.105)]",
 };
 
 /** The display label for a reputation tier. Exported for reuse by callers. */

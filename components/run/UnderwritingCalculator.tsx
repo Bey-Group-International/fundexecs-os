@@ -124,7 +124,7 @@ export function UnderwritingCalculator({
           </span>
           <span className="text-[11px] uppercase tracking-wider text-fg-muted">live preview</span>
         </div>
-        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300">
           Save &amp; compute
         </button>
       </div>

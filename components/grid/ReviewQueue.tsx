@@ -89,7 +89,7 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">FundExecs OS</p>
         <div className="mt-1 flex items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">Routing Review</h1>
           <ClearReviewQueueBtn count={items.length} />
@@ -102,7 +102,7 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
       </header>
 
       {items.length === 0 ? (
-        <section className="rounded-2xl border border-line/80 bg-surface-1/70 p-6 text-sm text-fg-muted shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+        <section className="rounded-2xl border border-line/80 bg-surface-1/70 p-6 text-sm text-fg-muted shadow-[0_1px_2px_rgb(15_23_42/0.08)]">
           Nothing to review — every workflow is routed with confidence and none are escalated.
         </section>
       ) : (
@@ -123,7 +123,7 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
             return (
               <section
                 key={wf.id}
-                className="flex flex-col gap-2 rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
+                className="flex flex-col gap-2 rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(15_23_42/0.08)]"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wider text-gold-300">

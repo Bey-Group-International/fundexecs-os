@@ -749,7 +749,7 @@ export function CollaborativeCanvas({
             className={[
               "flex h-8 w-8 items-center justify-center rounded text-sm font-mono transition",
               tool === t.id
-                ? "bg-gold-400/20 text-gold-400 ring-1 ring-gold-400/40"
+                ? "bg-gold-400/20 text-gold-300 ring-1 ring-gold-400/40"
                 : "text-fg-muted hover:bg-surface-2 hover:text-fg-primary",
             ].join(" ")}
           >
@@ -767,7 +767,7 @@ export function CollaborativeCanvas({
                 className={[
                   "rounded px-2 py-0.5 text-xs transition",
                   shapeKind === k
-                    ? "bg-gold-400/20 text-gold-400"
+                    ? "bg-gold-400/20 text-gold-300"
                     : "text-fg-muted hover:bg-surface-2",
                 ].join(" ")}
               >

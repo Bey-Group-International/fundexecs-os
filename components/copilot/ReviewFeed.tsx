@@ -67,7 +67,7 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
       <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Recent runs</p>
       <div className="flex flex-col gap-2">
         {runs.map((run, i) => (
-          <div key={run.sessionId ?? `run-${i}`} className="rounded-xl border border-neural-400/15 bg-black/55 p-3">
+          <div key={run.sessionId ?? `run-${i}`} className="rounded-xl border border-neural-400/15 bg-surface-0 p-3">
             <div className="flex items-start justify-between gap-2">
               <span className="min-w-0 text-sm font-medium text-fg-primary">{run.title}</span>
               <StatusPill status={run.status} />
@@ -98,7 +98,7 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
                     type="button"
                     onClick={() => act(approveRun, run.approvalId!)}
                     disabled={pending}
-                    className="rounded-md bg-neural-400 px-2.5 py-1 text-[11px] font-medium text-black transition hover:bg-neural-300 disabled:opacity-50"
+                    className="rounded-md bg-neural-400 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-neural-300 disabled:opacity-50"
                   >
                     Approve
                   </button>

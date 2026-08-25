@@ -71,7 +71,7 @@ function GenerateModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface-1 p-6 shadow-2xl">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="font-mono text-sm font-semibold text-fg-primary">Generate Document</h2>
@@ -282,7 +282,7 @@ export function DocumentsModule({ contracts, investors, funds }: Props) {
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
             <span
               aria-hidden
-              className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-400"
+              className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-300"
             >
               ✶
             </span>

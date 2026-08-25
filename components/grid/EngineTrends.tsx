@@ -43,10 +43,10 @@ function Sparkline({ counts }: { counts: number[] }) {
 // in canonical order. Presentational + pure.
 export function EngineTrends({ trends }: { trends: EngineTrend[] }) {
   return (
-    <section className="mx-auto mb-5 max-w-6xl rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+    <section className="mx-auto mb-5 max-w-6xl rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(15_23_42/0.08)]">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Engine Trends</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">Engine Trends</p>
           <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Weekly completed throughput · last {trends[0]?.series.length ?? 0} weeks
           </p>

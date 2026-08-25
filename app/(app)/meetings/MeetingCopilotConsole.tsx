@@ -176,7 +176,7 @@ export function MeetingCopilotConsole() {
           <button
             type="submit"
             disabled={isPending || !form.transcript.trim()}
-            className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-semibold px-5 py-2 transition-colors"
+            className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 transition-colors"
           >
             {isPending ? "Analyzing…" : "Analyze meeting"}
           </button>

@@ -7,7 +7,7 @@ function Ring({ value }: { value: number }) {
   const r = 26;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - value / 100);
-  const tone = value >= 85 ? "text-emerald-400" : value >= 35 ? "text-gold-400" : "text-fg-muted";
+  const tone = value >= 85 ? "text-emerald-400" : value >= 35 ? "text-gold-300" : "text-fg-muted";
   return (
     <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
       <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-line" />
@@ -86,7 +86,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
     return (
       <div className="mb-6 flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-10 text-center">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Deal command center
           </span>
           <Link
@@ -98,7 +98,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
         </div>
         <p className="mt-2 max-w-sm text-sm text-fg-secondary">
           No deals in evaluation yet. Move a deal into diligence from the{" "}
-          <Link href="/source/deal_pipeline" className="text-gold-400 hover:underline">
+          <Link href="/source/deal_pipeline" className="text-gold-300 hover:underline">
             deal pipeline
           </Link>{" "}
           and conviction will build here as you underwrite and clear diligence.
@@ -134,7 +134,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Portfolio conviction
             </span>
             <span
@@ -208,11 +208,11 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
           href={nextAction.href}
           className="mt-4 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-surface-0">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-on-gold">
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Next best step · {nextAction.dealName}
             </span>
             <span className="block truncate text-sm text-fg-primary">{nextAction.label}</span>

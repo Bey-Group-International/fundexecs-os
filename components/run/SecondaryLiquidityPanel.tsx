@@ -38,7 +38,7 @@ function InterestBar({ buyer, seller }: { buyer: number; seller: number }) {
         <div className="flex-1 h-1.5 bg-surface-1 rounded-full overflow-hidden">
           <div className="h-full bg-gold-400 rounded-full" style={{ width: `${sellerPct}%` }} />
         </div>
-        <span className="text-gold-400 font-mono text-xs w-6 text-right">{seller}</span>
+        <span className="text-gold-300 font-mono text-xs w-6 text-right">{seller}</span>
       </div>
     </div>
   );

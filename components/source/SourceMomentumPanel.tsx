@@ -33,7 +33,7 @@ function Ring({ value }: { value: number }) {
         strokeLinecap="round"
         strokeDasharray={c}
         strokeDashoffset={offset}
-        className="text-gold-400 transition-[stroke-dashoffset]"
+        className="text-gold-300 transition-[stroke-dashoffset]"
       />
     </svg>
   );
@@ -44,7 +44,7 @@ function CoverageCard({ coverage }: { coverage: CapitalCoverage }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           Capital coverage
         </span>
         {pct != null ? (
@@ -84,7 +84,7 @@ function VelocityCard({ velocity }: { velocity: PipelineVelocity }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           Pipeline velocity
         </span>
         <span
@@ -125,7 +125,7 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Sourcing readiness
             </span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
@@ -149,11 +149,11 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
           href={nextAction.href}
           className="mt-4 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-surface-0">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-on-gold">
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Next best move · {nextAction.moduleLabel}
             </span>
             <span className="block truncate text-sm text-fg-primary">{nextAction.label}</span>

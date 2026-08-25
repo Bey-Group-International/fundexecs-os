@@ -16,7 +16,7 @@ export default async function BrowserSessionPage() {
   return (
     <div className="fx-ambient mx-auto max-w-3xl">
       <header className="mb-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Earn · Controlled Browser Operator
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-fg">
@@ -26,7 +26,7 @@ export default async function BrowserSessionPage() {
           Earn proposes a scope before it opens a browser, pauses for you to sign
           in directly (it never sees your password), and shows you everything it
           found for approval before anything is saved.{" "}
-          <Link href="/earn" className="text-gold-400 hover:underline">
+          <Link href="/earn" className="text-gold-300 hover:underline">
             Back to Earn
           </Link>
         </p>

@@ -50,7 +50,7 @@ export function GlobalTopBar({
           aria-label="Wallet"
           className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
         >
-          <span className="text-gold-400">◇</span>
+          <span className="text-gold-300">◇</span>
           {formatCredits(balance)}
         </Link>
         <Link

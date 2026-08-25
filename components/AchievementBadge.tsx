@@ -71,7 +71,7 @@ function BadgeTile({
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${accent.dot} shadow-[0_0_8px_rgba(118,185,0,0.8)]`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${accent.dot} shadow-[0_0_8px_rgb(var(--fx-accent-rgb)/0.336)]`} />
         <span className={`font-mono text-[11px] uppercase tracking-[0.16em] ${accent.text}`}>
           {HUB_LABEL[achievement.hub]}
         </span>

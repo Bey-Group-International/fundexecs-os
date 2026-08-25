@@ -20,7 +20,7 @@ const STATUS_COLOR: Record<OnboardingStatus, string> = {
   pending: "text-slate-400 border-slate-500/40 bg-slate-500/10",
   accreditation: "text-blue-400 border-blue-500/40 bg-blue-500/10",
   subscription: "text-amber-400 border-amber-500/40 bg-amber-500/10",
-  committed: "text-gold-400 border-gold-500/40 bg-gold-500/10",
+  committed: "text-gold-300 border-gold-500/40 bg-gold-500/10",
   complete: "text-emerald-400 border-emerald-500/40 bg-emerald-500/10",
   expired: "text-red-400 border-red-500/40 bg-red-500/10",
 };
@@ -82,7 +82,7 @@ function SessionCard({ session }: { session: Session }) {
       </div>
 
       {session.commitmentAmount && (
-        <p className="mt-2 font-mono text-xs text-gold-400">
+        <p className="mt-2 font-mono text-xs text-gold-300">
           ${session.commitmentAmount.toLocaleString()} committed
         </p>
       )}

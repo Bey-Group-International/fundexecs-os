@@ -37,7 +37,7 @@ export function DealCompsPanel({ comps }: Props) {
   if (comps.length === 0) {
     return (
       <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Comparable Transactions
         </h3>
         <p className="text-sm text-fg-muted">
@@ -63,7 +63,7 @@ export function DealCompsPanel({ comps }: Props) {
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Comparable Transactions
         </h3>
         {(medEvRev !== null || medEvEb !== null) && (
@@ -116,7 +116,7 @@ export function DealCompsPanel({ comps }: Props) {
                     <span className={`font-medium ${comp.isCurrent ? "text-gold-300" : "text-fg-primary"}`}>
                       {comp.name}
                       {comp.isCurrent && (
-                        <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                        <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                           ← this deal
                         </span>
                       )}

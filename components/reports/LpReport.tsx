@@ -110,14 +110,14 @@ export function LpReport({ report }: { report: LpReportData }) {
         <>
           {/* Capital summary */}
           <section className="mt-6">
-            <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Capital Summary
             </h2>
 
             {/* Fund setup prompt — shown when assets exist but no fund record is configured */}
             {noFunds && (
               <div className="mb-4 flex items-start gap-3 rounded-lg border border-gold-500/20 bg-gold-500/5 px-4 py-3 text-sm text-fg-secondary print:hidden">
-                <span className="mt-0.5 shrink-0 text-gold-400">◆</span>
+                <span className="mt-0.5 shrink-0 text-gold-300">◆</span>
                 <p>
                   <span className="font-medium text-gold-300">Add a fund record</span>{" "}
                   to populate Committed, Paid-in, Distributed, and performance
@@ -149,7 +149,7 @@ export function LpReport({ report }: { report: LpReportData }) {
           {/* Portfolio NAV over time */}
           {navSeries.length > 0 && (
             <section className="mt-6">
-              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 Portfolio NAV over time
               </h2>
               <div className="rounded-lg border border-line bg-surface-1 p-4">
@@ -170,7 +170,7 @@ export function LpReport({ report }: { report: LpReportData }) {
           {/* Per-fund breakdown */}
           {funds.length > 0 && (
             <section className="mt-6">
-              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 Per-fund Breakdown
               </h2>
               <div className="overflow-x-auto rounded-lg border border-line">
@@ -219,7 +219,7 @@ export function LpReport({ report }: { report: LpReportData }) {
 
           {/* Performance multiples */}
           <section className="mt-6">
-            <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Performance
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -232,7 +232,7 @@ export function LpReport({ report }: { report: LpReportData }) {
 
           {/* Portfolio holdings */}
           <section className="mt-6">
-            <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Portfolio Holdings
             </h2>
             {holdings.length === 0 ? (
@@ -295,7 +295,7 @@ export function LpReport({ report }: { report: LpReportData }) {
           {/* Capital activity */}
           {activity.contributionsCount + activity.distributionsCount > 0 && (
             <section className="mt-6">
-              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 Capital Activity
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -58,7 +58,7 @@ export default async function MarketplacePage() {
   const stats = [
     { label: "Listings", value: String(listings.length) },
     { label: "Live", value: String(liveCount), accent: "text-emerald-300" },
-    { label: "Public", value: String(publicCount), accent: "text-gold-400" },
+    { label: "Public", value: String(publicCount), accent: "text-gold-300" },
     { label: "Total value", value: totalValue > 0 ? formatCompact(totalValue)! : "—" },
   ];
 

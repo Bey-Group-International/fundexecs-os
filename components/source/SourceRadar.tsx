@@ -153,7 +153,7 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ Source Radar
           </span>
           {!live ? (
@@ -197,7 +197,7 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
           type="button"
           onClick={scan}
           disabled={scanning}
-          className="shrink-0 rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+          className="shrink-0 rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
         >
           {scanning ? "Scanning…" : "Scan for signals"}
         </button>
@@ -236,7 +236,7 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
                         <span className="rounded-full border border-line px-1.5 py-0.5">{humanize(it.kind)}</span>
                         {it.geography ? <span>{it.geography}</span> : null}
                         {it.categories.slice(0, 2).map((c) => (
-                          <span key={c} className="text-gold-400">{humanize(c)}</span>
+                          <span key={c} className="text-gold-300">{humanize(c)}</span>
                         ))}
                         <span className="text-fg-muted">fit {it.fit}</span>
                       </div>

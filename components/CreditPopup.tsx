@@ -34,7 +34,7 @@ interface CreditPopupContextValue {
 // ─── Hub color map ────────────────────────────────────────────────────────────
 
 const HUB_COLOR: Record<string, { text: string; glow: string }> = {
-  build:   { text: "text-neural-300",           glow: "drop-shadow-[0_0_10px_rgba(118,185,0,0.7)]"    },
+  build:   { text: "text-neural-300",           glow: "drop-shadow-[0_0_10px_rgb(var(--fx-accent-rgb)/0.294)]"    },
   source:  { text: "text-agent-analyst",         glow: "drop-shadow-[0_0_10px_rgba(34,211,238,0.7)]"  },
   run:     { text: "text-agent-ir",              glow: "drop-shadow-[0_0_10px_rgba(245,158,11,0.7)]"  },
   execute: { text: "text-status-success",        glow: "drop-shadow-[0_0_10px_rgba(95,184,122,0.7)]"  },
@@ -117,7 +117,7 @@ function CreditPopupItem({
       <div
         className={[
           "flex items-center gap-1.5 rounded-full border px-3 py-1.5",
-          "border-neural-400/40 bg-black/80 backdrop-blur-sm",
+          "border-neural-400/40 bg-surface-1/95 backdrop-blur-sm",
           "shadow-[0_4px_24px_rgba(0,0,0,0.6)]",
         ].join(" ")}
       >

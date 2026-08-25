@@ -29,7 +29,7 @@ export function DownloadOSCard() {
           }}
         />
         <div className="relative">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400/80">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300/80">
             Native Application
           </span>
           <h3 className="mt-1 font-display text-lg font-semibold tracking-tight text-fg-primary">
@@ -60,7 +60,7 @@ export function DownloadOSCard() {
               />
               <PlatformIcon
                 platform={platform}
-                className="h-6 w-6 text-fg-muted transition duration-200 group-hover:text-gold-400"
+                className="h-6 w-6 text-fg-muted transition duration-200 group-hover:text-gold-300"
               />
               <div>
                 <p className="text-sm font-semibold text-fg-primary">{label}</p>
@@ -69,7 +69,7 @@ export function DownloadOSCard() {
                   {hint}
                 </p>
               </div>
-              <span className="mt-auto font-mono text-[11px] uppercase tracking-wider text-gold-400/60 transition duration-200 group-hover:text-gold-400">
+              <span className="mt-auto font-mono text-[11px] uppercase tracking-wider text-gold-300/60 transition duration-200 group-hover:text-gold-300">
                 Download ↓
               </span>
             </a>

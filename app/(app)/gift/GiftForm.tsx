@@ -95,7 +95,7 @@ export function GiftForm({
       <button
         type="submit"
         disabled={pending}
-        className="ml-auto rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+        className="ml-auto rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
       >
         {pending ? "Creating gift…" : "Send gift"}
       </button>

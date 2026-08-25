@@ -10,7 +10,7 @@ export interface CommandStat {
 }
 
 const TONE: Record<string, string> = {
-  gold: "text-gold-400 border-gold-500/25",
+  gold: "text-gold-300 border-gold-500/25",
   neural: "text-neural-300 border-neural-400/25",
   danger: "text-status-danger border-status-danger/30",
   success: "text-status-success border-status-success/30",

@@ -15,8 +15,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    // `dark` matches the root layout so the error page keeps the platform palette.
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface-0 text-center text-fg-primary">
         <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
           Critical error

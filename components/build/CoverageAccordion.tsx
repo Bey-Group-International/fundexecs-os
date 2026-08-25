@@ -245,11 +245,11 @@ export function CoverageAccordion({
           className="mt-3 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-2.5"
         >
           <input type="hidden" name="section" value={nextSuggestion.key} />
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Next to add</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Next to add</span>
           <span className="truncate text-sm text-fg-primary">{nextSuggestion.suggestion}</span>
           <button
             type="submit"
-            className="ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
+            className="ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
           >
             Build →
           </button>

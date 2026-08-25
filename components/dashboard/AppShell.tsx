@@ -30,7 +30,7 @@ export function AppShell({
             href="/dashboard"
             className={`shrink-0 rounded-xl px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 ${
               pathname === "/dashboard"
-                ? "bg-gold-500 text-surface-0"
+                ? "bg-gold-500 text-on-gold"
                 : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
             }`}
           >
@@ -44,7 +44,7 @@ export function AppShell({
                 href={workspace.href}
                 className={`shrink-0 rounded-xl px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 ${
                   active
-                    ? "bg-gold-500 text-surface-0"
+                    ? "bg-gold-500 text-on-gold"
                     : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
                 }`}
               >

@@ -67,7 +67,7 @@ export function DownloadBanner() {
           />
           <div className="relative flex items-start justify-between gap-3">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
                 FundExecs OS · Native App
               </p>
               <p className="mt-1 text-sm font-semibold text-fg-primary">
@@ -104,9 +104,9 @@ export function DownloadBanner() {
                 >
                   <PlatformIcon
                     platform={platform}
-                    className="h-4 w-4 text-fg-muted transition duration-200 group-hover:text-gold-400"
+                    className="h-4 w-4 text-fg-muted transition duration-200 group-hover:text-gold-300"
                   />
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-400/80">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-300/80">
                     {label}
                   </span>
                 </a>

@@ -36,7 +36,7 @@ export default async function AutomationCanvasPage(props: {
       <div className="flex flex-wrap items-center gap-2">
         <Link
           href="/automations"
-          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
         >
           ← Automations
         </Link>

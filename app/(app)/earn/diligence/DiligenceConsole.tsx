@@ -48,7 +48,7 @@ export function DiligenceConsole() {
             <span>Paste the document text</span>
             <span className="font-mono text-[11px] text-fg-muted">
               or{" "}
-              <label className="cursor-pointer text-gold-400 hover:underline">
+              <label className="cursor-pointer text-gold-300 hover:underline">
                 upload a .txt/.md
                 <input
                   type="file"
@@ -86,7 +86,7 @@ export function DiligenceConsole() {
         <button
           onClick={run}
           disabled={!canRun}
-          className="mt-5 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Brain is working…" : "Ask Earn"}
         </button>

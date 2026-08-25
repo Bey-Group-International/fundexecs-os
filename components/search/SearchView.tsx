@@ -100,7 +100,7 @@ export function SearchView({ results }: { results: SearchResults }) {
         />
         <button
           type="submit"
-          className="rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 shadow-[0_4px_14px_-6px_rgba(196,151,74,0.6)] transition hover:bg-gold-400"
+          className="rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-on-gold shadow-[0_4px_14px_-6px_rgba(196,151,74,0.6)] transition hover:bg-gold-400"
         >
           Search
         </button>

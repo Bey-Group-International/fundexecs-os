@@ -75,7 +75,7 @@ export function ProgressiveForm({
               }}
               className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
                 active
-                  ? "bg-gold-500 text-black"
+                  ? "bg-gold-500 text-on-gold"
                   : done
                     ? "border border-status-success/40 bg-status-success/10 text-status-success"
                     : "border border-line text-fg-muted opacity-50"
@@ -117,7 +117,7 @@ export function ProgressiveForm({
             type="button"
             onClick={onSubmit}
             disabled={!step.isComplete || isSubmitting}
-            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             {isSubmitting ? "Saving…" : submitLabel}
           </button>
@@ -126,7 +126,7 @@ export function ProgressiveForm({
             type="button"
             onClick={onNext}
             disabled={!step.isComplete}
-            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             Continue →
           </button>

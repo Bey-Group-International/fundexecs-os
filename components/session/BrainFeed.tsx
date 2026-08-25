@@ -23,7 +23,7 @@ function outputSnippet(output: BrainRun["output"]): string | null {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  completed: "text-gold-400",
+  completed: "text-gold-300",
   running: "text-fg-secondary",
   awaiting_approval: "text-fg-secondary",
   failed: "text-fg-muted",
@@ -57,7 +57,7 @@ export default function BrainFeed({ runs }: { runs: BrainRun[] }) {
                 className="rounded-xl border border-line bg-surface-1 p-4"
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 font-mono text-[11px] font-semibold tracking-wider text-gold-400">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 font-mono text-[11px] font-semibold tracking-wider text-gold-300">
                     {initials(name)}
                   </div>
                   <div className="min-w-0 flex-1">

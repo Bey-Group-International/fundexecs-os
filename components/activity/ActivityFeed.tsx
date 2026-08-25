@@ -129,7 +129,7 @@ function EntryRow({ entry, onDeleted }: { entry: ActivityEntry; onDeleted: () =>
           {entry.sessionId ? (
             <Link
               href={`/session/${entry.sessionId}`}
-              className="font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+              className="font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-300"
             >
               Open session →
             </Link>

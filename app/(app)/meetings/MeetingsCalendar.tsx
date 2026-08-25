@@ -354,7 +354,7 @@ function Toolbar({
                 onClick={() => onView(v)}
                 aria-pressed={view === v}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  view === v ? "bg-[var(--gold-400)] text-black" : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+                  view === v ? "bg-[var(--gold-400)] text-white" : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
                 }`}
               >
                 {VIEW_LABELS[v]}
@@ -477,7 +477,7 @@ function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectS
             >
               <span
                 className={`inline-flex h-6 w-6 items-center justify-center self-start rounded-full text-xs ${
-                  isToday ? "bg-[var(--gold-400)] font-semibold text-black" : inMonth ? "text-[var(--fg-secondary)]" : "text-[var(--fg-muted)]"
+                  isToday ? "bg-[var(--gold-400)] font-semibold text-white" : inMonth ? "text-[var(--fg-secondary)]" : "text-[var(--fg-muted)]"
                 }`}
               >
                 {day.getDate()}
@@ -546,7 +546,7 @@ function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelect
               <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">
                 {d.toLocaleDateString("en-US", { weekday: "short" })}
               </div>
-              <div className={`mx-auto mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-sm ${isToday ? "bg-[var(--gold-400)] font-semibold text-black" : "text-[var(--fg-primary)]"}`}>
+              <div className={`mx-auto mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-sm ${isToday ? "bg-[var(--gold-400)] font-semibold text-white" : "text-[var(--fg-primary)]"}`}>
                 {d.getDate()}
               </div>
             </div>
@@ -665,7 +665,7 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
         <div key={dayKey(d)} className="flex gap-4 px-2 py-3">
           <div className="w-16 shrink-0 text-center">
             <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
-            <div className={`mx-auto mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold ${isSameDay(d, today) ? "bg-[var(--gold-400)] text-black" : "text-[var(--fg-primary)]"}`}>
+            <div className={`mx-auto mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold ${isSameDay(d, today) ? "bg-[var(--gold-400)] text-white" : "text-[var(--fg-primary)]"}`}>
               {d.getDate()}
             </div>
             <div className="text-[11px] text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { month: "short" })}</div>
@@ -738,7 +738,7 @@ function MiniMonth({ anchor, onPick, today, meetings }: { anchor: Date; onPick: 
               key={i}
               onClick={() => onPick(d)}
               className={`relative flex h-7 items-center justify-center rounded-full text-[11px] ${
-                isToday ? "bg-[var(--gold-400)] font-semibold text-black" : inMonth ? "text-[var(--fg-secondary)] hover:bg-[var(--surface-0)]" : "text-[var(--fg-muted)] hover:bg-[var(--surface-0)]"
+                isToday ? "bg-[var(--gold-400)] font-semibold text-white" : inMonth ? "text-[var(--fg-secondary)] hover:bg-[var(--surface-0)]" : "text-[var(--fg-muted)] hover:bg-[var(--surface-0)]"
               }`}
             >
               {d.getDate()}
@@ -820,7 +820,7 @@ function EventDetail({
   }
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl">
         <div className="flex items-start gap-3 border-b border-[var(--line)] p-4" style={{ borderLeft: `3px solid ${meta.accent}` }}>
           <div className="min-w-0 flex-1">
@@ -857,7 +857,7 @@ function EventDetail({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] p-3">
-          <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-emerald-500/15 text-emerald-400" : "bg-[var(--gold-400)] text-black hover:bg-[var(--gold-500)]"}`}>
+          <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-emerald-500/15 text-emerald-400" : "bg-[var(--gold-400)] text-white hover:bg-[var(--gold-500)]"}`}>
             {live ? "Join live →" : "Join →"}
           </Link>
           <button onClick={onEdit} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">Edit</button>

@@ -135,7 +135,7 @@ export function ManageBooking({ token }: { token: string }) {
       {booking.status === "confirmed" && view.joinUrl && !isPast ? (
         <a
           href={view.joinUrl}
-          className="w-fit rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)]"
+          className="w-fit rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)]"
         >
           Join meeting →
         </a>
@@ -186,7 +186,7 @@ export function ManageBooking({ token }: { token: string }) {
                 type="button"
                 disabled={!selected || busy}
                 onClick={() => void act("reschedule")}
-                className="rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy ? "Moving…" : "Confirm new time"}
               </button>

@@ -74,7 +74,7 @@ export function MobileToastProvider({ children }: { children: React.ReactNode })
             key={t.id}
             role={t.tone === "error" ? "alert" : "status"}
             aria-live={t.tone === "error" ? "assertive" : undefined}
-            className={`fx-sheet-enter pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border px-3.5 py-3 shadow-[0_16px_40px_-20px_rgb(0_0_0/0.7)] backdrop-blur-xl ${TONE[t.tone ?? "neutral"]}`}
+            className={`fx-sheet-enter pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border px-3.5 py-3 shadow-[0_16px_40px_-20px_rgb(15_23_42/0.16)] backdrop-blur-xl ${TONE[t.tone ?? "neutral"]}`}
           >
             <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${DOT[t.tone ?? "neutral"]}`} />
             <span className="min-w-0 flex-1 text-[13px] leading-snug">{t.message}</span>

@@ -43,7 +43,7 @@ export function MeetEarnTeam() {
       className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6 sm:py-24"
     >
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
           The executive team
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">

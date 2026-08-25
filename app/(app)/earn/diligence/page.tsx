@@ -14,7 +14,7 @@ export default async function DiligencePage() {
   return (
     <div className="fx-ambient mx-auto max-w-3xl">
       <header className="mb-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Earn · Diligence Brain
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -23,7 +23,7 @@ export default async function DiligencePage() {
         <p className="mt-2 max-w-xl text-sm text-fg-secondary">
           Paste a deck, CIM, PPM, financials, or call notes, pick a question, and the right Brain
           reviews it — institutional-grade, with its reasoning and tools shown.{" "}
-          <Link href="/earn" className="text-gold-400 hover:underline">
+          <Link href="/earn" className="text-gold-300 hover:underline">
             Back to Earn
           </Link>
         </p>

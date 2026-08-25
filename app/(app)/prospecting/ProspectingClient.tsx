@@ -52,7 +52,7 @@ const EXAMPLES = [
 
 function bandClass(band: string): string {
   if (band === "high") return "bg-gold-500/20 text-gold-300 border-gold-500/50";
-  if (band === "medium") return "bg-surface-2 text-gold-400 border-line";
+  if (band === "medium") return "bg-surface-2 text-gold-300 border-line";
   return "bg-surface-2 text-ink-400 border-line/60";
 }
 
@@ -251,7 +251,7 @@ export default function ProspectingClient() {
           <button
             onClick={() => run(goal)}
             disabled={loading || !goal.trim()}
-            className="rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-medium text-surface-0 disabled:opacity-50"
+            className="rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-medium text-on-gold disabled:opacity-50"
           >
             {loading ? "Building…" : "Build plan"}
           </button>
@@ -317,7 +317,7 @@ export default function ProspectingClient() {
                   <button
                     onClick={enroll}
                     disabled={enrolling || plan.readyForOutreach.length === 0}
-                    className="rounded-xl bg-gold-500 px-4 py-2 text-sm font-medium text-surface-0 hover:bg-gold-400 disabled:opacity-50"
+                    className="rounded-xl bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold hover:bg-gold-400 disabled:opacity-50"
                   >
                     {enrolling ? "Enrolling…" : `Enroll ready (${plan.readyForOutreach.length})`}
                   </button>
@@ -361,7 +361,7 @@ export default function ProspectingClient() {
             <ul className="mt-2 space-y-1.5">
               {plan.nextActions.map((a, i) => (
                 <li key={i} className="flex gap-2 text-sm text-surface-0">
-                  <span className="text-gold-400">{i + 1}.</span>
+                  <span className="text-gold-300">{i + 1}.</span>
                   <span>{a}</span>
                 </li>
               ))}

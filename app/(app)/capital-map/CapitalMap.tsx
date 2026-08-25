@@ -65,7 +65,7 @@ export function CapitalMap({
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgb(var(--fx-accent-rgb)/0.18),transparent_34%),linear-gradient(135deg,rgb(var(--fx-accent-rgb)/0.08),transparent_55%)]" />
         <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Capital activation required
             </p>
             <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -171,7 +171,7 @@ function SummaryRow({ entries }: { entries: CapitalMapEntry[] }) {
   const stats: { label: string; value: string; accent?: string }[] = [
     { label: "Investors", value: String(entries.length) },
     { label: "Committed", value: committed > 0 ? usd.format(committed) : "—", accent: "text-status-success" },
-    { label: "Warm paths", value: `${warmPaths}/${entries.length}`, accent: "text-gold-400" },
+    { label: "Warm paths", value: `${warmPaths}/${entries.length}`, accent: "text-gold-300" },
     { label: "Avg thesis fit", value: avgFit != null ? `${avgFit}` : "—" },
   ];
 
@@ -216,7 +216,7 @@ function CoverageCallout({ entries }: { entries: CapitalMapEntry[] }) {
   const names = gaps.slice(0, 3).map((e) => e.investor.name).join(", ");
   return (
     <div className="animate-fade-up rounded-xl border border-gold-500/30 bg-gold-500/[0.06] px-4 py-3">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">Coverage gap</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">Coverage gap</p>
       <p className="mt-0.5 text-sm text-fg-secondary">
         <span className="font-medium text-fg-primary">{gaps.length}</span> high-fit{" "}
         {gaps.length === 1 ? "investor has" : "investors have"} no warm path yet — {names}
@@ -434,7 +434,7 @@ function InvestorCard({
 
       {introPath ? (
         <p className="mt-3 text-sm text-fg-secondary">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Warm path</span>{" "}
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Warm path</span>{" "}
           {introPath.hops.join("  →  ")}
           {introPath.introducer !== "You" ? (
             <span className="text-fg-muted"> · {introPath.introducer} can introduce you</span>
@@ -450,7 +450,7 @@ function InvestorCard({
       {/* Matched live listings — the marketplace flywheel surfaced inline. */}
       {matches.length ? (
         <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/[0.05] px-3 py-2">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Fits {matches.length} live {matches.length === 1 ? "listing" : "listings"}
           </p>
           <ul className="mt-1 flex flex-col gap-0.5">

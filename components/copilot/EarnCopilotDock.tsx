@@ -513,11 +513,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
         <button
           onClick={() => setOpen(true)}
           title="Ask Earn (⌘K)"
-          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-neural-400/45 bg-black/85 px-4 py-2.5 text-sm font-medium text-neural-300 shadow-[0_18px_48px_-24px_rgba(118,185,0,0.95)] backdrop-blur transition hover:border-neural-300/70 hover:bg-neural-400/10 print:hidden"
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-neural-400/45 bg-surface-1 px-4 py-2.5 text-sm font-medium text-neural-300 shadow-[0_18px_48px_-24px_rgb(var(--fx-accent-rgb)/0.378)] backdrop-blur transition hover:border-neural-300/70 hover:bg-neural-400/10 print:hidden"
         >
           <EarnOrb size={22} pulse />
           Ask Earn
-          <span className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_12px_rgba(118,185,0,0.95)] animate-glow" aria-hidden />
+          <span className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_12px_rgb(var(--fx-accent-rgb)/0.378)] animate-glow" aria-hidden />
           <kbd className="ml-1 hidden rounded border border-neural-400/35 px-1.5 py-0.5 font-mono text-[11px] text-fg-secondary sm:inline">⌘K</kbd>
         </button>
       ) : null}
@@ -526,14 +526,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
       <div
         role="dialog"
         aria-label="Earn copilot"
-        className={`fixed inset-y-0 right-0 z-50 flex w-[400px] max-w-[92vw] flex-col overflow-hidden border-l border-neural-400/30 bg-black shadow-[0_0_80px_-40px_rgba(118,185,0,0.95)] transition-transform duration-200 print:hidden ${
+        className={`fixed inset-y-0 right-0 z-50 flex w-[400px] max-w-[92vw] flex-col overflow-hidden border-l border-neural-400/30 bg-surface-1 shadow-[-24px_0_60px_-30px_rgb(15_23_42/0.28)] transition-transform duration-200 print:hidden ${
           open ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(118,185,0,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(118,185,0,0.045)_1px,transparent_1px)] bg-[length:26px_26px]" aria-hidden />
-        <div className="pointer-events-none absolute -top-20 right-6 h-56 w-56 rounded-full bg-neural-400/20 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgb(var(--fx-accent-rgb)/0.06)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--fx-accent-rgb)/0.06)_1px,transparent_1px)] bg-[length:26px_26px]" aria-hidden />
+        <div className="pointer-events-none absolute -top-20 right-6 h-56 w-56 rounded-full bg-neural-400/10 blur-3xl" aria-hidden />
         {/* Header */}
-        <div className="relative z-10 flex items-start justify-between gap-3 border-b border-neural-400/20 bg-black/80 px-4 py-3 backdrop-blur">
+        <div className="relative z-10 flex items-start justify-between gap-3 border-b border-neural-400/20 bg-surface-1/95 px-4 py-3 backdrop-blur">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <EarnOrb size={28} pulse />
@@ -594,7 +594,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                   disabled={pending}
                   className="mt-2.5 flex w-full items-center gap-2 rounded-lg border border-neural-400/30 bg-neural-400/5 px-3 py-2 text-left transition hover:bg-neural-400/10 disabled:opacity-50"
                 >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neural-400 font-mono text-[11px] text-black shadow-[0_0_12px_rgba(118,185,0,0.55)]">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neural-400 font-mono text-[11px] text-white shadow-[0_0_12px_rgb(var(--fx-accent-rgb)/0.231)]">
                     →
                   </span>
                   <span className="min-w-0">
@@ -622,7 +622,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                   <form key={s.id} action={launchCopilotSuggestion}>
                     <input type="hidden" name="pathname" value={pathname} />
                     <input type="hidden" name="suggestion_id" value={s.id} />
-                    <button className="group w-full rounded-xl border border-neural-400/15 bg-black/55 p-3 text-left transition hover:border-neural-400/45 hover:bg-neural-400/[0.06]">
+                    <button className="group w-full rounded-xl border border-neural-400/15 bg-surface-0 p-3 text-left transition hover:border-neural-400/45 hover:bg-neural-400/[0.06]">
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 text-sm font-medium text-fg-primary">{s.label}</span>
                         {tier ? (
@@ -735,13 +735,13 @@ export function EarnCopilotDock({ name }: { name: string }) {
                         }}
                         rows={3}
                         aria-label="Edit this entry"
-                        className="w-full resize-y rounded-lg border border-neural-400/40 bg-black/70 px-3 py-2 text-sm text-fg-primary focus:border-neural-400 focus:outline-none"
+                        className="w-full resize-y rounded-lg border border-neural-400/40 bg-surface-1 px-3 py-2 text-sm text-fg-primary focus:border-neural-400 focus:outline-none"
                       />
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => saveEdit(turn.id)}
                           disabled={!draft.trim()}
-                          className="rounded-md bg-neural-400 px-2.5 py-1 text-[12px] font-semibold text-black transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-md bg-neural-400 px-2.5 py-1 text-[12px] font-semibold text-white transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Save
                         </button>
@@ -771,7 +771,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                         {editing ? (
                           editor
                         ) : (
-                          <div className="break-words rounded-lg rounded-br-sm border border-white/10 bg-surface-2/80 px-3 py-2 text-sm text-fg-primary">
+                          <div className="break-words rounded-lg rounded-br-sm border border-line bg-surface-2/80 px-3 py-2 text-sm text-fg-primary">
                             {turn.text}
                           </div>
                         )}
@@ -789,7 +789,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                           editor
                         ) : (
                           <>
-                            <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 text-sm text-fg-primary shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
+                            <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 text-sm text-fg-primary shadow-[0_0_22px_-18px_rgb(var(--fx-accent-rgb)/0.378)]">
                               <Markdown>{turn.answer || "…"}</Markdown>
                               {turn.streaming ? (
                                 <span className="ml-0.5 inline-block h-3 w-1.5 animate-glow bg-neural-400 align-middle" aria-hidden />
@@ -813,7 +813,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                         editor
                       ) : (
                         <>
-                          <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
+                          <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgb(var(--fx-accent-rgb)/0.378)]">
                             {turn.planTitle ? (
                               <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
                             ) : null}
@@ -841,7 +841,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                                 }));
                                 setOpen(false);
                               }}
-                              className="flex-1 rounded border border-[#c9a84c]/60 bg-[#c9a84c]/10 px-2 py-1 text-[12px] font-semibold text-[#c9a84c] transition hover:border-[#c9a84c] hover:bg-[#c9a84c]/20 active:scale-95"
+                              className="flex-1 rounded border border-gold-500/60 bg-gold-500/10 px-2 py-1 text-[12px] font-semibold text-gold-300 transition hover:border-gold-500 hover:bg-gold-500/20 active:scale-95"
                             >
                               Approve &amp; automate
                             </button>
@@ -849,7 +849,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                               onClick={() => askRef.current(lastAsk)}
                               disabled={!lastAsk || pending || chatting}
                               title="Ask Earn to plan this again"
-                              className="rounded border border-white/20 bg-white/5 px-2 py-1 text-[12px] font-medium text-fg-secondary transition hover:bg-white/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="rounded border border-line bg-surface-2 px-2 py-1 text-[12px] font-medium text-fg-secondary transition hover:bg-surface-3 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               Redo plan
                             </button>
@@ -898,7 +898,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                       inputRef.current?.focus();
                     }}
                     title={a.role}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-neural-400/25 bg-black/35 px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-neural-400/60 hover:text-fg-primary"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-neural-400/25 bg-surface-0 px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-neural-400/60 hover:text-fg-primary"
                   >
                     <AgentDot color={a.color} />
                     {a.name}
@@ -910,7 +910,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
         </div>
 
         {/* Ask box */}
-        <div className="relative z-10 border-t border-neural-400/20 bg-black/80 p-3 backdrop-blur">
+        <div className="relative z-10 border-t border-neural-400/20 bg-surface-1/95 p-3 backdrop-blur">
           <textarea
             ref={inputRef}
             value={body}
@@ -923,7 +923,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
             }}
             rows={2}
             placeholder={`Ask Earn to help, ${name.split(" ")[0]}…`}
-            className="w-full resize-none rounded-lg border border-neural-400/20 bg-black/80 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-neural-400/70 focus:outline-none"
+            className="w-full resize-none rounded-lg border border-neural-400/20 bg-surface-1/95 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-neural-400/70 focus:outline-none"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-[11px] font-medium text-fg-muted">Press ⌘↵ to send</span>
@@ -943,7 +943,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                 onClick={submitAsk}
                 disabled={pending || chatting || !body.trim()}
                 title={!body.trim() && !pending && !chatting ? "Type a message to ask Earn" : undefined}
-                className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-semibold text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-semibold text-white shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.101)] transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {chatting ? "Answering…" : pending ? "Routing…" : "Ask Earn"}
               </button>

@@ -122,7 +122,7 @@ export function SourceTriage({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ Score &amp; Triage
           </span>
           {!live ? (
@@ -173,7 +173,7 @@ export function SourceTriage({
           <button
             type="submit"
             disabled={busy || !prompt.trim()}
-            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
           >
             {busy ? "Triaging…" : "Triage"}
           </button>
@@ -211,7 +211,7 @@ export function SourceTriage({
                     style={{ backgroundColor: AGENT_BY_KEY[g.agent]?.color ?? "#888" }}
                     aria-hidden
                   />
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     {humanize(g.entities)} · {g.agentName}
                   </span>
                 </div>

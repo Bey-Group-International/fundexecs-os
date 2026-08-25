@@ -225,11 +225,11 @@ export async function MaterialsModule() {
           href={readiness.nextAction.href}
           className="mb-5 flex items-center gap-2 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-2.5 text-xs text-fg-secondary transition hover:bg-gold-500/10 print:hidden"
         >
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Make it stronger
           </span>
           <span className="truncate text-fg-primary">{readiness.nextAction.label}</span>
-          <span className="ml-auto text-gold-400">→</span>
+          <span className="ml-auto text-gold-300">→</span>
         </Link>
       ) : null}
 
@@ -239,7 +239,7 @@ export async function MaterialsModule() {
         {/* Panel header */}
         <div className="flex items-center gap-4 border-b border-line px-5 py-4">
           <div className="flex-1">
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Institutional Coverage
             </p>
             <p className="mt-0.5 text-sm text-fg-secondary">

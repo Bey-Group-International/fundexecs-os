@@ -14,7 +14,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, value));
   const offset = c * (1 - pct / 100);
-  const tone = pct >= 67 ? "text-emerald-400" : pct >= 33 ? "text-gold-400" : "text-fg-muted";
+  const tone = pct >= 67 ? "text-emerald-400" : pct >= 33 ? "text-gold-300" : "text-fg-muted";
   return (
     <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }} className="-rotate-90">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-line" />
@@ -37,7 +37,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{children}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">{children}</h3>
       {action}
     </div>
   );
@@ -219,7 +219,7 @@ function NextActionItem({ action }: { action: AssetNextAction }) {
         href={action.href}
         className="flex items-start gap-2.5 rounded-lg border border-line/60 bg-surface-0 px-3 py-2.5 transition hover:border-gold-500/50"
       >
-        <span className="mt-0.5 shrink-0 text-gold-400">→</span>
+        <span className="mt-0.5 shrink-0 text-gold-300">→</span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm text-fg-primary">{action.label}</span>
           <span className="block text-xs text-fg-muted">{action.rationale}</span>
@@ -286,7 +286,7 @@ export function AssetWarRoom({ data }: { data: WarRoom }) {
       <div className="flex items-center justify-between gap-3">
         <Link
           href="/execute/asset_management"
-          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
         >
           ← Asset management
         </Link>

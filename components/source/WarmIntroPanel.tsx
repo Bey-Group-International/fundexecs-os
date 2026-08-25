@@ -121,7 +121,7 @@ export function WarmIntroPanel({ contact, senderName, senderTitle, onClose }: Pr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-2xl rounded-2xl border border-line bg-bg shadow-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-line px-6 py-4 shrink-0">

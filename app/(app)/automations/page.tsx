@@ -46,7 +46,7 @@ export default async function AutomationsPage() {
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Automations
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -115,7 +115,7 @@ export default async function AutomationsPage() {
 
                     <Link
                       href={`/automations/${a.id}`}
-                      className="mt-2 inline-flex font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+                      className="mt-2 inline-flex font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-300"
                     >
                       Open canvas →
                     </Link>
@@ -146,7 +146,7 @@ export default async function AutomationsPage() {
                           <input type="checkbox" name="auto_approve" defaultChecked={a.auto_approve} />
                           Auto-approve (run unattended)
                         </label>
-                        <button className="self-start rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-surface-0 transition hover:bg-gold-400">
+                        <button className="self-start rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-on-gold transition hover:bg-gold-400">
                           Save changes
                         </button>
                       </form>
@@ -156,7 +156,7 @@ export default async function AutomationsPage() {
                   <div className="flex shrink-0 items-center gap-1.5">
                     <form action={runAutomationNow}>
                       <input type="hidden" name="id" value={a.id} />
-                      <button className="rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-surface-0 transition hover:bg-gold-400">
+                      <button className="rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-on-gold transition hover:bg-gold-400">
                         Run now
                       </button>
                     </form>
@@ -183,11 +183,11 @@ export default async function AutomationsPage() {
 
       <p className="mt-6 text-xs text-fg-muted">
         Runs appear in the{" "}
-        <Link href="/workspace" className="text-gold-400 hover:underline">
+        <Link href="/workspace" className="text-gold-300 hover:underline">
           Copilot
         </Link>{" "}
         and{" "}
-        <Link href="/dashboard" className="text-gold-400 hover:underline">
+        <Link href="/dashboard" className="text-gold-300 hover:underline">
           Command Center
         </Link>{" "}
         as they execute.

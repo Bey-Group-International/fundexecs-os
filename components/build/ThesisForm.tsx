@@ -65,7 +65,7 @@ function ChipInput({
             <button
               type="button"
               onClick={() => remove(i)}
-              className="text-gold-400 transition hover:text-gold-300"
+              className="text-gold-300 transition hover:text-gold-300"
               aria-label={`Remove ${chip}`}
             >
               ×
@@ -130,7 +130,7 @@ export function ThesisForm() {
       <input name="check_size_max" type="number" placeholder="Check size max ($)" className={inputClass} />
       <input name="target_irr" type="number" step="0.1" placeholder="Target IRR (%)" className={inputClass} />
       <input name="target_moic" type="number" step="0.1" placeholder="Target MOIC (x)" className={inputClass} />
-      <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 sm:col-span-2">
+      <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 sm:col-span-2">
         Add thesis
       </button>
     </form>

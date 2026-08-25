@@ -43,7 +43,7 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mb-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">FundExecs OS</p>
         <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">Execution Grid</h1>
         <p className="mt-1 text-sm text-fg-secondary">
           Every routed workflow, in the pane of the engine the Intelligence Layer sent it to.
@@ -56,7 +56,7 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
         {panes.map((pane) => (
           <section
             key={pane.engine}
-            className="flex flex-col rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
+            className="flex flex-col rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(15_23_42/0.08)]"
           >
             <div className="flex items-start justify-between gap-2">
               <Link href={`/grid/${engineSlug(pane.engine)}`} className="group min-w-0">

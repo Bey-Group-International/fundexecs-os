@@ -104,7 +104,7 @@ export default function MeetingInvitePage() {
 
             <button
               onClick={handleSignUp}
-              className="w-full rounded-lg bg-[var(--gold-400)] text-black text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
+              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
             >
               Sign up for full access
             </button>
@@ -148,7 +148,7 @@ export default function MeetingInvitePage() {
             <button
               type="submit"
               disabled={!guestName.trim() || joining}
-              className="w-full rounded-lg bg-[var(--gold-400)] text-black text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40"
+              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40"
             >
               {joining ? "Joining…" : "Join as guest"}
             </button>

@@ -171,7 +171,7 @@ export async function ThesisLive() {
         </p>
         <Link
           href="/deals/feed"
-          className="font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+          className="font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-300"
         >
           Deal Signal Feed →
         </Link>

@@ -131,7 +131,7 @@ export function BookingFlow({
           {booked.joinUrl ? (
             <a
               href={booked.joinUrl}
-              className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)]"
+              className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)]"
             >
               Join link
             </a>
@@ -211,7 +211,7 @@ export function BookingFlow({
           <button
             type="submit"
             disabled={submitting}
-            className="flex items-center justify-center gap-2 rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? "Booking…" : eventType.requiresApproval ? "Request this time" : "Confirm booking"}
           </button>

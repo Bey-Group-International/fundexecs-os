@@ -259,7 +259,7 @@ function AssignTaskForm({
       <div className="flex items-center gap-3 md:col-span-3">
         <button
           disabled={pending || members.length === 0}
-          className="rounded-md bg-neural-400 px-4 py-2 text-sm font-medium text-black transition hover:bg-neural-300 disabled:opacity-50"
+          className="rounded-md bg-neural-400 px-4 py-2 text-sm font-medium text-white transition hover:bg-neural-300 disabled:opacity-50"
         >
           {pending ? "Assigning…" : "Assign task"}
         </button>
@@ -328,7 +328,7 @@ function YourProfile({
       <div className="flex items-center gap-3 sm:col-span-2">
         <button
           disabled={pending}
-          className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+          className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save profile"}
         </button>
@@ -378,7 +378,7 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
             Enter your teammate&apos;s email. They&apos;ll need a FundExecs account —{" "}
             <a
               href="https://fundexecs.com"
-              className="text-gold-400 underline hover:text-gold-300"
+              className="text-gold-300 underline hover:text-gold-300"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -398,7 +398,7 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
       {full ? (
         <p className="sm:col-span-3 text-xs text-fg-secondary">
           Your plan’s seats are full.{" "}
-          <a href="/wallet" className="text-gold-400 underline">
+          <a href="/wallet" className="text-gold-300 underline">
             Upgrade your plan
           </a>{" "}
           to add more members.
@@ -421,7 +421,7 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
       </select>
       <button
         disabled={pending || full}
-        className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+        className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
       >
         {pending ? "Adding…" : "Add"}
       </button>

@@ -73,7 +73,7 @@ export function PaneView({
     >
       <header className="flex items-center justify-between gap-2 border-b border-line/60 bg-surface-0/60 px-2.5 py-1.5">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
             {TYPE_BADGE[pane.paneType]}
           </span>
           <span className="truncate text-xs font-medium text-fg-primary">{pane.title}</span>
@@ -152,7 +152,7 @@ function PaneBody({ pane, deepLink }: { pane: LeafPane; deepLink: string | null 
       {deepLink ? (
         <Link
           href={deepLink}
-          className="inline-flex items-center gap-1 text-xs font-medium text-gold-400 hover:text-gold-300"
+          className="inline-flex items-center gap-1 text-xs font-medium text-gold-300 hover:text-gold-300"
         >
           Open full view →
         </Link>
