@@ -105,15 +105,14 @@ jobs:
           # meant a parse bug shouted 237 wrong diagnoses before the guard below
           # got to say what had actually happened.
           missing=0
-          missing_list=""
+          : > /tmp/missing-migrations.txt
           for file in supabase/migrations/*.sql; do
             version="$(basename "$file" | cut -d_ -f1)"
             # `migration list` prints local and remote columns; a version present
             # remotely appears in the remote column of its row.
             if ! grep -qE "^[[:space:]]*${version}[[:space:]]*\|[[:space:]]*${version}[[:space:]]*\|" /tmp/migration-list-clean.txt; then
               missing=$((missing + 1))
-              missing_list="${missing_list}${version} ($(basename "$file"))
-"
+              echo "${version} ($(basename "$file"))" >> /tmp/missing-migrations.txt
             fi
           done
 
@@ -130,9 +129,9 @@ jobs:
           fi
 
           if [ "$missing" -gt 0 ]; then
-            printf '%s' "$missing_list" | while IFS= read -r entry; do
-              [ -n "$entry" ] && echo "::error title=Migration not applied::${entry} is in the repo but not in the production history."
-            done
+            while IFS= read -r entry; do
+              echo "::error title=Migration not applied::${entry} is in the repo but not in the production history."
+            done < /tmp/missing-migrations.txt
             echo "::error::${missing} of ${total} migration(s) are missing from production. The schema does not match the merged code."
             echo "--- supabase migration list --linked ---"
             cat /tmp/migration-list.txt
