@@ -301,9 +301,19 @@ export function MeetingEditScreen({
         return;
       }
       if (res.status === 409) {
-        const json = (await res.json()) as { conflicts?: Array<{ id: string; title: string; scheduledAt: string }> };
+        const json = (await res.json()) as {
+          conflicts?: Array<{ id: string; title: string; scheduledAt: string }>;
+          error?: string;
+        };
         setConflicts(json.conflicts ?? []);
-        setError("This time conflicts with another meeting.");
+        // A 409 with no conflict list is the scheduling link's own guard — the
+        // slot was taken by another booking — and "Save anyway" cannot clear it,
+        // so show what the server said rather than the conflict wording.
+        setError(
+          json.conflicts?.length
+            ? "This time conflicts with another meeting."
+            : json.error ?? "That time is no longer available.",
+        );
         return;
       }
       if (!res.ok) {
@@ -311,7 +321,11 @@ export function MeetingEditScreen({
         throw new Error(json.error ?? "Failed to save meeting");
       }
 
-      const json = (await res.json().catch(() => ({}))) as MeetingSaveResult & { externalSyncError?: string; invited?: number };
+      const json = (await res.json().catch(() => ({}))) as MeetingSaveResult & {
+        externalSyncError?: string;
+        invited?: number;
+        notified?: number;
+      };
       const result: MeetingSaveResult = {
         id: json.id ?? initial?.meetingId ?? "",
         roomCode: json.roomCode ?? "",
@@ -326,6 +340,11 @@ export function MeetingEditScreen({
       const messages: string[] = [];
       if (json.invited && json.invited > 0) {
         messages.push(`invited ${json.invited} guest${json.invited === 1 ? "" : "s"} by email`);
+      }
+      // Moving a meeting emails the people already on it. Say so, so the host
+      // knows an edit reached their guests and isn't surprised by replies.
+      if (json.notified && json.notified > 0) {
+        messages.push(`emailed ${json.notified} attendee${json.notified === 1 ? "" : "s"} about the change`);
       }
       if (json.externalSyncError) {
         messages.push(`external calendar sync failed: ${json.externalSyncError}`);

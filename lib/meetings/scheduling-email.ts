@@ -27,6 +27,8 @@ export interface BookingEmailContext {
   manageUrl?: string | null;
   /** The host's meetings page. */
   hostMeetingsUrl?: string | null;
+  /** Where the booking used to sit — shown on a reschedule so the move reads clearly. */
+  previousStartIso?: string | null;
   reason?: string | null;
 }
 
@@ -148,6 +150,7 @@ export type BookingEmailKind =
   | "confirmed"
   | "declined"
   | "rescheduled"
+  | "rescheduled_by_host"
   | "cancelled_by_invitee"
   | "cancelled_by_host";
 
@@ -169,6 +172,9 @@ export async function sendBookingEmails(
 
   const inviteeWhen = whenFor(ctx, ctx.inviteeTimezone);
   const hostWhen = whenFor(ctx, ctx.hostTimezone);
+  const inviteePrevious = ctx.previousStartIso
+    ? formatSlotFull(ctx.previousStartIso, ctx.inviteeTimezone)
+    : "";
   const messages: Array<{ to: { name: string; email: string }; subject: string; html: string }> = [];
 
   const inviteeTo = { name: ctx.inviteeName, email: ctx.inviteeEmail };
@@ -299,6 +305,31 @@ export async function sendBookingEmails(
           }),
         });
       }
+      break;
+
+    // The host moved the booking from their own calendar. The invitee did not
+    // choose this time, so the notice leads with the change and keeps their
+    // manage link prominent — accepting the move is not automatic consent.
+    case "rescheduled_by_host":
+      messages.push({
+        to: inviteeTo,
+        subject: `Moved: ${ctx.eventTitle} with ${ctx.hostName}`,
+        html: buildSchedulingEmailHtml({
+          heading: "Your meeting moved to a new time",
+          intro: `${ctx.hostName} changed when this meeting happens. Your calendar entry is now out of date.`,
+          rows: [
+            ["Meeting", ctx.eventTitle],
+            ["New time", inviteeWhen],
+            ["Previously", inviteePrevious],
+            ["With", ctx.hostName],
+          ],
+          cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
+          secondary: gcal ? { label: "Add to Google Calendar", url: gcal } : null,
+          footnote: ctx.manageUrl
+            ? `If the new time doesn't work, cancel or pick another: ${ctx.manageUrl}`
+            : null,
+        }),
+      });
       break;
 
     case "cancelled_by_invitee":

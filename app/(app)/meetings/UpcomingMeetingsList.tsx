@@ -88,6 +88,12 @@ function copilotName(key: string | null): string | null {
   return AGENTS.find((a) => a.key === key)?.name ?? key;
 }
 
+/** How many guests a cancellation would actually reach — an attendee with no
+ * email address is on the meeting but not reachable by it. */
+function notifiableGuestCount(m: { attendees: UpcomingMeeting["attendees"] }): number {
+  return new Set((m.attendees ?? []).map((a) => a.email?.trim().toLowerCase()).filter(Boolean)).size;
+}
+
 function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
   const internal = (m.attendees ?? []).filter((a) => a.type === "internal");
   const external = (m.attendees ?? []).filter((a) => a.type !== "internal");
@@ -399,7 +405,15 @@ export function UpcomingMeetingsList({
               {deleteId === meeting.id ? (
                 <ConfirmBox
                   title="Delete this meeting?"
-                  body="This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced."
+                  body={
+                    // Deleting now emails the guests. Say so before the click,
+                    // not after — a host should never mail their LPs by accident.
+                    notifiableGuestCount(meeting) > 0
+                      ? `This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced. ${notifiableGuestCount(meeting)} guest${
+                          notifiableGuestCount(meeting) === 1 ? "" : "s"
+                        } will be emailed that it's cancelled.`
+                      : "This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced."
+                  }
                   confirmLabel={busy === meeting.id ? "Deleting..." : "Delete from FundExecs only"}
                   onConfirm={() => void deleteMeeting(meeting.id)}
                   onCancel={() => setDeleteId(null)}
