@@ -14,6 +14,13 @@ import type {
 import { sendEmail, escapeHtml } from "@/lib/email";
 import { getGoogleAccessToken } from "@/lib/google-oauth";
 
+/**
+ * Whether the DEPLOYMENT can send or connect at all. GOOGLE_OAUTH_CLIENT_ID
+ * counts here because it enables the connect flow, which is what this predicate
+ * drives in the integrations UI. It is deliberately NOT the dispatch gate: an
+ * OAuth client proves a deployment can offer "Connect Google", never that any
+ * particular org has done so.
+ */
 function configured(): boolean {
   return Boolean(process.env.GMAIL_ACCESS_TOKEN || process.env.GOOGLE_OAUTH_CLIENT_ID);
 }
@@ -24,14 +31,17 @@ export const gmailAdapter: DispatchAdapter = {
   async dispatch(ctx: DispatchContext): Promise<DispatchResult> {
     const to = ctx.target?.email;
     const recipient = to ?? ctx.target?.name ?? "the contact";
-    // The org's own vault credentials (resolved by dispatchAction) count
-    // toward "configured" alongside the deploy env — so an org with its own
-    // connected mailbox sends live even on a deploy with no env creds.
-    const hasOrgCreds = Boolean(
-      ctx.secrets?.GMAIL_ACCESS_TOKEN || ctx.secrets?.GOOGLE_REFRESH_TOKEN,
+    // Only an actual credential proves a send can succeed: the org's own
+    // (resolved by dispatchAction) or the deploy-wide token. An OAuth client id
+    // is not one — treating it as proof would send disconnected orgs down the
+    // live path to a guaranteed failure instead of saving them a draft.
+    const hasSendableCredential = Boolean(
+      ctx.secrets?.GMAIL_ACCESS_TOKEN ||
+        ctx.secrets?.GOOGLE_REFRESH_TOKEN ||
+        process.env.GMAIL_ACCESS_TOKEN,
     );
 
-    if (!(ctx.connected ?? (configured() || hasOrgCreds))) {
+    if (!(ctx.connected ?? hasSendableCredential)) {
       return {
         ok: true,
         channel: "gmail",
@@ -49,17 +59,16 @@ export const gmailAdapter: DispatchAdapter = {
       };
     }
 
-    // Per-org Gmail identity: when the org connected Google via OAuth, mint a
-    // fresh access token from its vaulted refresh token — this outlives the
-    // static ~1-hour GMAIL_ACCESS_TOKEN. A stored static token still wins
-    // (explicit configuration beats derived). Resolved here rather than by
-    // sendEmail because dispatch already holds the org's whole secret set.
-    let gmailAccessToken = ctx.secrets?.GMAIL_ACCESS_TOKEN;
-    if (!gmailAccessToken && ctx.secrets?.GOOGLE_REFRESH_TOKEN) {
+    // Per-org Gmail identity, resolved here rather than by sendEmail because
+    // dispatch already holds the org's whole secret set. The minted token comes
+    // first for the same reason it does in lib/email.ts: a stored static token
+    // expires within the hour and would otherwise shadow the durable one.
+    let gmailAccessToken: string | undefined;
+    if (ctx.secrets?.GOOGLE_REFRESH_TOKEN) {
       gmailAccessToken =
-        (await getGoogleAccessToken(ctx.orgId, ctx.secrets.GOOGLE_REFRESH_TOKEN)) ??
-        undefined;
+        (await getGoogleAccessToken(ctx.orgId, ctx.secrets.GOOGLE_REFRESH_TOKEN)) ?? undefined;
     }
+    gmailAccessToken ??= ctx.secrets?.GMAIL_ACCESS_TOKEN;
 
     const escaped = escapeHtml(ctx.body ?? "");
     const result = await sendEmail({

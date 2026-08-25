@@ -11,12 +11,17 @@
 //   1. `credentials.gmailAccessToken` — a token the caller already minted
 //      (the dispatch layer does this, since it resolves the whole secret set
 //      for an action in one pass).
-//   2. `orgId` — the org's own credential from the vault: a stored
-//      GMAIL_ACCESS_TOKEN if one was pasted, otherwise a fresh access token
-//      minted from its vaulted refresh token.
+//   2. `orgId` — a fresh access token minted from the org's vaulted refresh
+//      token, else a static GMAIL_ACCESS_TOKEN stored for that org.
 //   3. `GMAIL_ACCESS_TOKEN` in the deploy env — a development convenience
 //      only. Google issues these with a ~1-hour life, so it is never a
 //      production answer.
+//
+// Note the order within step 2: the minted token wins over a stored static
+// one. Static Gmail tokens expire after about an hour, so preferring one would
+// let a long-dead paste permanently shadow the durable OAuth credential — and
+// reconnecting Google could not rescue it, since the callback writes only the
+// refresh token and never clears the stale paste.
 //
 // With none of those, sending degrades to "in-app": the result reports
 // `channel: "in-app"` and `ok: false`, and callers carry on. That is
@@ -24,7 +29,7 @@
 // to save a meeting, cancel a booking, or issue an invoice. Nothing in this
 // module throws.
 import { getGoogleAccessToken, googleOAuthConfigured } from "@/lib/google-oauth";
-import { getOrgSecret } from "@/lib/org-secrets";
+import { getOrgSecretBounded } from "@/lib/org-secrets";
 
 export interface SendEmailCredentials {
   gmailAccessToken?: string;
@@ -59,12 +64,7 @@ export interface SendEmailResult {
   detail: string;
 }
 
-function fromAddress(args: SendEmailArgs): string | null {
-  return args.fromEmail ?? args.credentials?.fromEmail ?? process.env.FUNDEXECS_FROM_EMAIL ?? null;
-}
-
-function buildRfc2822(args: SendEmailArgs): string {
-  const from = fromAddress(args);
+function buildRfc2822(args: SendEmailArgs, from: string | null): string {
   const lines = [
     // No From header by default: Gmail stamps the connected account's own
     // address. Forcing one that isn't a verified alias only gets it rewritten.
@@ -86,8 +86,8 @@ function base64url(str: string): string {
 
 /**
  * The access token this send should use, or null when no mailbox is connected.
- * Never throws: a vault miss or a refused refresh means "not connected", which
- * is a normal state, not an error.
+ * Never throws and never hangs: a vault miss, a slow read, or a refused refresh
+ * all mean "not connected", which is a normal state rather than an error.
  */
 export async function resolveGmailToken(args: {
   orgId?: string;
@@ -97,12 +97,12 @@ export async function resolveGmailToken(args: {
 
   if (args.orgId) {
     try {
-      // A pasted static token is explicit configuration and beats a derived
-      // one, matching how the dispatch adapter resolves the same pair.
-      const stored = await getOrgSecret(args.orgId, "GMAIL_ACCESS_TOKEN");
-      if (stored) return stored;
+      // The minted token first: it is always fresh, where a stored static one
+      // is perishable and would otherwise shadow the OAuth credential forever.
       const minted = await getGoogleAccessToken(args.orgId);
       if (minted) return minted;
+      const stored = await getOrgSecretBounded(args.orgId, "GMAIL_ACCESS_TOKEN");
+      if (stored) return stored;
     } catch (err) {
       console.warn("[email] org mailbox lookup failed:", err);
     }
@@ -111,8 +111,27 @@ export async function resolveGmailToken(args: {
   return process.env.GMAIL_ACCESS_TOKEN ?? null;
 }
 
-async function sendViaGmail(args: SendEmailArgs, token: string): Promise<SendEmailResult> {
-  const raw = base64url(buildRfc2822(args));
+/**
+ * The From address for this send, or null to let Gmail stamp the connected
+ * mailbox's own. An org may store FUNDEXECS_FROM_EMAIL in the vault, so this
+ * has to be resolved per-org rather than read from the deploy env alone.
+ */
+async function resolveFromAddress(args: SendEmailArgs): Promise<string | null> {
+  if (args.fromEmail) return args.fromEmail;
+  if (args.credentials?.fromEmail) return args.credentials.fromEmail;
+  if (args.orgId) {
+    const stored = await getOrgSecretBounded(args.orgId, "FUNDEXECS_FROM_EMAIL");
+    if (stored) return stored;
+  }
+  return process.env.FUNDEXECS_FROM_EMAIL ?? null;
+}
+
+async function sendViaGmail(
+  args: SendEmailArgs,
+  token: string,
+  from: string | null,
+): Promise<SendEmailResult> {
+  const raw = base64url(buildRfc2822(args, from));
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
     headers: {
@@ -150,13 +169,15 @@ export interface EmailConfigStatus {
  */
 export async function getEmailConfigStatus(orgId?: string): Promise<EmailConfigStatus> {
   const oauthConfigured = googleOAuthConfigured();
-  const fromEmail = process.env.FUNDEXECS_FROM_EMAIL ?? null;
+  const fromEmail = orgId ? await resolveFromAddress({ orgId } as SendEmailArgs) : process.env.FUNDEXECS_FROM_EMAIL ?? null;
 
   let source: EmailConfigStatus["source"] = "none";
   if (orgId) {
     try {
-      if (await getOrgSecret(orgId, "GMAIL_ACCESS_TOKEN")) source = "org-token";
-      else if (await getGoogleAccessToken(orgId)) source = "org-oauth";
+      // Same order the sender uses, so the self-check reports the credential a
+      // real send would actually pick.
+      if (await getGoogleAccessToken(orgId)) source = "org-oauth";
+      else if (await getOrgSecretBounded(orgId, "GMAIL_ACCESS_TOKEN")) source = "org-token";
     } catch {
       // A vault miss is "not connected", not a failure worth surfacing here.
     }
@@ -206,7 +227,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   }
 
   try {
-    const result = await sendViaGmail(args, token);
+    const result = await sendViaGmail(args, token, await resolveFromAddress(args));
     if (!result.ok) console.warn("[email] Gmail send failed:", result.detail);
     return result;
   } catch (err) {
