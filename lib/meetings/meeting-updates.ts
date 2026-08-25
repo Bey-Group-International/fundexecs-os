@@ -9,7 +9,7 @@
 //      mail every attendee, so callers pass timing before and after and let
 //      `diffMeetingTiming` decide whether anything actually moved.
 //   2. Nothing throws. The edit is already saved by the time a notice goes out;
-//      a dead email provider must never surface as a failed save.
+//      an unconnected mailbox must never surface as a failed save.
 import { sendEmail } from "@/lib/email";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
@@ -55,6 +55,8 @@ export function diffMeetingTiming(before: MeetingTiming, after: MeetingTiming): 
 export interface MeetingUpdateContext {
   /** Canonical app origin, so the emailed link is stable across hosts/proxies. */
   origin: string;
+  /** The org whose connected mailbox sends these. Without it nothing sends. */
+  orgId?: string;
   roomCode: string;
   title: string;
   /** Who made the change, as attendees should see it. */
@@ -152,6 +154,7 @@ export async function sendMeetingUpdates(
   const results = await Promise.allSettled(
     emails.map((email) =>
       sendEmail({
+        orgId: ctx.orgId,
         to: { name: email.split("@")[0] ?? email, email },
         subject,
         htmlBody: html,

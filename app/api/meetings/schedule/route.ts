@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Email guest invites once the meeting is a real (non-draft) saved meeting.
-    // Non-fatal: a missing provider or send failure never blocks the meeting.
+    // Non-fatal: an unconnected mailbox or send failure never blocks the meeting.
     let invited = 0;
     if (!saved.isDraft) {
       const emails = guestEmails(attendees);
@@ -167,6 +167,7 @@ export async function POST(req: NextRequest) {
         try {
           const { data: userData } = await supabase.auth.getUser();
           const result = await sendMeetingInvites({
+            orgId: auth.ctx.orgId,
             // Canonical app URL so the emailed link is correct regardless of
             // which host/proxy served this request.
             origin: SITE_URL,

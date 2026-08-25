@@ -37,7 +37,7 @@ export const dynamic = "force-dynamic";
 // registry the dispatch layer resolves and the settings writer allow-lists —
 // so a key added there shows up here without a second edit.
 const CHANNEL_LABELS: Record<string, string> = {
-  gmail: "Email (Gmail / Resend)",
+  gmail: "Email (your Google mailbox)",
   calendly: "Calendly",
   docusign: "DocuSign",
 };
@@ -46,8 +46,8 @@ const SECRET_KEY_HINTS: Record<string, string> = {
   GMAIL_ACCESS_TOKEN: "Gmail OAuth access token — live sends go out from your inbox.",
   GOOGLE_REFRESH_TOKEN:
     "Written by Connect Google (Settings › Integrations) — mints fresh Gmail tokens automatically.",
-  RESEND_API_KEY: "Resend API key — live sends via Resend when Gmail isn't set.",
-  RESEND_FROM_EMAIL: "From address for Resend sends (defaults to the deploy-wide sender).",
+  FUNDEXECS_FROM_EMAIL:
+    "Optional From address. Gmail uses it only if it's the connected account or one of its verified send-as aliases; otherwise mail comes from the connected mailbox.",
   RESEND_WEBHOOK_SECRET:
     "Signing secret for Resend inbound email — arriving mail lands in your Unified Inbox.",
   CALENDLY_API_TOKEN: "Personal access token — scheduling links come from your Calendly account.",

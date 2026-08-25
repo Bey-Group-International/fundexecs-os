@@ -1,12 +1,33 @@
-// Unified email sender: Gmail API → Resend → in-app only.
-// Priority: Gmail (when a Gmail token resolves) → Resend (when a Resend key
-// resolves) → silent fallback. Each provider credential prefers the caller's
-// per-org value (resolved from the secret vault by the dispatch layer) over
-// the deploy-wide env var, so orgs send from their own identity.
+// lib/email.ts
+// Outbound email, sent natively from the organization's own Google mailbox.
+//
+// There is one send path: the Gmail API, authorized per organization through
+// the OAuth flow in lib/google-oauth.ts. No third-party email service sits in
+// between — a message leaves the org's real mailbox, under its own domain's
+// SPF/DKIM, and a reply lands back in a mailbox a human actually reads.
+//
+// Credential resolution, most explicit first:
+//
+//   1. `credentials.gmailAccessToken` — a token the caller already minted
+//      (the dispatch layer does this, since it resolves the whole secret set
+//      for an action in one pass).
+//   2. `orgId` — the org's own credential from the vault: a stored
+//      GMAIL_ACCESS_TOKEN if one was pasted, otherwise a fresh access token
+//      minted from its vaulted refresh token.
+//   3. `GMAIL_ACCESS_TOKEN` in the deploy env — a development convenience
+//      only. Google issues these with a ~1-hour life, so it is never a
+//      production answer.
+//
+// With none of those, sending degrades to "in-app": the result reports
+// `channel: "in-app"` and `ok: false`, and callers carry on. That is
+// deliberate — an org that has not connected a mailbox yet must still be able
+// to save a meeting, cancel a booking, or issue an invoice. Nothing in this
+// module throws.
+import { getGoogleAccessToken, googleOAuthConfigured } from "@/lib/google-oauth";
+import { getOrgSecret } from "@/lib/org-secrets";
 
 export interface SendEmailCredentials {
   gmailAccessToken?: string;
-  resendApiKey?: string;
   fromEmail?: string;
 }
 
@@ -15,33 +36,39 @@ export interface SendEmailArgs {
   subject: string;
   htmlBody: string;
   fromName?: string;
-  // Explicit per-send override — wins over credentials.fromEmail. From-address
-  // resolution: args.fromEmail → credentials.fromEmail → RESEND_FROM_EMAIL env
-  // → the deploy default.
+  /**
+   * The organization whose mailbox sends this. Supply it wherever an org
+   * context exists — without it the send can only fall back to the deploy env,
+   * which in production means no send at all.
+   */
+  orgId?: string;
+  /**
+   * Explicit sender address. Gmail accepts this only when it is the connected
+   * account or one of its verified send-as aliases; otherwise Gmail rewrites
+   * it. Leave it unset (the normal case) and the message simply comes from the
+   * connected mailbox.
+   */
   fromEmail?: string;
-  // Per-org credentials; each field falls back to its env var when unset.
+  /** Pre-resolved credentials — wins over `orgId` lookup and the env. */
   credentials?: SendEmailCredentials;
 }
 
 export interface SendEmailResult {
   ok: boolean;
-  channel: "gmail" | "resend" | "in-app";
+  channel: "gmail" | "in-app";
   detail: string;
 }
 
-function fromAddress(args: SendEmailArgs): string {
-  return (
-    args.fromEmail ??
-    args.credentials?.fromEmail ??
-    process.env.RESEND_FROM_EMAIL ??
-    "noreply@fundexecs.com"
-  );
+function fromAddress(args: SendEmailArgs): string | null {
+  return args.fromEmail ?? args.credentials?.fromEmail ?? process.env.FUNDEXECS_FROM_EMAIL ?? null;
 }
 
 function buildRfc2822(args: SendEmailArgs): string {
-  const from = `${args.fromName ?? "FundExecs"} <${fromAddress(args)}>`;
+  const from = fromAddress(args);
   const lines = [
-    `From: ${from}`,
+    // No From header by default: Gmail stamps the connected account's own
+    // address. Forcing one that isn't a verified alias only gets it rewritten.
+    ...(from ? [`From: ${args.fromName ?? "FundExecs"} <${from}>`] : []),
     `To: ${args.to.name} <${args.to.email}>`,
     `Subject: ${args.subject}`,
     `MIME-Version: 1.0`,
@@ -57,10 +84,34 @@ function base64url(str: string): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-async function sendViaGmail(args: SendEmailArgs): Promise<SendEmailResult> {
-  const token = args.credentials?.gmailAccessToken ?? process.env.GMAIL_ACCESS_TOKEN;
-  if (!token) return { ok: false, channel: "gmail", detail: "no token" };
+/**
+ * The access token this send should use, or null when no mailbox is connected.
+ * Never throws: a vault miss or a refused refresh means "not connected", which
+ * is a normal state, not an error.
+ */
+export async function resolveGmailToken(args: {
+  orgId?: string;
+  credentials?: SendEmailCredentials;
+}): Promise<string | null> {
+  if (args.credentials?.gmailAccessToken) return args.credentials.gmailAccessToken;
 
+  if (args.orgId) {
+    try {
+      // A pasted static token is explicit configuration and beats a derived
+      // one, matching how the dispatch adapter resolves the same pair.
+      const stored = await getOrgSecret(args.orgId, "GMAIL_ACCESS_TOKEN");
+      if (stored) return stored;
+      const minted = await getGoogleAccessToken(args.orgId);
+      if (minted) return minted;
+    } catch (err) {
+      console.warn("[email] org mailbox lookup failed:", err);
+    }
+  }
+
+  return process.env.GMAIL_ACCESS_TOKEN ?? null;
+}
+
+async function sendViaGmail(args: SendEmailArgs, token: string): Promise<SendEmailResult> {
   const raw = base64url(buildRfc2822(args));
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
@@ -78,101 +129,91 @@ async function sendViaGmail(args: SendEmailArgs): Promise<SendEmailResult> {
   return { ok: true, channel: "gmail", detail: "sent" };
 }
 
-async function sendViaResend(args: SendEmailArgs): Promise<SendEmailResult> {
-  const key = args.credentials?.resendApiKey ?? process.env.RESEND_API_KEY;
-  if (!key) return { ok: false, channel: "resend", detail: "no key" };
-
-  const from = `${args.fromName ?? "FundExecs"} <${fromAddress(args)}>`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: args.to.email,
-      subject: args.subject,
-      html: args.htmlBody,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    return { ok: false, channel: "resend", detail: text };
-  }
-  return { ok: true, channel: "resend", detail: "sent" };
-}
-
 export interface EmailConfigStatus {
-  gmailConfigured: boolean;
-  resendConfigured: boolean;
-  fromEmail: string;
-  fromDomain: string | null;
-  usingDefaultFrom: boolean;
-  primaryProvider: "gmail" | "resend" | "none";
+  /** True when this org can send right now — a mailbox is connected. */
+  mailboxConnected: boolean;
+  /** How the credential was found, for an operator reading the self-check. */
+  source: "org-oauth" | "org-token" | "deploy-env" | "none";
+  /** True when the deployment can run the OAuth connect flow at all. */
+  oauthConfigured: boolean;
+  /** Explicit sender override, when one is set. Null means "the mailbox itself". */
+  fromEmail: string | null;
   willAttemptSend: boolean;
   notes: string[];
 }
 
 /**
- * Report how outbound email is configured, WITHOUT exposing any secret values
- * (only booleans and the non-secret sender address). Powers the email
- * self-check endpoint so operators can confirm invites will deliver.
+ * Report whether an org can actually send, WITHOUT exposing any secret value —
+ * booleans, an enum, and the non-secret sender override only. Powers the email
+ * self-check so an operator can confirm invites will deliver before relying on
+ * them.
  */
-export function getEmailConfigStatus(): EmailConfigStatus {
-  const gmailConfigured = !!process.env.GMAIL_ACCESS_TOKEN;
-  const resendConfigured = !!process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL ?? "noreply@fundexecs.com";
-  const usingDefaultFrom = !process.env.RESEND_FROM_EMAIL;
-  const fromDomain = fromEmail.includes("@") ? fromEmail.split("@")[1] : null;
+export async function getEmailConfigStatus(orgId?: string): Promise<EmailConfigStatus> {
+  const oauthConfigured = googleOAuthConfigured();
+  const fromEmail = process.env.FUNDEXECS_FROM_EMAIL ?? null;
 
-  const primaryProvider: EmailConfigStatus["primaryProvider"] = gmailConfigured
-    ? "gmail"
-    : resendConfigured
-      ? "resend"
-      : "none";
+  let source: EmailConfigStatus["source"] = "none";
+  if (orgId) {
+    try {
+      if (await getOrgSecret(orgId, "GMAIL_ACCESS_TOKEN")) source = "org-token";
+      else if (await getGoogleAccessToken(orgId)) source = "org-oauth";
+    } catch {
+      // A vault miss is "not connected", not a failure worth surfacing here.
+    }
+  }
+  if (source === "none" && process.env.GMAIL_ACCESS_TOKEN) source = "deploy-env";
 
   const notes: string[] = [];
-  if (!gmailConfigured && !resendConfigured) {
-    notes.push("No email provider configured — invites will be saved but not emailed. Set RESEND_API_KEY (recommended) or GMAIL_ACCESS_TOKEN.");
+  if (source === "none") {
+    notes.push(
+      oauthConfigured
+        ? "No mailbox connected — email is saved in-app but not sent. Connect Google in Settings → Integrations."
+        : "Google OAuth is not configured on this deployment, so no org can connect a mailbox. Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, and FUNDEXECS_VAULT_KEY.",
+    );
   }
-  if (gmailConfigured) {
-    notes.push("Gmail is tried first but a static GMAIL_ACCESS_TOKEN expires (~1h); Resend is the durable fallback.");
+  if (source === "org-oauth") {
+    notes.push("Sending from this organization's connected Google mailbox. Access tokens are minted per send from its vaulted refresh token.");
   }
-  if (resendConfigured && usingDefaultFrom) {
-    notes.push("RESEND_FROM_EMAIL is unset, so sends use the default noreply@fundexecs.com — that domain must be verified in Resend or sends will fail.");
+  if (source === "org-token") {
+    notes.push("Using a static GMAIL_ACCESS_TOKEN stored for this organization. Google expires these after about an hour — connect Google via OAuth for a durable credential.");
   }
-  if (resendConfigured && fromDomain) {
-    notes.push(`Resend will send from "${fromEmail}". Confirm the domain "${fromDomain}" shows as Verified in the Resend dashboard.`);
+  if (source === "deploy-env") {
+    notes.push("Falling back to the deploy-wide GMAIL_ACCESS_TOKEN. That expires after about an hour and is shared by every org — connect Google per organization instead.");
+  }
+  if (fromEmail) {
+    notes.push(`Messages set From: "${fromEmail}". Gmail honours this only if it is the connected account or one of its verified send-as aliases.`);
   }
 
   return {
-    gmailConfigured,
-    resendConfigured,
+    mailboxConnected: source !== "none",
+    source,
+    oauthConfigured,
     fromEmail,
-    fromDomain,
-    usingDefaultFrom,
-    primaryProvider,
-    willAttemptSend: gmailConfigured || resendConfigured,
+    willAttemptSend: source !== "none",
     notes,
   };
 }
 
+/**
+ * Send one message from the org's connected mailbox. Returns rather than
+ * throws: `ok: false` with `channel: "in-app"` means nothing was sent, and the
+ * caller's own work still stands.
+ */
 export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
-  if (args.credentials?.gmailAccessToken ?? process.env.GMAIL_ACCESS_TOKEN) {
-    const result = await sendViaGmail(args);
-    if (result.ok) return result;
-    console.warn("[email] Gmail send failed, falling back to Resend:", result.detail);
+  const token = await resolveGmailToken(args);
+  if (!token) {
+    return { ok: false, channel: "in-app", detail: "no mailbox connected" };
   }
 
-  if (args.credentials?.resendApiKey ?? process.env.RESEND_API_KEY) {
-    const result = await sendViaResend(args);
-    if (result.ok) return result;
-    console.warn("[email] Resend send failed:", result.detail);
+  try {
+    const result = await sendViaGmail(args, token);
+    if (!result.ok) console.warn("[email] Gmail send failed:", result.detail);
+    return result;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "gmail request failed";
+    console.warn("[email] Gmail send threw:", detail);
+    return { ok: false, channel: "gmail", detail };
   }
-
-  return { ok: false, channel: "in-app", detail: "no email provider configured" };
 }
 
 

@@ -173,11 +173,12 @@ export async function POST(request: Request) {
         console.error('sentEventError', sentEventError)
       }
 
-      // Send emails via Gmail or Resend (whichever is configured)
+      // Send emails from the org's own connected mailbox.
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
       const emailPromises = insertedRecipients.map((recipient) => {
         const signingLink = `${appUrl}/sign/${recipient.signing_token}`
         return sendEmail({
+          orgId: organizationId,
           to: { name: recipient.name, email: recipient.email },
           subject: `Please sign: ${title}`,
           htmlBody: buildSigningInvitationHtml({

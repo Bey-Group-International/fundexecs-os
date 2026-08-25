@@ -38,9 +38,9 @@ export function buildMeetingInviteHtml({
 }
 
 /**
- * Send meeting invites to a set of email addresses. Never throws — a missing
- * email provider or a per-recipient failure just lowers the `sent` count, so
- * the caller's core flow (saving the meeting) is never blocked.
+ * Send meeting invites to a set of email addresses. Never throws — an
+ * unconnected mailbox or a per-recipient failure just lowers the `sent` count,
+ * so the caller's core flow (saving the meeting) is never blocked.
  */
 export async function sendMeetingInvites(args: {
   origin: string;
@@ -48,6 +48,8 @@ export async function sendMeetingInvites(args: {
   title: string;
   senderName: string;
   emails: string[];
+  /** The org whose connected mailbox sends these. Without it nothing sends. */
+  orgId?: string;
 }): Promise<{ sent: number; total: number }> {
   const emails = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (emails.length === 0) return { sent: 0, total: 0 };
@@ -59,6 +61,7 @@ export async function sendMeetingInvites(args: {
   const results = await Promise.allSettled(
     emails.map((email) =>
       sendEmail({
+        orgId: args.orgId,
         to: { name: email.split("@")[0] ?? email, email },
         subject: `You're invited to join "${args.title}" on FundExecs OS`,
         htmlBody: html,

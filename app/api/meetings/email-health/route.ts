@@ -7,12 +7,12 @@ import { buildMeetingInviteHtml } from "@/lib/meetings/invite";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// GET — report how outbound email is configured (no secrets exposed) so an
-// operator can confirm meeting invites will actually deliver.
+// GET — report whether this org's mailbox is connected (no secrets exposed) so
+// an operator can confirm meeting invites will actually deliver.
 export async function GET() {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  return NextResponse.json(getEmailConfigStatus());
+  return NextResponse.json(await getEmailConfigStatus(auth.ctx.orgId));
 }
 
 // POST — send a real test invite email to the signed-in user's OWN address
@@ -21,10 +21,10 @@ export async function POST(req: NextRequest) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const status = getEmailConfigStatus();
+  const status = await getEmailConfigStatus(auth.ctx.orgId);
   if (!status.willAttemptSend) {
     return NextResponse.json(
-      { ok: false, error: "No email provider configured.", status },
+      { ok: false, error: "No mailbox is connected for this organization.", status },
       { status: 409 },
     );
   }
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
 
   const origin = req.nextUrl.origin;
   const result = await sendEmail({
+    orgId: auth.ctx.orgId,
     to: { name: email.split("@")[0] ?? email, email },
     subject: "FundExecs OS — meeting invite email test",
     htmlBody: buildMeetingInviteHtml({

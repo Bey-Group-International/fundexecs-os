@@ -78,6 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Notifying is best-effort: the decision is already recorded, and a failed
     // send must not leave the host unsure whether it went through.
     await sendBookingEmails(emailKind, {
+      orgId: auth.ctx.orgId,
       eventTitle: next.eventType.title,
       hostName: next.page.display_name,
       hostEmail: auth.ctx.email,

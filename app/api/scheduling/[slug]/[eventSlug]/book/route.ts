@@ -82,6 +82,10 @@ export async function POST(
     const manageUrl = buildBookingManageUrl(SITE_URL, booking.manage_token);
 
     await sendBookingEmails(booking.status === "pending" ? "requested" : "confirmed", {
+      // The invitee is anonymous, so the sending mailbox comes from the
+      // scheduling page's organization — the host's own, which is whose name
+      // is on the email anyway.
+      orgId: resolved.page.organization_id ?? undefined,
       eventTitle: eventType.title,
       hostName: resolved.page.display_name,
       hostEmail: host.email,

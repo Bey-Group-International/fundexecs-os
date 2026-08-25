@@ -108,6 +108,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     }
 
     await sendBookingEmails(body.action === "cancel" ? "cancelled_by_invitee" : "rescheduled", {
+      // Anonymous invitee: the host org's mailbox sends, as on the public
+      // booking route.
+      orgId: next.page.organization_id ?? undefined,
       eventTitle: next.eventType.title,
       hostName: next.page.display_name,
       hostEmail: host.email,

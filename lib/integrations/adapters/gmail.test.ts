@@ -25,7 +25,6 @@ beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
   delete process.env.GMAIL_ACCESS_TOKEN;
   delete process.env.GOOGLE_OAUTH_CLIENT_ID;
-  delete process.env.RESEND_API_KEY;
   sendEmail.mockResolvedValue({ ok: true, channel: "resend", detail: "sent" });
 });
 
@@ -51,8 +50,8 @@ describe("gmail adapter per-org credential gate", () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it("sends live on a credential-less deploy when the org's own vault key resolved", async () => {
-    const result = await gmailAdapter.dispatch(ctx({ secrets: { RESEND_API_KEY: "re_org" } }));
+  it("sends live on a credential-less deploy when the org connected its own mailbox", async () => {
+    const result = await gmailAdapter.dispatch(ctx({ secrets: { GOOGLE_REFRESH_TOKEN: "rt-org" } }));
     expect(result.ok).toBe(true);
     expect(result.live).toBe(true);
     expect(sendEmail).toHaveBeenCalledTimes(1);
@@ -64,18 +63,14 @@ describe("gmail adapter per-org credential gate", () => {
         connected: true,
         secrets: {
           GMAIL_ACCESS_TOKEN: "org-gmail",
-          RESEND_API_KEY: "re_org",
-          RESEND_FROM_EMAIL: "gp@fund.test",
+          FUNDEXECS_FROM_EMAIL: "gp@fund.test",
         },
       }),
     );
     expect(sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        credentials: {
-          gmailAccessToken: "org-gmail",
-          resendApiKey: "re_org",
-          fromEmail: "gp@fund.test",
-        },
+        orgId: "org-1",
+        credentials: { gmailAccessToken: "org-gmail", fromEmail: "gp@fund.test" },
       }),
     );
   });
@@ -109,28 +104,25 @@ describe("gmail adapter per-org credential gate", () => {
     );
   });
 
-  it("still attempts the send with no gmail token when minting fails (Resend leg)", async () => {
+  it("hands the send off with orgId when minting fails, letting the sender retry the lookup", async () => {
     getGoogleAccessToken.mockResolvedValue(null);
     const result = await gmailAdapter.dispatch(
-      ctx({
-        connected: true,
-        secrets: { GOOGLE_REFRESH_TOKEN: "rt-org", RESEND_API_KEY: "re_org" },
-      }),
+      ctx({ connected: true, secrets: { GOOGLE_REFRESH_TOKEN: "rt-org" } }),
     );
     expect(result.live).toBe(true);
+    // No token to pass, but orgId still goes through — sendEmail resolves the
+    // org's mailbox itself, so a transient refresh failure is not fatal here.
     expect(sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        credentials: expect.objectContaining({
-          gmailAccessToken: undefined,
-          resendApiKey: "re_org",
-        }),
+        orgId: "org-1",
+        credentials: expect.objectContaining({ gmailAccessToken: undefined }),
       }),
     );
   });
 
   it("an explicit connected:false still drafts even when org creds resolved", async () => {
     const result = await gmailAdapter.dispatch(
-      ctx({ connected: false, secrets: { RESEND_API_KEY: "re_org" } }),
+      ctx({ connected: false, secrets: { GOOGLE_REFRESH_TOKEN: "rt-org" } }),
     );
     expect(result.live).toBe(false);
     expect(sendEmail).not.toHaveBeenCalled();
