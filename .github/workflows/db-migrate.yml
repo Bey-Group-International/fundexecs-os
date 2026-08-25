@@ -11,6 +11,15 @@
 #   SUPABASE_PROJECT_REF   — the production project ref: qhxcvvidhnwdgemjeaug
 #   SUPABASE_DB_PASSWORD   — the production database password
 #
+# A failure here is easy to miss, and that has already cost a month: the
+# SUPABASE_ACCESS_TOKEN expired on 2026-07-19 and every run since died at
+# `supabase link` with {"message":"Unauthorized"}. Nothing blocks a merge on a
+# red DB Migrate run, so migrations quietly stopped reaching production while
+# the merges kept looking green. The steps below exist to make that state
+# loud: the link step names the credential when it fails, and a drift check
+# afterwards compares repo migrations against the remote history and fails
+# with the exact list of versions that did not make it.
+#
 # `supabase db push --include-all` applies every local migration whose version is
 # not already in the remote history — including files whose timestamps sort before
 # the remote head, which happens routinely when parallel sessions merge migrations
@@ -50,7 +59,15 @@ jobs:
           version: latest
 
       - name: Link production project
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        run: |
+          if ! supabase link --project-ref "$SUPABASE_PROJECT_REF"; then
+            echo "::error title=Supabase link failed::Could not link the production project."
+            echo "::error::An 'Unauthorized' here means SUPABASE_ACCESS_TOKEN is expired or revoked."
+            echo "::error::Mint a new personal access token (Supabase dashboard -> account -> tokens)"
+            echo "::error::and update the SUPABASE_ACCESS_TOKEN repository secret. Until then NO"
+            echo "::error::migration reaches production, and merges will keep looking green."
+            exit 1
+          fi
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -58,6 +75,53 @@ jobs:
 
       - name: Push migrations to production
         run: supabase db push --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # Prove the push actually landed. `db push` exiting 0 is not by itself
+      # evidence that every repo migration is now recorded remotely — an
+      # out-of-band apply can record a different version, and a partial run can
+      # stop early. This compares the two lists and names what is missing, so
+      # drift is a specific failure rather than something noticed a month later.
+      - name: Verify no migration drift
+        run: |
+          supabase migration list --linked > /tmp/migration-list.txt 2>&1 || {
+            echo "::error title=Drift check failed::Could not read the remote migration history."
+            cat /tmp/migration-list.txt
+            exit 1
+          }
+
+          missing=0
+          for file in supabase/migrations/*.sql; do
+            version="$(basename "$file" | cut -d_ -f1)"
+            # `migration list` prints local and remote columns; a version present
+            # remotely appears in the remote column of its row.
+            if ! grep -qE "^[[:space:]]*${version}[[:space:]]*\|[[:space:]]*${version}[[:space:]]*\|" /tmp/migration-list.txt; then
+              echo "::error title=Migration not applied::${version} ($(basename "$file")) is in the repo but not in the production history."
+              missing=$((missing + 1))
+            fi
+          done
+
+          total="$(ls supabase/migrations/*.sql | wc -l)"
+
+          # Every single migration reporting missing is far more likely to mean
+          # this parse no longer matches the CLI's output than that production
+          # is empty. Say which of the two it is: a wrong diagnosis here sends
+          # someone hunting a schema problem that does not exist.
+          if [ "$missing" -eq "$total" ]; then
+            echo "::error title=Drift check could not parse the migration list::Expected 'local | remote | time' rows; got the output below. Fix this parse rather than the schema."
+            cat /tmp/migration-list.txt
+            exit 1
+          fi
+
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::${missing} of ${total} migration(s) are missing from production. The schema does not match the merged code."
+            echo "--- supabase migration list --linked ---"
+            cat /tmp/migration-list.txt
+            exit 1
+          fi
+          echo "All ${total} repo migrations are recorded in production."
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
