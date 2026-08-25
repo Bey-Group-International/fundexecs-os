@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { detectTimezone, formatSlotFull } from "@/lib/meetings/scheduling";
 import type { HostBooking, HostEventType, HostSchedulingPage, SchedulingSnapshot } from "./scheduling-types";
 import { SchedulingSettings } from "./SchedulingSettings";
+import { CalendarManager } from "./CalendarManager";
 
 /**
  * The member's own scheduling link on the Meetings landing: share it, see who
@@ -18,6 +19,7 @@ export function SchedulingLinkCard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewerTimezone, setViewerTimezone] = useState("UTC");
@@ -53,15 +55,19 @@ export function SchedulingLinkCard() {
     void load();
   }, [load]);
 
-  // Escape closes the availability overlay, matching the calendar overlay.
+  // Escape closes whichever overlay is open, matching the calendar overlay.
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen && !calendarOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSettingsOpen(false);
+      if (e.key !== "Escape") return;
+      // Topmost first: Escape out of the calendar hub must not also dismiss the
+      // availability panel if that happens to be open behind it.
+      if (calendarOpen) setCalendarOpen(false);
+      else setSettingsOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [settingsOpen]);
+  }, [settingsOpen, calendarOpen]);
 
   async function copyLink() {
     if (!snapshot) return;
@@ -141,13 +147,25 @@ export function SchedulingLinkCard() {
               Share one link. People pick a time from your real availability and land on your calendar.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
-          >
-            Manage availability
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Two neighbours, deliberately distinct: availability shapes what
+                the public link offers, the calendar hub shapes the host's own
+                time and connection. */}
+            <button
+              type="button"
+              onClick={() => setCalendarOpen(true)}
+              className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+            >
+              Manage calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+            >
+              Manage availability
+            </button>
+          </div>
         </header>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -295,6 +313,29 @@ export function SchedulingLinkCard() {
                     onPageChange={applyPage}
                     onEventTypesChange={applyEventTypes}
                   />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {calendarOpen && mounted
+        ? createPortal(
+            <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface-0)]">
+              <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 sm:px-6">
+                <h2 className="text-base font-semibold text-[var(--fg-primary)]">Manage calendar</h2>
+                <button
+                  type="button"
+                  onClick={() => setCalendarOpen(false)}
+                  className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+                >
+                  Close
+                </button>
+              </header>
+              <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+                <div className="mx-auto w-full max-w-2xl">
+                  <CalendarManager />
                 </div>
               </div>
             </div>,
