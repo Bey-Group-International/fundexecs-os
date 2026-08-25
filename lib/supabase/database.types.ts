@@ -2417,6 +2417,8 @@ export type LiveMeeting = {
 export type SchedulingPage = {
   id: string;
   user_id: string;
+  /** Secret path segment of this member's published ICS feed; null when none. */
+  ics_feed_token?: string | null;
   organization_id: string | null;
   slug: string;
   display_name: string;
@@ -2451,6 +2453,25 @@ export type SchedulingEventType = {
 };
 
 export type SchedulingBookingStatus = "pending" | "confirmed" | "declined" | "cancelled";
+
+// An external iCalendar (ICS) URL a member subscribes to. Imported events are
+// read-only busy time: they block booking slots, never edit a meeting here.
+export type CalendarFeed = {
+  id: string;
+  user_id: string;
+  organization_id: string | null;
+  label: string;
+  url: string;
+  is_active: boolean;
+  last_fetched_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  cached_busy: Json;
+  cached_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 // Time a member marked unavailable by hand. Not a meeting: no room, attendees,
 // or lifecycle — it only removes the time from booking slots and warns when
@@ -2765,6 +2786,7 @@ export type Database = {
       scheduling_event_types: TableShape<SchedulingEventType>;
       scheduling_bookings: TableShape<SchedulingBooking>;
       scheduling_blocks: TableShape<SchedulingBlock>;
+      calendar_feeds: TableShape<CalendarFeed>;
       meeting_notes: TableShape<MeetingNote>;
       agent_memories: TableShape<AgentMemory>;
       pipeline_stages: TableShape<PipelineStage>;
@@ -3005,6 +3027,10 @@ export type Database = {
       };
       // Atomically add to an org's reputation score (creating the row if absent),
       // clamped at 0 (migration 0048). Returns the new score.
+      increment_calendar_feed_failures: {
+        Args: { feed_id: string };
+        Returns: void;
+      };
       increment_org_reputation: {
         Args: {
           p_org: string;

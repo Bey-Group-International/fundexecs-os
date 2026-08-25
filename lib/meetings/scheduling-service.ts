@@ -21,6 +21,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import { generateRoomCode } from "@/lib/meetings/service";
 import { blocksToBusyIntervals } from "@/lib/meetings/blocks";
+import { externalBusyForUser } from "@/lib/calendar/feeds.server";
 import {
   DEFAULT_AVAILABILITY,
   DEFAULT_EVENT_TYPES,
@@ -330,6 +331,13 @@ export async function busyIntervals(
       (blocks.data ?? []) as Array<{ starts_at: string; ends_at: string }>,
     ),
   );
+
+  // Time already taken in a subscribed external calendar (Google, Outlook,
+  // Apple, Calendly). Served from each feed's cache — never fetched here,
+  // because this runs inside a public slot lookup and must not wait on a third
+  // party. externalBusyForUser resolves to an empty list rather than throwing,
+  // so a feed problem narrows availability accuracy without failing the page.
+  out.push(...(await externalBusyForUser(client as never, opts.hostUserId)));
 
   return out;
 }

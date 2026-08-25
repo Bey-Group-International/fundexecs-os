@@ -7,6 +7,7 @@ import { runSlaEscalations } from "@/lib/sla-cron";
 import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outbound";
 import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
 import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
+import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -180,6 +181,19 @@ export async function GET(request: Request) {
     console.error("intelligence_sync failed", e);
   }
 
+  // Subscribed calendar feeds: re-fetch the ones whose cached busy time has
+  // aged out. This is what keeps imported availability current — a slot lookup
+  // reads the cache and never fetches, so without this sweep an external
+  // booking would stop blocking slots as soon as its cache went stale.
+  // Best-effort: one unreachable third-party calendar never aborts the sweep,
+  // and each feed's own failure count drives what its owner is told.
+  let calendarFeeds = { refreshed: 0, failed: 0, skipped: 0 };
+  try {
+    calendarFeeds = await refreshStaleFeeds(supabase, { limit: 50 });
+  } catch (e) {
+    console.error("calendar_feed_refresh failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -196,6 +210,8 @@ export async function GET(request: Request) {
         webhooksFailed: webhooks.failed,
         proactiveSurfaced: proactive.surfaced,
         intelligenceAssessed: intelligence.assessed,
+        calendarFeedsRefreshed: calendarFeeds.refreshed,
+        calendarFeedsFailed: calendarFeeds.failed,
       },
       startedAt: now,
     });
