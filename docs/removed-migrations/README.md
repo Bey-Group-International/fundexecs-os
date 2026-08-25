@@ -11,11 +11,11 @@ production database is never lost just because its file never got committed.
 Three migrations were applied straight to production in July 2026 and their SQL
 was never committed:
 
-| Version | Name | Created |
-|---|---|---|
+|     Version      |             Name              |                                   Created                                   |
+|------------------|-------------------------------|-----------------------------------------------------------------------------|
 | `20260705000000` | `office_approval_enforcement` | `office_approvals`, `office_role_can_approve()`, `office_decide_approval()` |
-| `20260707130000` | `office_program` | `office_workflows`, `office_audit_log` |
-| `20260709120000` | `office_invite_tokens` | `office_invite_tokens` |
+| `20260707130000` | `office_program`              | `office_workflows`, `office_audit_log`                                      |
+| `20260709120000` | `office_invite_tokens`        | `office_invite_tokens`                                                      |
 
 All four tables were later dropped by
 `supabase/migrations/20260719000000_drop_virtual_office.sql` when the Virtual
