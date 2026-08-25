@@ -4,6 +4,8 @@ import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
+import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
+import { conflictMessage } from "@/lib/meetings/schedule";
 import { SITE_URL } from "@/lib/site";
 import {
   validateMeetingDraft,
@@ -110,8 +112,15 @@ export async function POST(req: NextRequest) {
         subjectHostId: auth.ctx.userId,
         subjectEmails: [auth.ctx.email, ...guestEmails(attendees)],
       });
-      if (conflicts.length > 0 && body.allowConflict !== true) {
-        return NextResponse.json({ error: "Time conflicts with another meeting.", conflicts }, { status: 409 });
+      // Time the host blocked by hand warns like an overlapping meeting does —
+      // same "Save anyway" escape, since a block is the host's own note to
+      // themselves rather than a commitment to someone else.
+      const blockedBy = await loadBlockConflicts(supabase, auth.ctx.userId, scheduledAt, endIso);
+      if ((conflicts.length > 0 || blockedBy.length > 0) && body.allowConflict !== true) {
+        return NextResponse.json(
+          { error: conflictMessage(conflicts.length, blockedBy.length), conflicts, blockedBy },
+          { status: 409 },
+        );
       }
     }
 

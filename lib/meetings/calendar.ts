@@ -292,3 +292,53 @@ export function formatDayTitle(d: Date): string {
 export function shortTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
+
+// ── Blocked time ────────────────────────────────────────────────────────────
+// Time a member marked unavailable. Rendered alongside meetings but never
+// mixed into them: blocks carry no status, presence, or type, and must not
+// reach the filters, the upcoming list, or any meeting count.
+
+export interface CalendarBlock {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+/** A block as it occupies one day's grid, in minutes from that day's midnight. */
+export interface BlockSpan extends CalendarBlock {
+  startMin: number;
+  endMin: number;
+  /** True when the block runs past this day — the label says so rather than lying. */
+  continuesNextDay: boolean;
+  startsEarlierDay: boolean;
+}
+
+/**
+ * The blocks touching one day, clipped to it. A block that crosses midnight
+ * appears on both days, each time bounded by that day — otherwise the second
+ * day would render a band starting at a negative offset.
+ */
+export function blocksForDay(blocks: CalendarBlock[], day: Date): BlockSpan[] {
+  const dayStart = startOfDay(day).getTime();
+  const dayEnd = dayStart + 24 * 60 * 60_000;
+
+  const out: BlockSpan[] = [];
+  for (const b of blocks) {
+    const start = new Date(b.startsAt).getTime();
+    const end = new Date(b.endsAt).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    if (start >= dayEnd || end <= dayStart) continue;
+
+    const clippedStart = Math.max(start, dayStart);
+    const clippedEnd = Math.min(end, dayEnd);
+    out.push({
+      ...b,
+      startMin: Math.round((clippedStart - dayStart) / 60_000),
+      endMin: Math.round((clippedEnd - dayStart) / 60_000),
+      continuesNextDay: end > dayEnd,
+      startsEarlierDay: start < dayStart,
+    });
+  }
+  return out.sort((a, b) => a.startMin - b.startMin);
+}

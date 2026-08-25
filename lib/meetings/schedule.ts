@@ -477,3 +477,17 @@ export function nextExternalSyncStatus(opts: {
   }
   return "sync_pending";
 }
+
+/**
+ * What to tell someone whose chosen time is already spoken for. Blocked time is
+ * their own note to themselves, so it reads differently from a clash with a
+ * real meeting — and when both apply, the meeting is the more urgent fact.
+ */
+export function conflictMessage(meetingCount: number, blockCount: number): string {
+  if (meetingCount > 0 && blockCount > 0) {
+    return "That time conflicts with another meeting and falls inside time you've blocked.";
+  }
+  if (meetingCount > 0) return "Time conflicts with another meeting.";
+  if (blockCount > 0) return "That time falls inside time you've blocked off.";
+  return "That time is unavailable.";
+}

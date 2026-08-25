@@ -4,7 +4,8 @@ import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "
 import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
-import { findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
+import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
+import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { SITE_URL } from "@/lib/site";
 import {
@@ -108,8 +109,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         subjectHostId: (prior.host_id as string | null) ?? null,
         subjectEmails: guestEmails(subjectAttendees),
       });
-      if (conflicts.length > 0 && body.allowConflict !== true) {
-        return NextResponse.json({ error: "Time conflicts with another meeting.", conflicts }, { status: 409 });
+      const blockedBy = await loadBlockConflicts(supabase, auth.ctx.userId, startIso, endIso);
+      if ((conflicts.length > 0 || blockedBy.length > 0) && body.allowConflict !== true) {
+        return NextResponse.json(
+          { error: conflictMessage(conflicts.length, blockedBy.length), conflicts, blockedBy },
+          { status: 409 },
+        );
       }
     }
   }

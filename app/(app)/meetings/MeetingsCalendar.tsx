@@ -32,10 +32,14 @@ import {
   typeMeta,
   weekDays,
   weekdayLabels,
+  blocksForDay,
+  type BlockSpan,
+  type CalendarBlock,
   type CalendarFilter,
   type CalendarMeeting,
   type CalendarView,
 } from "@/lib/meetings/calendar";
+import { defaultBlockEnd } from "@/lib/meetings/blocks";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
@@ -122,6 +126,11 @@ export function MeetingsCalendar({
   const [editing, setEditing] = useState<CalendarMeeting | null>(null);
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [blocks, setBlocks] = useState<CalendarBlock[]>([]);
+  // What a click on empty calendar space offers: schedule, or block the time.
+  const [slotMenu, setSlotMenu] = useState<{ iso: string; x: number; y: number } | null>(null);
+  const [blockDraft, setBlockDraft] = useState<{ startsAt: string; endsAt: string } | null>(null);
+  const [blockError, setBlockError] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [channelName] = useState(() => nextChannelName("calendar-meetings"));
 
@@ -148,9 +157,24 @@ export function MeetingsCalendar({
     setMeetings((data ?? []) as unknown as CalendarMeeting[]);
   }
 
+  // Blocked time is the member's own, so it comes through the API (which scopes
+  // to the session) rather than an org-wide table read like the meetings above.
+  async function refreshBlocks() {
+    try {
+      const res = await fetch("/api/meetings/blocks");
+      if (!res.ok) return;
+      const json = (await res.json()) as { blocks?: CalendarBlock[] };
+      setBlocks(json.blocks ?? []);
+    } catch {
+      // A failed load leaves the calendar without the shading; it must not
+      // take the whole grid down with it.
+    }
+  }
+
   useEffect(() => {
     const supabase = createClient();
     void refresh();
+    void refreshBlocks();
     function scheduleRefresh() {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => void refresh(), 350);
@@ -158,6 +182,7 @@ export function MeetingsCalendar({
     const channel = supabase
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "live_meetings" }, () => scheduleRefresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "scheduling_blocks" }, () => void refreshBlocks())
       .subscribe();
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -197,13 +222,39 @@ export function MeetingsCalendar({
     setScheduleOpen(true);
   }
 
+  async function createBlock(title: string, startsAt: string, endsAt: string) {
+    setBlockError(null);
+    const res = await fetch("/api/meetings/blocks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, startsAt, endsAt }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      setBlockError(json.error ?? "Couldn't block that time.");
+      return;
+    }
+    setBlockDraft(null);
+    await refreshBlocks();
+  }
+
+  async function clearBlock(id: string) {
+    // Drop it locally first so the band disappears on click; the refresh below
+    // is the correction if the delete actually failed.
+    setBlocks((prev) => prev.filter((b) => b.id !== id));
+    await fetch(`/api/meetings/blocks/${id}`, { method: "DELETE" }).catch(() => undefined);
+    await refreshBlocks();
+  }
+
   const shared = {
     now,
     today,
     presence,
     statusOf,
+    blocks,
     onSelectEvent: (m: CalendarMeeting) => setDetail(m),
-    onSelectSlot: openScheduleAt,
+    onSelectBlock: (b: CalendarBlock) => clearBlock(b.id),
+    onSelectSlot: (iso: string, x: number, y: number) => setSlotMenu({ iso, x, y }),
     onExpandDay: (d: Date) => {
       setAnchor(startOfDay(d));
       setView("day");
@@ -286,6 +337,198 @@ export function MeetingsCalendar({
           }}
         />
       ) : null}
+
+      {slotMenu ? (
+        <SlotMenu
+          x={slotMenu.x}
+          y={slotMenu.y}
+          onClose={() => setSlotMenu(null)}
+          onSchedule={() => {
+            openScheduleAt(slotMenu.iso);
+            setSlotMenu(null);
+          }}
+          onBlock={() => {
+            setBlockDraft({ startsAt: slotMenu.iso, endsAt: defaultBlockEnd(slotMenu.iso) });
+            setBlockError(null);
+            setSlotMenu(null);
+          }}
+        />
+      ) : null}
+
+      {blockDraft ? (
+        <BlockDialog
+          draft={blockDraft}
+          error={blockError}
+          onChange={setBlockDraft}
+          onCancel={() => { setBlockDraft(null); setBlockError(null); }}
+          onSave={(title) => void createBlock(title, blockDraft.startsAt, blockDraft.endsAt)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ── Slot menu ───────────────────────────────────────────────────────────────
+// Clicking empty calendar space is ambiguous — it could mean "meet then" or
+// "keep that free". The grid already resolves the click to an exact time, so
+// the menu just asks which of the two was meant.
+function SlotMenu({
+  x,
+  y,
+  onClose,
+  onSchedule,
+  onBlock,
+}: {
+  x: number;
+  y: number;
+  onClose: () => void;
+  onSchedule: () => void;
+  onBlock: () => void;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Keep the menu on screen when the click lands near the right or bottom edge.
+  const left = Math.min(x, (typeof window !== "undefined" ? window.innerWidth : 1024) - 200);
+  const top = Math.min(y, (typeof window !== "undefined" ? window.innerHeight : 768) - 110);
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        role="menu"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute w-48 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-xl"
+        style={{ left, top }}
+      >
+        <button
+          type="button"
+          onClick={onSchedule}
+          className="block w-full px-3 py-2.5 text-left text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-0)]"
+        >
+          New meeting
+        </button>
+        <button
+          type="button"
+          onClick={onBlock}
+          className="block w-full border-t border-[var(--line)] px-3 py-2.5 text-left text-sm text-[var(--fg-primary)] hover:bg-[var(--surface-0)]"
+        >
+          Block time
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Block dialog ────────────────────────────────────────────────────────────
+/** Local wall-clock value for a datetime-local input, from an ISO instant. */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(value: string): string | null {
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function BlockDialog({
+  draft,
+  error,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  draft: { startsAt: string; endsAt: string };
+  error: string | null;
+  onChange: (d: { startsAt: string; endsAt: string }) => void;
+  onCancel: () => void;
+  onSave: (title: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // A failed save has to let the user try again, so clear the pending state
+  // whenever a new error arrives rather than leaving the button stuck.
+  useEffect(() => {
+    if (error) setBusy(false);
+  }, [error]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" onClick={onCancel}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-5 shadow-2xl"
+      >
+        <h2 className="text-base font-semibold text-[var(--fg-primary)]">Block time</h2>
+        <p className="mt-1 text-xs text-[var(--fg-muted)]">
+          Keeps this time off your booking link and warns if you schedule over it.
+        </p>
+
+        <label className="mt-4 block text-xs font-medium text-[var(--fg-secondary)]">
+          Label
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Busy"
+            className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)]"
+          />
+        </label>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="block text-xs font-medium text-[var(--fg-secondary)]">
+            From
+            <input
+              type="datetime-local"
+              value={toLocalInput(draft.startsAt)}
+              onChange={(e) => {
+                const iso = fromLocalInput(e.target.value);
+                if (iso) onChange({ ...draft, startsAt: iso });
+              }}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-2 text-sm text-[var(--fg-primary)]"
+            />
+          </label>
+          <label className="block text-xs font-medium text-[var(--fg-secondary)]">
+            To
+            <input
+              type="datetime-local"
+              value={toLocalInput(draft.endsAt)}
+              onChange={(e) => {
+                const iso = fromLocalInput(e.target.value);
+                if (iso) onChange({ ...draft, endsAt: iso });
+              }}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2 py-2 text-sm text-[var(--fg-primary)]"
+            />
+          </label>
+        </div>
+
+        {error ? <p className="mt-3 text-xs text-[var(--status-danger)]">{error}</p> : null}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--fg-secondary)] hover:bg-[var(--surface-0)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => { setBusy(true); onSave(title); }}
+            className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? "Blocking…" : "Block time"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -445,12 +688,14 @@ interface SharedViewProps {
   today: Date;
   presence: Record<string, RoomPresence>;
   statusOf: (m: CalendarMeeting) => MeetingDisplayStatus;
+  blocks: CalendarBlock[];
   onSelectEvent: (m: CalendarMeeting) => void;
-  onSelectSlot: (iso: string) => void;
+  onSelectBlock: (b: CalendarBlock) => void;
+  onSelectSlot: (iso: string, x: number, y: number) => void;
   onExpandDay: (d: Date) => void;
 }
 
-function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectSlot, onExpandDay }: SharedViewProps & { anchor: Date }) {
+function MonthView({ anchor, meetings, blocks, today, presence, onSelectEvent, onSelectBlock, onSelectSlot, onExpandDay }: SharedViewProps & { anchor: Date }) {
   const weeks = monthMatrix(anchor);
   const labels = weekdayLabels();
   return (
@@ -465,12 +710,21 @@ function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectS
           const inMonth = isSameMonth(day, anchor);
           const isToday = isSameDay(day, today);
           const evs = eventsForDay(meetings, day);
-          const shown = evs.slice(0, 3);
+          const dayBlocks = blocksForDay(blocks, day);
+          // Blocks take the first row so a busy day reads as busy at a glance,
+          // then meetings fill what's left of the three-chip budget.
+          const shown = evs.slice(0, Math.max(1, 3 - dayBlocks.length));
           const extra = evs.length - shown.length;
           return (
             <button
               key={i}
-              onClick={() => onSelectSlot(localIso(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0))}
+              onClick={(e) =>
+                onSelectSlot(
+                  localIso(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0),
+                  e.clientX,
+                  e.clientY,
+                )
+              }
               className={`flex min-h-[104px] flex-col gap-1 border-b border-r border-[var(--line)] p-1.5 text-left transition-colors hover:bg-[var(--surface-0)] ${
                 inMonth ? "" : "bg-[var(--surface-0)]/40"
               }`}
@@ -483,6 +737,9 @@ function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectS
                 {day.getDate()}
               </span>
               <div className="flex flex-col gap-0.5">
+                {dayBlocks.map((b) => (
+                  <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onSelectBlock(b); }} />
+                ))}
                 {shown.map((m) => (
                   <MonthChip key={m.id} m={m} live={(presence[m.id]?.count ?? 0) > 0} onClick={(e) => { e.stopPropagation(); onSelectEvent(m); }} />
                 ))}
@@ -506,6 +763,26 @@ function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectS
   );
 }
 
+/** A blocked span in the month grid. Muted and hatched so it never reads as a
+ *  meeting — there is nothing to attend, only time that is spoken for. */
+function BlockChip({ b, onClick }: { b: BlockSpan; onClick: (e: React.MouseEvent) => void }) {
+  const label = b.startsEarlierDay ? "from earlier" : shortTime(b.startsAt);
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter") onClick(e as unknown as React.MouseEvent); }}
+      className="flex items-center gap-1 truncate rounded border border-dashed border-[var(--line)] bg-[var(--surface-0)] px-1 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]"
+      title={`${b.title} — click to clear`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--fg-muted)]" />
+      <span className="shrink-0 tabular-nums opacity-80">{label}</span>
+      <span className="truncate">{b.title}</span>
+    </span>
+  );
+}
+
 function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; onClick: (e: React.MouseEvent) => void }) {
   const meta = typeMeta(m.meeting_type);
   return (
@@ -525,7 +802,7 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
 }
 
 // ── Week / Day time grid ────────────────────────────────────────────────────
-function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelectEvent, onSelectSlot }: SharedViewProps & { days: Date[] }) {
+function TimeGridView({ days, meetings, blocks, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot }: SharedViewProps & { days: Date[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = DAY_SCROLL_HOUR * HOUR_PX;
@@ -570,6 +847,7 @@ function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelect
         {days.map((d) => {
           const evs = eventsForDay(meetings, d);
           const layout = layoutDayEvents(evs);
+          const dayBlocks = blocksForDay(blocks, d);
           const isToday = isSameDay(d, today);
           return (
             <div
@@ -581,13 +859,44 @@ function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelect
                 const y = e.clientY - rect.top;
                 let minutes = Math.round((y / HOUR_PX) * 60 / 30) * 30;
                 minutes = Math.max(0, Math.min(23 * 60 + 30, minutes));
-                onSelectSlot(localIso(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(minutes / 60), minutes % 60));
+                onSelectSlot(
+                  localIso(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(minutes / 60), minutes % 60),
+                  e.clientX,
+                  e.clientY,
+                );
               }}
             >
               {/* Hour lines */}
               {hours.map((h) => (
                 <div key={h} className="absolute left-0 right-0 border-b border-[var(--line)]/60" style={{ top: h * HOUR_PX, height: HOUR_PX }} />
               ))}
+
+              {/* Blocked time sits under the events: a meeting deliberately
+                  scheduled over a block must still be readable. */}
+              {dayBlocks.map((b) => {
+                const top = (b.startMin / 60) * HOUR_PX;
+                const height = Math.max(((b.endMin - b.startMin) / 60) * HOUR_PX, 16);
+                return (
+                  <button
+                    key={b.id}
+                    onClick={(e) => { e.stopPropagation(); onSelectBlock(b); }}
+                    className="absolute left-0 right-0 overflow-hidden border-y border-dashed border-[var(--line)] px-1.5 py-0.5 text-left"
+                    style={{
+                      top,
+                      height,
+                      backgroundColor: "color-mix(in srgb, var(--fg-muted) 12%, transparent)",
+                      backgroundImage:
+                        "repeating-linear-gradient(45deg, transparent, transparent 5px, color-mix(in srgb, var(--fg-muted) 10%, transparent) 5px, color-mix(in srgb, var(--fg-muted) 10%, transparent) 10px)",
+                    }}
+                    title={`${b.title} — click to clear`}
+                  >
+                    <span className="truncate text-[11px] font-medium text-[var(--fg-muted)]">
+                      {b.title}
+                      {b.continuesNextDay ? " →" : ""}
+                    </span>
+                  </button>
+                );
+              })}
 
               {/* Now indicator */}
               {isToday ? (
