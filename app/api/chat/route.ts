@@ -1,4 +1,5 @@
 import { requireOrgContext } from "@/lib/auth";
+import { copilotSessionName } from "@/lib/copilot-conversations";
 import { createServerClient } from "@/lib/supabase/server";
 import { earnChatStream, earnChatFallback } from "@/lib/claude";
 import { EARN_MODELS, type EarnModelKey } from "@/lib/earn-conversation";
@@ -42,7 +43,8 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, meeting_context } = await request.json().catch(() => ({ body: "" }));
+  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname } =
+    await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
       status: 400,
@@ -58,6 +60,13 @@ export async function POST(request: Request) {
   // sourcing, meeting) still respond to the current question regardless.
   const sessionId = typeof session_id === "string" && session_id ? session_id : undefined;
   const inSession = Boolean(sessionId);
+
+  // A dock conversation that has no session yet asks for one to be opened on
+  // its first reply, so the exchange lands in /sessions like any other work
+  // instead of living only in the tab. Deliberately NOT folded into
+  // `inSession` above: a brand-new conversation still starts clean, without the
+  // always-on org-state injections that an established session pulls in.
+  const startSession = start_session === true && !sessionId;
 
   // Pre-flight credit gate: this route calls Claude directly, outside the
   // task engine's per-step spendCredits gate, so without this a single
@@ -297,16 +306,40 @@ export async function POST(request: Request) {
     }
   }
 
-  // Persist the turn pair when the chat happens inside a session, so it survives
+  // Open the session for a first-reply conversation, before the stream starts,
+  // so its id can ride back on a response header. Best-effort: if the insert
+  // fails the reply still streams, it simply is not persisted.
+  let openedSessionId: string | undefined;
+  if (startSession) {
+    try {
+      const supabase = await createServerClient();
+      const { data } = await supabase
+        .from("sessions")
+        .insert({
+          organization_id: orgId,
+          name: copilotSessionName(typeof pathname === "string" ? pathname : "", body),
+          origin: "earn" as const,
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      openedSessionId = data?.id;
+    } catch {
+      // Non-fatal — the conversation carries on unpersisted.
+    }
+  }
+  const persistSessionId = sessionId ?? openedSessionId;
+
+  // Persist the turn pair when the chat belongs to a session, so it survives
   // a reload. Best-effort (RLS-gated insert); a failure never breaks the reply.
   async function persist(reply: string) {
-    if (!sessionId || !reply.trim()) return;
+    if (!persistSessionId || !reply.trim()) return;
     const supabase = await createServerClient();
     await supabase
       .from("session_messages")
       .insert([
-        { organization_id: orgId, session_id: sessionId, role: "user", content: body, created_by: userId },
-        { organization_id: orgId, session_id: sessionId, role: "assistant", content: reply, model: modelKey ?? null, created_by: userId },
+        { organization_id: orgId, session_id: persistSessionId, role: "user", content: body, created_by: userId },
+        { organization_id: orgId, session_id: persistSessionId, role: "assistant", content: reply, model: modelKey ?? null, created_by: userId },
       ])
       .then(undefined, () => {});
   }
@@ -317,8 +350,14 @@ export async function POST(request: Request) {
   // No API key — stream the deterministic fallback as a single chunk (still
   // redacted, so no contact-like text can ever slip through).
   if (!stream) {
-    return new Response(encoder.encode(redactContacts(earnChatFallback(body))), {
-      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    const fallback = earnChatFallback(body);
+    void persist(fallback);
+    return new Response(encoder.encode(redactContacts(fallback)), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        ...(openedSessionId ? { "X-Earn-Session": openedSessionId } : {}),
+      },
     });
   }
 
@@ -375,6 +414,8 @@ export async function POST(request: Request) {
       "Cache-Control": "no-store",
       "X-Accel-Buffering": "no",
       "X-Earn-Model": model,
+      // The dock adopts this as its conversation's session id.
+      ...(openedSessionId ? { "X-Earn-Session": openedSessionId } : {}),
     },
   });
 }

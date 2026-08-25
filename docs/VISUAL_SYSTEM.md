@@ -59,6 +59,24 @@ Wording has to survive a real trading desk, not a design screenshot:
   treatment and CSS-only animation.
 - `fx-data-stream`: lightweight processing line for pending/activation states.
 
+## Copilot conversations
+
+The Earn dock holds **one conversation per place**, never one per tab:
+
+- Identity is the location (`lib/copilot-conversations.ts`). A deal owns one
+  conversation across all of its modules; every other hub/module owns its own.
+- Turns never cross places. The `prior` context sent to the model is built from
+  the current conversation only, so a deal's turns are never shipped as context
+  for a question about Wallet.
+- A conversation becomes a real session on its first reply, named
+  `<Place> — <first message>`, and shows up in `/sessions` like any other work.
+  The dock adopts the id from the `X-Earn-Session` response header.
+- The header names the conversation, and "Recent" lists the others — each opens
+  as its own session rather than loading into the current dock, so switching can
+  never merge two threads.
+- "Start new" clears only the current place's conversation. The session it
+  already produced stays in `/sessions`.
+
 ## Overlay placement
 
 The Earn launcher owns the bottom-right corner. The guided tour sits above it

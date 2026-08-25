@@ -17,6 +17,7 @@ import {
   deleteSessionTurn,
   editSessionTurn,
   launchCopilotSuggestion,
+  getConversationDealName,
   getCopilotBriefing,
   getMandateSummary,
   type CopilotBriefing,
@@ -26,6 +27,19 @@ import { TeamTasksFeed } from "@/components/copilot/TeamTasksFeed";
 import { EarnOrb } from "@/components/copilot/EarnOrb";
 import { Markdown } from "@/components/Markdown";
 import { classifyIntent } from "@/lib/intent";
+import {
+  CONVERSATIONS_KEY,
+  LEGACY_THREAD_KEY,
+  conversationKeyForPath,
+  conversationLabelForPath,
+  findConversation,
+  migrateLegacyThread,
+  otherConversations,
+  parseStore,
+  removeConversation,
+  upsertConversation,
+  type ConversationStore,
+} from "@/lib/copilot-conversations";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
@@ -46,7 +60,15 @@ const TIER_TONE: Record<number, string> = {
   3: "border-status-danger/40 text-status-danger",
 };
 
-const STORE_KEY = "earn-copilot-thread";
+/** The first thing asked in a conversation — how a switcher row identifies it. */
+function conversationPreview(thread: Turn[]): string {
+  const first = thread.find((t) => t.role === "user");
+  const text = first && first.role === "user" ? first.text : "";
+  return text.length > 60 ? `${text.slice(0, 59).trimEnd()}…` : text || "No messages";
+}
+
+/** Stable identity for "no turns yet", so effects do not re-fire every render. */
+const EMPTY_THREAD: Turn[] = [];
 
 // A reference the meetings surface passes to open Earn with server-side context.
 // Only the id + mode travel from the browser; the sensitive prep/follow-up
@@ -115,14 +137,23 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // A readable name for wherever the operator is standing — the raw context is
   // a slug ("deal_room"), which is not something to show anyone.
   const sectionLabel = titleCase(ctx.module ?? ctx.hub ?? "workspace");
+  // Conversation identity: the place. A deal owns one conversation across all
+  // its modules; every other location owns its own.
+  const conversationKey = conversationKeyForPath(pathname);
+  // Resolved for deal routes so the conversation carries the deal's own name;
+  // null everywhere else, where the path already reads as a place.
+  const [dealName, setDealName] = useState<string | null>(null);
+  const conversationLabel = conversationLabelForPath(pathname, dealName);
 
   const [open, setOpen] = useState(false);
   // Some surfaces with their own Earn entry points ask to hide the floating
   // launcher pill; ⌘K still opens the dock.
   const [launcherSuppressed, setLauncherSuppressed] = useState(false);
   const [body, setBody] = useState("");
-  const [thread, setThread] = useState<Turn[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // Every conversation this tab knows about, filed by the place it belongs to.
+  // The dock reads and writes only the one for where the operator is standing,
+  // so a deal's turns are never sent as context for a question about Wallet.
+  const [store, setStore] = useState<ConversationStore<Turn>>(() => ({ version: 2, conversations: [] }));
   const [error, setError] = useState<string | null>(null);
   const [lastAsk, setLastAsk] = useState<string>("");
   const [briefing, setBriefing] = useState<CopilotBriefing | null>(null);
@@ -135,6 +166,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // yours or Earn's — can be rewritten in place.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  // Whether the recent-conversations menu is open.
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   // The in-flight answer stream, so Stop can end it and keep what arrived.
@@ -143,37 +176,78 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // mount-time state never overwrites a previously saved conversation.
   const hydrated = useRef(false);
 
-  // Hydrate the running conversation from this tab's storage so the dock keeps
-  // the session across reloads, then persist on every change.
+  // Hydrate every stored conversation, adopting any pre-v2 single-thread blob
+  // into whichever place the operator happens to be standing in.
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(STORE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as { sessionId: string | null; thread: Turn[] };
-        setSessionId(saved.sessionId ?? null);
-        // Clear any streaming flag left over from a reload mid-answer, and
-        // backfill ids for threads saved before turns carried one.
-        setThread(
-          (saved.thread ?? []).map((t) => ({
+      const loaded = parseStore<Turn>(sessionStorage.getItem(CONVERSATIONS_KEY));
+      const legacy = sessionStorage.getItem(LEGACY_THREAD_KEY);
+      const merged = migrateLegacyThread(loaded, legacy, {
+        key: conversationKey,
+        label: conversationLabel,
+        now: Date.now(),
+      });
+      // Clear any streaming flag left over from a reload mid-answer, and
+      // backfill ids for turns saved before they carried one.
+      setStore({
+        version: merged.version,
+        conversations: merged.conversations.map((c) => ({
+          ...c,
+          thread: c.thread.map((t) => ({
             ...t,
             id: t.id || newTurnId(),
             ...(t.role === "earn" && t.streaming ? { streaming: false } : null),
           })),
-        );
-      }
+        })),
+      });
+      if (legacy) sessionStorage.removeItem(LEGACY_THREAD_KEY);
     } catch {
       /* ignore malformed storage */
     }
     hydrated.current = true;
+    // Runs once: the adopted-into key is whichever place the dock first loaded on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (!hydrated.current) return;
     try {
-      sessionStorage.setItem(STORE_KEY, JSON.stringify({ sessionId, thread }));
+      sessionStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(store));
     } catch {
       /* storage may be unavailable */
     }
-  }, [sessionId, thread]);
+  }, [store]);
+
+  // The conversation for where the operator is standing. Reading and writing go
+  // through here, so nothing can accidentally address a different place's turns.
+  const active = findConversation(store, conversationKey);
+  const thread = active?.thread ?? EMPTY_THREAD;
+  const sessionId = active?.sessionId ?? null;
+  const recent = otherConversations(store, conversationKey);
+
+  /** Replace this conversation's turns, filing it under the current place. */
+  function setThread(update: Turn[] | ((prev: Turn[]) => Turn[])) {
+    setStore((prev) => {
+      const current = findConversation(prev, conversationKey);
+      const previousThread = current?.thread ?? EMPTY_THREAD;
+      const nextThread = typeof update === "function" ? update(previousThread) : update;
+      return upsertConversation(prev, {
+        key: conversationKey,
+        label: conversationLabel,
+        sessionId: current?.sessionId ?? null,
+        thread: nextThread,
+        updatedAt: Date.now(),
+      });
+    });
+  }
+
+  /** Adopt the server session this conversation now belongs to. */
+  function setSessionId(id: string | null) {
+    setStore((prev) => {
+      const current = findConversation(prev, conversationKey);
+      if (!current) return prev;
+      return upsertConversation(prev, { ...current, sessionId: id, updatedAt: Date.now() });
+    });
+  }
 
   // Update the most recent Earn turn in place (used while streaming a chat answer).
   function patchLastEarn(prev: Turn[], patch: Partial<Extract<Turn, { role: "earn" }>>): Turn[] {
@@ -229,10 +303,23 @@ export function EarnCopilotDock({ name }: { name: string }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: t, session_id: sessionId ?? undefined, prior, meeting_context: meetingContext }),
+        body: JSON.stringify({
+          body: t,
+          session_id: sessionId ?? undefined,
+          prior,
+          meeting_context: meetingContext,
+          // A conversation with no session yet asks the server to open one on
+          // this first reply, so it lands in /sessions instead of living only
+          // in this tab. `pathname` names it after the place it happened.
+          start_session: !sessionId,
+          pathname,
+        }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
+      // Adopt the session the server opened for this conversation, if any.
+      const opened = res.headers.get("X-Earn-Session");
+      if (opened && !sessionId) setSessionId(opened);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       for (;;) {
@@ -322,13 +409,17 @@ export function EarnCopilotDock({ name }: { name: string }) {
     return () => window.removeEventListener("earn:suppress-launcher", onSuppress);
   }, []);
 
-  /** Start a fresh conversation: drop the current thread and session. */
+  /**
+   * Start this place's conversation over. Only this conversation is dropped —
+   * every other place keeps its own, and the session it produced stays in
+   * /sessions rather than being deleted.
+   */
   function newConversation() {
     stopAnswer();
-    setThread([]);
-    setSessionId(null);
+    setStore((prev) => removeConversation(prev, conversationKey));
     setError(null);
     setEditingId(null);
+    setSwitcherOpen(false);
     setBody("");
     inputRef.current?.focus();
   }
@@ -462,10 +553,16 @@ export function EarnCopilotDock({ name }: { name: string }) {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
   }, [open]);
 
-  // A fresh location refreshes the briefing, but the conversation persists —
-  // the dock maintains the session as the operator moves around the app.
+  // A fresh location refreshes the briefing and swaps to that place's
+  // conversation. Any answer still streaming belongs to the place it was asked
+  // from, so it is stopped rather than left writing into a thread the operator
+  // has walked away from.
   useEffect(() => {
     setBriefing(null);
+    setSwitcherOpen(false);
+    setEditingId(null);
+    setError(null);
+    stopAnswer();
   }, [pathname]);
 
   // Keep the latest turn in view.
@@ -479,6 +576,19 @@ export function EarnCopilotDock({ name }: { name: string }) {
     let active = true;
     getCopilotBriefing(pathname).then((b) => {
       if (active) setBriefing(b);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, pathname]);
+
+  // Name the conversation after the deal, once, when the dock opens on one.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setDealName(null);
+    getConversationDealName(pathname).then((n) => {
+      if (active) setDealName(n);
     });
     return () => {
       active = false;
@@ -538,7 +648,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
             <div className="flex items-center gap-2">
               <EarnOrb size={28} pulse />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-fg-primary">Earn</p>
+                {/* Which conversation this is. Naming the place makes it plain
+                    that Wallet's turns are not in the deal's thread. */}
+                <p className="truncate text-sm font-semibold text-fg-primary">
+                  Earn · <span className="font-normal text-fg-secondary">{conversationLabel}</span>
+                </p>
                 <p className="truncate font-mono text-xs font-semibold uppercase tracking-[0.08em] text-neural-300">
                   {specialist.key !== "associate" ? (
                     <span className="inline-flex items-center gap-1">
@@ -551,13 +665,74 @@ export function EarnCopilotDock({ name }: { name: string }) {
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="rounded-md px-2 py-1 text-fg-muted transition hover:text-neural-300"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {/* Recent conversations. Each one belongs to its own place and opens
+                as its own session — the dock always shows the conversation for
+                where you are standing, so selecting one never mixes threads. */}
+            <div className="relative">
+              <button
+                onClick={() => setSwitcherOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={switcherOpen}
+                title="Recent conversations"
+                className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition hover:text-neural-300"
+              >
+                Recent ▾
+              </button>
+              {switcherOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1.5 w-64 rounded-xl border border-line bg-surface-1 p-1 shadow-[0_20px_48px_-28px_rgb(15_23_42/0.45)]">
+                  {recent.length === 0 ? (
+                    <p className="px-2.5 py-2 text-xs text-fg-muted">
+                      No other conversations yet. Each place you ask from keeps its own.
+                    </p>
+                  ) : (
+                    recent.map((c) =>
+                      c.sessionId ? (
+                        <Link
+                          key={c.key}
+                          href={`/session/${c.sessionId}`}
+                          onClick={() => {
+                            setSwitcherOpen(false);
+                            setOpen(false);
+                          }}
+                          className="block rounded-lg px-2.5 py-1.5 transition hover:bg-surface-2"
+                        >
+                          <span className="block truncate text-xs font-medium text-fg-primary">{c.label}</span>
+                          <span className="block truncate text-[11px] text-fg-muted">
+                            {conversationPreview(c.thread)}
+                          </span>
+                        </Link>
+                      ) : (
+                        <div key={c.key} className="rounded-lg px-2.5 py-1.5">
+                          <span className="block truncate text-xs font-medium text-fg-secondary">{c.label}</span>
+                          <span className="block truncate text-[11px] text-fg-muted">
+                            {conversationPreview(c.thread)}
+                          </span>
+                        </div>
+                      ),
+                    )
+                  )}
+                  <Link
+                    href="/sessions"
+                    onClick={() => {
+                      setSwitcherOpen(false);
+                      setOpen(false);
+                    }}
+                    className="mt-1 block rounded-lg border-t border-line px-2.5 py-1.5 text-xs font-medium text-neural-300 transition hover:bg-surface-2"
+                  >
+                    All conversations →
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="rounded-md px-2 py-1 text-fg-muted transition hover:text-neural-300"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="relative z-10 flex-1 space-y-5 overflow-y-auto px-4 py-4">

@@ -535,3 +535,28 @@ export async function deleteSessionTurn(args: {
     return { ok: false, rows: 0 };
   }
 }
+
+/**
+ * The deal's own name, so a conversation about it reads as "Deal · Meridian
+ * Growth" rather than an anonymous "Deal" the operator has to disambiguate by
+ * memory. Returns null off a deal route, or when the deal is not visible to
+ * this org — the dock falls back to the generic label.
+ */
+export async function getConversationDealName(pathname: string): Promise<string | null> {
+  const location = copilotContextFromPath(pathname);
+  if (!location.dealId) return null;
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return null;
+  try {
+    const supabase = await createServerClient();
+    const { data } = await supabase
+      .from("deals")
+      .select("name")
+      .eq("id", location.dealId)
+      .eq("organization_id", ctx.orgId)
+      .maybeSingle();
+    return data?.name?.trim() || null;
+  } catch {
+    return null;
+  }
+}

@@ -34,35 +34,70 @@ describe("isPersistedTurnId", () => {
   });
 });
 
-// A minimal Supabase double: records the filters a call chained, and resolves
-// with whatever rows the test hands it.
-function stubClient(rows: { id: string }[] | null, error: unknown = null) {
-  const calls: { table: string; op: string; payload?: unknown; filters: [string, string][] } = {
-    table: "",
-    op: "",
-    filters: [],
-  };
-  const chain = {
-    eq(column: string, value: string) {
-      calls.filters.push([column, value]);
-      return chain;
-    },
-    select() {
-      return Promise.resolve({ data: rows, error });
-    },
-  };
+// A minimal Supabase double. It records what each call chained and replays
+// canned rows: `lookupRows` answers the select() that resolves a client-minted
+// turn to a single row id, `writeRows` answers the update()/delete() itself.
+function stubClient(
+  writeRows: { id: string }[] | null,
+  error: unknown = null,
+  lookupRows: { id: string }[] = [],
+) {
+  const calls: {
+    table: string;
+    op: string;
+    payload?: unknown;
+    filters: [string, string][];
+    lookupFilters: [string, string][];
+    lookupLimit: number | null;
+  } = { table: "", op: "", filters: [], lookupFilters: [], lookupLimit: null };
+
+  function writeChain() {
+    const chain = {
+      eq(column: string, value: string) {
+        calls.filters.push([column, value]);
+        return chain;
+      },
+      select() {
+        return Promise.resolve({ data: writeRows, error });
+      },
+    };
+    return chain;
+  }
+
+  // The lookup chain resolves like a query (it is awaited directly), so it is
+  // thenable as well as chainable.
+  function lookupChain() {
+    const chain = {
+      eq(column: string, value: string) {
+        calls.lookupFilters.push([column, value]);
+        return chain;
+      },
+      order() {
+        return chain;
+      },
+      limit(n: number) {
+        calls.lookupLimit = n;
+        return Promise.resolve({ data: lookupRows, error: null });
+      },
+    };
+    return chain;
+  }
+
   const client = {
     from(table: string) {
       calls.table = table;
       return {
+        select() {
+          return lookupChain();
+        },
         update(payload: unknown) {
           calls.op = "update";
           calls.payload = payload;
-          return chain;
+          return writeChain();
         },
         delete() {
           calls.op = "delete";
-          return chain;
+          return writeChain();
         },
       };
     },
@@ -89,22 +124,43 @@ describe("updateSessionMessage", () => {
     ]);
   });
 
-  it("falls back to matching the previous text for a turn minted in this session", async () => {
-    const { client, calls } = stubClient([{ id: "row-1" }]);
+  it("resolves a turn minted in this session to a single row before writing", async () => {
+    const { client, calls } = stubClient([{ id: "row-1" }], null, [{ id: "row-1" }]);
     await updateSessionMessage(client, {
       sessionId: "sess-1",
       turnId: "you-1750000000000",
       previousContent: "old",
       content: "new",
     });
-    expect(calls.filters).toEqual([
+    // The text match narrows to one row...
+    expect(calls.lookupFilters).toEqual([
       ["session_id", "sess-1"],
       ["content", "old"],
     ]);
+    expect(calls.lookupLimit).toBe(1);
+    // ...and the write addresses that row by id, never by content. Without
+    // this, asking the same question twice and editing one would rewrite both.
+    expect(calls.filters).toEqual([
+      ["session_id", "sess-1"],
+      ["id", "row-1"],
+    ]);
+  });
+
+  it("writes nothing when no row matches the turn", async () => {
+    const { client, calls } = stubClient([{ id: "row-1" }], null, []);
+    await expect(
+      updateSessionMessage(client, {
+        sessionId: "sess-1",
+        turnId: "you-1",
+        previousContent: "never persisted",
+        content: "new",
+      }),
+    ).resolves.toBe(0);
+    expect(calls.op).toBe("");
   });
 
   it("reports zero rows rather than throwing when the write fails", async () => {
-    const { client } = stubClient(null, { message: "denied" });
+    const { client } = stubClient(null, { message: "denied" }, [{ id: "row-1" }]);
     await expect(
       updateSessionMessage(client, {
         sessionId: "sess-1",
@@ -132,17 +188,27 @@ describe("deleteSessionMessage", () => {
     ]);
   });
 
-  it("matches on content for a turn that has no row id yet", async () => {
-    const { client, calls } = stubClient([]);
+  it("deletes exactly one row when several turns share the same text", async () => {
+    // Two rows carry "gone"; the lookup returns only the newest.
+    const { client, calls } = stubClient([{ id: "row-2" }], null, [{ id: "row-2" }]);
     const rows = await deleteSessionMessage(client, {
       sessionId: "sess-1",
       turnId: "earn-1750000000000",
       content: "gone",
     });
-    expect(rows).toBe(0);
+    expect(rows).toBe(1);
+    expect(calls.lookupLimit).toBe(1);
     expect(calls.filters).toEqual([
       ["session_id", "sess-1"],
-      ["content", "gone"],
+      ["id", "row-2"],
     ]);
+  });
+
+  it("deletes nothing when the turn was never persisted", async () => {
+    const { client, calls } = stubClient([], null, []);
+    await expect(
+      deleteSessionMessage(client, { sessionId: "sess-1", turnId: "earn-1", content: "gone" }),
+    ).resolves.toBe(0);
+    expect(calls.op).toBe("");
   });
 });
