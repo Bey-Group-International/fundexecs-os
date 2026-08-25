@@ -46,7 +46,7 @@ export function DiligenceConsole() {
         <label className="mt-4 flex flex-col gap-1.5 text-sm">
           <span className="flex items-center justify-between text-fg-secondary">
             <span>Paste the document text</span>
-            <span className="font-mono text-[10px] text-fg-muted">
+            <span className="font-mono text-[11px] text-fg-muted">
               or{" "}
               <label className="cursor-pointer text-gold-400 hover:underline">
                 upload a .txt/.md
@@ -96,13 +96,13 @@ export function DiligenceConsole() {
         result.ok ? (
           <div className="rounded-2xl border border-line bg-surface-1 p-5">
             <div className="flex flex-wrap items-center gap-2 border-b border-line pb-3">
-              <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-300">
+              <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 {result.brainName}
               </span>
               {(result.toolsUsed ?? []).map((t) => (
                 <span
                   key={t}
-                  className="rounded-full border border-line px-2 py-0.5 font-mono text-[10px] text-fg-muted"
+                  className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-fg-muted"
                 >
                   {t}
                 </span>

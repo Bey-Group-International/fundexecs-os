@@ -55,7 +55,7 @@ function Metric({
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-2/40 px-3.5 py-2.5">
       <span className="font-display text-lg font-semibold leading-none text-fg-primary">{value}</span>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
       {delta ? <span className={`text-[11px] leading-tight ${deltaTone}`}>{delta}</span> : null}
     </div>
   );
@@ -74,7 +74,7 @@ function ModuleChip({ m }: { m: ExecuteModuleChip }) {
       title={`${m.label}: ${m.count}`}
       className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition hover:bg-surface-2 ${CHIP_TONE[m.status]}`}
     >
-      <span className="font-mono text-[10px]">{m.count}</span>
+      <span className="font-mono text-[11px]">{m.count}</span>
       <span>{m.label}</span>
     </Link>
   );
@@ -95,7 +95,7 @@ function ValueBridge({ perf }: { perf: ExecutePerformance }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Value bridge</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Value bridge</span>
         <span
           className={`font-display text-sm font-semibold ${
             totalValue >= called ? "text-emerald-300" : "text-status-danger"
@@ -140,7 +140,7 @@ function CapitalCard({ perf }: { perf: ExecutePerformance }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Capital position</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Capital position</span>
         <span
           className={`font-display text-sm font-semibold ${
             netCashflow >= 0 ? "text-emerald-300" : "text-fg-primary"
@@ -170,7 +170,7 @@ function CapitalCard({ perf }: { perf: ExecutePerformance }) {
         </p>
       )}
       {upcomingCall ? (
-        <p className="mt-1 font-mono text-[10px] text-gold-300">
+        <p className="mt-1 font-mono text-[11px] text-gold-300">
           ↑ {compactUsd(upcomingCall.amount)} call due {upcomingCall.date}
         </p>
       ) : null}
@@ -187,7 +187,7 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
   if (!perf.hasData) {
     return (
       <div className="mb-6 flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-10 text-center">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Portfolio command center
         </span>
         <p className="mt-2 max-w-sm text-sm text-fg-secondary">
@@ -218,7 +218,7 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
             <span className="font-display text-sm font-semibold text-fg-primary">
               {multiple(heroMultiple)}
             </span>
-            <span className="mt-0.5 font-mono text-[7px] uppercase tracking-wider text-fg-muted">
+            <span className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {heroLabel}
             </span>
           </span>
@@ -226,20 +226,20 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Portfolio performance
             </span>
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
             {exitedAssets > 0 ? (
-              <span className="rounded-full border border-emerald-400/40 bg-emerald-400/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+              <span className="rounded-full border border-emerald-400/40 bg-emerald-400/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-emerald-300">
                 {exitedAssets} exited
               </span>
             ) : null}
             <Link
               href="/execute/asset_management"
-              className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+              className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
             >
               ✶ AI Ops
             </Link>
@@ -288,7 +288,7 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
         {stages.map((s, i) => (
           <div key={s.stage.key} className="flex items-center gap-1.5">
             <span
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                 s.current
                   ? "bg-gold-400 text-surface-0"
                   : s.reached
@@ -328,7 +328,7 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Next best move · {perf.nextAction.moduleLabel}
             </span>
             <span className="block truncate text-sm text-fg-primary">{perf.nextAction.label}</span>

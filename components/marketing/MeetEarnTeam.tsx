@@ -43,7 +43,7 @@ export function MeetEarnTeam() {
       className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6 sm:py-24"
     >
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
           The executive team
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -109,7 +109,7 @@ export function MeetEarnTeam() {
               />
             </div>
           </div>
-          <span className="mt-2 rounded-full border border-gold-500/30 bg-surface-0/80 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 backdrop-blur">
+          <span className="mt-2 rounded-full border border-gold-500/30 bg-surface-0/80 px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 backdrop-blur">
             Earn · Orchestrator
           </span>
         </div>
@@ -129,7 +129,7 @@ export function MeetEarnTeam() {
             >
               {initials(agent.name)}
             </span>
-            <span className="mt-1 hidden max-w-[84px] text-center text-[10px] font-medium leading-tight text-fg-secondary sm:block">
+            <span className="mt-1 hidden max-w-[84px] text-center text-[11px] font-medium leading-tight text-fg-secondary sm:block">
               {agent.name}
             </span>
           </div>
@@ -139,7 +139,7 @@ export function MeetEarnTeam() {
       {/* Hub legend — institutional key to how the workforce is organized */}
       <Reveal
         delayMs={80}
-        className="mx-auto mt-10 flex max-w-xl flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-line/60 pt-6 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+        className="mx-auto mt-10 flex max-w-xl flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-line/60 pt-6 font-mono text-[11px] uppercase tracking-wider text-fg-muted"
       >
         <span>Sourcing</span>
         <span aria-hidden>·</span>

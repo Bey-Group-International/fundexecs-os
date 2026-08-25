@@ -33,7 +33,7 @@ export function DownloadOSFloat() {
               </span>
             ))}
           </div>
-          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Get the OS
           </span>
         </button>
@@ -63,7 +63,7 @@ export function DownloadOSFloat() {
           />
           <div className="relative flex items-start justify-between">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
                 Native App
               </p>
               <p className="mt-0.5 text-sm font-semibold text-fg-primary">Get the OS</p>
@@ -109,7 +109,7 @@ export function DownloadOSFloat() {
                     platform={platform}
                     className="h-4 w-4 text-fg-muted transition duration-200 group-hover:text-gold-400"
                   />
-                  <span className="font-mono text-[7.5px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-400/80">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-400/80">
                     {label}
                   </span>
                 </a>
@@ -120,7 +120,7 @@ export function DownloadOSFloat() {
 
         {/* Footer */}
         <div className="border-t border-line/40 px-4 py-2">
-          <p className="font-mono text-[8px] uppercase tracking-widest text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Self-hosted · no app store required
           </p>
         </div>

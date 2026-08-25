@@ -50,20 +50,20 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-fg-primary">{descriptor.label}</span>
                   {state === "connected_gateway" ? (
-                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                       Connected
                     </span>
                   ) : state === "connected_env" ? (
-                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                       Connected · environment
                     </span>
                   ) : (
-                    <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Prepared only
                     </span>
                   )}
                   {row?.status === "connected" && row.account_label ? (
-                    <span className="font-mono text-[10px] text-fg-muted">{row.account_label}</span>
+                    <span className="font-mono text-[11px] text-fg-muted">{row.account_label}</span>
                   ) : null}
                 </div>
 
@@ -78,14 +78,14 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                     {descriptor.capabilities.map((cap) => (
                       <span
                         key={cap.kind}
-                        className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[10px] text-fg-secondary"
+                        className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[11px] text-fg-secondary"
                       >
                         {cap.label}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     No actions routed
                   </p>
                 )}
@@ -123,10 +123,10 @@ export function Connections({ connections }: { connections: IntegrationConnectio
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-fg-primary">Professional Network</span>
-              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                 Import available
               </span>
-              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Data input
               </span>
             </div>
@@ -143,7 +143,7 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                 "Recommend capital contacts",
                 "Generate outreach drafts",
               ].map((cap) => (
-                <span key={cap} className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[10px] text-fg-secondary">
+                <span key={cap} className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[11px] text-fg-secondary">
                   {cap}
                 </span>
               ))}
@@ -166,7 +166,7 @@ export function Connections({ connections }: { connections: IntegrationConnectio
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-fg-primary">Prepared fallback</span>
-              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Not sent
               </span>
             </div>

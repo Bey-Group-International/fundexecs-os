@@ -100,7 +100,7 @@ export function SourceLiveHeader({ title, subtitle, stats = [], intervalMs = DEF
             onClick={() => setLive((v) => !v)}
             aria-pressed={live}
             title={live ? "Live — auto-refreshing. Click to pause." : "Paused. Click to resume live updates."}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
               live
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-line bg-surface-2 text-fg-muted hover:text-fg-primary"
@@ -147,7 +147,7 @@ export function SourceLiveHeader({ title, subtitle, stats = [], intervalMs = DEF
         >
           {stats.map((s) => (
             <div key={s.label} className="fx-stat">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">{s.label}</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{s.label}</p>
               <p className={`mt-1 font-display text-2xl font-semibold tabular-nums ${s.accent ?? "text-fg-primary"}`}>
                 {s.value}
               </p>
@@ -157,7 +157,7 @@ export function SourceLiveHeader({ title, subtitle, stats = [], intervalMs = DEF
         </div>
       ) : null}
 
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70">
+      <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted/70">
         {syncedAt ? `As of ${relativeSince(syncedAt)}` : "Syncing…"}
         {live ? " · streaming" : " · paused"}
       </p>

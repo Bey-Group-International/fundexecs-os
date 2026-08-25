@@ -36,7 +36,7 @@ export function MobileQuickAction({ open, onClose }: { open: boolean; onClose: (
                   <span className="flex items-center gap-2">
                     <span className="truncate text-[15px] font-medium text-fg-primary">{a.label}</span>
                     {a.gated && (
-                      <span className="shrink-0 rounded-full border border-neural-400/40 px-1.5 py-px font-mono text-[8px] uppercase tracking-wider text-neural-300">
+                      <span className="shrink-0 rounded-full border border-neural-400/40 px-1.5 py-px font-mono text-[11px] uppercase tracking-wider text-neural-300">
                         Approval
                       </span>
                     )}

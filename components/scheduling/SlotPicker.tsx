@@ -73,7 +73,7 @@ export function SlotPicker({
                   : "border-[var(--line)] bg-[var(--surface-1)] text-[var(--fg-secondary)] hover:border-[var(--gold-400)]/40"
               }`}
             >
-              <span className="text-[10px] uppercase tracking-wide text-[var(--fg-muted)]">
+              <span className="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
                 {new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(new Date(sample))}
               </span>
               <span className="text-sm font-medium">
@@ -81,7 +81,7 @@ export function SlotPicker({
                   new Date(sample),
                 )}
               </span>
-              <span className="text-[10px] text-[var(--fg-muted)]">{day.slots.length} open</span>
+              <span className="text-[11px] text-[var(--fg-muted)]">{day.slots.length} open</span>
             </button>
           );
         })}

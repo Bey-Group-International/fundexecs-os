@@ -71,7 +71,7 @@ export function ClarificationDialog({
       >
         {/* Header */}
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             ✦ Quick Clarification
           </span>
           <h2 className="text-sm font-medium text-fg-primary">{title}</h2>

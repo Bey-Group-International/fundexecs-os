@@ -45,11 +45,11 @@ function NBACard({
         <span className={`text-base ${meta.color}`} aria-hidden>
           {meta.icon}
         </span>
-        <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {meta.label}
         </span>
         {item.priority >= 80 && (
-          <span className="ml-auto rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-red-300">
+          <span className="ml-auto rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-red-300">
             Priority
           </span>
         )}
@@ -70,7 +70,7 @@ function NBACard({
         <button
           type="button"
           onClick={() => onLaunch(item.copilotPrompt)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:border-gold-500/70 hover:bg-gold-500/20"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:border-gold-500/70 hover:bg-gold-500/20"
         >
           <span aria-hidden>◈</span>
           Ask Earn
@@ -78,7 +78,7 @@ function NBACard({
         <button
           type="button"
           onClick={() => onDismiss(item.id)}
-          className="ml-auto font-mono text-[10px] text-fg-muted transition hover:text-fg-secondary"
+          className="ml-auto font-mono text-[11px] text-fg-muted transition hover:text-fg-secondary"
         >
           Dismiss
         </button>
@@ -130,11 +130,11 @@ export function NextBestAction({ items }: Props) {
   return (
     <section aria-label="Next best actions">
       <header className="mb-3 flex items-center justify-between">
-        <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+        <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_6px_2px_rgba(212,175,106,0.4)]" aria-hidden />
           Today&apos;s Priority Actions
         </span>
-        <span className="font-mono text-[10px] text-fg-muted">
+        <span className="font-mono text-[11px] text-fg-muted">
           {visible.length} of {items.length}
         </span>
       </header>

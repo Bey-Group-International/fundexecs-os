@@ -304,7 +304,7 @@ export function DataRoomViewer({
           </div>
         </div>
 
-        <span className="shrink-0 rounded-full border border-line bg-surface-1 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+        <span className="shrink-0 rounded-full border border-line bg-surface-1 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Read-only
         </span>
       </header>
@@ -328,7 +328,7 @@ export function DataRoomViewer({
           ) : null}
 
           <div className="relative z-10 flex flex-1 flex-col overflow-y-auto py-4">
-            <p className="px-4 pb-2 font-mono text-[9px] uppercase tracking-[0.2em] text-fg-muted">Contents</p>
+            <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Contents</p>
             <nav className="flex flex-col gap-0.5 px-2">
               {nav.map((item) => {
                 const active = item.key === selected;
@@ -347,7 +347,7 @@ export function DataRoomViewer({
                   >
                     {item.label}
                     {"docs" in item && item.docs.length > 1 ? (
-                      <span className="ml-2 font-mono text-[9px] text-fg-muted">{item.docs.length}</span>
+                      <span className="ml-2 font-mono text-[11px] text-fg-muted">{item.docs.length}</span>
                     ) : null}
                   </button>
                 );
@@ -357,9 +357,9 @@ export function DataRoomViewer({
 
           <div className="shrink-0 border-t border-line px-4 py-3">
             {viewerEmail ? (
-              <p className="truncate font-mono text-[9px] text-fg-muted">{viewerEmail}</p>
+              <p className="truncate font-mono text-[11px] text-fg-muted">{viewerEmail}</p>
             ) : null}
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               FundExecs OS
             </p>
           </div>
@@ -413,7 +413,7 @@ function ContentPanel({
         <SectionHeader title="Overview" accent={accent} />
         <div className="mt-4 space-y-3 text-sm text-fg-secondary">
           {org.tagline ? <p className="text-base font-medium text-fg-primary">{org.tagline}</p> : null}
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {[org.entity_type, org.jurisdiction, org.website].filter(Boolean).join("  ·  ") || "—"}
           </p>
           {org.legal_name ? (
@@ -438,11 +438,11 @@ function ContentPanel({
           {rows.map((m) => (
             <div key={m.l} className="rounded-xl border border-line bg-surface-1 px-4 py-3 text-center" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}>
               <p className="font-display text-2xl font-semibold text-fg-primary">{m.v}</p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">{m.l}</p>
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">{m.l}</p>
             </div>
           ))}
         </div>
-        <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {blended.dealCount} deals · {blended.realizedCount} realized
           {blended.vintageRange ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}` : ""}
         </p>
@@ -463,7 +463,7 @@ function ContentPanel({
           {thesis.summary ? (
             <p className="text-sm leading-relaxed text-fg-secondary">{thesis.summary}</p>
           ) : null}
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {[
               thesis.asset_classes?.join(", "),
               thesis.geographies?.join(", "),
@@ -548,7 +548,7 @@ function DocCard({ doc, token, accent }: { doc: ViewerDoc; token: string; accent
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="font-mono text-[9px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
           >
             {expanded ? "Collapse" : "Expand"}
           </button>
@@ -558,7 +558,7 @@ function DocCard({ doc, token, accent }: { doc: ViewerDoc; token: string; accent
             href={`/dataroom/${token}/d/${doc.id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg border px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition hover:bg-surface-0"
+            className="rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition hover:bg-surface-0"
             style={{ borderColor: `${accent}55`, color: accent }}
           >
             Open →

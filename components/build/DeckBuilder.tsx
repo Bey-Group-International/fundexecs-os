@@ -221,7 +221,7 @@ function SlideEditor({
       }`}
     >
       {/* Layout label */}
-      <span className="absolute right-3 top-2 rounded border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted/50">
+      <span className="absolute right-3 top-2 rounded border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted/50">
         {slide.layout}
       </span>
 
@@ -364,7 +364,7 @@ function DeleteBlockBtn({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-[10px] text-fg-muted opacity-0 transition hover:bg-status-danger/20 hover:text-status-danger group-hover:opacity-100"
+      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-[11px] text-fg-muted opacity-0 transition hover:bg-status-danger/20 hover:text-status-danger group-hover:opacity-100"
     >
       ✕
     </button>
@@ -385,13 +385,13 @@ function SlideThumbnail({ slide, active }: { slide: Slide; active: boolean }) {
         active ? "border-gold-400 bg-gold-500/10" : "border-line bg-surface-1"
       }`}
     >
-      <span className="truncate font-mono text-[8px] uppercase tracking-widest text-fg-muted">{slide.layout}</span>
+      <span className="truncate font-mono text-[11px] uppercase tracking-widest text-fg-muted">{slide.layout}</span>
       {firstText ? (
-        <span className="line-clamp-2 text-[9px] leading-tight text-fg-secondary">{firstText.value}</span>
+        <span className="line-clamp-2 text-[11px] leading-tight text-fg-secondary">{firstText.value}</span>
       ) : metricCount > 0 ? (
-        <span className="text-[9px] text-fg-muted">{metricCount} metrics</span>
+        <span className="text-[11px] text-fg-muted">{metricCount} metrics</span>
       ) : (
-        <span className="text-[9px] text-fg-muted/40">Empty</span>
+        <span className="text-[11px] text-fg-muted/40">Empty</span>
       )}
     </div>
   );
@@ -598,13 +598,13 @@ export function DeckBuilder({
     <div className="flex flex-col gap-3">
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deck Builder</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Deck Builder</span>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => printDeck(deck, docName)}
-            className="rounded-md border border-line px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary"
+            className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary"
           >
             ⤓ PDF
           </button>
@@ -640,7 +640,7 @@ export function DeckBuilder({
               } ${dragIdx === idx ? "opacity-30" : ""}`}
             >
               <div className="flex items-center gap-1">
-                <span className="w-4 text-center font-mono text-[8px] text-fg-muted">{idx + 1}</span>
+                <span className="w-4 text-center font-mono text-[11px] text-fg-muted">{idx + 1}</span>
                 <div className="flex-1">
                   <SlideThumbnail slide={slide} active={idx === activeIdx} />
                 </div>
@@ -650,14 +650,14 @@ export function DeckBuilder({
 
           {/* Add slide */}
           <div className="mt-1 border-t border-line pt-2">
-            <p className="mb-1 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Add slide</p>
+            <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Add slide</p>
             <div className="flex flex-col gap-1">
               {LAYOUT_OPTIONS.map(({ layout, label }) => (
                 <button
                   key={layout}
                   type="button"
                   onClick={() => addSlide(layout)}
-                  className="rounded border border-line bg-surface-1 px-2 py-1 text-left text-[10px] text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
+                  className="rounded border border-line bg-surface-1 px-2 py-1 text-left text-[11px] text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
                 >
                   {label}
                 </button>
@@ -681,14 +681,14 @@ export function DeckBuilder({
 
           {/* Bottom slide controls */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] text-fg-muted">
+            <span className="font-mono text-[11px] text-fg-muted">
               Slide {activeIdx + 1} / {deck.slides.length}
             </span>
             <div className="ml-auto flex gap-1.5">
               <button
                 type="button"
                 onClick={duplicateSlide}
-                className="rounded border border-line px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+                className="rounded border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
               >
                 Duplicate
               </button>
@@ -696,7 +696,7 @@ export function DeckBuilder({
                 type="button"
                 onClick={deleteSlide}
                 disabled={deck.slides.length <= 1}
-                className="rounded border border-status-danger/30 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/10 disabled:opacity-30"
+                className="rounded border border-status-danger/30 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/10 disabled:opacity-30"
               >
                 Delete
               </button>
@@ -708,7 +708,7 @@ export function DeckBuilder({
         <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface-0 p-3">
           {/* Layout */}
           <div>
-            <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Layout</p>
+            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Layout</p>
             <div className="flex flex-col gap-1">
               {LAYOUT_OPTIONS.map(({ layout, label }) => (
                 <button
@@ -731,7 +731,7 @@ export function DeckBuilder({
 
           {/* Blocks */}
           <div>
-            <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Add Block</p>
+            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Add Block</p>
             <div className="flex flex-col gap-1">
               {BLOCK_OPTIONS.map(({ type, label, icon }) => (
                 <button
@@ -751,8 +751,8 @@ export function DeckBuilder({
 
           {/* Text size (for active text blocks hint) */}
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Tip</p>
-            <p className="mt-1 text-[10px] leading-snug text-fg-muted">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Tip</p>
+            <p className="mt-1 text-[11px] leading-snug text-fg-muted">
               Click any text to edit it inline. Drag slides in the left panel to reorder.
             </p>
           </div>

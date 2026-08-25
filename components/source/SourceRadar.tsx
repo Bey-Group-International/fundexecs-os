@@ -153,18 +153,18 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Source Radar
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
           {tuned ? (
             <span
               title="Ranking nudged by your accept/dismiss feedback."
-              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300"
             >
               tuned by your feedback
             </span>
@@ -227,12 +227,12 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
                       <div className="flex items-baseline gap-2">
                         <span className="truncate text-sm font-medium text-fg-primary">{it.name}</span>
                         {it.inPipeline ? (
-                          <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-status-info">
+                          <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-status-info">
                             in pipeline
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                         <span className="rounded-full border border-line px-1.5 py-0.5">{humanize(it.kind)}</span>
                         {it.geography ? <span>{it.geography}</span> : null}
                         {it.categories.slice(0, 2).map((c) => (
@@ -242,14 +242,14 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
                       </div>
                       <p className="mt-1.5 text-xs text-fg-secondary">{it.signalSummary}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${propTone(it.propensity.sell)}`}>
+                        <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${propTone(it.propensity.sell)}`}>
                           sell {it.propensity.sell}
                         </span>
-                        <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${propTone(it.propensity.raise)}`}>
+                        <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${propTone(it.propensity.raise)}`}>
                           raise {it.propensity.raise}
                         </span>
                         {it.signalCount > 0 ? (
-                          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                             {it.signalCount} signal{it.signalCount === 1 ? "" : "s"}
                           </span>
                         ) : null}
@@ -277,7 +277,7 @@ export function SourceRadar({ live }: { live: boolean; initialPrompt?: string })
                       <button
                         type="button"
                         onClick={() => onDismiss(it, key)}
-                        className="rounded-md px-2 py-0.5 text-[10px] text-fg-muted transition hover:text-fg-secondary"
+                        className="rounded-md px-2 py-0.5 text-[11px] text-fg-muted transition hover:text-fg-secondary"
                       >
                         Dismiss
                       </button>

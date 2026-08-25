@@ -43,11 +43,11 @@ export function MobileContactCard({ contact }: { contact: MobileContact }) {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           {contact.stage && (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide text-fg-secondary">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-fg-secondary">
               {contact.stage}
             </span>
           )}
-          {last && <span className="text-[10px] text-fg-muted">{last}</span>}
+          {last && <span className="text-[11px] text-fg-muted">{last}</span>}
         </div>
       </div>
       {contact.nextAction && (

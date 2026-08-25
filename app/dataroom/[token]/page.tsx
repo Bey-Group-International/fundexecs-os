@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
 function Unavailable() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
-      <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">FundExecs OS</span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</span>
       <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">This data room isn&apos;t available</h1>
       <p className="mt-2 max-w-sm text-sm text-fg-secondary">
         The link is invalid, has expired, or has been revoked. Ask the sender for a fresh link.

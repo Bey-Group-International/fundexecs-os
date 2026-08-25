@@ -139,7 +139,7 @@ export function SyndicateCircle({ circles, onCreateCircle }: Props) {
                     <p className="text-xs text-fg-muted mt-0.5 line-clamp-2">{circle.description}</p>
                   )}
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${circle.isActive ? "bg-emerald-500/15 text-emerald-400" : "bg-fg-muted/10 text-fg-muted"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${circle.isActive ? "bg-emerald-500/15 text-emerald-400" : "bg-fg-muted/10 text-fg-muted"}`}>
                   {circle.isActive ? "Active" : "Inactive"}
                 </span>
               </div>

@@ -81,7 +81,7 @@ export function AvatarSprite({
             type="button"
             aria-pressed={facing === f}
             onClick={() => setFacing(f)}
-            className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+            className={`rounded border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
               facing === f
                 ? "border-gold-500/50 bg-gold-500/10 text-gold-200"
                 : "border-line text-fg-muted hover:text-fg-secondary"

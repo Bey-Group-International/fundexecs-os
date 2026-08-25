@@ -23,7 +23,7 @@ function ReportLine({ label, value, sub }: { label: string; value: string; sub?:
     <div className="flex items-baseline justify-between gap-3 border-b border-line/50 py-2 last:border-0">
       <span className="text-sm text-fg-secondary">{label}</span>
       <span className="flex items-baseline gap-2">
-        {sub ? <span className="font-mono text-[10px] text-fg-muted">{sub}</span> : null}
+        {sub ? <span className="font-mono text-[11px] text-fg-muted">{sub}</span> : null}
         <span className="font-mono text-sm text-fg-primary">{value}</span>
       </span>
     </div>
@@ -77,10 +77,10 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
       {/* Live snapshot — the numbers a quarterly letter leads with */}
       <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Portfolio snapshot
           </span>
-          <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+          <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
             {perf.stage.label}
           </span>
         </div>
@@ -115,7 +115,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
       {tax.holderCount > 0 ? (
         <div className="mt-6">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
               Tax allocation (K-1) · {tax.year}
             </h3>
             <EarnAction kind="tax_k1" label="Prepare K-1s with Earn" subtle />
@@ -133,7 +133,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
             <span className="text-fg-secondary">
               Expenses <span className="font-mono text-fg-primary">{usd(tax.items.expenses)}</span>
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">estimated · review before filing</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">estimated · review before filing</span>
           </div>
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full border-collapse text-sm">
@@ -143,7 +143,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
                     (h, i) => (
                       <th
                         key={h}
-                        className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 1 ? "text-right" : ""}`}
+                        className={`whitespace-nowrap px-3 py-3 font-mono text-[11px] font-medium uppercase tracking-wider text-fg-muted ${i >= 1 ? "text-right" : ""}`}
                       >
                         {h}
                       </th>
@@ -174,7 +174,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
       ) : null}
 
       {/* Report library */}
-      <h3 className="mb-3 mt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+      <h3 className="mb-3 mt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         Reports drafted
       </h3>
       {reports.length === 0 ? (
@@ -190,11 +190,11 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
               key={r.id}
               className={`flex items-center gap-3 px-4 py-3 bg-surface-1 ${i > 0 ? "border-t border-line/50" : ""}`}
             >
-              <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {r.artifact_type.replace("_", " ")}
               </span>
               <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">{r.title}</span>
-              <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+              <span className="shrink-0 font-mono text-[11px] text-fg-muted">
                 {r.created_at.slice(0, 10)}
               </span>
             </div>
@@ -274,7 +274,7 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
 
       {exited.length > 0 ? (
         <>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+          <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Realized exits
           </h3>
           <div className="mb-6 overflow-hidden rounded-xl border border-line">
@@ -286,7 +286,7 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
                   className={`flex items-center gap-3 px-4 py-3 bg-surface-1 ${i > 0 ? "border-t border-line/50" : ""}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-primary">{a.name}</span>
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {a.asset_type.replace(/_/g, " ")}
                   </span>
                   <span className="shrink-0 font-mono text-sm text-fg-secondary">
@@ -312,7 +312,7 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
 
       {candidates.length > 0 ? (
         <>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+          <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Held — ripest to harvest
           </h3>
           <div className="flex flex-col gap-2.5">
@@ -323,7 +323,7 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium text-fg-primary">{a.name}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {a.asset_type.replace(/_/g, " ")} · {compactUsd(num(a.current_value))} mark
                   </p>
                 </div>
@@ -344,12 +344,12 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
       {scenarios.length > 0 ? (
         <>
           <div className="mb-3 mt-6 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
               Exit scenarios — portfolio
             </h3>
             <EarnAction kind="exit_model" label="Model exits with Earn" subtle />
           </div>
-          <p className="mb-3 font-mono text-[10px] text-fg-muted">
+          <p className="mb-3 font-mono text-[11px] text-fg-muted">
             On {compactUsd(perf.cost)} cost · {compactUsd(perf.called)} paid-in · {ASSUMED_HOLD_YEARS}y hold ·
             {" "}
             {Math.round(DEFAULT_TERMS.prefRate * 100)}% pref / {Math.round(DEFAULT_TERMS.carry * 100)}% carry
@@ -362,7 +362,7 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
                     (h, i) => (
                       <th
                         key={h}
-                        className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 1 ? "text-right" : ""}`}
+                        className={`whitespace-nowrap px-3 py-3 font-mono text-[11px] font-medium uppercase tracking-wider text-fg-muted ${i >= 1 ? "text-right" : ""}`}
                       >
                         {h}
                       </th>
@@ -381,7 +381,7 @@ export async function ExecuteExitModule({ orgId }: { orgId: string }) {
                       <td className="whitespace-nowrap px-3 py-3 font-medium text-fg-primary">
                         {s.label}
                         {isMark ? (
-                          <span className="ml-2 rounded-full border border-gold-500/40 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                          <span className="ml-2 rounded-full border border-gold-500/40 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                             today
                           </span>
                         ) : null}

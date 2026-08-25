@@ -241,7 +241,7 @@ export async function DealPipelineLive() {
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Deal Pipeline
         </p>
         <div className="flex items-center gap-3">

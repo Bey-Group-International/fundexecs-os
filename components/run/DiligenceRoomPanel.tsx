@@ -45,7 +45,7 @@ const LEVEL_META: Record<RiskLevel, { label: string; ring: string; text: string;
 function SeverityBadge({ severity }: { severity: Severity }) {
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${SEVERITY_BADGE[severity]}`}
+      className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${SEVERITY_BADGE[severity]}`}
     >
       {SEVERITY_LABEL[severity]}
     </span>
@@ -58,7 +58,7 @@ function RiskGauge({ score, level }: { score: number; level: RiskLevel }) {
     <div className={`rounded-xl border ${meta.ring} bg-surface-1 p-5`}>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Overall risk
           </p>
           <p className={`mt-1 text-2xl font-semibold ${meta.text}`}>{meta.label}</p>
@@ -126,7 +126,7 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-[220px_1fr] sm:items-start">
             <label className="flex flex-col gap-1.5">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Deal (optional)
               </span>
               <select
@@ -144,7 +144,7 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Data-room excerpt
               </span>
               <textarea
@@ -158,7 +158,7 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            <p className="font-mono text-[10px] text-fg-muted">
+            <p className="font-mono text-[11px] text-fg-muted">
               {text.trim().length > 0 ? `${text.trim().length.toLocaleString()} chars` : "Awaiting input"}
             </p>
             <button
@@ -185,7 +185,7 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
 
           {result.source === "fallback" && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/6 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-amber-400">
                 Heuristic mode
               </p>
               <p className="mt-1 text-xs text-fg-secondary">
@@ -201,11 +201,11 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
               const b = risk.byLens[key];
               return (
                 <div key={key} className="rounded-lg border border-line bg-surface-1 px-3 py-2">
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</p>
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</p>
                   <p className="mt-1 flex items-center gap-2">
                     <span className="text-sm font-medium tabular-nums text-fg-primary">{b.count}</span>
                     {b.top ? <SeverityBadge severity={b.top} /> : (
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">clear</span>
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">clear</span>
                     )}
                   </p>
                 </div>
@@ -218,7 +218,7 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
             {grouped.map((group) => (
               <div key={group.lens} className="rounded-xl border border-line bg-surface-1">
                 <div className="border-b border-line bg-surface-2/30 px-4 py-2">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {group.label} · {group.items.length}
                   </span>
                 </div>
@@ -231,7 +231,7 @@ export function DiligenceRoomPanel({ deals }: { deals: DealOption[] }) {
                       </div>
                       <p className="mt-1.5 text-xs leading-5 text-fg-secondary">{f.detail}</p>
                       <p className="mt-2 text-xs leading-5 text-fg-muted">
-                        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                           Recommendation ·{" "}
                         </span>
                         {f.recommendation}

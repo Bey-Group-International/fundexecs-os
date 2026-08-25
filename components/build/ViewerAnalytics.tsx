@@ -182,7 +182,7 @@ export async function ViewerAnalytics() {
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${st.text === "Active" ? "bg-emerald-400" : "bg-fg-muted/30"}`}
                     />
-                    <span className={`font-mono text-[9px] uppercase tracking-wider ${st.cls}`}>
+                    <span className={`font-mono text-[11px] uppercase tracking-wider ${st.cls}`}>
                       {st.text}
                     </span>
                   </div>
@@ -190,11 +190,11 @@ export async function ViewerAnalytics() {
                     {a.share.label || "Untitled link"}
                   </span>
                   {a.share.expires_at ? (
-                    <span className="font-mono text-[9px] text-fg-muted">
+                    <span className="font-mono text-[11px] text-fg-muted">
                       exp {new Date(a.share.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
                   ) : null}
-                  <div className="ml-auto flex items-center gap-4 font-mono text-[9px] text-fg-muted">
+                  <div className="ml-auto flex items-center gap-4 font-mono text-[11px] text-fg-muted">
                     <span>{a.uniqueViewers} viewer{a.uniqueViewers !== 1 ? "s" : ""}</span>
                     <span>{a.totalViews} event{a.totalViews !== 1 ? "s" : ""}</span>
                     <span>{fmtDuration(a.totalSeconds)} total</span>
@@ -206,19 +206,19 @@ export async function ViewerAnalytics() {
                   <table className="w-full min-w-[600px] text-sm">
                     <thead>
                       <tr className="border-b border-line/50">
-                        <th className="px-5 py-2.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <th className="px-5 py-2.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Viewer
                         </th>
-                        <th className="px-4 py-2.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <th className="px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Document / Section
                         </th>
-                        <th className="px-4 py-2.5 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <th className="px-4 py-2.5 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Time spent
                         </th>
-                        <th className="px-4 py-2.5 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <th className="px-4 py-2.5 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Views
                         </th>
-                        <th className="px-5 py-2.5 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <th className="px-5 py-2.5 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Last seen
                         </th>
                       </tr>
@@ -230,7 +230,7 @@ export async function ViewerAnalytics() {
                             {row.viewerEmail ? (
                               <span className="text-fg-primary">{row.viewerEmail}</span>
                             ) : (
-                              <span className="font-mono text-[10px] text-fg-muted">
+                              <span className="font-mono text-[11px] text-fg-muted">
                                 {row.sessionId ? `anon·${row.sessionId.slice(0, 8)}` : "anonymous"}
                               </span>
                             )}
@@ -244,7 +244,7 @@ export async function ViewerAnalytics() {
                           <td className="px-4 py-2.5 text-right font-mono text-[11px] text-fg-muted">
                             {row.viewCount}
                           </td>
-                          <td className="px-5 py-2.5 text-right font-mono text-[10px] text-fg-muted">
+                          <td className="px-5 py-2.5 text-right font-mono text-[11px] text-fg-muted">
                             {fmtDate(row.lastSeen)}
                           </td>
                         </tr>

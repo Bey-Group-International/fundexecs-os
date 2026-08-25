@@ -368,7 +368,7 @@ export function ActiveRoster({
           </svg>
           Filters
           {activeFilterCount > 0 && (
-            <span className="rounded-full bg-gold-400/20 px-1.5 text-[10px] font-semibold text-gold-300">
+            <span className="rounded-full bg-gold-400/20 px-1.5 text-[11px] font-semibold text-gold-300">
               {activeFilterCount}
             </span>
           )}
@@ -532,10 +532,10 @@ function PersonRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="truncate text-sm font-medium text-fg-primary">{p.name}</span>
-          <span className={`shrink-0 rounded-full border px-1.5 py-px text-[10px] font-medium ${temp.chip}`}>
+          <span className={`shrink-0 rounded-full border px-1.5 py-px text-[11px] font-medium ${temp.chip}`}>
             {temp.label}
           </span>
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted/70">
+          <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted/70">
             {KIND_LABEL[p.kind]}
           </span>
         </div>

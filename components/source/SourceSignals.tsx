@@ -41,7 +41,7 @@ function humanize(s: string): string {
 function PropensityBadge({ label, value }: { label: string; value: number }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${badgeClass(value)}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${badgeClass(value)}`}
       title={`${label}: ${value}%`}
     >
       {label} {value}%
@@ -52,7 +52,7 @@ function PropensityBadge({ label, value }: { label: string; value: number }) {
 function SignalRow({ s }: { s: SignalRecord }) {
   return (
     <div className="flex items-start gap-2 py-1.5">
-      <span className="mt-0.5 shrink-0 rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      <span className="mt-0.5 shrink-0 rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {SIGNAL_LABELS[s.signalType] ?? humanize(s.signalType)}
       </span>
       <span className={`shrink-0 font-mono text-[11px] ${toneClass(s.strength)}`}>{s.strength}%</span>
@@ -63,7 +63,7 @@ function SignalRow({ s }: { s: SignalRecord }) {
             href={s.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-1.5 font-mono text-[10px] text-status-info hover:underline"
+            className="ml-1.5 font-mono text-[11px] text-status-info hover:underline"
           >
             ↗ source
           </a>
@@ -91,7 +91,7 @@ function SubjectCard({ subject }: { subject: SubjectSignals }) {
               <span className="truncate text-sm font-medium text-fg-primary">{subject.subjectName}</span>
             )}
             {subject.kind ? (
-              <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {humanize(subject.kind)}
               </span>
             ) : null}
@@ -109,7 +109,7 @@ function SubjectCard({ subject }: { subject: SubjectSignals }) {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
           >
             {open ? "▾ hide" : "▸ show"} {subject.signals.length} signal
             {subject.signals.length === 1 ? "" : "s"}
@@ -225,17 +225,17 @@ export function SourceSignals({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Signals &amp; Triggers
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
           <Link
             href="/source/lp_pipeline"
-            className="ml-auto font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-gold-200"
+            className="ml-auto font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-gold-200"
           >
             → Intelligence
           </Link>
@@ -285,7 +285,7 @@ export function SourceSignals({
       {phase === "done" ? (
         subjects.length ? (
           <div className="mt-5 space-y-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {subjects.length} subject{subjects.length === 1 ? "" : "s"} on the watchlist · ranked by propensity
             </p>
             {subjects.map((s) => (

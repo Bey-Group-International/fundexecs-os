@@ -30,7 +30,7 @@ async function activeDeals(orgId: string): Promise<Deal[]> {
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
 const SEVERITY_OPTS: RiskSeverity[] = ["low", "medium", "high", "critical"];
-const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelClass = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 
 // Shared empty state when there's no deal to attach work to yet.
 function NoDeals({ what }: { what: string }) {

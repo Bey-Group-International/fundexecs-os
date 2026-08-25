@@ -189,7 +189,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
     <button
       type="button"
       onClick={() => setPaneMode(mode)}
-      className={`px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition ${
+      className={`px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
         paneMode === mode ? "text-gold-400" : "text-fg-muted hover:text-fg-secondary"
       }`}
     >
@@ -422,9 +422,9 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 {/* Pane mode toggle */}
                 <div className="flex items-center gap-0.5 rounded-md border border-line bg-surface-1 px-1 py-0.5">
                   {paneModeBtn("edit", "Edit")}
-                  <span className="text-[10px] text-fg-muted/30">|</span>
+                  <span className="text-[11px] text-fg-muted/30">|</span>
                   {paneModeBtn("split", "Split")}
-                  <span className="text-[10px] text-fg-muted/30">|</span>
+                  <span className="text-[11px] text-fg-muted/30">|</span>
                   {paneModeBtn("preview", "Preview")}
                 </div>
 
@@ -433,19 +433,19 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   onClick={cycleStatus}
                   disabled={statusPending}
                   title="Click to advance status: Draft → Review → Ready"
-                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[docStatus]}`}
+                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[docStatus]}`}
                 >
                   {STATUS_LABELS[docStatus]}
                 </button>
 
                 {dirtySaved === "saved" ? (
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-400">Saved ✓</span>
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-emerald-400">Saved ✓</span>
                 ) : null}
 
                 <button
                   type="button"
                   onClick={() => setSidePanel((p) => (p === "history" ? "none" : "history"))}
-                  className={`rounded-md border px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition ${
+                  className={`rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
                     sidePanel === "history"
                       ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
                       : "border-line text-fg-muted hover:text-fg-secondary"
@@ -468,7 +468,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   type="button"
                   onClick={printDoc}
                   disabled={!content.trim()}
-                  className="rounded-md border border-line px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary disabled:opacity-40"
+                  className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:text-fg-primary disabled:opacity-40"
                 >
                   ⤓ PDF
                 </button>
@@ -498,9 +498,9 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
               {/* Institutional readiness */}
               <div className="rounded-lg border border-line bg-surface-1 px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Institutional readiness</span>
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Institutional readiness</span>
                   <span
-                    className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                    className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                       report.level === "Institutional"
                         ? "border-emerald-400/40 text-emerald-300"
                         : report.level === "Solid"
@@ -522,11 +522,11 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                     {report.checks.map((c, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <span
-                          className={`shrink-0 text-[10px] ${c.ok ? "text-emerald-400" : "text-fg-muted"}`}
+                          className={`shrink-0 text-[11px] ${c.ok ? "text-emerald-400" : "text-fg-muted"}`}
                         >
                           {c.ok ? "✓" : "○"}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-[10px] text-fg-muted">{c.label}</span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-fg-muted">{c.label}</span>
                         <div className="h-0.5 w-10 overflow-hidden rounded-full bg-surface-2">
                           <div
                             className={`h-full ${c.ok ? "bg-emerald-400" : "bg-surface-2"}`}
@@ -567,7 +567,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 {showEdit && (
                   <div className="flex flex-col gap-1">
                     {paneMode === "split" && (
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Markdown</span>
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Markdown</span>
                     )}
                     <textarea
                       value={content}
@@ -581,7 +581,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                 {showPreview && (
                   <div className="flex flex-col gap-1">
                     {paneMode === "split" && (
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Preview</span>
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Preview</span>
                     )}
                     <div className="min-h-[22rem] overflow-y-auto rounded-lg border border-line bg-surface-1 px-4 py-3">
                       {content.trim() ? (
@@ -601,7 +601,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
         {sidePanel === "history" && (
           <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-0 p-4">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Version History</span>
+              <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Version History</span>
               <button type="button" onClick={() => setSidePanel("none")} className="text-fg-muted hover:text-fg-primary">
                 ✕
               </button>

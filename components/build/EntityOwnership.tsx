@@ -312,9 +312,9 @@ export function EntityOwnership({
       {rollup.rows.length > 0 ? (
         <div className="mb-3 rounded-xl border border-line bg-surface-1 p-4">
           <div className="mb-2 flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Fully-diluted ownership</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Fully-diluted ownership</span>
             <span
-              className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+              className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                 rollup.balanced ? "border-emerald-400/40 text-emerald-300" : "border-status-warning/40 text-status-warning"
               }`}
             >
@@ -339,7 +339,7 @@ export function EntityOwnership({
           <thead>
             <tr className="border-b border-line bg-surface-2 text-left">
               {["Holder", "Class", "Units", "Own %", "Invested", ""].map((h) => (
-                <th key={h} className="px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">{h}</th>
+                <th key={h} className="px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">{h}</th>
               ))}
             </tr>
           </thead>
@@ -363,7 +363,7 @@ export function EntityOwnership({
                       <span className="inline-flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }} />
                         <span className="text-fg-primary">{r.name}</span>
-                        <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{r.kind}</span>
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{r.kind}</span>
                       </span>
                     </td>
                     {editing ? (
@@ -523,7 +523,7 @@ export function EntityOwnership({
 
       {stakeholders.length > 0 ? (
         <div className="mt-2 rounded-xl border border-line bg-surface-1 p-3">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Stakeholder registry
           </div>
           <div className="flex flex-wrap gap-2">
@@ -538,7 +538,7 @@ export function EntityOwnership({
               >
                 <input type="hidden" name="id" value={s.id} />
                 <span className="text-fg-primary">{s.name}</span>
-                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{s.kind}</span>
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{s.kind}</span>
                 <button className="text-status-danger transition hover:text-red-300" aria-label={`Delete ${s.name}`}>
                   Delete
                 </button>
@@ -550,7 +550,7 @@ export function EntityOwnership({
 
       {/* Earn draft */}
       <div className="mt-2 rounded-xl border border-gold-500/30 bg-gold-500/5 p-3">
-        <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">Draft with Earn</p>
+        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-400">Draft with Earn</p>
         <textarea
           value={desc}
           onChange={(e) => setDesc(e.target.value)}

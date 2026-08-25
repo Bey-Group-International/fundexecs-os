@@ -57,7 +57,7 @@ export function AutosaveForm({
     >
       <div
         aria-live="polite"
-        className="pointer-events-none absolute right-0 top-0 font-mono text-[10px] uppercase tracking-wider"
+        className="pointer-events-none absolute right-0 top-0 font-mono text-[11px] uppercase tracking-wider"
       >
         {status === "saving" ? (
           <span className="text-fg-muted">Saving…</span>

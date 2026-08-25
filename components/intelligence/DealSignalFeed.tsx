@@ -38,20 +38,20 @@ function SignalCard({ signal }: { signal: DealSignal }) {
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${typeColor}`}>
+          <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${typeColor}`}>
             {SIGNAL_TYPE_LABELS[signal.signalType]}
           </span>
           {signal.sector && (
-            <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[9px] text-fg-muted">
+            <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-fg-muted">
               {signal.sector}
             </span>
           )}
           {signal.thesisMatchScore > 0 && (
-            <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] font-semibold ${THESIS_BADGE(signal.thesisMatchScore)}`}>
+            <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold ${THESIS_BADGE(signal.thesisMatchScore)}`}>
               {signal.thesisMatchScore}% thesis fit
             </span>
           )}
-          <span className="ml-auto font-mono text-[10px] text-fg-muted">{timeAgo(signal.publishedAt)}</span>
+          <span className="ml-auto font-mono text-[11px] text-fg-muted">{timeAgo(signal.publishedAt)}</span>
         </div>
 
         <p className="mt-2 text-sm font-medium leading-snug text-fg-primary">{signal.title}</p>
@@ -61,22 +61,22 @@ function SignalCard({ signal }: { signal: DealSignal }) {
 
         <div className="mt-2 flex flex-wrap items-center gap-3">
           {signal.companyName && (
-            <span className="font-mono text-[10px] text-fg-muted">{signal.companyName}</span>
+            <span className="font-mono text-[11px] text-fg-muted">{signal.companyName}</span>
           )}
           {(signal.dealSizeMin || signal.dealSizeMax) && (
-            <span className="font-mono text-[10px] text-gold-400">
+            <span className="font-mono text-[11px] text-gold-400">
               {formatSignalSize(signal.dealSizeMin, signal.dealSizeMax)}
             </span>
           )}
           {signal.geography && (
-            <span className="font-mono text-[10px] text-fg-muted">{signal.geography}</span>
+            <span className="font-mono text-[11px] text-fg-muted">{signal.geography}</span>
           )}
           {signal.sourceUrl && (
             <a
               href={signal.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-auto font-mono text-[10px] text-gold-400/70 transition hover:text-gold-400"
+              className="ml-auto font-mono text-[11px] text-gold-400/70 transition hover:text-gold-400"
             >
               View source →
             </a>
@@ -107,7 +107,7 @@ export function DealSignalFeed({ signals }: Props) {
         <button
           type="button"
           onClick={() => setFilter("all")}
-          className={`rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider transition ${filter === "all" ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
+          className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${filter === "all" ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
         >
           All
         </button>
@@ -116,7 +116,7 @@ export function DealSignalFeed({ signals }: Props) {
             key={type}
             type="button"
             onClick={() => setFilter(type)}
-            className={`rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider transition ${filter === type ? `${SIGNAL_TYPE_COLORS[type]} bg-current/5` : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
+            className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${filter === type ? `${SIGNAL_TYPE_COLORS[type]} bg-current/5` : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/20"}`}
           >
             {SIGNAL_TYPE_ICONS[type]} {SIGNAL_TYPE_LABELS[type]}
           </button>
@@ -124,7 +124,7 @@ export function DealSignalFeed({ signals }: Props) {
         <button
           type="button"
           onClick={() => setShowSavedOnly((p) => !p)}
-          className={`ml-auto rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider transition ${showSavedOnly ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line text-fg-muted hover:border-gold-500/20"}`}
+          className={`ml-auto rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider transition ${showSavedOnly ? "border-gold-500/40 bg-gold-500/10 text-gold-300" : "border-line text-fg-muted hover:border-gold-500/20"}`}
         >
           Saved
         </button>
@@ -141,7 +141,7 @@ export function DealSignalFeed({ signals }: Props) {
         )}
       </div>
 
-      <p className="text-center font-mono text-[10px] text-fg-muted">
+      <p className="text-center font-mono text-[11px] text-fg-muted">
         {filtered.length} signal{filtered.length !== 1 ? "s" : ""}
       </p>
     </div>

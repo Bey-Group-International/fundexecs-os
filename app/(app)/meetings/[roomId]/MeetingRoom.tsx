@@ -336,7 +336,7 @@ function DeviceChevron({ kind, onSelect }: { kind: "audioinput" | "videoinput" |
         </svg>
       </button>
       <FloatingMenu open={open} anchorRef={anchorRef} onClose={() => setOpen(false)}>
-        <p className="text-[10px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">
+        <p className="text-[11px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">
           {kind === "audioinput" ? "Microphone" : kind === "videoinput" ? "Camera" : "Speaker"}
         </p>
         {devs.length === 0 ? <p className="text-xs text-[var(--fg-muted)] px-2 py-1">No devices found</p> : devs.map((d: MediaDeviceInfo) => (
@@ -493,7 +493,7 @@ function ControlBar({
           }`}>
           ✨ <span className="hidden sm:inline">Copilot</span>
           {chatUnread > 0 && !copilotOpen && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-black text-[10px] font-bold flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-black text-[11px] font-bold flex items-center justify-center">
               {chatUnread}
             </span>
           )}
@@ -527,7 +527,7 @@ function WalkthroughPanel({
           <div className="flex flex-col gap-1.5">
             {FUNDEXECS_PROGRAM.map((s, i) => (
               <div key={i} className="flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
-                <span className="w-4 h-4 rounded-full border border-[var(--line)] flex items-center justify-center text-[0.6rem] font-medium shrink-0">{i + 1}</span>
+                <span className="w-4 h-4 rounded-full border border-[var(--line)] flex items-center justify-center text-[11px] font-medium shrink-0">{i + 1}</span>
                 {s.title}
               </div>
             ))}
@@ -559,8 +559,8 @@ function WalkthroughPanel({
 
       {/* Step header */}
       <div className="flex items-center justify-between">
-        <span className="text-[0.65rem] font-medium text-[var(--fg-muted)] uppercase tracking-wide">Step {stepIndex! + 1} of {FUNDEXECS_PROGRAM.length}</span>
-        <button onClick={() => onNavigate(null)} className="text-[0.65rem] text-[var(--fg-muted)] hover:text-[var(--status-danger)] transition-colors">End walkthrough</button>
+        <span className="text-[11px] font-medium text-[var(--fg-muted)] uppercase tracking-wide">Step {stepIndex! + 1} of {FUNDEXECS_PROGRAM.length}</span>
+        <button onClick={() => onNavigate(null)} className="text-[11px] text-[var(--fg-muted)] hover:text-[var(--status-danger)] transition-colors">End walkthrough</button>
       </div>
 
       {/* Step progress pills */}
@@ -580,7 +580,7 @@ function WalkthroughPanel({
 
       {/* Talking points */}
       <div className="flex flex-col gap-2">
-        <p className="text-[0.65rem] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Talking Points</p>
+        <p className="text-[11px] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Talking Points</p>
         {step!.talkingPoints.map((pt, i) => (
           <div key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-0)] border border-[var(--line)] p-2.5">
             <span className="mt-1 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] shrink-0" />
@@ -591,7 +591,7 @@ function WalkthroughPanel({
 
       {/* Suggested questions */}
       <div className="flex flex-col gap-2">
-        <p className="text-[0.65rem] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Ask the Prospect</p>
+        <p className="text-[11px] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Ask the Prospect</p>
         {step!.suggestedQuestions.map((q, i) => (
           <div key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-0)] border border-[var(--line)] p-2.5">
             <span className="text-[var(--gold-400)] text-xs shrink-0 mt-0.5">?</span>
@@ -841,7 +841,7 @@ function CopilotSidebar({
                   {emailSent ? "Sent!" : emailSending ? "…" : "Send"}
                 </button>
               </div>
-              <p className="text-[10px] text-[var(--fg-muted)]">Guests can join without an account</p>
+              <p className="text-[11px] text-[var(--fg-muted)]">Guests can join without an account</p>
             </div>
 
             {/* Participant list */}
@@ -1891,7 +1891,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               preview is the same local-only stream from the pre-join screen; no
               media is sent to the room until the host admits them. */}
           <div className="flex flex-col items-center gap-0.5">
-            <p className="text-[0.65rem] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Waiting room</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Waiting room</p>
             <h2 className="text-lg font-semibold text-[var(--fg-primary)]">{meetingTitle}</h2>
           </div>
           <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-[var(--line)] shadow-sm">

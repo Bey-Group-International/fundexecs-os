@@ -57,7 +57,7 @@ function Pulse({ c }: { c: CommandCenterData["counts"] }) {
     <div className="w-full overflow-hidden rounded-2xl rounded-tl-md border border-neural-400/25 bg-gradient-to-br from-surface-1 to-surface-0/70">
       <div className="flex items-center gap-1.5 border-b border-line/50 px-3 py-1.5">
         <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-success" />
-        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted">Live pulse</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Live pulse</span>
       </div>
       <div className="grid grid-cols-4 divide-x divide-line/50">
         {items.map((it) => {
@@ -66,7 +66,7 @@ function Pulse({ c }: { c: CommandCenterData["counts"] }) {
             <Link key={it.label} href={it.href} onClick={() => haptic("tap")} className="fx-tap flex flex-col items-center gap-0.5 px-1 py-2.5 transition active:bg-surface-2">
               <Icon width={15} height={15} className={it.tone} />
               <span className="font-display text-lg font-semibold leading-none text-fg-primary">{it.value}</span>
-              <span className="text-[9px] leading-tight text-fg-muted">{it.sub}</span>
+              <span className="text-[11px] leading-tight text-fg-muted">{it.sub}</span>
             </Link>
           );
         })}

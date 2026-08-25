@@ -62,11 +62,11 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Outcome Funnel
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
@@ -102,7 +102,7 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
                 const width = Math.max(2, Math.round((count / maxCount) * 100));
                 return (
                   <div key={stage} className="flex items-center gap-3">
-                    <span className="w-20 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <span className="w-20 shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {STAGE_LABELS[stage]}
                     </span>
                     <div className="relative h-7 flex-1 overflow-hidden rounded-md border border-line bg-surface-1">
@@ -121,7 +121,7 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
 
             {/* Stage-to-stage conversion */}
             <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Stage-to-stage conversion
               </p>
               <div className="flex flex-wrap gap-2">
@@ -130,7 +130,7 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
                     key={`${c.from}:${c.to}`}
                     className="rounded-lg border border-line bg-surface-1 px-3 py-1.5"
                   >
-                    <div className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {STAGE_LABELS[c.from]} → {STAGE_LABELS[c.to]}
                     </div>
                     <div className={`font-mono text-sm font-semibold ${rateTone(c.rate)}`}>
@@ -183,7 +183,7 @@ function ActNowPanel({ engagement }: { engagement: EngagementSummary }) {
   const sent = engagement.digestsSent > 0;
   return (
     <div>
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         Act-now performance
       </p>
       {sent ? (
@@ -210,7 +210,7 @@ function ActNowPanel({ engagement }: { engagement: EngagementSummary }) {
 function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
     <div className="rounded-lg border border-line bg-surface-1 px-3 py-1.5">
-      <div className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</div>
+      <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</div>
       <div className={`font-mono text-sm font-semibold ${tone}`}>{value}</div>
     </div>
   );
@@ -225,11 +225,11 @@ function BreakdownTable({
 }) {
   return (
     <div>
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">{title}</p>
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">{title}</p>
       <div className="overflow-hidden rounded-xl border border-line bg-surface-1">
         <table className="w-full text-left text-xs">
           <thead>
-            <tr className="border-b border-line text-[9px] uppercase tracking-wider text-fg-muted">
+            <tr className="border-b border-line text-[11px] uppercase tracking-wider text-fg-muted">
               <th className="px-3 py-2 font-medium">Group</th>
               <th className="px-3 py-2 text-right font-medium">Sourced</th>
               <th className="px-3 py-2 text-right font-medium">Contacted</th>

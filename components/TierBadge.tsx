@@ -30,7 +30,7 @@ export function tierLabel(tier: ReputationTier): string {
 export function TierBadge({ tier }: { tier: ReputationTier }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[tier]}`}
+      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[tier]}`}
     >
       {TIER_LABEL[tier]}
     </span>

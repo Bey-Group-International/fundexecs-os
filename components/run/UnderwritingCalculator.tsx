@@ -11,7 +11,7 @@ import { ActionForm } from "@/components/shared/ActionForm";
 
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
-const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelClass = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 
 function toNum(v: string): number | null {
   const t = v.trim();
@@ -122,7 +122,7 @@ export function UnderwritingCalculator({
           <span className="text-fg-secondary">
             MOIC <span className="text-gold-300">{moicLabel}</span>
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-fg-muted">live preview</span>
+          <span className="text-[11px] uppercase tracking-wider text-fg-muted">live preview</span>
         </div>
         <button className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
           Save &amp; compute

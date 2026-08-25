@@ -55,7 +55,7 @@ export function ActivityFeed({ items }: { items: ActivityItem[] }) {
                     <span className="block truncate text-[11px] text-fg-muted">{item.detail}</span>
                   ) : null}
                 </span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted/80">
+                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted/80">
                   {relTime(item.at)}
                 </span>
               </Link>

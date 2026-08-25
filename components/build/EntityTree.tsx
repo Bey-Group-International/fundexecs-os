@@ -64,14 +64,14 @@ function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
         </>
       ) : null}
       <div className={depth > 0 ? "flex items-center gap-2 pl-5 py-1" : "flex items-center gap-2 py-1"}>
-        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
           {TYPE_LABEL[node.entity_type] ?? node.entity_type}
         </span>
         <span className="text-sm text-fg-primary">{node.name}</span>
         {node.jurisdiction ? (
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{node.jurisdiction}</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{node.jurisdiction}</span>
         ) : null}
-        {year ? <span className="font-mono text-[10px] text-fg-muted">· {year}</span> : null}
+        {year ? <span className="font-mono text-[11px] text-fg-muted">· {year}</span> : null}
       </div>
       {node.children.length > 0 ? (
         <ul className="relative ml-3 border-l border-line pl-0">
@@ -91,7 +91,7 @@ export function EntityTree({ entities }: { entities: Entity[] }) {
 
   return (
     <div className="mb-6 rounded-xl border border-line bg-surface-1 p-4">
-      <div className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Legal structure</div>
+      <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Legal structure</div>
       <ul className="flex flex-col">
         {roots.map((node) => (
           <TreeRow key={node.id} node={node} depth={0} />

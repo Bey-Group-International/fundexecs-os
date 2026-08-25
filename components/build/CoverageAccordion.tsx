@@ -31,20 +31,20 @@ export interface AccordionSection {
 function StatusPill({ ready, viaBuild, docCount }: { ready: boolean; viaBuild: boolean; docCount: number }) {
   if (ready && docCount > 0)
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-emerald-400">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         {docCount} doc{docCount > 1 ? "s" : ""}
       </span>
     );
   if (ready && viaBuild)
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-sky-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-sky-400">
         <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
         From Build
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-surface-0 border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+    <span className="inline-flex items-center gap-1 rounded-full bg-surface-0 border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
       <span className="h-1.5 w-1.5 rounded-full bg-fg-muted/40" />
       Not added
     </span>
@@ -80,7 +80,7 @@ function StatusCycler({ doc }: { doc: AccordionDoc }) {
       onClick={cycle}
       disabled={pending}
       title={`Status: ${STATUS_LABELS[status]} — click to advance`}
-      className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[status]}`}
+      className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition hover:opacity-80 disabled:opacity-50 ${STATUS_CLASSES[status]}`}
     >
       {STATUS_LABELS[status]}
     </button>
@@ -118,7 +118,7 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
             {section.label}
           </span>
           {section.weight >= 3 && !section.ready && (
-            <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-amber-400">
+            <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-amber-400">
               Priority
             </span>
           )}
@@ -139,7 +139,7 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
             <button
               type="submit"
               disabled={pending}
-              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
+              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 disabled:opacity-50"
             >
               {pending ? "…" : hasContent ? "Open →" : "+ Add"}
             </button>
@@ -164,7 +164,7 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
                 </Link>
                 {d.qualityLevel ? (
                   <span
-                    className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider ${
+                    className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                       d.qualityLevel === "Institutional"
                         ? "border-emerald-400/40 text-emerald-300"
                         : d.qualityLevel === "Solid"
@@ -176,14 +176,14 @@ function SectionRow({ section, defaultOpen }: { section: AccordionSection; defau
                   </span>
                 ) : null}
                 {d.qualityScore != null ? (
-                  <span className="shrink-0 font-mono text-[9px] text-fg-muted">
+                  <span className="shrink-0 font-mono text-[11px] text-fg-muted">
                     {d.qualityScore}%
                   </span>
                 ) : null}
                 {d.qualityScore != null && d.qualityScore < 80 && d.qualityGaps != null && d.qualityGaps > 0 ? (
                   <span
                     title={`${d.qualityGaps} quality gap${d.qualityGaps > 1 ? "s" : ""} remaining`}
-                    className="flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full bg-amber-500/15 px-1 font-mono text-[8px] text-amber-400"
+                    className="flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full bg-amber-500/15 px-1 font-mono text-[11px] text-amber-400"
                   >
                     {d.qualityGaps}
                   </span>
@@ -245,11 +245,11 @@ export function CoverageAccordion({
           className="mt-3 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-2.5"
         >
           <input type="hidden" name="section" value={nextSuggestion.key} />
-          <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Next to add</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Next to add</span>
           <span className="truncate text-sm text-fg-primary">{nextSuggestion.suggestion}</span>
           <button
             type="submit"
-            className="ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline"
+            className="ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
           >
             Build →
           </button>

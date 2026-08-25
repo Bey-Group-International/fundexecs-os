@@ -35,7 +35,7 @@ export function OutcomeReceipt({ outcome }: { outcome: OutcomeSummary }) {
         {outcome.kind === "approved" && outcome.automationId ? (
           <Link
             href="/automations"
-            className="mt-1.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:text-gold-200"
+            className="mt-1.5 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-200"
           >
             View in Workflows →
           </Link>

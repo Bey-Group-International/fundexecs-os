@@ -131,16 +131,16 @@ export function OwnerListings({
                   badges={
                     <>
                       <span
-                        className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_BADGE[l.status]}`}
+                        className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_BADGE[l.status]}`}
                       >
                         {STATUS_LABEL[l.status]}
                       </span>
                       {l.is_public ? (
-                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                           Public
                         </span>
                       ) : (
-                        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Private
                         </span>
                       )}
@@ -181,7 +181,7 @@ export function OwnerListings({
 
                       {matches?.length ? (
                         <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/[0.05] p-3">
-                          <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                             Best-fit investors
                           </p>
                           <div className="mt-1.5 flex flex-col gap-2">
@@ -199,17 +199,17 @@ export function OwnerListings({
                                       <span className="text-sm font-medium text-fg-primary">
                                         {inv.name}
                                       </span>
-                                      <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                                      <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                                         {m.score} fit
                                       </span>
                                       {inv.investor_type ? (
-                                        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                                        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                                           {inv.investor_type.replace(/_/g, " ")}
                                         </span>
                                       ) : null}
                                     </div>
                                     {checkRange || aum ? (
-                                      <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+                                      <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
                                         {[aum, checkRange].filter(Boolean).join(" · ")}
                                       </p>
                                     ) : null}

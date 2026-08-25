@@ -48,7 +48,7 @@ export function MobileWorkflowCard({ workflow }: { workflow: MobileWorkflow }) {
             </p>
           </div>
         </div>
-        <span className={`shrink-0 font-mono text-[9px] uppercase tracking-wide ${tone}`}>{workflow.statusLabel}</span>
+        <span className={`shrink-0 font-mono text-[11px] uppercase tracking-wide ${tone}`}>{workflow.statusLabel}</span>
       </div>
       {workflow.status !== "completed" && workflow.status !== "failed" && (
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-3">

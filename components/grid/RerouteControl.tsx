@@ -32,7 +32,7 @@ export function RerouteControl({
         });
       }}
       onClick={(e) => e.stopPropagation()}
-      className="shrink-0 rounded-md border border-line/60 bg-surface-1/70 px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted outline-none transition hover:border-gold-500/40 hover:text-fg-secondary focus:border-gold-500/60 disabled:opacity-50"
+      className="shrink-0 rounded-md border border-line/60 bg-surface-1/70 px-1 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted outline-none transition hover:border-gold-500/40 hover:text-fg-secondary focus:border-gold-500/60 disabled:opacity-50"
     >
       {TARGET_ENGINES.map((eng) => (
         <option key={eng} value={eng}>

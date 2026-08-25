@@ -87,7 +87,7 @@ export function SignupsTable({ rows }: { rows: SignupRow[] }) {
       <div className="fx-card overflow-x-auto">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
-            <tr className="border-b border-line/70 font-mono text-[10px] uppercase tracking-[0.12em] text-fg-muted">
+            <tr className="border-b border-line/70 font-mono text-[11px] uppercase tracking-[0.12em] text-fg-muted">
               <Th onClick={() => toggleSort("email")}>User{arrow("email")}</Th>
               <Th onClick={() => toggleSort("orgName")}>Org{arrow("orgName")}</Th>
               <Th>Role</Th>

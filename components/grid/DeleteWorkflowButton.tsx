@@ -36,7 +36,7 @@ export function DeleteWorkflowButton({ workflowId }: { workflowId: string }) {
       disabled={pending || done}
       aria-label="Delete workflow"
       title="Delete"
-      className="shrink-0 rounded-full border border-status-danger/40 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/20 disabled:opacity-60"
+      className="shrink-0 rounded-full border border-status-danger/40 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/20 disabled:opacity-60"
     >
       {done ? "Deleted" : pending ? "Deleting…" : "Delete"}
     </button>

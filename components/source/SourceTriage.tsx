@@ -122,18 +122,18 @@ export function SourceTriage({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Score &amp; Triage
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               offline mode
             </span>
           ) : null}
           {personalized ? (
             <span
               title="Tuned by what you've queued and accepted before"
-              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300"
             >
               ✦ personalized
             </span>
@@ -211,7 +211,7 @@ export function SourceTriage({
                     style={{ backgroundColor: AGENT_BY_KEY[g.agent]?.color ?? "#888" }}
                     aria-hidden
                   />
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                     {humanize(g.entities)} · {g.agentName}
                   </span>
                 </div>

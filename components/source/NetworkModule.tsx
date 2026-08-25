@@ -125,7 +125,7 @@ export function NetworkModule({
         <Stat label="Engaged" value={pulse.engaged} hint="warm, active, or committed" accent="text-accent-300" />
         <Stat label="Committed" value={pulse.committed} hint="capital relationships" accent="text-emerald-300" />
         <div className="fx-stat flex flex-col justify-between">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">Temperature</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Temperature</p>
           <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-surface-2">
             {tempOrder.map((t) =>
               pulse.temperature[t] > 0 ? (
@@ -140,7 +140,7 @@ export function NetworkModule({
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
             {tempOrder.map((t) => (
-              <span key={t} className="flex items-center gap-1 text-[10px] text-fg-muted">
+              <span key={t} className="flex items-center gap-1 text-[11px] text-fg-muted">
                 <span className={`h-1.5 w-1.5 rounded-full ${TEMP_BAR[t].bg}`} />
                 {pulse.temperature[t]}
               </span>
@@ -235,7 +235,7 @@ function Stat({
 }) {
   return (
     <div className="fx-stat">
-      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{label}</p>
       <p className={`mt-1 font-display text-2xl font-semibold tabular-nums ${accent}`}>
         {value.toLocaleString()}
       </p>

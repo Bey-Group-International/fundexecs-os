@@ -99,7 +99,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {portfolio.length >= 2 ? (
         <div className="mb-4 rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
           <div className="flex items-baseline justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Portfolio value over time
             </span>
             <span
@@ -110,7 +110,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
             </span>
           </div>
           <Sparkline values={portfolio.map((p) => p.value)} width={600} height={56} className="mt-3 h-14 w-full" />
-          <div className="mt-1 flex justify-between font-mono text-[10px] text-fg-muted">
+          <div className="mt-1 flex justify-between font-mono text-[11px] text-fg-muted">
             <span>{shortDate(portfolio[0].date)} · {compactUsd(portfolio[0].value)}</span>
             <span>{shortDate(portfolio[portfolio.length - 1].date)} · {compactUsd(portfolio[portfolio.length - 1].value)}</span>
           </div>
@@ -120,10 +120,10 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {/* Valuation policy — 409A-style freshness discipline over the marks */}
       <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Valuation policy
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             quarterly · {policy.cadenceDays}d cadence
           </span>
         </div>
@@ -137,7 +137,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
           {policy.methods.length > 0 ? (
             <span className="flex flex-wrap items-center gap-1.5">
               {policy.methods.map((m) => (
-                <span key={m.method} className="rounded-full border border-line px-2 py-0.5 font-mono text-[10px] text-fg-secondary">
+                <span key={m.method} className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-fg-secondary">
                   {m.method} ×{m.count}
                 </span>
               ))}
@@ -160,10 +160,10 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {fair.length > 0 ? (
         <div className="mb-4 rounded-xl border border-line bg-surface-1 p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               409A fair-value engine
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {fair.length} of {held.length} valued · income & cost approaches
             </span>
           </div>
@@ -189,7 +189,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
                   className={`flex items-center gap-3 bg-surface-0/40 px-4 py-2.5 text-sm ${i > 0 ? "border-t border-line/50" : ""}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-fg-primary">{asset.name}</span>
-                  <span className="hidden shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted sm:inline">
+                  <span className="hidden shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted sm:inline">
                     {f.primary ?? "—"}
                   </span>
                   <span className="w-24 shrink-0 text-right font-mono text-fg-primary">{usd(f.concludedValue)}</span>
@@ -221,7 +221,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
               {["Holding", "Type", "Cost", "Fair value", "Gain", "MOIC", "Yield", "Marks", ""].map((h, i) => (
                 <th
                   key={h || "act"}
-                  className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 7 ? "text-right" : ""}`}
+                  className={`whitespace-nowrap px-3 py-3 font-mono text-[11px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 7 ? "text-right" : ""}`}
                 >
                   {h}
                 </th>
@@ -300,7 +300,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
       {/* Audit trail */}
       {marks.length > 0 ? (
         <>
-          <h3 className="mb-3 mt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+          <h3 className="mb-3 mt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Valuation audit trail
           </h3>
           <div className="overflow-hidden rounded-xl border border-line">
@@ -311,7 +311,7 @@ export async function ExecuteValuationsModule({ orgId }: { orgId: string }) {
               >
                 <span className="w-24 shrink-0 font-mono text-[11px] text-fg-muted">{shortDate(m.as_of)}</span>
                 <span className="min-w-0 flex-1 truncate text-fg-primary">{nameById.get(m.asset_id) ?? "—"}</span>
-                {m.method ? <span className="hidden shrink-0 font-mono text-[10px] text-fg-muted sm:block">{m.method}</span> : null}
+                {m.method ? <span className="hidden shrink-0 font-mono text-[11px] text-fg-muted sm:block">{m.method}</span> : null}
                 <span className="shrink-0 font-mono text-fg-secondary">{usd(num(m.value))}</span>
               </div>
             ))}

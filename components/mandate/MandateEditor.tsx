@@ -62,7 +62,7 @@ export function MandateEditor({
     <form action={saveMandate} className="flex flex-col gap-8">
       {/* Autonomy ceiling */}
       <section>
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Autonomy ceiling
         </h3>
         <p className="mt-1 text-sm text-fg-secondary">
@@ -115,10 +115,10 @@ export function MandateEditor({
       {/* Tier 2 — toggleable external actions */}
       <section>
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             External actions Earn may run
           </h3>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Tier 2
           </span>
         </div>
@@ -195,7 +195,7 @@ export function MandateEditor({
 
       {/* Scope — free-text description of what the mandate covers */}
       <section>
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">Scope</h3>
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Scope</h3>
         <p className="mt-1 text-sm text-fg-secondary">
           What this mandate covers — which hubs, counterparty classes, and deal sizes. Earn keeps
           its work inside this scope.
@@ -211,7 +211,7 @@ export function MandateEditor({
 
       {/* Guardrails — free-text constraints Earn must respect */}
       <section>
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">Guardrails</h3>
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Guardrails</h3>
         <p className="mt-1 text-sm text-fg-secondary">
           Explicit constraints Earn must respect during execution — one per line. These are folded
           into Earn&apos;s context on every reply.
@@ -227,7 +227,7 @@ export function MandateEditor({
 
       {/* Blast radius — hard limits on the automated footprint */}
       <section>
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Blast-radius limits
         </h3>
         <p className="mt-1 text-sm text-fg-secondary">
@@ -281,7 +281,7 @@ export function MandateEditor({
       <section className="rounded-xl border border-line bg-surface-1 p-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium text-fg-primary">Internal work product</span>
-          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-emerald-300">
             Always on
           </span>
         </div>
@@ -295,7 +295,7 @@ export function MandateEditor({
       <section className="rounded-xl border border-line bg-surface-1 p-4 opacity-80">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium text-fg-primary">Capital- &amp; compliance-binding</span>
-          <span className="rounded-full border border-line bg-surface-0 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="rounded-full border border-line bg-surface-0 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             🔒 Always you
           </span>
         </div>

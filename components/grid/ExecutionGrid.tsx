@@ -43,7 +43,7 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mb-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">FundExecs OS</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</p>
         <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">Execution Grid</h1>
         <p className="mt-1 text-sm text-fg-secondary">
           Every routed workflow, in the pane of the engine the Intelligence Layer sent it to.
@@ -63,17 +63,17 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
                 <h2 className="truncate font-display text-sm font-semibold text-fg-primary group-hover:text-gold-300">
                   {pane.engine}
                 </h2>
-                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {ENGINE_BLURB[pane.engine]}
                 </p>
               </Link>
-              <span className="shrink-0 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[10px] text-gold-300">
+              <span className="shrink-0 rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2 py-0.5 font-mono text-[11px] text-gold-300">
                 {pane.total}
               </span>
             </div>
 
             {pane.total > 0 ? (
-              <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {pane.active} active · {pane.done} done
               </p>
             ) : null}
@@ -99,11 +99,11 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
                         {wf.title}
                       </span>
                       {lowConfidence ? (
-                        <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           ~ low-confidence
                         </span>
                       ) : null}
-                      <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                         {STATUS_LABEL[wf.status] ?? wf.status}
                       </span>
                     </span>
@@ -130,7 +130,7 @@ export function ExecutionGrid({ panes }: { panes: EnginePane[] }) {
               {pane.workflows.length > 6 ? (
                 <Link
                   href={`/grid/${engineSlug(pane.engine)}`}
-                  className="mt-0.5 font-mono text-[10px] text-fg-muted transition hover:text-gold-300"
+                  className="mt-0.5 font-mono text-[11px] text-fg-muted transition hover:text-gold-300"
                 >
                   +{pane.workflows.length - 6} more
                 </Link>

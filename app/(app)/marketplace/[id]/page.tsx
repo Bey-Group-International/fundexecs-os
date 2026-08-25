@@ -169,7 +169,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
   return (
     <div className="fx-ambient mx-auto max-w-3xl">
       {/* Breadcrumb */}
-      <div className="mb-6 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted animate-fade-up">
+      <div className="mb-6 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted animate-fade-up">
         <Link href="/marketplace/browse" className="hover:text-fg-secondary transition">Marketplace</Link>
         <span>/</span>
         <span className="text-fg-primary">{listing.title}</span>
@@ -178,26 +178,26 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
       {/* Header */}
       <div className="mb-6 animate-fade-up">
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
             {listing.organizations?.name ?? "Unknown firm"}
           </span>
           <TierBadge tier={ownerTier} />
           {listing.featured ? (
-            <span className="rounded-full border border-gold-500/50 bg-gold-500/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="rounded-full border border-gold-500/50 bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               ★ Featured
             </span>
           ) : null}
           <span
-            className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_BADGE[listing.status]}`}
+            className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_BADGE[listing.status]}`}
           >
             {STATUS_LABEL[listing.status]}
           </span>
           {listing.is_public ? (
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Public
             </span>
           ) : (
-            <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Private
             </span>
           )}
@@ -207,7 +207,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
           {listing.title}
         </h1>
 
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {listing.reference_code ? `${listing.reference_code} · ` : ""}
           {prettyType(listing.listing_type)} · {timeAgo(listing.created_at)}
           {interestCount > 0 ? ` · ${interestCount} interested` : ""}
@@ -219,18 +219,18 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
         <div className="flex flex-col gap-4 sm:col-span-2">
           {listing.summary ? (
             <div className="fx-card p-4">
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Overview</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Overview</p>
               <p className="text-sm leading-relaxed text-fg-secondary">{listing.summary}</p>
             </div>
           ) : null}
 
           {dealCardFields.length > 0 ? (
             <div className="fx-card p-4">
-              <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deal details</p>
+              <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Deal details</p>
               <dl className="grid grid-cols-2 gap-3">
                 {dealCardFields.map((f) => (
                   <div key={f.label}>
-                    <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{f.label}</dt>
+                    <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{f.label}</dt>
                     <dd className="mt-0.5 text-sm font-medium text-fg-primary">{f.value}</dd>
                   </div>
                 ))}
@@ -240,7 +240,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
 
           {listing.teaser_url ? (
             <div className="fx-card p-4">
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Materials</p>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Materials</p>
               <a
                 href={listing.teaser_url}
                 target="_blank"
@@ -276,7 +276,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
           {/* CTA */}
           {!isOwner ? (
             <div className="fx-card p-4">
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Interested?</p>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Interested?</p>
               <InterestButton
                 listingId={listing.id}
                 listingTitle={listing.title}
@@ -302,7 +302,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
           {/* Owner controls */}
           {isOwner ? (
             <div className="fx-card p-4">
-              <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Controls</p>
+              <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Controls</p>
               <div className="flex flex-col gap-2">
                 <form action={updateListingStatus}>
                   <input type="hidden" name="id" value={listing.id} />
@@ -336,7 +336,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
           {/* Matched investors from capital map */}
           {isOwner && matchedInvestors.length > 0 ? (
             <div className="fx-card p-4">
-              <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Matched from your pipeline
               </p>
               <div className="flex flex-col gap-2">
@@ -349,7 +349,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
                           <p className="mt-0.5 text-[11px] leading-snug text-fg-muted">{reasons[0]}</p>
                         ) : null}
                       </div>
-                      <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] text-gold-300">
+                      <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] text-gold-300">
                         {score}
                       </span>
                     </div>
@@ -372,7 +372,7 @@ export default async function ListingDetailPage(props: { params: Promise<{ id: s
           {/* Standing */}
           {!isOwner ? (
             <div className="fx-card p-4">
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Seller standing</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Seller standing</p>
               <div className="flex items-center gap-2">
                 <TierBadge tier={ownerTier} />
                 <span className="text-xs text-fg-secondary">{tierLabel(ownerTier)}</span>

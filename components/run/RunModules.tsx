@@ -28,7 +28,7 @@ function NoActiveDeals({ note }: { note: string }) {
 function StageBadge({ d }: { d: DealConviction }) {
   return (
     <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${d.stage.tone}`}
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${d.stage.tone}`}
     >
       {d.stage.label}
     </span>
@@ -48,7 +48,7 @@ const RESOLVED = new Set(["cleared", "waived"]);
 function SeverityPill({ sev }: { sev: string }) {
   return (
     <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
         SEVERITY_TONE[sev] ?? "border-line text-fg-muted"
       }`}
     >
@@ -124,12 +124,12 @@ export async function RunRiskModule({ orgId }: { orgId: string }) {
                     <p className={`text-sm ${resolved ? "text-fg-muted line-through" : "text-fg-primary"}`}>
                       {i.title}
                       {mitigated ? (
-                        <span className="ml-2 rounded-full border border-status-info/40 px-1.5 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wider text-status-info">
+                        <span className="ml-2 rounded-full border border-status-info/40 px-1.5 py-0.5 align-middle font-mono text-[11px] uppercase tracking-wider text-status-info">
                           mitigated
                         </span>
                       ) : null}
                     </p>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {nameById.get(i.deal_id) ?? "—"} · {i.category} · {i.status.replace("_", " ")}
                     </p>
                   </div>

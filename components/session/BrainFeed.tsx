@@ -66,7 +66,7 @@ export default function BrainFeed({ runs }: { runs: BrainRun[] }) {
                         {name}
                       </span>
                       <span
-                        className={`ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider ${statusClass}`}
+                        className={`ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wider ${statusClass}`}
                       >
                         {run.status}
                       </span>
@@ -77,7 +77,7 @@ export default function BrainFeed({ runs }: { runs: BrainRun[] }) {
                   </div>
                 </div>
 
-                <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   Goal
                 </p>
                 <p className="mt-1 text-sm text-fg-secondary">{run.goal}</p>
@@ -87,7 +87,7 @@ export default function BrainFeed({ runs }: { runs: BrainRun[] }) {
                     {tools.map((tool) => (
                       <span
                         key={tool}
-                        className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary"
+                        className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary"
                       >
                         {tool}
                       </span>

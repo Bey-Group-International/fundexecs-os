@@ -10,8 +10,8 @@ type GradientTextProps = {
 };
 
 // Clips a panning gold→neural gradient to its text. The colors live in
-// globals.css (.fx-text-gradient) so they track theme-day/theme-night with the
-// rest of the fx tokens; this component only wires up the element + motion.
+// globals.css (.fx-text-gradient) so they stay in step with the rest of the fx
+// tokens; this component only wires up the element + motion.
 // The global prefers-reduced-motion catch-all freezes the pan for users who
 // ask, leaving a legible static gradient.
 export function GradientText({

@@ -10,8 +10,8 @@
   --fx-surface-3: 24 40 66;
   --fx-line: 38 61 92;
   --fx-fg-primary: 241 247 255;
-  --fx-fg-secondary: 175 190 211;
-  --fx-fg-muted: 113 132 158;
+  --fx-fg-secondary: 197 210 228;
+  --fx-fg-muted: 154 172 197;
   /* Neural/data-terminal accent — sky blue for grid lines and tech surfaces */
   --fx-accent-300: 125 211 252;
   --fx-accent-400: 56 189 248;
@@ -35,8 +35,8 @@
   --surface-3: rgb(24 40 66);
   --line: rgb(38 61 92);
   --fg-primary: rgb(241 247 255);
-  --fg-secondary: rgb(175 190 211);
-  --fg-muted: rgb(113 132 158);
+  --fg-secondary: rgb(197 210 228);
+  --fg-muted: rgb(154 172 197);
   --gold-300: rgb(125 211 252);
   --gold-400: rgb(56 189 248);
   --gold-500: rgb(37 99 235);
@@ -46,48 +46,11 @@
   --status-info: #5B9BD5;
 }
 
-html.theme-day {
-  --fx-color-scheme: light;
-  --fx-surface-0: 238 244 252;
-  --fx-surface-1: 248 251 255;
-  --fx-surface-2: 226 236 248;
-  --fx-surface-3: 208 223 242;
-  --fx-line: 178 197 221;
-  --fx-fg-primary: 12 24 44;
-  --fx-fg-secondary: 55 74 103;
-  --fx-fg-muted: 91 112 145;
-  --fx-accent-300: 14 165 233;
-  --fx-accent-400: 37 99 235;
-  --fx-accent-500: 29 78 216;
-  --fx-accent-rgb: 37 99 235;
-  --fx-accent-strong-rgb: 29 78 216;
-  --fx-gold-300: 160 120 10;
-  --fx-gold-400: 130 96 5;
-  --fx-gold-500: 100 72 2;
-  --fx-gold-rgb: 130 96 5;
-  --background: rgb(var(--fx-surface-0));
-  --foreground: rgb(var(--fx-fg-primary));
-
-  /* Semantic aliases — light-theme overrides */
-  --surface-0: rgb(238 244 252);
-  --surface-1: rgb(248 251 255);
-  --surface-2: rgb(226 236 248);
-  --surface-3: rgb(208 223 242);
-  --line: rgb(178 197 221);
-  --fg-primary: rgb(12 24 44);
-  --fg-secondary: rgb(55 74 103);
-  --fg-muted: rgb(91 112 145);
-  --gold-300: rgb(14 165 233);
-  --gold-400: rgb(37 99 235);
-  --gold-500: rgb(29 78 216);
-}
-
-html.theme-night {
-  --fx-color-scheme: dark;
-}
-
+/* The platform ships one scheme: the bold, high-contrast command-center
+   palette above. There is no day/night switch and no OS-driven variant — a
+   single vibrant surface ramp keeps every label readable on every device. */
 html {
-  color-scheme: var(--fx-color-scheme);
+  color-scheme: dark;
 }
 
 body {
@@ -585,9 +548,9 @@ body {
    Marketing surfaces — gradient text + conic CTA ring. The mechanics are
    adopted from the Evalyze landing patterns but retinted to the FundExecs
    gold→neural ramp so they read inside the existing dark terminal system.
-   Both are theme-aware (they consume --fx-gold-* / --fx-accent-* which flip
-   with theme-day/theme-night) and their motion is frozen automatically by the
-   global prefers-reduced-motion catch-all above.
+   Both consume --fx-gold-* / --fx-accent-* from the single platform palette,
+   and their motion is frozen automatically by the global
+   prefers-reduced-motion catch-all above.
    ========================================================================== */
 
 /* Clips a panning gold→neural gradient to the element's text. Add

@@ -127,7 +127,7 @@ function CreditPopupItem({
         <span className="font-display text-xl font-semibold text-fg-primary">
           +{payload.totalEarned}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           credits
         </span>
       </div>
@@ -135,7 +135,7 @@ function CreditPopupItem({
       {/* Streak multiplier pill */}
       {hasStreak && (
         <div className="mt-1 flex justify-center">
-          <span className="flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 font-mono text-[10px] text-orange-300">
+          <span className="flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 font-mono text-[11px] text-orange-300">
             <span className="animate-streak-flame inline-block">🔥</span>
             {payload.streakMult.toFixed(2)}× streak · +{payload.streakBonus}
           </span>
@@ -145,7 +145,7 @@ function CreditPopupItem({
       {/* Milestone unlock */}
       {hasMilestone && (
         <div className="mt-1 flex justify-center">
-          <span className="animate-milestone-burst flex items-center gap-1 rounded-full border border-yellow-400/50 bg-yellow-400/15 px-2 py-0.5 font-mono text-[10px] text-yellow-300">
+          <span className="animate-milestone-burst flex items-center gap-1 rounded-full border border-yellow-400/50 bg-yellow-400/15 px-2 py-0.5 font-mono text-[11px] text-yellow-300">
             ★ Milestone · +{payload.milestoneBonus}
           </span>
         </div>
@@ -155,7 +155,7 @@ function CreditPopupItem({
       {hasAchievement &&
         payload.achievementsEarned.map((a) => (
           <div key={a.key} className="mt-1 flex justify-center">
-            <span className="animate-badge-reveal flex items-center gap-1 rounded-full border border-neural-400/50 bg-neural-400/15 px-2 py-0.5 font-mono text-[10px] text-neural-300">
+            <span className="animate-badge-reveal flex items-center gap-1 rounded-full border border-neural-400/50 bg-neural-400/15 px-2 py-0.5 font-mono text-[11px] text-neural-300">
               ◈ {a.label}
             </span>
           </div>

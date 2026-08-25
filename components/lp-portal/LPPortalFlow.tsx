@@ -50,7 +50,7 @@ function ProgressBar({ status }: { status: OnboardingStatus }) {
         {steps.map((step) => (
           <div key={step.key} className="flex-1">
             <p
-              className={`font-mono text-[9px] uppercase tracking-wider truncate ${
+              className={`font-mono text-[11px] uppercase tracking-wider truncate ${
                 step.completed
                   ? "text-emerald-400"
                   : step.current
@@ -280,14 +280,14 @@ function WireStep({
             key={key}
             className={`flex items-center justify-between gap-4 px-4 py-3 ${i > 0 ? "border-t border-line/50" : ""}`}
           >
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{key}</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{key}</span>
             <span className="font-mono text-sm text-fg-primary">{value}</span>
           </div>
         ))}
       </div>
 
       {!hasWireDetails && (
-        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[10px] text-amber-400">
+        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[11px] text-amber-400">
           Your fund manager will send final wire details directly. Confirm below once you have initiated the transfer.
         </p>
       )}
@@ -329,7 +329,7 @@ function CommittedScreen({ fundName }: { fundName: string }) {
         Your capital commitment to <strong className="text-fg-primary">{fundName}</strong> has been recorded.
         The fund manager will confirm receipt of your wire and complete your onboarding.
       </p>
-      <p className="mt-4 font-mono text-[10px] uppercase tracking-wider text-emerald-400/60">
+      <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-emerald-400/60">
         Awaiting capital confirmation
       </p>
     </div>

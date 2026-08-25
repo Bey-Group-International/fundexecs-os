@@ -122,21 +122,21 @@ export function AiSourcingPanel({
   return (
     <div className="mb-5 rounded-2xl border border-gold-500/25 bg-gradient-to-b from-gold-500/[0.06] to-transparent p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           ✶ AI Sourcing
         </span>
         <span className="text-xs text-fg-muted">· {agentName}</span>
         {!live ? (
-          <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             offline mode
           </span>
         ) : webEnrichment ? (
-          <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-info">
+          <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-info">
             web ⚡
           </span>
         ) : null}
         {personalized ? (
-          <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+          <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
             personalized ✦
           </span>
         ) : null}
@@ -210,7 +210,7 @@ export function AiSourcingPanel({
                     {c.fitScore}% fit
                   </span>
                 </div>
-                <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {humanize(c.category)}
                 </div>
                 <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
@@ -219,37 +219,37 @@ export function AiSourcingPanel({
                 {(c.contactName || c.aumRange || c.ticketRange || c.geography || c.strategies?.length) && (
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
                     {c.contactName && (
-                      <span className="font-mono text-[9px] text-fg-muted">
+                      <span className="font-mono text-[11px] text-fg-muted">
                         {c.contactName}{c.contactRole && <span className="opacity-70"> · {c.contactRole}</span>}
                       </span>
                     )}
-                    {c.aumRange && <span className="font-mono text-[9px] text-fg-muted">AUM {c.aumRange}</span>}
-                    {c.ticketRange && <span className="font-mono text-[9px] text-fg-muted">Ticket {c.ticketRange}</span>}
-                    {c.geography && <span className="font-mono text-[9px] text-fg-muted">{c.geography}</span>}
+                    {c.aumRange && <span className="font-mono text-[11px] text-fg-muted">AUM {c.aumRange}</span>}
+                    {c.ticketRange && <span className="font-mono text-[11px] text-fg-muted">Ticket {c.ticketRange}</span>}
+                    {c.geography && <span className="font-mono text-[11px] text-fg-muted">{c.geography}</span>}
                     {c.strategies?.slice(0, 2).map((s) => (
-                      <span key={s} className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] text-fg-muted">{s}</span>
+                      <span key={s} className="rounded-full border border-line px-1.5 py-0 font-mono text-[11px] text-fg-muted">{s}</span>
                     ))}
                   </div>
                 )}
                 {(c.contactEmail || c.contactPhone) && (
                   <div className="mt-0.5 flex flex-wrap gap-x-3">
                     {c.contactEmail && (
-                      <a href={`mailto:${c.contactEmail}`} onClick={(e) => e.stopPropagation()} className="font-mono text-[9px] text-status-info hover:underline">
+                      <a href={`mailto:${c.contactEmail}`} onClick={(e) => e.stopPropagation()} className="font-mono text-[11px] text-status-info hover:underline">
                         {c.contactEmail}
                       </a>
                     )}
-                    {c.contactPhone && <span className="font-mono text-[9px] text-fg-muted">{c.contactPhone}</span>}
+                    {c.contactPhone && <span className="font-mono text-[11px] text-fg-muted">{c.contactPhone}</span>}
                   </div>
                 )}
                 {(c.sourceUrl || c.website) && (
                   <div className="mt-0.5 flex flex-wrap gap-x-2">
                     {c.website && (
-                      <a href={c.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono text-[9px] text-fg-muted hover:text-gold-300 hover:underline">
+                      <a href={c.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline">
                         {c.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                       </a>
                     )}
                     {c.sourceUrl && !c.website && (
-                      <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono text-[10px] text-status-info hover:underline">↗ source</a>
+                      <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono text-[11px] text-status-info hover:underline">↗ source</a>
                     )}
                   </div>
                 )}

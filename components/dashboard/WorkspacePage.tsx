@@ -112,7 +112,7 @@ function QuickActionPanel({ view }: { view: WorkspaceViewModel }) {
         <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">
           Quick action
         </h2>
-        <Link href={view.primaryAction.href} className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+        <Link href={view.primaryAction.href} className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
           {view.primaryAction.label} →
         </Link>
       </div>
@@ -132,7 +132,7 @@ export function WorkspacePage({ view, data }: { view: WorkspaceViewModel; data: 
       <header className="fx-glass mb-6 p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               {view.eyebrow}
             </p>
             <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
@@ -170,7 +170,7 @@ export function WorkspacePage({ view, data }: { view: WorkspaceViewModel; data: 
                   {data.automations.map((automation) => (
                     <div key={automation.id} className="rounded-xl border border-line bg-surface-0/55 p-3">
                       <p className="text-sm text-fg-primary">{automation.name}</p>
-                      <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                         {automation.trigger_type} · {automation.enabled ? "enabled" : "paused"}
                       </p>
                     </div>

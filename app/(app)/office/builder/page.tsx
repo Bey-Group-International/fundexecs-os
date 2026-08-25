@@ -42,7 +42,7 @@ export default async function CharacterBuilderPage() {
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-6">
         <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Virtual Office
           </span>
           <Link

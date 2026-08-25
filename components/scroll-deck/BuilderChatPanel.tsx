@@ -93,7 +93,7 @@ export function BuilderChatPanel({
           >
             <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-neural-300" />
             <span className="flex-1 truncate">{nextPrompt}</span>
-            <span className="rounded-full border border-line px-2 py-0.5 text-[10px] text-fg-muted group-hover:text-fg-secondary">
+            <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-fg-muted group-hover:text-fg-secondary">
               What&apos;s next?
             </span>
           </button>

@@ -61,15 +61,15 @@ export function BuilderWizard({
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Review</span>
-          <span className="font-mono text-[10px] text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Review</span>
+          <span className="font-mono text-[11px] text-fg-muted">
             {answeredCount}/{total} answered
           </span>
         </div>
         <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface-1 p-3">
           {questions.map((q) => (
             <div key={q.id}>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{q.label}</p>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{q.label}</p>
               <p className="text-sm text-fg-secondary">{(answers[q.id] ?? "").trim() || "—"}</p>
             </div>
           ))}
@@ -106,7 +106,7 @@ export function BuilderWizard({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           Step {step + 1} of {total}
         </span>
         <div className="h-1 w-28 overflow-hidden rounded-full bg-surface-2">

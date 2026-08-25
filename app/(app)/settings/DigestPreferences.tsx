@@ -189,11 +189,11 @@ function ChannelRow({ channel, initial }: { channel: DigestChannel; initial: Cha
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-fg-primary">{meta.label}</span>
             {draft.enabled ? (
-              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                 On · {draft.cadence}
               </span>
             ) : (
-              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Off
               </span>
             )}
@@ -204,7 +204,7 @@ function ChannelRow({ channel, initial }: { channel: DigestChannel; initial: Cha
           <div className="mt-3 flex flex-col gap-3">
             {needsRecipient ? (
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {meta.recipientLabel}
                 </span>
                 <input
@@ -219,7 +219,7 @@ function ChannelRow({ channel, initial }: { channel: DigestChannel; initial: Cha
 
             <div className="flex flex-wrap items-end gap-4">
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   Cadence
                 </span>
                 <select
@@ -233,7 +233,7 @@ function ChannelRow({ channel, initial }: { channel: DigestChannel; initial: Cha
               </label>
 
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   Min score · {draft.min_score}
                 </span>
                 <input
@@ -261,7 +261,7 @@ function ChannelRow({ channel, initial }: { channel: DigestChannel; initial: Cha
             {error ? (
               <span className="text-xs text-status-danger">{error}</span>
             ) : saved ? (
-              <span className="font-mono text-[10px] uppercase tracking-wider text-status-success">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-status-success">
                 Saved
               </span>
             ) : null}

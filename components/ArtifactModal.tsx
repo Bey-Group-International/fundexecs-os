@@ -54,7 +54,7 @@ export function ArtifactModal({
       >
         <header className="flex items-center gap-2 border-b border-line px-5 py-3">
           {label ? (
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {label}
             </span>
           ) : null}
@@ -64,7 +64,7 @@ export function ArtifactModal({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="rounded-md border border-line px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
+              className="rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
             >
               Close ✕
             </button>

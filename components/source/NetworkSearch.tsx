@@ -100,7 +100,7 @@ export function NetworkSearch({ onSelectContact }: Props) {
 
       {!isPending && results.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             {results.length} result{results.length !== 1 ? "s" : ""}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -147,7 +147,7 @@ function ContactCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm text-fg truncate">{contact.fullName}</span>
-            <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${colorCls}`}>
+            <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${colorCls}`}>
               {label}
             </span>
           </div>

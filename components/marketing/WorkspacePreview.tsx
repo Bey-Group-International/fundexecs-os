@@ -24,7 +24,7 @@ export function WorkspacePreview() {
       className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6 sm:py-24"
     >
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
           The workspace
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -40,7 +40,7 @@ export function WorkspacePreview() {
         <div className="fx-glass mx-auto max-w-3xl p-4 sm:p-6">
           {/* Header */}
           <div className="mb-5">
-            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               FundExecs OS
             </span>
             <h3 className="mt-1 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -56,7 +56,7 @@ export function WorkspacePreview() {
             />
             <div className="relative flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+                <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
                   <span className="animate-pulse inline-block h-1.5 w-1.5 rounded-full bg-gold-400" aria-hidden />
                   AI Operating Brief
                 </p>
@@ -89,7 +89,7 @@ export function WorkspacePreview() {
           </div>
 
           {/* Recent sessions */}
-          <h4 className="mb-3 mt-6 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <h4 className="mb-3 mt-6 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Recent
           </h4>
           <div className="flex flex-col gap-1.5">
@@ -110,7 +110,7 @@ export function WorkspacePreview() {
                     {s.group}
                   </span>
                 </span>
-                <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] text-fg-muted">
                   {s.when}
                 </span>
                 <span className="shrink-0 font-mono text-fg-muted">→</span>

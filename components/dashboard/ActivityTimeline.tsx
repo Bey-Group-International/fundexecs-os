@@ -28,7 +28,7 @@ export function ActivityTimeline({ activities }: { activities: DashboardActivity
               <span className="mt-1 h-2.5 w-2.5 rounded-full bg-gold-400 shadow-[0_0_10px_rgba(251,191,36,0.55)]" />
               <span>
                 <span className="block text-sm text-fg-primary">{activity.title}</span>
-                <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span className="mt-0.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {activity.detail} · {timeLabel(activity.createdAt)}
                 </span>
               </span>

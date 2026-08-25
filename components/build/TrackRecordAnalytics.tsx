@@ -34,7 +34,7 @@ function fmtRatio(n: number | null | undefined): string {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-3">
-      <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</div>
+      <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</div>
       <div className="mt-1 text-lg font-semibold text-fg-primary">{value}</div>
     </div>
   );
@@ -58,7 +58,7 @@ export function TrackRecordAnalytics({ records }: { records: TrackRecord[] }) {
   return (
     <section className="mb-6 space-y-5 rounded-xl border border-line bg-surface-0 p-4">
       <div>
-        <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Pooled performance</h3>
+        <h3 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Pooled performance</h3>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <Stat label="Gross IRR" value={fmtPct(blended.weightedGrossIrr)} />
           <Stat label="Pooled MOIC" value={fmtMoic(blended.pooledMoic)} />
@@ -70,7 +70,7 @@ export function TrackRecordAnalytics({ records }: { records: TrackRecord[] }) {
       </div>
 
       <div>
-        <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Realized vs unrealized</h3>
+        <h3 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Realized vs unrealized</h3>
         {splitBase > 0 ? (
           <>
             <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-surface-2">
@@ -94,7 +94,7 @@ export function TrackRecordAnalytics({ records }: { records: TrackRecord[] }) {
       </div>
 
       <div>
-        <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">By vintage</h3>
+        <h3 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">By vintage</h3>
         {vintages.length === 0 ? (
           <p className="mt-2 text-xs text-fg-muted">No deals to break down yet.</p>
         ) : (
@@ -121,7 +121,7 @@ export function TrackRecordAnalytics({ records }: { records: TrackRecord[] }) {
                   </div>
                 );
               })}
-              <div className="flex gap-4 pl-14 text-[10px] text-fg-muted">
+              <div className="flex gap-4 pl-14 text-[11px] text-fg-muted">
                 <span className="flex items-center gap-1">
                   <span className="inline-block h-2 w-2 rounded-sm bg-fg-secondary" /> Invested
                 </span>
@@ -136,7 +136,7 @@ export function TrackRecordAnalytics({ records }: { records: TrackRecord[] }) {
                 <thead>
                   <tr className="border-b border-line bg-surface-2 text-left">
                     {["Vintage", "Deals", "Invested", "MOIC", "IRR"].map((h) => (
-                      <th key={h} className="px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      <th key={h} className="px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                         {h}
                       </th>
                     ))}
@@ -223,7 +223,7 @@ export function SortableTrackRecordList({
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Sort by</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Sort by</span>
         {SORT_OPTIONS.map((o) => {
           const active = o.key === key;
           return (
@@ -256,7 +256,7 @@ export function SortableTrackRecordList({
           <thead>
             <tr className="border-b border-line bg-surface-2 text-left">
               {["Deal", "Class", "Vintage", "Invested", "IRR", "MOIC", ""].map((h) => (
-                <th key={h} className="px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <th key={h} className="px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {h}
                 </th>
               ))}

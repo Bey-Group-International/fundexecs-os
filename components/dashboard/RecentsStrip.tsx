@@ -92,14 +92,14 @@ export function RecentsStrip() {
       aria-label="Recent destinations"
       className="flex items-center gap-1.5 overflow-x-auto"
     >
-      <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         Recent:
       </span>
       {recents.map((entry) => (
         <Link
           key={entry.path}
           href={entry.path}
-          className="shrink-0 rounded border border-line/70 bg-surface-0/80 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          className="shrink-0 rounded border border-line/70 bg-surface-0/80 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
         >
           {entry.label}
         </Link>

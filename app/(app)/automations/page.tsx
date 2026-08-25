@@ -46,7 +46,7 @@ export default async function AutomationsPage() {
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Automations
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -91,11 +91,11 @@ export default async function AutomationsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium text-fg-primary">{a.name}</span>
                       {a.auto_approve ? (
-                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                           Auto
                         </span>
                       ) : (
-                        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Approval
                         </span>
                       )}
@@ -103,7 +103,7 @@ export default async function AutomationsPage() {
                     <p className="mt-1 line-clamp-2 text-xs leading-snug text-fg-secondary">
                       {a.prompt}
                     </p>
-                    <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <p className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {a.trigger_type === "manual" && !a.schedule
                         ? "Manual · run on demand"
                         : describeSchedule(a.schedule)}
@@ -115,14 +115,14 @@ export default async function AutomationsPage() {
 
                     <Link
                       href={`/automations/${a.id}`}
-                      className="mt-2 inline-flex font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+                      className="mt-2 inline-flex font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
                     >
                       Open canvas →
                     </Link>
 
                     {/* Edit in place — name, instruction, and unattended autonomy. */}
                     <details className="group mt-2">
-                      <summary className="inline-flex cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary">
+                      <summary className="inline-flex cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary">
                         Edit
                       </summary>
                       <form action={updateAutomation} className="mt-3 flex flex-col gap-2">

@@ -145,14 +145,14 @@ export async function ClosingLive() {
   return (
     <>
       <section>
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           LP Onboarding Status
         </p>
         <LPOnboardingStatus sessions={sessions} />
       </section>
       <div className="border-t border-line" />
       <section>
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Contract Lifecycle
         </p>
         <ContractStatusBoard contracts={contracts} />

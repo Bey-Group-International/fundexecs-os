@@ -43,7 +43,7 @@ function HealthScoreRing({ score, grade }: { score: number; grade: string }) {
       <span className={`rounded-full border px-3 py-1 font-mono text-sm font-bold ${color} border-current/30 bg-current/10`}>
         Grade {grade}
       </span>
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Portfolio Health</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Portfolio Health</span>
     </div>
   );
 }
@@ -54,7 +54,7 @@ function RiskAlertCard({ risk }: { risk: ConcentrationRisk }) {
     <div className={`rounded-xl border p-4 ${styles.border} ${styles.bg}`}>
       <div className="flex items-start justify-between gap-2">
         <p className={`text-sm font-medium ${styles.text}`}>{risk.label}</p>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider border-current/30 ${styles.text}`}>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider border-current/30 ${styles.text}`}>
           {risk.severity}
         </span>
       </div>
@@ -84,32 +84,32 @@ function AssetRow({ asset }: { asset: AssetMetric }) {
     <div className={`flex items-center gap-4 border-b border-line px-4 py-3 last:border-0 transition hover:bg-surface-2/40 ${asset.isUnderperforming ? "bg-red-500/[0.03]" : ""}`}>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-fg-primary">{asset.name}</p>
-        <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+        <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
           {asset.sector} · {asset.geography}
         </p>
       </div>
       <div className="hidden w-16 text-right sm:block">
         <p className="font-mono text-sm font-semibold text-fg-primary">{formatMOIC(asset.moic)}</p>
-        <p className="font-mono text-[10px] text-fg-muted">MOIC</p>
+        <p className="font-mono text-[11px] text-fg-muted">MOIC</p>
       </div>
       <div className="hidden w-16 text-right md:block">
         <p className="font-mono text-sm text-fg-secondary">{formatIRR(asset.irr)}</p>
-        <p className="font-mono text-[10px] text-fg-muted">IRR</p>
+        <p className="font-mono text-[11px] text-fg-muted">IRR</p>
       </div>
       <div className="hidden w-20 text-right lg:block">
         <p className={`font-mono text-xs ${variancePositive ? "text-emerald-400" : "text-red-400"}`}>
           {variance}
         </p>
-        <p className="font-mono text-[10px] text-fg-muted">vs UW</p>
+        <p className="font-mono text-[11px] text-fg-muted">vs UW</p>
       </div>
       <div className="hidden w-16 text-right lg:block">
         <p className="font-mono text-xs text-fg-secondary">
           {asset.concentrationPct !== null ? `${asset.concentrationPct.toFixed(1)}%` : "—"}
         </p>
-        <p className="font-mono text-[10px] text-fg-muted">NAV %</p>
+        <p className="font-mono text-[11px] text-fg-muted">NAV %</p>
       </div>
       {asset.isUnderperforming && (
-        <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 font-mono text-[9px] text-red-400">
+        <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 font-mono text-[11px] text-red-400">
           Under UW
         </span>
       )}
@@ -152,7 +152,7 @@ export function PortfolioHealthDashboard({ healthScore, assets, riskAlerts, tota
             { label: "Momentum", score: healthScore.momentum, max: 20, desc: "portfolio trajectory" },
           ].map((sub) => (
             <div key={sub.label} className="rounded-xl border border-line bg-surface-1 p-4">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{sub.label}</p>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{sub.label}</p>
               <p className="mt-2 font-display text-2xl font-bold text-fg-primary">
                 {sub.score}
                 <span className="ml-1 font-mono text-sm text-fg-muted">/{sub.max}</span>
@@ -180,7 +180,7 @@ export function PortfolioHealthDashboard({ healthScore, assets, riskAlerts, tota
       {/* Risk alerts */}
       {riskAlerts.length > 0 && (
         <section>
-          <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+          <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Risk Alerts · {riskAlerts.length}
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -193,16 +193,16 @@ export function PortfolioHealthDashboard({ healthScore, assets, riskAlerts, tota
 
       {/* Asset table */}
       <section>
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Portfolio Positions · {assets.length}
         </h3>
         <div className="rounded-xl border border-line bg-surface-1">
           <div className="flex items-center gap-4 border-b border-line bg-surface-2/30 px-4 py-2.5">
-            <span className="min-w-0 flex-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Asset</span>
-            <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">MOIC</span>
-            <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted md:block">IRR</span>
-            <span className="hidden w-20 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">vs UW</span>
-            <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">NAV %</span>
+            <span className="min-w-0 flex-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Asset</span>
+            <span className="hidden w-16 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted sm:block">MOIC</span>
+            <span className="hidden w-16 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted md:block">IRR</span>
+            <span className="hidden w-20 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted lg:block">vs UW</span>
+            <span className="hidden w-16 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted lg:block">NAV %</span>
           </div>
           {assets.map((asset) => (
             <AssetRow key={asset.id} asset={asset} />

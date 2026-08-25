@@ -17,7 +17,7 @@ export function CopyText({ value, label = "Copy code" }: { value: string; label?
           // clipboard unavailable — no-op
         }
       }}
-      className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-surface-2"
+      className="shrink-0 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-surface-2"
     >
       {copied ? "Copied!" : label}
     </button>

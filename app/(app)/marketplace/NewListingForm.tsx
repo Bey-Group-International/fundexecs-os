@@ -52,7 +52,7 @@ export function NewListingForm({
       action={handleSubmit}
       className="fx-card animate-fade-up p-4"
     >
-      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
         New listing
       </p>
 
@@ -149,7 +149,7 @@ export function NewListingForm({
 
         {/* Booking / calendar link — buyers can book a meeting with the seller. */}
         <div className="flex flex-col gap-1">
-          <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <label className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Booking / calendar link
           </label>
           <input
@@ -168,7 +168,7 @@ export function NewListingForm({
 
         {/* Deal card fields */}
         <details className="group">
-          <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary transition select-none">
+          <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary transition select-none">
             <span className="group-open:hidden">▸ Add deal details (optional)</span>
             <span className="hidden group-open:inline">▾ Deal details</span>
           </summary>

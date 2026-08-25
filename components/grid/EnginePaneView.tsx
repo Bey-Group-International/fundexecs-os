@@ -47,7 +47,7 @@ function StatusDot({ status }: { status: string }) {
 // Amber "STUCK · {hours}h" pill for a workflow that has blown its SLA.
 function StuckPill({ hours }: { hours: number | null }) {
   return (
-    <span className="shrink-0 rounded-full border border-status-danger/40 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-danger">
+    <span className="shrink-0 rounded-full border border-status-danger/40 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
       Stuck{hours !== null ? ` · ${hours}h` : ""}
     </span>
   );
@@ -60,7 +60,7 @@ function WorkflowRow({ wf, stuck, hours }: { wf: GridWorkflow; stuck: boolean; h
       <span className="min-w-0 flex-1 truncate text-fg-secondary group-hover:text-fg-primary">{wf.title}</span>
       {stuck && <StuckPill hours={hours} />}
       {stuck && <EscalateButton workflowId={wf.id} />}
-      <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {STATUS_LABEL[wf.status] ?? wf.status}
       </span>
       <DeleteWorkflowButton workflowId={wf.id} />
@@ -109,13 +109,13 @@ export function EnginePaneView({ engine, workflows, now }: { engine: TargetEngin
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-5">
-        <Link href="/grid" className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400 hover:text-gold-300">
+        <Link href="/grid" className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400 hover:text-gold-300">
           ← Execution Grid
         </Link>
         <div className="mt-1 flex items-center gap-2">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">{engine}</h1>
           {stuck > 0 && (
-            <span className="rounded-full border border-status-danger/40 bg-status-danger/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-status-danger">
+            <span className="rounded-full border border-status-danger/40 bg-status-danger/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
               ⚠ {stuck} stuck
             </span>
           )}
@@ -137,7 +137,7 @@ export function EnginePaneView({ engine, workflows, now }: { engine: TargetEngin
         <div className="flex flex-col gap-5">
           {groups.map((status) => (
             <section key={status}>
-              <h2 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <h2 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {STATUS_LABEL[status] ?? status}
                 {" "}
                 <span className="text-gold-300">{byStatus.get(status)!.length}</span>

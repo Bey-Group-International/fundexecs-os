@@ -42,12 +42,12 @@ export function FrontDoor() {
     const p = PATHS[path];
     return (
       <div className="rounded-2xl border border-line bg-surface-1 p-6">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">Routed</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">Routed</p>
         <h2 className="mt-1 font-display text-xl font-semibold text-fg-primary">{p.label}</h2>
         <p className="mt-1 text-sm text-fg-secondary">{p.blurb}</p>
 
         <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Earnest Fundmaker
           </p>
           <p className="mt-1.5 whitespace-pre-wrap text-sm text-fg-primary">
@@ -89,7 +89,7 @@ export function FrontDoor() {
           />
         ))}
       </div>
-      <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+      <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
         Question {step + 1} of {QUESTIONS.length}
       </p>
       <h2 className="mt-1.5 font-display text-xl font-semibold text-fg-primary">{q.prompt}</h2>

@@ -166,12 +166,12 @@ export async function ThesisLive() {
   return (
     <section>
       <div className="mb-1 flex items-center justify-between gap-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Sector Heatmap
         </p>
         <Link
           href="/deals/feed"
-          className="font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+          className="font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
         >
           Deal Signal Feed →
         </Link>

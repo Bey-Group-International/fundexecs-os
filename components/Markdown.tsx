@@ -25,7 +25,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
             () => {},
           );
         }}
-        className="absolute right-2 top-2 rounded-md border border-line/70 bg-surface-0/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted opacity-0 transition hover:text-fg-primary group-hover:opacity-100"
+        className="absolute right-2 top-2 rounded-md border border-line/70 bg-surface-0/80 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted opacity-0 transition hover:text-fg-primary group-hover:opacity-100"
       >
         {copied ? "Copied" : "Copy"}
       </button>

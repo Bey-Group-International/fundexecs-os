@@ -39,12 +39,12 @@ export function MobileBottomNav({
         <span className={`relative transition-colors ${active ? "text-gold-400" : "text-fg-muted"}`}>
           <Icon width={22} height={22} />
           {badge ? (
-            <span className="absolute -right-2.5 -top-1.5 flex min-w-[16px] items-center justify-center rounded-full bg-status-danger px-1 text-[9px] font-semibold leading-[16px] text-white ring-2 ring-surface-1">
+            <span className="absolute -right-2.5 -top-1.5 flex min-w-[16px] items-center justify-center rounded-full bg-status-danger px-1 text-[11px] font-semibold leading-[16px] text-white ring-2 ring-surface-1">
               {badge > 9 ? "9+" : badge}
             </span>
           ) : null}
         </span>
-        <span className={`text-[10px] font-medium leading-none tracking-tight transition-colors ${active ? "text-gold-300" : "text-fg-muted"}`}>
+        <span className={`text-[11px] font-medium leading-none tracking-tight transition-colors ${active ? "text-gold-300" : "text-fg-muted"}`}>
           {tab.label}
         </span>
       </span>

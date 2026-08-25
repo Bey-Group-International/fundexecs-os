@@ -24,7 +24,7 @@ export function NewAutomationForm() {
       }
       className="rounded-xl border border-line bg-surface-1 p-4"
     >
-      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
         New workflow
       </p>
 

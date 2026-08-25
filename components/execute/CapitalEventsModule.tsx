@@ -57,13 +57,13 @@ function LedgerLine({ row, first }: { row: LedgerRow; first: boolean }) {
       <span className="font-mono text-[11px] text-fg-muted">{shortDate(event.effective_date)}</span>
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${DIR_TONE[direction]}`}>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${DIR_TONE[direction]}`}>
             {humanize(event.event_type)}
           </span>
           {fundName ? <span className="truncate text-[11px] text-fg-secondary">{fundName}</span> : null}
         </div>
         {event.reference ? (
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted">{event.reference}</span>
+          <span className="mt-0.5 block truncate font-mono text-[11px] text-fg-muted">{event.reference}</span>
         ) : null}
       </div>
       <span className={`text-right font-mono text-sm ${amountTone}`}>
@@ -158,7 +158,7 @@ export async function ExecuteCapitalEventsModule({ orgId }: { orgId: string }) {
               key={t.type}
               className="flex items-center gap-1.5 rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary"
             >
-              <span className="font-mono text-[10px] text-fg-muted">{t.count}</span>
+              <span className="font-mono text-[11px] text-fg-muted">{t.count}</span>
               {humanize(t.type)}
               <span className="font-mono text-[11px] text-fg-primary">{compactUsd(t.total)}</span>
             </span>

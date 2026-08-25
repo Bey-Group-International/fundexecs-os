@@ -40,12 +40,12 @@ export function DocumentCard({ doc }: { doc: WorkspaceDoc }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={`text-base ${iconColor}`} aria-hidden>{DOC_TYPE_ICONS[doc.docType]}</span>
-          <span className={`rounded-full border border-current/30 bg-current/8 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${iconColor}`}>
+          <span className={`rounded-full border border-current/30 bg-current/8 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${iconColor}`}>
             {DOC_TYPE_LABELS[doc.docType]}
           </span>
         </div>
         {doc.isPinned && (
-          <span className="font-mono text-[10px] text-gold-400">Pinned</span>
+          <span className="font-mono text-[11px] text-gold-400">Pinned</span>
         )}
       </div>
 
@@ -60,7 +60,7 @@ export function DocumentCard({ doc }: { doc: WorkspaceDoc }) {
         )}
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-2 font-mono text-[10px] text-fg-muted">
+      <div className="mt-auto flex flex-wrap items-center gap-2 font-mono text-[11px] text-fg-muted">
         {doc.dealName && <span className="text-gold-400/70">{doc.dealName}</span>}
         {doc.fundName && <span className="text-blue-400/70">{doc.fundName}</span>}
         <span className="ml-auto">{words} words · {timeLabel(doc.updatedAt)}</span>

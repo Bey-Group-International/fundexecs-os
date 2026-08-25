@@ -36,7 +36,7 @@ function TierBadge({ tier }: { tier: FundTier }) {
   const meta = TIER_META[tier];
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${meta.classes}`}
+      className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${meta.classes}`}
     >
       {meta.label}
     </span>
@@ -79,7 +79,7 @@ function ContributionBar({ contribution }: { contribution: number }) {
 function FactorBreakdown({ row }: { row: Row }) {
   return (
     <div className="border-t border-line bg-surface-2/20 px-4 py-3">
-      <p className="mb-3 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         Factor breakdown
       </p>
       <ul className="flex flex-col gap-3">
@@ -88,7 +88,7 @@ function FactorBreakdown({ row }: { row: Row }) {
             <div className="min-w-0">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs font-medium text-fg-primary">{f.label}</span>
-                <span className="font-mono text-[10px] text-fg-muted">
+                <span className="font-mono text-[11px] text-fg-muted">
                   w {(f.weight * 100).toFixed(0)}%
                 </span>
               </div>
@@ -139,7 +139,7 @@ function FundRowItem({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-fg-primary">{row.name}</p>
-          <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+          <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
             {formatUsd(row.inputs.fund_size_usd)}
             {row.inputs.vintage_year != null && ` · vintage ${row.inputs.vintage_year}`}
             {` · prior IRR ${formatPct(row.inputs.prior_gross_irr)}`}
@@ -151,12 +151,12 @@ function FundRowItem({
             <span className="font-mono text-sm font-semibold tabular-nums text-fg-primary">
               {row.score.toFixed(1)}
             </span>
-            <span className="ml-0.5 font-mono text-[9px] text-fg-muted">/100</span>
+            <span className="ml-0.5 font-mono text-[11px] text-fg-muted">/100</span>
           </div>
           <TierBadge tier={row.tier} />
           <span
             aria-hidden
-            className={`inline-block font-mono text-[10px] text-fg-muted transition-transform ${
+            className={`inline-block font-mono text-[11px] text-fg-muted transition-transform ${
               open ? "rotate-90 text-gold-400" : ""
             }`}
           >
@@ -220,7 +220,7 @@ export function FundScoringBoard({ rows }: { rows: Row[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-gold-500/20 bg-gold-500/[0.04] p-4">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           How this score works
         </p>
         <p className="mt-1.5 text-xs leading-5 text-fg-secondary">
@@ -236,20 +236,20 @@ export function FundScoringBoard({ rows }: { rows: Row[] }) {
 
       <div className="rounded-xl border border-line bg-surface-1">
         <div className="flex items-center gap-3 border-b border-line bg-surface-2/30 px-4 py-2">
-          <span className="w-6 shrink-0 text-center font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="w-6 shrink-0 text-center font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             #
           </span>
-          <span className="flex-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="flex-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Fund
           </span>
           <button
             type="button"
             onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
             aria-label={`Sort by score ${sortDir === "desc" ? "ascending" : "descending"}`}
-            className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
+            className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
           >
             Score
-            <span aria-hidden className="text-[9px]">
+            <span aria-hidden className="text-[11px]">
               {sortDir === "desc" ? "▼" : "▲"}
             </span>
           </button>

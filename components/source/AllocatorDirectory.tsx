@@ -137,7 +137,7 @@ function InviteLPModal({
           <h2 className="font-mono text-sm font-semibold text-fg-primary">Invite LP to Onboard</h2>
           <button
             onClick={onClose}
-            className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Close
           </button>
@@ -152,22 +152,22 @@ function InviteLPModal({
               <span className="flex-1 truncate font-mono text-[11px] text-fg-secondary">{portalUrl}</span>
               <button
                 onClick={handleCopy}
-                className="shrink-0 rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+                className="shrink-0 rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
               >
                 {copied ? "Copied ✓" : "Copy"}
               </button>
             </div>
-            <p className="font-mono text-[10px] text-emerald-400">Invite email sent if email was provided.</p>
+            <p className="font-mono text-[11px] text-emerald-400">Invite email sent if email was provided.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
             <div>
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">LP</p>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">LP</p>
               <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary">{entry.name}</p>
             </div>
 
             <div>
-              <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 LP Email
               </label>
               <input
@@ -182,7 +182,7 @@ function InviteLPModal({
 
             {funds.length > 0 && (
               <div>
-                <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   Fund
                 </label>
                 <select
@@ -199,7 +199,7 @@ function InviteLPModal({
             )}
 
             <div>
-              <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Commitment Amount (optional)
               </label>
               <input
@@ -211,7 +211,7 @@ function InviteLPModal({
               />
             </div>
 
-            {error && <p className="font-mono text-[10px] text-status-danger">{error}</p>}
+            {error && <p className="font-mono text-[11px] text-status-danger">{error}</p>}
 
             <button
               onClick={handleSend}
@@ -246,7 +246,7 @@ function LogContactButton({ investorId }: { investorId: string }) {
     <button
       onClick={handleClick}
       disabled={pending}
-      className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
+      className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
     >
       {pending ? "Saving…" : done ? "Logged ✓" : "Log contact"}
     </button>
@@ -292,17 +292,17 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium text-fg-primary">{entry.name}</p>
           {entry.provenance === "ai" ? (
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-gold-300">AI Sourced</span>
           ) : (
-            <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+            <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Manual</span>
           )}
         </div>
-        <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+        <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
           {ALLOCATOR_TYPE_LABELS[entry.allocatorType]}
           {entry.hqCity && ` · ${entry.hqCity}`}
         </p>
         {entry.topActionTitle && (
-          <p className="mt-1 font-mono text-[9px] text-amber-400/80 truncate max-w-[220px]">
+          <p className="mt-1 font-mono text-[11px] text-amber-400/80 truncate max-w-[220px]">
             ↗ {entry.topActionTitle}
           </p>
         )}
@@ -314,7 +314,7 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
           <p className="font-mono text-xs text-fg-secondary">
             {formatAUM(entry.aumMax ?? entry.aumMin)}
           </p>
-          <p className="font-mono text-[10px] text-fg-muted">AUM</p>
+          <p className="font-mono text-[11px] text-fg-muted">AUM</p>
         </div>
       )}
 
@@ -324,7 +324,7 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
           <p className="font-mono text-xs text-fg-secondary">
             {formatTicketRange(entry.ticketMin ?? null, entry.ticketMax ?? null)}
           </p>
-          <p className="font-mono text-[10px] text-fg-muted">Ticket</p>
+          <p className="font-mono text-[11px] text-fg-muted">Ticket</p>
         </div>
       )}
 
@@ -332,12 +332,12 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
       {cols.showStrategies && (
         <div className="hidden w-40 xl:flex flex-wrap gap-1">
           {entry.primaryStrategies.slice(0, 2).map((s) => (
-            <span key={s} className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[9px] text-fg-muted">
+            <span key={s} className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-fg-muted">
               {s.replace(/_/g, " ")}
             </span>
           ))}
           {entry.primaryStrategies.length > 2 && (
-            <span className="font-mono text-[9px] text-fg-muted">+{entry.primaryStrategies.length - 2}</span>
+            <span className="font-mono text-[11px] text-fg-muted">+{entry.primaryStrategies.length - 2}</span>
           )}
         </div>
       )}
@@ -345,7 +345,7 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
       {/* Fit score — only if any row has data */}
       {cols.showFit && entry.fitScore !== undefined && (
         <div className="hidden w-16 text-right sm:block">
-          <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${fitColor}`}>
+          <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold ${fitColor}`}>
             {entry.fitScore}%
           </span>
         </div>
@@ -357,11 +357,11 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
       {/* Pipeline stage */}
       <div className="hidden w-24 sm:block">
         {stageLabel ? (
-          <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase ${stageColor}`}>
+          <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase ${stageColor}`}>
             {stageLabel}
           </span>
         ) : entry.temperature ? (
-          <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase ${tempColor}`}>
+          <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase ${tempColor}`}>
             {entry.temperature}
           </span>
         ) : null}
@@ -371,7 +371,7 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
       <div className="hidden w-44 lg:flex flex-col items-end gap-0.5">
         {/* Contact details — always visible when populated */}
         {displayName && (
-          <p className="font-mono text-[10px] text-fg-secondary truncate max-w-[176px] text-right">
+          <p className="font-mono text-[11px] text-fg-secondary truncate max-w-[176px] text-right">
             {displayName}{displayRole && <span className="opacity-60"> · {displayRole}</span>}
           </p>
         )}
@@ -379,16 +379,16 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
           <a
             href={`mailto:${displayEmail}`}
             onClick={(e) => e.stopPropagation()}
-            className="font-mono text-[9px] text-fg-muted/70 truncate max-w-[176px] hover:text-gold-300"
+            className="font-mono text-[11px] text-fg-muted/70 truncate max-w-[176px] hover:text-gold-300"
           >
             {displayEmail}
           </a>
         )}
         {displayPhone && !displayEmail && (
-          <p className="font-mono text-[9px] text-fg-muted/70">{displayPhone}</p>
+          <p className="font-mono text-[11px] text-fg-muted/70">{displayPhone}</p>
         )}
         {!displayName && !displayEmail && (
-          <p className={`font-mono text-[10px] ${entry.lastContactDays != null && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
+          <p className={`font-mono text-[11px] ${entry.lastContactDays != null && entry.lastContactDays > 60 ? "text-amber-400" : "text-fg-muted"}`}>
             {entry.lastContactDays != null ? `${entry.lastContactDays}d ago` : "—"}
           </p>
         )}
@@ -398,7 +398,7 @@ function AllocatorRow({ entry, funds, cols }: { entry: AllocatorEntry; funds: Fu
           <EditContactBtn onClick={() => setEditingContact((v) => !v)} />
           <button
             onClick={(e) => { e.stopPropagation(); setShowInvite(true); }}
-            className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Invite
           </button>
@@ -534,7 +534,7 @@ export function AllocatorDirectory({ entries, funds }: Props) {
             Clear all
           </button>
         )}
-        <span className="ml-auto font-mono text-[10px] text-fg-muted">
+        <span className="ml-auto font-mono text-[11px] text-fg-muted">
           {filtered.length} of {entries.length} allocators
         </span>
         {entries.length > 0 && <ClearInvestorsBtn />}
@@ -544,13 +544,13 @@ export function AllocatorDirectory({ entries, funds }: Props) {
       <div className="rounded-xl border border-line bg-surface-1">
         {/* Header */}
         <div className="flex items-center gap-4 border-b border-line bg-surface-2/30 px-4 py-2.5">
-          <span className="min-w-[200px] flex-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Allocator</span>
-          {cols.showAum && <span className="hidden w-28 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">AUM</span>}
-          {cols.showTicket && <span className="hidden w-36 font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Ticket</span>}
-          {cols.showStrategies && <span className="hidden w-40 font-mono text-[10px] uppercase tracking-wider text-fg-muted xl:block">Strategies</span>}
-          {cols.showFit && <span className="hidden w-16 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Fit</span>}
-          <span className="hidden w-24 font-mono text-[10px] uppercase tracking-wider text-fg-muted sm:block">Stage</span>
-          <span className="hidden w-44 text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
+          <span className="min-w-[200px] flex-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Allocator</span>
+          {cols.showAum && <span className="hidden w-28 font-mono text-[11px] uppercase tracking-wider text-fg-muted sm:block">AUM</span>}
+          {cols.showTicket && <span className="hidden w-36 font-mono text-[11px] uppercase tracking-wider text-fg-muted lg:block">Ticket</span>}
+          {cols.showStrategies && <span className="hidden w-40 font-mono text-[11px] uppercase tracking-wider text-fg-muted xl:block">Strategies</span>}
+          {cols.showFit && <span className="hidden w-16 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted sm:block">Fit</span>}
+          <span className="hidden w-24 font-mono text-[11px] uppercase tracking-wider text-fg-muted sm:block">Stage</span>
+          <span className="hidden w-44 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted lg:block">Contact</span>
         </div>
         {filtered.length === 0 ? (
           <div className="px-4 py-10 text-center">

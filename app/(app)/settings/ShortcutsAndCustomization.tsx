@@ -1,22 +1,18 @@
 "use client";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { APP_SHORTCUTS } from "@/lib/shortcuts";
 
 export function ShortcutsAndCustomization() {
   return (
     <div className="flex flex-col gap-4">
-      {/* Theme */}
+      {/* Appearance — one scheme, no switch. The platform ships a single
+          high-contrast palette so every label reads the same on every device. */}
       <div className="fx-card p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-fg-primary">Appearance</p>
-            <p className="mt-0.5 text-xs text-fg-muted">
-              Switch between day and night mode. Saved locally to this device.
-            </p>
-          </div>
-          <ThemeToggle />
-        </div>
+        <p className="text-sm font-medium text-fg-primary">Appearance</p>
+        <p className="mt-1 text-sm text-fg-secondary">
+          FundExecs OS renders in one bold, high-contrast scheme on every device — no dimmed
+          mode to switch into, so wording stays legible wherever you are working.
+        </p>
       </div>
 
       {/* Keyboard shortcuts */}
@@ -33,7 +29,7 @@ export function ShortcutsAndCustomization() {
                 {s.keys.map((k, i) => (
                   <kbd
                     key={i}
-                    className="rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
+                    className="rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-fg-muted"
                   >
                     {k}
                   </kbd>

@@ -40,7 +40,7 @@ export function MarketplaceToolbar({
   const filtered = filteredTotal !== total;
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         <span className="text-fg-secondary">{filteredTotal}</span>{" "}
         {filteredTotal === 1 ? "listing" : "listings"}
         {filtered ? <span className="opacity-60"> of {total}</span> : null}
@@ -54,7 +54,7 @@ export function MarketplaceToolbar({
                 type="button"
                 onClick={onExportCsv}
                 title="Export current view to CSV"
-                className="rounded-md border border-line px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-secondary"
+                className="rounded-md border border-line px-2 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-secondary"
               >
                 CSV
               </button>
@@ -64,7 +64,7 @@ export function MarketplaceToolbar({
                 type="button"
                 onClick={onPrint}
                 title="Print / save as PDF"
-                className="rounded-md border border-line px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-secondary"
+                className="rounded-md border border-line px-2 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-secondary"
               >
                 PDF
               </button>
@@ -73,7 +73,7 @@ export function MarketplaceToolbar({
         )}
 
         <label className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Sort</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Sort</span>
           <select
             value={sort}
             onChange={(e) => onSort(e.target.value as SortKey)}

@@ -323,9 +323,9 @@ export function UpcomingMeetingsList({
               <div className="flex items-start justify-between gap-3 pb-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_TONE[status]}`}>{status}</span>
+                    <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_TONE[status]}`}>{status}</span>
                     {timeState && timeState.phase !== "ended" ? (
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${COUNTDOWN_TONE[timeState.phase]}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${COUNTDOWN_TONE[timeState.phase]}`}>
                         {(timeState.phase === "imminent" || timeState.phase === "in_progress") ? (
                           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
                         ) : null}
@@ -452,7 +452,7 @@ function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
 
 function StatusPill({ label }: { label: string }) {
   return (
-    <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">
+    <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">
       {label.replace(/_/g, " ")}
     </span>
   );

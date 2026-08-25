@@ -55,7 +55,7 @@ export function EditListingForm({ listing }: { listing: MarketplaceListing }) {
 
           <div className="flex flex-col gap-2.5">
             <div>
-              <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Title
               </label>
               <input
@@ -67,7 +67,7 @@ export function EditListingForm({ listing }: { listing: MarketplaceListing }) {
             </div>
 
             <div>
-              <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Summary
               </label>
               <textarea
@@ -105,7 +105,7 @@ export function EditListingForm({ listing }: { listing: MarketplaceListing }) {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Booking / calendar link
               </label>
               <input
@@ -123,7 +123,7 @@ export function EditListingForm({ listing }: { listing: MarketplaceListing }) {
             </div>
 
             <details className="group">
-              <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary transition select-none">
+              <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary transition select-none">
                 <span className="group-open:hidden">▸ Deal details</span>
                 <span className="hidden group-open:inline">▾ Deal details</span>
               </summary>

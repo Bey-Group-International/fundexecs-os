@@ -18,7 +18,7 @@ const KIND_LABEL: Record<SearchKind, string> = {
 
 function KindBadge({ kind }: { kind: SearchKind }) {
   return (
-    <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+    <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
       {KIND_LABEL[kind]}
     </span>
   );
@@ -37,7 +37,7 @@ function HitRow({ hit }: { hit: SearchHit }) {
       <Link href={hit.href} className="min-w-0 flex-1">
         <span className="block truncate text-sm text-fg-primary transition hover:text-gold-300">{hit.title}</span>
         {hit.subtitle ? (
-          <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-fg-muted">
+          <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-fg-muted">
             {hit.subtitle}
           </span>
         ) : null}

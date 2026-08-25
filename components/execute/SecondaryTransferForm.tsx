@@ -50,7 +50,7 @@ export default function SecondaryTransferForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
       >
         ⇄ Record secondary transfer
       </button>
@@ -94,8 +94,8 @@ export default function SecondaryTransferForm({
       className="mb-4 flex flex-col gap-4 rounded-xl border border-gold-500/30 bg-surface-1 p-5"
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">Secondary transfer</span>
-        <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-danger">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Secondary transfer</span>
+        <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
           Tier 3 · operator sign-off
         </span>
       </div>
@@ -160,7 +160,7 @@ export default function SecondaryTransferForm({
 
       {/* Live transfer preview */}
       <div className="overflow-hidden rounded-lg border border-line">
-        <div className="flex items-center justify-between bg-surface-2/80 px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <div className="flex items-center justify-between bg-surface-2/80 px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           <span>Transfer preview</span>
           <span>
             {t.premiumDiscountPct == null
@@ -207,7 +207,7 @@ export default function SecondaryTransferForm({
 function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
       <span className="font-mono text-fg-primary">{value}</span>
     </div>
   );

@@ -77,7 +77,7 @@ function EnvelopeStatusBadge({ status }: { status: EnvelopeStatus }) {
   const { dot, badge } = ENVELOPE_STATUS_STYLES[status] ?? ENVELOPE_STATUS_STYLES.draft;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${badge}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${badge}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
       {ENVELOPE_STATUS_LABELS[status] ?? status}
@@ -110,7 +110,7 @@ function RecipientStatusBadge({ status }: { status: RecipientStatus }) {
   const cls = RECIPIENT_STATUS_STYLES[status] ?? RECIPIENT_STATUS_STYLES.pending;
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${cls}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${cls}`}
     >
       {RECIPIENT_STATUS_LABELS[status] ?? status}
     </span>
@@ -138,7 +138,7 @@ function CopyButton({ token }: { token: string }) {
       onClick={handleCopy}
       aria-label="Copy signing link"
       title="Copy signing link"
-      className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+      className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
     >
       {copied ? (
         <>
@@ -413,7 +413,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       <header className="fx-glass p-5 sm:p-6">
         <Link
           href="/envelopes"
-          className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400 hover:underline"
+          className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400 hover:underline"
         >
           ← Documents &amp; Signatures
         </Link>
@@ -512,7 +512,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       {/* ------------------------------------------------------------------ */}
       {envelope.status === "completed" && (
         <div className="fx-card p-5">
-          <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Completed
           </p>
           <p className="text-sm text-fg-primary">
@@ -567,7 +567,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       {/* ------------------------------------------------------------------ */}
       <section className="fx-card overflow-hidden">
         <div className="border-b border-line px-5 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Document
           </p>
         </div>
@@ -589,7 +589,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       {/* ------------------------------------------------------------------ */}
       <section className="fx-card overflow-hidden">
         <div className="border-b border-line px-5 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Recipients
           </p>
         </div>
@@ -606,7 +606,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
                 {/* Identity + status */}
                 <div className="flex items-center gap-3">
                   {/* Routing order bubble */}
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] text-fg-muted">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[11px] text-fg-muted">
                     {r.routing_order}
                   </span>
                   <div className="min-w-0">
@@ -617,7 +617,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
                       {r.email}
                     </p>
                     {r.signed_at && (
-                      <p className="font-mono text-[10px] text-fg-muted">
+                      <p className="font-mono text-[11px] text-fg-muted">
                         Signed {formatDateTime(r.signed_at)}
                       </p>
                     )}
@@ -640,7 +640,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
       {/* ------------------------------------------------------------------ */}
       <section className="fx-card overflow-hidden">
         <div className="border-b border-line px-5 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Activity
           </p>
         </div>
@@ -673,7 +673,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
                   {/* Content */}
                   <div className="flex-1 pb-4">
                     <p className="text-sm text-fg-primary">{label}</p>
-                    <p className="font-mono text-[10px] text-fg-muted">
+                    <p className="font-mono text-[11px] text-fg-muted">
                       {formatDateTime(ev.created_at)}
                     </p>
                     {ev.metadata &&
@@ -685,7 +685,7 @@ export function EnvelopeDetail({ envelope, recipients, events }: Props) {
                             .map(([k, v]) => (
                               <li
                                 key={k}
-                                className="font-mono text-[10px] text-fg-muted"
+                                className="font-mono text-[11px] text-fg-muted"
                               >
                                 <span className="text-fg-secondary">{k}:</span>{" "}
                                 {String(v)}

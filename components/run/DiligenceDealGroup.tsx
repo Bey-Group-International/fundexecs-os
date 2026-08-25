@@ -25,7 +25,7 @@ const SEV_DOT: Record<RiskSeverity, string> = {
 const DILIGENCE_STATUSES = ["open", "in_review", "cleared", "flagged", "waived"];
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
-const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelClass = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 
 export function DiligenceDealGroup({
   dealId,
@@ -128,7 +128,7 @@ export function DiligenceDealGroup({
                 </span>
                 {i.owner && <span className={labelClass}>{i.owner}</span>}
                 {i.due_date && (
-                  <span className={overdue ? "font-mono text-[10px] uppercase tracking-wider text-status-danger" : labelClass}>
+                  <span className={overdue ? "font-mono text-[11px] uppercase tracking-wider text-status-danger" : labelClass}>
                     {overdue ? "overdue " : "due "}
                     {i.due_date}
                   </span>

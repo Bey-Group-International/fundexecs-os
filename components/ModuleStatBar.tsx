@@ -28,7 +28,7 @@ function Stat({ value, label, accent }: { value: string; label: string; accent?:
       >
         {value}
       </span>
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
     </div>
   );
 }
@@ -54,7 +54,7 @@ export function ModuleStatBar({
       {updated ? (
         <div className="ml-auto flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-status-success" aria-hidden />
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Updated {updated}
           </span>
         </div>

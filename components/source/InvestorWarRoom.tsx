@@ -39,7 +39,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">{children}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{children}</h3>
       {action}
     </div>
   );
@@ -87,16 +87,16 @@ function Header({ data }: { data: WarRoom }) {
           <Ring value={fit} />
           <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
             <span className="font-display text-base font-semibold leading-none text-fg-primary">{fit}</span>
-            <span className="mt-0.5 font-mono text-[8px] uppercase tracking-wider text-fg-muted">fit</span>
+            <span className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">fit</span>
           </span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="min-w-0 break-words font-display text-2xl font-semibold tracking-tight text-fg-primary">{investor.name}</h1>
-            <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${temp.tone}`}>
+            <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${temp.tone}`}>
               {temp.label}
             </span>
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {humanize(investor.investor_type as InvestorType)}
             </span>
           </div>
@@ -146,7 +146,7 @@ function Header({ data }: { data: WarRoom }) {
 function StatCell({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="rounded-lg border border-line/60 bg-surface-0 px-3 py-2">
-      <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</p>
       <p className={`mt-0.5 font-display text-lg font-semibold ${tone ?? "text-fg-primary"}`}>{value}</p>
     </div>
   );
@@ -159,7 +159,7 @@ function Commitments({ data }: { data: WarRoom }) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {commitments.length} {commitments.length === 1 ? "fund" : "funds"}
           </span>
         }
@@ -179,7 +179,7 @@ function Commitments({ data }: { data: WarRoom }) {
               <span className="min-w-0 flex-1">
                 <span className="text-fg-primary">{fund?.name ?? "Unassigned fund"}</span>
                 {commitment.committed_at ? (
-                  <span className="ml-2 font-mono text-[10px] text-fg-muted">
+                  <span className="ml-2 font-mono text-[11px] text-fg-muted">
                     {new Date(commitment.committed_at).toLocaleDateString()}
                   </span>
                 ) : null}
@@ -206,7 +206,7 @@ function CapitalFlows({ data }: { data: WarRoom }) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{capitalEvents.length} events</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{capitalEvents.length} events</span>
         }
       >
         Capital flows
@@ -217,10 +217,10 @@ function CapitalFlows({ data }: { data: WarRoom }) {
             const inflow = INFLOW_EVENTS.has(event.event_type);
             return (
               <div key={event.id} className="flex flex-wrap items-center gap-2.5 text-sm">
-                <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] text-fg-muted">
                   {new Date(event.effective_date).toLocaleDateString()}
                 </span>
-                <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary">
+                <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
                   {humanize(event.event_type)}
                 </span>
                 {event.reference ? <span className="min-w-0 flex-1 truncate text-fg-muted">{event.reference}</span> : <span className="flex-1" />}
@@ -251,7 +251,7 @@ function NextActionItem({ action }: { action: NextAction }) {
   const tier = TIER_META[action.tier];
   return (
     <li className="flex items-start gap-2.5">
-      <span className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider ${tier.tone}`}>
+      <span className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${tier.tone}`}>
         {tier.label}
       </span>
       <span className="min-w-0 flex-1">
@@ -288,7 +288,7 @@ function Relationships({ data }: { data: WarRoom }) {
       <SectionTitle>Relationships & intro path</SectionTitle>
       {introPath ? (
         <div className="mb-3 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Warm intro via {introPath.introducer}</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Warm intro via {introPath.introducer}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm text-fg-secondary">
             {introPath.hops.map((hop, i) => (
               <span key={`${hop}-${i}`} className="flex items-center gap-1.5">
@@ -303,14 +303,14 @@ function Relationships({ data }: { data: WarRoom }) {
         <ul className="flex flex-col gap-1.5">
           {relationships.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
-              <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary">
+              <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
                 {humanize(r.relation)}
               </span>
               <span className="text-fg-secondary">
                 {humanize(r.from_entity_type)} ↔ {humanize(r.to_entity_type)}
               </span>
               {r.strength != null ? (
-                <span className="ml-auto font-mono text-[10px] text-fg-muted">strength {r.strength}</span>
+                <span className="ml-auto font-mono text-[11px] text-fg-muted">strength {r.strength}</span>
               ) : null}
             </li>
           ))}

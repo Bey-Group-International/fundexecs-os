@@ -34,7 +34,7 @@ export default async function DocumentBuilderPage(props: { params: Promise<{ id:
         <div className="flex items-center justify-between gap-4">
           <Link
             href="/build/data_room"
-            className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400 hover:underline"
+            className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400 hover:underline"
           >
             ← Materials &amp; Data Room
           </Link>
@@ -43,7 +43,7 @@ export default async function DocumentBuilderPage(props: { params: Promise<{ id:
               href={`/api/documents/${doc.id}/pdf`}
               target="_blank"
               rel="noreferrer"
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-gold-400 transition"
+              className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-gold-400 transition"
             >
               ↓ PDF
             </a>

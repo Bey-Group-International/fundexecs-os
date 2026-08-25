@@ -77,7 +77,7 @@ function TotalCard({
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-4">
-      <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {label}
       </div>
       <div
@@ -116,10 +116,10 @@ function NavTrend({ series }: { series: { date: string; value: number }[] }) {
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
       <div className="flex items-center justify-between">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           NAV over time
         </div>
-        <div className={`font-mono text-[10px] tabular-nums ${gainClass(delta)}`}>
+        <div className={`font-mono text-[11px] tabular-nums ${gainClass(delta)}`}>
           {delta > 0 ? "+" : ""}
           {delta.toFixed(1)}%
         </div>
@@ -143,7 +143,7 @@ function AlertRow({ alert }: { alert: PortfolioAlert }) {
             {alert.assetName}
           </span>
           <span
-            className={`font-mono text-[9px] uppercase tracking-wider ${tone.label}`}
+            className={`font-mono text-[11px] uppercase tracking-wider ${tone.label}`}
           >
             {tone.tag}
           </span>
@@ -160,7 +160,7 @@ function AlertsList({ alerts }: { alerts: PortfolioAlert[] }) {
   if (alerts.length === 0) return null;
   return (
     <section>
-      <h2 className="mb-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+      <h2 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         Alerts
       </h2>
       <div className="flex flex-col gap-2">
@@ -177,7 +177,7 @@ function MarkCell({ asset }: { asset: PortfolioAsset }) {
     return (
       <span className="text-fg-muted">
         {usd(asset.nav)}
-        <span className="ml-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+        <span className="ml-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           est
         </span>
       </span>
@@ -188,7 +188,7 @@ function MarkCell({ asset }: { asset: PortfolioAsset }) {
       {usd(asset.nav)}
       {asset.markAgeDays != null ? (
         <span
-          className={`ml-1 font-mono text-[9px] uppercase tracking-wider ${
+          className={`ml-1 font-mono text-[11px] uppercase tracking-wider ${
             asset.isStale ? "text-status-warning" : "text-fg-muted"
           }`}
         >
@@ -202,13 +202,13 @@ function MarkCell({ asset }: { asset: PortfolioAsset }) {
 function AssetsTable({ assets }: { assets: PortfolioAsset[] }) {
   return (
     <section>
-      <h2 className="mb-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+      <h2 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         Held assets
       </h2>
       <div className="overflow-hidden rounded-xl border border-line bg-surface-1">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-line text-left font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               <th className="px-4 py-3 font-normal">Asset</th>
               <th className="px-4 py-3 text-right font-normal">Cost</th>
               <th className="px-4 py-3 text-right font-normal">Mark</th>
@@ -227,7 +227,7 @@ function AssetsTable({ assets }: { assets: PortfolioAsset[] }) {
                   <Link href={`/asset/${asset.id}`} className="font-medium text-fg-primary transition hover:text-gold-300">
                     {asset.name}
                   </Link>
-                  <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {asset.assetType.replace(/_/g, " ")}
                     {asset.fundName ? ` · ${asset.fundName}` : ""}
                   </div>

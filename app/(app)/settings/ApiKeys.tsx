@@ -39,12 +39,12 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
       {reveal ? (
         <div className="rounded-xl border border-gold-500/40 bg-gold-500/[0.06] p-4">
           <div className="flex items-start justify-between gap-3">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-gold-300">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
               New key · {reveal.forName}
             </p>
             <button
               onClick={() => setReveal(null)}
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+              className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
             >
               Dismiss
             </button>
@@ -81,7 +81,7 @@ export function ApiKeys({ keys }: { keys: ApiKeyView[] }) {
         }
         className="rounded-xl border border-line bg-surface-1 p-4"
       >
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
           New API key
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -178,7 +178,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-fg-primary">{k.name}</span>
             <span
-              className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+              className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                 k.mode === "live"
                   ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
                   : "border-line bg-surface-0 text-fg-secondary"
@@ -187,7 +187,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
               {k.mode}
             </span>
             {revoked ? (
-              <span className="rounded-full border border-status-danger/40 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-danger">
+              <span className="rounded-full border border-status-danger/40 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
                 Revoked
               </span>
             ) : null}
@@ -198,7 +198,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
               {k.scopes.map((scope) => (
                 <span
                   key={scope}
-                  className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] text-fg-secondary"
+                  className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] text-fg-secondary"
                 >
                   {scope}
                 </span>
@@ -214,7 +214,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
             </p>
           </div>
 
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Created {new Date(k.created_at).toLocaleDateString()}
             {k.last_used_at
               ? ` · last used ${new Date(k.last_used_at).toLocaleDateString()}`
@@ -223,7 +223,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
 
           {rotated ? (
             <div className="mt-2 rounded-md border border-gold-500/40 bg-gold-500/[0.06] p-2">
-              <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 New secret — copy now
               </p>
               <CopyField label="Secret key" value={rotated} highlight />
@@ -301,7 +301,7 @@ function CopyField({
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+          className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
           aria-label={`Copy ${label}`}
         >
           {copied ? "Copied" : "Copy"}

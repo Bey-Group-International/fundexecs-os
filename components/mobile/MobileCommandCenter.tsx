@@ -67,7 +67,7 @@ export function MobileCommandCenter({ data }: { data: CommandCenterData }) {
               {initials(data.name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">{data.dateLabel}</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{data.dateLabel}</p>
               <h1 className="mt-0.5 font-display text-[24px] font-semibold leading-tight tracking-tight text-fg-primary">
                 {data.greeting}, {data.name.split(" ")[0]}
               </h1>
@@ -146,7 +146,7 @@ export function MobileCommandCenter({ data }: { data: CommandCenterData }) {
                     <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neural-400/70" />
                     <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-fg-secondary">{item.text}</span>
                     {relativeTime(item.at) && (
-                      <span className="shrink-0 text-[10px] text-fg-muted">{relativeTime(item.at)}</span>
+                      <span className="shrink-0 text-[11px] text-fg-muted">{relativeTime(item.at)}</span>
                     )}
                   </Link>
                 </li>

@@ -32,11 +32,11 @@ export function RoutingTrace({
         aria-expanded={open}
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
-        <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Route</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Route</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase tracking-wider text-gold-300">
           {compact}
         </span>
-        <span className={`shrink-0 font-mono text-[9px] text-fg-muted transition ${open ? "rotate-90" : ""}`} aria-hidden>
+        <span className={`shrink-0 font-mono text-[11px] text-fg-muted transition ${open ? "rotate-90" : ""}`} aria-hidden>
           ▸
         </span>
       </button>
@@ -52,8 +52,8 @@ export function RoutingTrace({
               </div>
               <div className="min-w-0 flex-1 pb-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{n.label}</span>
-                  <span className="shrink-0 font-mono text-[9px] text-fg-muted">{fmtClockTime(n.at, "—")}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{n.label}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-fg-muted">{fmtClockTime(n.at, "—")}</span>
                 </div>
                 <p className="truncate text-xs text-fg-primary">
                   {n.value}

@@ -10,7 +10,7 @@ import type { ProfileValues } from "@/components/build/ProfileForm";
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
       <span className="text-xs font-medium text-fg-primary">{value}</span>
     </div>
   );
@@ -65,7 +65,7 @@ export function ProfilePreviewCard({
               {name || <span className="italic text-fg-muted">Display name</span>}
             </span>
             {discoverable && (
-              <span className="rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-green-400">
+              <span className="rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-green-400">
                 Discoverable
               </span>
             )}

@@ -281,7 +281,7 @@ export async function AllocatorDirectoryLive() {
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Allocator Intelligence Directory
         </p>
         {entries.length > 0 && (

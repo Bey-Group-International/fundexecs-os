@@ -93,7 +93,7 @@ export default async function HubLayout(
             aria-hidden
             className="h-5 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500"
           />
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             {hub.label} Hub
           </span>
         </div>

@@ -108,7 +108,7 @@ export default async function LandingPage(
           className="pointer-events-none absolute inset-x-0 top-24 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-gold-500/15 blur-3xl"
         />
         <div className="mx-auto max-w-3xl text-center">
-          <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300">
+          <p className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/5 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Private Markets Operating System
           </p>
           <h1 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl lg:text-7xl">
@@ -142,7 +142,7 @@ export default async function LandingPage(
       {/* Product-capability band — verifiable facts only, no invented metrics */}
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="rounded-2xl border border-line bg-surface-1 px-6 py-7">
-          <p className="mb-6 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+          <p className="mb-6 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             One operating system for the private-market lifecycle
           </p>
           <div className="flex flex-col divide-y divide-line/70 sm:flex-row sm:divide-x sm:divide-y-0">
@@ -173,7 +173,7 @@ export default async function LandingPage(
 
       <section id="operating-model" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 scroll-mt-20">
         <div className="max-w-2xl">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-fg-secondary">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-fg-secondary">
             Operating framework
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -224,7 +224,7 @@ export default async function LandingPage(
                 </span>
                 <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-fg-primary">{item.step}</h3>
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
                     Hub {index + 1} of {OPERATING_LOOP.length}
                   </span>
                 </div>
@@ -232,7 +232,7 @@ export default async function LandingPage(
 
               <p className="mt-4 flex-1 text-sm text-fg-secondary">{item.body}</p>
 
-              <p className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 <span
                   aria-hidden
                   className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -249,7 +249,7 @@ export default async function LandingPage(
 
       <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="mb-8 text-center">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             FAQ
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -262,7 +262,7 @@ export default async function LandingPage(
       <div className="border-t border-line" />
 
       <section className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-24">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
           Early access
         </p>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight">

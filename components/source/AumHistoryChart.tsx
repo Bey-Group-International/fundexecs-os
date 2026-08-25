@@ -74,7 +74,7 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
 
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-      <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+      <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
         Capital Deployment
       </h3>
 
@@ -82,25 +82,25 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
       <div className="mb-3 flex flex-wrap gap-4">
         {investor.aum !== null && (
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Reported AUM</p>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Reported AUM</p>
             <p className="font-mono text-lg font-bold text-fg-primary">{fmt(investor.aum)}</p>
           </div>
         )}
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Committed (this firm)</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Committed (this firm)</p>
           <p className="font-mono text-lg font-bold text-fg-primary">{fmt(totalCommitted)}</p>
         </div>
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Called</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Called</p>
           <p className="font-mono text-base font-semibold text-status-danger">{fmt(totalCalled)}</p>
         </div>
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Distributed</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Distributed</p>
           <p className="font-mono text-base font-semibold text-emerald-300">{fmt(totalDistributed)}</p>
         </div>
         {investor.aum !== null && totalCommitted > 0 && (
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Concentration</p>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Concentration</p>
             <p className="font-mono text-base font-semibold text-gold-300">
               {((totalCommitted / investor.aum) * 100).toFixed(1)}%
             </p>
@@ -111,7 +111,7 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
       {/* Cumulative called sparkline */}
       {svgPts && (
         <div className="mb-3">
-          <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Cumulative capital called
           </p>
           <svg viewBox={`0 0 ${W} ${H}`} className="h-12 w-full overflow-visible">
@@ -133,7 +133,7 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
               className="text-gold-400"
             />
           </svg>
-          <div className="mt-0.5 flex justify-between font-mono text-[9px] text-fg-muted">
+          <div className="mt-0.5 flex justify-between font-mono text-[11px] text-fg-muted">
             <span>{callEvents[0]?.date?.slice(0, 7) ?? ""}</span>
             <span>{callEvents[callEvents.length - 1]?.date?.slice(0, 7) ?? ""}</span>
           </div>
@@ -149,7 +149,7 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
                 {["Fund", "Committed", "Called", "Distributed", "DPI"].map((h) => (
                   <th
                     key={h}
-                    className={`pb-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted ${
+                    className={`pb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted ${
                       h === "Fund" ? "text-left" : "text-right"
                     }`}
                   >

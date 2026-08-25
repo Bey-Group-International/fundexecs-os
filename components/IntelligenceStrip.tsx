@@ -66,7 +66,7 @@ function InsightCard({ insight }: { insight: IntelligenceInsight }) {
       <div className="flex items-center gap-2">
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${styles.dot} shadow-[0_0_6px_1px_rgba(255,255,255,0.15)]`} />
         <span
-          className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${styles.pill}`}
+          className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${styles.pill}`}
         >
           {TYPE_LABELS[insight.type]}
         </span>
@@ -79,7 +79,7 @@ function InsightCard({ insight }: { insight: IntelligenceInsight }) {
       {insight.actionLabel && insight.actionHref && (
         <a
           href={insight.actionHref}
-          className="mt-auto inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+          className="mt-auto inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
         >
           {insight.actionLabel}
           <span aria-hidden>→</span>
@@ -98,11 +98,11 @@ export function IntelligenceStrip({ insights }: Props) {
   return (
     <section aria-label="Intelligence insights" className="relative">
       <div className="mb-2 flex items-center justify-between">
-        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+        <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           <span className="h-1 w-1 rounded-full bg-gold-400/60" aria-hidden />
           Earn Intelligence
         </span>
-        <span className="font-mono text-[10px] text-fg-muted">
+        <span className="font-mono text-[11px] text-fg-muted">
           {visible.length} insight{visible.length !== 1 ? "s" : ""}
         </span>
       </div>

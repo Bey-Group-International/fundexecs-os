@@ -76,8 +76,8 @@ export default function CapitalRunForm({
       className="mb-4 flex flex-col gap-4 rounded-xl border border-gold-500/30 bg-surface-1 p-5"
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">Capital run</span>
-        <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-danger">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Capital run</span>
+        <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
           Tier 3 · operator sign-off
         </span>
       </div>
@@ -136,7 +136,7 @@ export default function CapitalRunForm({
       {/* Live allocation preview */}
       {amount > 0 && commitments.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-line">
-          <div className="flex items-center justify-between bg-surface-2/80 px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <div className="flex items-center justify-between bg-surface-2/80 px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             <span>Allocation preview · {active.length} LPs</span>
             <span>
               {usd(plan.totalAllocated)} allocated

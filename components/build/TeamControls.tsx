@@ -101,7 +101,7 @@ const ROLE_BADGE_CLASS: Record<MemberRole, string> = {
 function RoleBadge({ role }: { role: MemberRole }) {
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${ROLE_BADGE_CLASS[role]}`}
+      className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${ROLE_BADGE_CLASS[role]}`}
     >
       {role}
     </span>
@@ -154,7 +154,7 @@ export function TeamControls({
 
       {leaders.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <p className="px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Owners &amp; Admins
           </p>
           {leaders.map(renderMember)}
@@ -163,7 +163,7 @@ export function TeamControls({
 
       {regular.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <p className="px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Members
           </p>
           {regular.map(renderMember)}
@@ -388,7 +388,7 @@ function InviteForm({ seats }: { seats: SeatInfo }) {
           </p>
         </div>
         <span
-          className={`font-mono text-[10px] uppercase tracking-wider ${
+          className={`font-mono text-[11px] uppercase tracking-wider ${
             full ? "text-status-danger" : "text-fg-muted"
           }`}
         >
@@ -459,7 +459,7 @@ function AdminMemberRow({
         <p className="flex items-center gap-1.5 truncate text-sm text-fg-primary">
           <span className="truncate">{member.name}</span>
           {isSelf ? (
-            <span className="font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
               you
             </span>
           ) : null}
@@ -490,7 +490,7 @@ function AdminMemberRow({
               isLastOwner ? "The last owner's role cannot be changed." : undefined
             }
             onChange={(e) => e.currentTarget.form?.requestSubmit()}
-            className="rounded-md border border-line bg-surface-0 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary focus:border-gold-500/60 focus:outline-none disabled:opacity-50"
+            className="rounded-md border border-line bg-surface-0 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-secondary focus:border-gold-500/60 focus:outline-none disabled:opacity-50"
           >
             {ROLE_OPTIONS.map((r) => (
               <option key={r} value={r}>
@@ -540,7 +540,7 @@ function ReadOnlyMemberRow({
         <p className="flex items-center gap-1.5 truncate text-sm text-fg-primary">
           <span className="truncate">{member.name}</span>
           {isSelf ? (
-            <span className="font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
               you
             </span>
           ) : null}

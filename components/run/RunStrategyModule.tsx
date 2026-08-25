@@ -34,14 +34,14 @@ function NoActiveDeals({ note }: { note: string }) {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{children}</span>
+    <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{children}</span>
   );
 }
 
 function StageBadge({ d }: { d: DealConviction }) {
   return (
     <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${d.stage.tone}`}
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${d.stage.tone}`}
     >
       {d.stage.label}
     </span>
@@ -104,7 +104,7 @@ function AllocationBar({
       <div className="flex items-center justify-between">
         <Label>{title}</Label>
         {dim.unspecified > 0 ? (
-          <span className="font-mono text-[10px] text-fg-muted">{dim.unspecified} unset</span>
+          <span className="font-mono text-[11px] text-fg-muted">{dim.unspecified} unset</span>
         ) : null}
       </div>
       <div className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-surface-0">
@@ -129,7 +129,7 @@ function AllocationBar({
             <span className="capitalize">{s.label.replace(/_/g, " ")}</span>
             <span className="font-mono text-fg-muted">{Math.round(s.share * 100)}%</span>
             {s.concentrated ? (
-              <span className="font-mono text-[9px] uppercase tracking-wider text-status-warning">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-status-warning">
                 concentrated
               </span>
             ) : null}
@@ -164,7 +164,7 @@ function ComparisonTable({ deals, m }: { deals: DealConviction[]; m: Mandate | n
             {["Deal", "Fit", "Conviction", "IRR vs target", "Open risks", "Stage"].map((h) => (
               <th
                 key={h}
-                className="px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                className="px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted"
               >
                 {h}
               </th>
@@ -247,7 +247,7 @@ function DealRow({
     <div className="rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/30">
       <div className="flex items-center justify-between gap-3">
         <Link href={`/deal/${d.deal.id}`} className="min-w-0 flex items-center gap-2">
-          <span className="font-mono text-[10px] text-fg-muted">#{rank}</span>
+          <span className="font-mono text-[11px] text-fg-muted">#{rank}</span>
           <span className="truncate font-medium text-fg-primary transition hover:text-gold-300">
             {d.deal.name}
           </span>
@@ -303,7 +303,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
       <div className="rounded-xl border border-gold-500/40 bg-gold-500/5 p-4">
         <div className="flex items-center justify-between gap-3">
           <Label>Focus next</Label>
-          <span className="font-mono text-[10px] text-gold-300">
+          <span className="font-mono text-[11px] text-gold-300">
             priority {focus.priority}
           </span>
         </div>
@@ -327,7 +327,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
 
       {/* Mandate coverage / allocation */}
       <section>
-        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Allocation &amp; mandate coverage
         </h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -338,7 +338,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
 
       {/* Prioritization queue / per-deal fit board */}
       <section>
-        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Prioritization queue
         </h3>
         <div className="flex flex-col gap-2.5">
@@ -350,7 +350,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
 
       {/* Side-by-side comparison */}
       <section>
-        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Deal comparison
         </h3>
         <ComparisonTable deals={deals} m={m} />

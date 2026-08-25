@@ -118,7 +118,7 @@ export default function MeetingInvitePage() {
 
             <div className="flex items-center gap-3">
               <span className="h-px flex-1 bg-[var(--line)]" />
-              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--fg-muted)]">or</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--fg-muted)]">or</span>
               <span className="h-px flex-1 bg-[var(--line)]" />
             </div>
 
@@ -129,7 +129,7 @@ export default function MeetingInvitePage() {
               Continue as guest
             </button>
 
-            <p className="text-[10px] text-[var(--fg-muted)] text-center leading-relaxed">
+            <p className="text-[11px] text-[var(--fg-muted)] text-center leading-relaxed">
               Guests can join this meeting without an account. Sign up for AI transcription, notes, and action items.
             </p>
           </div>

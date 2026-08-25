@@ -18,7 +18,7 @@ export function EngineAnalytics({ analytics }: { analytics: EngineAnalyticsData 
     <section className="mx-auto mb-5 max-w-6xl rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">Engine Analytics</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Engine Analytics</p>
           <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {rollup.total} routed · {rollup.active} active · {rollup.completed} done · {cycle(rollup.avgCycleHours)} avg cycle
           </p>
@@ -37,10 +37,10 @@ export function EngineAnalytics({ analytics }: { analytics: EngineAnalyticsData 
             >
               {stat.engine}
             </Link>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {stat.total} total · {stat.active} active · {stat.completed} done
             </p>
-            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-300/80">
+            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300/80">
               {cycle(stat.avgCycleHours)} avg cycle
             </p>
           </div>

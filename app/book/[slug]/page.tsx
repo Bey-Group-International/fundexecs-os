@@ -43,7 +43,7 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
         <Logo />
 
         <header className="flex flex-col gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--gold-400)]">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--gold-400)]">
             Schedule a meeting
           </span>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg-primary)] sm:text-3xl">

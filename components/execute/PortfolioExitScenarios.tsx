@@ -72,7 +72,7 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Exit Scenarios
           </h3>
           <p className="mt-0.5 text-xs text-fg-muted">
@@ -81,7 +81,7 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
         </div>
         <div className="text-right">
           <p className="font-display text-lg font-semibold text-fg-primary">{fmt(totalNAV)}</p>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Current NAV</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Current NAV</p>
         </div>
       </div>
 
@@ -93,9 +93,9 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
           const irr = moic && avgHold ? approxIRR(moic, avgHold) : null;
           return (
             <div key={s.label} className="rounded-lg border border-line/60 bg-surface-0 px-3 py-2.5">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{s.label}</p>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{s.label}</p>
               <p className={`mt-1 font-display text-lg font-semibold ${s.tone}`}>{fmt(exitValue)}</p>
-              <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-fg-muted">
+              <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] text-fg-muted">
                 {moic != null ? (
                   <span className={s.tone}>{moicFmt(moic)}</span>
                 ) : null}
@@ -113,11 +113,11 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line">
-              <th className="pb-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">Asset</th>
-              <th className="pb-2 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">Cost</th>
-              <th className="pb-2 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">NAV</th>
+              <th className="pb-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">Asset</th>
+              <th className="pb-2 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">Cost</th>
+              <th className="pb-2 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">NAV</th>
               {SCENARIOS.map((s) => (
-                <th key={s.label} className="pb-2 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <th key={s.label} className="pb-2 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {s.label} ({s.multiple}×)
                 </th>
               ))}
@@ -136,7 +136,7 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
                     <td key={s.label} className={`py-2 text-right font-mono text-xs ${s.tone}`}>
                       {fmt(exitV)}
                       {m != null ? (
-                        <span className="ml-1 text-[10px] opacity-60">{moicFmt(m)}</span>
+                        <span className="ml-1 text-[11px] opacity-60">{moicFmt(m)}</span>
                       ) : null}
                     </td>
                   );
@@ -146,7 +146,7 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
           </tbody>
           <tfoot>
             <tr className="border-t border-line">
-              <td className="py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Total</td>
+              <td className="py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Total</td>
               <td className="py-2 pr-3 text-right font-mono text-xs font-semibold text-fg-primary">{fmt(totalCost)}</td>
               <td className="py-2 pr-3 text-right font-mono text-xs font-semibold text-fg-primary">{fmt(totalNAV)}</td>
               {SCENARIOS.map((s) => (
@@ -159,7 +159,7 @@ export function PortfolioExitScenarios({ assets, totalNAV }: Props) {
         </table>
       </div>
 
-      <p className="mt-3 font-mono text-[9px] text-fg-muted">
+      <p className="mt-3 font-mono text-[11px] text-fg-muted">
         Multiples applied to current NAV. IRR estimated from average hold period ({avgHold != null ? `${avgHold}mo` : "unknown"}).
       </p>
     </div>

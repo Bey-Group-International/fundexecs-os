@@ -74,7 +74,7 @@ function HubTile({ signal }: { signal: HubSignal }) {
         style={{ background: TONE_STRIPE[tone] }}
       />
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           {signal.label}
         </span>
         {signal.score == null ? (
@@ -87,7 +87,7 @@ function HubTile({ signal }: { signal: HubSignal }) {
         <div className="min-w-0">
           <p className="text-sm font-medium leading-snug text-fg-primary">{signal.metric}</p>
           {signal.detail ? (
-            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {signal.detail}
             </p>
           ) : null}
@@ -96,7 +96,7 @@ function HubTile({ signal }: { signal: HubSignal }) {
 
       {signal.nextAction ? (
         <span className="mt-auto flex items-center gap-1.5 text-xs text-fg-secondary transition group-hover:text-gold-300">
-          <span className="font-mono text-[10px] text-gold-400">→</span>
+          <span className="font-mono text-[11px] text-gold-400">→</span>
           <span className="truncate">{signal.nextAction.label}</span>
         </span>
       ) : (
@@ -113,7 +113,7 @@ export async function MissionControl({ orgId }: { orgId: string }) {
   return (
     <section className="mb-6">
       <div className="mb-2 flex items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Mission control
         </span>
         <span className="h-px flex-1 bg-line" />

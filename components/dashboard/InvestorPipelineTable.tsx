@@ -25,7 +25,7 @@ export function InvestorPipelineTable({ investors }: { investors: Investor[] }) 
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-surface-0/70 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <thead className="bg-surface-0/70 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               <tr>
                 <th scope="col" className="px-4 py-2 font-medium">Investor</th>
                 <th scope="col" className="px-4 py-2 font-medium">Stage</th>
@@ -37,7 +37,7 @@ export function InvestorPipelineTable({ investors }: { investors: Investor[] }) 
               {investors.map((investor) => (
                 <tr key={investor.id}>
                   <td className="px-4 py-3 text-fg-primary">{investor.name}</td>
-                  <td className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-gold-300">
+                  <td className="px-4 py-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     {investor.pipeline_stage.replace("_", " ")}
                   </td>
                   <td className="px-4 py-3 text-fg-secondary">

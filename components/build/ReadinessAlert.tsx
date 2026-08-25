@@ -88,7 +88,7 @@ export function ReadinessAlert({ children }: { children: ReactNode }) {
           <span aria-hidden className="text-xs leading-none">✕</span>
         </button>
         {children}
-        <p className="mt-2 text-center font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+        <p className="mt-2 text-center font-mono text-[11px] uppercase tracking-widest text-fg-muted">
           Press{" "}
           <kbd className="rounded border border-line bg-surface-2 px-1 py-0.5 text-fg-secondary">
             i

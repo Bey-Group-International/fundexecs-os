@@ -1,8 +1,11 @@
 # FundExecs OS visual system
 
-FundExecs OS uses an institutional command-center language with day and night
-themes. Keep visual changes scoped to the surface they serve so the app does not
-drift into competing themes.
+FundExecs OS uses an institutional command-center language in a single bold,
+high-contrast palette. There is no day/night switch and no OS-driven variant:
+`<html>` carries `dark` permanently and Tailwind runs in `darkMode: "class"`, so
+a `dark:` utility never flips with the viewer's system preference. Keep visual
+changes scoped to the surface they serve so the app does not drift into
+competing themes.
 
 ## Accent zones
 
@@ -16,6 +19,21 @@ drift into competing themes.
   the color is communicating state.
 - **Agent palette (`agent.*`)**: identity colors for named agents. Do not use
   agent colors as generic UI accents.
+
+## Legibility floor
+
+Wording has to survive a real trading desk, not a design screenshot:
+
+- **11px is the smallest type on the platform.** `text-[11px]` is the floor for
+  eyebrows, chips, and metadata; anything an operator reads rather than glances
+  at belongs at `text-xs` (12px) or larger. Do not reintroduce `text-[8px]`,
+  `text-[9px]`, or `text-[10px]`.
+- **Cap letter-spacing at `tracking-[0.16em]`.** Wider tracking pulls small
+  uppercase labels apart into loose letters instead of words.
+- **Prefer sentence case over uppercase mono for anything clickable.** Uppercase
+  mono is for section eyebrows; controls read as controls.
+- `--fx-fg-muted` is the lowest-contrast text token. If a label needs to be
+  quieter than that, it probably should not be on the screen.
 
 ## Shared utilities
 

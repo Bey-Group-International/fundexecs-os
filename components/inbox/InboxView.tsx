@@ -145,7 +145,7 @@ function ApprovalRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium text-fg-primary">{item.title}</span>
-            <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${risk.cls}`}>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${risk.cls}`}>
               {risk.label}
             </span>
           </div>
@@ -163,7 +163,7 @@ function ApprovalRow({
           </p>
         </div>
         <span
-          className="mt-0.5 shrink-0 font-mono text-[10px] text-fg-muted transition group-hover:text-gold-300"
+          className="mt-0.5 shrink-0 font-mono text-[11px] text-fg-muted transition group-hover:text-gold-300"
           aria-hidden
         >
           {open ? "▾" : "▸"}
@@ -182,7 +182,7 @@ function ApprovalRow({
           )}
           {approval.preview ? (
             <div className="mt-3 rounded-lg border border-line/60 bg-surface-1/70 p-3">
-              <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 What {approval.agentLabel ?? "the executive"} produced
               </p>
               <p className="whitespace-pre-wrap text-xs leading-relaxed text-fg-primary">{approval.preview}</p>
@@ -342,7 +342,7 @@ function LinkRow({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-sm font-medium text-fg-primary">{item.title}</span>
-              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PILL[item.tone]}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${PILL[item.tone]}`}>
                 {PILL_LABEL[item.tone]}
               </span>
             </div>
@@ -413,26 +413,26 @@ function Section({
   const isApproval = items[0]?.tone === "approval";
   return (
     <section>
-      <h2 className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+      <h2 className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         {title}
-        <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] tracking-normal text-fg-secondary">
+        <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 text-[11px] tracking-normal text-fg-secondary">
           {items.length}
         </span>
         {isApproval && onDismissAll && items.length > 1 ? (
           confirmingAll ? (
             <div className="ml-auto flex items-center gap-1">
-              <span className="text-[10px] normal-case tracking-normal text-fg-secondary">Cancel all tasks?</span>
+              <span className="text-[11px] normal-case tracking-normal text-fg-secondary">Cancel all tasks?</span>
               <button
                 type="button"
                 onClick={onDismissAll}
-                className="rounded-md border border-status-danger/40 px-2 py-0.5 text-[10px] normal-case tracking-normal text-status-danger transition hover:bg-status-danger/10"
+                className="rounded-md border border-status-danger/40 px-2 py-0.5 text-[11px] normal-case tracking-normal text-status-danger transition hover:bg-status-danger/10"
               >
                 Confirm
               </button>
               <button
                 type="button"
                 onClick={() => onConfirmingAllChange?.(false)}
-                className="rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:text-fg-primary"
+                className="rounded-md border border-line px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-muted transition hover:text-fg-primary"
               >
                 Cancel
               </button>
@@ -442,7 +442,7 @@ function Section({
               type="button"
               disabled={dismissingAll}
               onClick={() => onConfirmingAllChange?.(true)}
-              className="ml-auto rounded-md border border-line px-2 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
+              className="ml-auto rounded-md border border-line px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger disabled:opacity-50"
             >
               {dismissingAll ? "Dismissing…" : "Dismiss all"}
             </button>

@@ -251,7 +251,7 @@ export default function OnboardingWizard({
       {/* Step 1 — User profile */}
       {step === 1 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             Your profile
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -319,7 +319,7 @@ export default function OnboardingWizard({
       {/* Step 2 — Org identity */}
       {step === 2 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             Build · Identity
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -365,7 +365,7 @@ export default function OnboardingWizard({
       {/* Step 3 — Operator role */}
       {step === 3 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             Build · Role
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -419,7 +419,7 @@ export default function OnboardingWizard({
       {/* Step 4 — Strategy */}
       {step === 4 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             Build · Strategy
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -448,7 +448,7 @@ export default function OnboardingWizard({
       {/* Step 5 — First hub */}
       {step === 5 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             Activation
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -477,7 +477,7 @@ export default function OnboardingWizard({
       {/* Step 6 — Mandate (optional) */}
       {step === 6 && (
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
             Activation · Mandate
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg-primary">
@@ -505,7 +505,7 @@ export default function OnboardingWizard({
           {/* Custom per-action toggles */}
           {preset === "custom" && (
             <div className="mt-4 flex flex-col gap-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 External actions Earn may run
               </p>
               {MANDATE_ACTION_OPTIONS.map((opt) => {

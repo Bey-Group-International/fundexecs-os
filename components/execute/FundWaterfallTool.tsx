@@ -31,7 +31,7 @@ const DEFAULT_ROWS: Row[] = [
 
 const fieldClass =
   "w-full rounded-md border border-line bg-surface-0 px-2 py-1 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
-const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelClass = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 
 function money(n: number): string {
   const a = Math.abs(n);
@@ -119,7 +119,7 @@ export default function FundWaterfallTool({ saved = [] }: { saved?: SavedScenari
         aria-expanded={open}
       >
         <span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Fund-life waterfall
           </span>
           <span className="ml-2 text-sm text-fg-secondary">
@@ -233,7 +233,7 @@ export default function FundWaterfallTool({ saved = [] }: { saved?: SavedScenari
             <button
               type="button"
               onClick={addRow}
-              className="mt-2 rounded-md border border-line px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/60 hover:text-gold-300"
+              className="mt-2 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/60 hover:text-gold-300"
             >
               + Add event
             </button>

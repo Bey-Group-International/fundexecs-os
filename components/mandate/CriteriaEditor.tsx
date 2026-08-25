@@ -51,7 +51,7 @@ function ChipInput({
 
   return (
     <div>
-      <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {label}
       </label>
       <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-line bg-surface-0 px-2 py-1.5 focus-within:border-gold-500/60">
@@ -132,7 +132,7 @@ export function CriteriaEditor({ initial }: { initial: ScreeningCriteria | null 
 
   return (
     <section>
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         Screening criteria
       </h3>
       <p className="mt-1 text-sm text-fg-secondary">

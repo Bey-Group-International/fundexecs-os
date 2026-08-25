@@ -163,7 +163,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
           <span className="truncate text-sm font-medium text-fg-primary">{name}</span>
           <span className={`ml-auto shrink-0 font-mono text-xs ${scoreTone(score)}`}>{score}%</span>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {type ? <span className="rounded-full border border-line px-1.5 py-0.5">{humanize(type)}</span> : null}
           {onFile ? <span className="text-status-info">on file</span> : null}
         </div>
@@ -176,11 +176,11 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Buyers &amp; Ownership
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
@@ -286,7 +286,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
         <div className="mt-5 space-y-4">
           {onFile.length ? (
             <section className="space-y-3">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                 Buyers on file ranked for {target}
               </p>
               {onFile.map((m, i) =>
@@ -295,7 +295,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
             </section>
           ) : null}
           <section className="space-y-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {saved > 0 ? `+${saved} saved · ` : ""}
               {candidates.length} likely buyers for {target}
             </p>
@@ -312,7 +312,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
 
       {phase === "done" && tab === "addons" ? (
         <div className="mt-5 space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {addOns.length} bolt-ons for {platform}
           </p>
           {addOns.length ? (
@@ -325,7 +325,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
                   <span className="truncate text-sm font-medium text-fg-primary">{a.name}</span>
                   <span className={`ml-auto shrink-0 font-mono text-xs ${scoreTone(a.fitScore)}`}>{a.fitScore}%</span>
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {a.sector ? <span className="text-gold-400">{a.sector}</span> : null}
                   {a.geography ? <span>{a.geography}</span> : null}
                 </div>
@@ -361,7 +361,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
                     <span className="ml-auto font-mono text-xs text-gold-300">{compactUsd(r.price_amount)}</span>
                   ) : null}
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {r.structure ? <span className="rounded-full border border-line px-1.5 py-0.5">{humanize(r.structure)}</span> : null}
                   {r.sector ? <span className="text-gold-400">{r.sector}</span> : null}
                   {r.announced_on ? <span>{r.announced_on}</span> : null}
@@ -382,7 +382,7 @@ export function OwnershipIntel({ live, initialPrompt }: { live: boolean; initial
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3">
-      <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">{label}</span>
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">{label}</span>
       <span className="mt-1 block truncate text-sm font-semibold text-fg-primary">{value}</span>
     </div>
   );

@@ -114,11 +114,11 @@ export function RunSearch({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ AI Evaluate
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               offline mode
             </span>
           ) : null}
@@ -218,7 +218,7 @@ export function RunSearch({
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm text-fg-primary">{s.title}</span>
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider">
+                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider">
                     {s.status === "queued" ? (
                       <span className="text-fg-muted">queued</span>
                     ) : s.status === "running" ? (
@@ -230,7 +230,7 @@ export function RunSearch({
                     )}
                   </span>
                 </div>
-                <span className="font-mono text-[10px] text-fg-muted">{s.agentName}</span>
+                <span className="font-mono text-[11px] text-fg-muted">{s.agentName}</span>
               </li>
             ))}
           </ol>
@@ -245,7 +245,7 @@ export function RunSearch({
             .map((s) => (
               <div key={s.id} className="rounded-2xl border border-line bg-surface-1 p-4">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                     {s.title} · {s.agentName}
                   </span>
                 </div>

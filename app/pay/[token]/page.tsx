@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 function Unavailable() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
-      <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
         FundExecs OS
       </span>
       <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">
@@ -77,7 +77,7 @@ export default async function InvoicePayPage(props: {
 
       <div className="mx-auto max-w-lg px-6 py-12">
         <header className="mb-6 text-center">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             {merchant ? `Invoice from ${merchant}` : "Invoice"}
           </span>
           <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -157,7 +157,7 @@ export default async function InvoicePayPage(props: {
         ) : null}
 
         <footer className="mt-10 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Powered by FundExecs OS
           </span>
         </footer>

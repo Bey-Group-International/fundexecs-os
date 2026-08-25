@@ -76,15 +76,15 @@ export function McpServersPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-fg-primary">{server.name}</span>
-                  <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary">
+                  <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
                     {MCP_TRANSPORT_LABELS[server.transport]}
                   </span>
                   {server.enabled ? (
-                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                    <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                       Enabled
                     </span>
                   ) : (
-                    <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Disabled
                     </span>
                   )}

@@ -50,7 +50,7 @@ function Metric({ value, label }: { value: string; label: string }) {
       <p className="font-display text-2xl font-semibold leading-none text-fg-primary print:text-black">
         {value}
       </p>
-      <p className="mt-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+      <p className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
         {label}
       </p>
     </div>
@@ -65,7 +65,7 @@ function Section({ title, accent, children }: { title: string; accent?: string |
           className="h-4 w-0.5 rounded-full"
           style={{ backgroundColor: accent ?? "#D4AF6A" }}
         />
-        <h3 className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted print:text-neutral-500">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted print:text-neutral-500">
           {title}
         </h3>
       </div>
@@ -225,7 +225,7 @@ export async function MaterialsModule() {
           href={readiness.nextAction.href}
           className="mb-5 flex items-center gap-2 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-2.5 text-xs text-fg-secondary transition hover:bg-gold-500/10 print:hidden"
         >
-          <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Make it stronger
           </span>
           <span className="truncate text-fg-primary">{readiness.nextAction.label}</span>
@@ -239,7 +239,7 @@ export async function MaterialsModule() {
         {/* Panel header */}
         <div className="flex items-center gap-4 border-b border-line px-5 py-4">
           <div className="flex-1">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Institutional Coverage
             </p>
             <p className="mt-0.5 text-sm text-fg-secondary">
@@ -288,7 +288,7 @@ export async function MaterialsModule() {
               {org?.tagline ? (
                 <p className="mt-1 text-sm text-fg-secondary print:text-neutral-700">{org.tagline}</p>
               ) : null}
-              <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
                 {[org?.entity_type, org?.jurisdiction, org?.website].filter(Boolean).join("  ·  ") || "—"}
               </p>
             </div>
@@ -313,7 +313,7 @@ export async function MaterialsModule() {
               <p className="text-sm text-fg-muted print:text-neutral-500">No track record captured yet.</p>
             )}
             {blended.dealCount > 0 ? (
-              <p className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+              <p className="mt-2.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
                 {blended.dealCount} deals · {blended.realizedCount} realized
                 {blended.vintageRange ? ` · vintages ${blended.vintageRange.from}–${blended.vintageRange.to}` : ""}
               </p>
@@ -329,7 +329,7 @@ export async function MaterialsModule() {
                   {thesis.summary}
                 </p>
               ) : null}
-              <p className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+              <p className="mt-2.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
                 {[
                   thesis.asset_classes?.join(", "),
                   thesis.geographies?.join(", "),
@@ -382,7 +382,7 @@ export async function MaterialsModule() {
                   if (!docs?.length) return null;
                   return (
                     <div key={s.key}>
-                      <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+                      <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
                         {s.label}
                       </p>
                       <ul className="flex flex-col gap-1">
@@ -409,7 +409,7 @@ export async function MaterialsModule() {
           ) : null}
 
           <footer className="mt-8 border-t border-line pt-4 print:border-neutral-300">
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
               {org?.legal_name ?? ""}
               {org?.description ? `  ·  ${org.description}` : ""}
             </p>

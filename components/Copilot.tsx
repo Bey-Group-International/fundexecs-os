@@ -30,6 +30,7 @@ import { classifyIntent } from "@/lib/intent";
 import { Markdown } from "@/components/Markdown";
 import { ModelCompare, type ModelComparison } from "@/components/ModelCompare";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { deleteSessionTurn, editSessionTurn } from "@/components/copilot/actions";
 import { RoutePanel } from "@/components/RoutePanel";
 
 // A conversational turn rendered in the transcript. Chat turns are Earn's
@@ -114,7 +115,7 @@ function StepNode({ status, color }: { status: string; color?: string }) {
   if (status === "completed") {
     return (
       <span
-        className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-surface-0"
+        className="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-surface-0"
         style={{ backgroundColor: color }}
       >
         ✓
@@ -130,7 +131,7 @@ function StepNode({ status, color }: { status: string; color?: string }) {
     );
   }
   if (status === "cancelled" || status === "failed") {
-    return <span className="flex h-5 w-5 items-center justify-center rounded-full border border-status-danger text-[10px] text-status-danger">×</span>;
+    return <span className="flex h-5 w-5 items-center justify-center rounded-full border border-status-danger text-[11px] text-status-danger">×</span>;
   }
   return <span className="h-5 w-5 rounded-full border-2 border-line" />;
 }
@@ -211,6 +212,13 @@ export default function Copilot({
   const [openMenu, setOpenMenu] = useState<"model" | "mode" | "route" | "plus" | "slash" | "integrations" | null>(null);
   // The response actions menu currently open in the transcript.
   const [responseMenuId, setResponseMenuId] = useState<string | null>(null);
+  // The transcript entry currently open for editing, plus its working copy.
+  // Every entry — yours or Earn's — can be rewritten in place or removed.
+  const [editingTurnId, setEditingTurnId] = useState<string | null>(null);
+  const [turnDraft, setTurnDraft] = useState("");
+  // True while an answer is streaming. `chatAbortRef` holds the controller, but a
+  // ref never re-renders — this is what the Stop control keys off.
+  const [streamingChat, setStreamingChat] = useState(false);
   // Which integration row in the submenu is expanded to reveal its operational
   // actions.
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
@@ -257,7 +265,7 @@ export default function Copilot({
     const supabase = createClient();
     supabase
       .from("session_messages")
-      .select("role, content, created_at")
+      .select("id, role, content, created_at")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: true })
       .then(({ data }) => {
@@ -266,7 +274,9 @@ export default function Copilot({
           data.forEach((m, i) => {
             const ts = new Date(m.created_at as string).getTime() || Date.now() + i;
             loaded.push({
-              id: `loaded-${i}`,
+              // The row id, so editing or deleting this turn reaches the row
+              // behind it rather than only the copy on screen.
+              id: (m.id as string) ?? `loaded-${i}`,
               role: m.role === "assistant" ? "earn" : "you",
               content: m.content as string,
               ts,
@@ -334,14 +344,14 @@ export default function Copilot({
         setPaletteOpen((o) => !o);
         return;
       }
-      if (e.key === "Escape" && !paletteOpen && !openMenu && chatAbortRef.current) {
+      if (e.key === "Escape" && !paletteOpen && !openMenu && streamingChat) {
         stopChat();
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
      
-  }, [paletteOpen, openMenu]);
+  }, [paletteOpen, openMenu, streamingChat]);
 
   // Keep the newest turn in view as the conversation grows — chat behavior.
   // Skip when there's nothing to follow (empty composer): otherwise the
@@ -575,6 +585,7 @@ export default function Copilot({
 
     const controller = new AbortController();
     chatAbortRef.current = controller;
+    setStreamingChat(true);
     let replyText = "";
     const startMs = performance.now();
     let earnedModelId = model;
@@ -614,6 +625,7 @@ export default function Copilot({
       }
     } finally {
       chatAbortRef.current = null;
+      setStreamingChat(false);
       const latencyMs = Math.round(performance.now() - startMs);
       setChatTurns((prev) =>
         prev.map((t) =>
@@ -864,21 +876,131 @@ export default function Copilot({
     ...chatTurns.map((t) => ({ kind: "chat" as const, ts: t.ts, turn: t })),
   ].sort((a, b) => a.ts - b.ts);
 
+  /** Open one transcript entry for editing, seeded with its current wording. */
+  function beginEditTurn(t: ChatTurn) {
+    setResponseMenuId(null);
+    setEditingTurnId(t.id);
+    setTurnDraft(t.content);
+  }
+
+  function cancelEditTurn() {
+    setEditingTurnId(null);
+    setTurnDraft("");
+  }
+
+  /**
+   * Save the rewritten wording onto the entry, and onto the persisted row behind
+   * it so the correction survives a reload. Nothing is re-run — this is a
+   * correction, not a new ask.
+   */
+  function saveEditTurn(t: ChatTurn) {
+    const content = turnDraft.trim();
+    if (!content) return;
+    if (sessionId) {
+      void editSessionTurn({ sessionId, turnId: t.id, previousContent: t.content, content });
+    }
+    setChatTurns((prev) => prev.map((turn) => (turn.id === t.id ? { ...turn, content } : turn)));
+    cancelEditTurn();
+  }
+
+  /**
+   * Remove one entry from the conversation. An answer still streaming is stopped
+   * first, so nothing streams back into a turn that no longer exists.
+   */
+  function deleteTurn(t: ChatTurn) {
+    if (t.streaming) stopChat();
+    if (editingTurnId === t.id) cancelEditTurn();
+    if (sessionId) {
+      void deleteSessionTurn({ sessionId, turnId: t.id, content: t.content });
+    }
+    setChatTurns((prev) => prev.filter((turn) => turn.id !== t.id));
+  }
+
+  /** The in-place editor shared by both sides of the transcript. */
+  function renderTurnEditor(t: ChatTurn) {
+    return (
+      <div className="flex flex-col gap-2">
+        <textarea
+          value={turnDraft}
+          onChange={(e) => setTurnDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") cancelEditTurn();
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              saveEditTurn(t);
+            }
+          }}
+          rows={4}
+          aria-label="Edit this entry"
+          className="w-full resize-y rounded-xl border border-gold-500/50 bg-surface-1 px-3 py-2 text-sm leading-6 text-fg-primary focus:border-gold-400 focus:outline-none"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => saveEditTurn(t)}
+            disabled={!turnDraft.trim()}
+            className="rounded-lg bg-gold-400 px-3 py-1 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={cancelEditTurn}
+            className="text-xs font-medium text-fg-muted transition hover:text-fg-primary"
+          >
+            Cancel
+          </button>
+          <span className="text-xs text-fg-muted">⌘↵ saves · Esc cancels</span>
+        </div>
+      </div>
+    );
+  }
+
+  /** Edit + Delete, offered on every entry in the transcript. */
+  function renderTurnControls(t: ChatTurn, align: "start" | "end") {
+    return (
+      <div className={`mt-1.5 flex items-center gap-3 ${align === "end" ? "justify-end" : ""}`}>
+        <button
+          type="button"
+          onClick={() => beginEditTurn(t)}
+          className="text-xs font-medium text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => deleteTurn(t)}
+          className="text-xs font-medium text-fg-muted underline-offset-2 transition hover:text-status-danger hover:underline"
+        >
+          Delete
+        </button>
+      </div>
+    );
+  }
+
   // A chat turn in the conversation rail. Earn reads as an institutional answer,
   // not a widget: the response is primary; controls stay quiet and secondary.
   function renderChatTurn(t: ChatTurn) {
     if (t.role === "you") {
+      const editing = editingTurnId === t.id;
       return (
         <div key={t.id} className="flex justify-end gap-3">
-          <div className="max-w-[84%]">
-            <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <div className="w-full max-w-[84%]">
+            <div className="mb-1 flex items-center justify-end gap-2 font-mono text-xs font-semibold uppercase tracking-wider text-fg-secondary">
               You
             </div>
-            <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
-              {stripSystemAnnotations(t.content)}
-            </div>
+            {editing ? (
+              renderTurnEditor(t)
+            ) : (
+              <>
+                <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+                  {stripSystemAnnotations(t.content)}
+                </div>
+                {renderTurnControls(t, "end")}
+              </>
+            )}
           </div>
-          <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
+          <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[11px] font-semibold text-gold-300">
             YOU
           </span>
         </div>
@@ -890,24 +1012,28 @@ export default function Copilot({
       <div key={t.id} className="flex gap-3">
         <EarnOrb size={24} pulse={t.streaming} className="mt-1.5" />
         <div className="min-w-0 flex-1 border-l border-gold-500/25 pl-4">
-          <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             <span className="text-gold-300">Earn</span>
             <span className="h-1 w-1 rounded-full bg-line" />
             <span>{t.streaming ? "Drafting response" : "Private-market response"}</span>
           </div>
-          <div
-            className="max-w-none text-sm leading-6 text-fg-primary"
-            aria-live="polite"
-            aria-busy={t.streaming}
-          >
-            {t.content ? <Markdown>{stripSystemAnnotations(t.content)}</Markdown> : null}
-            {t.streaming ? (
-              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom motion-reduce:animate-none" aria-hidden />
-            ) : null}
-          </div>
+          {editingTurnId === t.id ? (
+            renderTurnEditor(t)
+          ) : (
+            <div
+              className="max-w-none text-sm leading-6 text-fg-primary"
+              aria-live="polite"
+              aria-busy={t.streaming}
+            >
+              {t.content ? <Markdown>{stripSystemAnnotations(t.content)}</Markdown> : null}
+              {t.streaming ? (
+                <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gold-400 align-text-bottom motion-reduce:animate-none" aria-hidden />
+              ) : null}
+            </div>
+          )}
 
           {t.metrics && !t.streaming ? (
-            <div className="mt-2 flex items-center gap-2 font-mono text-[9px] tracking-wider text-fg-muted/60">
+            <div className="mt-2 flex items-center gap-2 font-mono text-[11px] tracking-wider text-fg-muted/60">
               <span className="text-gold-500/70">{t.metrics.latencyMs}ms</span>
               <span>·</span>
               <span>{t.metrics.chars.toLocaleString()} chars</span>
@@ -921,7 +1047,7 @@ export default function Copilot({
               <button
                 type="button"
                 onClick={stopChat}
-                className="font-mono text-[10px] uppercase tracking-wider text-status-danger/80 transition hover:text-status-danger"
+                className="rounded-md border border-status-danger/50 bg-status-danger/10 px-2.5 py-1 text-xs font-semibold text-status-danger transition hover:bg-status-danger/20"
               >
                 Stop
               </button>
@@ -931,9 +1057,23 @@ export default function Copilot({
                   type="button"
                   onClick={() => copyText(t.content)}
                   disabled={!t.content}
-                  className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+                  className="text-xs font-medium text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline disabled:opacity-40"
                 >
                   Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => beginEditTurn(t)}
+                  className="text-xs font-medium text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteTurn(t)}
+                  className="text-xs font-medium text-fg-muted underline-offset-2 transition hover:text-status-danger hover:underline"
+                >
+                  Delete
                 </button>
                 {t.sourcePrompt ? (
                   <div className="relative" data-response-menu>
@@ -942,7 +1082,7 @@ export default function Copilot({
                       onClick={() => setResponseMenuId((id) => (id === t.id ? null : t.id))}
                       aria-haspopup="menu"
                       aria-expanded={responseMenuId === t.id}
-                      className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-primary"
+                      className="text-xs font-medium text-fg-muted underline-offset-2 transition hover:text-fg-primary hover:underline"
                     >
                       More
                     </button>
@@ -978,7 +1118,7 @@ export default function Copilot({
             )}
             {primaryFollowups.length ? (
               <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   Continue
                 </span>
                 {primaryFollowups.map((s, i) => (
@@ -1011,14 +1151,14 @@ export default function Copilot({
       <div key={b.workflow.id} className="flex flex-col gap-3">
         <div className="flex justify-end gap-3">
           <div className="max-w-[84%]">
-            <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               You
             </div>
             <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
               {stripSystemAnnotations(b.workflow.description || b.workflow.title)}
             </div>
           </div>
-          <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[10px] font-semibold text-gold-300">
+          <span className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-1 font-mono text-[11px] font-semibold text-gold-300">
             YOU
           </span>
         </div>
@@ -1154,7 +1294,7 @@ export default function Copilot({
       hint: c.command,
       run: () => applySlashCommand(c.template),
     })),
-    ...(chatAbortRef.current ? [{ id: "stop", group: "Action", label: "Stop generating", run: stopChat }] : []),
+    ...(streamingChat ? [{ id: "stop", group: "Action", label: "Stop generating", run: stopChat }] : []),
     { id: "integrations", group: "Go", label: "Manage integrations", run: () => router.push("/settings#integrations") },
     { id: "new", group: "Go", label: "New conversation", run: () => router.push("/workspace") },
   ];
@@ -1178,31 +1318,31 @@ export default function Copilot({
             const totalTurns = chatTurns.filter((t) => t.role === "you").length + turns.length;
             return (
               <div className="flex items-center gap-0 overflow-x-auto border-b border-line/40 bg-surface-0/60 px-4 py-1.5 backdrop-blur-sm">
-                <span className="shrink-0 font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-gold-400">Earn</span>
+                <span className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-400">Earn</span>
                 <span className="mx-2.5 text-line/60">·</span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {activeModel.label}
                 </span>
                 {lastEarnTurn?.metrics ? (
                   <>
                     <span className="mx-2.5 text-line/60">·</span>
-                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider">
+                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider">
                       <span className="text-gold-500/80">{lastEarnTurn.metrics.latencyMs}ms</span>
                     </span>
                     <span className="mx-2.5 text-line/60">·</span>
-                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {lastEarnTurn.metrics.chars.toLocaleString()} chars
                     </span>
                   </>
                 ) : null}
                 <span className="mx-2.5 text-line/60">·</span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {totalTurns} {totalTurns === 1 ? "turn" : "turns"}
                 </span>
                 {activeWorkflows > 0 ? (
                   <>
                     <span className="mx-2.5 text-line/60">·</span>
-                    <span className="shrink-0 inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                    <span className="shrink-0 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400 motion-reduce:animate-none" />
                       {activeWorkflows} active
                     </span>
@@ -1259,7 +1399,7 @@ export default function Copilot({
                     <div className="flex items-center gap-2">
                       <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{pendingPlan.title}</h2>
                     </div>
-                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {pendingPlan.hub} · Drafting
                     </p>
                     {pendingPlan.summary ? <p className="mt-2 text-sm text-fg-secondary">{pendingPlan.summary}</p> : null}
@@ -1281,7 +1421,7 @@ export default function Copilot({
                         </li>
                       ))}
                     </ol>
-                    <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-gold-300">Preparing the approval gate…</p>
+                    <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">Preparing the approval gate…</p>
                   </article>
                 </div>
               ) : planning ? (
@@ -1316,7 +1456,7 @@ export default function Copilot({
                       key={`${file.name}-${i}`}
                       type="button"
                       onClick={() => setAttachments((prev) => prev.filter((_, index) => index !== i))}
-                      className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[10px] text-gold-300 transition hover:bg-gold-500/15"
+                      className="rounded-full border border-gold-500/30 bg-gold-500/10 px-2 py-1 font-mono text-[11px] text-gold-300 transition hover:bg-gold-500/15"
                       title="Remove attachment"
                       aria-label={`Remove attachment ${file.name}`}
                     >
@@ -1341,11 +1481,23 @@ export default function Copilot({
                   placeholder={sessionId ? "Reply to Earn..." : "Ask Earn what to move forward..."}
                   className="max-h-44 min-h-[46px] flex-1 resize-none rounded-xl border-0 bg-transparent px-3 py-3 text-sm leading-6 text-fg-primary outline-none placeholder:text-fg-muted"
                 />
+                {/* Stop sits in the composer, not only on the streaming answer,
+                    so it is where the operator is already looking. */}
+                {streamingChat ? (
+                  <button
+                    type="button"
+                    onClick={stopChat}
+                    title="Stop Earn's answer and keep what it has written so far"
+                    className="mb-1 flex h-9 shrink-0 items-center rounded-lg border border-status-danger/50 bg-status-danger/10 px-3.5 text-xs font-semibold text-status-danger transition hover:bg-status-danger/20"
+                  >
+                    Stop
+                  </button>
+                ) : null}
                 <button
                   disabled={busy || !prompt.trim()}
                   className="mb-1 flex h-9 shrink-0 items-center rounded-lg bg-gold-400 px-3.5 text-xs font-semibold text-surface-0 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {planning ? "Planning" : "Send"}
+                  {planning ? "Planning" : busy ? "Working" : "Send"}
                 </button>
               </div>
 
@@ -1377,7 +1529,7 @@ export default function Copilot({
                     }
                     aria-haspopup="menu"
                     aria-expanded={openMenu === "plus" || openMenu === "slash" || openMenu === "integrations"}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:bg-surface-2 hover:text-fg-primary"
                     title="Open composer tools"
                   >
                     Tools
@@ -1455,7 +1607,7 @@ export default function Copilot({
                         </span>
                         <span className="flex items-center gap-1.5">
                           {integrations.length ? (
-                            <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] text-status-success">
+                            <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] text-status-success">
                               {integrations.length}
                             </span>
                           ) : null}
@@ -1475,7 +1627,7 @@ export default function Copilot({
                           setExpandedIntegration(null);
                           setOpenMenu("plus");
                         }}
-                        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+                        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
                       >
                         <span aria-hidden>‹</span> Active integrations
                       </button>
@@ -1497,11 +1649,11 @@ export default function Copilot({
                                 <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-status-success" />
                                 <span className="flex-1 truncate">{it.label}</span>
                                 {hasActions ? (
-                                  <span className="font-mono text-[9px] text-fg-muted">
+                                  <span className="font-mono text-[11px] text-fg-muted">
                                     {it.capabilities.length} action{it.capabilities.length === 1 ? "" : "s"}
                                   </span>
                                 ) : (
-                                  <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                                  <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                                     Connected
                                   </span>
                                 )}
@@ -1521,7 +1673,7 @@ export default function Copilot({
                                     >
                                       <span className="truncate">{cap.label}</span>
                                       <span
-                                        className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider ${
+                                        className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                                           cap.tier === 3
                                             ? "border-status-danger/40 bg-status-danger/10 text-status-danger"
                                             : cap.tier === 2
@@ -1562,7 +1714,7 @@ export default function Copilot({
                       <button
                         type="button"
                         onClick={() => setOpenMenu("plus")}
-                        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+                        className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
                       >
                         <span aria-hidden>‹</span> Slash commands
                       </button>
@@ -1575,7 +1727,7 @@ export default function Copilot({
                           className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                         >
                           {c.label}
-                          <span className="font-mono text-[10px] text-fg-muted">{c.command}</span>
+                          <span className="font-mono text-[11px] text-fg-muted">{c.command}</span>
                         </button>
                       ))}
                     </div>
@@ -1592,11 +1744,11 @@ export default function Copilot({
                       onClick={() => setOpenMenu((m) => m === "model" ? null : "model")}
                       aria-haspopup="menu"
                       aria-expanded={openMenu === "model"}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-line/50 bg-surface-2/60 px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-line/50 bg-surface-2/60 px-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
                       title="Switch model"
                     >
                       {activeModel.label}
-                      <span aria-hidden className="text-[8px]">▾</span>
+                      <span aria-hidden className="text-[11px]">▾</span>
                     </button>
                     {openMenu === "model" ? (
                       <div
@@ -1612,7 +1764,7 @@ export default function Copilot({
                             className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-surface-2 ${model === m.key ? "text-gold-300" : "text-fg-secondary"}`}
                           >
                             <span className="text-sm">{m.label}</span>
-                            {model === m.key ? <span className="font-mono text-[9px] text-gold-400">✓</span> : null}
+                            {model === m.key ? <span className="font-mono text-[11px] text-gold-400">✓</span> : null}
                           </button>
                         ))}
                       </div>
@@ -1626,11 +1778,11 @@ export default function Copilot({
                       onClick={() => setOpenMenu((m) => m === "mode" ? null : "mode")}
                       aria-haspopup="menu"
                       aria-expanded={openMenu === "mode"}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-line/50 bg-surface-2/60 px-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-line/50 bg-surface-2/60 px-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary"
                       title="Switch mode"
                     >
                       {activeMode.label}
-                      <span aria-hidden className="text-[8px]">▾</span>
+                      <span aria-hidden className="text-[11px]">▾</span>
                     </button>
                     {openMenu === "mode" ? (
                       <div
@@ -1647,9 +1799,9 @@ export default function Copilot({
                           >
                             <span className="flex items-center justify-between gap-2 text-sm">
                               {m.label}
-                              {mode === m.key ? <span className="font-mono text-[9px] text-gold-400">✓</span> : null}
+                              {mode === m.key ? <span className="font-mono text-[11px] text-gold-400">✓</span> : null}
                             </span>
-                            <span className="font-mono text-[9px] text-fg-muted">{m.hint}</span>
+                            <span className="font-mono text-[11px] text-fg-muted">{m.hint}</span>
                           </button>
                         ))}
                       </div>
@@ -1705,7 +1857,7 @@ function StepDeliverable({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="w-full border-t border-line/60 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+          className="w-full border-t border-line/60 px-3 py-1.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
         >
           {expanded ? "Show less ▴" : `Show more (${lines.length - LINE_LIMIT} more lines) ▾`}
         </button>
@@ -1759,11 +1911,11 @@ function WorkflowSteps({
               <div className="flex items-center gap-2">
                 <span className="min-w-0 truncate text-sm font-medium text-fg-primary">{step.title}</span>
                 {artifact ? (
-                  <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                  <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     {ARTIFACT_LABEL[artifact.artifact_type]}
                   </span>
                 ) : null}
-                <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {STATUS_LABEL[status] ?? status}
                 </span>
               </div>
@@ -1858,12 +2010,12 @@ function WorkflowCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{workflow.title}</h2>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {workflow.hub} · {STATUS_LABEL[workflow.status] ?? workflow.status}
           </p>
         </div>
         <div className="w-28 shrink-0 pt-1">
-          <div className="mb-1 text-right font-mono text-[9px] text-fg-muted">{Math.round(workflow.progress * 100)}%</div>
+          <div className="mb-1 text-right font-mono text-[11px] text-fg-muted">{Math.round(workflow.progress * 100)}%</div>
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-3 shadow-[inset_0_1px_2px_rgb(0_0_0/0.32)]">
             <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300 transition-all" style={{ width: `${Math.round(workflow.progress * 100)}%` }} />
           </div>
@@ -1881,7 +2033,7 @@ function WorkflowCard({
       {split ? (
         <div className="mt-3 flex max-w-full flex-wrap items-center gap-2">
           <span
-            className="inline-flex shrink-0 items-center rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300"
+            className="inline-flex shrink-0 items-center rounded-full border border-gold-500/30 bg-gold-500/[0.06] px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300"
             title="This workflow was split from one request into sibling workflows"
           >
             Split · {split.index} of {split.total}
@@ -1892,7 +2044,7 @@ function WorkflowCard({
       {/* Lead with the result: the headline deliverable + the single next step. */}
       {!pending && primaryArtifact ? (
         <div className="mt-3">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deliverable</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Deliverable</p>
           <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
             <ArtifactInline
               id={primaryArtifact.id}
@@ -1909,7 +2061,7 @@ function WorkflowCard({
             />
           </div>
           <p className="mt-2 text-xs text-fg-secondary">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Next step</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Next step</span>
             {" · "}
             {cursor.nextStep}
           </p>
@@ -1923,7 +2075,7 @@ function WorkflowCard({
           type="button"
           onClick={() => setDetailsOverride(!detailsOpen)}
           aria-expanded={detailsOpen}
-          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+          className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
         >
           <span className={`transition ${detailsOpen ? "rotate-90" : ""}`} aria-hidden>▸</span>
           {detailsOpen ? "Hide details" : pending ? "Plan & routing" : "Details & full run"}
@@ -1935,17 +2087,17 @@ function WorkflowCard({
 
             <dl className="space-y-2 text-sm">
               <div>
-                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Summary</dt>
+                <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Summary</dt>
                 <dd className="text-fg-secondary">{cursor.summary}</dd>
               </div>
               <div>
-                <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Action</dt>
+                <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Action</dt>
                 <dd className="text-fg-secondary">{cursor.action}</dd>
               </div>
             </dl>
 
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Output</p>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Output</p>
               <div className="mt-1.5 rounded-2xl border border-line/65 bg-surface-0/35 p-2.5">
                 <WorkflowSteps bundle={bundle} orgId={orgId} liveSteps={liveSteps} />
               </div>
@@ -1966,7 +2118,7 @@ function WorkflowCard({
 
       {pending ? (
         <div className="mt-4 border-t border-line/75 pt-4">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Your decision</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Your decision</p>
           <p className="mt-1 text-xs text-fg-secondary">{approval.summary}</p>
 
           {/* Clarify panel — Earn's questions for the operator. */}
@@ -1974,7 +2126,7 @@ function WorkflowCard({
             <div className="mt-3 rounded-xl border border-gold-500/30 bg-gold-500/[0.06] p-3">
               {clarify.questions.length > 0 ? (
                 <>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                     Earn needs to know
                   </p>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-fg-secondary">

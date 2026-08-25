@@ -30,7 +30,7 @@ export function MobileMoreMenu({
           <p id="fx-more-title" className="truncate text-[15px] font-semibold text-fg-primary">
             {name}
           </p>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-gold-400">{planName} plan</p>
+          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-400">{planName} plan</p>
         </div>
         <Link
           href="/settings/account"
@@ -43,7 +43,7 @@ export function MobileMoreMenu({
 
       {MORE_GROUPS.map((group) => (
         <section key={group.heading} className="mb-3">
-          <h3 className="mb-1.5 flex items-center gap-2 px-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <h3 className="mb-1.5 flex items-center gap-2 px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             <span aria-hidden className="h-2.5 w-0.5 rounded-full bg-gold-500/70" />
             {group.heading}
           </h3>
@@ -81,7 +81,7 @@ export function MobileMoreMenu({
           Sign out
         </button>
       </form>
-      <p className="mt-3 pb-2 text-center font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+      <p className="mt-3 pb-2 text-center font-mono text-[11px] uppercase tracking-widest text-fg-muted">
         FundExecs OS · Private markets, in your pocket
       </p>
     </MobileSheet>

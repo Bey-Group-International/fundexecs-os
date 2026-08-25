@@ -61,7 +61,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
   if (cost <= 0 || paidIn <= 0) {
     return (
       <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Exit Scenarios
         </h3>
         <p className="text-sm text-fg-muted">
@@ -80,10 +80,10 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Exit Scenarios
         </h3>
-        <span className="font-mono text-[10px] text-fg-muted">
+        <span className="font-mono text-[11px] text-fg-muted">
           {holdYears.toFixed(1)}-year hold · paid-in {fmtM(paidIn)}
         </span>
       </div>
@@ -91,7 +91,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
       {/* Current mark callout */}
       {current && (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Current mark
           </span>
           <span className="font-mono text-sm font-semibold text-fg-primary">
@@ -101,7 +101,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
             {fmtX(current.grossMultiple)} gross
           </span>
           <IrrTone irr={current.irr} />
-          <span className="ml-auto font-mono text-[10px] text-fg-muted">
+          <span className="ml-auto font-mono text-[11px] text-fg-muted">
             LP: {fmtM(current.toLps)} · GP: {fmtM(current.toGp)}
           </span>
         </div>
@@ -123,7 +123,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
               ].map(([label, align]) => (
                 <th
                   key={label}
-                  className={`pb-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted ${align}`}
+                  className={`pb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted ${align}`}
                 >
                   {label}
                 </th>
@@ -154,7 +154,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
         </table>
       </div>
 
-      <p className="mt-3 font-mono text-[9px] text-fg-muted">
+      <p className="mt-3 font-mono text-[11px] text-fg-muted">
         Waterfall modeled over {holdYears.toFixed(1)}-year hold. Green = ≥ 25% IRR / 3× MOIC.
       </p>
     </div>

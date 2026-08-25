@@ -131,7 +131,7 @@ export function BackendConnectors() {
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-fg text-sm">{c.label}</p>
                     <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider ${
+                      className={`rounded px-1.5 py-0.5 text-[11px] font-normal uppercase tracking-wider ${
                         c.available
                           ? "bg-emerald-500/10 text-emerald-400"
                           : "bg-amber-500/10 text-amber-400"

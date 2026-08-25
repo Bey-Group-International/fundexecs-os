@@ -133,7 +133,7 @@ export function SchedulingLinkCard() {
       <section className="flex flex-col gap-5 rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-5 sm:p-6">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <span className="inline-flex w-fit items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--gold-400)]">
+            <span className="inline-flex w-fit items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--gold-400)]">
               <LinkIcon />
               Your scheduling link
             </span>

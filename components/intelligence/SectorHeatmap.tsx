@@ -32,17 +32,17 @@ function HeatCell({ cell }: { cell: HeatmapCell | null }) {
       <div className="flex h-full flex-col items-center justify-center gap-0.5 p-1">
         <span className={`font-mono text-sm font-bold ${colors.text}`}>{cell.dealCount}</span>
         {cell.yoyChangePct !== null && cell.yoyChangePct !== undefined && (
-          <span className={`font-mono text-[9px] ${cell.yoyChangePct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+          <span className={`font-mono text-[11px] ${cell.yoyChangePct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
             {cell.yoyChangePct >= 0 ? "+" : ""}{cell.yoyChangePct.toFixed(0)}%
           </span>
         )}
       </div>
       {/* Tooltip on hover */}
       <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden -translate-x-1/2 rounded-lg border border-line bg-surface-1 px-2 py-1.5 shadow-xl group-hover:block">
-        <p className="whitespace-nowrap font-mono text-[10px] text-fg-secondary">
+        <p className="whitespace-nowrap font-mono text-[11px] text-fg-secondary">
           {ACTIVITY_LABELS[cell.activityLevel]} activity
         </p>
-        <p className="whitespace-nowrap font-mono text-[10px] font-semibold text-fg-primary">
+        <p className="whitespace-nowrap font-mono text-[11px] font-semibold text-fg-primary">
           {cell.dealCount} deal{cell.dealCount !== 1 ? "s" : ""}
         </p>
       </div>
@@ -61,11 +61,11 @@ export function SectorHeatmap({ cells, sectors, stages }: Props) {
     <div className="flex flex-col gap-3">
       {/* Legend */}
       <div className="flex items-center gap-4">
-        <span className="font-mono text-[10px] text-fg-muted">Activity:</span>
+        <span className="font-mono text-[11px] text-fg-muted">Activity:</span>
         {(["low", "moderate", "high", "very_high"] as ActivityLevel[]).map((level) => (
           <span key={level} className="flex items-center gap-1.5">
             <span className={`h-3 w-3 rounded border ${ACTIVITY_COLORS[level].bg} ${ACTIVITY_COLORS[level].border}`} />
-            <span className="font-mono text-[10px] text-fg-muted">{ACTIVITY_LABELS[level]}</span>
+            <span className="font-mono text-[11px] text-fg-muted">{ACTIVITY_LABELS[level]}</span>
           </span>
         ))}
       </div>
@@ -77,7 +77,7 @@ export function SectorHeatmap({ cells, sectors, stages }: Props) {
           <div className="mb-2 flex" style={{ paddingLeft: "140px" }}>
             {stages.map((stage) => (
               <div key={stage} className="flex-1 px-1 text-center">
-                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {stage.replace(/_/g, " ")}
                 </span>
               </div>
@@ -88,7 +88,7 @@ export function SectorHeatmap({ cells, sectors, stages }: Props) {
           {sectors.map((sector) => (
             <div key={sector} className="mb-2 flex items-center gap-0">
               <div className="w-[140px] shrink-0 pr-3 text-right">
-                <span className="font-mono text-[10px] text-fg-secondary">{sector}</span>
+                <span className="font-mono text-[11px] text-fg-secondary">{sector}</span>
               </div>
               <div className={`grid flex-1 gap-1`} style={{ gridTemplateColumns: `repeat(${stages.length}, 1fr)` }}>
                 {stages.map((stage) => (

@@ -29,7 +29,7 @@ function DangerBtn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+      className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
     >
       {children}
     </button>

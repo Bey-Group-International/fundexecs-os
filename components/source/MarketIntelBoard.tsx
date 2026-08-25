@@ -58,7 +58,7 @@ function Chip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50 ${
+      className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50 ${
         active
           ? "border-gold-500/50 bg-gold-500/15 text-gold-300"
           : "border-line bg-surface-2/40 text-fg-muted hover:text-fg-secondary"
@@ -72,7 +72,7 @@ function Chip({
 function KindBadge({ kind }: { kind: IntelKind }) {
   const m = KIND_META[kind];
   return (
-    <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${m.cls}`}>
+    <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${m.cls}`}>
       {m.label}
     </span>
   );
@@ -81,7 +81,7 @@ function KindBadge({ kind }: { kind: IntelKind }) {
 function MomentumBadge({ momentum }: { momentum: Momentum }) {
   const m = MOMENTUM_META[momentum];
   return (
-    <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${m.cls}`}>
+    <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${m.cls}`}>
       {m.label}
     </span>
   );
@@ -90,7 +90,7 @@ function MomentumBadge({ momentum }: { momentum: Momentum }) {
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</dt>
+      <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</dt>
       <dd className="mt-0.5 text-xs text-fg-secondary">{value}</dd>
     </div>
   );
@@ -200,7 +200,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
       {/* Filter chips */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Kind</span>
+          <span className="mr-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Kind</span>
           {kindOptions.map((k) => (
             <Chip key={k} active={kinds.has(k)} onClick={() => toggleKind(k)}>
               {KIND_META[k].label}
@@ -208,7 +208,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Momentum</span>
+          <span className="mr-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Momentum</span>
           {MOMENTA.map((m) => (
             <Chip key={m} active={momentum === m} onClick={() => setMomentum((cur) => (cur === m ? null : m))}>
               {MOMENTUM_META[m].label}
@@ -217,7 +217,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
         </div>
         {sectorOptions.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Sector</span>
+            <span className="mr-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Sector</span>
             {sectorOptions.map((s) => (
               <Chip key={s} active={sector === s} onClick={() => setSector((cur) => (cur === s ? null : s))}>
                 {s}
@@ -227,7 +227,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
         )}
       </div>
 
-      <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {rows.length} of {records.length} records
       </p>
 
@@ -240,7 +240,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
                 <th
                   key={col.key}
                   scope="col"
-                  className={`px-4 py-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted ${col.className ?? ""}`}
+                  className={`px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted ${col.className ?? ""}`}
                 >
                   <button
                     type="button"
@@ -252,7 +252,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
                   </button>
                 </th>
               ))}
-              <th scope="col" className="px-4 py-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted text-right">
+              <th scope="col" className="px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted text-right">
                 Momentum
               </th>
             </tr>
@@ -285,7 +285,7 @@ export function MarketIntelBoard({ records }: { records: IntelRecord[] }) {
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium text-fg-primary">{rec.name}</span>
                         {rec.geography && (
-                          <span className="ml-2 font-mono text-[10px] text-fg-muted">{rec.geography}</span>
+                          <span className="ml-2 font-mono text-[11px] text-fg-muted">{rec.geography}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">

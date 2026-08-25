@@ -257,7 +257,7 @@ const SessionRow = memo(function SessionRow({
         }`}
       >
         {s.pinned ? (
-          <span className="shrink-0 text-[10px] leading-none text-gold-400" title="Pinned">
+          <span className="shrink-0 text-[11px] leading-none text-gold-400" title="Pinned">
             📌
           </span>
         ) : (
@@ -433,7 +433,7 @@ function SidebarPanel({
               Inbox
             </span>
             {inboxUnread > 0 ? (
-              <span className="rounded-full bg-gradient-to-r from-gold-400 to-gold-300 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-surface-0 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.5)]">
+              <span className="rounded-full bg-gradient-to-r from-gold-400 to-gold-300 px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-surface-0 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.5)]">
                 {inboxUnread > 99 ? "99+" : inboxUnread}
               </span>
             ) : null}
@@ -462,7 +462,7 @@ function SidebarPanel({
           </Link>
         </div>
 
-        <p className="mb-1.5 mt-5 px-2 font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted/70">
+        <p className="mb-1.5 mt-5 px-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted/70">
           Hubs
         </p>
         {hubs.map((hub) => {
@@ -484,14 +484,14 @@ function SidebarPanel({
                   {hub.approvalGated ? (
                     <span
                       title="Approval gate — actions in this hub run behind your explicit sign-off before any outward-facing work executes"
-                      className="rounded border border-gold-500/40 bg-gold-500/10 px-1 py-px font-mono text-[8px] font-medium uppercase leading-none tracking-wider text-gold-300"
+                      className="rounded border border-gold-500/40 bg-gold-500/10 px-1 py-px font-mono text-[11px] font-medium uppercase leading-none tracking-wider text-gold-300"
                     >
                       gate
                     </span>
                   ) : null}
                 </span>
                 <span
-                  className="font-mono text-[10px] text-fg-muted transition-transform duration-200"
+                  className="font-mono text-[11px] text-fg-muted transition-transform duration-200"
                   style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
                 >
                   ▸
@@ -568,7 +568,7 @@ function SidebarPanel({
                 placeholder="Group name…"
                 className="min-w-0 flex-1 rounded-md border border-line bg-surface-0 px-2 py-1 text-xs text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
               />
-              <button className="rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
+              <button className="rounded-md border border-line px-1.5 py-1 text-[11px] text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
                 Add
               </button>
             </form>
@@ -590,7 +590,7 @@ function SidebarPanel({
                       }))
                     }
                     aria-expanded={!isGroupCollapsed}
-                    className="flex w-full items-center justify-between rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-gold-400 transition hover:bg-surface-2"
+                    className="flex w-full items-center justify-between rounded-md px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-gold-400 transition hover:bg-surface-2"
                   >
                     <span className="truncate">{sec.label}</span>
                     <span className="text-fg-muted">{isGroupCollapsed ? "▸" : "▾"}</span>
@@ -651,12 +651,12 @@ function SidebarPanel({
               <span className="block truncate text-xs font-semibold text-fg-primary">
                 {name}
               </span>
-              <span className="block truncate text-[10px] text-gold-400/70">
+              <span className="block truncate text-[11px] text-gold-400/70">
                 {planName} plan
               </span>
             </span>
             <span
-              className="font-mono text-[10px] text-fg-muted transition-transform duration-200"
+              className="font-mono text-[11px] text-fg-muted transition-transform duration-200"
               style={{ transform: accountOpen ? "rotate(180deg)" : "rotate(0deg)" }}
             >
               ▾

@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<EnvelopeStatus, string> = {
 
 function StatusBadge({ status }: { status: EnvelopeStatus }) {
   const base =
-    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider border";
+    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider border";
   const variants: Record<EnvelopeStatus, { dot: string; classes: string }> = {
     draft: { dot: "bg-fg-muted", classes: "border-line bg-surface-2 text-fg-muted" },
     sent: {
@@ -121,7 +121,7 @@ export async function SigningModule() {
         <DocuSignPanel />
       </div>
 
-      <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         Envelope Tracker
       </p>
 
@@ -130,10 +130,10 @@ export async function SigningModule() {
       ) : (
         <div className="fx-card overflow-hidden">
           <div className="hidden grid-cols-[1fr_160px_140px_80px] items-center gap-4 border-b border-line px-5 py-3 sm:grid">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Document</span>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Status</span>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Created</span>
-            <span className="text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">Recipients</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Document</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Status</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Created</span>
+            <span className="text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">Recipients</span>
           </div>
           <ul role="list" className="divide-y divide-line">
             {envelopes.map((env) => (
@@ -149,7 +149,7 @@ export async function SigningModule() {
                   <span className="font-mono text-[11px] text-fg-muted">{formatDate(env.created_at)}</span>
                   <span className="text-left font-mono text-sm tabular-nums text-fg-secondary sm:text-right">
                     {env.recipient_count ?? 0}
-                    <span className="ml-1 text-[10px] text-fg-muted">
+                    <span className="ml-1 text-[11px] text-fg-muted">
                       {(env.recipient_count ?? 0) === 1 ? "signer" : "signers"}
                     </span>
                   </span>

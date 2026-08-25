@@ -92,7 +92,7 @@ export function SwipeableCard({
           const inner = (
             <>
               <Icon width={19} height={19} />
-              <span className="text-[10px] font-medium leading-none">{a.label}</span>
+              <span className="text-[11px] font-medium leading-none">{a.label}</span>
             </>
           );
           const cls = `flex h-full flex-col items-center justify-center gap-1 ${TONE[a.tone ?? "neutral"]}`;

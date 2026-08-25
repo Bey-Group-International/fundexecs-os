@@ -65,7 +65,7 @@ export function CapitalMap({
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgb(var(--fx-accent-rgb)/0.18),transparent_34%),linear-gradient(135deg,rgb(var(--fx-accent-rgb)/0.08),transparent_55%)]" />
         <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Capital activation required
             </p>
             <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -188,7 +188,7 @@ function SummaryRow({ entries }: { entries: CapitalMapEntry[] }) {
             <div className={`font-display text-2xl font-semibold tracking-tight ${s.accent ?? "text-fg-primary"}`}>
               {s.value}
             </div>
-            <div className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
               {s.label}
             </div>
           </div>
@@ -216,7 +216,7 @@ function CoverageCallout({ entries }: { entries: CapitalMapEntry[] }) {
   const names = gaps.slice(0, 3).map((e) => e.investor.name).join(", ");
   return (
     <div className="animate-fade-up rounded-xl border border-gold-500/30 bg-gold-500/[0.06] px-4 py-3">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">Coverage gap</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">Coverage gap</p>
       <p className="mt-0.5 text-sm text-fg-secondary">
         <span className="font-medium text-fg-primary">{gaps.length}</span> high-fit{" "}
         {gaps.length === 1 ? "investor has" : "investors have"} no warm path yet — {names}
@@ -294,7 +294,7 @@ function ControlsBar({
           <option value="committed">Committed</option>
           <option value="name">Name</option>
         </select>
-        <span className="hidden font-mono text-[10px] sm:inline">
+        <span className="hidden font-mono text-[11px] sm:inline">
           {showing}/{total}
         </span>
       </label>
@@ -305,11 +305,11 @@ function ControlsBar({
 function GateLegend() {
   return (
     <div className="fx-glass flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Gate</span>
+      <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Gate</span>
       {([1, 2, 3] as GateTier[]).map((tier) => (
         <span key={tier} className="flex items-center gap-1.5">
           <span
-            className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[tier]}`}
+            className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[tier]}`}
           >
             T{tier}
           </span>
@@ -392,7 +392,7 @@ function InvestorCard({
           </p>
           {/* Fintrx-style AUM + check range — capacity context at a glance. */}
           {(investor.aum != null || investor.typical_check_min != null || investor.typical_check_max != null) ? (
-            <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+            <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
               {investor.aum != null ? (
                 <span className="mr-3 text-fg-secondary">{usd.format(investor.aum)} AUM</span>
               ) : null}
@@ -416,7 +416,7 @@ function InvestorCard({
                 {thesisFit.score}
                 <span className="text-sm text-fg-muted">/100</span>
               </div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Thesis fit</div>
+              <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Thesis fit</div>
             </div>
           </div>
         ) : null}
@@ -434,7 +434,7 @@ function InvestorCard({
 
       {introPath ? (
         <p className="mt-3 text-sm text-fg-secondary">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Warm path</span>{" "}
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Warm path</span>{" "}
           {introPath.hops.join("  →  ")}
           {introPath.introducer !== "You" ? (
             <span className="text-fg-muted"> · {introPath.introducer} can introduce you</span>
@@ -442,7 +442,7 @@ function InvestorCard({
         </p>
       ) : (
         <p className="mt-3 text-sm text-fg-muted">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Warm path</span>{" "}
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Warm path</span>{" "}
           No mapped connection yet — cold outreach or build the relationship graph.
         </p>
       )}
@@ -450,7 +450,7 @@ function InvestorCard({
       {/* Matched live listings — the marketplace flywheel surfaced inline. */}
       {matches.length ? (
         <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/[0.05] px-3 py-2">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Fits {matches.length} live {matches.length === 1 ? "listing" : "listings"}
           </p>
           <ul className="mt-1 flex flex-col gap-0.5">
@@ -482,7 +482,7 @@ function InvestorCard({
               title={na.rationale}
               className="group inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 hover:bg-surface-0 disabled:opacity-50"
             >
-              <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[na.tier]}`}>
+              <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[na.tier]}`}>
                 T{na.tier}
               </span>
               {isPending ? "Queuing…" : na.label}

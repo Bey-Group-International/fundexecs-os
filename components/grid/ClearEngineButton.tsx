@@ -30,7 +30,7 @@ export function ClearEngineButton({ engine, count }: { engine: TargetEngine; cou
       type="button"
       onClick={handleClick}
       disabled={pending || count === 0}
-      className="shrink-0 rounded-full border border-status-danger/40 bg-status-danger/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
+      className="shrink-0 rounded-full border border-status-danger/40 bg-status-danger/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-status-danger transition hover:bg-status-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {pending ? "Clearing…" : "Clear all"}
     </button>
