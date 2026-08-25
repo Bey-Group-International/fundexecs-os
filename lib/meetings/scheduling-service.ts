@@ -20,6 +20,7 @@ import type {
   SchedulingPage,
 } from "@/lib/supabase/database.types";
 import { generateRoomCode } from "@/lib/meetings/service";
+import { blocksToBusyIntervals } from "@/lib/meetings/blocks";
 import {
   DEFAULT_AVAILABILITY,
   DEFAULT_EVENT_TYPES,
@@ -259,7 +260,7 @@ export async function busyIntervals(
   // scan bounded instead of reading the host's whole history.
   const lookback = new Date(new Date(opts.fromIso).getTime() - MAX_MEETING_MINUTES * 60_000).toISOString();
 
-  const [meetings, bookings] = await Promise.all([
+  const [meetings, bookings, blocks] = await Promise.all([
     table(client, "live_meetings")
       .select("scheduled_at, duration_minutes")
       .eq("host_id", opts.hostUserId)
@@ -278,13 +279,26 @@ export async function busyIntervals(
       .lt("starts_at", opts.toIso)
       .order("starts_at", { ascending: true })
       .limit(BUSY_ROW_CAP),
+    // Time the host marked unavailable by hand. Same lookback as the others:
+    // a block can start before the window and run into it.
+    table(client, "scheduling_blocks")
+      .select("starts_at, ends_at")
+      .eq("user_id", opts.hostUserId)
+      .gte("starts_at", lookback)
+      .lt("starts_at", opts.toIso)
+      .order("starts_at", { ascending: true })
+      .limit(BUSY_ROW_CAP),
   ]);
 
   // Truncation here would silently stop blocking real commitments, so it is
   // loud rather than invisible. Hitting this means a host has more than
   // BUSY_ROW_CAP items in one window and the cap needs raising or the busy
   // lookup needs paging.
-  for (const [label, res] of [["live_meetings", meetings], ["scheduling_bookings", bookings]] as const) {
+  for (const [label, res] of [
+    ["live_meetings", meetings],
+    ["scheduling_bookings", bookings],
+    ["scheduling_blocks", blocks],
+  ] as const) {
     if ((res.data?.length ?? 0) >= BUSY_ROW_CAP) {
       console.warn(
         `[scheduling] busyIntervals hit the ${BUSY_ROW_CAP}-row cap on ${label} for host ${opts.hostUserId}; ` +
@@ -310,6 +324,12 @@ export async function busyIntervals(
     if (opts.excludeBookingId && row.id === opts.excludeBookingId) continue;
     out.push({ start: row.starts_at, end: row.ends_at });
   }
+
+  out.push(
+    ...blocksToBusyIntervals(
+      (blocks.data ?? []) as Array<{ starts_at: string; ends_at: string }>,
+    ),
+  );
 
   return out;
 }

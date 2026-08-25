@@ -2452,6 +2452,20 @@ export type SchedulingEventType = {
 
 export type SchedulingBookingStatus = "pending" | "confirmed" | "declined" | "cancelled";
 
+// Time a member marked unavailable by hand. Not a meeting: no room, attendees,
+// or lifecycle — it only removes the time from booking slots and warns when
+// something is scheduled over it.
+export type SchedulingBlock = {
+  id: string;
+  user_id: string;
+  organization_id: string | null;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SchedulingBooking = {
   id: string;
   page_id: string;
@@ -2750,6 +2764,7 @@ export type Database = {
       scheduling_pages: TableShape<SchedulingPage>;
       scheduling_event_types: TableShape<SchedulingEventType>;
       scheduling_bookings: TableShape<SchedulingBooking>;
+      scheduling_blocks: TableShape<SchedulingBlock>;
       meeting_notes: TableShape<MeetingNote>;
       agent_memories: TableShape<AgentMemory>;
       pipeline_stages: TableShape<PipelineStage>;

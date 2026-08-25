@@ -175,6 +175,9 @@ export function MeetingEditScreen({
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [conflicts, setConflicts] = useState<Array<{ id: string; title: string; scheduledAt: string }>>([]);
+  // Time the host blocked themselves. Reported separately from meeting
+  // conflicts because it reads differently — nobody else is affected.
+  const [blockedBy, setBlockedBy] = useState<Array<{ id: string; title: string; startsAt: string; endsAt: string }>>([]);
   const [allowConflict, setAllowConflict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -303,17 +306,15 @@ export function MeetingEditScreen({
       if (res.status === 409) {
         const json = (await res.json()) as {
           conflicts?: Array<{ id: string; title: string; scheduledAt: string }>;
+          blockedBy?: Array<{ id: string; title: string; startsAt: string; endsAt: string }>;
           error?: string;
         };
         setConflicts(json.conflicts ?? []);
-        // A 409 with no conflict list is the scheduling link's own guard — the
-        // slot was taken by another booking — and "Save anyway" cannot clear it,
-        // so show what the server said rather than the conflict wording.
-        setError(
-          json.conflicts?.length
-            ? "This time conflicts with another meeting."
-            : json.error ?? "That time is no longer available.",
-        );
+        setBlockedBy(json.blockedBy ?? []);
+        // A 409 with neither list is the scheduling link's own guard — the slot
+        // was taken by another booking — and "Save anyway" cannot clear it, so
+        // show what the server said rather than the conflict wording.
+        setError(json.error ?? "That time is no longer available.");
         return;
       }
       if (!res.ok) {
@@ -617,12 +618,20 @@ export function MeetingEditScreen({
             </div>
           ) : null}
 
-          {conflicts.length > 0 ? (
+          {conflicts.length > 0 || blockedBy.length > 0 ? (
             <div className="mt-4 rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3 sm:ml-11">
-              <p className="text-xs font-medium text-[var(--fg-primary)]">Scheduling conflict</p>
+              <p className="text-xs font-medium text-[var(--fg-primary)]">
+                {conflicts.length > 0 ? "Scheduling conflict" : "Inside blocked time"}
+              </p>
               <ul className="mt-1 list-disc pl-4 text-xs text-[var(--fg-muted)]">
                 {conflicts.map((c) => (
                   <li key={c.id}>{c.title} — {new Date(c.scheduledAt).toLocaleString()}</li>
+                ))}
+                {blockedBy.map((b) => (
+                  <li key={b.id}>
+                    {b.title} (blocked) — {new Date(b.startsAt).toLocaleString()} to{" "}
+                    {new Date(b.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </li>
                 ))}
               </ul>
               <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
