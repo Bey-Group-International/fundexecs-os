@@ -6,7 +6,7 @@ const getOrgSecretMock = jest.fn();
 const getGoogleAccessTokenMock = jest.fn();
 
 jest.mock("@/lib/org-secrets", () => ({
-  getOrgSecret: (...args: unknown[]) => getOrgSecretMock(...args),
+  getOrgSecretBounded: (...args: unknown[]) => getOrgSecretMock(...args),
 }));
 
 jest.mock("@/lib/google-oauth", () => ({
@@ -61,20 +61,32 @@ describe("sendEmail credential resolution", () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer minted-token");
   });
 
-  it("prefers a token stored for the org over minting a new one", async () => {
-    getOrgSecretMock.mockResolvedValue("stored-token");
+  it("prefers the freshly minted token over a stored static one", async () => {
+    // A static Gmail token dies within the hour. If it won, one stale paste
+    // would shadow the org's durable OAuth credential forever — and a
+    // reconnect could not clear it, since the callback only writes the
+    // refresh token.
+    getOrgSecretMock.mockResolvedValue("stale-static-token");
     getGoogleAccessTokenMock.mockResolvedValue("minted-token");
     await sendEmail({ ...ARGS, orgId: "org1" });
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer minted-token");
+  });
+
+  it("falls back to a stored static token when the org has no OAuth grant", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue(null);
+    getOrgSecretMock.mockImplementation(async (_org: string, key: string) =>
+      key === "GMAIL_ACCESS_TOKEN" ? "stored-token" : null,
+    );
+    await sendEmail({ ...ARGS, orgId: "org1" });
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer stored-token");
-    expect(getGoogleAccessTokenMock).not.toHaveBeenCalled();
   });
 
   it("prefers a caller-supplied token over anything it could look up", async () => {
-    getOrgSecretMock.mockResolvedValue("stored-token");
+    getGoogleAccessTokenMock.mockResolvedValue("minted-token");
     process.env.GMAIL_ACCESS_TOKEN = "env-token";
     await sendEmail({ ...ARGS, orgId: "org1", credentials: { gmailAccessToken: "caller-token" } });
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer caller-token");
-    expect(getOrgSecretMock).not.toHaveBeenCalled();
+    expect(getGoogleAccessTokenMock).not.toHaveBeenCalled();
   });
 
   it("falls back to the deploy env token only when the org has none", async () => {
@@ -85,7 +97,7 @@ describe("sendEmail credential resolution", () => {
 
   it("treats a vault failure as an unconnected mailbox, not an error", async () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
-    getOrgSecretMock.mockRejectedValue(new Error("vault key missing"));
+    getGoogleAccessTokenMock.mockRejectedValue(new Error("vault key missing"));
     const result = await sendEmail({ ...ARGS, orgId: "org1" });
     expect(result.channel).toBe("in-app");
     warn.mockRestore();
@@ -115,6 +127,17 @@ describe("sendEmail message construction", () => {
     process.env.FUNDEXECS_FROM_EMAIL = "meetings@acme.vc";
     await sendEmail({ ...ARGS, orgId: "org1" });
     expect(sentMessage()).toContain("From: FundExecs <meetings@acme.vc>");
+  });
+
+  it("uses the org's own From override ahead of the deploy default", async () => {
+    // FUNDEXECS_FROM_EMAIL is a per-org vault key, so a send that knows only
+    // its orgId still has to pick up the alias an admin stored for that org.
+    process.env.FUNDEXECS_FROM_EMAIL = "deploy@fundexecs.com";
+    getOrgSecretMock.mockImplementation(async (_org: string, key: string) =>
+      key === "FUNDEXECS_FROM_EMAIL" ? "ir@acme.vc" : null,
+    );
+    await sendEmail({ ...ARGS, orgId: "org1" });
+    expect(sentMessage()).toContain("From: FundExecs <ir@acme.vc>");
   });
 
   it("carries the recipient, subject, and html body", async () => {
