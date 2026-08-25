@@ -80,7 +80,7 @@ export function InvestorRoom({ data }: { data: InvestorRoomData }) {
     <div className="fx-ambient mx-auto max-w-6xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
             Investor Room
           </p>
           <h1 className="mt-1 font-display text-xl font-semibold text-fg-primary">

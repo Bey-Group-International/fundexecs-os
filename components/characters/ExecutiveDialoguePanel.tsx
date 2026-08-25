@@ -35,7 +35,7 @@ export function ExecutiveDialoguePanel({
           </p>
           <p className="mt-3 text-sm leading-6 text-fg-secondary">{recommendation}</p>
           <div className="mt-3 rounded-lg border border-line bg-surface-0/55 p-3">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Boundary
             </p>
             <p className="mt-1 text-xs leading-5 text-fg-muted">{character.promptBoundary}</p>
@@ -44,7 +44,7 @@ export function ExecutiveDialoguePanel({
             {character.workspaceHref ? (
               <Link
                 href={character.workspaceHref}
-                className="rounded-lg bg-gold-500 px-3 py-2 text-xs font-medium text-surface-0 transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+                className="rounded-lg bg-gold-500 px-3 py-2 text-xs font-medium text-on-gold transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
               >
                 Open workspace
               </Link>

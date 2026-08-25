@@ -155,7 +155,7 @@ export function SourcingIntel({
               <span className="rounded-full border border-line px-1.5 py-0.5">{humanize(h.kind)}</span>
               {h.geography ? <span>{h.geography}</span> : null}
               {h.categories.slice(0, 3).map((c) => (
-                <span key={c} className="text-gold-400">
+                <span key={c} className="text-gold-300">
                   {humanize(c)}
                 </span>
               ))}
@@ -204,7 +204,7 @@ export function SourcingIntel({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ Sourcing Intelligence
           </span>
           {!live ? (
@@ -267,7 +267,7 @@ export function SourcingIntel({
           <button
             type="submit"
             disabled={busy || !query.trim()}
-            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
           >
             {busy ? "Searching…" : "Discover"}
           </button>
@@ -296,7 +296,7 @@ export function SourcingIntel({
       {similar ? (
         <div className="mt-5 rounded-2xl border border-gold-500/30 bg-gold-500/[0.04] p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Similar to {similar.anchor}
             </span>
             <button

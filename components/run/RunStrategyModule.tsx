@@ -17,7 +17,7 @@ function NoActiveDeals({ note }: { note: string }) {
     <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-12 text-center">
       <span
         aria-hidden
-        className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-400"
+        className="mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-gold-500/5 font-mono text-sm text-gold-300"
       >
         ✶
       </span>
@@ -327,7 +327,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
 
       {/* Mandate coverage / allocation */}
       <section>
-        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Allocation &amp; mandate coverage
         </h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -338,7 +338,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
 
       {/* Prioritization queue / per-deal fit board */}
       <section>
-        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Prioritization queue
         </h3>
         <div className="flex flex-col gap-2.5">
@@ -350,7 +350,7 @@ export async function RunStrategyModule({ orgId }: { orgId: string }) {
 
       {/* Side-by-side comparison */}
       <section>
-        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Deal comparison
         </h3>
         <ComparisonTable deals={deals} m={m} />

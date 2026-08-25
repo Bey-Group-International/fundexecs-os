@@ -25,8 +25,8 @@ export function EarnOrb({
       />
       {/* Orb body: the coin over a radial gold core, ringed and inset-lit so it
           has real spherical depth. */}
-      <span className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-neural-400/60 bg-[radial-gradient(circle_at_30%_25%,rgba(199,255,107,0.34),rgba(7,12,5,0.94))] shadow-[inset_0_1px_2px_rgba(255,255,255,0.18),0_2px_14px_-2px_rgba(118,185,0,0.85)]">
-        <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent_35%,rgba(199,255,107,0.18)_50%,transparent_65%)]" />
+      <span className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-neural-400/60 bg-[radial-gradient(circle_at_30%_25%,rgb(var(--fx-accent-rgb)/0.30),rgba(7,12,5,0.94))] shadow-[inset_0_1px_2px_rgba(255,255,255,0.18),0_2px_14px_-2px_rgb(var(--fx-accent-rgb)/0.357)]">
+        <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent_35%,rgb(255_255_255/0.45)_50%,transparent_65%)]" />
         <Image
           src="/earn-coin.png"
           alt="Earn"

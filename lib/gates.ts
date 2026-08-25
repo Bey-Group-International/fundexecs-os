@@ -319,6 +319,6 @@ export function gateDecision(
 // Shared across CapitalMap, Inbox, and any other surface that renders tier badges.
 export const TIER_STYLE: Record<GateTier, string> = {
   1: "border-status-success/40 text-status-success",
-  2: "border-gold-500/50 text-gold-400",
+  2: "border-gold-500/50 text-gold-300",
   3: "border-status-danger/50 text-status-danger",
 };

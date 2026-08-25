@@ -19,14 +19,14 @@ function fmtUsd(n: number): string {
 
 function stalenessColor(days: number): string {
   if (days > 60) return "text-status-danger";
-  if (days > 30) return "text-gold-400";
+  if (days > 30) return "text-gold-300";
   return "text-fg-muted";
 }
 
 function stageBadgeClass(stage: string): string {
   const s = stage.toLowerCase();
   if (s.includes("close") || s.includes("sign")) return "bg-emerald-950 text-emerald-300 border-emerald-800";
-  if (s.includes("due") || s.includes("diligen")) return "bg-yellow-950 text-gold-400 border-yellow-800";
+  if (s.includes("due") || s.includes("diligen")) return "bg-yellow-950 text-gold-300 border-yellow-800";
   if (s.includes("prospect") || s.includes("sourcing")) return "bg-zinc-800 text-fg-secondary border-zinc-700";
   return "bg-zinc-800 text-fg-secondary border-zinc-700";
 }
@@ -42,7 +42,7 @@ export function StaleDealAlerts({ deals }: { deals: StaleDeal[] }) {
   const severityBands = [
     { label: "Critical", sublabel: ">90d", count: critical, color: "text-status-danger", bar: "bg-red-600" },
     { label: "High", sublabel: ">60d", count: high, color: "text-orange-400", bar: "bg-orange-500" },
-    { label: "Medium", sublabel: ">30d", count: medium, color: "text-gold-400", bar: "bg-yellow-500" },
+    { label: "Medium", sublabel: ">30d", count: medium, color: "text-gold-300", bar: "bg-yellow-500" },
     { label: "Low", sublabel: "<30d", count: low, color: "text-fg-muted", bar: "bg-zinc-600" },
   ];
 

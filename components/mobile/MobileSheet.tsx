@@ -48,12 +48,12 @@ export function MobileSheet({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="fx-scrim-enter absolute inset-0 h-full w-full cursor-default bg-black/60 backdrop-blur-sm"
+        className="fx-scrim-enter absolute inset-0 h-full w-full cursor-default bg-slate-900/40 backdrop-blur-sm"
       />
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="fx-sheet-enter absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-3xl border-t border-line/70 bg-surface-1 pb-safe shadow-[0_-24px_60px_-30px_rgb(0_0_0/0.8)] outline-none"
+        className="fx-sheet-enter absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-3xl border-t border-line/70 bg-surface-1 pb-safe shadow-[0_-24px_60px_-30px_rgb(15_23_42/0.18)] outline-none"
       >
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent" />
         {/* Drag handle */}

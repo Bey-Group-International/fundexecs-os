@@ -53,7 +53,7 @@ export function TypedConfirmDialog({
       aria-modal="true"
       aria-label={title}
       onClick={onCancel}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
     >
       <div
         onClick={(e) => e.stopPropagation()}

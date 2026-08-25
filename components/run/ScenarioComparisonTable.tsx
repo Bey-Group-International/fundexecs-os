@@ -61,7 +61,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
   if (cost <= 0 || paidIn <= 0) {
     return (
       <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Exit Scenarios
         </h3>
         <p className="text-sm text-fg-muted">
@@ -80,7 +80,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Exit Scenarios
         </h3>
         <span className="font-mono text-[11px] text-fg-muted">
@@ -91,7 +91,7 @@ export function ScenarioComparisonTable({ cost, currentValue, paidIn, holdYears,
       {/* Current mark callout */}
       {current && (
         <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Current mark
           </span>
           <span className="font-mono text-sm font-semibold text-fg-primary">

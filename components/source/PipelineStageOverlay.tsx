@@ -39,7 +39,7 @@ export default function PipelineStageOverlay({
       role="dialog"
       className={[
         "fixed inset-0 z-50 flex items-center justify-center p-4",
-        "bg-black/50 backdrop-blur-sm",
+        "bg-slate-900/40 backdrop-blur-sm",
         "transition-opacity duration-200",
         open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
       ].join(" ")}

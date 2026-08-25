@@ -20,8 +20,8 @@ import { SaveToSystemApproval } from "./SaveToSystemApproval";
 // returns pending), so the review queue starts empty until the driver lands.
 
 const STATUS_STYLE: Record<string, string> = {
-  awaiting_user_approval: "border-gold-500/50 text-gold-400",
-  paused_for_user_auth: "border-gold-500/50 text-gold-400",
+  awaiting_user_approval: "border-gold-500/50 text-gold-300",
+  paused_for_user_auth: "border-gold-500/50 text-gold-300",
   awaiting_user_review: "border-accent/50 text-accent",
   saved: "border-status-success/50 text-status-success",
   cancelled: "border-line text-fg-muted",

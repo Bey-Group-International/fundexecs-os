@@ -131,7 +131,7 @@ export function LboModelTool({ saved = [] }: { saved?: SavedScenario[] }) {
         aria-expanded={open}
       >
         <span>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             LBO model
           </span>
           <span className="ml-2 text-sm text-fg-secondary">
@@ -233,7 +233,7 @@ export function LboModelTool({ saved = [] }: { saved?: SavedScenario[] }) {
                 <tbody className="font-mono">
                   {result.schedule.map((y) => (
                     <tr key={y.year} className="border-b border-line/40">
-                      <td className="py-1.5 pr-3 text-gold-400">{y.year}</td>
+                      <td className="py-1.5 pr-3 text-gold-300">{y.year}</td>
                       <td className="py-1.5 pr-3 text-fg-secondary">{money(y.revenue)}</td>
                       <td className="py-1.5 pr-3 text-fg-secondary">{money(y.ebitda)}</td>
                       <td className="py-1.5 pr-3 text-fg-secondary">{money(y.interest)}</td>

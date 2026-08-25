@@ -43,7 +43,7 @@ export function FaqAccordion({ items, className = "" }: FaqAccordionProps) {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="size-4 shrink-0 text-gold-400 transition-transform duration-200 group-open:rotate-180"
+              className="size-4 shrink-0 text-gold-300 transition-transform duration-200 group-open:rotate-180"
             >
               <path d="m6 9 6 6 6-6" />
             </svg>

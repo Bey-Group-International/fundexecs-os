@@ -67,7 +67,7 @@ export function MobileCommandCenter({ data }: { data: CommandCenterData }) {
               {initials(data.name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{data.dateLabel}</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">{data.dateLabel}</p>
               <h1 className="mt-0.5 font-display text-[24px] font-semibold leading-tight tracking-tight text-fg-primary">
                 {data.greeting}, {data.name.split(" ")[0]}
               </h1>

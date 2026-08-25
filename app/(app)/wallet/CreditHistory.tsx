@@ -75,7 +75,7 @@ export async function CreditHistory() {
     if (entries.length === 0) {
       return (
         <section className="mt-10">
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
             Credit history
           </h2>
           <div className="rounded-2xl border border-dashed border-line/60 px-6 py-10 text-center">
@@ -96,7 +96,7 @@ export async function CreditHistory() {
 
     return (
       <section className="mt-10">
-        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
           Credit history
         </h2>
 

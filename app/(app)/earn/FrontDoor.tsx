@@ -42,7 +42,7 @@ export function FrontDoor() {
     const p = PATHS[path];
     return (
       <div className="rounded-2xl border border-line bg-surface-1 p-6">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">Routed</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">Routed</p>
         <h2 className="mt-1 font-display text-xl font-semibold text-fg-primary">{p.label}</h2>
         <p className="mt-1 text-sm text-fg-secondary">{p.blurb}</p>
 
@@ -60,7 +60,7 @@ export function FrontDoor() {
             <Link
               key={a.href + a.label}
               href={a.href}
-              className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+              className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300"
             >
               {a.label} →
             </Link>

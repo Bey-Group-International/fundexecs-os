@@ -369,7 +369,7 @@ export function BrandStudio({
       <div className="flex items-center gap-3 border-t border-line pt-4">
         <button
           type="submit"
-          className="rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-surface-0 transition hover:opacity-90 active:opacity-75"
+          className="rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-on-gold transition hover:opacity-90 active:opacity-75"
         >
           Save changes
         </button>

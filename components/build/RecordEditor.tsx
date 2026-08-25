@@ -52,7 +52,7 @@ export function RecordEditor({
       <input type="hidden" name="id" value={id} />
       {children}
       <div className="flex gap-2 sm:col-span-2">
-        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-gold-300">
+        <button className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-medium text-on-gold transition hover:bg-gold-300">
           Save
         </button>
         <button
@@ -124,7 +124,7 @@ export function TableRecordEditor({
           <input type="hidden" name="id" value={id} />
           {children}
           <div className="flex gap-2 sm:col-span-2">
-            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-medium text-surface-0 transition hover:bg-gold-300">
+            <button className="rounded-md bg-gold-400 px-3 py-1.5 text-xs font-medium text-on-gold transition hover:bg-gold-300">
               Save
             </button>
             <button

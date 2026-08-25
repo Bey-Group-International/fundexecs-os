@@ -199,7 +199,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
             <button
               type="button"
               onClick={() => setShowNdaText((v) => !v)}
-              className="ml-auto font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
+              className="ml-auto font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:text-gold-300"
             >
               {showNdaText ? "Hide text" : "Custom text"}
             </button>
@@ -284,7 +284,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
       <div className="mt-3 flex items-center gap-3">
         <button
           disabled={pending}
-          className="rounded-lg bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+          className="rounded-lg bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
         >
           {pending ? "Creating…" : "Create link"}
         </button>
@@ -333,7 +333,7 @@ export function ShareControls({ shares, activeCount }: { shares: ShareView[]; ac
           className="w-full rounded-xl border border-dashed border-line bg-surface-1 px-4 py-8 text-center transition hover:border-gold-500/40 hover:bg-gold-500/5"
         >
           <p className="text-sm text-fg-muted">No active links.</p>
-          <p className="mt-1 text-xs text-gold-400">Click to create a shareable link →</p>
+          <p className="mt-1 text-xs text-gold-300">Click to create a shareable link →</p>
         </button>
       ) : (
         <div className="flex flex-col gap-2">

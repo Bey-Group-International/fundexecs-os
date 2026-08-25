@@ -137,7 +137,7 @@ export function SessionCommandBar({
           title="Credit balance — open wallet"
           className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
         >
-          <span className="text-gold-400">◇</span>
+          <span className="text-gold-300">◇</span>
           {formatCredits(balance)}
         </Link>
 
@@ -275,7 +275,7 @@ export function SessionCommandBar({
       {tasksOpen ? (
         <div className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col border-l border-line bg-surface-1 shadow-2xl sm:w-80">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
               Background Tasks
             </span>
             <button
@@ -295,7 +295,7 @@ export function SessionCommandBar({
               <div className="p-2">
                 <button
                   onClick={() => setSelected(null)}
-                  className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
+                  className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
                 >
                   ← All tasks
                 </button>

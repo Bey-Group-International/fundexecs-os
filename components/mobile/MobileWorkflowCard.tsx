@@ -15,7 +15,7 @@ export interface MobileWorkflow {
 
 const STATUS_TONE: Record<string, string> = {
   in_progress: "text-neural-300",
-  awaiting_approval: "text-gold-400",
+  awaiting_approval: "text-gold-300",
   queued: "text-fg-secondary",
   running: "text-neural-300",
   completed: "text-status-success",

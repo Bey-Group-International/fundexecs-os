@@ -30,7 +30,7 @@ const STATUS_CONFIG: Record<
   },
   sent: {
     label: "Sent",
-    badgeClass: "bg-yellow-950 text-gold-400 border-yellow-800",
+    badgeClass: "bg-yellow-950 text-gold-300 border-yellow-800",
     amountClass: "text-gold-300",
   },
   paid: {

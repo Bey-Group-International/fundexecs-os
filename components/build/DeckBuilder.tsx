@@ -254,7 +254,7 @@ function SlideEditor({
                     value={block.number}
                     onChange={(v) => updateBlock(idx, { ...block, number: v })}
                     placeholder="0×"
-                    className="text-center font-display text-4xl font-bold text-gold-400"
+                    className="text-center font-display text-4xl font-bold text-gold-300"
                   />
                   <EditableText
                     value={block.label}
@@ -291,7 +291,7 @@ function SlideEditor({
                   value={block.number}
                   onChange={(v) => updateBlock(idx, { ...block, number: v })}
                   placeholder="0×"
-                  className="text-center font-display text-4xl font-bold text-gold-400"
+                  className="text-center font-display text-4xl font-bold text-gold-300"
                 />
                 <EditableText
                   value={block.label}
@@ -329,7 +329,7 @@ function SlideEditor({
                   <button
                     type="button"
                     onClick={() => addBullet(idx)}
-                    className="mt-1 text-xs text-gold-400 hover:underline"
+                    className="mt-1 text-xs text-gold-300 hover:underline"
                   >
                     + Add bullet
                   </button>
@@ -612,7 +612,7 @@ export function DeckBuilder({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+            className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
           >
             {saving ? "Saving…" : "Save"}
           </button>

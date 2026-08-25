@@ -244,7 +244,7 @@ export function EditListingForm({ listing }: { listing: MarketplaceListing }) {
               <button
                 type="submit"
                 disabled={pending}
-                className="rounded-md bg-gold-500 px-3 py-1 text-xs font-medium text-surface-0 transition hover:bg-gold-400 disabled:opacity-60"
+                className="rounded-md bg-gold-500 px-3 py-1 text-xs font-medium text-on-gold transition hover:bg-gold-400 disabled:opacity-60"
               >
                 {pending ? "Saving…" : saved ? "Saved!" : "Save changes"}
               </button>

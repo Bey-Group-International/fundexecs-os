@@ -93,7 +93,7 @@ export default async function HubLayout(
             aria-hidden
             className="h-5 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500"
           />
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             {hub.label} Hub
           </span>
         </div>
@@ -112,11 +112,11 @@ export default async function HubLayout(
               Every AI action in this hub that touches deal records, sends communications, or
               modifies diligence requires your explicit approval before executing. Review pending
               approvals in your{" "}
-              <a href="/inbox" className="text-gold-400 underline-offset-2 hover:underline">
+              <a href="/inbox" className="text-gold-300 underline-offset-2 hover:underline">
                 Inbox
               </a>
               . To widen or restrict AI permissions, visit{" "}
-              <a href="/settings#mandates" className="text-gold-400 underline-offset-2 hover:underline">
+              <a href="/settings#mandates" className="text-gold-300 underline-offset-2 hover:underline">
                 AI Permissions
               </a>
               .

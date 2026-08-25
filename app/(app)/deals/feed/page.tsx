@@ -62,7 +62,7 @@ export default async function DealFeedPage() {
       {/* Opening the feed clears the lightbulb's unread badge. */}
       <DealsSeen />
       <header className="mb-8">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Ecosystem
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -111,7 +111,7 @@ export default async function DealFeedPage() {
       {signals.length > 0 && (
         <section className="mt-12">
           <header className="mb-6">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Intelligence
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -128,7 +128,7 @@ export default async function DealFeedPage() {
       {heatmapCells.length > 0 && (
         <section className="mt-12">
           <header className="mb-6">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Intelligence
             </span>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">

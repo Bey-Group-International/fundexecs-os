@@ -16,7 +16,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
   const r = size / 2 - 6;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - value / 100);
-  const tone = value >= 70 ? "text-emerald-400" : value >= 35 ? "text-gold-400" : "text-fg-muted";
+  const tone = value >= 70 ? "text-emerald-400" : value >= 35 ? "text-gold-300" : "text-fg-muted";
   return (
     <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }} className="-rotate-90">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-line" />
@@ -39,7 +39,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{children}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">{children}</h3>
       {action}
     </div>
   );
@@ -288,7 +288,7 @@ function Relationships({ data }: { data: WarRoom }) {
       <SectionTitle>Relationships & intro path</SectionTitle>
       {introPath ? (
         <div className="mb-3 rounded-lg border border-gold-500/30 bg-gold-500/5 px-3 py-2.5">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Warm intro via {introPath.introducer}</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Warm intro via {introPath.introducer}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm text-fg-secondary">
             {introPath.hops.map((hop, i) => (
               <span key={`${hop}-${i}`} className="flex items-center gap-1.5">
@@ -329,7 +329,7 @@ export function InvestorWarRoom({ data }: { data: WarRoom }) {
       <div className="flex items-center justify-between gap-3">
         <Link
           href="/source/lp_pipeline"
-          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-400"
+          className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
         >
           ← LP pipeline
         </Link>

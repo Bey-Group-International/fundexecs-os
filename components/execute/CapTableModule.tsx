@@ -129,7 +129,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
       {ownership.linkedCount > 0 ? (
         <div className="mb-4 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Complete ownership
             </span>
             <span className="font-mono text-[11px] text-fg-muted">

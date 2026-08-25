@@ -72,7 +72,7 @@ export const SIGNAL_TYPE_ICONS: Record<SignalType, string> = {
 
 export const SIGNAL_TYPE_COLORS: Record<SignalType, string> = {
   funding_round: "text-emerald-400 border-emerald-500/30",
-  acquisition: "text-gold-400 border-gold-500/30",
+  acquisition: "text-gold-300 border-gold-500/30",
   ipo: "text-blue-400 border-blue-500/30",
   bankruptcy: "text-red-400 border-red-500/30",
   exec_change: "text-slate-400 border-slate-500/30",

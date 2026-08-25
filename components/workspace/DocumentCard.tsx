@@ -45,7 +45,7 @@ export function DocumentCard({ doc }: { doc: WorkspaceDoc }) {
           </span>
         </div>
         {doc.isPinned && (
-          <span className="font-mono text-[11px] text-gold-400">Pinned</span>
+          <span className="font-mono text-[11px] text-gold-300">Pinned</span>
         )}
       </div>
 
@@ -61,7 +61,7 @@ export function DocumentCard({ doc }: { doc: WorkspaceDoc }) {
       </div>
 
       <div className="mt-auto flex flex-wrap items-center gap-2 font-mono text-[11px] text-fg-muted">
-        {doc.dealName && <span className="text-gold-400/70">{doc.dealName}</span>}
+        {doc.dealName && <span className="text-gold-300/70">{doc.dealName}</span>}
         {doc.fundName && <span className="text-blue-400/70">{doc.fundName}</span>}
         <span className="ml-auto">{words} words · {timeLabel(doc.updatedAt)}</span>
       </div>

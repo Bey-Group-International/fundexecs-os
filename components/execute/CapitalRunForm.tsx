@@ -76,7 +76,7 @@ export default function CapitalRunForm({
       className="mb-4 flex flex-col gap-4 rounded-xl border border-gold-500/30 bg-surface-1 p-5"
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Capital run</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">Capital run</span>
         <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
           Tier 3 · operator sign-off
         </span>
@@ -174,7 +174,7 @@ export default function CapitalRunForm({
         <button
           type="submit"
           disabled={pending || !(amount > 0 && plan.totalAllocated > 0)}
-          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {pending ? "Booking…" : `Confirm & book ${kind === "capital_call" ? "call" : "distribution"}`}
         </button>

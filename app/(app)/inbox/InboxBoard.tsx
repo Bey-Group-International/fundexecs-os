@@ -88,7 +88,7 @@ export interface InboxCardData {
 
 const BUCKETS = [
   { key: "now", label: "Needs you now", tone: "text-status-success" },
-  { key: "soon", label: "Soon", tone: "text-gold-400" },
+  { key: "soon", label: "Soon", tone: "text-gold-300" },
   { key: "later", label: "Later", tone: "text-fg-muted" },
 ] as const;
 
@@ -332,7 +332,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
               <button
                 type="button"
                 onClick={() => switchTab("other")}
-                className="text-gold-400 transition hover:underline"
+                className="text-gold-300 transition hover:underline"
               >
                 See {tabCounts.other} in Other →
               </button>
@@ -572,7 +572,7 @@ function ThreadCard({
               aria-label={`Select thread: ${card.subject}`}
               className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-gold-500"
             />
-            <span className="font-mono text-base leading-none text-gold-400" title={card.channelLabel}>
+            <span className="font-mono text-base leading-none text-gold-300" title={card.channelLabel}>
               {card.channelIcon}
             </span>
             <h3 className={`truncate text-sm ${card.unread ? "font-semibold text-fg-primary" : "text-fg-primary"}`}>
@@ -594,7 +594,7 @@ function ThreadCard({
             aria-label={starred ? "Unstar thread" : "Star thread"}
             title={starred ? "Starred — click to unstar" : "Star this thread"}
             className={`text-sm leading-none transition disabled:opacity-50 ${
-              starred ? "text-gold-400" : "text-fg-muted hover:text-gold-400"
+              starred ? "text-gold-300" : "text-fg-muted hover:text-gold-300"
             }`}
           >
             {starred ? "★" : "☆"}
@@ -622,7 +622,7 @@ function ThreadCard({
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
         {card.context ? (
-          <Link href={card.context.href} className="text-gold-400 hover:underline">
+          <Link href={card.context.href} className="text-gold-300 hover:underline">
             {card.context.kind === "deal" ? "Deal" : "Investor"}: {card.context.name} →
           </Link>
         ) : (
@@ -635,7 +635,7 @@ function ThreadCard({
           <span className="text-fg-muted">💤 until {relativeMeeting(card.snoozedUntil)}</span>
         ) : null}
         {card.meetingUrl ? (
-          <a href={card.meetingUrl} target="_blank" rel="noreferrer" className="text-gold-400 hover:underline">
+          <a href={card.meetingUrl} target="_blank" rel="noreferrer" className="text-gold-300 hover:underline">
             Meeting link →
           </a>
         ) : null}
@@ -712,7 +712,7 @@ function ThreadCard({
               return (
                 <div className="mb-2">
                   {aiReplies ? (
-                    <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-400/80">
+                    <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-300/80">
                       ✦ Suggested for this thread
                     </p>
                   ) : null}
@@ -750,7 +750,7 @@ function ThreadCard({
               ) : (
                 <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {card.channelLabel} not connected — sends save as drafts.{" "}
-                  <Link href="/settings/integrations" className="text-gold-400 hover:underline">
+                  <Link href="/settings/integrations" className="text-gold-300 hover:underline">
                     Connect →
                   </Link>
                 </span>

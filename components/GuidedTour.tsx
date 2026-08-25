@@ -151,7 +151,7 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
     <div className="fixed bottom-24 right-4 z-40 w-[320px] rounded-xl border border-line bg-surface-1 shadow-2xl">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
             Setup guide
           </span>
           <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] text-gold-300">
@@ -215,7 +215,7 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className={`text-sm font-medium ${isDone ? "text-fg-muted line-through" : "text-fg-primary"}`}>
-                    <span className="mr-1 font-mono text-[11px] text-gold-400">{i + 1}.</span>
+                    <span className="mr-1 font-mono text-[11px] text-gold-300">{i + 1}.</span>
                     {step.title}
                   </p>
                   {!isDone ? (

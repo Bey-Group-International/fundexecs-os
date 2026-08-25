@@ -64,7 +64,7 @@ function SignalCard({ signal }: { signal: DealSignal }) {
             <span className="font-mono text-[11px] text-fg-muted">{signal.companyName}</span>
           )}
           {(signal.dealSizeMin || signal.dealSizeMax) && (
-            <span className="font-mono text-[11px] text-gold-400">
+            <span className="font-mono text-[11px] text-gold-300">
               {formatSignalSize(signal.dealSizeMin, signal.dealSizeMax)}
             </span>
           )}
@@ -76,7 +76,7 @@ function SignalCard({ signal }: { signal: DealSignal }) {
               href={signal.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-auto font-mono text-[11px] text-gold-400/70 transition hover:text-gold-400"
+              className="ml-auto font-mono text-[11px] text-gold-300/70 transition hover:text-gold-300"
             >
               View source →
             </a>

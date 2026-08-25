@@ -61,7 +61,7 @@ export function BuilderWizard({
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Review</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Review</span>
           <span className="font-mono text-[11px] text-fg-muted">
             {answeredCount}/{total} answered
           </span>
@@ -86,7 +86,7 @@ export function BuilderWizard({
             type="button"
             onClick={finalize}
             disabled={busy || answeredCount === 0}
-            className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+            className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
           >
             {busy ? "Earn is drafting…" : "✶ Make it institutional with Earn"}
           </button>
@@ -106,7 +106,7 @@ export function BuilderWizard({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           Step {step + 1} of {total}
         </span>
         <div className="h-1 w-28 overflow-hidden rounded-full bg-surface-2">
@@ -150,7 +150,7 @@ export function BuilderWizard({
         <button
           type="button"
           onClick={() => setStep((s) => s + 1)}
-          className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300"
+          className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300"
         >
           {step === total - 1 ? "Review →" : "Next →"}
         </button>

@@ -109,7 +109,7 @@ export function EnginePaneView({ engine, workflows, now }: { engine: TargetEngin
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-5">
-        <Link href="/grid" className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400 hover:text-gold-300">
+        <Link href="/grid" className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300 hover:text-gold-300">
           ← Execution Grid
         </Link>
         <div className="mt-1 flex items-center gap-2">

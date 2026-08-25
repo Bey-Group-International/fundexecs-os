@@ -200,7 +200,7 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
           type="button"
           onClick={() => setStage("preview")}
           disabled={mappedCount === 0}
-          className="self-end rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-gold-400 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          className="self-end rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
         >
           Preview →
         </button>
@@ -259,7 +259,7 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
             type="button"
             onClick={handleImport}
             disabled={importing}
-            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-gold-400 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             Import {rawRows.length} rows →
           </button>
@@ -272,7 +272,7 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
   if (stage === "importing") {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-4 py-6">
-        <span className="animate-pulse text-gold-400">◇</span>
+        <span className="animate-pulse text-gold-300">◇</span>
         <p className="text-sm text-fg-primary">Importing {rawRows.length} rows…</p>
       </div>
     );

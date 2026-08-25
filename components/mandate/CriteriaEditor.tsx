@@ -64,7 +64,7 @@ function ChipInput({
             <button
               type="button"
               onClick={() => remove(i)}
-              className="text-gold-400 transition hover:text-gold-300"
+              className="text-gold-300 transition hover:text-gold-300"
               aria-label={`Remove ${chip}`}
             >
               ×

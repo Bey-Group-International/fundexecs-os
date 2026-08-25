@@ -110,7 +110,7 @@ export function CoachingToastProvider({ children }: { children: ReactNode }) {
     error: "border-l-status-danger",
   };
   const TONE_BADGE: Record<ToastTone, string> = {
-    info: "text-gold-400",
+    info: "text-gold-300",
     success: "text-status-success",
     warn: "text-status-warning",
     error: "text-status-danger",

@@ -119,7 +119,7 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
         aria-hidden
       >
         <span
-          className={`flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-surface-1/90 text-gold-400 shadow-lg ${
+          className={`flex h-9 w-9 items-center justify-center rounded-full border border-gold-500/30 bg-surface-1/90 text-gold-300 shadow-lg ${
             refreshing ? "animate-spin" : ""
           }`}
           style={{ transform: refreshing ? undefined : `rotate(${progress * 270}deg)` }}

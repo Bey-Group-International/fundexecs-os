@@ -74,7 +74,7 @@ export default async function NetworkPage() {
   return (
     <div className="fx-ambient mx-auto max-w-6xl px-4 py-6">
       <header className="mb-6 animate-fade-up">
-        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_10px_2px_rgba(212,175,106,0.6)]" />
           Network OS
         </span>

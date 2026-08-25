@@ -77,7 +77,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
       {/* Live snapshot — the numbers a quarterly letter leads with */}
       <div className="rounded-2xl border border-line bg-gradient-to-b from-surface-1 to-surface-1/60 p-5">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Portfolio snapshot
           </span>
           <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
@@ -133,7 +133,7 @@ export async function ExecuteReportingModule({ orgId }: { orgId: string }) {
             <span className="text-fg-secondary">
               Expenses <span className="font-mono text-fg-primary">{usd(tax.items.expenses)}</span>
             </span>
-            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">estimated · review before filing</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">estimated · review before filing</span>
           </div>
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full border-collapse text-sm">

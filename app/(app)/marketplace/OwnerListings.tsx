@@ -105,7 +105,7 @@ export function OwnerListings({
             <p className="text-sm text-fg-muted">No listings match your filters.</p>
             <button
               onClick={ex.resetFilters}
-              className="mt-2 text-xs text-gold-400 underline underline-offset-2 hover:text-gold-300"
+              className="mt-2 text-xs text-gold-300 underline underline-offset-2 hover:text-gold-300"
             >
               Clear filters
             </button>
@@ -152,7 +152,7 @@ export function OwnerListings({
                         <form action={updateListingStatus}>
                           <input type="hidden" name="id" value={l.id} />
                           <input type="hidden" name="current" value={l.status} />
-                          <button className="rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-surface-0 transition hover:bg-gold-400">
+                          <button className="rounded-md bg-gold-500 px-2.5 py-1 text-xs font-medium text-on-gold transition hover:bg-gold-400">
                             {NEXT_LABEL[l.status]}
                           </button>
                         </form>
@@ -174,14 +174,14 @@ export function OwnerListings({
 
                       {l.status === "draft" && !l.summary ? (
                         <p className="mt-2 text-[11px] text-fg-muted">
-                          <span className="text-gold-400">Tip:</span> Add a summary so buyers know
+                          <span className="text-gold-300">Tip:</span> Add a summary so buyers know
                           what this is before you list it.
                         </p>
                       ) : null}
 
                       {matches?.length ? (
                         <div className="mt-3 rounded-lg border border-gold-500/25 bg-gold-500/[0.05] p-3">
-                          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                             Best-fit investors
                           </p>
                           <div className="mt-1.5 flex flex-col gap-2">

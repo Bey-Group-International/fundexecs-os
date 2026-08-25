@@ -9,7 +9,7 @@ function safeHex(value: string | null | undefined): string | null {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-5">
-      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-500 print:text-neutral-600">
+      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300 print:text-neutral-600">
         {title}
       </h3>
       {children}
@@ -28,7 +28,7 @@ function Swatch({ hex, label }: { hex: string; label?: string }) {
         {hex}
       </span>
       {label ? (
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-500 print:text-neutral-600">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300 print:text-neutral-600">
           {label}
         </span>
       ) : null}

@@ -83,7 +83,7 @@ export function EarnPlanner({
           <button
             type="submit"
             disabled={busy || !prompt.trim()}
-            className="flex h-9 items-center rounded-lg bg-gold-400 px-4 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
+            className="flex h-9 items-center rounded-lg bg-gold-400 px-4 text-xs font-semibold text-on-gold transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
           >
             {busy ? "Planning…" : "Plan with Earn"}
           </button>

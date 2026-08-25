@@ -94,7 +94,7 @@ export default async function LandingPage(
             </Link>
             <Link
               href="/login?mode=signup"
-              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
               Request access
             </Link>
@@ -249,7 +249,7 @@ export default async function LandingPage(
 
       <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="mb-8 text-center">
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
             FAQ
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -262,7 +262,7 @@ export default async function LandingPage(
       <div className="border-t border-line" />
 
       <section className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-24">
-        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
           Early access
         </p>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight">
@@ -281,7 +281,7 @@ export default async function LandingPage(
           </Link>
           <Link
             href="/login?mode=signup"
-            className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-surface-0 transition hover:opacity-90"
+            className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-on-gold transition hover:opacity-90"
           >
             Request access
           </Link>
@@ -305,7 +305,7 @@ export default async function LandingPage(
             </Link>
             <Link
               href="/login?mode=signup"
-              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+              className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
               Request access
             </Link>

@@ -11,7 +11,7 @@ function Ring({ value }: { value: number }) {
       <circle
         cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="6"
         strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
-        className="text-gold-400 transition-[stroke-dashoffset]"
+        className="text-gold-300 transition-[stroke-dashoffset]"
       />
     </svg>
   );
@@ -103,7 +103,7 @@ export function ReadinessPanel({
 
         <div className="min-w-0 flex-1">
           <div className={`flex flex-wrap items-center gap-2 ${floating ? "pr-6" : ""}`}>
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Investor Readiness
             </span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
@@ -118,7 +118,7 @@ export function ReadinessPanel({
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
           {nextStage ? (
-            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {gap} {gap === 1 ? "point" : "points"} to {nextStage.label}
             </p>
           ) : null}
@@ -130,7 +130,7 @@ export function ReadinessPanel({
                 <span
                   className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                     s.current
-                      ? "bg-gold-400 text-surface-0"
+                      ? "bg-gold-400 text-on-gold"
                       : s.unlocked
                         ? "border border-emerald-400/40 text-emerald-300"
                         : "border border-line text-fg-muted"
@@ -167,11 +167,11 @@ export function ReadinessPanel({
               href={action.href}
               className="flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
             >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-surface-0">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-on-gold">
                 {idx + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-300">
                   {action.impact} · {action.moduleLabel}
                 </span>
                 <span className="block truncate text-sm text-fg-primary">{action.label}</span>

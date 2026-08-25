@@ -26,7 +26,7 @@ export default async function OnboardingPage(
     <div className="fx-blueprint flex min-h-screen bg-surface-0">
       {/* Progress rail */}
       <div className="hidden w-72 flex-col border-r border-line bg-surface-1/55 p-10 backdrop-blur-xl lg:flex">
-        <span className="font-mono text-xs uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-xs uppercase tracking-[0.16em] text-gold-300">
           FundExecs OS
         </span>
         <div className="mt-12 flex flex-col gap-6">

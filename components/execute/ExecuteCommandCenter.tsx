@@ -11,7 +11,7 @@ function Ring({ value }: { value: number | null }) {
   const fill = value == null ? 0 : Math.min(100, (value / 2) * 100);
   const offset = c * (1 - fill / 100);
   const tone =
-    value == null ? "text-fg-muted" : value >= 1.5 ? "text-emerald-400" : value >= 1 ? "text-gold-400" : "text-status-danger";
+    value == null ? "text-fg-muted" : value >= 1.5 ? "text-emerald-400" : value >= 1 ? "text-gold-300" : "text-status-danger";
   return (
     <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
       <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-line" />
@@ -95,7 +95,7 @@ function ValueBridge({ perf }: { perf: ExecutePerformance }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Value bridge</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Value bridge</span>
         <span
           className={`font-display text-sm font-semibold ${
             totalValue >= called ? "text-emerald-300" : "text-status-danger"
@@ -140,7 +140,7 @@ function CapitalCard({ perf }: { perf: ExecutePerformance }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Capital position</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Capital position</span>
         <span
           className={`font-display text-sm font-semibold ${
             netCashflow >= 0 ? "text-emerald-300" : "text-fg-primary"
@@ -187,12 +187,12 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
   if (!perf.hasData) {
     return (
       <div className="mb-6 flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-10 text-center">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Portfolio command center
         </span>
         <p className="mt-2 max-w-sm text-sm text-fg-secondary">
           Nothing on the book yet. Add a holding in{" "}
-          <Link href="/execute/asset_management" className="text-gold-400 hover:underline">
+          <Link href="/execute/asset_management" className="text-gold-300 hover:underline">
             asset management
           </Link>{" "}
           and your NAV, multiples, and the capital ledger will compound here as you operate.
@@ -226,7 +226,7 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Portfolio performance
             </span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
@@ -290,7 +290,7 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
             <span
               className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                 s.current
-                  ? "bg-gold-400 text-surface-0"
+                  ? "bg-gold-400 text-on-gold"
                   : s.reached
                     ? "border border-emerald-400/40 text-emerald-300"
                     : "border border-line text-fg-muted"
@@ -324,11 +324,11 @@ export function ExecuteCommandCenter({ perf }: { perf: ExecutePerformance }) {
           href={perf.nextAction.href}
           className="mt-4 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3 transition hover:bg-gold-500/10"
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-surface-0">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-xs text-on-gold">
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-300">
               Next best move · {perf.nextAction.moduleLabel}
             </span>
             <span className="block truncate text-sm text-fg-primary">{perf.nextAction.label}</span>

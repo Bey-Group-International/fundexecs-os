@@ -69,10 +69,10 @@ export default async function SignPage(
       <SignPageShell>
         <div className="text-center py-16">
           <div className="text-5xl mb-4">🔍</div>
-          <h1 className="text-2xl font-semibold text-white mb-2">
+          <h1 className="text-2xl font-semibold text-fg-primary mb-2">
             Signing Link Not Found
           </h1>
-          <p className="text-slate-400">
+          <p className="text-fg-secondary">
             This signing link is invalid or has expired. Please contact the
             sender for a new link.
           </p>
@@ -89,10 +89,10 @@ export default async function SignPage(
       <SignPageShell>
         <div className="text-center py-16">
           <div className="text-5xl mb-4">⏳</div>
-          <h1 className="text-2xl font-semibold text-white mb-2">
+          <h1 className="text-2xl font-semibold text-fg-primary mb-2">
             Not Ready for Signing
           </h1>
-          <p className="text-slate-400">
+          <p className="text-fg-secondary">
             This document has not been sent for signing yet. Please contact the
             sender.
           </p>
@@ -106,10 +106,10 @@ export default async function SignPage(
       <SignPageShell>
         <div className="text-center py-16">
           <div className="text-5xl mb-4">✅</div>
-          <h1 className="text-2xl font-semibold text-white mb-2">
+          <h1 className="text-2xl font-semibold text-fg-primary mb-2">
             Already Signed
           </h1>
-          <p className="text-slate-400">
+          <p className="text-fg-secondary">
             This document was already signed on{" "}
             {signingData.signedAt
               ? new Date(signingData.signedAt).toLocaleDateString("en-US", {
@@ -122,7 +122,7 @@ export default async function SignPage(
               : "a previous date"}
             .
           </p>
-          <p className="text-slate-500 mt-2 text-sm">
+          <p className="text-fg-muted mt-2 text-sm">
             Please contact the sender if you have questions.
           </p>
         </div>
@@ -139,9 +139,9 @@ export default async function SignPage(
 
 function SignPageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#05090F] flex flex-col">
+    <div className="min-h-screen bg-surface-0 flex flex-col">
       {/* Header bar */}
-      <header className="border-b border-white/10 bg-[#0A111F]/80 backdrop-blur-md">
+      <header className="border-b border-line bg-surface-1/90 backdrop-blur-md">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div
@@ -150,12 +150,12 @@ function SignPageShell({ children }: { children: React.ReactNode }) {
             >
               FE
             </div>
-            <span className="text-white font-semibold text-sm tracking-wide">
+            <span className="text-fg-primary font-semibold text-sm tracking-wide">
               FundExecs
             </span>
           </div>
-          <div className="h-4 w-px bg-white/20" />
-          <span className="text-slate-400 text-sm">Document Signing</span>
+          <div className="h-4 w-px bg-line" />
+          <span className="text-fg-secondary text-sm">Document Signing</span>
         </div>
       </header>
 
@@ -165,7 +165,7 @@ function SignPageShell({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 py-4 text-center text-xs text-slate-600">
+      <footer className="border-t border-line py-4 text-center text-xs text-fg-muted">
         Powered by FundExecs &middot; Secure Document Signing
       </footer>
     </div>

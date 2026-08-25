@@ -377,7 +377,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                     <div className="flex items-center gap-2">
                       <Link
                         href={`/meetings/${m.room_code}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--gold-400)] text-black text-xs font-semibold px-3 py-1.5 hover:opacity-90 transition-opacity"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--gold-400)] text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 transition-opacity"
                       >
                         {isHost && m.status === "waiting" ? "Start meeting" : "Rejoin meeting"}
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

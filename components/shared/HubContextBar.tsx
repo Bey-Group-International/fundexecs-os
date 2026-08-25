@@ -102,7 +102,7 @@ export function HubContextBar({ stats, quickAction }: HubContextBarProps) {
           <button
             type="button"
             onClick={quickAction.onClick}
-            className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:bg-gold-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             + {quickAction.label}
           </button>
@@ -118,7 +118,7 @@ export function HubContextBar({ stats, quickAction }: HubContextBarProps) {
               }),
             )
           }
-          className="rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          className="rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           title="Ask Earn about this module"
         >
           ✦ Ask Earn

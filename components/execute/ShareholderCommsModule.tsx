@@ -94,7 +94,7 @@ export async function ShareholderCommsModule() {
             </option>
           ))}
         </select>
-        <button className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300">
+        <button className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300">
           + Draft
         </button>
       </form>

@@ -217,7 +217,7 @@ export function SchedulingSettings({
           type="button"
           onClick={() => void save()}
           disabled={saving}
-          className="rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save availability"}
         </button>

@@ -86,7 +86,7 @@ export function BrowseListings({
   const stats = [
     { label: "Live listings", value: String(listings.length), accent: "text-emerald-300" },
     { label: "Countries", value: countries ? String(countries) : "—" },
-    { label: "Firms", value: String(orgs), accent: "text-gold-400" },
+    { label: "Firms", value: String(orgs), accent: "text-gold-300" },
     { label: "Aggregate value", value: aggregate > 0 ? formatCompact(aggregate)! : "—" },
   ];
 
@@ -128,7 +128,7 @@ export function BrowseListings({
               <p className="text-sm text-fg-muted">No listings match your filters.</p>
               <button
                 onClick={ex.resetFilters}
-                className="mt-2 text-xs text-gold-400 underline underline-offset-2 hover:text-gold-300"
+                className="mt-2 text-xs text-gold-300 underline underline-offset-2 hover:text-gold-300"
               >
                 Clear filters
               </button>
@@ -154,7 +154,7 @@ export function BrowseListings({
                     index={i}
                     eyebrow={
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+                        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
                           {l.orgName ?? "Unknown firm"}
                         </span>
                         <TierBadge tier={l.ownerTier} />

@@ -115,7 +115,7 @@ export function ScenarioBar({
           type="button"
           onClick={save}
           disabled={pending}
-          className="rounded-md bg-gold-500 px-3 py-1 text-xs font-medium text-black transition hover:bg-gold-400 disabled:opacity-50"
+          className="rounded-md bg-gold-500 px-3 py-1 text-xs font-medium text-on-gold transition hover:bg-gold-400 disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save"}
         </button>

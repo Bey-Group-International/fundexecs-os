@@ -62,7 +62,7 @@ export function SourceFunnel({ live }: { live?: boolean; initialPrompt?: string 
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ Outcome Funnel
           </span>
           {!live ? (

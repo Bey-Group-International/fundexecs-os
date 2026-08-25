@@ -493,7 +493,7 @@ function ControlBar({
           }`}>
           ✨ <span className="hidden sm:inline">Copilot</span>
           {chatUnread > 0 && !copilotOpen && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-black text-[11px] font-bold flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-white text-[11px] font-bold flex items-center justify-center">
               {chatUnread}
             </span>
           )}
@@ -534,7 +534,7 @@ function WalkthroughPanel({
           </div>
           <button
             onClick={() => onNavigate(0)}
-            className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black text-xs font-semibold py-2.5 transition-colors"
+            className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-white text-xs font-semibold py-2.5 transition-colors"
           >
             Start walkthrough
           </button>
@@ -614,7 +614,7 @@ function WalkthroughPanel({
           className={`flex-1 rounded-lg text-xs font-semibold py-2 transition-colors ${
             isLast
               ? "bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/30 hover:bg-[var(--status-success)]/25"
-              : "bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black"
+              : "bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-white"
           }`}
         >
           {isLast ? "Finish ✓" : "Next →"}
@@ -822,7 +822,7 @@ function CopilotSidebar({
               <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Invite people</p>
               <button
                 onClick={() => { void navigator.clipboard.writeText(inviteLink).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-black text-xs font-semibold py-2 transition-colors">
+                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-white text-xs font-semibold py-2 transition-colors">
                 {copied ? "Link copied!" : "Copy invite link"}
               </button>
               <div className="flex gap-1.5 mt-1">
@@ -885,7 +885,7 @@ function CopilotSidebar({
             placeholder="Message everyone…"
             className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]" />
           <button onClick={sendChat} disabled={!chatInput.trim()}
-            className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-40 text-black text-xs font-semibold px-3 py-2 transition-colors">
+            className="rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-40 text-white text-xs font-semibold px-3 py-2 transition-colors">
             Send
           </button>
         </div>
@@ -2047,7 +2047,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <button
                 onClick={() => void joinMeeting()}
                 disabled={joining}
-                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-black text-sm font-semibold py-2.5 transition-colors"
+                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
               >
                 {joining ? (isHost ? "Starting…" : "Joining…") : (isHost ? "Start meeting" : "Join meeting")}
               </button>
@@ -2110,7 +2110,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           <div className="flex flex-col gap-3">
             <a
               href="/login?mode=signup"
-              className="w-full rounded-lg bg-[var(--gold-400)] text-black text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
+              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
             >
               Sign up free →
             </a>
@@ -2247,7 +2247,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
       {/* Report generation error banner */}
       {endError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
           <div className="rounded-2xl border border-[var(--status-danger)]/40 bg-[var(--surface-1)] shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4">
             <div className="flex items-start gap-3">
               <span className="text-xl shrink-0">⚠️</span>

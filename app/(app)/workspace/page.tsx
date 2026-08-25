@@ -138,7 +138,7 @@ export default async function SessionsPage({
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             FundExecs OS
           </span>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -209,7 +209,7 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
         <div className="relative flex flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
                 AI Operating Brief
               </p>
               <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-fg-primary">
@@ -230,8 +230,8 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
           <details className="group rounded-xl border border-line/70 bg-surface-0/70 px-3 py-2">
             <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted transition hover:text-fg-secondary">
               Show context and executive team
-              <span className="ml-2 text-gold-400 group-open:hidden">+</span>
-              <span className="ml-2 hidden text-gold-400 group-open:inline">-</span>
+              <span className="ml-2 text-gold-300 group-open:hidden">+</span>
+              <span className="ml-2 hidden text-gold-300 group-open:inline">-</span>
             </summary>
             <div className="mt-3 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
               <div>
@@ -310,7 +310,7 @@ function SessionCard({
       <span className="shrink-0 font-mono text-[11px] text-fg-muted">
         {relativeTime(s.updated_at ?? s.created_at ?? null)}
       </span>
-      <span className="shrink-0 font-mono text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-400">
+      <span className="shrink-0 font-mono text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-300">
         →
       </span>
     </Link>

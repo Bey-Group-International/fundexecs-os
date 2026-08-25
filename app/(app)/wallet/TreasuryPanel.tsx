@@ -113,7 +113,7 @@ export function TreasuryPanel({
               your bank.
             </p>
           </div>
-          <div className="rounded-xl border border-neural-400/25 bg-black/40 px-4 py-2 text-right">
+          <div className="rounded-xl border border-neural-400/25 bg-surface-0 px-4 py-2 text-right">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Available</p>
             <p className="mt-1 font-display text-lg font-semibold text-fg-primary">
               {fmt(summary.totalBalanceCents)}
@@ -179,7 +179,7 @@ export function TreasuryPanel({
         </div>
 
         {/* Transfer form */}
-        <form action={submitTransfer} className="mt-6 grid gap-3 rounded-2xl border border-line/40 bg-black/30 p-4 sm:grid-cols-[auto_1fr_auto]">
+        <form action={submitTransfer} className="mt-6 grid gap-3 rounded-2xl border border-line/40 bg-surface-0 p-4 sm:grid-cols-[auto_1fr_auto]">
           <select
             name="direction"
             className="rounded-lg border border-line/50 bg-surface-2/40 px-3 py-2 text-sm text-fg-primary"

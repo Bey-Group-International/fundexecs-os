@@ -111,10 +111,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  // One scheme, everywhere: the platform renders in its single bold palette
-  // regardless of the device's light/dark preference.
-  themeColor: "#050912",
-  colorScheme: "dark" as const,
+  // One scheme, everywhere: the platform renders in its single bold daylight
+  // palette regardless of the device's light/dark preference.
+  themeColor: "#F0F5FC",
+  colorScheme: "light" as const,
   // Extend content beneath the notch / home indicator so the app shell can
   // draw its own safe-area padding for an edge-to-edge installed experience.
   viewportFit: "cover" as const,
@@ -128,12 +128,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const supabase = supabaseOrigin();
-  // `dark` is permanent on <html>: Tailwind's dark: variants are class-driven,
-  // so every surface keeps its bold palette instead of flipping with the OS.
+  // No `dark` class, ever: Tailwind's dark: variants are class-driven, so
+  // leaving it off keeps every surface on the light palette regardless of the
+  // viewer's OS preference.
   return (
     <html
       lang="en"
-      className={`dark ${display.variable} ${sans.variable} ${mono.variable}`}
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <head>

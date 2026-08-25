@@ -91,7 +91,7 @@ export async function TrackRecordModule() {
           <input type="checkbox" name="is_realized" className="h-3.5 w-3.5 accent-gold-500" />
           Realized
         </label>
-        <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 sm:col-span-2">
+        <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 sm:col-span-2">
           Add record
         </button>
       </form>

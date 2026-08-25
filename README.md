@@ -26,11 +26,11 @@ It automates the **80% of time spent moving information** so you can focus on th
 
 ### Wallet and Earn Copilot Visual Refresh
 
-The visual system now has an electric-blue enterprise console treatment: one
-bold, high-contrast palette (no day/night switch, so wording stays legible on
-every device), compute-grid panels, glowing hierarchy, CSS-only activation
-streams, and an Earn copilot drawer that reads like an active operating-agent
-terminal.
+The visual system now has an electric-blue enterprise console treatment on a
+single bold, vibrant daylight palette (no day/night switch and no dark mode, so
+wording stays legible on every device), compute-grid panels, a clear elevation
+hierarchy, CSS-only activation streams, and an Earn copilot drawer that reads
+like an active operating-agent console.
 
 ![FundExecs OS wallet neural preview](./public/fundexecs-wallet-neural-preview.svg)
 

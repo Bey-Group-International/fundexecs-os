@@ -88,7 +88,7 @@ export default function RelationshipClient() {
             <div className="overflow-hidden rounded-2xl border border-line/60 bg-surface-1">
               <div className="flex items-center justify-between border-b border-line/60 px-4 py-2.5 text-xs text-ink-400">
                 <span>{data.signals.total} engagement event{data.signals.total === 1 ? "" : "s"}</span>
-                <Link href="/signals" className="text-gold-300 hover:text-gold-400">
+                <Link href="/signals" className="text-gold-300 hover:text-gold-300">
                   View all →
                 </Link>
               </div>
@@ -111,7 +111,7 @@ export default function RelationshipClient() {
               <ul className="mt-2 space-y-1.5">
                 {data.recommendations.map((r, i) => (
                   <li key={i} className="flex gap-2 text-sm text-surface-0">
-                    <span className="text-gold-400">→</span>
+                    <span className="text-gold-300">→</span>
                     <span>{r}</span>
                   </li>
                 ))}

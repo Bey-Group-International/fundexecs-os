@@ -545,7 +545,7 @@ function PersonRow({
         {/* Next action + intro path */}
         {p.nextAction && (
           <p className="mt-1.5 flex items-center gap-1.5 text-xs text-fg-secondary">
-            <svg className="h-3 w-3 shrink-0 text-gold-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="h-3 w-3 shrink-0 text-gold-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
             </svg>
             <span className="truncate">{p.nextAction}</span>

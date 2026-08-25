@@ -74,7 +74,7 @@ export function SessionGuard() {
   if (!expired) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm px-6 md:hidden print:hidden">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-6 md:hidden print:hidden">
       <div className="rounded-3xl border border-line bg-surface-1 p-6 text-center max-w-sm w-full">
         <span
           aria-hidden

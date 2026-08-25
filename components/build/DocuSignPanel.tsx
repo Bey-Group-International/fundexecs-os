@@ -207,7 +207,7 @@ function SendModal({ onClose, onSent }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4"
       onClick={handleBackdrop}
     >
       <div

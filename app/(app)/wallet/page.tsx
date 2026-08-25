@@ -131,7 +131,7 @@ export default async function WalletPage(
         </div>
       )}
 
-      <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+      <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
         Account summary
       </h2>
       <section className="fx-neural-panel p-5 sm:p-6">
@@ -144,7 +144,7 @@ export default async function WalletPage(
                 Available balance
               </p>
               <p className="mt-2 flex items-baseline gap-2 font-display text-5xl font-semibold tracking-tight text-fg-primary">
-                <span className="text-gold-400">◇</span>
+                <span className="text-gold-300">◇</span>
                 <span className="tabular-nums">{formatCredits(balance)}</span>
                 <span className="font-mono text-[11px] font-normal uppercase tracking-[0.16em] text-fg-muted">
                   compute credits
@@ -231,7 +231,7 @@ export default async function WalletPage(
         </div>
       </section>
 
-      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
         Choose a plan
       </h2>
       <PlanSelector
@@ -242,7 +242,7 @@ export default async function WalletPage(
         publishableKey={publishableKey}
       />
 
-      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
         Add credits
       </h2>
       <CreditPacks live={live} publishableKey={publishableKey} />

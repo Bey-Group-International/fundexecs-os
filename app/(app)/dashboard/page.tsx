@@ -107,7 +107,7 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
     <div className="fx-card p-5">
       <SectionHeading
         action={
-          <Link href="/source/lp_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/source/lp_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
             LP pipeline →
           </Link>
         }
@@ -166,7 +166,7 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
     <div className="fx-card p-5">
       <SectionHeading
         action={
-          <Link href="/source/deal_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/source/deal_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
             Deal pipeline →
           </Link>
         }
@@ -274,7 +274,7 @@ export default async function DashboardPage() {
         <div className="relative flex items-center justify-between gap-3 border-b border-line/60 px-5 py-2.5 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <Logo as="span" variant="coin" />
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">FundExecs OS</span>
             <span aria-hidden className="text-fg-muted/50">/</span>
             <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">Dashboard</span>
           </div>
@@ -335,7 +335,7 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2">
           <SectionHeading
             action={
-              <Link href="/activity" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
+              <Link href="/activity" className="font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline">
                 Full activity →
               </Link>
             }
@@ -366,7 +366,7 @@ export default async function DashboardPage() {
       <Link href="/build" className="fx-card fx-card-hover mt-4 flex items-center gap-4 p-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Investor Readiness</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Investor Readiness</span>
             <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {readiness.stage.label}
             </span>

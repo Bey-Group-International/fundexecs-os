@@ -30,7 +30,7 @@ export function MobileMoreMenu({
           <p id="fx-more-title" className="truncate text-[15px] font-semibold text-fg-primary">
             {name}
           </p>
-          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-400">{planName} plan</p>
+          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">{planName} plan</p>
         </div>
         <Link
           href="/settings/account"

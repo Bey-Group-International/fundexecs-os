@@ -29,7 +29,7 @@ export function EntityInsights({ insights }: { insights: EntityInsights }) {
   return (
     <div className="mb-5 rounded-2xl border border-line bg-surface-1 p-5">
       <div className="mb-3 flex items-center gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Structure &amp; ownership</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">Structure &amp; ownership</span>
         {topConcentration ? (
           <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Top holder {topConcentration.pct}% · {topConcentration.entityName}

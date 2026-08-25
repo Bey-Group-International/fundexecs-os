@@ -128,7 +128,7 @@ export default async function LoginPage(
             </div>
             <button
               formAction={isSignup ? signUp : signIn}
-              className="mt-2 rounded-md bg-gold-400 py-2.5 text-sm font-medium text-surface-0 transition hover:opacity-90"
+              className="mt-2 rounded-md bg-gold-400 py-2.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
               {isSignup ? "Create account" : "Sign in"}
             </button>
@@ -138,14 +138,14 @@ export default async function LoginPage(
             {isSignup ? (
               <>
                 Already have an account?{" "}
-                <Link href="/login" className="text-gold-400 hover:underline">
+                <Link href="/login" className="text-gold-300 hover:underline">
                   Sign in
                 </Link>
               </>
             ) : (
               <>
                 New here?{" "}
-                <Link href="/login?mode=signup" className="text-gold-400 hover:underline">
+                <Link href="/login?mode=signup" className="text-gold-300 hover:underline">
                   Create an account
                 </Link>
               </>

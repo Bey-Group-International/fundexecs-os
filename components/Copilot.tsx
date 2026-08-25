@@ -939,7 +939,7 @@ export default function Copilot({
             type="button"
             onClick={() => saveEditTurn(t)}
             disabled={!turnDraft.trim()}
-            className="rounded-lg bg-gold-400 px-3 py-1 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-gold-400 px-3 py-1 text-xs font-semibold text-on-gold transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Save
           </button>
@@ -993,7 +993,7 @@ export default function Copilot({
               renderTurnEditor(t)
             ) : (
               <>
-                <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+                <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(15_23_42/0.08)]">
                   {stripSystemAnnotations(t.content)}
                 </div>
                 {renderTurnControls(t, "end")}
@@ -1034,7 +1034,7 @@ export default function Copilot({
 
           {t.metrics && !t.streaming ? (
             <div className="mt-2 flex items-center gap-2 font-mono text-[11px] tracking-wider text-fg-muted/60">
-              <span className="text-gold-500/70">{t.metrics.latencyMs}ms</span>
+              <span className="text-gold-300/70">{t.metrics.latencyMs}ms</span>
               <span>·</span>
               <span>{t.metrics.chars.toLocaleString()} chars</span>
               <span>·</span>
@@ -1087,7 +1087,7 @@ export default function Copilot({
                       More
                     </button>
                     {responseMenuId === t.id ? (
-                    <div className="absolute left-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-line/80 bg-surface-1/95 p-1 shadow-[0_20px_48px_-28px_rgb(0_0_0/0.8)] backdrop-blur-xl">
+                    <div className="absolute left-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-line/80 bg-surface-1/95 p-1 shadow-[0_20px_48px_-28px_rgb(15_23_42/0.18)] backdrop-blur-xl">
                       <button
                         type="button"
                         onClick={() => {
@@ -1154,7 +1154,7 @@ export default function Copilot({
             <div className="mb-1 flex items-center justify-end gap-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               You
             </div>
-            <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
+            <div className="whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-line/70 bg-surface-2/80 px-4 py-3 text-sm leading-6 text-fg-primary shadow-[0_1px_2px_rgb(15_23_42/0.08)]">
               {stripSystemAnnotations(b.workflow.description || b.workflow.title)}
             </div>
           </div>
@@ -1318,7 +1318,7 @@ export default function Copilot({
             const totalTurns = chatTurns.filter((t) => t.role === "you").length + turns.length;
             return (
               <div className="flex items-center gap-0 overflow-x-auto border-b border-line/40 bg-surface-0/60 px-4 py-1.5 backdrop-blur-sm">
-                <span className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-400">Earn</span>
+                <span className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-300">Earn</span>
                 <span className="mx-2.5 text-line/60">·</span>
                 <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {activeModel.label}
@@ -1327,7 +1327,7 @@ export default function Copilot({
                   <>
                     <span className="mx-2.5 text-line/60">·</span>
                     <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider">
-                      <span className="text-gold-500/80">{lastEarnTurn.metrics.latencyMs}ms</span>
+                      <span className="text-gold-300/80">{lastEarnTurn.metrics.latencyMs}ms</span>
                     </span>
                     <span className="mx-2.5 text-line/60">·</span>
                     <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
@@ -1495,7 +1495,7 @@ export default function Copilot({
                 ) : null}
                 <button
                   disabled={busy || !prompt.trim()}
-                  className="mb-1 flex h-9 shrink-0 items-center rounded-lg bg-gold-400 px-3.5 text-xs font-semibold text-surface-0 shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
+                  className="mb-1 flex h-9 shrink-0 items-center rounded-lg bg-gold-400 px-3.5 text-xs font-semibold text-on-gold shadow-[0_0_18px_rgb(var(--fx-accent-rgb)/0.24)] transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {planning ? "Planning" : busy ? "Working" : "Send"}
                 </button>
@@ -1538,7 +1538,7 @@ export default function Copilot({
                   {openMenu === "plus" ? (
                     <div
                       role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(15_23_42/0.18)] backdrop-blur-xl"
                     >
                       <button
                         type="button"
@@ -1550,7 +1550,7 @@ export default function Copilot({
                         title="Have Earn decide whether to delegate or execute this directive, with an action plan"
                         className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <span aria-hidden className="font-mono text-gold-400">◆</span>
+                        <span aria-hidden className="font-mono text-gold-300">◆</span>
                         Plan with Earn
                       </button>
                       <button
@@ -1619,7 +1619,7 @@ export default function Copilot({
                   {openMenu === "integrations" ? (
                     <div
                       role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(15_23_42/0.18)] backdrop-blur-xl"
                     >
                       <button
                         type="button"
@@ -1709,7 +1709,7 @@ export default function Copilot({
                   {openMenu === "slash" ? (
                     <div
                       role="menu"
-                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl"
+                      className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line/85 bg-surface-1/95 p-1 shadow-[0_24px_60px_-32px_rgb(15_23_42/0.18)] backdrop-blur-xl"
                     >
                       <button
                         type="button"
@@ -1753,7 +1753,7 @@ export default function Copilot({
                     {openMenu === "model" ? (
                       <div
                         role="menu"
-                        className="absolute bottom-full right-0 mb-1.5 min-w-[160px] rounded-xl border border-line/80 bg-surface-1/95 py-1 shadow-[0_8px_32px_-8px_rgb(0_0_0/0.5)] backdrop-blur-sm"
+                        className="absolute bottom-full right-0 mb-1.5 min-w-[160px] rounded-xl border border-line/80 bg-surface-1/95 py-1 shadow-[0_8px_32px_-8px_rgb(15_23_42/0.14)] backdrop-blur-sm"
                       >
                         {EARN_MODELS.map((m) => (
                           <button
@@ -1764,7 +1764,7 @@ export default function Copilot({
                             className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-surface-2 ${model === m.key ? "text-gold-300" : "text-fg-secondary"}`}
                           >
                             <span className="text-sm">{m.label}</span>
-                            {model === m.key ? <span className="font-mono text-[11px] text-gold-400">✓</span> : null}
+                            {model === m.key ? <span className="font-mono text-[11px] text-gold-300">✓</span> : null}
                           </button>
                         ))}
                       </div>
@@ -1787,7 +1787,7 @@ export default function Copilot({
                     {openMenu === "mode" ? (
                       <div
                         role="menu"
-                        className="absolute bottom-full right-0 mb-1.5 min-w-[200px] rounded-xl border border-line/80 bg-surface-1/95 py-1 shadow-[0_8px_32px_-8px_rgb(0_0_0/0.5)] backdrop-blur-sm"
+                        className="absolute bottom-full right-0 mb-1.5 min-w-[200px] rounded-xl border border-line/80 bg-surface-1/95 py-1 shadow-[0_8px_32px_-8px_rgb(15_23_42/0.14)] backdrop-blur-sm"
                       >
                         {EARN_MODES.map((m) => (
                           <button
@@ -1799,7 +1799,7 @@ export default function Copilot({
                           >
                             <span className="flex items-center justify-between gap-2 text-sm">
                               {m.label}
-                              {mode === m.key ? <span className="font-mono text-[11px] text-gold-400">✓</span> : null}
+                              {mode === m.key ? <span className="font-mono text-[11px] text-gold-300">✓</span> : null}
                             </span>
                             <span className="font-mono text-[11px] text-fg-muted">{m.hint}</span>
                           </button>
@@ -1822,7 +1822,7 @@ export default function Copilot({
           {toasts.map((t) => (
             <div
               key={t.id}
-              className={`pointer-events-auto rounded-xl border px-3.5 py-2.5 text-sm shadow-[0_24px_60px_-32px_rgb(0_0_0/0.8)] backdrop-blur-xl ${
+              className={`pointer-events-auto rounded-xl border px-3.5 py-2.5 text-sm shadow-[0_24px_60px_-32px_rgb(15_23_42/0.18)] backdrop-blur-xl ${
                 t.tone === "warn"
                   ? "border-status-danger/40 bg-surface-1/95 text-fg-primary"
                   : "border-gold-500/40 bg-surface-1/95 text-fg-primary"
@@ -2006,7 +2006,7 @@ function WorkflowCard({
   const [detailsOverride, setDetailsOverride] = useState<boolean | null>(null);
   const detailsOpen = detailsOverride ?? livePhase;
   return (
-    <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
+    <article className={`rounded-2xl border bg-surface-1/82 p-4 shadow-[0_1px_2px_rgb(15_23_42/0.08)] sm:p-5 ${primary ? "border-gold-500/40 shadow-[0_0_36px_-28px_rgb(var(--fx-accent-rgb)/0.9)]" : "border-line/80"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-display text-lg font-semibold tracking-tight text-fg-primary">{workflow.title}</h2>
@@ -2016,7 +2016,7 @@ function WorkflowCard({
         </div>
         <div className="w-28 shrink-0 pt-1">
           <div className="mb-1 text-right font-mono text-[11px] text-fg-muted">{Math.round(workflow.progress * 100)}%</div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface-3 shadow-[inset_0_1px_2px_rgb(0_0_0/0.32)]">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-3 shadow-[inset_0_1px_2px_rgb(15_23_42/0.12)]">
             <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-gold-300 transition-all" style={{ width: `${Math.round(workflow.progress * 100)}%` }} />
           </div>
         </div>
@@ -2126,7 +2126,7 @@ function WorkflowCard({
             <div className="mt-3 rounded-xl border border-gold-500/30 bg-gold-500/[0.06] p-3">
               {clarify.questions.length > 0 ? (
                 <>
-                  <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     Earn needs to know
                   </p>
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-fg-secondary">
@@ -2160,7 +2160,7 @@ function WorkflowCard({
                   type="button"
                   disabled={busy || !clarify.answer.trim()}
                   onClick={() => decide(approval.id, "regenerate", clarify.answer.trim())}
-                  className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+                  className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
                 >
                   Submit &amp; refine
                 </button>
@@ -2173,7 +2173,7 @@ function WorkflowCard({
               type="button"
               disabled={busy}
               onClick={() => decide(approval.id, "approved")}
-              className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+              className="rounded-lg bg-gold-400 px-3 py-1.5 text-xs font-semibold text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
             >
               Approve &amp; automate
             </button>

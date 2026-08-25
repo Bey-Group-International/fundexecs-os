@@ -71,7 +71,7 @@ function EmptyState() {
       </p>
       <Link
         href="/envelopes/new"
-        className="mt-6 rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400"
+        className="mt-6 rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-on-gold shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400"
       >
         New Envelope
       </Link>
@@ -107,7 +107,7 @@ export async function SigningModule() {
         </div>
         <Link
           href="/envelopes/new"
-          className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-medium text-surface-0 shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400"
+          className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-medium text-on-gold shadow-[0_10px_24px_-14px_rgb(var(--fx-accent-rgb)/0.85)] transition hover:bg-gold-400"
         >
           <svg aria-hidden className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

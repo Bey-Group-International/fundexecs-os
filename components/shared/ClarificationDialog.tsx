@@ -63,7 +63,7 @@ export function ClarificationDialog({
       aria-modal="true"
       aria-label="Clarification needed"
       onClick={onSkip}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -71,7 +71,7 @@ export function ClarificationDialog({
       >
         {/* Header */}
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             ✦ Quick Clarification
           </span>
           <h2 className="text-sm font-medium text-fg-primary">{title}</h2>
@@ -110,7 +110,7 @@ export function ClarificationDialog({
           <button
             type="button"
             onClick={handleConfirm}
-            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             Confirm & run →
           </button>

@@ -11,7 +11,7 @@ export interface GPScorecard {
 
 function scoreColor(score: number): string {
   if (score >= 70) return "text-emerald-300";
-  if (score >= 40) return "text-gold-400";
+  if (score >= 40) return "text-gold-300";
   return "text-fg-muted";
 }
 

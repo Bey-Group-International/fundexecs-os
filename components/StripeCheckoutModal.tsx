@@ -30,7 +30,7 @@ export function StripeCheckoutModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {
@@ -39,7 +39,7 @@ export function StripeCheckoutModal({
     >
       <div className="relative my-8 w-full max-w-xl rounded-2xl border border-line bg-surface-1 p-2 shadow-2xl">
         <div className="flex items-center justify-between px-3 py-2">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300">
             Secure checkout
           </span>
           <button

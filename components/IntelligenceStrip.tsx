@@ -79,7 +79,7 @@ function InsightCard({ insight }: { insight: IntelligenceInsight }) {
       {insight.actionLabel && insight.actionHref && (
         <a
           href={insight.actionHref}
-          className="mt-auto inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+          className="mt-auto inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-300"
         >
           {insight.actionLabel}
           <span aria-hidden>→</span>

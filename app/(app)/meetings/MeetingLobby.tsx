@@ -88,7 +88,7 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
                 disabled={isPending}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-3 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {isPending ? <SpinnerIcon /> : <VideoIcon />}
                 {isPending ? "Starting…" : "New meeting"}

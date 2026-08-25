@@ -107,7 +107,7 @@ function ItemRow({ item, overdue }: { item: AgendaItem; overdue: boolean }) {
           type="button"
           onClick={onChase}
           disabled={pending}
-          className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-400 disabled:opacity-50"
+          className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-300 disabled:opacity-50"
         >
           {pending ? "Routing…" : "Have Earn chase this"}
         </button>
@@ -118,7 +118,7 @@ function ItemRow({ item, overdue }: { item: AgendaItem; overdue: boolean }) {
             ) : null}
             <Link
               href={`/session/${result.sessionId}`}
-              className="text-gold-300 transition hover:text-gold-400"
+              className="text-gold-300 transition hover:text-gold-300"
             >
               Open session →
             </Link>

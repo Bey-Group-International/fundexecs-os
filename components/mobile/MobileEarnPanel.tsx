@@ -31,7 +31,7 @@ export function MobileEarnPanel({ name }: { name: string }) {
           <EarnIcon width={22} height={22} />
         </span>
         <div className="min-w-0">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Earn · Executive copilot</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">Earn · Executive copilot</p>
           <p className="mt-0.5 text-[14px] font-semibold text-fg-primary">Hi {first} — what are we moving forward?</p>
         </div>
       </div>

@@ -157,7 +157,7 @@ function FundRowItem({
           <span
             aria-hidden
             className={`inline-block font-mono text-[11px] text-fg-muted transition-transform ${
-              open ? "rotate-90 text-gold-400" : ""
+              open ? "rotate-90 text-gold-300" : ""
             }`}
           >
             →
@@ -220,7 +220,7 @@ export function FundScoringBoard({ rows }: { rows: Row[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-gold-500/20 bg-gold-500/[0.04] p-4">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
           How this score works
         </p>
         <p className="mt-1.5 text-xs leading-5 text-fg-secondary">

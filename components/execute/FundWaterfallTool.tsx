@@ -119,7 +119,7 @@ export default function FundWaterfallTool({ saved = [] }: { saved?: SavedScenari
         aria-expanded={open}
       >
         <span>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Fund-life waterfall
           </span>
           <span className="ml-2 text-sm text-fg-secondary">
@@ -271,7 +271,7 @@ export default function FundWaterfallTool({ saved = [] }: { saved?: SavedScenari
                 <tbody className="font-mono">
                   {result.distributions.map((d, i) => (
                     <tr key={i} className="border-b border-line/40">
-                      <td className="py-1.5 pr-3 text-gold-400">{d.period}</td>
+                      <td className="py-1.5 pr-3 text-gold-300">{d.period}</td>
                       <td className="py-1.5 pr-3 text-fg-primary">{money(d.distribution)}</td>
                       <td className="py-1.5 pr-3 text-fg-secondary">{money(d.roc)}</td>
                       <td className="py-1.5 pr-3 text-fg-secondary">{money(d.prefToLps)}</td>

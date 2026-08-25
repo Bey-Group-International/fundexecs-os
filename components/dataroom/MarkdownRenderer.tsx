@@ -155,7 +155,7 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
               ? "font-display text-xl font-semibold text-fg-primary mt-6 first:mt-0"
               : tok.level === 2
                 ? "font-display text-base font-semibold text-fg-primary mt-5 first:mt-0"
-                : "font-mono text-[11px] uppercase tracking-widest text-gold-400 mt-4 first:mt-0";
+                : "font-mono text-[11px] uppercase tracking-widest text-gold-300 mt-4 first:mt-0";
           return <p key={idx} className={cls}><Inline text={tok.text} /></p>;
         }
 

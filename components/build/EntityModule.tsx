@@ -115,7 +115,7 @@ export async function EntityModule() {
         </select>
         <input name="formation_date" type="date" className={inputClass} />
         <input name="notes" placeholder="Notes" className={`${inputClass} sm:col-span-2`} />
-        <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 sm:col-span-2">
+        <button className="justify-self-start rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 sm:col-span-2">
           Add entity
         </button>
       </form>

@@ -25,7 +25,7 @@ export function MobileSectionHeader({
         )}
       </h2>
       {href && (
-        <Link href={href} className="fx-tap text-[12px] font-medium text-gold-400 transition active:opacity-70">
+        <Link href={href} className="fx-tap text-[12px] font-medium text-gold-300 transition active:opacity-70">
           {action} ›
         </Link>
       )}

@@ -127,7 +127,7 @@ export function ExecuteBilling({
   return (
     <div className="flex flex-col gap-8">
       <header>
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Execute · Invoices
         </span>
         <h1 className="mt-2 font-display text-2xl font-semibold text-fg-primary">

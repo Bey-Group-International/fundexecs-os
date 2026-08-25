@@ -85,7 +85,7 @@ export default async function GiftEarnPage(
             {stats.map((s) => (
               <div
                 key={s.label}
-                className={`flex flex-col gap-1.5 bg-black/40 px-5 py-4 ${
+                className={`flex flex-col gap-1.5 bg-surface-0 px-5 py-4 ${
                   s.accent ? "border-t-2 border-t-gold-400/70" : "border-t-2 border-t-transparent"
                 }`}
               >
@@ -100,7 +100,7 @@ export default async function GiftEarnPage(
                   }`}
                 >
                   {s.accent && (
-                    <span className="mr-1 text-gold-400 drop-shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.6)]">
+                    <span className="mr-1 text-gold-300 drop-shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.6)]">
                       ◇
                     </span>
                   )}
@@ -164,7 +164,7 @@ export default async function GiftEarnPage(
           </div>
 
           {/* How rewards compound */}
-          <div className="rounded-2xl border border-neural-400/20 bg-surface-0/85 p-5 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
+          <div className="rounded-2xl border border-neural-400/20 bg-surface-0/85 p-5 shadow-[0_1px_2px_rgb(15_23_42/0.10)]">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
               How rewards compound
             </p>
@@ -211,7 +211,7 @@ export default async function GiftEarnPage(
           </div>
 
           {/* Redeem */}
-          <div className="rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 p-5 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
+          <div className="rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 p-5 shadow-[0_1px_2px_rgb(15_23_42/0.10)]">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
               Redeem a code
             </p>
@@ -226,13 +226,13 @@ export default async function GiftEarnPage(
         <section className="flex flex-col gap-4">
           {/* Your network */}
           <div>
-            <p className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
               Your network
             </p>
             {summary.downline.length === 0 ? (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line/60 bg-surface-1/30 px-6 py-10 text-center">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full border border-gold-400/25 bg-gold-400/[0.06]">
-                  <span className="text-xl text-gold-400/60">◇</span>
+                  <span className="text-xl text-gold-300/60">◇</span>
                 </div>
                 <p className="text-sm text-fg-secondary">No introductions yet.</p>
                 <p className="text-xs text-fg-muted">
@@ -240,7 +240,7 @@ export default async function GiftEarnPage(
                 </p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-neural-400/20 bg-surface-0/85 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
+              <div className="overflow-hidden rounded-2xl border border-neural-400/20 bg-surface-0/85 shadow-[0_1px_2px_rgb(15_23_42/0.10)]">
                 <div className="flex items-center justify-between border-b border-neural-400/15 px-4 py-3">
                   <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                     {summary.totalDownline} firm{summary.totalDownline !== 1 ? "s" : ""} in network
@@ -286,7 +286,7 @@ export default async function GiftEarnPage(
 
           {/* Gift credits */}
           <div className="mt-2">
-            <p className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
               Gift credits
             </p>
             <div className="fx-neural-card p-5">
@@ -301,7 +301,7 @@ export default async function GiftEarnPage(
 
           {/* Sent gifts */}
           {gifts.length > 0 && (
-            <div className="overflow-hidden rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
+            <div className="overflow-hidden rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 shadow-[0_1px_2px_rgb(15_23_42/0.10)]">
               <div className="border-b border-line/60 px-4 py-3">
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Gifts you&apos;ve sent

@@ -151,7 +151,7 @@ export default async function SettingsPage() {
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-8">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           Settings
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -500,7 +500,7 @@ function Section({
   return (
     <section id={id} className="scroll-mt-6">
       <header className="mb-4">
-        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400/80">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-300/80">
           {eyebrow}
         </span>
         <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-fg-primary">
@@ -533,7 +533,7 @@ function RowLink({
         <p className="text-sm font-medium text-fg-primary">{label}</p>
         <p className="mt-0.5 text-xs text-fg-muted">{hint}</p>
       </div>
-      <span className="font-mono text-fg-muted transition group-hover:text-gold-400">
+      <span className="font-mono text-fg-muted transition group-hover:text-gold-300">
         {external ? "↗" : "→"}
       </span>
     </div>

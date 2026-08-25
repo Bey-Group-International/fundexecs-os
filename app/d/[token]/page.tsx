@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 function Unavailable() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
-      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
         FundExecs OS
       </span>
       <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">
@@ -69,7 +69,7 @@ export default async function SharedDealPage(props: { params: Promise<{ token: s
 
   return (
     <main className="fx-ambient mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-16">
-      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
         Confidential deal teaser · FundExecs OS
       </span>
       <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -89,7 +89,7 @@ export default async function SharedDealPage(props: { params: Promise<{ token: s
       </dl>
 
       <div className="fx-card mt-6 p-5">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">The teaser</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-300">The teaser</p>
         <p className="mt-2 text-sm leading-relaxed text-fg-secondary">{share.memo}</p>
       </div>
 

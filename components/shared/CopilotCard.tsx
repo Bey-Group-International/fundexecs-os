@@ -128,7 +128,7 @@ export function CopilotCard({ data }: { data: CopilotCardData }) {
             <ul className="mt-2 mb-1 space-y-1.5">
               {data.keyFindings.slice(0, 5).map((finding, i) => (
                 <li key={i} className="flex gap-2 text-sm text-fg-secondary">
-                  <span className="text-gold-400 shrink-0">·</span>
+                  <span className="text-gold-300 shrink-0">·</span>
                   <span>{finding}</span>
                 </li>
               ))}
@@ -192,7 +192,7 @@ export function CopilotCard({ data }: { data: CopilotCardData }) {
               onClick={action.onClick}
               className={
                 action.primary
-                  ? "rounded-lg bg-gold-500 px-3 py-1.5 text-sm font-medium text-black transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                  ? "rounded-lg bg-gold-500 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
                   : "rounded-lg border border-line px-3 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
               }
             >

@@ -178,7 +178,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
       type="button"
       onClick={() => setTab(t)}
       className={`rounded-md px-3 py-1.5 text-sm transition ${
-        tab === t ? "bg-gold-400 text-surface-0" : "border border-line text-fg-secondary hover:text-fg-primary"
+        tab === t ? "bg-gold-400 text-on-gold" : "border border-line text-fg-secondary hover:text-fg-primary"
       }`}
     >
       {label}
@@ -190,7 +190,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
       type="button"
       onClick={() => setPaneMode(mode)}
       className={`px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
-        paneMode === mode ? "text-gold-400" : "text-fg-muted hover:text-fg-secondary"
+        paneMode === mode ? "text-gold-300" : "text-fg-muted hover:text-fg-secondary"
       }`}
     >
       {label}
@@ -233,7 +233,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
           {isLink ? (
             <p className="-mt-2 text-xs text-fg-muted">
               This is a linked file.{" "}
-              <a href={doc.storage_key ?? "#"} target="_blank" rel="noopener noreferrer" className="text-gold-400 hover:underline">
+              <a href={doc.storage_key ?? "#"} target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:underline">
                 Open original →
               </a>{" "}
               Any notes you write below are saved with this document.
@@ -287,7 +287,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                       disabled={busy}
                       className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 px-4 py-3 text-left transition hover:border-gold-500/40 disabled:opacity-60"
                     >
-                      <span className="text-gold-400">✶</span>
+                      <span className="text-gold-300">✶</span>
                       <div>
                         <p className="text-sm font-medium text-fg-primary">Generate from my data</p>
                         <p className="text-xs text-fg-muted">Builds a first draft from your profile, thesis, and track record.</p>
@@ -298,7 +298,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                       onClick={() => setShowTemplatePicker(true)}
                       className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 px-4 py-3 text-left transition hover:border-gold-500/40"
                     >
-                      <span className="text-gold-400">⊞</span>
+                      <span className="text-gold-300">⊞</span>
                       <div>
                         <p className="text-sm font-medium text-fg-primary">Start from a template</p>
                         <p className="text-xs text-fg-muted">Choose an institutional template for this section.</p>
@@ -309,7 +309,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                       onClick={() => setTab("earn")}
                       className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 px-4 py-3 text-left transition hover:border-gold-500/40"
                     >
-                      <span className="text-gold-400">✶</span>
+                      <span className="text-gold-300">✶</span>
                       <div>
                         <p className="text-sm font-medium text-fg-primary">Draft with Earn</p>
                         <p className="text-xs text-fg-muted">Chat with Earn to write the document collaboratively.</p>
@@ -318,7 +318,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   </div>
                   <p className="text-xs text-fg-muted">
                     Or{" "}
-                    <button type="button" onClick={() => setTab("import")} className="text-gold-400 hover:underline">
+                    <button type="button" onClick={() => setTab("import")} className="text-gold-300 hover:underline">
                       import from a file
                     </button>
                     .
@@ -336,7 +336,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                     type="button"
                     onClick={compose}
                     disabled={busy}
-                    className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+                    className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
                   >
                     {busy ? "Composing…" : "✶ Compose from my data"}
                   </button>
@@ -405,7 +405,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                       type="button"
                       onClick={() => void sendEarn()}
                       disabled={busy}
-                      className="rounded-md bg-gold-400 px-4 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+                      className="rounded-md bg-gold-400 px-4 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
                     >
                       Send
                     </button>
@@ -477,7 +477,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                   type="button"
                   onClick={() => save()}
                   disabled={pending}
-                  className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+                  className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
                 >
                   {dirtySaved === "saving" ? "Saving…" : "Save"}
                 </button>
@@ -550,7 +550,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
                             setChatInput(`Please add the following to this document: ${g}`);
                             setTab("earn");
                           }}
-                          className="ml-auto shrink-0 rounded text-[11px] text-gold-400 hover:underline"
+                          className="ml-auto shrink-0 rounded text-[11px] text-gold-300 hover:underline"
                         >
                           Fix with Earn →
                         </button>
@@ -601,7 +601,7 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
         {sidePanel === "history" && (
           <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-0 p-4">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Version History</span>
+              <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Version History</span>
               <button type="button" onClick={() => setSidePanel("none")} className="text-fg-muted hover:text-fg-primary">
                 ✕
               </button>

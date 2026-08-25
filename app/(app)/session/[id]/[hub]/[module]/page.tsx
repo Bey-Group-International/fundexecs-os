@@ -22,7 +22,7 @@ export default async function SessionModulePage(
     <div className="mx-auto max-w-4xl">
       {hub && mod ? (
         <header className="mb-4">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             {hub.label} · in session
           </p>
           <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">

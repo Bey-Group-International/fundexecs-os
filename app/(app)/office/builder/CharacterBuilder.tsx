@@ -86,7 +86,7 @@ export function CharacterBuilder({
       {/* ── Live preview ── */}
       <div className="md:sticky md:top-4 md:self-start">
         <div className="fx-card overflow-hidden p-0">
-          <div className="relative flex items-center justify-center bg-[#070c16] py-6">
+          <div className="relative flex items-center justify-center bg-surface-3 py-6">
             <div
               className="pointer-events-none absolute inset-0 opacity-70"
               style={{
@@ -180,7 +180,7 @@ export function CharacterBuilder({
                       : "border-line hover:border-gold-500/40"
                   }`}
                 >
-                  <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-md bg-[#070c16]">
+                  <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-md bg-surface-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={p.portrait}

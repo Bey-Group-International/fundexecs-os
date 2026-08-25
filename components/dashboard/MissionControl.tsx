@@ -14,7 +14,7 @@ import {
 
 const TONE_RING: Record<SignalTone, string> = {
   good: "text-emerald-400",
-  warn: "text-gold-400",
+  warn: "text-gold-300",
   muted: "text-fg-muted",
 };
 
@@ -74,7 +74,7 @@ function HubTile({ signal }: { signal: HubSignal }) {
         style={{ background: TONE_STRIPE[tone] }}
       />
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           {signal.label}
         </span>
         {signal.score == null ? (
@@ -96,7 +96,7 @@ function HubTile({ signal }: { signal: HubSignal }) {
 
       {signal.nextAction ? (
         <span className="mt-auto flex items-center gap-1.5 text-xs text-fg-secondary transition group-hover:text-gold-300">
-          <span className="font-mono text-[11px] text-gold-400">→</span>
+          <span className="font-mono text-[11px] text-gold-300">→</span>
           <span className="truncate">{signal.nextAction.label}</span>
         </span>
       ) : (

@@ -101,7 +101,7 @@ export async function NdaSignatures() {
                     {sig.signer_email ? (
                       <a
                         href={`mailto:${sig.signer_email}`}
-                        className="hover:text-gold-400 hover:underline"
+                        className="hover:text-gold-300 hover:underline"
                       >
                         {sig.signer_email}
                       </a>

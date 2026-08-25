@@ -13,7 +13,7 @@ const ACTION_TYPE_META: Record<
   contact_overdue: { icon: "◌", label: "Overdue", color: "text-red-400" },
   cadence_due: { icon: "○", label: "Cadence due", color: "text-amber-400" },
   meeting_prep: { icon: "◎", label: "Meeting prep", color: "text-blue-400" },
-  deal_followup: { icon: "◈", label: "Deal follow-up", color: "text-gold-400" },
+  deal_followup: { icon: "◈", label: "Deal follow-up", color: "text-gold-300" },
   lp_update: { icon: "▣", label: "LP update", color: "text-emerald-400" },
   intro_request: { icon: "⟳", label: "Intro", color: "text-purple-400" },
 };

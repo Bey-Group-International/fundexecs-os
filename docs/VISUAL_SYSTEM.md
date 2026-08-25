@@ -1,11 +1,21 @@
 # FundExecs OS visual system
 
 FundExecs OS uses an institutional command-center language in a single bold,
-high-contrast palette. There is no day/night switch and no OS-driven variant:
-`<html>` carries `dark` permanently and Tailwind runs in `darkMode: "class"`, so
-a `dark:` utility never flips with the viewer's system preference. Keep visual
-changes scoped to the surface they serve so the app does not drift into
-competing themes.
+vibrant **daylight** palette. There is no day/night switch, no dark mode, and no
+OS-driven variant: nothing ever sets the `dark` class and Tailwind runs in
+`darkMode: "class"`, so a `dark:` utility never fires. Keep visual changes scoped
+to the surface they serve so the app does not drift into competing themes.
+
+Two consequences worth knowing before you style anything:
+
+- **Never hand-darken a surface.** `bg-black`, `bg-white/5`, `border-white/10`,
+  and literal dark hexes do not follow the palette and will strand a panel in
+  the old scheme. Use the surface ramp (`surface-0` … `surface-3`) and `line`.
+  The only surfaces that stay dark on purpose are modal scrims
+  (`bg-slate-900/40`), video tiles, and sprite shadows.
+- **Ink follows the fill.** The blue accent (`neural-*`, and the semantic
+  `--gold-*` vars) is deep enough for white text. The warm `gold-*` ramp is
+  bright amber and takes `text-on-gold` instead — white on it fails contrast.
 
 ## Accent zones
 
@@ -32,8 +42,11 @@ Wording has to survive a real trading desk, not a design screenshot:
   uppercase labels apart into loose letters instead of words.
 - **Prefer sentence case over uppercase mono for anything clickable.** Uppercase
   mono is for section eyebrows; controls read as controls.
-- `--fx-fg-muted` is the lowest-contrast text token. If a label needs to be
-  quieter than that, it probably should not be on the screen.
+- `--fx-fg-muted` is the lowest-contrast text token (~5:1 on the page). If a
+  label needs to be quieter than that, it probably should not be on the screen.
+- Elevation does the work shadows and glows used to do on black: a card is a
+  visible `line` border plus a soft neutral shadow. Accent glows are decoration
+  now, not separation — do not rely on one to divide two surfaces.
 
 ## Shared utilities
 

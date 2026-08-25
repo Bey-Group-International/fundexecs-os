@@ -25,8 +25,8 @@ const STAGE_TONE: Record<string, string> = {
   sourced: "text-fg-secondary border-line",
   screening: "text-neural-300 border-neural-400/40",
   diligence: "text-neural-300 border-neural-400/40",
-  underwriting: "text-gold-400 border-gold-500/40",
-  ic_review: "text-gold-400 border-gold-500/40",
+  underwriting: "text-gold-300 border-gold-500/40",
+  ic_review: "text-gold-300 border-gold-500/40",
   closing: "text-status-success border-status-success/40",
   owned: "text-status-success border-status-success/40",
   exited: "text-fg-muted border-line",
@@ -93,7 +93,7 @@ export function MobileDealCard({ deal }: { deal: MobileDeal }) {
               {fit}% fit
             </span>
           )}
-          <span aria-hidden className="ml-auto text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-400">
+          <span aria-hidden className="ml-auto text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-300">
             ›
           </span>
         </div>

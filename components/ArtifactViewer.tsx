@@ -655,7 +655,7 @@ export function ArtifactInline({
       {isLong && (
         <button
           onClick={() => setExpanded((e) => !e)}
-          className="mt-2 font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
+          className="mt-2 font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:text-gold-300"
         >
           {expanded ? "Collapse ↑" : "Read full output ↓"}
         </button>

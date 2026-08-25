@@ -52,7 +52,7 @@ export function ModuleDashboard({ summary, empty }: { summary: ModuleSummary; em
   return (
     <details className="mb-5 group">
       <summary className="mb-3 flex cursor-pointer items-center gap-2 select-none list-none">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted group-open:text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted group-open:text-gold-300">
           Stats
         </span>
         <span className="font-mono text-[11px] text-fg-muted group-open:hidden">▸</span>
@@ -66,7 +66,7 @@ export function ModuleDashboard({ summary, empty }: { summary: ModuleSummary; em
         </div>
         {summary.funnel ? (
           <div className="rounded-xl border border-line bg-surface-1 p-4">
-            <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-400">
+            <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {summary.funnel.title}
             </div>
             <div className="space-y-2">

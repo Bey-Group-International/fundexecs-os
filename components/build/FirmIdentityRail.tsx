@@ -49,7 +49,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
       <circle
         cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth="5"
         strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
-        className="text-gold-400 transition-[stroke-dashoffset] duration-500"
+        className="text-gold-300 transition-[stroke-dashoffset] duration-500"
       />
     </svg>
   );
@@ -221,7 +221,7 @@ function InterviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fx-scrim-enter absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fx-scrim-enter absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
@@ -229,7 +229,7 @@ function InterviewModal({
         className="fx-sheet-enter relative w-full max-w-lg overflow-hidden rounded-2xl border border-gold-500/25 bg-surface-1 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             Guided interview
           </span>
           <button
@@ -270,7 +270,7 @@ function InterviewModal({
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                   {q!.sectionLabel} · Step {step + 1} of {total}
                 </span>
                 <div className="h-1 w-28 overflow-hidden rounded-full bg-surface-2">
@@ -359,7 +359,7 @@ export function FirmIdentityRail({
             </span>
           </div>
           <div className="min-w-0">
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
               Firm Identity
             </p>
             <p className="mt-0.5 truncate font-display text-base font-semibold text-fg-primary">

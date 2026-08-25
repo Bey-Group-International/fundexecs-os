@@ -91,7 +91,7 @@ const FIELD =
   "w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none focus:ring-1 focus:ring-gold-500/40";
 const LABEL = "mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 const BTN =
-  "inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-on-gold transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_GHOST =
   "inline-flex items-center justify-center rounded-lg border border-line bg-surface-0 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-50";
 

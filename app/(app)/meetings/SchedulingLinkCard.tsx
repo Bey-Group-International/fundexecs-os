@@ -157,7 +157,7 @@ export function SchedulingLinkCard() {
           <button
             type="button"
             onClick={() => void copyLink()}
-            className="rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-500)]"
+            className="rounded-lg bg-[var(--gold-400)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)]"
           >
             {copied ? "Copied" : "Copy link"}
           </button>
@@ -219,7 +219,7 @@ export function SchedulingLinkCard() {
                       type="button"
                       disabled={busyId === booking.id}
                       onClick={() => void decide(booking, "approve")}
-                      className="rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-[var(--gold-500)] disabled:opacity-50"
+                      className="rounded-lg bg-[var(--gold-400)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:opacity-50"
                     >
                       Approve
                     </button>

@@ -114,7 +114,7 @@ export function RunSearch({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             ✶ AI Evaluate
           </span>
           {!live ? (
@@ -184,7 +184,7 @@ export function RunSearch({
           <button
             type="submit"
             disabled={busy || !prompt.trim()}
-            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-50"
+            className="shrink-0 rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-50"
           >
             {busy ? "Working…" : "Evaluate"}
           </button>
@@ -245,7 +245,7 @@ export function RunSearch({
             .map((s) => (
               <div key={s.id} className="rounded-2xl border border-line bg-surface-1 p-4">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     {s.title} · {s.agentName}
                   </span>
                 </div>

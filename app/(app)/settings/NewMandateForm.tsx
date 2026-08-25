@@ -29,7 +29,7 @@ export function NewMandateForm({
       }
       className="rounded-xl border border-line bg-surface-1 p-4"
     >
-      <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-300">
         New mandate
       </p>
 
@@ -66,7 +66,7 @@ export function NewMandateForm({
         <button
           type="submit"
           disabled={pending}
-          className="ml-auto rounded-md bg-gold-500 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-400 disabled:opacity-60"
+          className="ml-auto rounded-md bg-gold-500 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-400 disabled:opacity-60"
         >
           {pending ? "Saving…" : "Activate mandate"}
         </button>

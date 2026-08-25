@@ -76,7 +76,7 @@ export function FormationWizard({ parents }: { parents: { id: string; name: stri
       {/* Header + progress */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-300">
             Form a vehicle · Step {step + 1} of {total}
           </span>
         </div>
@@ -212,7 +212,7 @@ export function FormationWizard({ parents }: { parents: { id: string; name: stri
             <button
               type="submit"
               disabled={!name.trim()}
-              className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+              className="rounded-md bg-gold-400 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
             >
               Create vehicle
             </button>
@@ -235,7 +235,7 @@ export function FormationWizard({ parents }: { parents: { id: string; name: stri
             type="button"
             onClick={() => canNext && setStep((s) => s + 1)}
             disabled={!canNext}
-            className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-surface-0 transition hover:bg-gold-300 disabled:opacity-60"
+            className="rounded-md bg-gold-400 px-4 py-1.5 text-sm font-medium text-on-gold transition hover:bg-gold-300 disabled:opacity-60"
           >
             {step === 1 ? "Review →" : "Next →"}
           </button>

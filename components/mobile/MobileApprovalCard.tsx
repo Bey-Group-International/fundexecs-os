@@ -13,7 +13,7 @@ export interface MobileApproval {
 
 const RISK_META: Record<string, { label: string; cls: string }> = {
   high: { label: "High-sensitivity", cls: "border-status-danger/40 text-status-danger" },
-  medium: { label: "Review", cls: "border-gold-500/40 text-gold-400" },
+  medium: { label: "Review", cls: "border-gold-500/40 text-gold-300" },
   low: { label: "Routine", cls: "border-status-success/40 text-status-success" },
 };
 

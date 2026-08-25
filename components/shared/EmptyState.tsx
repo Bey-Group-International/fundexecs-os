@@ -57,7 +57,7 @@ export function EmptyState({
                 router.push(primaryAction.href);
               }
             }}
-            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-on-gold transition hover:bg-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             {primaryAction.label}
           </button>

@@ -74,7 +74,7 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
 
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-      <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
+      <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
         Capital Deployment
       </h3>
 
@@ -117,8 +117,8 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
           <svg viewBox={`0 0 ${W} ${H}`} className="h-12 w-full overflow-visible">
             <defs>
               <linearGradient id="aum-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="currentColor" stopOpacity="0.15" className="text-gold-400" />
-                <stop offset="100%" stopColor="currentColor" stopOpacity="0" className="text-gold-400" />
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.15" className="text-gold-300" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0" className="text-gold-300" />
               </linearGradient>
             </defs>
             <polygon
@@ -130,7 +130,7 @@ export function AumHistoryChart({ investor, commitments, capitalEvents }: Props)
               fill="none"
               stroke="currentColor"
               strokeWidth="1.5"
-              className="text-gold-400"
+              className="text-gold-300"
             />
           </svg>
           <div className="mt-0.5 flex justify-between font-mono text-[11px] text-fg-muted">

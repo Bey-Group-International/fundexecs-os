@@ -24,7 +24,7 @@ export function CommandBar({ onDispatch }: { onDispatch: (plan: CommandPlan) => 
   return (
     <div className="relative">
       <div className="flex items-center gap-2 rounded-lg border border-line/70 bg-surface-1 px-3 py-2 focus-within:border-gold-400/60">
-        <span className="select-none font-mono text-xs text-gold-400">›</span>
+        <span className="select-none font-mono text-xs text-gold-300">›</span>
         <input
           ref={inputRef}
           value={value}
