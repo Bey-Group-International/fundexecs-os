@@ -8,7 +8,11 @@
 //      dispatch adapter uses). Returns the first active event type's scheduling
 //      URL, falling back to the account's root scheduling URL.
 //   3. A deploy-wide Calendly token (CALENDLY_API_TOKEN / CALENDLY_ACCESS_TOKEN).
-//   4. A static NEXT_PUBLIC_BOOKING_URL.
+//   4. The firm's own native FundExecs scheduling link (/book/<handle>) — no
+//      third party, no configuration. Ranked below the options above because
+//      those are deliberate choices, but above the static fallback: sending a
+//      buyer to the actual seller beats sending them to a deploy-wide calendar.
+//   5. A static NEXT_PUBLIC_BOOKING_URL.
 //
 // Retrieved URLs are cached in-process with a short TTL so rendering the
 // marketplace doesn't hit the Calendly API on every request, and `cache()`
@@ -16,6 +20,8 @@
 import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolveChannelCredentials } from "@/lib/integrations/credentials";
+import { buildBookingPageUrl } from "@/lib/meetings/scheduling";
+import { SITE_URL } from "@/lib/site";
 
 function serviceConfigured(): boolean {
   return Boolean(
@@ -52,6 +58,46 @@ export async function resolveFirmBookingUrls(
 async function firmStoredBookingUrl(orgId: string): Promise<string | null> {
   const map = await resolveFirmBookingUrls([orgId]);
   return map[orgId] ?? null;
+}
+
+/**
+ * The firm's own booking page, if a member publishes one.
+ *
+ * Only a page that is live *and* has at least one visible meeting type
+ * qualifies — linking a buyer to a page that says "not taking bookings" is
+ * worse than showing no button at all. Where several members of a firm publish
+ * a link, the earliest is chosen so the CTA is stable rather than shuffling
+ * between colleagues on each render.
+ */
+async function nativeSchedulingUrl(orgId: string): Promise<string | null> {
+  if (!serviceConfigured()) return null;
+  try {
+    const svc = createServiceClient();
+    const { data: pages } = await svc
+      .from("scheduling_pages")
+      .select("id, slug")
+      .eq("organization_id", orgId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: true })
+      .limit(10);
+
+    const candidates = (pages ?? []) as { id: string; slug: string }[];
+    if (candidates.length === 0) return null;
+
+    const { data: activeTypes } = await svc
+      .from("scheduling_event_types")
+      .select("page_id")
+      .eq("is_active", true)
+      .in("page_id", candidates.map((p) => p.id));
+
+    const bookable = new Set(
+      ((activeTypes ?? []) as { page_id: string }[]).map((t) => t.page_id),
+    );
+    const page = candidates.find((p) => bookable.has(p.id));
+    return page ? buildBookingPageUrl(SITE_URL, page.slug) : null;
+  } catch {
+    return null;
+  }
 }
 
 const CALENDLY_TIMEOUT_MS = 5_000;
@@ -132,7 +178,12 @@ async function resolve(orgId?: string | null): Promise<string | null> {
     }
   }
 
-  // 3. Static fallback.
+  // 4. The firm's own native scheduling link, before any deploy-wide default.
+  if (!url && orgId) {
+    url = await nativeSchedulingUrl(orgId);
+  }
+
+  // 5. Static fallback.
   url = url ?? process.env.NEXT_PUBLIC_BOOKING_URL ?? null;
 
   memo.set(key, { url, at: now });
