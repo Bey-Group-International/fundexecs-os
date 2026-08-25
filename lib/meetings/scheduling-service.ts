@@ -607,6 +607,27 @@ export async function loadBookingById(
   return withBookingRelations(client, booking);
 }
 
+/**
+ * Same, addressed by the meeting room it created — the path a host takes when
+ * they edit a link-booked meeting from their own calendar rather than from the
+ * booking card. Only a live booking is returned: a cancelled or declined one
+ * left its meeting behind and has nothing left to keep in step.
+ */
+export async function loadLiveBookingByMeetingId(
+  client: SchedulingClient,
+  meetingId: string,
+): Promise<BookingContext | null> {
+  const { data, error } = await table(client, "scheduling_bookings")
+    .select(BOOKING_COLUMNS)
+    .eq("meeting_id", meetingId)
+    .in("status", ["pending", "confirmed"])
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const booking = data as SchedulingBooking | null;
+  if (!booking) return null;
+  return withBookingRelations(client, booking);
+}
+
 async function withBookingRelations(
   client: SchedulingClient,
   booking: SchedulingBooking,
@@ -705,23 +726,33 @@ export async function cancelBooking(
  * Move a booking to a new slot, keeping its identity (and the invitee's manage
  * link) intact. A confirmed booking's room moves with it; a pending request
  * stays pending.
+ *
+ * `enforceAvailability` distinguishes the two callers. An invitee picking a new
+ * time may only land on a slot the link actually offers, so it defaults on.
+ * A host editing the meeting in their own calendar has already chosen the time
+ * deliberately — holding them to their own published office hours would block
+ * legitimate moves — so that path turns it off. The database's overlap
+ * constraint still forbids double-booking either way.
  */
 export async function rescheduleBooking(
   client: SchedulingClient,
   ctx: BookingContext,
   startIso: string,
-  opts: { now?: Date } = {},
+  opts: { now?: Date; durationMinutes?: number; enforceAvailability?: boolean } = {},
 ): Promise<BookingContext> {
   if (ctx.booking.status !== "confirmed" && ctx.booking.status !== "pending") {
     throw new Error("This booking can no longer be changed.");
   }
-  await assertSlotOpen(client, ctx.page, ctx.eventType, startIso, {
-    now: opts.now,
-    excludeBookingId: ctx.booking.id,
-  });
+  if (opts.enforceAvailability !== false) {
+    await assertSlotOpen(client, ctx.page, ctx.eventType, startIso, {
+      now: opts.now,
+      excludeBookingId: ctx.booking.id,
+    });
+  }
 
   const start = new Date(startIso);
-  const endIso = new Date(start.getTime() + ctx.eventType.duration_minutes * 60_000).toISOString();
+  const duration = opts.durationMinutes ?? ctx.eventType.duration_minutes;
+  const endIso = new Date(start.getTime() + duration * 60_000).toISOString();
 
   if (ctx.booking.meeting_id) {
     const { error } = await table(client, "live_meetings")

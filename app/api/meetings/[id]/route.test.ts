@@ -2,6 +2,17 @@ const authMock = jest.fn();
 const from = jest.fn();
 const updateMeetingMock = jest.fn();
 const deleteMeetingLocalMock = jest.fn();
+const hasServiceEnvMock = jest.fn();
+const sendMeetingInvitesMock = jest.fn();
+const sendMeetingUpdatesMock = jest.fn();
+const sendBookingEmailsMock = jest.fn();
+const loadLiveBookingMock = jest.fn();
+const rescheduleBookingMock = jest.fn();
+const cancelBookingMock = jest.fn();
+
+// A stand-in for the real error class: the route branches on `instanceof`, so
+// the mock has to hand back something that actually is one.
+class SlotUnavailable extends Error {}
 
 jest.mock("@/lib/auth", () => ({
   requireOrgContext: () => authMock(),
@@ -9,11 +20,35 @@ jest.mock("@/lib/auth", () => ({
 
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: () => ({ from }),
+  createServiceClient: () => ({ from }),
+  hasSupabaseServiceEnv: () => hasServiceEnvMock(),
 }));
 
 jest.mock("@/lib/meetings/service", () => ({
   updateMeeting: (...args: unknown[]) => updateMeetingMock(...args),
   deleteMeetingLocal: (...args: unknown[]) => deleteMeetingLocalMock(...args),
+  buildMeetingInviteUrl: (origin: string, code: string) => `${origin}/meeting-invite/${code}`,
+}));
+
+jest.mock("@/lib/meetings/invite", () => ({
+  ...jest.requireActual("@/lib/meetings/invite"),
+  sendMeetingInvites: (...args: unknown[]) => sendMeetingInvitesMock(...args),
+}));
+
+jest.mock("@/lib/meetings/meeting-updates", () => ({
+  ...jest.requireActual("@/lib/meetings/meeting-updates"),
+  sendMeetingUpdates: (...args: unknown[]) => sendMeetingUpdatesMock(...args),
+}));
+
+jest.mock("@/lib/meetings/scheduling-email", () => ({
+  sendBookingEmails: (...args: unknown[]) => sendBookingEmailsMock(...args),
+}));
+
+jest.mock("@/lib/meetings/scheduling-service", () => ({
+  SlotUnavailableError: SlotUnavailable,
+  loadLiveBookingByMeetingId: (...args: unknown[]) => loadLiveBookingMock(...args),
+  rescheduleBooking: (...args: unknown[]) => rescheduleBookingMock(...args),
+  cancelBooking: (...args: unknown[]) => cancelBookingMock(...args),
 }));
 
 import { NextRequest } from "next/server";
@@ -52,7 +87,33 @@ const PRIOR_ROW = {
   host_id: "u1",
   scheduled_at: "2026-07-10T10:00:00.000Z",
   duration_minutes: 60,
+  title: "Quarterly review",
+  timezone: "America/New_York",
 };
+
+const GUESTS = [
+  { name: "Ada", email: "ada@lp.test", type: "external" as const },
+  { name: "Ben", email: "ben@lp.test", type: "external" as const },
+];
+
+/** A live booking whose meeting is the one under edit. */
+function bookingCtx(overrides: Record<string, unknown> = {}) {
+  return {
+    booking: {
+      id: "b1",
+      invitee_name: "Ada",
+      invitee_email: "ada@lp.test",
+      invitee_timezone: "Europe/London",
+      manage_token: "tok",
+      starts_at: "2026-07-10T10:00:00.000Z",
+      ends_at: "2026-07-10T11:00:00.000Z",
+      ...(overrides.booking as object ?? {}),
+    },
+    page: { display_name: "Nia", timezone: "America/New_York", slug: "nia" },
+    eventType: { title: "Intro call", duration_minutes: 60 },
+    roomCode: "abc",
+  };
+}
 const OVERLAPPING_CANDIDATE = {
   id: "other",
   title: "Board",
@@ -70,6 +131,13 @@ beforeEach(() => {
   });
   // Default: no prior row and no candidates, so conflict detection is skipped.
   from.mockReturnValue(makeBuilder());
+  // Default: no service credentials, so the booking side stays out of the way
+  // of the tests that are only about meetings.
+  hasServiceEnvMock.mockReturnValue(false);
+  loadLiveBookingMock.mockResolvedValue(null);
+  sendMeetingInvitesMock.mockResolvedValue({ sent: 0, total: 0 });
+  sendMeetingUpdatesMock.mockResolvedValue({ sent: 0, total: 0 });
+  sendBookingEmailsMock.mockResolvedValue({ sent: 0 });
 });
 
 describe("/api/meetings/[id]", () => {
@@ -134,6 +202,138 @@ describe("/api/meetings/[id]", () => {
     expect(updateMeetingMock).toHaveBeenCalled();
   });
 
+  it("tells the guests already on a meeting when it moves", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    sendMeetingUpdatesMock.mockResolvedValue({ sent: 2, total: 2 });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-11T15:00:00.000Z" }), params);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ notified: 2 });
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "rescheduled",
+      expect.objectContaining({
+        emails: ["ada@lp.test", "ben@lp.test"],
+        roomCode: "abc",
+        title: "Quarterly review",
+        timezone: "America/New_York",
+        startIso: "2026-07-11T15:00:00.000Z",
+        previousStartIso: "2026-07-10T10:00:00.000Z",
+      }),
+    );
+  });
+
+  it("stays quiet when an edit leaves the timing alone", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ title: "Quarterly review (final)", agenda: "1. Numbers" }), params);
+
+    expect(res.status).toBe(200);
+    expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a re-sent identical time as no change", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    // Same instant, different spelling — a save must not read as a reschedule.
+    const res = await PATCH(req({ scheduledAt: "2026-07-10T06:00:00.000-04:00", durationMinutes: 60 }), params);
+
+    expect(res.status).toBe(200);
+    expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+  });
+
+  it("invites a newly added guest instead of mailing them a reschedule", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    sendMeetingInvitesMock.mockResolvedValue({ sent: 1, total: 1 });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: [GUESTS[0]] } } }));
+
+    const res = await PATCH(
+      req({ scheduledAt: "2026-07-11T15:00:00.000Z", attendees: GUESTS }),
+      params,
+    );
+
+    expect(res.status).toBe(200);
+    // Ben is new: one invite carrying the new time, not an "it moved" notice.
+    expect(sendMeetingInvitesMock).toHaveBeenCalledWith(expect.objectContaining({ emails: ["ben@lp.test"] }));
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "rescheduled",
+      expect.objectContaining({ emails: ["ada@lp.test"] }),
+    );
+  });
+
+  it("tells a dropped guest they are off the meeting", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ attendees: [GUESTS[0]] }), params);
+
+    expect(res.status).toBe(200);
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "removed",
+      expect.objectContaining({ emails: ["ben@lp.test"] }),
+    );
+  });
+
+  it("leaves draft meetings unnotified", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, is_draft: true, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-11T15:00:00.000Z" }), params);
+
+    expect(res.status).toBe(200);
+    expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+  });
+
+  it("moves a link booking with the meeting and mails the invitee once", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    hasServiceEnvMock.mockReturnValue(true);
+    loadLiveBookingMock.mockResolvedValue(bookingCtx());
+    rescheduleBookingMock.mockResolvedValue(
+      bookingCtx({ booking: { starts_at: "2026-07-11T15:00:00.000Z", ends_at: "2026-07-11T16:00:00.000Z" } }),
+    );
+    sendBookingEmailsMock.mockResolvedValue({ sent: 1 });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-11T15:00:00.000Z" }), params);
+
+    expect(res.status).toBe(200);
+    expect(rescheduleBookingMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "2026-07-11T15:00:00.000Z",
+      expect.objectContaining({ enforceAvailability: false }),
+    );
+    expect(sendBookingEmailsMock).toHaveBeenCalledWith(
+      "rescheduled_by_host",
+      expect.objectContaining({
+        inviteeEmail: "ada@lp.test",
+        previousStartIso: "2026-07-10T10:00:00.000Z",
+      }),
+    );
+    // Ada is the invitee: she gets the booking email, not the guest notice too.
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "rescheduled",
+      expect.objectContaining({ emails: ["ben@lp.test"] }),
+    );
+  });
+
+  it("aborts the edit when the new time collides with another booking", async () => {
+    hasServiceEnvMock.mockReturnValue(true);
+    loadLiveBookingMock.mockResolvedValue(bookingCtx());
+    rescheduleBookingMock.mockRejectedValue(new SlotUnavailable("That time was just taken."));
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ scheduledAt: "2026-07-11T15:00:00.000Z" }), params);
+
+    expect(res.status).toBe(409);
+    // The booking is the gate: nothing about the meeting may be written.
+    expect(updateMeetingMock).not.toHaveBeenCalled();
+    expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+  });
+
   it("deletes meetings locally by default", async () => {
     deleteMeetingLocalMock.mockResolvedValue({ ok: true });
     const res = await DELETE(new NextRequest("http://localhost/api/meetings/m1", { method: "DELETE" }), params);
@@ -143,6 +343,56 @@ describe("/api/meetings/[id]", () => {
       expect.anything(),
       { orgId: "org1", userId: "u1" },
       "m1",
+    );
+  });
+
+  it("tells the guests when a meeting is cancelled", async () => {
+    deleteMeetingLocalMock.mockResolvedValue({ ok: true });
+    sendMeetingUpdatesMock.mockResolvedValue({ sent: 2, total: 2 });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/meetings/m1", {
+        method: "DELETE",
+        body: JSON.stringify({ reason: "Deal closed early" }),
+      }),
+      params,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ notified: 2 });
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "cancelled",
+      expect.objectContaining({
+        emails: ["ada@lp.test", "ben@lp.test"],
+        title: "Quarterly review",
+        reason: "Deal closed early",
+      }),
+    );
+  });
+
+  it("cancels the link booking before deleting the meeting it belongs to", async () => {
+    deleteMeetingLocalMock.mockResolvedValue({ ok: true });
+    hasServiceEnvMock.mockReturnValue(true);
+    loadLiveBookingMock.mockResolvedValue(bookingCtx());
+    cancelBookingMock.mockResolvedValue(bookingCtx());
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await DELETE(new NextRequest("http://localhost/api/meetings/m1", { method: "DELETE" }), params);
+
+    expect(res.status).toBe(200);
+    expect(cancelBookingMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), "host", null);
+    expect(cancelBookingMock.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteMeetingLocalMock.mock.invocationCallOrder[0],
+    );
+    expect(sendBookingEmailsMock).toHaveBeenCalledWith(
+      "cancelled_by_host",
+      expect.objectContaining({ inviteeEmail: "ada@lp.test" }),
+    );
+    // The invitee is covered by the booking email, so the guest notice skips her.
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "cancelled",
+      expect.objectContaining({ emails: ["ben@lp.test"] }),
     );
   });
 });
