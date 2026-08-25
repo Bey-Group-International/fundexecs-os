@@ -8,15 +8,15 @@ scaffolding rather than function. No code here; the recommendation is at the end
 
 The application looks like it syncs calendars. It does not.
 
-| Piece | Reality |
-| --- | --- |
-| `live_meetings.external_calendar_*` | Five real columns: `provider`, `event_id`, `sync_enabled`, `sync_status`, `last_error`. Written and read throughout the UI. |
+|                        Piece                        |                                                                                         Reality                                                                                         |
+|-----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `live_meetings.external_calendar_*`                 | Five real columns: `provider`, `event_id`, `sync_enabled`, `sync_status`, `last_error`. Written and read throughout the UI.                                                             |
 | `syncMeetingExternal()` (`lib/meetings/service.ts`) | Mints `ext_<uuid>` and writes `sync_status: "synced"`. **Contacts no provider.** Its comment says dispatch "is handled by the integrations layer" — that layer has no calendar adapter. |
-| `POST /api/meetings/[id]/sync` | Calls the above. Returns success. Nothing left the app. |
-| `EXTERNAL_SYNC_STATUS_LABELS` | Six user-facing states — Not Connected, Sync Off, Sync Pending, Synced, Sync Failed, Needs Re-Sync — none of which reflect a provider. |
-| `lib/integrations/adapters/` | calendly, docusign, gmail, slack, finance, inbox, native-meeting, native-signing. **No calendar adapter.** |
-| `lib/integrations/catalog.ts` | `google_calendar: "Google Calendar"` — a display label with nothing behind it. |
-| `lib/google-oauth.ts` | Scopes are `gmail.send` and `contacts.readonly`. **No calendar scope.** |
+| `POST /api/meetings/[id]/sync`                      | Calls the above. Returns success. Nothing left the app.                                                                                                                                 |
+| `EXTERNAL_SYNC_STATUS_LABELS`                       | Six user-facing states — Not Connected, Sync Off, Sync Pending, Synced, Sync Failed, Needs Re-Sync — none of which reflect a provider.                                                  |
+| `lib/integrations/adapters/`                        | calendly, docusign, gmail, slack, finance, inbox, native-meeting, native-signing. **No calendar adapter.**                                                                              |
+| `lib/integrations/catalog.ts`                       | `google_calendar: "Google Calendar"` — a display label with nothing behind it.                                                                                                          |
+| `lib/google-oauth.ts`                               | Scopes are `gmail.send` and `contacts.readonly`. **No calendar scope.**                                                                                                                 |
 
 So a host can flag a meeting to sync, click re-sync, and be told "Synced", while
 the event exists only in this database. The Manage calendar hub's connection tab
@@ -85,13 +85,13 @@ Reading Google events back so externally-booked time blocks FundExecs slots:
 
 ## Cost and sequencing
 
-| Phase | Work | Blocked by |
-| --- | --- | --- |
-| 0 | Google verification + CASA for the restricted scope | Nothing — **start first**, it gates everything |
-| 1 | Separate calendar grant (vault key, scopes, connect flow) | Phase 0 for external orgs |
-| 2 | Adapter: create + update + delete + 404 reconcile | Phase 1 |
-| 3 | Replace the `syncMeetingExternal` stub; flip `providerSyncAvailable` | Phase 2 |
-| 4 | Two-way pull, watch renewal, conflict rules | Phase 3 |
+| Phase |                                 Work                                 |                   Blocked by                   |
+|-------|----------------------------------------------------------------------|------------------------------------------------|
+| 0     | Google verification + CASA for the restricted scope                  | Nothing — **start first**, it gates everything |
+| 1     | Separate calendar grant (vault key, scopes, connect flow)            | Phase 0 for external orgs                      |
+| 2     | Adapter: create + update + delete + 404 reconcile                    | Phase 1                                        |
+| 3     | Replace the `syncMeetingExternal` stub; flip `providerSyncAvailable` | Phase 2                                        |
+| 4     | Two-way pull, watch renewal, conflict rules                          | Phase 3                                        |
 
 Phases 1–3 are the useful unit: one-way push makes "Synced" true. Phase 4 is
 comparable in size to 1–3 combined and should be justified on its own.
