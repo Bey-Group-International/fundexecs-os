@@ -166,7 +166,7 @@ export default async function InboxPage(
       <InboxLive orgId={ctx.orgId} />
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             <span aria-hidden className="h-4 w-1 rounded-full bg-gradient-to-b from-gold-300 to-gold-500" />
             Unified Inbox
           </span>

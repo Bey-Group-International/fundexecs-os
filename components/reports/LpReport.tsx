@@ -36,7 +36,7 @@ function formatDate(iso: string): string {
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+    <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
       {children}
     </span>
   );
@@ -176,7 +176,7 @@ export function LpReport({ report }: { report: LpReportData }) {
               <div className="overflow-x-auto rounded-lg border border-line">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-surface-2">
-                    <tr className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <tr className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       <th className="px-4 py-2 font-normal">Fund</th>
                       <th className="px-4 py-2 text-right font-normal">
                         Committed
@@ -206,7 +206,7 @@ export function LpReport({ report }: { report: LpReportData }) {
                         <td className="px-4 py-2 text-right tabular-nums text-emerald-400">
                           {usd(f.distributed)}
                         </td>
-                        <td className="px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        <td className="px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           {f.currency}
                         </td>
                       </tr>
@@ -243,7 +243,7 @@ export function LpReport({ report }: { report: LpReportData }) {
               <div className="overflow-hidden rounded-lg border border-line">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-surface-2">
-                    <tr className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <tr className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       <th className="px-4 py-2 font-normal">Asset</th>
                       <th className="px-4 py-2 font-normal">Type</th>
                       <th className="px-4 py-2 text-right font-normal">Cost</th>
@@ -275,7 +275,7 @@ export function LpReport({ report }: { report: LpReportData }) {
                         </td>
                         <td className="px-4 py-2">
                           <span
-                            className={`font-mono text-[10px] uppercase tracking-wider ${
+                            className={`font-mono text-[11px] uppercase tracking-wider ${
                               h.exited
                                 ? "text-fg-muted"
                                 : "text-status-success"

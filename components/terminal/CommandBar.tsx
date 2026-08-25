@@ -48,7 +48,7 @@ export function CommandBar({ onDispatch }: { onDispatch: (plan: CommandPlan) => 
 
       {showPreview && plan.summary ? (
         <div className="mt-1.5 flex items-start gap-2 rounded-md border border-line/60 bg-surface-0/70 px-3 py-2 text-xs">
-          <span className="mt-0.5 shrink-0 rounded border border-line/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="mt-0.5 shrink-0 rounded border border-line/70 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {kindLabel(plan)}
           </span>
           <span className={plan.nonDelegable ? "text-status-danger" : "text-fg-secondary"}>
@@ -80,7 +80,7 @@ function kindLabel(plan: CommandPlan): string {
 function TierChip({ plan }: { plan: CommandPlan }) {
   if (!plan.classification) {
     return (
-      <span className="shrink-0 rounded border border-line/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      <span className="shrink-0 rounded border border-line/70 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         NL
       </span>
     );
@@ -93,7 +93,7 @@ function TierChip({ plan }: { plan: CommandPlan }) {
         ? "border-status-warning/50 text-status-warning"
         : "border-status-success/50 text-status-success";
   return (
-    <span className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${cls}`}>
+    <span className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${cls}`}>
       T{tier}
     </span>
   );

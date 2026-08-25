@@ -135,7 +135,7 @@ export async function PortfolioHealthLive() {
 
   return (
     <section>
-      <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+      <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         Portfolio Health
       </p>
       <PortfolioHealthDashboard

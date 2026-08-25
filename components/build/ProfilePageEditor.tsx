@@ -38,7 +38,7 @@ export function ProfilePageEditor({
 
       {/* Investor preview — live from the editor's current values. */}
       <div className="mt-12 border-t border-line pt-10">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400/80">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400/80">
           How counterparties see you
         </span>
         <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-fg-primary">

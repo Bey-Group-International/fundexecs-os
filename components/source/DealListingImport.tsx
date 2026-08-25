@@ -69,7 +69,7 @@ export function DealListingImport({ hub, module }: { hub: string; module: string
   return (
     <div className="mb-5 rounded-2xl border border-status-info/25 bg-gradient-to-b from-status-info/[0.06] to-transparent p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-status-info">⇥ Import Listings</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-status-info">⇥ Import Listings</span>
         <span className="hidden text-xs text-fg-muted sm:inline">· {NETWORKS}</span>
         <button
           type="button"
@@ -90,7 +90,7 @@ export function DealListingImport({ hub, module }: { hub: string; module: string
           />
           <div className="flex items-center gap-2">
             <span className="h-px flex-1 bg-line" />
-            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">or paste the page</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">or paste the page</span>
             <span className="h-px flex-1 bg-line" />
           </div>
           <textarea
@@ -134,25 +134,25 @@ export function DealListingImport({ hub, module }: { hub: string; module: string
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-medium text-fg-primary">{l.name}</span>
-                    <span className="shrink-0 rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">
+                    <span className="shrink-0 rounded-full border border-line px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {l.sourceLabel}
                     </span>
                   </div>
                   {(l.category || l.location) && (
-                    <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {[l.category?.replace(/_/g, " "), l.location].filter(Boolean).join(" · ")}
                     </div>
                   )}
                   {chips.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
                       {chips.map((c) => (
-                        <span key={c} className="font-mono text-[10px] text-status-info">{c}</span>
+                        <span key={c} className="font-mono text-[11px] text-status-info">{c}</span>
                       ))}
                     </div>
                   )}
                   {l.description && <p className="mt-1 line-clamp-2 text-xs text-fg-secondary">{l.description}</p>}
                   {(l.contactName || l.contactEmail) && (
-                    <div className="mt-0.5 font-mono text-[9px] text-fg-muted">
+                    <div className="mt-0.5 font-mono text-[11px] text-fg-muted">
                       {l.contactName}
                       {l.contactEmail && <span className="opacity-70"> · {l.contactEmail}</span>}
                     </div>
@@ -163,7 +163,7 @@ export function DealListingImport({ hub, module }: { hub: string; module: string
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 inline-block font-mono text-[9px] text-fg-muted hover:text-status-info hover:underline"
+                      className="mt-0.5 inline-block font-mono text-[11px] text-fg-muted hover:text-status-info hover:underline"
                     >
                       ↗ view listing
                     </a>

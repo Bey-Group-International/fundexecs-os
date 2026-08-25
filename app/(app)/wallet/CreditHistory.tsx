@@ -75,7 +75,7 @@ export async function CreditHistory() {
     if (entries.length === 0) {
       return (
         <section className="mt-10">
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
             Credit history
           </h2>
           <div className="rounded-2xl border border-dashed border-line/60 px-6 py-10 text-center">
@@ -96,7 +96,7 @@ export async function CreditHistory() {
 
     return (
       <section className="mt-10">
-        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
           Credit history
         </h2>
 
@@ -128,16 +128,16 @@ export async function CreditHistory() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line/60 bg-surface-2/30">
-                  <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                     Type
                   </th>
-                  <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  <th className="px-4 py-3 text-right font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                     Credits
                   </th>
-                  <th className="hidden px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted sm:table-cell">
+                  <th className="hidden px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted sm:table-cell">
                     Note
                   </th>
-                  <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  <th className="px-4 py-3 text-right font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                     Date
                   </th>
                 </tr>

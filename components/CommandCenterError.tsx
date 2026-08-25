@@ -35,7 +35,7 @@ export class CommandCenterError extends Component<Props, State> {
         <div className="border border-red-500/30 bg-surface-2 rounded-lg p-4 text-fg-muted text-sm flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" aria-hidden />
-            <span className="font-mono text-[10px] uppercase tracking-wider text-red-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-red-400">
               Command Center Error
             </span>
           </div>

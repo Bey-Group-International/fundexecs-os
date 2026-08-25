@@ -39,3 +39,50 @@ export async function loadSessionMessages(
   if (error || !data) return [];
   return data;
 }
+
+/** A turn id that came from the database (a uuid) rather than a client-minted one. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isPersistedTurnId(id: string): boolean {
+  return UUID_RE.test(id);
+}
+
+/**
+ * Rewrite one persisted turn. Turns created in the current session carry a
+ * client-minted id (no row to address yet), so the caller may instead pass the
+ * exact text it is replacing and we match on that within the session. Returns
+ * how many rows were rewritten; 0 is not an error — the transcript in front of
+ * the operator is still updated, it simply had nothing persisted behind it.
+ */
+export async function updateSessionMessage(
+  supabase: SupabaseClient<Database>,
+  args: { sessionId: string; turnId: string; previousContent: string; content: string },
+): Promise<number> {
+  const query = supabase
+    .from("session_messages")
+    .update({ content: args.content })
+    .eq("session_id", args.sessionId);
+  const { data, error } = await (isPersistedTurnId(args.turnId)
+    ? query.eq("id", args.turnId)
+    : query.eq("content", args.previousContent)
+  ).select("id");
+  if (error || !data) return 0;
+  return data.length;
+}
+
+/**
+ * Delete one persisted turn, addressed the same way as `updateSessionMessage`.
+ * Returns how many rows were removed.
+ */
+export async function deleteSessionMessage(
+  supabase: SupabaseClient<Database>,
+  args: { sessionId: string; turnId: string; content: string },
+): Promise<number> {
+  const query = supabase.from("session_messages").delete().eq("session_id", args.sessionId);
+  const { data, error } = await (isPersistedTurnId(args.turnId)
+    ? query.eq("id", args.turnId)
+    : query.eq("content", args.content)
+  ).select("id");
+  if (error || !data) return 0;
+  return data.length;
+}

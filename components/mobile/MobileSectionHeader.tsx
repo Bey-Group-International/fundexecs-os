@@ -19,7 +19,7 @@ export function MobileSectionHeader({
         <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
         {title}
         {count != null && count > 0 && (
-          <span className="rounded-full bg-surface-2 px-1.5 py-px text-[10px] font-semibold text-fg-secondary">
+          <span className="rounded-full bg-surface-2 px-1.5 py-px text-[11px] font-semibold text-fg-secondary">
             {count}
           </span>
         )}

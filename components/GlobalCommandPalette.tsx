@@ -29,7 +29,7 @@ export function CommandPaletteTrigger({ className }: { className?: string }) {
       onClick={openCommandPalette}
       className={
         className ??
-        "rounded-lg border border-line px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+        "rounded-lg border border-line px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
       }
       aria-label="Open command palette"
       title="Open command palette. Use Shift+Command+K inside Earn composer surfaces."

@@ -52,7 +52,7 @@ export default async function AdminPage() {
 
       {/* Traction metrics */}
       <section>
-        <h2 className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Traction
         </h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -74,7 +74,7 @@ export default async function AdminPage() {
 
       {/* Signups per day — last 30 days */}
       <section className="fx-card p-5">
-        <h2 className="mb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+        <h2 className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Signups · last 30 days
         </h2>
         <div className="flex h-32 items-end gap-1">
@@ -91,7 +91,7 @@ export default async function AdminPage() {
                   minHeight: d.count > 0 ? "3px" : "0",
                 }}
               />
-              <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-fg-secondary opacity-0 transition group-hover:opacity-100">
+              <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-fg-secondary opacity-0 transition group-hover:opacity-100">
                 {d.date.slice(5)} · {d.count}
               </span>
             </div>
@@ -101,7 +101,7 @@ export default async function AdminPage() {
 
       {/* Signup funnel */}
       <section>
-        <h2 className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Signup funnel
         </h2>
         <div className="fx-card divide-y divide-line/60">
@@ -116,7 +116,7 @@ export default async function AdminPage() {
                 <div className="w-32 shrink-0">
                   <p className="text-sm text-fg-primary">{step.label}</p>
                   {step.note ? (
-                    <p className="font-mono text-[10px] text-fg-muted">
+                    <p className="font-mono text-[11px] text-fg-muted">
                       {step.note}
                     </p>
                   ) : null}
@@ -134,7 +134,7 @@ export default async function AdminPage() {
                     {step.count != null ? step.count : "—"}
                   </span>
                   {pct != null ? (
-                    <span className="ml-1 font-mono text-[10px] text-fg-muted">
+                    <span className="ml-1 font-mono text-[11px] text-fg-muted">
                       {pct}%
                     </span>
                   ) : null}
@@ -147,7 +147,7 @@ export default async function AdminPage() {
 
       {/* Signups + activity table */}
       <section>
-        <h2 className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Users &amp; activity ({signups.length})
         </h2>
         <SignupsTable rows={signups} />

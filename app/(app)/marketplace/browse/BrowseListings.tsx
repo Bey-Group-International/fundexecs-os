@@ -154,7 +154,7 @@ export function BrowseListings({
                     index={i}
                     eyebrow={
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+                        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
                           {l.orgName ?? "Unknown firm"}
                         </span>
                         <TierBadge tier={l.ownerTier} />

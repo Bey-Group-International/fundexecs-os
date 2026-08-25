@@ -26,7 +26,7 @@ const PRIORITY_CLASS: Record<string, string> = {
 function StatusPill({ status }: { status: TaskStatus }) {
   const pill = STATUS_PILL[status] ?? { label: status.replace(/_/g, " "), cls: "border-line text-fg-muted" };
   return (
-    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${pill.cls}`}>
+    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${pill.cls}`}>
       {pill.label}
     </span>
   );
@@ -78,8 +78,8 @@ export function TeamTasksFeed({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Your tasks</p>
-        <Link href="/build/team" className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Your tasks</p>
+        <Link href="/build/team" className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300">
           Assign →
         </Link>
       </div>
@@ -97,7 +97,7 @@ export function TeamTasksFeed({
                 </div>
                 <StatusPill status={task.status} />
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider">
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] uppercase tracking-wider">
                 <span className={PRIORITY_CLASS[task.priority] ?? "text-fg-muted"}>{task.priority}</span>
                 {task.hub ? <span className="text-fg-muted">{task.hub}{task.module ? ` / ${task.module.replace(/_/g, " ")}` : ""}</span> : null}
                 {due ? <span className="text-fg-muted">Due {due}</span> : null}

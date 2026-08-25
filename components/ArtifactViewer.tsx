@@ -29,7 +29,7 @@ function SealChip({ status }: { status?: SealStatus }) {
   if (status === "sealed") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-status-success/45 bg-status-success/[0.08] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success"
+        className="inline-flex items-center gap-1 rounded-full border border-status-success/45 bg-status-success/[0.08] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success"
         title="Tamper-evident — the seal was recomputed and matches the signed content."
       >
         🔒 Sealed
@@ -39,7 +39,7 @@ function SealChip({ status }: { status?: SealStatus }) {
   if (status === "tampered") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-status-danger/55 bg-status-danger/[0.12] px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-status-danger"
+        className="inline-flex items-center gap-1 rounded-full border border-status-danger/55 bg-status-danger/[0.12] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-status-danger"
         title="The seal no longer matches — the signed content changed after sign-off. Re-verify before relying on it."
       >
         ⚠ Seal broken
@@ -88,7 +88,7 @@ export function ProvenanceBar({
     <div className="mt-2 border-t border-line/55 pt-2">
       <div className="flex flex-wrap items-center gap-2">
         <span
-          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${VERIFY_TONE[view.level]}`}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${VERIFY_TONE[view.level]}`}
           title={view.detail}
         >
           {view.level === "verified" ? "✓ " : null}
@@ -96,7 +96,7 @@ export function ProvenanceBar({
         </span>
         {critic.show ? (
           <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${CRITIC_TONE[critic.tone]}`}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${CRITIC_TONE[critic.tone]}`}
             title={critic.detail}
           >
             {critic.tone === "alert" ? "✕ " : "⚠ "}
@@ -109,12 +109,12 @@ export function ProvenanceBar({
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
           >
             {open ? "Hide sources" : `${cited.length} source${cited.length === 1 ? "" : "s"}`}
           </button>
         ) : (
-          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{view.detail}</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{view.detail}</span>
         )}
         {canVerify ? (
           noteOpen ? (
@@ -142,11 +142,11 @@ export function ProvenanceBar({
                     router.refresh();
                   });
                 }}
-                className="rounded-md bg-status-success/90 px-2 py-1 font-mono text-[9px] font-medium uppercase tracking-wider text-surface-0 transition hover:bg-status-success disabled:opacity-50"
+                className="rounded-md bg-status-success/90 px-2 py-1 font-mono text-[11px] font-medium uppercase tracking-wider text-surface-0 transition hover:bg-status-success disabled:opacity-50"
               >
                 Confirm
               </button>
-              <button type="button" onClick={() => setNoteOpen(false)} className="text-[10px] text-fg-muted hover:text-fg-secondary">
+              <button type="button" onClick={() => setNoteOpen(false)} className="text-[11px] text-fg-muted hover:text-fg-secondary">
                 Cancel
               </button>
             </span>
@@ -154,7 +154,7 @@ export function ProvenanceBar({
             <button
               type="button"
               onClick={() => setNoteOpen(true)}
-              className="ml-auto rounded-full border border-status-success/40 bg-status-success/10 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wider text-status-success transition hover:bg-status-success/20"
+              className="ml-auto rounded-full border border-status-success/40 bg-status-success/10 px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wider text-status-success transition hover:bg-status-success/20"
             >
               ✓ Verify
             </button>
@@ -169,8 +169,8 @@ export function ProvenanceBar({
           {cited.map((s, i) => (
             <li key={`${s.source}-${i}`} className="rounded-lg border border-line/60 bg-surface-0/40 px-2.5 py-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate font-mono text-[10px] text-fg-secondary">{s.source}</span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="min-w-0 truncate font-mono text-[11px] text-fg-secondary">{s.source}</span>
+                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {s.kind === "kb" ? "KB" : "Doc"}
                   {s.score > 0 ? ` · ${(s.score * 100).toFixed(0)}%` : ""}
                 </span>
@@ -244,7 +244,7 @@ function ArtifactActions({
   const [copied, setCopied] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const btn =
-    "rounded-md border border-line/70 bg-surface-0/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary";
+    "rounded-md border border-line/70 bg-surface-0/80 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-fg-primary";
   return (
     <div className="flex items-center gap-1.5">
       <button
@@ -285,7 +285,7 @@ function ArtifactActions({
                   href={`/api/artifacts/${id}/export?format=${fmt}`}
                   download
                   onClick={() => setDownloadOpen(false)}
-                  className="block rounded-md px-2 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
+                  className="block rounded-md px-2 py-1.5 text-left font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary"
                 >
                   {label}
                 </a>
@@ -392,7 +392,7 @@ function renderContent(content: string): React.ReactNode[] {
                 {header.map((h, hi) => (
                   <th
                     key={hi}
-                    className="px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
+                    className="px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-fg-muted"
                   >
                     {formatInline(h, `th-${i}-${hi}`)}
                   </th>
@@ -556,14 +556,14 @@ export function ArtifactCard({
         className="w-full px-4 py-3 text-left"
       >
         <div className="flex items-center gap-2">
-          <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${color}`}>
+          <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${color}`}>
             {label}
           </span>
           {agent && (
-            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{agent}</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{agent}</span>
           )}
           {date && (
-            <span className="ml-auto font-mono text-[9px] text-fg-muted">{date}</span>
+            <span className="ml-auto font-mono text-[11px] text-fg-muted">{date}</span>
           )}
         </div>
         <p className="mt-1.5 text-sm font-medium text-fg-primary">{title}</p>
@@ -590,7 +590,7 @@ export function ArtifactCard({
           ) : null}
           <button
             onClick={() => setExpanded(false)}
-            className="mt-4 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
+            className="mt-4 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
           >
             Collapse ↑
           </button>
@@ -655,7 +655,7 @@ export function ArtifactInline({
       {isLong && (
         <button
           onClick={() => setExpanded((e) => !e)}
-          className="mt-2 font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
+          className="mt-2 font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
         >
           {expanded ? "Collapse ↑" : "Read full output ↓"}
         </button>

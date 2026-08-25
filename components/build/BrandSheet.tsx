@@ -9,7 +9,7 @@ function safeHex(value: string | null | undefined): string | null {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-5">
-      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-gold-500 print:text-neutral-600">
+      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-500 print:text-neutral-600">
         {title}
       </h3>
       {children}
@@ -24,11 +24,11 @@ function Swatch({ hex, label }: { hex: string; label?: string }) {
         className="h-12 w-12 rounded-lg border border-line print:border-neutral-300"
         style={{ backgroundColor: hex }}
       />
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-500">
         {hex}
       </span>
       {label ? (
-        <span className="font-mono text-[8px] uppercase tracking-wider text-gold-500 print:text-neutral-600">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-500 print:text-neutral-600">
           {label}
         </span>
       ) : null}
@@ -139,7 +139,7 @@ export function BrandSheet({
         </Section>
 
         <footer className="mt-6 border-t border-line pt-3 print:border-neutral-300">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted print:text-neutral-400">
             {firmName || ""} · Brand reference
           </p>
         </footer>

@@ -84,7 +84,7 @@ export function CopilotCard({ data }: { data: CopilotCardData }) {
             {data.stepTitle}
           </span>
           {data.agentLabel ? (
-            <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {data.agentLabel}
             </span>
           ) : null}
@@ -93,13 +93,13 @@ export function CopilotCard({ data }: { data: CopilotCardData }) {
           {tier ? (
             <span
               title={tier.tooltip}
-              className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider cursor-help ${tier.badgeClass}`}
+              className={`rounded px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider cursor-help ${tier.badgeClass}`}
             >
               {tier.label} confidence
             </span>
           ) : null}
           <span
-            className={`font-mono text-[10px] uppercase tracking-wider ${STATUS_CLASS[data.status]}`}
+            className={`font-mono text-[11px] uppercase tracking-wider ${STATUS_CLASS[data.status]}`}
           >
             {STATUS_LABEL[data.status]}
           </span>
@@ -119,7 +119,7 @@ export function CopilotCard({ data }: { data: CopilotCardData }) {
             onClick={() => setFindingsOpen((v) => !v)}
             className="flex w-full items-center justify-between py-1 text-xs font-medium text-fg-secondary hover:text-fg-primary transition"
           >
-            <span className="uppercase tracking-wider font-mono text-[9px]">
+            <span className="uppercase tracking-wider font-mono text-[11px]">
               Key Findings
             </span>
             <span className="font-mono text-fg-muted">{findingsOpen ? "▲" : "▼"}</span>
@@ -140,7 +140,7 @@ export function CopilotCard({ data }: { data: CopilotCardData }) {
       {/* Artifact */}
       {data.artifactLabel ? (
         <div className="border-t border-line/60 px-4 py-2.5 flex items-center gap-3">
-          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Artifact
           </span>
           <span className="text-sm text-fg-secondary truncate flex-1">

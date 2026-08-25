@@ -34,13 +34,13 @@ export function DraftLpUpdateButton({ period }: { period: string }) {
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition-colors hover:bg-gold-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition-colors hover:bg-gold-500/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {pending ? "Drafting…" : "Draft LP update"}
       </button>
 
       {result?.error ? (
-        <p className="font-mono text-[10px] uppercase tracking-wider text-status-danger">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-status-danger">
           {result.error}
         </p>
       ) : result?.sessionId ? (
@@ -50,7 +50,7 @@ export function DraftLpUpdateButton({ period }: { period: string }) {
           ) : null}
           <Link
             href={`/session/${result.sessionId}`}
-            className="font-mono text-[10px] uppercase tracking-wider text-gold-300 underline-offset-2 hover:underline"
+            className="font-mono text-[11px] uppercase tracking-wider text-gold-300 underline-offset-2 hover:underline"
           >
             Open in Earn →
           </Link>

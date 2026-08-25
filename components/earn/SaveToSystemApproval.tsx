@@ -27,7 +27,7 @@ export function SaveToSystemApproval({
 
   return (
     <div className="rounded-2xl border border-accent/40 bg-surface-1 p-5">
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
         Save approval
       </p>
       <h3 className="mt-1 text-base font-semibold text-fg">

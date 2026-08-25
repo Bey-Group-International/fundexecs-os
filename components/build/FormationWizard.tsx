@@ -76,7 +76,7 @@ export function FormationWizard({ parents }: { parents: { id: string; name: stri
       {/* Header + progress */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Form a vehicle · Step {step + 1} of {total}
           </span>
         </div>
@@ -248,7 +248,7 @@ export function FormationWizard({ parents }: { parents: { id: string; name: stri
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
       <span className="text-sm text-fg-secondary">{value}</span>
     </div>
   );

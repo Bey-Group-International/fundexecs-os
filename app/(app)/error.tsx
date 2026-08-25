@@ -26,7 +26,7 @@ export default function AppError({
             : "An unexpected error occurred. Please try again."}
         </p>
         {error.digest ? (
-          <p className="mt-1 font-mono text-[10px] text-fg-muted">ref: {error.digest}</p>
+          <p className="mt-1 font-mono text-[11px] text-fg-muted">ref: {error.digest}</p>
         ) : null}
         <button
           type="button"

@@ -151,7 +151,7 @@ export function SourcingIntel({
               <span className="truncate text-sm font-medium text-fg-primary">{h.name}</span>
               <span className={`shrink-0 font-mono text-xs ${scoreTone(h.score)}`}>{h.score}%</span>
             </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               <span className="rounded-full border border-line px-1.5 py-0.5">{humanize(h.kind)}</span>
               {h.geography ? <span>{h.geography}</span> : null}
               {h.categories.slice(0, 3).map((c) => (
@@ -169,7 +169,7 @@ export function SourcingIntel({
                 href={h.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1 inline-block max-w-full truncate font-mono text-[10px] text-status-info hover:underline"
+                className="mt-1 inline-block max-w-full truncate font-mono text-[11px] text-status-info hover:underline"
               >
                 ↗ source
               </a>
@@ -204,11 +204,11 @@ export function SourcingIntel({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Sourcing Intelligence
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
@@ -296,13 +296,13 @@ export function SourcingIntel({
       {similar ? (
         <div className="mt-5 rounded-2xl border border-gold-500/30 bg-gold-500/[0.04] p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Similar to {similar.anchor}
             </span>
             <button
               type="button"
               onClick={() => setSimilar(null)}
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
+              className="font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:text-fg-secondary"
             >
               ✕ close
             </button>
@@ -320,7 +320,7 @@ export function SourcingIntel({
         hits.length ? (
           <div className="mt-5 space-y-3">
             {discovered > 0 ? (
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 +{discovered} newly discovered · {hits.length} ranked
               </p>
             ) : null}

@@ -26,7 +26,7 @@ export default function OfflinePage() {
         >
           Try again
         </Link>
-        <p className="mt-8 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+        <p className="mt-8 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
           FundExecs OS · Private markets operating system
         </p>
       </div>

@@ -53,7 +53,7 @@ export default async function EventTypeBookingPage({
         <Logo />
 
         <header className="flex flex-col gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--gold-400)]">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--gold-400)]">
             {page.display_name}
           </span>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg-primary)]">{eventType.title}</h1>

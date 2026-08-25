@@ -41,10 +41,10 @@ export function ProgressiveForm({
       {/* Progress bar + step counter */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Step {currentStep + 1} of {steps.length}
           </span>
-          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {Math.round(progress)}%
           </span>
         </div>
@@ -73,7 +73,7 @@ export function ProgressiveForm({
                   // In practice callers handle this by managing currentStep themselves.
                 }
               }}
-              className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-wider transition ${
+              className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
                 active
                   ? "bg-gold-500 text-black"
                   : done

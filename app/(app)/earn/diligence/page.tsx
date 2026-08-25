@@ -14,7 +14,7 @@ export default async function DiligencePage() {
   return (
     <div className="fx-ambient mx-auto max-w-3xl">
       <header className="mb-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Earn · Diligence Brain
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-fg-primary">

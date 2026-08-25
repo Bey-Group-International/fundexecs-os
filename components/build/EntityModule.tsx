@@ -131,7 +131,7 @@ export async function EntityModule() {
             if (rows.length === 0) return null;
             return (
               <div key={group.key} className="flex flex-col gap-2">
-                <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{group.label}</div>
+                <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{group.label}</div>
                 {rows.map((e) => (
                   <div key={e.id} className="flex items-start gap-3 rounded-xl border border-line bg-surface-1 p-3">
                     <div className="min-w-0 flex-1">
@@ -141,15 +141,15 @@ export async function EntityModule() {
                         layout="grid"
                         display={
                           <div className="flex items-center gap-3">
-                            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                               {TYPE_LABEL[e.entity_type] ?? e.entity_type}
                             </span>
                             <span className="text-sm text-fg-primary">{e.name}</span>
                             {e.jurisdiction ? (
-                              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{e.jurisdiction}</span>
+                              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{e.jurisdiction}</span>
                             ) : null}
                             {e.formation_date ? (
-                              <span className="font-mono text-[10px] text-fg-muted">· {e.formation_date.slice(0, 4)}</span>
+                              <span className="font-mono text-[11px] text-fg-muted">· {e.formation_date.slice(0, 4)}</span>
                             ) : null}
                           </div>
                         }

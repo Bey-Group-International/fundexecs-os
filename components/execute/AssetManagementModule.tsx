@@ -107,7 +107,7 @@ export async function ExecuteAssetManagementModule({
               key={type}
               className="flex items-center gap-1.5 rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary"
             >
-              <span className="font-mono text-[10px] text-fg-muted">{t.count}</span>
+              <span className="font-mono text-[11px] text-fg-muted">{t.count}</span>
               {humanize(type)}
               <span className="font-mono text-[11px] text-fg-primary">{compactUsd(t.value)}</span>
             </span>
@@ -123,7 +123,7 @@ export async function ExecuteAssetManagementModule({
               {["Asset", "Type", "Cost", "Value", "Mark", "Status", ""].map((h, i) => (
                 <th
                   key={h || "actions"}
-                  className={`px-4 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 4 ? "text-right" : ""}`}
+                  className={`px-4 py-3 font-mono text-[11px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 4 ? "text-right" : ""}`}
                 >
                   {h}
                 </th>
@@ -144,7 +144,7 @@ export async function ExecuteAssetManagementModule({
                       {a.name}
                     </Link>
                     {a.acquisition_date ? (
-                      <span className="ml-2 font-mono text-[10px] text-fg-muted">acq. {shortDate(a.acquisition_date)}</span>
+                      <span className="ml-2 font-mono text-[11px] text-fg-muted">acq. {shortDate(a.acquisition_date)}</span>
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-fg-secondary">{humanize(a.asset_type)}</td>
@@ -163,7 +163,7 @@ export async function ExecuteAssetManagementModule({
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                      className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                         exited ? "border-emerald-400/40 text-emerald-300" : "border-line text-fg-muted"
                       }`}
                     >

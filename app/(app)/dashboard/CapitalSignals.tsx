@@ -25,7 +25,7 @@ export function HottestCapital({ entries }: { entries: CapitalMapEntry[] }) {
           <span aria-hidden className="h-3 w-0.5 rounded-full bg-gold-500/70" />
           Hottest capital
         </h2>
-        <Link href="/capital-map" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+        <Link href="/capital-map" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
           Capital Map →
         </Link>
       </div>
@@ -54,7 +54,7 @@ export function HottestCapital({ entries }: { entries: CapitalMapEntry[] }) {
                 />
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-fg-primary">{entry.investor.name}</span>
-                  <span className="block truncate font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <span className="block truncate font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {temp.label}
                     {entry.introPath && entry.introPath.introducer !== "You"
                       ? ` · intro via ${entry.introPath.introducer}`
@@ -87,7 +87,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
           Pending gates
         </h2>
         {approvals.length > 0 ? (
-          <Link href="/grid/review" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/grid/review" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
             Review →
           </Link>
         ) : null}
@@ -111,7 +111,7 @@ export function PendingGates({ approvals }: { approvals: Approval[] }) {
                 className="fx-card fx-card-hover flex items-center gap-2.5 px-3 py-2.5"
               >
                 <span
-                  className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[tier]}`}
+                  className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[tier]}`}
                 >
                   T{tier}
                 </span>

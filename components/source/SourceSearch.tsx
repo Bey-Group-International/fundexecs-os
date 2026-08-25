@@ -179,22 +179,22 @@ export function SourceSearch({
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ AI Sourcing Search
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               offline mode
             </span>
           ) : webEnrichment ? (
-            <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-info">
+            <span className="rounded-full border border-status-info/40 bg-status-info/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-info">
               web ⚡
             </span>
           ) : null}
           {personalized ? (
             <span
               title="Tuned by what you've accepted and skipped before"
-              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+              className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300"
             >
               ✦ personalized
             </span>
@@ -268,7 +268,7 @@ export function SourceSearch({
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm text-fg-primary">{s.title}</span>
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider">
+                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider">
                     {s.status === "queued" ? (
                       <span className="text-fg-muted">queued</span>
                     ) : s.status === "running" ? (
@@ -280,7 +280,7 @@ export function SourceSearch({
                     )}
                   </span>
                 </div>
-                <span className="font-mono text-[10px] text-fg-muted">{s.agentName}</span>
+                <span className="font-mono text-[11px] text-fg-muted">{s.agentName}</span>
               </li>
             ))}
           </ol>
@@ -297,11 +297,11 @@ export function SourceSearch({
               return (
                 <div key={s.id} className="rounded-2xl border border-line bg-surface-1 p-4">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                       {humanize(s.entities)} · {s.agentName}
                     </span>
                     {added[s.id] != null ? (
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-status-success">
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-status-success">
                         ✓ added {added[s.id]}
                       </span>
                     ) : null}
@@ -328,7 +328,7 @@ export function SourceSearch({
                                 {c.fitScore}% fit
                               </span>
                             </div>
-                            <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                               {humanize(c.category)}
                             </div>
                             <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
@@ -339,7 +339,7 @@ export function SourceSearch({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="mt-1 inline-block max-w-full truncate font-mono text-[10px] text-status-info hover:underline"
+                                className="mt-1 inline-block max-w-full truncate font-mono text-[11px] text-status-info hover:underline"
                               >
                                 ↗ source
                               </a>

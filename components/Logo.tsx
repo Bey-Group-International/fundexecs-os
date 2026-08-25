@@ -18,7 +18,7 @@ type LogoProps = {
 };
 
 const WORDMARK_CLASS =
-  "font-mono text-xs uppercase tracking-[0.2em] text-gold-400";
+  "font-mono text-xs uppercase tracking-[0.16em] text-gold-400";
 
 function CoinMark({ className = "" }: { className?: string }) {
   return (

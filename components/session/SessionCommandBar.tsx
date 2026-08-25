@@ -171,14 +171,14 @@ export function SessionCommandBar({
               >
                 Background Tasks
                 {active > 0 ? (
-                  <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
+                  <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] text-gold-300">
                     {active}
                   </span>
                 ) : null}
               </button>
 
               <div className="my-1 border-t border-line" />
-              <p className="px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              <p className="px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
                 Hub Modules
               </p>
               {HUB_ORDER.map((hk) => {
@@ -295,7 +295,7 @@ export function SessionCommandBar({
               <div className="p-2">
                 <button
                   onClick={() => setSelected(null)}
-                  className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline"
+                  className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline"
                 >
                   ← All tasks
                 </button>

@@ -79,13 +79,13 @@ export default function WaterfallCalculator({
       <div className="grid grid-cols-2 gap-2.5">
         <div className="rounded-xl border border-line bg-surface-2/40 px-3.5 py-3">
           <span className="font-display text-lg font-semibold text-emerald-300">{usd(result.totalToLps)}</span>
-          <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             to LPs · {result.lpPct}%
           </span>
         </div>
         <div className="rounded-xl border border-line bg-surface-2/40 px-3.5 py-3">
           <span className="font-display text-lg font-semibold text-gold-300">{usd(result.totalToGp)}</span>
-          <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             to GP · {result.gpPct}%
           </span>
         </div>
@@ -93,7 +93,7 @@ export default function WaterfallCalculator({
 
       {/* Tiers */}
       <div className="overflow-hidden rounded-xl border border-line">
-        <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-line bg-surface-2/80 px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-line bg-surface-2/80 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           <span>Tier</span>
           <span className="text-right">To LPs</span>
           <span className="text-right">To GP</span>
@@ -113,7 +113,7 @@ export default function WaterfallCalculator({
       {/* Per-LP allocation */}
       {allocation.length > 0 ? (
         <div>
-          <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+          <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             LP allocation · by ownership
           </h3>
           <div className="overflow-hidden rounded-xl border border-line">

@@ -23,7 +23,7 @@ export function EarnAction({
       <button
         className={
           subtle
-            ? "inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            ? "inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
             : "inline-flex items-center gap-1.5 rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-300 transition hover:bg-gold-500/20 hover:text-gold-200"
         }
       >
@@ -71,8 +71,8 @@ export function StatTile({
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-1 px-3.5 py-3">
       <span className={`font-display text-lg font-semibold leading-none ${valueTone}`}>{value}</span>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</span>
-      {sub ? <span className="font-mono text-[10px] text-fg-muted">{sub}</span> : null}
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
+      {sub ? <span className="font-mono text-[11px] text-fg-muted">{sub}</span> : null}
     </div>
   );
 }

@@ -56,7 +56,7 @@ function ShareRow({ share }: { share: ShareView }) {
         {/* Status dot + label */}
         <div className="flex items-center gap-1.5">
           <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-emerald-400" : "bg-fg-muted/40"}`} />
-          <span className={`font-mono text-[9px] uppercase tracking-wider ${live ? "text-emerald-400" : "text-fg-muted"}`}>
+          <span className={`font-mono text-[11px] uppercase tracking-wider ${live ? "text-emerald-400" : "text-fg-muted"}`}>
             {st.label}
           </span>
         </div>
@@ -64,7 +64,7 @@ function ShareRow({ share }: { share: ShareView }) {
         <span className="text-sm font-medium text-fg-primary">{share.label || "Untitled link"}</span>
 
         {share.expires_at && !share.revoked_at ? (
-          <span className="font-mono text-[9px] text-fg-muted">
+          <span className="font-mono text-[11px] text-fg-muted">
             exp {new Date(share.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
         ) : null}
@@ -79,7 +79,7 @@ function ShareRow({ share }: { share: ShareView }) {
                   setTimeout(() => setCopied(false), 1500);
                 });
               }}
-              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+              className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
             >
               {copied ? "Copied ✓" : "Copy link"}
             </button>
@@ -98,13 +98,13 @@ function ShareRow({ share }: { share: ShareView }) {
       {/* URL preview strip + section scope */}
       {live ? (
         <div className="border-t border-line/50 bg-surface-0 px-4 py-2">
-          <p className="truncate font-mono text-[9px] text-fg-muted">{url}</p>
+          <p className="truncate font-mono text-[11px] text-fg-muted">{url}</p>
           {share.allowed_sections && share.allowed_sections.length > 0 ? (
-            <p className="mt-1 font-mono text-[9px] text-fg-muted/70">
+            <p className="mt-1 font-mono text-[11px] text-fg-muted/70">
               Sections: {share.allowed_sections.join(", ")}
             </p>
           ) : (
-            <p className="mt-1 font-mono text-[9px] text-fg-muted/50">Full data room</p>
+            <p className="mt-1 font-mono text-[11px] text-fg-muted/50">Full data room</p>
           )}
         </div>
       ) : null}
@@ -168,7 +168,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
 
       {/* Gate toggles */}
       <div className="mt-4 space-y-2 rounded-lg border border-line bg-surface-0 p-3">
-        <p className="mb-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Access gates</p>
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Access gates</p>
 
         <label className="flex cursor-pointer items-center gap-2.5">
           <input
@@ -199,7 +199,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
             <button
               type="button"
               onClick={() => setShowNdaText((v) => !v)}
-              className="ml-auto font-mono text-[9px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
+              className="ml-auto font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:text-gold-300"
             >
               {showNdaText ? "Hide text" : "Custom text"}
             </button>
@@ -248,7 +248,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
 
       {/* Section scope */}
       <div className="mt-3 space-y-2 rounded-lg border border-line bg-surface-0 p-3">
-        <p className="mb-2 font-mono text-[9px] uppercase tracking-wider text-fg-muted">Scope</p>
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Scope</p>
         <label className="flex cursor-pointer items-center gap-2.5">
           <input
             type="checkbox"
@@ -268,7 +268,7 @@ function CreateShareForm({ onDone }: { onDone: () => void }) {
                 key={s.key}
                 type="button"
                 onClick={() => toggleSection(s.key)}
-                className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition ${
+                className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
                   selectedSections.has(s.key)
                     ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
                     : "border-line text-fg-muted hover:border-gold-500/30 hover:text-fg-secondary"

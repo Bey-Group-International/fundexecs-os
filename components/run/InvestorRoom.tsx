@@ -13,7 +13,7 @@ import type { InvestorRoomData, RoomCard } from "@/lib/investor-room";
 function Gate({ label, on }: { label: string; on: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
         on
           ? "border-status-success/40 bg-status-success/10 text-status-success"
           : "border-status-warning/40 bg-status-warning/10 text-status-warning"
@@ -55,7 +55,7 @@ function ComplianceRow({ label, on }: { label: string; on: boolean }) {
     <li className="flex items-center gap-2 text-sm">
       <span
         aria-hidden
-        className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
+        className={`flex h-4 w-4 items-center justify-center rounded-full text-[11px] ${
           on
             ? "bg-status-success/15 text-status-success"
             : "bg-status-warning/15 text-status-warning"
@@ -80,7 +80,7 @@ export function InvestorRoom({ data }: { data: InvestorRoomData }) {
     <div className="fx-ambient mx-auto max-w-6xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
             Investor Room
           </p>
           <h1 className="mt-1 font-display text-xl font-semibold text-fg-primary">
@@ -109,7 +109,7 @@ export function InvestorRoom({ data }: { data: InvestorRoomData }) {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-fg-primary">Compliance State</h2>
             <span
-              className={`rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+              className={`rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                 allClear
                   ? "bg-status-success/10 text-status-success"
                   : "bg-status-warning/10 text-status-warning"

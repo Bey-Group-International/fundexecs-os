@@ -49,7 +49,7 @@ export function StatTile({
         aria-hidden
         className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-neural-400/30 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{label}</p>
       <div className="mt-2 flex items-end gap-2">
         <p className="font-display text-[2.1rem] font-bold leading-none tracking-tight text-fg-primary transition-colors duration-200 group-hover:text-white">
           {display}

@@ -65,9 +65,9 @@ function stageLabel(overall: number): string {
 
 function StatusMark({ s }: { s: SectionProgress }) {
   if (s.status === "complete")
-    return <span className="font-mono text-[10px] text-emerald-400">✓</span>;
+    return <span className="font-mono text-[11px] text-emerald-400">✓</span>;
   return (
-    <span className="font-mono text-[10px] text-fg-muted">
+    <span className="font-mono text-[11px] text-fg-muted">
       {s.doneCount}/{s.total}
     </span>
   );
@@ -229,7 +229,7 @@ function InterviewModal({
         className="fx-sheet-enter relative w-full max-w-lg overflow-hidden rounded-2xl border border-gold-500/25 bg-surface-1 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Guided interview
           </span>
           <button
@@ -270,7 +270,7 @@ function InterviewModal({
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                   {q!.sectionLabel} · Step {step + 1} of {total}
                 </span>
                 <div className="h-1 w-28 overflow-hidden rounded-full bg-surface-2">
@@ -359,13 +359,13 @@ export function FirmIdentityRail({
             </span>
           </div>
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Firm Identity
             </p>
             <p className="mt-0.5 truncate font-display text-base font-semibold text-fg-primary">
               {firmName || "Your firm"}
             </p>
-            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {stageLabel(progress.overall)}
             </p>
           </div>
@@ -390,7 +390,7 @@ export function FirmIdentityRail({
                 }`}
               >
                 <span
-                  className={`font-mono text-[10px] ${
+                  className={`font-mono text-[11px] ${
                     isActive ? "text-gold-300" : "text-fg-muted"
                   }`}
                 >

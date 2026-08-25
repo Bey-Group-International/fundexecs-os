@@ -58,7 +58,7 @@ function ContrastBadge({ label, ratio }: { label: string; ratio: number }) {
           ? "WCAG AA ✓ — meets readability standard for LP materials (≥4.5:1 contrast ratio)"
           : "Below WCAG AA threshold (4.5:1). Text on LP materials may be hard to read — consider a darker or lighter shade."
       }
-      className={`inline-flex cursor-help items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] uppercase tracking-wider ${
+      className={`inline-flex cursor-help items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wider ${
         pass
           ? "border-status-success/40 bg-status-success/10 text-status-success"
           : "border-status-warning/40 bg-status-warning/10 text-status-warning"
@@ -185,7 +185,7 @@ export function BrandStudio({
           {hasSavedColor && isValidHex(color) ? (
             <span className="select-all font-mono text-xs text-fg-secondary">{color}</span>
           ) : (
-            <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Not set — open the picker
             </span>
           )}
@@ -236,7 +236,7 @@ export function BrandStudio({
                 type="button"
                 aria-label={`Remove ${c}`}
                 onClick={() => removeFromPalette(c)}
-                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-surface-2 text-[10px] leading-none text-fg-secondary opacity-0 transition group-hover:opacity-100 hover:bg-status-danger/20 hover:text-status-danger"
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-line bg-surface-2 text-[11px] leading-none text-fg-secondary opacity-0 transition group-hover:opacity-100 hover:bg-status-danger/20 hover:text-status-danger"
               >
                 ×
               </button>
@@ -358,7 +358,7 @@ export function BrandStudio({
             ))}
           </div>
           {voice ? (
-            <p className="mt-4 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Voice · {voice}
             </p>
           ) : null}

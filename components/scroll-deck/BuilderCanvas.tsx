@@ -58,7 +58,7 @@ function Field({
 
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+      <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
         {label}
       </span>
       {editable && editing ? (
@@ -135,7 +135,7 @@ function SectionCard({
             {index + 1}
           </span>
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            <div className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
               {section.kicker}
             </div>
             <h3 className="font-display text-base font-semibold text-fg-primary">
@@ -144,12 +144,12 @@ function SectionCard({
           </div>
         </div>
         {pending ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-gold-400/50 bg-gold-400/10 px-2 py-0.5 text-[10px] font-medium text-gold-300">
+          <span className="inline-flex items-center gap-1 rounded-full border border-gold-400/50 bg-gold-400/10 px-2 py-0.5 text-[11px] font-medium text-gold-300">
             <SparklesIcon className="h-3 w-3" />
             Proposed edit
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-status-success">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-status-success">
             <CircleCheckIcon className="h-3.5 w-3.5" />
             Applied
           </span>
@@ -236,13 +236,13 @@ export function BuilderCanvas({
       {/* Canvas toolbar */}
       <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-line px-5">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Canvas
           </span>
           <span className="text-fg-muted">/</span>
           <span className="text-sm font-medium text-fg-primary">Fund Deck</span>
         </div>
-        <span className="rounded-full border border-line bg-surface-1 px-2.5 py-1 font-mono text-[10px] text-fg-muted">
+        <span className="rounded-full border border-line bg-surface-1 px-2.5 py-1 font-mono text-[11px] text-fg-muted">
           {applied.length}/6 sections
         </span>
       </div>

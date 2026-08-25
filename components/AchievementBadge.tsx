@@ -47,13 +47,13 @@ function BadgeTile({
       <div className="flex flex-col gap-1.5 rounded-xl border border-line/25 bg-surface-1/15 p-3 opacity-40">
         <div className="flex items-center gap-1.5">
           <span className={`h-1.5 w-1.5 rounded-full ${accent.dot} opacity-30`} />
-          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             {HUB_LABEL[achievement.hub]}
           </span>
         </div>
         <p className="text-xs font-medium text-fg-muted">{achievement.label}</p>
-        <p className="text-[10px] leading-4 text-fg-muted">{achievement.description}</p>
-        <p className="mt-auto font-mono text-[9px] text-fg-muted">
+        <p className="text-[11px] leading-4 text-fg-muted">{achievement.description}</p>
+        <p className="mt-auto font-mono text-[11px] text-fg-muted">
           +{achievement.bonus} cr
         </p>
       </div>
@@ -72,16 +72,16 @@ function BadgeTile({
     >
       <div className="flex items-center gap-1.5">
         <span className={`h-1.5 w-1.5 rounded-full ${accent.dot} shadow-[0_0_8px_rgba(118,185,0,0.8)]`} />
-        <span className={`font-mono text-[9px] uppercase tracking-[0.2em] ${accent.text}`}>
+        <span className={`font-mono text-[11px] uppercase tracking-[0.16em] ${accent.text}`}>
           {HUB_LABEL[achievement.hub]}
         </span>
       </div>
       <p className={`text-xs font-semibold ${accent.text}`}>{achievement.label}</p>
-      <p className="text-[10px] leading-4 text-fg-secondary">{achievement.description}</p>
+      <p className="text-[11px] leading-4 text-fg-secondary">{achievement.description}</p>
       <div className="mt-auto flex items-center justify-between">
-        <span className={`font-mono text-[9px] ${accent.text}`}>+{achievement.bonus} cr</span>
+        <span className={`font-mono text-[11px] ${accent.text}`}>+{achievement.bonus} cr</span>
         {earnedAt && (
-          <span className="font-mono text-[9px] text-fg-muted">
+          <span className="font-mono text-[11px] text-fg-muted">
             {new Date(earnedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </span>
         )}
@@ -107,10 +107,10 @@ export function AchievementBadgeGrid({ earned, showLocked = true }: AchievementB
         return (
           <div key={hub}>
             <div className="mb-2.5 flex items-center gap-2">
-              <span className={`font-mono text-[10px] uppercase tracking-[0.24em] ${HUB_ACCENT[hub]?.text ?? "text-neural-300"}`}>
+              <span className={`font-mono text-[11px] uppercase tracking-[0.16em] ${HUB_ACCENT[hub]?.text ?? "text-neural-300"}`}>
                 {HUB_LABEL[hub]}
               </span>
-              <span className="font-mono text-[10px] text-fg-muted">
+              <span className="font-mono text-[11px] text-fg-muted">
                 {earnedInHub.length}/{hubAchs.length}
               </span>
               <div className="h-px flex-1 bg-line/30" />

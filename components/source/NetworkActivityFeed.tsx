@@ -84,7 +84,7 @@ export function NetworkActivityFeed({ initialEvents, initialLive }: Props) {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
           </span>
-          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">Live activity</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Live activity</p>
         </div>
         <button
           onClick={refresh}
@@ -108,7 +108,7 @@ export function NetworkActivityFeed({ initialEvents, initialLive }: Props) {
         ].map((s) => (
           <div key={s.label} className="px-3 py-2.5 text-center">
             <p className="font-mono text-lg font-semibold tabular-nums text-fg-primary">{s.value}</p>
-            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-fg-muted">{s.label}</p>
+            <p className="mt-0.5 text-[11px] uppercase tracking-wider text-fg-muted">{s.label}</p>
           </div>
         ))}
       </div>
@@ -146,7 +146,7 @@ export function NetworkActivityFeed({ initialEvents, initialLive }: Props) {
 
       {updatedAt && (
         <div className="border-t border-line/70 px-4 py-2 text-center">
-          <p className="text-[10px] uppercase tracking-wider text-fg-muted/70">
+          <p className="text-[11px] uppercase tracking-wider text-fg-muted/70">
             Updated {relativeTime(new Date(updatedAt).toISOString())}
           </p>
         </div>

@@ -22,7 +22,7 @@ const HELD_OUT = new Set(["exited", "sold", "realized", "divested", "written_off
 function Unavailable() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
-      <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">FundExecs OS</span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</span>
       <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">This statement isn&apos;t available</h1>
       <p className="mt-2 max-w-sm text-sm text-fg-secondary">
         The link is invalid, has expired, or has been revoked. Ask the sender for a fresh link.
@@ -35,7 +35,7 @@ function Stat({ value, label, tone }: { value: string; label: string; tone?: str
   return (
     <div className="rounded-lg border border-line bg-surface-1 px-3 py-2.5 text-center">
       <p className={`font-display text-xl font-semibold ${tone ?? "text-fg-primary"}`}>{value}</p>
-      <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</p>
+      <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</p>
     </div>
   );
 }
@@ -111,8 +111,8 @@ export default async function InvestorPortal(props: { params: Promise<{ token: s
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">Investor Portal</span>
-              <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Investor Portal</span>
+              <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Read-only
               </span>
             </div>
@@ -164,7 +164,7 @@ export default async function InvestorPortal(props: { params: Promise<{ token: s
         ) : null}
 
         <footer className="mt-12 border-t border-line pt-6 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-fg-muted">Powered by FundExecs OS</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Powered by FundExecs OS</span>
         </footer>
       </div>
     </main>

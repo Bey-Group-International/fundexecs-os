@@ -44,7 +44,7 @@ function CoverageCard({ coverage }: { coverage: CapitalCoverage }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           Capital coverage
         </span>
         {pct != null ? (
@@ -71,7 +71,7 @@ function CoverageCard({ coverage }: { coverage: CapitalCoverage }) {
         </p>
       )}
       {coverage.debt > 0 ? (
-        <p className="mt-1 font-mono text-[10px] text-fg-muted">
+        <p className="mt-1 font-mono text-[11px] text-fg-muted">
           incl. {compactUsd(coverage.debt)} debt
         </p>
       ) : null}
@@ -84,7 +84,7 @@ function VelocityCard({ velocity }: { velocity: PipelineVelocity }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 p-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           Pipeline velocity
         </span>
         <span
@@ -125,14 +125,14 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Sourcing readiness
             </span>
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
           </div>
-          <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">Based on profile completion</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Based on profile completion</p>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
         </div>
       </div>
@@ -153,7 +153,7 @@ export function SourceMomentumPanel({ momentum }: { momentum: SourceMomentum }) 
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Next best move · {nextAction.moduleLabel}
             </span>
             <span className="block truncate text-sm text-fg-primary">{nextAction.label}</span>

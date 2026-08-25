@@ -39,7 +39,7 @@ export function GridLive({ orgId }: { orgId: string }) {
   }, [orgId]);
 
   return (
-    <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+    <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-success" />
       Live
     </span>

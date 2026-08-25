@@ -78,7 +78,7 @@ export function TopNavAlerts({
       >
         <span className={`inline-block ${shakeMsg ? "animate-shake" : ""}`}>📬</span>
         {messages > 0 ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-400 px-1 font-mono text-[9px] font-semibold text-surface-0">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-400 px-1 font-mono text-[11px] font-semibold text-surface-0">
             {messages > 9 ? "9+" : messages}
           </span>
         ) : null}
@@ -92,7 +92,7 @@ export function TopNavAlerts({
       >
         <span className={`inline-block ${popDeal ? "animate-nudge" : ""}`}>💡</span>
         {deals > 0 ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-400 px-1 font-mono text-[9px] font-semibold text-surface-0">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-400 px-1 font-mono text-[11px] font-semibold text-surface-0">
             {deals > 9 ? "9+" : deals}
           </span>
         ) : null}

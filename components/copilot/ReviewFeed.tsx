@@ -18,7 +18,7 @@ function StatusPill({ status }: { status: TaskStatus }) {
   const pill = STATUS_PILL[status] ?? { label: status.replace(/_/g, " "), cls: "border-line text-fg-muted" };
   return (
     <span
-      className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${pill.cls}`}
+      className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${pill.cls}`}
     >
       {pill.label}
     </span>
@@ -64,7 +64,7 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <div>
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Recent runs</p>
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Recent runs</p>
       <div className="flex flex-col gap-2">
         {runs.map((run, i) => (
           <div key={run.sessionId ?? `run-${i}`} className="rounded-xl border border-neural-400/15 bg-black/55 p-3">
@@ -77,12 +77,12 @@ export function ReviewFeed({ open, onClose }: { open: boolean; onClose: () => vo
                 <Link
                   href={`/session/${run.sessionId}`}
                   onClick={onClose}
-                  className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
+                  className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
                 >
                   Open →
                 </Link>
               ) : (
-                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">No session</span>
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">No session</span>
               )}
               {run.status === "awaiting_approval" && run.approvalId ? (
                 <div className="flex items-center gap-1.5">

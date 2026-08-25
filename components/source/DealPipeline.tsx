@@ -173,7 +173,7 @@ function StageDropdown({
   return (
     <div className="relative" ref={ref}>
       {advanceError && (
-        <p className="mb-1 text-[10px] text-red-400">{advanceError}</p>
+        <p className="mb-1 text-[11px] text-red-400">{advanceError}</p>
       )}
       <button
         type="button"
@@ -298,7 +298,7 @@ function DealSlideOver({
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* Stage */}
           <div>
-            <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Stage</p>
+            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Stage</p>
             <StageDropdown deal={deal} onAdvanced={handleStageAdvanced} pipelineStages={pipelineStages} />
           </div>
 
@@ -309,7 +309,7 @@ function DealSlideOver({
               </p>
               <a
                 href="/build/documents"
-                className="mt-1.5 inline-block font-mono text-[10px] uppercase tracking-widest text-gold-300 hover:underline"
+                className="mt-1.5 inline-block font-mono text-[11px] uppercase tracking-widest text-gold-300 hover:underline"
               >
                 Go to Documents →
               </a>
@@ -319,7 +319,7 @@ function DealSlideOver({
           {/* AI Fit */}
           {fit && (
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">AI Thesis Fit</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">AI Thesis Fit</p>
               <div className="flex items-center gap-2">
                 <span className={`rounded-full px-2.5 py-0.5 font-mono text-sm font-semibold ${fitColor}`}>
                   {fit.fitScore}
@@ -347,7 +347,7 @@ function DealSlideOver({
           {/* Manual thesis fit fallback */}
           {!fit && deal.thesisFit != null && (
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Thesis Fit</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Thesis Fit</p>
               <span className="font-mono text-sm font-semibold text-accent">
                 {Number(deal.thesisFit).toFixed(2)}
               </span>
@@ -358,19 +358,19 @@ function DealSlideOver({
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             {deal.assetClass && (
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Asset Class</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Asset Class</p>
                 <p className="mt-0.5 text-xs text-fg-secondary">{deal.assetClass}</p>
               </div>
             )}
             {deal.geography && (
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Geography</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Geography</p>
                 <p className="mt-0.5 text-xs text-fg-secondary">{deal.geography}</p>
               </div>
             )}
             {(deal.revenueRange ?? deal.targetAmount != null) && (
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Target / Revenue</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Target / Revenue</p>
                 <p className="mt-0.5 font-mono text-xs text-fg-secondary">
                   {deal.revenueRange ?? formatCurrency(deal.targetAmount)}
                 </p>
@@ -378,13 +378,13 @@ function DealSlideOver({
             )}
             {deal.expectedClose && (
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Expected Close</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Expected Close</p>
                 <p className="mt-0.5 font-mono text-xs text-fg-secondary">{deal.expectedClose}</p>
               </div>
             )}
             {deal.employeeRange && (
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Employees</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Employees</p>
                 <p className="mt-0.5 text-xs text-fg-secondary">{deal.employeeRange}</p>
               </div>
             )}
@@ -393,7 +393,7 @@ function DealSlideOver({
           {/* Website */}
           {deal.website && (
             <div>
-              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Website</p>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Website</p>
               <a
                 href={deal.website.startsWith("http") ? deal.website : `https://${deal.website}`}
                 target="_blank"
@@ -408,11 +408,11 @@ function DealSlideOver({
           {/* Point of Contact */}
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">Point of Contact</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">Point of Contact</p>
               <button
                 type="button"
                 onClick={() => setEditingContact((v) => !v)}
-                className="font-mono text-[9px] text-fg-muted hover:text-gold-300"
+                className="font-mono text-[11px] text-fg-muted hover:text-gold-300"
               >
                 {editingContact ? "Cancel" : "Edit"}
               </button>
@@ -446,7 +446,7 @@ function DealSlideOver({
                 )}
               </div>
             ) : (
-              <button type="button" onClick={() => setEditingContact(true)} className="font-mono text-[10px] text-fg-muted/50 hover:text-gold-300">
+              <button type="button" onClick={() => setEditingContact(true)} className="font-mono text-[11px] text-fg-muted/50 hover:text-gold-300">
                 + Add contact
               </button>
             )}
@@ -455,14 +455,14 @@ function DealSlideOver({
           {/* Notes */}
           {deal.notes && (
             <div>
-              <p className="mb-1 font-mono text-[9px] uppercase tracking-widest text-fg-muted">Notes</p>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Notes</p>
               <p className="text-xs leading-relaxed text-fg-secondary">{deal.notes}</p>
             </div>
           )}
 
           {/* Verification */}
           <div>
-            <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Data Source</p>
+            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Data Source</p>
             <VerificationPill
               verified={deal.verified}
               confidence={deal.confidence}
@@ -472,7 +472,7 @@ function DealSlideOver({
 
           {/* Quick actions */}
           <div className="border-t border-line pt-4">
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Quick Actions</p>
+            <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Quick Actions</p>
             <div className="flex flex-wrap gap-2">
               <a
                 href="/build/documents"
@@ -528,7 +528,7 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
 
   const inputClass =
     "w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/40 focus:outline-none";
-  const labelClass = "block font-mono text-[10px] uppercase tracking-widest text-fg-muted mb-1";
+  const labelClass = "block font-mono text-[11px] uppercase tracking-widest text-fg-muted mb-1";
 
   return (
     <>
@@ -715,11 +715,11 @@ export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
         </select>
         <div className="ml-auto flex items-center gap-3">
           {verifiedCount > 0 && (
-            <span className="hidden font-mono text-[10px] text-fg-muted sm:block">
+            <span className="hidden font-mono text-[11px] text-fg-muted sm:block">
               {verifiedCount}/{Math.min(localDeals.length, enrichCap)} enriched
             </span>
           )}
-          <span className="font-mono text-[10px] text-fg-muted">
+          <span className="font-mono text-[11px] text-fg-muted">
             {filtered.length}/{localDeals.length} deals
           </span>
           <button
@@ -774,7 +774,7 @@ export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
             <thead>
               <tr className="border-b border-line bg-surface-subtle">
                 {["Deal", "Stage", "Asset Class", "Target", "Fit", "Source", "Close", ""].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                  <th key={h} className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                     {h}
                   </th>
                 ))}
@@ -798,9 +798,9 @@ export function DealPipeline({ deals, enrichCap, pipelineStages }: Props) {
                     <div className="flex items-center gap-1.5">
                       <p className="font-medium text-fg">{d.name}</p>
                       {d.provenance === "ai" ? (
-                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+                        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-gold-300">AI Sourced</span>
                       ) : (
-                        <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+                        <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Manual</span>
                       )}
                     </div>
                     {d.industry ? (

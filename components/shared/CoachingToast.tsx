@@ -145,7 +145,7 @@ export function CoachingToastProvider({ children }: { children: ReactNode }) {
             >
               <div className="flex items-start justify-between gap-2">
                 <span
-                  className={`font-mono text-[9px] uppercase tracking-wider ${TONE_BADGE[tone]}`}
+                  className={`font-mono text-[11px] uppercase tracking-wider ${TONE_BADGE[tone]}`}
                 >
                   {TONE_LABEL[tone]}
                 </span>
@@ -153,7 +153,7 @@ export function CoachingToastProvider({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => dismiss(toast.id)}
                   aria-label="Dismiss notification"
-                  className="font-mono text-[10px] text-fg-muted transition hover:text-fg-primary"
+                  className="font-mono text-[11px] text-fg-muted transition hover:text-fg-primary"
                 >
                   ✕
                 </button>

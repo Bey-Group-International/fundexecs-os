@@ -66,7 +66,7 @@ export function OrgSecretsPanel({
 
       {groups.map((group) => (
         <div key={group.channelLabel} className="rounded-xl border border-line bg-surface-1 p-4">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {group.channelLabel}
           </span>
           <div className="mt-2 flex flex-col gap-2">
@@ -82,7 +82,7 @@ export function OrgSecretsPanel({
 
                   {stored && !editing ? (
                     <>
-                      <span className="font-mono text-[10px] text-fg-secondary">
+                      <span className="font-mono text-[11px] text-fg-secondary">
                         ••••{stored.last4}
                         {stored.updatedAt ? (
                           <span className="ml-1.5 text-fg-muted">

@@ -602,7 +602,7 @@ export async function ModuleView({
       {mandateStrip}
       <ModuleHeader title={mod.label} blurb={`Part of the ${hub.label} hub.`} />
       <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-1 px-8 py-14 text-center">
-        <span className="mb-1 font-mono text-[10px] uppercase tracking-[0.3em] text-fg-muted">
+        <span className="mb-1 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Coming soon
         </span>
         <h3 className="mt-2 font-display text-xl font-semibold text-fg-primary">

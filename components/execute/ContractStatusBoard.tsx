@@ -77,7 +77,7 @@ function RenewalBadge({ days, urgency }: Metric) {
 
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${cls}`}
+      className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${cls}`}
     >
       {label}
     </span>
@@ -87,7 +87,7 @@ function RenewalBadge({ days, urgency }: Metric) {
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</dt>
+      <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</dt>
       <dd className="mt-0.5 text-xs text-fg-secondary">{value}</dd>
     </div>
   );
@@ -121,12 +121,12 @@ function ContractDetail({ contract, days }: { contract: Contract; days: number |
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
+            className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-gold-400/50"
           >
             Open document <span aria-hidden>↗</span>
           </a>
         ) : (
-          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             No document attached
           </p>
         )}
@@ -167,7 +167,7 @@ function ContractRow({
       >
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-fg-primary">{contract.title}</p>
-          <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+          <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
             {DOCUMENT_TYPE_LABELS[contract.documentType]}
             {contract.investorName && ` · ${contract.investorName}`}
             {contract.fundName && ` · ${contract.fundName}`}
@@ -176,13 +176,13 @@ function ContractRow({
         <div className="flex shrink-0 items-center gap-2">
           <RenewalBadge days={metric.days} urgency={metric.urgency} />
           <span
-            className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${colorClass}`}
+            className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${colorClass}`}
           >
             {meta.label}
           </span>
           <span
             aria-hidden
-            className={`inline-block font-mono text-[10px] text-fg-muted transition-transform ${
+            className={`inline-block font-mono text-[11px] text-fg-muted transition-transform ${
               open ? "rotate-90 text-gold-400" : ""
             }`}
           >
@@ -245,7 +245,7 @@ export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
     <div className="flex flex-col gap-6">
       {renewalAlerts.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/6 p-4">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-amber-400">
             ⚠ Renewal Alerts — {renewalAlerts.length} contract
             {renewalAlerts.length !== 1 ? "s" : ""} expiring
           </p>
@@ -263,7 +263,7 @@ export function ContractStatusBoard({ contracts }: { contracts: Contract[] }) {
         {STATUS_ORDER.filter((s) => grouped[s].length > 0).map((status) => (
           <div key={status}>
             <div className="border-b border-line bg-surface-2/30 px-4 py-2">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {CONTRACT_STATUS_META[status].label} · {grouped[status].length}
               </span>
             </div>

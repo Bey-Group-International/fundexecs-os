@@ -77,7 +77,7 @@ function GenerateModal({
           <h2 className="font-mono text-sm font-semibold text-fg-primary">Generate Document</h2>
           <button
             onClick={onClose}
-            className="rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+            className="rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
           >
             Cancel
           </button>
@@ -85,7 +85,7 @@ function GenerateModal({
 
         <div className="flex flex-col gap-4">
           <div>
-            <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Document Type
             </label>
             <select
@@ -103,7 +103,7 @@ function GenerateModal({
 
           {funds.length > 0 && (
             <div>
-              <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Fund
               </label>
               <select
@@ -122,7 +122,7 @@ function GenerateModal({
 
           {needsInvestor && investors.length > 0 && (
             <div>
-              <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 LP / Investor
               </label>
               <select
@@ -140,13 +140,13 @@ function GenerateModal({
           )}
 
           {needsInvestor && investors.length === 0 && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[10px] text-amber-400">
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[11px] text-amber-400">
               Add investors to the LP pipeline first.
             </p>
           )}
 
           {error && (
-            <p className="font-mono text-[10px] text-status-danger">{error}</p>
+            <p className="font-mono text-[11px] text-status-danger">{error}</p>
           )}
 
           <button
@@ -178,15 +178,15 @@ function ContractCard({ contract }: { contract: ContractRow }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-fg-primary">{contract.title}</p>
-          <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+          <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
             {DOCUMENT_TYPE_LABELS[contract.documentType]}
             {contract.investorName && ` · ${contract.investorName}`}
           </p>
-          <p className="mt-1 font-mono text-[9px] text-fg-muted">
+          <p className="mt-1 font-mono text-[11px] text-fg-muted">
             Created {new Date(contract.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
           </p>
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusColor}`}>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${statusColor}`}>
           {meta.label}
         </span>
       </div>
@@ -196,7 +196,7 @@ function ContractCard({ contract }: { contract: ContractRow }) {
           <button
             onClick={handleAdvance}
             disabled={pending}
-            className="rounded border border-line px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
+            className="rounded border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300 disabled:opacity-40"
           >
             {pending ? "Saving…" : meta.nextLabel}
           </button>
@@ -272,7 +272,7 @@ export function DocumentsModule({ contracts, investors, funds }: Props) {
             </select>
           )}
 
-          <span className="ml-auto font-mono text-[10px] text-fg-muted">
+          <span className="ml-auto font-mono text-[11px] text-fg-muted">
             {filtered.length} document{filtered.length !== 1 ? "s" : ""}
           </span>
         </div>

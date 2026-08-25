@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Space_Grotesk, DM_Sans, JetBrains_Mono } from "next/font/google";
 import {
   SITE_DESCRIPTION,
@@ -112,11 +111,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#EEF4FC" },
-    { media: "(prefers-color-scheme: dark)", color: "#050912" },
-  ],
-  colorScheme: "dark light" as const,
+  // One scheme, everywhere: the platform renders in its single bold palette
+  // regardless of the device's light/dark preference.
+  themeColor: "#050912",
+  colorScheme: "dark" as const,
   // Extend content beneath the notch / home indicator so the app shell can
   // draw its own safe-area padding for an edge-to-edge installed experience.
   viewportFit: "cover" as const,
@@ -124,29 +122,18 @@ export const viewport = {
   initialScale: 1,
 };
 
-const themeBootstrap = `
-try {
-  var stored = window.localStorage.getItem("fx-theme");
-  var prefersDay = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
-  var mode = stored === "day" || stored === "night" ? stored : (prefersDay ? "day" : "night");
-  var root = document.documentElement;
-  root.classList.remove("theme-day", "theme-night");
-  root.classList.add(mode === "day" ? "theme-day" : "theme-night");
-  root.dataset.theme = mode;
-  root.style.colorScheme = mode === "day" ? "light" : "dark";
-} catch (_) {}
-`;
-
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const supabase = supabaseOrigin();
+  // `dark` is permanent on <html>: Tailwind's dark: variants are class-driven,
+  // so every surface keeps its bold palette instead of flipping with the OS.
   return (
     <html
       lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+      className={`dark ${display.variable} ${sans.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -164,9 +151,6 @@ export default function RootLayout({
         <JsonLd id="ld-global" data={globalGraph()} />
       </head>
       <body className="min-h-screen antialiased">
-        <Script id="fx-theme-bootstrap" strategy="beforeInteractive">
-          {themeBootstrap}
-        </Script>
         {children}
       </body>
     </html>

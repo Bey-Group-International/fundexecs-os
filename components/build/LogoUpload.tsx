@@ -50,7 +50,7 @@ export function LogoUpload({
             className="h-12 w-12 rounded-lg object-contain border border-line bg-surface-1 shrink-0 p-1"
           />
         ) : (
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-line bg-surface-1 font-mono text-[10px] text-fg-muted">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-line bg-surface-1 font-mono text-[11px] text-fg-muted">
             logo
           </span>
         )}

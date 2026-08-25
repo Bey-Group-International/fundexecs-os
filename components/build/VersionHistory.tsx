@@ -86,7 +86,7 @@ export function VersionHistory({
           <div className="flex items-center justify-between border-b border-line px-5 py-3">
             <div>
               <p className="text-sm font-medium text-fg-primary">Diff — {diffWith.name}</p>
-              <p className="font-mono text-[10px] text-fg-muted">{relativeTime(diffWith.created_at)} vs current</p>
+              <p className="font-mono text-[11px] text-fg-muted">{relativeTime(diffWith.created_at)} vs current</p>
             </div>
             <button
               type="button"
@@ -97,7 +97,7 @@ export function VersionHistory({
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-5">
-            <div className="flex gap-4 font-mono text-[10px] uppercase tracking-wider text-fg-muted mb-2">
+            <div className="flex gap-4 font-mono text-[11px] uppercase tracking-wider text-fg-muted mb-2">
               <span className="text-red-400">− removed</span>
               <span className="text-emerald-400">+ added</span>
               <span>· unchanged</span>
@@ -131,7 +131,7 @@ export function VersionHistory({
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-fg-primary">{v.name}</p>
-              <p className="font-mono text-[10px] text-fg-muted">
+              <p className="font-mono text-[11px] text-fg-muted">
                 {relativeTime(v.created_at)}
                 {i === 0 ? " · Latest" : ""}
                 {v.content ? ` · ${v.content.length} chars` : ""}
@@ -154,7 +154,7 @@ export function VersionHistory({
             </button>
           </div>
         ))}
-        <p className="text-[10px] text-fg-muted">Up to 20 versions are kept per document.</p>
+        <p className="text-[11px] text-fg-muted">Up to 20 versions are kept per document.</p>
       </div>
     </>
   );

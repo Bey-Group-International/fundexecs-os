@@ -62,7 +62,7 @@ export function HubContextBar({ stats, quickAction }: HubContextBarProps) {
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line/60 bg-surface-1/60 px-3.5 py-2">
       {/* Breadcrumb */}
-      <nav aria-label="Hub breadcrumb" className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider">
+      <nav aria-label="Hub breadcrumb" className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
         <Link
           href={`/${hubKey}`}
           className="text-fg-muted transition hover:text-fg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
@@ -83,7 +83,7 @@ export function HubContextBar({ stats, quickAction }: HubContextBarProps) {
           <div className="flex items-center gap-3">
             {stats.map((s) => (
               <div key={s.label} className="flex items-center gap-1.5">
-                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {s.label}
                 </span>
                 <span
@@ -102,7 +102,7 @@ export function HubContextBar({ stats, quickAction }: HubContextBarProps) {
           <button
             type="button"
             onClick={quickAction.onClick}
-            className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-gold-400 transition hover:bg-gold-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:bg-gold-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           >
             + {quickAction.label}
           </button>
@@ -118,7 +118,7 @@ export function HubContextBar({ stats, quickAction }: HubContextBarProps) {
               }),
             )
           }
-          className="rounded-lg border border-line px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          className="rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
           title="Ask Earn about this module"
         >
           ✦ Ask Earn

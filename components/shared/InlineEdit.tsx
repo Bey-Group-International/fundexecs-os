@@ -116,7 +116,7 @@ export function InlineEdit({
       </span>
       <span
         aria-hidden
-        className="shrink-0 mt-0.5 font-mono text-[10px] text-fg-muted opacity-0 transition-opacity group-hover:opacity-100"
+        className="shrink-0 mt-0.5 font-mono text-[11px] text-fg-muted opacity-0 transition-opacity group-hover:opacity-100"
       >
         ✎
       </span>

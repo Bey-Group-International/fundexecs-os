@@ -43,7 +43,7 @@ export default async function WalletRewardsPage() {
         <div>
           <Link
             href="/wallet"
-            className="font-mono text-[11px] uppercase tracking-[0.28em] text-fg-muted transition hover:text-gold-300"
+            className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted transition hover:text-gold-300"
           >
             ← Wallet
           </Link>
@@ -60,7 +60,7 @@ export default async function WalletRewardsPage() {
       {/* Standing + loyalty — the two rate-setting mechanics, side by side. */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-line/60 bg-surface-1/30 p-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Standing
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -68,7 +68,7 @@ export default async function WalletRewardsPage() {
               {standing.label}
             </span>
             {profile.discountPct > 0 && (
-              <span className="rounded-md border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[10px] text-gold-300">
+              <span className="rounded-md border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[11px] text-gold-300">
                 −{profile.discountPct}% on every action
               </span>
             )}
@@ -77,7 +77,7 @@ export default async function WalletRewardsPage() {
         </div>
 
         <div className="rounded-2xl border border-line/60 bg-surface-1/30 p-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Loyalty accrual
           </p>
           <p className="mt-2 font-display text-3xl font-semibold tabular-nums text-gold-300">
@@ -93,7 +93,7 @@ export default async function WalletRewardsPage() {
       </div>
 
       {/* Execution rewards — streaks, ranks, milestones, hub achievements. */}
-      <h2 className="mb-4 mt-10 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+      <h2 className="mb-4 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
         Execution rewards
       </h2>
       <GamificationPanel />
@@ -105,7 +105,7 @@ export default async function WalletRewardsPage() {
       >
         <span className="absolute left-0 top-0 h-full w-0.5 rounded-l-2xl bg-neural-400/50 opacity-0 transition group-hover:opacity-100" />
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Earn credits
           </p>
           <p className="mt-1 text-sm font-medium text-fg-primary">Earn credits instead of buying them</p>

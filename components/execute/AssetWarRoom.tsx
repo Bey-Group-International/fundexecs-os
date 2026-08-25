@@ -37,7 +37,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">{children}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{children}</h3>
       {action}
     </div>
   );
@@ -89,19 +89,19 @@ function Header({ data }: { data: WarRoom }) {
             <span className="font-display text-base font-semibold leading-none text-fg-primary">
               {moic != null ? `${moic}x` : "—"}
             </span>
-            <span className="mt-0.5 font-mono text-[8px] uppercase tracking-wider text-fg-muted">MOIC</span>
+            <span className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">MOIC</span>
           </span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="min-w-0 break-words font-display text-2xl font-semibold tracking-tight text-fg-primary">{asset.name}</h1>
-            <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${stage.tone}`}>
+            <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${stage.tone}`}>
               {stage.label}
             </span>
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {ASSET_TYPE_LABEL[asset.asset_type]}
             </span>
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {humanize(asset.status)}
             </span>
           </div>
@@ -123,7 +123,7 @@ function Header({ data }: { data: WarRoom }) {
 function StatCell({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="rounded-lg border border-line/60 bg-surface-0 px-3 py-2">
-      <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</p>
       <p className={`mt-0.5 font-display text-lg font-semibold ${tone ?? "text-fg-primary"}`}>{value}</p>
     </div>
   );
@@ -165,7 +165,7 @@ function CapitalFlows({ data }: { data: WarRoom }) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {capitalEvents.length} events
           </span>
         }
@@ -178,10 +178,10 @@ function CapitalFlows({ data }: { data: WarRoom }) {
             const outflow = OUTFLOW_EVENTS.has(event.event_type);
             return (
               <div key={event.id} className="flex flex-wrap items-center gap-2.5 text-sm">
-                <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] text-fg-muted">
                   {new Date(event.effective_date).toLocaleDateString()}
                 </span>
-                <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-secondary">
+                <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
                   {humanize(event.event_type)}
                 </span>
                 {event.reference ? (
@@ -256,13 +256,13 @@ function Provenance({ data }: { data: WarRoom }) {
       <div className="flex flex-col gap-2 text-sm">
         {fund ? (
           <div className="flex items-center justify-between gap-3">
-            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Fund</span>
+            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Fund</span>
             <span className="min-w-0 truncate text-right text-fg-primary">{fund.name}</span>
           </div>
         ) : null}
         {deal ? (
           <div className="flex items-center justify-between gap-3">
-            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Source deal</span>
+            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Source deal</span>
             <Link href={`/deal/${deal.id}`} className="min-w-0 truncate text-right text-gold-300 transition hover:underline">
               {deal.name} →
             </Link>
@@ -270,7 +270,7 @@ function Provenance({ data }: { data: WarRoom }) {
         ) : null}
         {asset.acquisition_date ? (
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Acquired</span>
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Acquired</span>
             <span className="text-fg-secondary">{new Date(asset.acquisition_date).toLocaleDateString()}</span>
           </div>
         ) : null}

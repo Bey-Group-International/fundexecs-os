@@ -77,7 +77,7 @@ export default async function WalletPage(
     <div className="fx-neural-ambient mx-auto max-w-5xl">
       <header className="mb-6 flex flex-col gap-4 border-b border-line/50 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.32em] text-neural-300">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
             FundExecs wallet core
           </span>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
@@ -88,7 +88,7 @@ export default async function WalletPage(
             and top up compute credits.
           </p>
         </div>
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-line/60 bg-surface-2/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-fg-secondary">
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-line/60 bg-surface-2/40 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">
           <span className="h-1.5 w-1.5 rounded-full bg-gold-400" />
           Compute credit ledger online
         </div>
@@ -131,7 +131,7 @@ export default async function WalletPage(
         </div>
       )}
 
-      <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+      <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
         Account summary
       </h2>
       <section className="fx-neural-panel p-5 sm:p-6">
@@ -140,18 +140,18 @@ export default async function WalletPage(
               live rates that describe it (burn out, loyalty in) and the plan. */}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5 border-b border-line/40 pb-5">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 Available balance
               </p>
               <p className="mt-2 flex items-baseline gap-2 font-display text-5xl font-semibold tracking-tight text-fg-primary">
                 <span className="text-gold-400">◇</span>
                 <span className="tabular-nums">{formatCredits(balance)}</span>
-                <span className="font-mono text-[11px] font-normal uppercase tracking-[0.2em] text-fg-muted">
+                <span className="font-mono text-[11px] font-normal uppercase tracking-[0.16em] text-fg-muted">
                   compute credits
                 </span>
               </p>
               <p
-                className={`mt-3 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] ${
+                className={`mt-3 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.16em] ${
                   runway.health === "critical"
                     ? "border-status-danger/40 bg-status-danger/[0.08] text-status-danger"
                     : runway.health === "low"
@@ -167,7 +167,7 @@ export default async function WalletPage(
             </div>
             <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line/50 bg-line/40 text-center">
               <div className="bg-surface-1/40 px-4 py-3">
-                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   30-day burn
                 </p>
                 <p className="mt-1.5 font-display text-xl font-semibold tabular-nums text-fg-primary">
@@ -175,16 +175,16 @@ export default async function WalletPage(
                 </p>
               </div>
               <div className="bg-surface-1/40 px-4 py-3">
-                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Loyalty accrual
                 </p>
                 <p className="mt-1.5 font-display text-xl font-semibold tabular-nums text-gold-300">
                   +{formatCredits(loyalty)}
-                  <span className="ml-0.5 font-mono text-[10px] font-normal text-fg-muted">/mo</span>
+                  <span className="ml-0.5 font-mono text-[11px] font-normal text-fg-muted">/mo</span>
                 </p>
               </div>
               <div className="bg-surface-1/40 px-4 py-3">
-                <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Active plan
                 </p>
                 <p className="mt-1.5 font-display text-xl font-semibold text-gold-300">
@@ -199,12 +199,12 @@ export default async function WalletPage(
             href="/wallet/rewards"
             className="group mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line/50 bg-surface-1/30 px-4 py-3 text-sm transition hover:border-gold-400/40 hover:bg-surface-1/50"
           >
-            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
               Standing
             </span>
             <span className="font-medium text-fg-primary">{standing.label}</span>
             {profile.discountPct > 0 && (
-              <span className="rounded-md border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[10px] text-gold-300">
+              <span className="rounded-md border border-gold-400/40 bg-gold-400/10 px-2 py-0.5 font-mono text-[11px] text-gold-300">
                 −{profile.discountPct}% on every action
               </span>
             )}
@@ -231,7 +231,7 @@ export default async function WalletPage(
         </div>
       </section>
 
-      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
         Choose a plan
       </h2>
       <PlanSelector
@@ -242,7 +242,7 @@ export default async function WalletPage(
         publishableKey={publishableKey}
       />
 
-      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+      <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
         Add credits
       </h2>
       <CreditPacks live={live} publishableKey={publishableKey} />

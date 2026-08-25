@@ -241,7 +241,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
               }`}
             >
               {t.label}
-              <span className="ml-1.5 font-mono text-[10px] text-fg-muted">{tabCounts[t.key]}</span>
+              <span className="ml-1.5 font-mono text-[11px] text-fg-muted">{tabCounts[t.key]}</span>
             </button>
           );
         })}
@@ -264,7 +264,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
               }`}
             >
               {f.label}
-              <span className="ml-1.5 font-mono text-[10px] text-fg-muted">{n}</span>
+              <span className="ml-1.5 font-mono text-[11px] text-fg-muted">{n}</span>
             </button>
           );
         })}
@@ -347,7 +347,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
           if (inBucket.length === 0) return null;
           return (
             <section key={bucket.key}>
-              <h2 className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest">
+              <h2 className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest">
                 <span className={bucket.tone}>{bucket.label}</span>
                 <span className="text-fg-muted">{inBucket.length}</span>
               </h2>
@@ -373,10 +373,10 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
           <button
             type="button"
             onClick={() => setShowSnoozed((s) => !s)}
-            className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted transition hover:text-fg-primary"
+            className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-fg-muted transition hover:text-fg-primary"
             aria-expanded={showSnoozed}
           >
-            <span className="text-[9px]">{showSnoozed ? "▾" : "▸"}</span>
+            <span className="text-[11px]">{showSnoozed ? "▾" : "▸"}</span>
             Snoozed
             <span>{snoozed.length}</span>
           </button>
@@ -580,7 +580,7 @@ function ThreadCard({
             </h3>
             {card.unread ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" title="Unread" /> : null}
           </div>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {card.counterparty} · {card.channelLabel}
             {card.intent ? ` · ${card.intent}` : ""}
           </p>
@@ -599,7 +599,7 @@ function ThreadCard({
           >
             {starred ? "★" : "☆"}
           </button>
-          <span className="font-mono text-[10px] text-fg-muted" title="Triage priority">
+          <span className="font-mono text-[11px] text-fg-muted" title="Triage priority">
             {card.priority}
           </span>
         </div>
@@ -641,7 +641,7 @@ function ThreadCard({
         ) : null}
         {/* Assignee picker — route the thread to a teammate. */}
         <label className="ml-auto inline-flex items-center gap-1 text-fg-muted">
-          <span className="font-mono text-[9px] uppercase tracking-wider">Owner</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider">Owner</span>
           <select
             value={card.assignee?.id ?? ""}
             disabled={assigning}
@@ -670,7 +670,7 @@ function ThreadCard({
         aria-expanded={expanded}
         className="mt-2 inline-flex items-center gap-1 text-[11px] text-fg-muted transition hover:text-fg-primary"
       >
-        <span className="font-mono text-[9px]">{expanded ? "▾" : "▸"}</span>
+        <span className="font-mono text-[11px]">{expanded ? "▾" : "▸"}</span>
         {expanded ? "Hide thread" : "View thread"}
       </button>
 
@@ -689,7 +689,7 @@ function ThreadCard({
                       : "self-start border border-line/60 bg-surface-1 text-fg-secondary"
                   }`}
                 >
-                  <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  <div className="mb-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {m.author ?? (m.direction === "outbound" ? "You" : card.counterparty)} · {relativeMeeting(m.occurredAt)}
                   </div>
                   <div className="whitespace-pre-wrap break-words">{m.body}</div>
@@ -712,7 +712,7 @@ function ThreadCard({
               return (
                 <div className="mb-2">
                   {aiReplies ? (
-                    <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-gold-400/80">
+                    <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-400/80">
                       ✦ Suggested for this thread
                     </p>
                   ) : null}
@@ -740,15 +740,15 @@ function ThreadCard({
             />
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
               {card.connected && LIVE_CAPABLE_CHANNELS.has(card.channel) ? (
-                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   Routes through connected {card.channelLabel} · approvals if required
                 </span>
               ) : card.connected ? (
-                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {card.channelLabel} sending isn&apos;t live yet — this will be recorded on the thread but not delivered.
                 </span>
               ) : (
-                <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {card.channelLabel} not connected — sends save as drafts.{" "}
                   <Link href="/settings/integrations" className="text-gold-400 hover:underline">
                     Connect →
@@ -788,7 +788,7 @@ function ThreadCard({
             onClick={() => run("suggested", () => actOnThread(fd({ action: card.suggested!.action })))}
             className="group inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
           >
-            <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[card.suggested.tier]}`}>
+            <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[card.suggested.tier]}`}>
               T{card.suggested.tier}
             </span>
             {pending && active === "suggested" ? "Working…" : card.suggested.label}
@@ -803,7 +803,7 @@ function ThreadCard({
             title="Attach this deal/investor's Command Center details to a reply"
             className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
           >
-            <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[card.shareTier]}`}>
+            <span className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[card.shareTier]}`}>
               T{card.shareTier}
             </span>
             {pending && active === "share" ? "Working…" : "Share Command Center"}

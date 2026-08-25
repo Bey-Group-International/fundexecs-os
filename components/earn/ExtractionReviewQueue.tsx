@@ -112,9 +112,9 @@ export function ExtractionReviewQueue({ points, reviewId, onReadyToSave, onSaved
                   {f.field_name}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-accent">{f.source_type}</span>
+                  <span className="font-mono text-[11px] text-accent">{f.source_type}</span>
                   <span
-                    className={`font-mono text-[10px] ${
+                    className={`font-mono text-[11px] ${
                       f.low_confidence ? "text-status-warning" : "text-fg-muted"
                     }`}
                   >
@@ -140,7 +140,7 @@ export function ExtractionReviewQueue({ points, reviewId, onReadyToSave, onSaved
                   href={f.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1.5 block truncate font-mono text-[10px] text-accent hover:underline"
+                  className="mt-1.5 block truncate font-mono text-[11px] text-accent hover:underline"
                   title={f.source_url}
                 >
                   {f.source_url}

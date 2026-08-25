@@ -51,10 +51,10 @@ export default function SkillRunFeed({ runs }: { runs: SkillRunView[] }) {
               <article key={run.id} className="rounded-xl border border-line bg-surface-1 p-4">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold text-fg-primary">{label}</span>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${TIER_STYLE[run.approvalTier] ?? ""}`}>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[run.approvalTier] ?? ""}`}>
                     {TIER_LABEL[run.approvalTier] ?? `Tier ${run.approvalTier}`}
                   </span>
-                  <span className={`ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider ${statusClass}`}>
+                  <span className={`ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wider ${statusClass}`}>
                     {run.status}
                   </span>
                 </div>
@@ -64,7 +64,7 @@ export default function SkillRunFeed({ runs }: { runs: SkillRunView[] }) {
                   {run.requiresApproval ? " · needs sign-off" : ""}
                 </p>
 
-                <div className="mt-3 flex flex-wrap gap-3 font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
+                <div className="mt-3 flex flex-wrap gap-3 font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
                   <span>confidence {pct(run.confidence)}</span>
                   <span>completeness {pct(run.completeness)}</span>
                 </div>
@@ -75,7 +75,7 @@ export default function SkillRunFeed({ runs }: { runs: SkillRunView[] }) {
                     .map(([name, n]) => (
                       <span
                         key={name}
-                        className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary"
+                        className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary"
                       >
                         {n} {name}
                       </span>

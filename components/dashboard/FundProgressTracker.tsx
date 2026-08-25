@@ -30,7 +30,7 @@ export function FundProgressTracker({ funds }: { funds: Fund[] }) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-fg-primary">{fund.name}</p>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                    <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       {fund.fund_type.replace("_", " ")} · {fund.vintage_year ?? "Vintage TBD"}
                     </p>
                   </div>

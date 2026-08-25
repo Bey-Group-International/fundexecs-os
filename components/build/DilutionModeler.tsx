@@ -96,7 +96,7 @@ export function DilutionModeler({
         <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
           Scenario &amp; Dilution
         </h3>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           model a priced round
         </span>
         <select
@@ -115,7 +115,7 @@ export function DilutionModeler({
       {/* Inputs */}
       <div className="grid gap-2 rounded-xl border border-line bg-surface-1 p-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Pre-money</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Pre-money</span>
           <input
             type="number"
             step="any"
@@ -127,7 +127,7 @@ export function DilutionModeler({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Raise amount</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Raise amount</span>
           <input
             type="number"
             step="any"
@@ -139,7 +139,7 @@ export function DilutionModeler({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">New investor</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">New investor</span>
           <input
             type="text"
             value={newInvestorName}
@@ -149,7 +149,7 @@ export function DilutionModeler({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Option pool % (post)</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Option pool % (post)</span>
           <input
             type="number"
             step="any"
@@ -175,7 +175,7 @@ export function DilutionModeler({
           },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-line bg-surface-2 px-3 py-2">
-            <div className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{s.label}</div>
+            <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{s.label}</div>
             <div className="mt-0.5 text-sm font-medium text-fg-primary">{s.value}</div>
           </div>
         ))}
@@ -184,7 +184,7 @@ export function DilutionModeler({
       {/* Post-round stacked bar */}
       {result.rows.length > 0 ? (
         <div className="mt-3 rounded-xl border border-line bg-surface-1 p-4">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Post-round ownership
           </div>
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-2">
@@ -207,7 +207,7 @@ export function DilutionModeler({
               {["Holder", "Pre %", "Post %", "Δ"].map((h) => (
                 <th
                   key={h}
-                  className="px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                  className="px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted"
                 >
                   {h}
                 </th>
@@ -242,7 +242,7 @@ export function DilutionModeler({
                         />
                         <span className="text-fg-primary">{r.name}</span>
                         {isNew ? (
-                          <span className="rounded-full border border-gold-500/40 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-gold-300">
+                          <span className="rounded-full border border-gold-500/40 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                             new
                           </span>
                         ) : null}

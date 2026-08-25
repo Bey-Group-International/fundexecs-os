@@ -131,7 +131,7 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
           className="flex items-center gap-2 rounded-full py-2 pl-3.5 pr-1 text-xs font-medium text-gold-300 transition hover:text-gold-200"
         >
           <span className="font-mono">◆ Setup guide</span>
-          <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
+          <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] text-gold-300">
             {completed}/{STEPS.length}
           </span>
         </button>
@@ -151,10 +151,10 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
     <div className="fixed bottom-24 right-4 z-40 w-[320px] rounded-xl border border-line bg-surface-1 shadow-2xl">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
             Setup guide
           </span>
-          <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] text-gold-300">
+          <span className="rounded-full bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] text-gold-300">
             {pct}%
           </span>
         </div>
@@ -162,7 +162,7 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
           {completed > 0 ? (
             <button
               onClick={() => persistDone([])}
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+              className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
             >
               Reset
             </button>
@@ -170,7 +170,7 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
           <button
             onClick={() => persistHidden(true)}
             title="Hide — bring it back from Settings → Setup guide"
-            className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
           >
             Hide
           </button>
@@ -205,7 +205,7 @@ export function GuidedTour({ orgId, initialHidden = false }: { orgId: string; in
                 <button
                   onClick={() => toggleStep(i)}
                   aria-label={isDone ? "Mark incomplete" : "Mark complete"}
-                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] transition ${
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[11px] transition ${
                     isDone
                       ? "border-status-success bg-status-success/20 text-status-success"
                       : "border-line text-transparent hover:border-gold-500/50"

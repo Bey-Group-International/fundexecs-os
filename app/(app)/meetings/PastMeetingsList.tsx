@@ -301,7 +301,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                         : m.status === "active"
                         ? "Live"
                         : "Ended"}
-                      {isActive && <span className="hidden sm:inline text-[0.6rem] opacity-60">▾</span>}
+                      {isActive && <span className="hidden sm:inline text-[11px] opacity-60">▾</span>}
                     </button>
 
                     {m.status === "ended" && (
@@ -357,13 +357,13 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                   <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-1)] p-3 flex flex-col gap-3 ml-0">
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[0.65rem] text-[var(--fg-muted)] uppercase tracking-wide font-medium">
+                        <span className="text-[11px] text-[var(--fg-muted)] uppercase tracking-wide font-medium">
                           Room code
                         </span>
                         <CopyRoomCode code={m.room_code} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[0.65rem] text-[var(--fg-muted)] uppercase tracking-wide font-medium">
+                        <span className="text-[11px] text-[var(--fg-muted)] uppercase tracking-wide font-medium">
                           Started
                         </span>
                         <span className="text-xs text-[var(--fg-secondary)]">

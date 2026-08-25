@@ -76,7 +76,7 @@ export function MobileDealCard({ deal }: { deal: MobileDeal }) {
               {[deal.sector, deal.geography].filter(Boolean).join(" · ") || "Private markets"}
             </p>
           </div>
-          <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide ${tone}`}>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide ${tone}`}>
             {deal.stageLabel}
           </span>
         </div>

@@ -29,7 +29,7 @@ export function PWAInstallPrompt() {
           ★
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Install FundExecs
           </p>
           <p className="mt-1 leading-5">

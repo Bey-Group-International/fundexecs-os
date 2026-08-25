@@ -66,7 +66,7 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
         {/* Left column — hero + actions */}
         <div className="flex flex-col gap-7">
           <div className="flex flex-col gap-3">
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[var(--gold-400)]/25 bg-[var(--gold-400)]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--gold-400)]">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[var(--gold-400)]/25 bg-[var(--gold-400)]/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-[var(--gold-400)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--gold-400)]" />
               FundExecs Meetings
             </span>

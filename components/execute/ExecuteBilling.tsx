@@ -127,7 +127,7 @@ export function ExecuteBilling({
   return (
     <div className="flex flex-col gap-8">
       <header>
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Execute · Invoices
         </span>
         <h1 className="mt-2 font-display text-2xl font-semibold text-fg-primary">
@@ -308,7 +308,7 @@ export function ExecuteBilling({
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm text-fg-primary">{inv.title}</span>
                       {inv.number ? (
-                        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           {inv.number}
                         </span>
                       ) : null}
@@ -325,7 +325,7 @@ export function ExecuteBilling({
                   </span>
 
                   <span
-                    className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                    className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                       inv.status === "paid"
                         ? "border-status-success/40 bg-status-success/10 text-status-success"
                         : inv.status === "void"

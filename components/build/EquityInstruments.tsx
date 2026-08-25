@@ -42,7 +42,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
       {children}
     </label>
   );
@@ -65,7 +65,7 @@ function EarnButton({ kind, scenario }: { kind: string; scenario: string }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2 px-3 py-2">
-      <div className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</div>
+      <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</div>
       <div className="mt-0.5 text-sm font-medium text-fg-primary">{value}</div>
     </div>
   );
@@ -80,7 +80,7 @@ export function EquityInstruments() {
         <h3 className="font-display text-lg font-semibold tracking-tight text-fg-primary">
           Equity Issuance
         </h3>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           grants · SAFEs · stock comp
         </span>
       </div>
@@ -122,7 +122,7 @@ function VestingCalc() {
 
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
-      <h4 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">Vesting</h4>
+      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">Vesting</h4>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Units granted">
           <input type="number" step="any" min={0} value={totalUnits} onChange={(e) => setTotalUnits(e.target.value)} className={inputClass} />
@@ -189,7 +189,7 @@ function ConvertibleCalc() {
 
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
-      <h4 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">SAFE / Note conversion</h4>
+      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">SAFE / Note conversion</h4>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Instrument">
           <select value={type} onChange={(e) => setType(e.target.value as InstrumentType)} className={inputClass}>
@@ -262,7 +262,7 @@ function StockCompCalc() {
 
   return (
     <section className="rounded-xl border border-line bg-surface-1 p-4">
-      <h4 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">ASC 718 expense</h4>
+      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">ASC 718 expense</h4>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Units">
           <input type="number" step="any" min={0} value={unitsGranted} onChange={(e) => setUnitsGranted(e.target.value)} className={inputClass} />

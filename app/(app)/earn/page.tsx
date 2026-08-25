@@ -23,7 +23,7 @@ export default async function EarnPage({
   return (
     <div className="fx-ambient mx-auto max-w-3xl">
       <header className="mb-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">Earn</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Earn</p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-fg-primary">
           What are we moving forward today?
         </h1>
@@ -41,7 +41,7 @@ export default async function EarnPage({
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-gold-500/25 bg-gold-500/[0.06] px-4 py-3">
           <span aria-hidden className="mt-0.5 text-gold-400">✦</span>
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">You asked Earn</p>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">You asked Earn</p>
             <p className="mt-0.5 text-sm text-fg-primary">“{asked}”</p>
             <p className="mt-1 text-[12px] text-fg-secondary">
               Answer a couple of quick questions and Earn will route this to the right path.

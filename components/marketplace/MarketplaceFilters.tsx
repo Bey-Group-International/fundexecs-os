@@ -50,12 +50,12 @@ export function MarketplaceFilters({
   return (
     <aside className="fx-card animate-fade-up p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">Refine</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">Refine</p>
         {active ? (
           <button
             type="button"
             onClick={() => onChange({ ...DEFAULT_FILTERS })}
-            className="font-mono text-[10px] uppercase tracking-wider text-fg-muted underline underline-offset-2 transition hover:text-gold-300"
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted underline underline-offset-2 transition hover:text-gold-300"
           >
             Clear all
           </button>
@@ -64,7 +64,7 @@ export function MarketplaceFilters({
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Keyword
           </label>
           <input
@@ -78,7 +78,7 @@ export function MarketplaceFilters({
 
         {/* Type chips */}
         <div>
-          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Type</p>
+          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Type</p>
           <div className="flex flex-wrap gap-1.5">
             <FacetChip
               label="All"
@@ -99,7 +99,7 @@ export function MarketplaceFilters({
 
         {showStatus ? (
           <div>
-            <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Status
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -139,13 +139,13 @@ export function MarketplaceFilters({
 
         {/* Advanced ranges + features */}
         <details className="group" open={filters.amountMin != null || filters.amountMax != null || filters.irrMin != null}>
-          <summary className="cursor-pointer list-none select-none font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary">
+          <summary className="cursor-pointer list-none select-none font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary">
             <span className="group-open:hidden">▸ Price, IRR &amp; features</span>
             <span className="hidden group-open:inline">▾ Price, IRR &amp; features</span>
           </summary>
           <div className="mt-3 flex flex-col gap-3">
             <div>
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Price ({currency})
               </p>
               <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export function MarketplaceFilters({
               </div>
             </div>
             <div>
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Min target IRR %
               </p>
               <RangeInput
@@ -206,7 +206,7 @@ function FacetChip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+      className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
         active
           ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
           : "border-line text-fg-muted hover:border-neural-400/40 hover:text-fg-secondary"
@@ -231,7 +231,7 @@ function FacetSelect({
 }) {
   return (
     <div>
-      <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {label}
       </label>
       <select

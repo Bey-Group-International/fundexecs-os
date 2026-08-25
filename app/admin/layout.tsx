@@ -29,7 +29,7 @@ export default async function AdminLayout({
             className="font-display text-sm font-bold tracking-tight text-fg-primary"
           >
             FundExecs
-            <span className="ml-2 rounded-md bg-gold-500/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-gold-300">
+            <span className="ml-2 rounded-md bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold-300">
               Admin
             </span>
           </Link>

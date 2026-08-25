@@ -34,7 +34,7 @@ export function MobileApprovalCard({ approval }: { approval: MobileApproval }) {
             {when ? ` · ${when}` : ""}
           </p>
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide ${risk.cls}`}>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide ${risk.cls}`}>
           {risk.label}
         </span>
       </div>

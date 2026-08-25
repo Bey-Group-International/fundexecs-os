@@ -82,7 +82,7 @@ function CoreBenchBar({ providers }: { providers: ProviderEntry[] }) {
           return (
             <span
               key={b.key}
-              className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+              className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                 ok
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
                   : "border-slate-600/30 text-slate-500"
@@ -93,7 +93,7 @@ function CoreBenchBar({ providers }: { providers: ProviderEntry[] }) {
           );
         })}
       </div>
-      <span className={`hidden font-mono text-[10px] sm:block ${all ? "text-emerald-400/60" : "text-amber-400/60"}`}>
+      <span className={`hidden font-mono text-[11px] sm:block ${all ? "text-emerald-400/60" : "text-amber-400/60"}`}>
         {all ? "Institutional bench complete" : "Core bench incomplete"}
       </span>
     </div>
@@ -174,7 +174,7 @@ function ProviderForm({
 
   const inputClass =
     "w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/40 focus:outline-none";
-  const labelClass = "block font-mono text-[10px] uppercase tracking-widest text-fg-muted mb-1";
+  const labelClass = "block font-mono text-[11px] uppercase tracking-widest text-fg-muted mb-1";
 
   return (
     <>
@@ -332,16 +332,16 @@ function ProviderCard({
           <div className="flex items-center gap-1.5">
             <p className="truncate text-sm font-medium text-fg-primary">{provider.name}</p>
             {provider.provenance === "ai" ? (
-              <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+              <span className="shrink-0 rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-gold-300">AI Sourced</span>
             ) : (
-              <span className="shrink-0 rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+              <span className="shrink-0 rounded-full border border-line px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Manual</span>
             )}
           </div>
           {provider.description && (
             <p className="mt-0.5 line-clamp-1 text-[11px] text-fg-muted">{provider.description}</p>
           )}
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${typeColor}`}>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${typeColor}`}>
           {typeLabel}
         </span>
       </div>
@@ -349,7 +349,7 @@ function ProviderCard({
       {(provider.contactName || provider.contactEmail || provider.contactPhone) && (
         <div className="flex flex-col gap-0.5">
           {provider.contactName && (
-            <p className="font-mono text-[10px] text-fg-secondary">
+            <p className="font-mono text-[11px] text-fg-secondary">
               {provider.contactName}
               {provider.role && <span className="ml-1 text-fg-muted">· {provider.role}</span>}
             </p>
@@ -357,14 +357,14 @@ function ProviderCard({
           {provider.contactEmail && (
             <a
               href={`mailto:${provider.contactEmail}`}
-              className="font-mono text-[10px] text-fg-muted transition hover:text-gold-300"
+              className="font-mono text-[11px] text-fg-muted transition hover:text-gold-300"
               onClick={(e) => e.stopPropagation()}
             >
               {provider.contactEmail}
             </a>
           )}
           {provider.contactPhone && (
-            <p className="font-mono text-[10px] text-fg-muted">{provider.contactPhone}</p>
+            <p className="font-mono text-[11px] text-fg-muted">{provider.contactPhone}</p>
           )}
         </div>
       )}
@@ -375,9 +375,9 @@ function ProviderCard({
 
       <div className="flex items-center justify-between">
         {provider.employeeRange && (
-          <span className="font-mono text-[9px] text-fg-muted">{provider.employeeRange} employees</span>
+          <span className="font-mono text-[11px] text-fg-muted">{provider.employeeRange} employees</span>
         )}
-        <span className={`ml-auto rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusColor}`}>
+        <span className={`ml-auto rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${statusColor}`}>
           {statusLabel}
         </span>
       </div>
@@ -445,7 +445,7 @@ function ProviderSlideOver({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 id="provider-slide-title" className="truncate text-base font-semibold text-fg-primary">{provider.name}</h2>
-              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${typeColor}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${typeColor}`}>
                 {typeLabel}
               </span>
             </div>
@@ -470,7 +470,7 @@ function ProviderSlideOver({
           {/* Contact */}
           {(provider.contactName || provider.contactEmail) && (
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Contact</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Contact</p>
               {provider.contactName && (
                 <p className="text-sm font-medium text-fg-primary">{provider.contactName}</p>
               )}
@@ -487,8 +487,8 @@ function ProviderSlideOver({
 
           {/* Status */}
           <div>
-            <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Status</p>
-            <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_COLORS[provider.status] ?? ""}`}>
+            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Status</p>
+            <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_COLORS[provider.status] ?? ""}`}>
               {provider.status}
             </span>
           </div>
@@ -496,14 +496,14 @@ function ProviderSlideOver({
           {/* Enriched details */}
           {provider.employeeRange && (
             <div>
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Employees</p>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Employees</p>
               <p className="text-xs text-fg-secondary">{provider.employeeRange}</p>
             </div>
           )}
 
           {provider.website && (
             <div>
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Website</p>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Website</p>
               <a
                 href={provider.website.startsWith("http") ? provider.website : `https://${provider.website}`}
                 target="_blank"
@@ -518,7 +518,7 @@ function ProviderSlideOver({
           {/* Notes */}
           {provider.notes && (
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Notes</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Notes</p>
               <p className="text-xs leading-relaxed text-fg-secondary">{provider.notes}</p>
             </div>
           )}
@@ -526,7 +526,7 @@ function ProviderSlideOver({
           {/* Data source */}
           {provider.verified != null && (
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">Data Source</p>
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">Data Source</p>
               <VerificationPill
                 verified={provider.verified}
                 confidence={provider.confidence ?? 0.5}
@@ -646,7 +646,7 @@ export function ServiceProviderDirectory({ providers: initialProviders }: Props)
           <option value="former">Former</option>
         </select>
         <div className="ml-auto flex items-center gap-3">
-          <span className="font-mono text-[10px] text-fg-muted">
+          <span className="font-mono text-[11px] text-fg-muted">
             {filtered.length} of {providers.length} providers
           </span>
           <button

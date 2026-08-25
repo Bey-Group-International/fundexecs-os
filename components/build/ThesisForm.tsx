@@ -52,7 +52,7 @@ function ChipInput({
 
   return (
     <div>
-      <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {label}
       </label>
       <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-line bg-surface-0 px-2 py-1.5 focus-within:border-gold-500/60">

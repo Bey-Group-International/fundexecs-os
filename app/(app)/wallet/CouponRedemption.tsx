@@ -29,7 +29,7 @@ export function CouponRedemption() {
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-line/60 bg-surface-1/30 p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Redeem a code
         </p>
         <p className="mt-1 text-xs text-fg-secondary">
@@ -56,7 +56,7 @@ export function CouponRedemption() {
         <button
           type="submit"
           disabled={isPending}
-          className="h-9 rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 font-mono text-xs uppercase tracking-[0.18em] text-gold-300 transition hover:bg-gold-400/20 disabled:opacity-50"
+          className="h-9 rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 font-mono text-xs uppercase tracking-[0.16em] text-gold-300 transition hover:bg-gold-400/20 disabled:opacity-50"
         >
           {isPending ? "…" : "Apply"}
         </button>

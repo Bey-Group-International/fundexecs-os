@@ -14,6 +14,7 @@ import {
   type CopilotContext,
   type CopilotSuggestion,
 } from "@/lib/copilot";
+import { deleteSessionMessage, updateSessionMessage } from "@/lib/session-messages";
 import { getBuildReadiness } from "@/lib/build-readiness";
 import { getRunConviction } from "@/lib/run-conviction";
 import { getSourceMomentum } from "@/lib/source-readiness";
@@ -486,5 +487,51 @@ export async function getCopilotBriefing(pathname: string): Promise<CopilotBrief
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Rewrite one turn of a persisted conversation, so an edit made in the
+ * transcript survives a reload rather than living only in the browser. Both
+ * conversation surfaces (the dock and the workspace composer) call this.
+ *
+ * Best-effort by design: a turn that was never persisted (no session yet, or the
+ * row has not landed) simply has nothing to rewrite, and the operator's on-screen
+ * edit still stands.
+ */
+export async function editSessionTurn(args: {
+  sessionId: string;
+  turnId: string;
+  previousContent: string;
+  content: string;
+}): Promise<{ ok: boolean; rows: number }> {
+  const content = args.content.trim();
+  if (!args.sessionId || !content) return { ok: false, rows: 0 };
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { ok: false, rows: 0 };
+  try {
+    const supabase = await createServerClient();
+    const rows = await updateSessionMessage(supabase, { ...args, content });
+    return { ok: true, rows };
+  } catch {
+    return { ok: false, rows: 0 };
+  }
+}
+
+/** Delete one turn of a persisted conversation. See `editSessionTurn`. */
+export async function deleteSessionTurn(args: {
+  sessionId: string;
+  turnId: string;
+  content: string;
+}): Promise<{ ok: boolean; rows: number }> {
+  if (!args.sessionId) return { ok: false, rows: 0 };
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { ok: false, rows: 0 };
+  try {
+    const supabase = await createServerClient();
+    const rows = await deleteSessionMessage(supabase, args);
+    return { ok: true, rows };
+  } catch {
+    return { ok: false, rows: 0 };
   }
 }

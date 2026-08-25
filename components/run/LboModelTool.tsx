@@ -48,7 +48,7 @@ const FIELDS: FieldDef[] = [
 
 const fieldClass =
   "w-full rounded-md border border-line bg-surface-0 px-2 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
-const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelClass = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 
 // Present a stored value in UI units: fractions become whole percents.
 function toDisplay(key: keyof LboInputs, v: number): string {
@@ -131,7 +131,7 @@ export function LboModelTool({ saved = [] }: { saved?: SavedScenario[] }) {
         aria-expanded={open}
       >
         <span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             LBO model
           </span>
           <span className="ml-2 text-sm text-fg-secondary">

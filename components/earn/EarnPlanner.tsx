@@ -77,7 +77,7 @@ export function EarnPlanner({
           className="w-full resize-none bg-transparent px-1 py-1 text-sm text-fg-primary outline-none placeholder:text-fg-muted"
         />
         <div className="mt-2 flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             ⌘↵ to plan
           </span>
           <button
@@ -109,7 +109,7 @@ export function EarnPlanCard({ plan }: { plan: EarnPlan }) {
       <header className="mb-3 flex items-center gap-2">
         <span
           className={[
-            "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
+            "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
             delegate
               ? "border border-neural-400/50 bg-neural-400/10 text-neural-300"
               : "border border-gold-400/50 bg-gold-400/10 text-gold-300",

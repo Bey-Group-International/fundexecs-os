@@ -25,17 +25,17 @@ export function ExecutiveDialoguePanel({
               {character.name}
             </p>
             {character.nickname ? (
-              <span className="rounded-full border border-gold-500/35 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+              <span className="rounded-full border border-gold-500/35 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                 {character.nickname}
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {character.role}
           </p>
           <p className="mt-3 text-sm leading-6 text-fg-secondary">{recommendation}</p>
           <div className="mt-3 rounded-lg border border-line bg-surface-0/55 p-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Boundary
             </p>
             <p className="mt-1 text-xs leading-5 text-fg-muted">{character.promptBoundary}</p>
@@ -56,7 +56,7 @@ export function ExecutiveDialoguePanel({
               Create task
             </Link>
           </div>
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {context}
           </p>
         </div>

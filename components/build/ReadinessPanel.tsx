@@ -31,7 +31,7 @@ function ModuleChip({ m }: { m: ModuleReadiness }) {
       title={`${m.label}: ${m.score}% complete`}
       className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition hover:bg-surface-2 ${tone}`}
     >
-      <span className="font-mono text-[10px]">{mark}</span>
+      <span className="font-mono text-[11px]">{mark}</span>
       <span>{m.label}</span>
     </Link>
   );
@@ -103,22 +103,22 @@ export function ReadinessPanel({
 
         <div className="min-w-0 flex-1">
           <div className={`flex flex-wrap items-center gap-2 ${floating ? "pr-6" : ""}`}>
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Investor Readiness
             </span>
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {stage.label}
             </span>
             <Link
               href="/build/data_room"
-              className="ml-auto font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
+              className="ml-auto font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300"
             >
               View materials →
             </Link>
           </div>
           <p className="mt-1 text-sm text-fg-secondary">{stage.blurb}</p>
           {nextStage ? (
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-gold-400">
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-gold-400">
               {gap} {gap === 1 ? "point" : "points"} to {nextStage.label}
             </p>
           ) : null}
@@ -128,7 +128,7 @@ export function ReadinessPanel({
             {stages.map((s, i) => (
               <div key={s.key} className="flex items-center gap-1.5">
                 <span
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                     s.current
                       ? "bg-gold-400 text-surface-0"
                       : s.unlocked
@@ -158,7 +158,7 @@ export function ReadinessPanel({
       {/* Top-3 ranked next actions */}
       {topActions.length > 0 ? (
         <div className="mt-4 flex flex-col gap-2">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Top actions by impact
           </p>
           {topActions.map((action, idx) => (
@@ -171,7 +171,7 @@ export function ReadinessPanel({
                 {idx + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
                   {action.impact} · {action.moduleLabel}
                 </span>
                 <span className="block truncate text-sm text-fg-primary">{action.label}</span>

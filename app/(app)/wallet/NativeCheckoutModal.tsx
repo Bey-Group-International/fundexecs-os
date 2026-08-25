@@ -52,7 +52,7 @@ export function NativeCheckoutModal({
     >
       <div className="relative my-8 w-full max-w-md rounded-2xl border border-line bg-surface-1 p-2 shadow-2xl">
         <div className="flex items-center justify-between px-3 py-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
             In-app checkout
           </span>
           <button
@@ -88,13 +88,13 @@ export function NativeCheckoutModal({
 
               <div className="mt-4 flex items-center justify-between rounded-xl border border-line bg-surface-0 px-4 py-3">
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-fg-muted">Credits</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Credits</p>
                   <p className="mt-0.5 font-display text-lg font-semibold text-gold-300">
                     {formatCredits(summary.credits)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-fg-muted">Price</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Price</p>
                   <p className="mt-0.5 font-display text-lg font-semibold text-fg-primary">
                     {formatUsd(summary.priceUsd)}
                     {summary.kind === "plan" ? (

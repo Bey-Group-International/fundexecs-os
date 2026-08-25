@@ -44,7 +44,7 @@ function Ring({ value, size = 72 }: { value: number; size?: number }) {
 // Conviction-over-time sparkline from the snapshot scores.
 function Sparkline({ scores }: { scores: number[] }) {
   if (scores.length < 2) {
-    return <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Trend builds as you work the deal</p>;
+    return <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Trend builds as you work the deal</p>;
   }
   const w = 160;
   const h = 36;
@@ -70,7 +70,7 @@ function Sparkline({ scores }: { scores: number[] }) {
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">{children}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">{children}</h3>
       {action}
     </div>
   );
@@ -111,10 +111,10 @@ function Header({ data }: { data: WarRoom }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">{deal.name}</h1>
-            <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${stage.tone}`}>
+            <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${stage.tone}`}>
               {stage.label}
             </span>
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {deal.stage.replace("_", " ")}
             </span>
           </div>
@@ -143,7 +143,7 @@ function Checks({ data }: { data: WarRoom }) {
         {data.conviction.checks.map((c) => (
           <li key={c.label} className="flex items-center gap-2.5 text-sm">
             <span
-              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full font-mono text-[9px] ${
+              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full font-mono text-[11px] ${
                 c.done ? "bg-emerald-400/20 text-emerald-300" : "border border-line text-fg-muted"
               }`}
             >
@@ -226,7 +226,7 @@ function DiligenceRow({ item }: { item: DiligenceItem }) {
         <span className={`min-w-0 flex-1 truncate text-sm ${resolved ? "text-fg-muted" : "text-fg-primary"}`}>
           {item.title}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{item.category}</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{item.category}</span>
         <ActionForm action={updateDiligenceItem} className="flex items-center print:hidden">
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="deal_id" value={item.deal_id} />
@@ -289,7 +289,7 @@ function Diligence({ data }: { data: WarRoom }) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle
         action={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {Math.round(coverage * 100)}% cleared
           </span>
         }
@@ -351,7 +351,7 @@ function Heatmap({ data }: { data: WarRoom }) {
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <SectionTitle>Risk heatmap</SectionTitle>
       <div className="flex gap-2">
-        <div className="flex flex-col justify-between py-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+        <div className="flex flex-col justify-between py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           <span>Impact ↑</span>
         </div>
         <div className="flex-1">
@@ -373,14 +373,14 @@ function Heatmap({ data }: { data: WarRoom }) {
               }),
             )}
           </div>
-          <div className="mt-1 grid grid-cols-4 gap-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <div className="mt-1 grid grid-cols-4 gap-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {SEVERITY_AXIS.map((l) => (
               <span key={l} className="text-center">
                 {l}
               </span>
             ))}
           </div>
-          <p className="mt-1 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">Likelihood →</p>
+          <p className="mt-1 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">Likelihood →</p>
         </div>
       </div>
     </div>
@@ -395,12 +395,12 @@ function DecisionHistory({ decisions }: { decisions: IcDecision[] }) {
         const meta = DECISION_META[d.decision];
         return (
           <div key={d.id} className="flex items-start gap-2 text-sm">
-            <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${meta.tone}`}>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${meta.tone}`}>
               {meta.label}
             </span>
             <span className="min-w-0 flex-1">
               {d.rationale ? <span className="text-fg-secondary">{d.rationale}</span> : <span className="text-fg-muted">—</span>}
-              <span className="ml-2 font-mono text-[10px] text-fg-muted">
+              <span className="ml-2 font-mono text-[11px] text-fg-muted">
                 {d.conviction != null ? `@ ${d.conviction}%` : ""} · {new Date(d.created_at).toLocaleDateString()}
               </span>
             </span>
@@ -419,7 +419,7 @@ function Decision({ data }: { data: WarRoom }) {
       <SectionTitle
         action={
           latest ? (
-            <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${DECISION_META[latest.decision].tone}`}>
+            <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${DECISION_META[latest.decision].tone}`}>
               Last: {DECISION_META[latest.decision].label}
             </span>
           ) : undefined
@@ -428,7 +428,7 @@ function Decision({ data }: { data: WarRoom }) {
         IC decision
       </SectionTitle>
       <IcDecisionForm dealId={deal.id} />
-      <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted print:hidden">
+      <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted print:hidden">
         Go → advances to closing · No-Go → passes the deal
       </p>
       <DecisionHistory decisions={data.decisions} />

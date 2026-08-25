@@ -294,7 +294,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
           placeholder="Search nodes…"
           className="min-w-[160px] flex-1 rounded-lg border border-line bg-surface-0 px-3 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none"
         />
-        <span className="ml-auto font-mono text-[10px] text-fg-muted">
+        <span className="ml-auto font-mono text-[11px] text-fg-muted">
           {data.nodes.length} nodes · {data.edges.length} edges
         </span>
         {fullData.nodes.length > 0 && (
@@ -302,7 +302,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
             type="button"
             onClick={handleClearAll}
             disabled={clearing}
-            className="shrink-0 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+            className="shrink-0 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
           >
             {clearing ? "Clearing…" : "Clear all"}
           </button>
@@ -329,7 +329,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
                 className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: colorFor(t), boxShadow: off ? "none" : `0 0 8px ${colorFor(t)}66` }}
               />
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {t.replace(/_/g, " ")}
               </span>
             </button>
@@ -342,7 +342,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgb(var(--fx-accent-rgb)/0.16),transparent_34%)]" />
           <div className="relative grid gap-5 md:grid-cols-[1fr_220px] md:items-center">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
                 {tab.label} graph activation
               </p>
               <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg-primary">
@@ -384,7 +384,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colorFor(selectedNode.type) }} />
                     <p className="truncate text-sm font-medium text-fg-primary">{selectedNode.label || "—"}</p>
                   </div>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {selectedNode.type.replace(/_/g, " ")} · {neighbors.get(selectedNode.id)?.size ?? 0} ties
                   </p>
                 </div>
@@ -395,7 +395,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
 
               {tracePath ? (
                 <div className="mt-2 rounded-lg border border-gold-500/30 bg-gold-500/[0.06] px-2 py-1.5">
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                  <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
                     Path · {tracePath.length - 1} hop{tracePath.length - 1 === 1 ? "" : "s"}
                   </p>
                   <p className="mt-0.5 text-xs text-fg-secondary">
@@ -429,7 +429,7 @@ export function GraphExplorer({ graphs }: { graphs: Record<GraphKind, GraphData>
                 <button
                   onClick={() => handleDeleteNode(selectedNode.id)}
                   disabled={deleting}
-                  className="mt-1.5 w-full rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+                  className="mt-1.5 w-full rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
                 >
                   {deleting ? "Deleting…" : "Delete node"}
                 </button>

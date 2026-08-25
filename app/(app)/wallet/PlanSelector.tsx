@@ -139,7 +139,7 @@ export function PlanSelector({
             </button>
           ))}
         </div>
-        <span className="rounded-full border border-neural-400/35 bg-neural-400/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
+        <span className="rounded-full border border-neural-400/35 bg-neural-400/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
           Annual = 2 months free
         </span>
       </div>
@@ -163,7 +163,7 @@ export function PlanSelector({
             >
               {(isCurrent || isRecommended) && (
                 <span
-                  className={`absolute -top-2 right-4 z-10 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] ${
+                  className={`absolute -top-2 right-4 z-10 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.16em] ${
                     isCurrent
                       ? "border border-status-success/40 bg-status-success/10 text-status-success"
                       : "border border-neural-400/50 bg-black text-neural-300 shadow-[0_0_18px_rgba(118,185,0,0.35)]"
@@ -177,7 +177,7 @@ export function PlanSelector({
                 <div className="mb-4 rounded-xl border border-neural-400/10 bg-neural-400/[0.035] p-2">
                   <ComputeLayerGraphic featured={p.key === "pro"} />
                 </div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-neural-300">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                   {p.key} tier
                 </p>
                 <p className="mt-1 font-display text-xl font-semibold text-fg-primary">{p.name}</p>

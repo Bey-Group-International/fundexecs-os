@@ -24,7 +24,7 @@ function ProvenanceChip({ claim }: { claim: ProvenancedClaim }) {
     : "border-gold-500/40 text-gold-300";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${tone}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${tone}`}
       title={claim.claim}
     >
       <span aria-hidden>◆</span>
@@ -44,9 +44,9 @@ function Card({ item }: { item: ProactiveItemView }) {
     <div className="group relative flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4 transition hover:border-gold-500/30">
       {/* Header row: hub, class, blast-radius tier, priority */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{item.hub}</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{item.hub}</span>
         <span
-          className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+          className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
             item.signalClass === "market"
               ? "border-cyan-500/40 text-cyan-300"
               : "border-line text-fg-muted"
@@ -54,10 +54,10 @@ function Card({ item }: { item: ProactiveItemView }) {
         >
           {item.signalClass === "market" ? "Market-aware" : "Internal"}
         </span>
-        <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_STYLE[tier]}`}>
+        <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TIER_STYLE[tier]}`}>
           {TIER_LABEL[tier]}
         </span>
-        <span className="ml-auto font-mono text-[10px] text-fg-muted">P{item.priority}</span>
+        <span className="ml-auto font-mono text-[11px] text-fg-muted">P{item.priority}</span>
       </div>
 
       {/* Title + why-now rationale */}
@@ -81,7 +81,7 @@ function Card({ item }: { item: ProactiveItemView }) {
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="flex w-full items-center justify-between px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+            className="flex w-full items-center justify-between px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
           >
             <span>Drafted deliverable</span>
             <span aria-hidden>{open ? "−" : "+"}</span>
@@ -106,7 +106,7 @@ function Card({ item }: { item: ProactiveItemView }) {
           <input type="hidden" name="itemId" value={item.id} />
           <button
             type="submit"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:border-gold-500/70 hover:bg-gold-500/20"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:border-gold-500/70 hover:bg-gold-500/20"
           >
             <span aria-hidden>✓</span>
             {approveLabel}
@@ -115,20 +115,20 @@ function Card({ item }: { item: ProactiveItemView }) {
         {item.workflowId && (
           <Link
             href={`/report?task_id=${item.workflowId}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary"
           >
             Edit
           </Link>
         )}
         <form action={snoozeProactive} className="ml-auto">
           <input type="hidden" name="itemId" value={item.id} />
-          <button type="submit" className="font-mono text-[10px] text-fg-muted transition hover:text-fg-secondary">
+          <button type="submit" className="font-mono text-[11px] text-fg-muted transition hover:text-fg-secondary">
             Snooze
           </button>
         </form>
         <form action={dismissProactive}>
           <input type="hidden" name="itemId" value={item.id} />
-          <button type="submit" className="font-mono text-[10px] text-fg-muted transition hover:text-fg-secondary">
+          <button type="submit" className="font-mono text-[11px] text-fg-muted transition hover:text-fg-secondary">
             Dismiss
           </button>
         </form>
@@ -143,12 +143,12 @@ export function ProactiveInitiative({ items }: { items: ProactiveItemView[] }) {
   return (
     <section aria-label="Earn initiative" className="mb-6">
       <header className="mb-3 flex items-center justify-between">
-        <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-fg-muted">
+        <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shadow-[0_0_6px_2px_rgba(99,102,241,0.4)]" aria-hidden />
           Earn Initiative
         </span>
         {/* Earn-level count — how many finished decisions await the operator */}
-        <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 font-mono text-[10px] text-indigo-200">
+        <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 font-mono text-[11px] text-indigo-200">
           {items.length} awaiting you
         </span>
       </header>

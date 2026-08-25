@@ -23,7 +23,7 @@ function CloseCard({ c }: { c: DealClose }) {
       <div className="flex items-center justify-between gap-3">
         <span className="truncate font-medium text-fg-primary">{c.deal.name}</span>
         <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
             isClosing ? "border-gold-500/40 text-gold-300" : "border-status-info/50 text-status-info"
           }`}
         >
@@ -47,7 +47,7 @@ function CloseCard({ c }: { c: DealClose }) {
         <div className="flex-1">
           <Meter value={c.progress} />
         </div>
-        <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+        <span className="shrink-0 font-mono text-[11px] text-fg-muted">
           {c.doneCount}/{c.total} steps
         </span>
       </div>

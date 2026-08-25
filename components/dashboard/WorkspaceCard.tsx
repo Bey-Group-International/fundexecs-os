@@ -12,7 +12,7 @@ export function WorkspaceCard({ workspace }: { workspace: WorkspaceConfig }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             {workspace.eyebrow}
           </p>
           <h2 className="mt-1 font-display text-xl font-semibold text-fg-primary">
@@ -22,7 +22,7 @@ export function WorkspaceCard({ workspace }: { workspace: WorkspaceConfig }) {
         <ExecutiveSprite character={character} size="sm" state="idle" />
       </div>
       <p className="mt-4 text-sm leading-6 text-fg-secondary">{workspace.description}</p>
-      <span className="mt-4 font-mono text-[10px] uppercase tracking-wider text-gold-400 transition group-hover:translate-x-1">
+      <span className="mt-4 font-mono text-[11px] uppercase tracking-wider text-gold-400 transition group-hover:translate-x-1">
         Open workspace →
       </span>
     </Link>

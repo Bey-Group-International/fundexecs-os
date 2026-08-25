@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 function Unavailable({ reason }: { reason?: string }) {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
-      <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">FundExecs OS</span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</span>
       <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">
         {reason === "expired" ? "This link has expired" : "Link not available"}
       </h1>
@@ -76,7 +76,7 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
       <div className="mx-auto max-w-xl px-6 py-12">
         {/* Header */}
         <header className="mb-8 border-b border-line pb-6">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             FundExecs OS
           </span>
           <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">{orgName}</h1>
@@ -102,7 +102,7 @@ export default async function LPOnboardingPortal(props: { params: Promise<{ toke
         />
 
         <footer className="mt-12 border-t border-line pt-6 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Powered by FundExecs OS
           </span>
         </footer>

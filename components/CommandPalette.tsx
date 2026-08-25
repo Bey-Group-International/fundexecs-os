@@ -165,13 +165,13 @@ export function CommandPalette({
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     {c.group ? (
-                      <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                      <span className="shrink-0 rounded border border-line/70 bg-surface-0/70 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                         {c.group}
                       </span>
                     ) : null}
                     <span className="truncate">{c.label}</span>
                   </span>
-                  {c.hint ? <span className="shrink-0 font-mono text-[10px] text-fg-muted">{c.hint}</span> : null}
+                  {c.hint ? <span className="shrink-0 font-mono text-[11px] text-fg-muted">{c.hint}</span> : null}
                 </button>
               </li>
             ))
@@ -179,7 +179,7 @@ export function CommandPalette({
             <li className="px-3 py-6 text-center text-sm text-fg-muted">No commands</li>
           )}
         </ul>
-        <div className="flex items-center justify-end gap-3 border-t border-line/70 px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+        <div className="flex items-center justify-end gap-3 border-t border-line/70 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           <span>↑↓ navigate</span>
           <span>↵ run</span>
           <span>esc close</span>

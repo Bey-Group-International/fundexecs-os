@@ -46,7 +46,7 @@ export function EngineTrends({ trends }: { trends: EngineTrend[] }) {
     <section className="mx-auto mb-5 max-w-6xl rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">Engine Trends</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Engine Trends</p>
           <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Weekly completed throughput · last {trends[0]?.series.length ?? 0} weeks
           </p>
@@ -71,7 +71,7 @@ export function EngineTrends({ trends }: { trends: EngineTrend[] }) {
               <div className="mt-1.5">
                 <Sparkline counts={counts} />
               </div>
-              <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {latest} this week
               </p>
             </div>

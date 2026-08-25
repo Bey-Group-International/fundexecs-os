@@ -53,7 +53,7 @@ function DeleteReviewItemBtn({ id }: { id: string }) {
           router.refresh();
         });
       }}
-      className="shrink-0 rounded-md border border-status-danger/40 px-1.5 py-0.5 font-mono text-[10px] text-status-danger transition hover:bg-status-danger/10 disabled:opacity-40"
+      className="shrink-0 rounded-md border border-status-danger/40 px-1.5 py-0.5 font-mono text-[11px] text-status-danger transition hover:bg-status-danger/10 disabled:opacity-40"
     >
       {pending ? "…" : "Delete"}
     </button>
@@ -75,7 +75,7 @@ function ClearReviewQueueBtn({ count }: { count: number }) {
           router.refresh();
         });
       }}
-      className="rounded-md border border-status-danger/40 px-2 py-0.5 font-mono text-[10px] text-status-danger transition hover:bg-status-danger/10 disabled:opacity-40"
+      className="rounded-md border border-status-danger/40 px-2 py-0.5 font-mono text-[11px] text-status-danger transition hover:bg-status-danger/10 disabled:opacity-40"
     >
       {pending ? "…" : "Clear all"}
     </button>
@@ -89,7 +89,7 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-400">FundExecs OS</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</p>
         <div className="mt-1 flex items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">Routing Review</h1>
           <ClearReviewQueueBtn count={items.length} />
@@ -115,7 +115,7 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
                 <span className="min-w-0 flex-1 truncate text-fg-secondary group-hover:text-fg-primary">
                   {wf.title}
                 </span>
-                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {STATUS_LABEL[wf.status] ?? wf.status}
                 </span>
               </span>
@@ -126,10 +126,10 @@ export function ReviewQueue({ items }: { items: ReviewItem<GridWorkflow>[] }) {
                 className="flex flex-col gap-2 rounded-2xl border border-line/80 bg-surface-1/70 p-4 shadow-[0_1px_2px_rgb(0_0_0/0.2)]"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-gold-300">
+                  <span className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     {engine}
                   </span>
-                  <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  <span className="shrink-0 rounded-full border border-line/60 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {REASON_LABEL[reason]}
                   </span>
                 </div>

@@ -20,11 +20,11 @@ export function AgendaBoard({ agenda }: { agenda: Agenda }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {agenda.summary}
         </span>
         {agenda.overdue > 0 ? (
-          <span className="rounded-full border border-status-danger/30 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-status-danger">
+          <span className="rounded-full border border-status-danger/30 bg-status-danger/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
             {agenda.overdue} overdue
           </span>
         ) : null}

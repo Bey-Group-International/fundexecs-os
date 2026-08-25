@@ -20,7 +20,7 @@ export async function MandateStrip({ orgId }: { orgId: string }) {
   if (!mandate) {
     return (
       <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line bg-surface-1 px-4 py-2.5 text-xs text-fg-muted">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Mandate</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Mandate</span>
         <span>No active thesis yet —</span>
         <Link href="/build/profile#thesis" className="text-gold-400 hover:underline">
           define it in Build → Thesis
@@ -44,7 +44,7 @@ export async function MandateStrip({ orgId }: { orgId: string }) {
       href="/build/profile#thesis"
       className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-surface-1 px-4 py-2.5 text-xs transition hover:border-gold-500/40"
     >
-      <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">Mandate</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Mandate</span>
       <span className="font-medium text-fg-primary">{mandate.thesisTitle}</span>
       {facts.length ? <span className="text-fg-muted">·</span> : null}
       {facts.map((f, i) => (

@@ -46,9 +46,9 @@ function PartnerRowItem({ p, isLast }: { p: PartnerRow; isLast: boolean }) {
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-fg">{p.name}</span>
             {p.provenance === "ai" ? (
-              <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-gold-300">AI Sourced</span>
+              <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-gold-300">AI Sourced</span>
             ) : (
-              <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[8px] uppercase tracking-wider text-fg-muted">Manual</span>
+              <span className="rounded-full border border-line px-1.5 py-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Manual</span>
             )}
           </div>
         </td>
@@ -65,13 +65,13 @@ function PartnerRowItem({ p, isLast }: { p: PartnerRow; isLast: boolean }) {
               {fields.contact_email && (
                 <a
                   href={`mailto:${fields.contact_email}`}
-                  className="font-mono text-[10px] text-accent underline-offset-2 hover:underline"
+                  className="font-mono text-[11px] text-accent underline-offset-2 hover:underline"
                 >
                   {fields.contact_email}
                 </a>
               )}
               {fields.contact_phone && (
-                <span className="font-mono text-[10px] text-fg-muted">{fields.contact_phone}</span>
+                <span className="font-mono text-[11px] text-fg-muted">{fields.contact_phone}</span>
               )}
             </div>
           ) : (
@@ -93,7 +93,7 @@ function PartnerRowItem({ p, isLast }: { p: PartnerRow; isLast: boolean }) {
               href={fields.website.startsWith("http") ? fields.website : `https://${fields.website}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-[10px] text-fg-muted hover:text-gold-300 hover:underline"
+              className="font-mono text-[11px] text-fg-muted hover:text-gold-300 hover:underline"
             >
               {fields.website.replace(/^https?:\/\//, "")}
             </a>
@@ -139,7 +139,7 @@ export function PartnersTable({ partners }: Props) {
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Partner Pipeline
         </p>
         <div className="flex items-center gap-2">
@@ -163,22 +163,22 @@ export function PartnersTable({ partners }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-subtle">
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Partner
                 </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Type
                 </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Contact
                 </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Website
                 </th>
-                <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <th className="px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Notes
                 </th>
                 <th className="px-4 py-3" />

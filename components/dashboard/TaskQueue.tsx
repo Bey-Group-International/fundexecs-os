@@ -13,7 +13,7 @@ export function TaskQueue({ tasks }: { tasks: Task[] }) {
     <section className="fx-card p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="font-mono text-xs uppercase tracking-wider text-fg-muted">Task queue</h2>
-        <Link href="/workspace" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+        <Link href="/workspace" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
           Open Earn →
         </Link>
       </div>
@@ -27,7 +27,7 @@ export function TaskQueue({ tasks }: { tasks: Task[] }) {
             <div key={task.id} className="rounded-xl border border-line bg-surface-0/55 px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-sm text-fg-primary">{task.title}</span>
-                <span className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${PRIORITY[task.status] ?? "text-fg-muted"}`}>
+                <span className={`shrink-0 font-mono text-[11px] uppercase tracking-wider ${PRIORITY[task.status] ?? "text-fg-muted"}`}>
                   {task.status.replace("_", " ")}
                 </span>
               </div>

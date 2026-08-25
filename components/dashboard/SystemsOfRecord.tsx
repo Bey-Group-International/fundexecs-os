@@ -34,7 +34,7 @@ export function SystemsOfRecord({ systems }: { systems: SystemStatus[] }) {
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent opacity-60 transition-opacity duration-300 group-hover:opacity-100"
           />
           <div className="flex items-start justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-muted">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
               {s.label}
             </span>
             <span
@@ -46,14 +46,14 @@ export function SystemsOfRecord({ systems }: { systems: SystemStatus[] }) {
             <span className="font-display text-2xl font-bold leading-none tracking-tight text-fg-primary transition-colors duration-200 group-hover:text-white">
               {s.primary}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {s.unit}
             </span>
           </div>
           {s.detail ? (
             <p className="truncate text-[11px] text-fg-secondary">{s.detail}</p>
           ) : null}
-          <p className="mt-auto pt-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted/70">
+          <p className="mt-auto pt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted/70">
             {s.health === "empty" ? "Awaiting first record" : `Updated ${relTime(s.lastActivity)}`}
           </p>
         </Link>

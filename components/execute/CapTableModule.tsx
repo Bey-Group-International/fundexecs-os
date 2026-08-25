@@ -129,7 +129,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
       {ownership.linkedCount > 0 ? (
         <div className="mb-4 rounded-xl border border-gold-500/30 bg-gold-500/5 px-4 py-3">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Complete ownership
             </span>
             <span className="font-mono text-[11px] text-fg-muted">
@@ -143,7 +143,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
           </p>
           <Link
             href="/execute/ownership"
-            className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:text-gold-200"
+            className="mt-2 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-200"
           >
             → View unified ownership
           </Link>
@@ -168,7 +168,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
               key={b.type}
               className="flex items-center gap-1.5 rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary"
             >
-              <span className="font-mono text-[10px] text-fg-muted">{b.count}</span>
+              <span className="font-mono text-[11px] text-fg-muted">{b.count}</span>
               {humanize(b.type)}
               <span className="font-mono text-[11px] text-fg-primary">{b.pct}%</span>
             </span>
@@ -185,7 +185,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                 (h, i) => (
                   <th
                     key={h}
-                    className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 ? "text-right" : ""}`}
+                    className={`whitespace-nowrap px-3 py-3 font-mono text-[11px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 ? "text-right" : ""}`}
                   >
                     {h}
                   </th>
@@ -204,7 +204,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                     return (
                       <span
                         title={eq.equity.map((e) => e.entityName).join(", ")}
-                        className="ml-2 rounded-full border border-gold-500/40 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300"
+                        className="ml-2 rounded-full border border-gold-500/40 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300"
                       >
                         + equity ×{eq.equity.length}
                       </span>
@@ -233,7 +233,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                       return (
                         <form action={createInvestorPortalShare} className="inline">
                           <input type="hidden" name="investor_id" value={h.investorId} />
-                          <button className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
+                          <button className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
                             + Create link
                           </button>
                         </form>
@@ -242,7 +242,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                     const eng = engagement.get(share.id);
                     return (
                       <div className="flex items-center justify-end gap-2">
-                        <span className="font-mono text-[10px] text-fg-muted">
+                        <span className="font-mono text-[11px] text-fg-muted">
                           {eng ? `opened ${eng.count}× · ${shortDate(eng.last)}` : "unopened"}
                         </span>
                         <CopyLink path={`/portal/${share.token}`} />
@@ -250,7 +250,7 @@ export async function ExecuteCapTableModule({ orgId }: { orgId: string }) {
                           <input type="hidden" name="id" value={share.id} />
                           <button
                             title="Revoke link"
-                            className="inline-flex items-center rounded-md border border-line px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger"
+                            className="inline-flex items-center rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/50 hover:text-status-danger"
                           >
                             Revoke
                           </button>

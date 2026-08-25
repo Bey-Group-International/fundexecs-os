@@ -20,7 +20,7 @@ interface Props {
 
 const inputCls =
   "w-full rounded border border-line bg-surface-2 px-2 py-1 font-mono text-[11px] text-fg-primary placeholder:text-fg-muted/50 focus:border-gold-500/40 focus:outline-none";
-const labelCls = "block font-mono text-[9px] uppercase tracking-widest text-fg-muted mb-0.5";
+const labelCls = "block font-mono text-[11px] uppercase tracking-widest text-fg-muted mb-0.5";
 
 export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Props) {
   const router = useRouter();
@@ -78,19 +78,19 @@ export function InlineContactEdit({ table, id, initial, onClose, onSaved }: Prop
       </div>
       {saveError && (
         <div className="flex items-center justify-between gap-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1">
-          <p className="font-mono text-[10px] text-red-400">{saveError}</p>
-          <button type="button" onClick={() => setSaveError(null)} className="font-mono text-[10px] text-red-400/60 hover:text-red-400">×</button>
+          <p className="font-mono text-[11px] text-red-400">{saveError}</p>
+          <button type="button" onClick={() => setSaveError(null)} className="font-mono text-[11px] text-red-400/60 hover:text-red-400">×</button>
         </div>
       )}
       <div className="flex items-center justify-end gap-2 pt-1">
-        <button type="button" onClick={onClose} className="font-mono text-[9px] uppercase tracking-widest text-fg-muted hover:text-fg-primary">
+        <button type="button" onClick={onClose} className="font-mono text-[11px] uppercase tracking-widest text-fg-muted hover:text-fg-primary">
           Cancel
         </button>
         <button
           type="button"
           onClick={handleSave}
           disabled={pending}
-          className="rounded border border-gold-500/40 bg-gold-500/10 px-3 py-1 font-mono text-[9px] uppercase tracking-widest text-gold-300 hover:bg-gold-500/20 disabled:opacity-40"
+          className="rounded border border-gold-500/40 bg-gold-500/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-gold-300 hover:bg-gold-500/20 disabled:opacity-40"
         >
           {pending ? "Saving…" : "Save"}
         </button>
@@ -106,7 +106,7 @@ export function EditContactBtn({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title="Edit contact info"
-      className="rounded border border-line px-1.5 py-0.5 font-mono text-[9px] text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
+      className="rounded border border-line px-1.5 py-0.5 font-mono text-[11px] text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300"
     >
       Edit
     </button>

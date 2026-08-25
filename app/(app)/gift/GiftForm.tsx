@@ -69,7 +69,7 @@ export function GiftForm({
               <p className="font-display text-lg font-semibold text-fg-primary">
                 {formatCredits(pack.credits)}
               </p>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 credits · {formatUsd(pack.price)}
               </p>
             </button>

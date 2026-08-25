@@ -27,7 +27,7 @@ function StageBadge({ stage }: { stage: string }) {
       ? "border-line bg-surface-2 text-fg-muted"
       : "border-gold-500/40 bg-gold-500/10 text-gold-300";
   return (
-    <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${tone}`}>
+    <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${tone}`}>
       {stage.replace("_", " ")}
     </span>
   );
@@ -37,7 +37,7 @@ export function DealCompsPanel({ comps }: Props) {
   if (comps.length === 0) {
     return (
       <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Comparable Transactions
         </h3>
         <p className="text-sm text-fg-muted">
@@ -63,19 +63,19 @@ export function DealCompsPanel({ comps }: Props) {
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Comparable Transactions
         </h3>
         {(medEvRev !== null || medEvEb !== null) && (
           <div className="flex gap-3">
             {medEvRev !== null && (
-              <span className="font-mono text-[10px] text-fg-muted">
+              <span className="font-mono text-[11px] text-fg-muted">
                 Peer EV/Rev median{" "}
                 <span className="text-fg-secondary">{fmtMultiple(medEvRev)}</span>
               </span>
             )}
             {medEvEb !== null && (
-              <span className="font-mono text-[10px] text-fg-muted">
+              <span className="font-mono text-[11px] text-fg-muted">
                 EV/EBITDA median{" "}
                 <span className="text-fg-secondary">{fmtMultiple(medEvEb)}</span>
               </span>
@@ -88,19 +88,19 @@ export function DealCompsPanel({ comps }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line">
-              <th className="pb-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <th className="pb-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Deal
               </th>
-              <th className="pb-2 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <th className="pb-2 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 EV
               </th>
-              <th className="pb-2 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <th className="pb-2 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 EV / Rev
               </th>
-              <th className="pb-2 text-right font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <th className="pb-2 text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 EV / EBITDA
               </th>
-              <th className="pb-2 pl-3 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+              <th className="pb-2 pl-3 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Stage
               </th>
             </tr>
@@ -116,13 +116,13 @@ export function DealCompsPanel({ comps }: Props) {
                     <span className={`font-medium ${comp.isCurrent ? "text-gold-300" : "text-fg-primary"}`}>
                       {comp.name}
                       {comp.isCurrent && (
-                        <span className="ml-2 font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                        <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">
                           ← this deal
                         </span>
                       )}
                     </span>
                     {comp.sector && (
-                      <span className="font-mono text-[10px] text-fg-muted">{comp.sector}</span>
+                      <span className="font-mono text-[11px] text-fg-muted">{comp.sector}</span>
                     )}
                   </div>
                 </td>
@@ -144,7 +144,7 @@ export function DealCompsPanel({ comps }: Props) {
         </table>
       </div>
 
-      <p className="mt-3 font-mono text-[9px] text-fg-muted">
+      <p className="mt-3 font-mono text-[11px] text-fg-muted">
         Multiples derived from underwriting entry assumptions across your portfolio.
       </p>
     </div>

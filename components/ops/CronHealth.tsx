@@ -71,11 +71,11 @@ export function CronHealth({ live }: { live?: boolean; initialPrompt?: string })
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Scheduling Health
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
@@ -119,22 +119,22 @@ function JobRow({ job }: { job: CronJobHealth }) {
     <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-1 px-4 py-3">
       <div className="min-w-0">
         <div className="font-mono text-sm font-medium text-fg-primary">{job.label}</div>
-        <div className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {last ? `Last run ${relativeTime(last)}` : "Never run"}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {failed ? (
-          <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-danger">
+          <span className="rounded-full border border-status-danger/40 bg-status-danger/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-danger">
             error
           </span>
         ) : null}
         {job.stale ? (
-          <span className="rounded-full border border-status-warning/40 bg-status-warning/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-warning">
+          <span className="rounded-full border border-status-warning/40 bg-status-warning/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-warning">
             stale
           </span>
         ) : (
-          <span className="rounded-full border border-status-success/40 bg-status-success/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+          <span className="rounded-full border border-status-success/40 bg-status-success/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
             fresh
           </span>
         )}

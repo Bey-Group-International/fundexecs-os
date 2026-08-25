@@ -59,11 +59,11 @@ export function AiFieldWand({
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-gold-500/25 bg-gold-500/5 p-3">
       {label ? (
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           {label}
         </span>
       ) : (
-        <span className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           ✦ AI Field Wand
         </span>
       )}

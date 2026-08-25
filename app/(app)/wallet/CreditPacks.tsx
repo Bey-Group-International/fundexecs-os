@@ -61,7 +61,7 @@ export function CreditPacks({
                 <p className="font-display text-lg font-semibold text-fg-primary">
                   {formatCredits(pack.credits)}
                 </p>
-                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                   burst credits
                 </p>
               </div>

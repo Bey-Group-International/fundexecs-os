@@ -138,7 +138,7 @@ export default async function SessionsPage({
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             FundExecs OS
           </span>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -157,7 +157,7 @@ export default async function SessionsPage({
           empty-state card or prompt chips. */}
       {pinned.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Pinned
           </h2>
           <div className="flex flex-col gap-1.5">
@@ -170,7 +170,7 @@ export default async function SessionsPage({
 
       {recent.length > 0 && (
         <section>
-          <h2 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Recent
           </h2>
           <div className="flex flex-col gap-1.5">
@@ -209,7 +209,7 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
         <div className="relative flex flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
                 AI Operating Brief
               </p>
               <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-fg-primary">
@@ -228,14 +228,14 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
           </div>
 
           <details className="group rounded-xl border border-line/70 bg-surface-0/70 px-3 py-2">
-            <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-[0.22em] text-fg-muted transition hover:text-fg-secondary">
+            <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted transition hover:text-fg-secondary">
               Show context and executive team
               <span className="ml-2 text-gold-400 group-open:hidden">+</span>
               <span className="ml-2 hidden text-gold-400 group-open:inline">-</span>
             </summary>
             <div className="mt-3 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Active context
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -250,7 +250,7 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
                 </div>
               </div>
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Suggested executive team
                 </p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -258,7 +258,7 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
                     <div key={role.role} className="rounded-xl border border-line bg-surface-1 px-3 py-2">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-medium text-fg-primary">{role.label}</p>
-                        <span className="rounded-full border border-gold-500/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                        <span className="rounded-full border border-gold-500/30 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                           {role.approvalBoundary.replace(/_/g, " ")}
                         </span>
                       </div>
@@ -269,7 +269,7 @@ function OperatingBriefCard({ brief }: { brief: OperatingBrief }) {
               </div>
             </div>
             <div className="mt-3 rounded-xl border border-line bg-surface-1 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 Recommended next actions
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-snug text-fg-secondary">
@@ -307,7 +307,7 @@ function SessionCard({
           <span className="block truncate text-[11px] text-fg-muted">{groupName}</span>
         )}
       </span>
-      <span className="shrink-0 font-mono text-[10px] text-fg-muted">
+      <span className="shrink-0 font-mono text-[11px] text-fg-muted">
         {relativeTime(s.updated_at ?? s.created_at ?? null)}
       </span>
       <span className="shrink-0 font-mono text-fg-muted transition group-hover:translate-x-0.5 group-hover:text-gold-400">

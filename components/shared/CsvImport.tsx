@@ -141,7 +141,7 @@ export function CsvImport({ expectedColumns, onImport, maxRows = 500 }: CsvImpor
             <p className="text-sm font-medium text-fg-primary">Drop a CSV or XLSX file here</p>
             <p className="text-xs text-fg-muted">or click to browse — up to {maxRows} rows</p>
           </div>
-          <span className="rounded border border-line px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
+          <span className="rounded border border-line px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
             Choose file
           </span>
         </div>

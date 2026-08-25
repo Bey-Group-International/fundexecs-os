@@ -36,7 +36,7 @@ export function RoutePanel({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         title="Re-route — change the engine or delegate to a different desk"
-        className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+        className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
       >
         <span className={`transition ${open ? "rotate-90" : ""}`} aria-hidden>▸</span>
         Re-route
@@ -47,7 +47,7 @@ export function RoutePanel({
           {/* Engine axis — always available; re-classifies + teaches the router. */}
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Engine</p>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Engine</p>
               <p className="mt-0.5 text-[11px] text-fg-muted">Re-classify the execution engine.</p>
             </div>
             <RerouteControl workflowId={workflowId} currentEngine={currentEngine} />
@@ -55,7 +55,7 @@ export function RoutePanel({
 
           {/* Desk axis — delegate ownership; re-plans, so only before approval. */}
           <div className="border-t border-line/55 pt-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Desk</p>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Desk</p>
             {canDelegate ? (
               <>
                 <p className="mt-0.5 text-[11px] text-fg-muted">

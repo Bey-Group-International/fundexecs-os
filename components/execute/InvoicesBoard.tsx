@@ -122,7 +122,7 @@ function StatusBadge({ status }: { status: FinInvoiceStatus }) {
   const meta = STATUS_META[status] ?? STATUS_META.draft;
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${meta.cls}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${meta.cls}`}
     >
       {meta.label}
     </span>
@@ -133,7 +133,7 @@ function KindBadge({ kind }: { kind: FinInvoiceKind }) {
   const receivable = kind === "receivable";
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
         receivable
           ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
           : "border-line bg-surface-2 text-fg-secondary"
@@ -148,7 +148,7 @@ function AgingBadge({ dueDate, asOf }: { dueDate: string; asOf: string }) {
   const od = daysOverdue(dueDate, asOf);
   if (od <= 0) {
     return (
-      <span className="font-mono text-[10px] text-fg-muted">
+      <span className="font-mono text-[11px] text-fg-muted">
         due {fmtDate(dueDate)}
       </span>
     );
@@ -163,7 +163,7 @@ function AgingBadge({ dueDate, asOf }: { dueDate: string; asOf: string }) {
           : "border-amber-500/25 bg-amber-500/6 text-amber-400";
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${cls}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${cls}`}
     >
       {od}d overdue
     </span>
@@ -174,7 +174,7 @@ function AgingBadge({ dueDate, asOf }: { dueDate: string; asOf: string }) {
 
 const FIELD =
   "w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none focus:ring-1 focus:ring-gold-500/40";
-const LABEL = "mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const LABEL = "mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 const BTN =
   "inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -207,7 +207,7 @@ function Panel({
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">
         {title}
       </p>
       {subtitle && <p className="mt-0.5 text-xs text-fg-muted">{subtitle}</p>}
@@ -820,13 +820,13 @@ function AgingSummary({
 
   return (
     <div>
-      <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
         AR Aging · as of {fmtDate(asOf)}
       </p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {AGING_COLUMNS.map((c) => (
           <div key={c.key} className="rounded-lg border border-line bg-surface-1 px-3 py-2.5">
-            <p className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {c.label}
             </p>
             <p className="mt-1 font-mono text-sm tabular-nums text-fg-primary">
@@ -835,7 +835,7 @@ function AgingSummary({
           </div>
         ))}
         <div className="rounded-lg border border-gold-500/30 bg-gold-500/8 px-3 py-2.5">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-gold-400">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
             Total AR
           </p>
           <p className="mt-1 font-mono text-sm tabular-nums text-gold-200">
@@ -872,19 +872,19 @@ function InvoiceList({
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface-1">
       <div className="hidden grid-cols-[1fr_90px_150px_130px_130px] items-center gap-4 border-b border-line bg-surface-2/30 px-4 py-2 sm:grid">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Invoice
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Status
         </span>
-        <span className="text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Total
         </span>
-        <span className="text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Outstanding
         </span>
-        <span className="text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Due / Aging
         </span>
       </div>
@@ -903,7 +903,7 @@ function InvoiceList({
                     {inv.invoiceNo}
                   </span>
                 </div>
-                <p className="mt-0.5 truncate font-mono text-[10px] text-fg-muted">
+                <p className="mt-0.5 truncate font-mono text-[11px] text-fg-muted">
                   {inv.partyName} · issued {fmtDate(inv.issueDate)}
                 </p>
               </div>
@@ -918,7 +918,7 @@ function InvoiceList({
               </div>
               <div className="text-left sm:text-right">
                 {inv.status === "paid" || inv.status === "void" ? (
-                  <span className="font-mono text-[10px] text-fg-muted">
+                  <span className="font-mono text-[11px] text-fg-muted">
                     {fmtDate(inv.dueDate)}
                   </span>
                 ) : (
@@ -1004,7 +1004,7 @@ export function InvoicesBoard({ entities, parties, invoices, asOf }: Props) {
       />
 
       <div>
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Invoices &amp; Bills
         </p>
         <InvoiceList invoices={entityInvoices} asOf={asOf} />

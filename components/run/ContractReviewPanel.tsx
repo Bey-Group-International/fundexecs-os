@@ -37,7 +37,7 @@ const LEVEL_META: Record<OverallLevel, { label: string; cls: string }> = {
 function RiskBadge({ risk }: { risk: RiskLevel }) {
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${RISK_BADGE[risk]}`}
+      className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${RISK_BADGE[risk]}`}
     >
       {risk}
     </span>
@@ -80,13 +80,13 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
     <div className="flex flex-col gap-6">
       {/* Input */}
       <div className="rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           M&amp;A Contract Review
         </h3>
 
         {contracts.length > 0 && (
           <label className="mb-3 block">
-            <span className="mb-1 block font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Contract (optional — for labeling)
             </span>
             <select
@@ -105,7 +105,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
         )}
 
         <label className="block">
-          <span className="mb-1 block font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Contract text
           </span>
           <textarea
@@ -129,7 +129,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
             {isPending ? "Reviewing…" : "Run review"}
           </button>
           {selectedTitle && (
-            <span className="font-mono text-[10px] text-fg-muted">Reviewing: {selectedTitle}</span>
+            <span className="font-mono text-[11px] text-fg-muted">Reviewing: {selectedTitle}</span>
           )}
         </div>
       </div>
@@ -140,7 +140,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
           {/* Overall score */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Overall Risk Score
               </p>
               <p className="mt-1 text-3xl font-semibold text-fg-primary">
@@ -149,7 +149,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
               </p>
             </div>
             <span
-              className={`rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider ${LEVEL_META[assessment.level].cls}`}
+              className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider ${LEVEL_META[assessment.level].cls}`}
             >
               {LEVEL_META[assessment.level].label}
             </span>
@@ -158,14 +158,14 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
           {/* Missing protective clauses */}
           {assessment.missing.length > 0 && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/6 p-4">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-amber-400">
                 ⚠ Missing protective clauses — {assessment.missing.length}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {assessment.missing.map((label) => (
                   <span
                     key={label}
-                    className="rounded-full border border-amber-500/30 bg-amber-500/8 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-300"
+                    className="rounded-full border border-amber-500/30 bg-amber-500/8 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-amber-300"
                   >
                     {label}
                   </span>
@@ -177,7 +177,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
           {/* Findings table */}
           <div className="rounded-2xl border border-line bg-surface-1">
             <div className="border-b border-line bg-surface-2/30 px-4 py-2">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Clause Findings · {findings.length}
               </span>
             </div>
@@ -185,19 +185,19 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line">
-                    <th className="px-4 py-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <th className="px-4 py-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Clause
                     </th>
-                    <th className="px-2 py-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <th className="px-2 py-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Present
                     </th>
-                    <th className="px-2 py-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <th className="px-2 py-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Risk
                     </th>
-                    <th className="px-2 py-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <th className="px-2 py-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Excerpt
                     </th>
-                    <th className="px-4 py-2 text-left font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <th className="px-4 py-2 text-left font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Suggested Redline
                     </th>
                   </tr>
@@ -210,7 +210,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
                       </td>
                       <td className="px-2 py-2">
                         <span
-                          className={`font-mono text-[10px] ${f.present ? "text-emerald-300" : "text-fg-muted"}`}
+                          className={`font-mono text-[11px] ${f.present ? "text-emerald-300" : "text-fg-muted"}`}
                         >
                           {f.present ? "Yes" : "No"}
                         </span>
@@ -233,7 +233,7 @@ export function ContractReviewPanel({ contracts }: { contracts: ContractOption[]
 
           {/* Fallback note */}
           {source === "fallback" && (
-            <p className="font-mono text-[9px] text-fg-muted">
+            <p className="font-mono text-[11px] text-fg-muted">
               Heuristic review (no model key configured) — keyword/regex scan. Connect
               ANTHROPIC_API_KEY for a full AI-generated clause analysis.
             </p>

@@ -57,20 +57,20 @@ function VerifyBadge({ row }: { row: Row }) {
   return (
     <div className="flex items-center justify-end gap-1.5">
       {ai ? (
-        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+        <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
           AI Sourced
         </span>
       ) : (
-        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+        <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Manual
         </span>
       )}
       {verified ? (
-        <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-status-success">
+        <span className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-status-success">
           ✓ Verified
         </span>
       ) : (
-        <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           <span className="h-1.5 w-1.5 rounded-full border border-fg-muted" aria-hidden /> Unverified
         </span>
       )}
@@ -104,7 +104,7 @@ function RowDetails({
       <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
         {detailEntries.map(([k, v]) => (
           <div key={k} className="flex flex-col gap-0.5">
-            <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               {humanize(k)}
             </dt>
             <dd className="text-sm text-fg-primary">{cell(v)}</dd>
@@ -205,7 +205,7 @@ export default function ModuleTable({
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
-            className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-fg-secondary"
           >
             {showArchived ? "Hide archived" : `Show archived (${archivedRows.length})`}
           </button>
@@ -221,7 +221,7 @@ export default function ModuleTable({
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  className="px-4 py-2.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                  className="px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted"
                 >
                   {c.label}
                 </th>
@@ -264,7 +264,7 @@ export default function ModuleTable({
                     ))}
                     <td className="px-4 py-2.5">
                       {archived ? (
-                        <span className="block text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        <span className="block text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           Archived
                         </span>
                       ) : (
@@ -335,7 +335,7 @@ export default function ModuleTable({
                   <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
                     {facets.slice(0, isOpen ? facets.length : 4).map((f) => (
                       <div key={f.label} className="min-w-0">
-                        <dt className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                        <dt className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                           {f.label}
                         </dt>
                         <dd className="truncate text-[13px] text-fg-secondary">{f.value}</dd>
@@ -346,7 +346,7 @@ export default function ModuleTable({
 
                 <div className="mt-2.5 flex items-center justify-between gap-2">
                   {archived ? (
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Archived
                     </span>
                   ) : (

@@ -15,7 +15,7 @@ export default async function ActivityPage() {
   return (
     <div className="fx-ambient mx-auto max-w-4xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Activity
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">

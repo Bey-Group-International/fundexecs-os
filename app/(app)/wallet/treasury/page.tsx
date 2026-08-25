@@ -30,7 +30,7 @@ export default async function WalletTreasuryPage() {
       <div className="mb-2">
         <Link
           href="/wallet"
-          className="font-mono text-[11px] uppercase tracking-[0.28em] text-fg-muted transition hover:text-gold-300"
+          className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted transition hover:text-gold-300"
         >
           ← Wallet
         </Link>

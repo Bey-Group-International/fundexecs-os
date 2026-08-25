@@ -52,7 +52,7 @@ function SectionHeader({
             {String(n).padStart(2, "0")}
           </span>
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-400/80">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400/80">
               Section {String(n).padStart(2, "0")} · {meta.eyebrow}
             </p>
             <h2 className="font-display text-xl font-semibold tracking-tight text-fg-primary">
@@ -61,7 +61,7 @@ function SectionHeader({
           </div>
         </div>
         <span
-          className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider ${
+          className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${
             done
               ? "border-emerald-400/40 bg-emerald-400/5 text-emerald-300"
               : "border-line text-fg-muted"
@@ -161,13 +161,13 @@ export default async function FirmIdentityPage() {
     <div className="fx-ambient w-full">
       <Link
         href="/settings#account"
-        className="mb-6 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted transition hover:text-gold-400"
+        className="mb-6 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted transition hover:text-gold-400"
       >
         ← Settings
       </Link>
 
       <header className="mb-8 border-b border-line pb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Build Hub
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">

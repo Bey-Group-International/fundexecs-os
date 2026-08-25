@@ -11,7 +11,7 @@ type ModuleStatus = "empty" | "started" | "complete";
 // supplied (Build hub): a check when complete, a dot when in progress.
 function StatusDot({ status }: { status: ModuleStatus }) {
   if (status === "complete")
-    return <span className="font-mono text-[10px] text-emerald-400">✓</span>;
+    return <span className="font-mono text-[11px] text-emerald-400">✓</span>;
   if (status === "started")
     return <span className="h-1.5 w-1.5 rounded-full bg-gold-400" aria-hidden />;
   return <span className="h-1.5 w-1.5 rounded-full border border-line" aria-hidden />;

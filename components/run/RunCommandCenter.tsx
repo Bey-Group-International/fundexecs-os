@@ -55,7 +55,7 @@ function Bench({
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-2/40 px-3.5 py-2.5">
       <span className="font-display text-lg font-semibold leading-none text-fg-primary">{value}</span>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{label}</span>
       {delta ? <span className={`text-[11px] leading-tight ${deltaTone}`}>{delta}</span> : null}
     </div>
   );
@@ -68,9 +68,9 @@ function DealConvictionChip({ d }: { d: DealConviction }) {
       title={`${d.deal.name} · ${d.score}% conviction · ${d.stage.label}`}
       className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition hover:bg-surface-2 ${d.stage.tone}`}
     >
-      <span className="font-mono text-[10px]">{d.score}</span>
+      <span className="font-mono text-[11px]">{d.score}</span>
       <span className="max-w-[10rem] truncate text-fg-secondary">{d.deal.name}</span>
-      <span className="font-mono text-[9px] uppercase tracking-wider">{d.stage.label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider">{d.stage.label}</span>
     </Link>
   );
 }
@@ -86,12 +86,12 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
     return (
       <div className="mb-6 flex flex-col items-center rounded-2xl border border-dashed border-line bg-surface-1 px-8 py-10 text-center">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             Deal command center
           </span>
           <Link
             href="/run/diligence"
-            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+            className="rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
           >
             ✶ AI Evaluate
           </Link>
@@ -134,22 +134,22 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Portfolio conviction
             </span>
             <span
-              className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${stage.tone}`}
+              className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${stage.tone}`}
             >
               {stage.label}
             </span>
             {benchmark.icReadyCount > 0 ? (
-              <span className="rounded-full border border-emerald-400/40 bg-emerald-400/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+              <span className="rounded-full border border-emerald-400/40 bg-emerald-400/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-emerald-300">
                 {benchmark.icReadyCount} IC-ready
               </span>
             ) : null}
             <Link
               href="/run/diligence"
-              className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
+              className="ml-auto rounded-md border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-200 transition hover:bg-gold-500/20"
             >
               ✶ AI Evaluate
             </Link>
@@ -212,7 +212,7 @@ export function RunCommandCenter({ conviction }: { conviction: RunConviction }) 
             →
           </span>
           <span className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+            <span className="block font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Next best step · {nextAction.dealName}
             </span>
             <span className="block truncate text-sm text-fg-primary">{nextAction.label}</span>

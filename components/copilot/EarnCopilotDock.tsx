@@ -14,6 +14,8 @@ import {
 } from "@/lib/copilot";
 import {
   askEarn,
+  deleteSessionTurn,
+  editSessionTurn,
   launchCopilotSuggestion,
   getCopilotBriefing,
   getMandateSummary,
@@ -26,6 +28,12 @@ import { Markdown } from "@/components/Markdown";
 import { classifyIntent } from "@/lib/intent";
 import type { Mandate } from "@/lib/gates";
 import type { AgentKey } from "@/lib/supabase/database.types";
+
+/** Turn a context slug ("deal_room") into a readable label ("Deal room"). */
+function titleCase(slug: string): string {
+  const words = slug.replace(/[_-]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : words;
+}
 
 /** A small colored dot used to tag a message or chip with its agent's identity. */
 function AgentDot({ color }: { color: string }) {
@@ -46,10 +54,12 @@ const STORE_KEY = "earn-copilot-thread";
 type MeetingChatContext = { id: string; mode: "prep" | "followup" };
 
 // One turn in the in-dock conversation: the operator's message, or Earn's
-// routed plan in reply.
+// routed plan in reply. Every turn carries a stable `id` so it can be edited or
+// deleted on its own without the surrounding conversation shifting underneath.
 type Turn =
-  | { role: "user"; text: string }
+  | { id: string; role: "user"; text: string }
   | {
+      id: string;
       role: "earn";
       planTitle?: string;
       steps?: { agent: AgentKey; title: string }[];
@@ -58,7 +68,22 @@ type Turn =
       // `answer` is defined the turn is a chat reply, not a routed plan.
       answer?: string;
       streaming?: boolean;
+      // Set when the operator pressed Stop mid-answer. The partial text is kept
+      // and labelled, so a short reply never reads as a complete one.
+      stopped?: boolean;
     };
+
+/** A stable id for a conversation turn. */
+let turnSeq = 0;
+function newTurnId(): string {
+  turnSeq += 1;
+  return `t${Date.now().toString(36)}-${turnSeq}`;
+}
+
+/** The editable text of a turn — the message, the answer, or the plan title. */
+function turnText(turn: Turn): string {
+  return turn.role === "user" ? turn.text : (turn.answer ?? turn.planTitle ?? "");
+}
 
 /**
  * Routes where the Earn dock is suppressed: the session/workspace surfaces
@@ -87,6 +112,9 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const specialist = AGENT_BY_KEY[onPointAgent(ctx)];
   const suggestions = suggestionsFor(ctx);
   const team = ctx.hub ? AGENTS.filter((a) => a.hub === ctx.hub) : [];
+  // A readable name for wherever the operator is standing — the raw context is
+  // a slug ("deal_room"), which is not something to show anyone.
+  const sectionLabel = titleCase(ctx.module ?? ctx.hub ?? "workspace");
 
   const [open, setOpen] = useState(false);
   // Some surfaces with their own Earn entry points ask to hide the floating
@@ -103,8 +131,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // True while a conversational answer is streaming in (separate from `pending`,
   // which covers the server-action plan path).
   const [chatting, setChatting] = useState(false);
+  // The turn currently open for editing, plus its working copy. Any entry —
+  // yours or Earn's — can be rewritten in place.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  // The in-flight answer stream, so Stop can end it and keep what arrived.
+  const chatAbortRef = useRef<AbortController | null>(null);
   // Gates the persist effect until the initial hydrate has run, so the empty
   // mount-time state never overwrites a previously saved conversation.
   const hydrated = useRef(false);
@@ -117,11 +151,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
       if (raw) {
         const saved = JSON.parse(raw) as { sessionId: string | null; thread: Turn[] };
         setSessionId(saved.sessionId ?? null);
-        // Clear any streaming flag left over from a reload mid-answer.
+        // Clear any streaming flag left over from a reload mid-answer, and
+        // backfill ids for threads saved before turns carried one.
         setThread(
-          (saved.thread ?? []).map((t) =>
-            t.role === "earn" && t.streaming ? { ...t, streaming: false } : t,
-          ),
+          (saved.thread ?? []).map((t) => ({
+            ...t,
+            id: t.id || newTurnId(),
+            ...(t.role === "earn" && t.streaming ? { streaming: false } : null),
+          })),
         );
       }
     } catch {
@@ -152,8 +189,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
   }
 
   // Prior conversation as {role, content} pairs so the chat reply is multi-turn.
-  function buildPrior(): { role: string; content: string }[] {
-    return thread
+  // Takes the turns explicitly so a re-ask can pass only the turns that still
+  // stand after an edit, rather than the thread as it was before.
+  function priorFrom(turns: Turn[]): { role: string; content: string }[] {
+    return turns
       .map((turn) =>
         turn.role === "user"
           ? { role: "user", content: turn.text }
@@ -167,24 +206,35 @@ export function EarnCopilotDock({ name }: { name: string }) {
       .slice(-30);
   }
 
+  function buildPrior(): { role: string; content: string }[] {
+    return priorFrom(thread);
+  }
+
   // Conversational (ungated) answer: stream tokens from /api/chat straight into
   // the dock — the same seamless chat the workspace composer gets, on every
   // page. Verified Apollo contacts arrive appended in the same stream.
-  async function askChat(t: string, meetingContext?: MeetingChatContext) {
-    const prior = buildPrior();
-    setThread((prev) => [...prev, { role: "user", text: t }, { role: "earn", answer: "", streaming: true }]);
+  async function askChat(t: string, meetingContext?: MeetingChatContext, priorOverride?: { role: string; content: string }[]) {
+    const prior = priorOverride ?? buildPrior();
+    setThread((prev) => [
+      ...prev,
+      { id: newTurnId(), role: "user", text: t },
+      { id: newTurnId(), role: "earn", answer: "", streaming: true },
+    ]);
     setBody("");
     setChatting(true);
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+    let acc = "";
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: t, session_id: sessionId ?? undefined, prior, meeting_context: meetingContext }),
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("chat failed");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let acc = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -192,11 +242,27 @@ export function EarnCopilotDock({ name }: { name: string }) {
         setThread((prev) => patchLastEarn(prev, { answer: acc, streaming: true }));
       }
       setThread((prev) => patchLastEarn(prev, { answer: acc || "…", streaming: false }));
-    } catch {
-      setThread((prev) => patchLastEarn(prev, { answer: "Earn couldn't answer that just now — please try again.", streaming: false }));
+    } catch (err) {
+      // Stop is not a failure: keep whatever Earn had already written and mark
+      // the answer as stopped rather than replacing it with an error.
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setThread((prev) =>
+          patchLastEarn(prev, { answer: acc || "Stopped before Earn answered.", streaming: false, stopped: true }),
+        );
+      } else {
+        setThread((prev) =>
+          patchLastEarn(prev, { answer: "Earn couldn't answer that just now — please try again.", streaming: false }),
+        );
+      }
     } finally {
+      chatAbortRef.current = null;
       setChatting(false);
     }
+  }
+
+  /** Stop the answer Earn is writing. Whatever already arrived is kept. */
+  function stopAnswer() {
+    chatAbortRef.current?.abort();
   }
 
   // Run any prompt through Earn. Informational questions stream back a
@@ -215,14 +281,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
       void askChat(t, meetingContext);
       return;
     }
-    setThread((prev) => [...prev, { role: "user", text: t }]);
+    setThread((prev) => [...prev, { id: newTurnId(), role: "user", text: t }]);
     start(async () => {
       const r = await askEarn({ body: t, pathname, sessionId: sessionId ?? undefined });
       if (r.ok) {
         if (r.sessionId) setSessionId(r.sessionId);
         setThread((prev) => [
           ...prev,
-          { role: "earn", planTitle: r.planTitle, steps: r.steps, sessionId: r.sessionId },
+          { id: newTurnId(), role: "earn", planTitle: r.planTitle, steps: r.steps, sessionId: r.sessionId },
         ]);
         window.dispatchEvent(new CustomEvent("earn:exec-activity", {
           detail: {
@@ -258,11 +324,95 @@ export function EarnCopilotDock({ name }: { name: string }) {
 
   /** Start a fresh conversation: drop the current thread and session. */
   function newConversation() {
+    stopAnswer();
     setThread([]);
     setSessionId(null);
     setError(null);
+    setEditingId(null);
     setBody("");
     inputRef.current?.focus();
+  }
+
+  /** Open one entry for editing, seeded with its current wording. */
+  function beginEdit(turn: Turn) {
+    setEditingId(turn.id);
+    setDraft(turnText(turn));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft("");
+  }
+
+  /**
+   * Save the edited wording back onto the entry. The message, Earn's answer, and
+   * a plan's title are all editable in place — nothing is re-run, so this is a
+   * correction rather than a new ask.
+   */
+  function saveEdit(id: string) {
+    const text = draft.trim();
+    if (!text) return;
+    const previous = thread.find((turn) => turn.id === id);
+    if (sessionId && previous) {
+      // Persist the rewrite so it survives a reload; failure leaves the
+      // on-screen edit standing rather than blocking it.
+      void editSessionTurn({ sessionId, turnId: id, previousContent: turnText(previous), content: text });
+    }
+    setThread((prev) =>
+      prev.map((turn) => {
+        if (turn.id !== id) return turn;
+        if (turn.role === "user") return { ...turn, text };
+        return turn.answer !== undefined ? { ...turn, answer: text } : { ...turn, planTitle: text };
+      }),
+    );
+    cancelEdit();
+  }
+
+  /**
+   * Save an edited message and ask it again: everything after it is dropped, so
+   * the conversation continues from the corrected wording.
+   */
+  function saveEditAndResend(id: string) {
+    const text = draft.trim();
+    if (!text || pending || chatting) return;
+    const index = thread.findIndex((turn) => turn.id === id);
+    if (index < 0) return;
+    const kept = thread.slice(0, index);
+    const dropped = thread.slice(index);
+    cancelEdit();
+    stopAnswer();
+    // The turns being replaced go from the persisted transcript too, so a reload
+    // shows the corrected conversation rather than both versions of it.
+    if (sessionId) {
+      dropped.forEach((turn) => {
+        void deleteSessionTurn({ sessionId, turnId: turn.id, content: turnText(turn) });
+      });
+    }
+    setThread(kept);
+    setError(null);
+    setLastAsk(text);
+    // Re-ask against only the turns that still stand, so the dropped tail never
+    // leaks back in as context.
+    const prior = priorFrom(kept);
+    if (classifyIntent(text) === "chat") {
+      setTimeout(() => void askChat(text, undefined, prior), 0);
+    } else {
+      setTimeout(() => askRef.current(text), 0);
+    }
+  }
+
+  /**
+   * Delete a single entry. Deleting the answer Earn is still writing stops the
+   * stream first, so nothing streams back into a turn that no longer exists.
+   */
+  function deleteTurn(id: string) {
+    const turn = thread.find((t) => t.id === id);
+    if (turn?.role === "earn" && turn.streaming) stopAnswer();
+    if (editingId === id) cancelEdit();
+    if (sessionId && turn) {
+      void deleteSessionTurn({ sessionId, turnId: id, content: turnText(turn) });
+    }
+    setThread((prev) => prev.filter((t) => t.id !== id));
   }
 
   // ⌘/Ctrl-K toggles the dock; Esc closes it. Inert where the dock is hidden.
@@ -274,7 +424,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
         e.preventDefault();
         setOpen((o) => !o);
       } else if (e.key === "Escape") {
-        setOpen(false);
+        // Esc stops the answer in flight first; a second press closes the dock,
+        // so an operator can cut Earn off without losing the conversation.
+        if (chatAbortRef.current) stopAnswer();
+        else setOpen(false);
       }
     }
     function onExecContext(e: Event) {
@@ -365,7 +518,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           <EarnOrb size={22} pulse />
           Ask Earn
           <span className="h-1.5 w-1.5 rounded-full bg-neural-400 shadow-[0_0_12px_rgba(118,185,0,0.95)] animate-glow" aria-hidden />
-          <kbd className="ml-1 hidden rounded border border-neural-400/25 px-1 font-mono text-[10px] text-fg-muted sm:inline">⌘K</kbd>
+          <kbd className="ml-1 hidden rounded border border-neural-400/35 px-1.5 py-0.5 font-mono text-[11px] text-fg-secondary sm:inline">⌘K</kbd>
         </button>
       ) : null}
 
@@ -386,7 +539,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
               <EarnOrb size={28} pulse />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-fg-primary">Earn</p>
-                <p className="truncate font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
+                <p className="truncate font-mono text-xs font-semibold uppercase tracking-[0.08em] text-neural-300">
                   {specialist.key !== "associate" ? (
                     <span className="inline-flex items-center gap-1">
                       <AgentDot color={specialist.color} /> {specialist.name} on point
@@ -411,7 +564,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           {/* Live briefing — where things stand in this context */}
           {briefing ? (
             <div className="fx-neural-card p-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Where things stand</p>
+              <p className="font-mono text-xs font-semibold uppercase tracking-[0.1em] text-neural-300">Where things stand</p>
               <p className="mt-1 text-sm font-medium text-fg-primary">{briefing.headline}</p>
               {briefing.stats.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
@@ -445,7 +598,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                     →
                   </span>
                   <span className="min-w-0">
-                    <span className="block font-mono text-[9px] uppercase tracking-wider text-neural-300">
+                    <span className="block font-mono text-xs font-semibold uppercase tracking-[0.1em] text-neural-300">
                       Do this next
                     </span>
                     <span className="block truncate text-sm text-fg-primary">{briefing.nextAction.label}</span>
@@ -457,8 +610,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
 
           {/* Suggestions */}
           <div>
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">
-              Next best · {ctx.module ? ctx.module.replace(/_/g, " ") : ctx.hub ?? "workspace"}
+            <p className="mb-2 font-mono text-xs font-semibold uppercase tracking-[0.1em] text-neural-300">
+              Suggested next · {sectionLabel}
             </p>
             <div className="flex flex-col gap-2">
               {suggestions.map((s) => {
@@ -474,20 +627,20 @@ export function EarnCopilotDock({ name }: { name: string }) {
                         <span className="min-w-0 text-sm font-medium text-fg-primary">{s.label}</span>
                         {tier ? (
                           <span
-                            className={`shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TIER_TONE[tier]}`}
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${TIER_TONE[tier]}`}
                             title={`${TIER_LABEL[tier]} — ${tier === 1 ? "runs freely" : tier === 2 ? "your standing mandate may auto-approve" : "always needs your sign-off"}`}
                           >
                             {TIER_LABEL[tier]}
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-0.5 text-xs text-fg-secondary">{s.hint}</p>
+                      <p className="mt-1 text-xs leading-5 text-fg-secondary">{s.hint}</p>
                       <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg-secondary">
                           <AgentDot color={agent.color} /> <span className="truncate">{agent.name}</span>
                         </span>
                         <span
-                          className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${
+                          className={`shrink-0 text-xs font-semibold ${
                             auto ? "text-status-success" : "text-fg-muted"
                           }`}
                           title={
@@ -496,7 +649,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                               : "Earn drafts the plan; you approve before it runs"
                           }
                         >
-                          {auto ? "Earn runs it" : "needs approval"}
+                          {auto ? "Earn runs this" : "Needs your approval"}
                         </span>
                       </div>
                     </button>
@@ -516,102 +669,203 @@ export function EarnCopilotDock({ name }: { name: string }) {
           {thread.length > 0 ? (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Conversation</p>
+                <p className="font-mono text-xs font-semibold uppercase tracking-[0.1em] text-neural-300">Your conversation</p>
                 <div className="flex items-center gap-2">
                   {sessionId ? (
                     <Link
                       href={`/session/${sessionId}`}
                       onClick={() => setOpen(false)}
-                      className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
+                      className="text-xs font-medium text-fg-secondary underline-offset-2 transition hover:text-neural-300 hover:underline"
                     >
-                      Open full →
+                      Open full session
                     </Link>
                   ) : null}
                   <button
                     onClick={newConversation}
-                    className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
+                    className="text-xs font-medium text-fg-secondary underline-offset-2 transition hover:text-neural-300 hover:underline"
                   >
-                    New
+                    Start new
                   </button>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                {thread.map((turn, i) =>
-                  turn.role === "user" ? (
-                    <div key={i} className="ml-6 break-words rounded-lg rounded-br-sm border border-white/10 bg-surface-2/80 px-3 py-2 text-sm text-fg-primary">
-                      {turn.text}
+                {thread.map((turn) => {
+                  const editing = editingId === turn.id;
+                  const streaming = turn.role === "earn" && turn.streaming === true;
+                  // Every entry carries the same two controls — rewrite it, or
+                  // remove it from the conversation entirely.
+                  const controls = (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {streaming ? (
+                        <button
+                          onClick={stopAnswer}
+                          className="rounded border border-status-danger/40 bg-status-danger/10 px-2 py-0.5 text-[11px] font-semibold text-status-danger transition hover:bg-status-danger/20"
+                        >
+                          Stop
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => beginEdit(turn)}
+                          className="text-[11px] font-medium text-fg-muted underline-offset-2 transition hover:text-neural-300 hover:underline"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteTurn(turn.id)}
+                        className="text-[11px] font-medium text-fg-muted underline-offset-2 transition hover:text-status-danger hover:underline"
+                      >
+                        Delete
+                      </button>
                     </div>
-                  ) : turn.answer !== undefined ? (
+                  );
+
+                  // The in-place editor, shared by every kind of entry.
+                  const editor = (
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") cancelEdit();
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                            e.preventDefault();
+                            saveEdit(turn.id);
+                          }
+                        }}
+                        rows={3}
+                        aria-label="Edit this entry"
+                        className="w-full resize-y rounded-lg border border-neural-400/40 bg-black/70 px-3 py-2 text-sm text-fg-primary focus:border-neural-400 focus:outline-none"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => saveEdit(turn.id)}
+                          disabled={!draft.trim()}
+                          className="rounded-md bg-neural-400 px-2.5 py-1 text-[12px] font-semibold text-black transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Save
+                        </button>
+                        {turn.role === "user" ? (
+                          <button
+                            onClick={() => saveEditAndResend(turn.id)}
+                            disabled={!draft.trim() || pending || chatting}
+                            title="Save this message and ask Earn again from here"
+                            className="rounded-md border border-neural-400/50 px-2.5 py-1 text-[12px] font-medium text-neural-300 transition hover:bg-neural-400/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Save &amp; ask again
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={cancelEdit}
+                          className="text-[12px] font-medium text-fg-muted transition hover:text-fg-primary"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  );
+
+                  if (turn.role === "user") {
+                    return (
+                      <div key={turn.id} className="ml-6">
+                        {editing ? (
+                          editor
+                        ) : (
+                          <div className="break-words rounded-lg rounded-br-sm border border-white/10 bg-surface-2/80 px-3 py-2 text-sm text-fg-primary">
+                            {turn.text}
+                          </div>
+                        )}
+                        {editing ? null : controls}
+                      </div>
+                    );
+                  }
+
+                  if (turn.answer !== undefined) {
                     // Conversational answer (streamed markdown), incl. any
                     // appended verified-contact block.
-                    <div key={i} className="mr-6">
-                      <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 text-sm text-fg-primary shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
-                        <Markdown>{turn.answer || "…"}</Markdown>
-                        {turn.streaming ? (
-                          <span className="ml-0.5 inline-block h-3 w-1.5 animate-glow bg-neural-400 align-middle" aria-hidden />
-                        ) : null}
+                    return (
+                      <div key={turn.id} className="mr-6">
+                        {editing ? (
+                          editor
+                        ) : (
+                          <>
+                            <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 text-sm text-fg-primary shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
+                              <Markdown>{turn.answer || "…"}</Markdown>
+                              {turn.streaming ? (
+                                <span className="ml-0.5 inline-block h-3 w-1.5 animate-glow bg-neural-400 align-middle" aria-hidden />
+                              ) : null}
+                            </div>
+                            {turn.stopped ? (
+                              <p className="mt-1 text-[11px] font-medium text-fg-muted">
+                                You stopped this answer — it may be incomplete.
+                              </p>
+                            ) : null}
+                            {controls}
+                          </>
+                        )}
                       </div>
+                    );
+                  }
+
+                  return (
+                    <div key={turn.id} className="mr-6 space-y-2">
+                      {editing ? (
+                        editor
+                      ) : (
+                        <>
+                          <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
+                            {turn.planTitle ? (
+                              <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
+                            ) : null}
+                            {turn.steps?.length ? (
+                              <ul className="mt-1.5 flex flex-col gap-1">
+                                {turn.steps.map((st, j) => {
+                                  const a = AGENT_BY_KEY[st.agent];
+                                  return (
+                                    <li key={j} className="flex items-center gap-2 text-xs text-fg-secondary">
+                                      <AgentDot color={a?.color ?? "#888"} />
+                                      <span className="shrink-0 text-fg-muted">{a?.name ?? st.agent}</span>
+                                      <span className="min-w-0 truncate">{st.title}</span>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            ) : null}
+                          </div>
+                          {/* What you can do with this plan */}
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              onClick={() => {
+                                window.dispatchEvent(new CustomEvent("earn-delegate", {
+                                  detail: { planTitle: turn.planTitle, steps: turn.steps },
+                                }));
+                                setOpen(false);
+                              }}
+                              className="flex-1 rounded border border-[#c9a84c]/60 bg-[#c9a84c]/10 px-2 py-1 text-[12px] font-semibold text-[#c9a84c] transition hover:border-[#c9a84c] hover:bg-[#c9a84c]/20 active:scale-95"
+                            >
+                              Approve &amp; automate
+                            </button>
+                            <button
+                              onClick={() => askRef.current(lastAsk)}
+                              disabled={!lastAsk || pending || chatting}
+                              title="Ask Earn to plan this again"
+                              className="rounded border border-white/20 bg-white/5 px-2 py-1 text-[12px] font-medium text-fg-secondary transition hover:bg-white/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Redo plan
+                            </button>
+                            <button
+                              onClick={() => deleteTurn(turn.id)}
+                              className="rounded border border-status-danger/40 bg-status-danger/5 px-2 py-1 text-[12px] font-medium text-status-danger transition hover:bg-status-danger/15 active:scale-95"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                          {controls}
+                        </>
+                      )}
                     </div>
-                  ) : (
-                    <div key={i} className="mr-6 space-y-2">
-                      <div className="rounded-lg rounded-bl-sm border border-neural-400/30 bg-neural-400/[0.06] px-3 py-2 shadow-[0_0_22px_-18px_rgba(118,185,0,0.9)]">
-                        {turn.planTitle ? (
-                          <p className="break-words text-sm font-medium text-fg-primary">{turn.planTitle}</p>
-                        ) : null}
-                        {turn.steps?.length ? (
-                          <ul className="mt-1.5 flex flex-col gap-1">
-                            {turn.steps.map((st, j) => {
-                              const a = AGENT_BY_KEY[st.agent];
-                              return (
-                                <li key={j} className="flex items-center gap-2 text-xs text-fg-secondary">
-                                  <AgentDot color={a?.color ?? "#888"} />
-                                  <span className="shrink-0 text-fg-muted">{a?.name ?? st.agent}</span>
-                                  <span className="min-w-0 truncate">{st.title}</span>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        ) : null}
-                      </div>
-                      {/* Action bar */}
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          onClick={() => {
-                            window.dispatchEvent(new CustomEvent("earn-delegate", {
-                              detail: { planTitle: turn.planTitle, steps: turn.steps },
-                            }));
-                            setOpen(false);
-                          }}
-                          className="flex-1 rounded border border-[#c9a84c]/60 bg-[#c9a84c]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#c9a84c] transition hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] active:scale-95"
-                        >
-                          Approve &amp; Automate
-                        </button>
-                        <button
-                          onClick={() => {/* accept without automation */}}
-                          className="rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-fg-secondary transition hover:bg-white/10 active:scale-95"
-                        >
-                          Accept
-                        </button>
-                        <button
-                          onClick={() => {
-                            setThread((prev) => prev.slice(0, i));
-                          }}
-                          className="rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted transition hover:bg-white/10 active:scale-95"
-                        >
-                          Regenerate
-                        </button>
-                        <button
-                          onClick={() => {
-                            setThread((prev) => prev.slice(0, i - 1 < 0 ? 0 : i - 1));
-                          }}
-                          className="rounded border border-status-danger/30 bg-status-danger/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-status-danger/70 transition hover:bg-status-danger/10 active:scale-95"
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    </div>
-                  ),
-                )}
+                  );
+                })}
                 <div ref={threadEndRef} />
               </div>
             </div>
@@ -623,7 +877,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                 <button
                   onClick={() => ask(lastAsk)}
                   disabled={pending}
-                  className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-status-danger/70 underline hover:text-status-danger disabled:opacity-50"
+                  className="mt-1.5 text-xs font-semibold text-status-danger underline underline-offset-2 hover:text-status-danger disabled:opacity-50"
                 >
                   Try again →
                 </button>
@@ -634,7 +888,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
           {/* The team on point here */}
           {team.length > 0 ? (
             <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Your team here</p>
+              <p className="mb-2 font-mono text-xs font-semibold uppercase tracking-[0.1em] text-neural-300">Your team on this page</p>
               <div className="flex flex-wrap gap-1.5">
                 {team.map((a) => (
                   <button
@@ -644,7 +898,7 @@ export function EarnCopilotDock({ name }: { name: string }) {
                       inputRef.current?.focus();
                     }}
                     title={a.role}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-neural-400/15 bg-black/35 px-2.5 py-1 text-[11px] text-fg-secondary transition hover:border-neural-400/45 hover:text-fg-primary"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-neural-400/25 bg-black/35 px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-neural-400/60 hover:text-fg-primary"
                   >
                     <AgentDot color={a.color} />
                     {a.name}
@@ -671,24 +925,37 @@ export function EarnCopilotDock({ name }: { name: string }) {
             placeholder={`Ask Earn to help, ${name.split(" ")[0]}…`}
             className="w-full resize-none rounded-lg border border-neural-400/20 bg-black/80 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-neural-400/70 focus:outline-none"
           />
-          <div className="mt-2 flex items-center justify-between">
-            <span className="font-mono text-[10px] text-fg-muted">⌘↵ to send</span>
-            <button
-              onClick={submitAsk}
-              disabled={pending || chatting || !body.trim()}
-              title={!body.trim() && !pending && !chatting ? "Type a message to ask Earn" : undefined}
-              className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-medium text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {chatting ? "Answering…" : pending ? "Routing…" : "Ask Earn"}
-            </button>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium text-fg-muted">Press ⌘↵ to send</span>
+            <div className="flex items-center gap-2">
+              {/* Stop is only offered while an answer is actually streaming —
+                  the routed-plan path runs server-side and cannot be cut off. */}
+              {chatting ? (
+                <button
+                  onClick={stopAnswer}
+                  title="Stop Earn's answer and keep what it has written so far"
+                  className="rounded-md border border-status-danger/50 bg-status-danger/10 px-3 py-1.5 text-sm font-semibold text-status-danger transition hover:bg-status-danger/20"
+                >
+                  Stop
+                </button>
+              ) : null}
+              <button
+                onClick={submitAsk}
+                disabled={pending || chatting || !body.trim()}
+                title={!body.trim() && !pending && !chatting ? "Type a message to ask Earn" : undefined}
+                className="rounded-md bg-neural-400 px-3 py-1.5 text-sm font-semibold text-black shadow-[0_0_18px_rgba(118,185,0,0.24)] transition hover:bg-neural-300 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {chatting ? "Answering…" : pending ? "Routing…" : "Ask Earn"}
+              </button>
+            </div>
           </div>
           <div className="mt-2 text-center">
             <Link
               href="/settings/mandate"
               onClick={() => setOpen(false)}
-              className="font-mono text-[10px] uppercase tracking-wider text-fg-muted transition hover:text-neural-300"
+              className="text-xs font-medium text-fg-secondary underline-offset-2 transition hover:text-neural-300 hover:underline"
             >
-              ⚙ What Earn can do
+              ⚙ Review what Earn is allowed to do
             </Link>
           </div>
         </div>

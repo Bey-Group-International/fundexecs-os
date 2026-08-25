@@ -106,7 +106,7 @@ export function TreasuryPanel({
       <div className="relative z-10">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">Treasury</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Treasury</p>
             <h2 className="mt-2 font-display text-xl font-semibold text-fg-primary">Linked accounts &amp; transfers</h2>
             <p className="mt-1 text-sm text-fg-secondary">
               Connect a bank account through Stripe and move funds by ACH. Balances shown are the last reported by
@@ -114,11 +114,11 @@ export function TreasuryPanel({
             </p>
           </div>
           <div className="rounded-xl border border-neural-400/25 bg-black/40 px-4 py-2 text-right">
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-neural-300">Available</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Available</p>
             <p className="mt-1 font-display text-lg font-semibold text-fg-primary">
               {fmt(summary.totalBalanceCents)}
             </p>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
               {summary.active} active
             </p>
           </div>
@@ -149,7 +149,7 @@ export function TreasuryPanel({
               >
                 <div>
                   <p className="font-medium text-fg-primary">{linkedAccountLabel(a)}</p>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                     {a.account_type} · {a.status}
                     {typeof a.balance_cents === "number" ? ` · ${fmt(a.balance_cents)}` : ""}
                   </p>
@@ -159,7 +159,7 @@ export function TreasuryPanel({
                     type="button"
                     onClick={() => disconnect(a.id)}
                     disabled={pending}
-                    className="rounded-lg border border-line/50 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-secondary transition hover:border-rose-400/40 hover:text-rose-300 disabled:opacity-50"
+                    className="rounded-lg border border-line/50 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary transition hover:border-rose-400/40 hover:text-rose-300 disabled:opacity-50"
                   >
                     Disconnect
                   </button>
@@ -172,7 +172,7 @@ export function TreasuryPanel({
             type="button"
             onClick={linkBank}
             disabled={linking || !stripeLive}
-            className="rounded-xl border border-neural-400/40 bg-neural-400/10 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-neural-200 transition hover:bg-neural-400/20 disabled:opacity-50"
+            className="rounded-xl border border-neural-400/40 bg-neural-400/10 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-neural-200 transition hover:bg-neural-400/20 disabled:opacity-50"
           >
             {linking ? "Opening secure link…" : stripeLive ? "+ Link a bank account" : "Connect Stripe to link a bank"}
           </button>
@@ -212,7 +212,7 @@ export function TreasuryPanel({
             <button
               type="submit"
               disabled={pending || active.length === 0}
-              className="whitespace-nowrap rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-gold-300 transition hover:bg-gold-400/20 disabled:opacity-50"
+              className="whitespace-nowrap rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300 transition hover:bg-gold-400/20 disabled:opacity-50"
             >
               {pending ? "Working…" : "Transfer"}
             </button>
@@ -222,7 +222,7 @@ export function TreasuryPanel({
         {/* Transfer history */}
         {transfers.length > 0 ? (
           <div className="mt-6">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neural-300">Recent transfers</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">Recent transfers</p>
             <div className="mt-3 grid gap-2">
               {transfers.map((t) => (
                 <div
@@ -230,14 +230,14 @@ export function TreasuryPanel({
                   className="flex items-center justify-between gap-3 rounded-lg border border-line/30 bg-surface-2/20 px-4 py-2.5 text-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                       {t.direction === "deposit" ? "In" : "Out"}
                     </span>
                     <span className="font-medium text-fg-primary">{fmt(t.amount_cents)}</span>
                     {t.description ? <span className="text-fg-muted">{t.description}</span> : null}
                   </div>
                   <span
-                    className={`rounded-full border px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] ${STATUS_STYLE[t.status]}`}
+                    className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.16em] ${STATUS_STYLE[t.status]}`}
                   >
                     {t.status}
                   </span>

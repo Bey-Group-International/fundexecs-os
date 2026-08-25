@@ -35,7 +35,7 @@ function StatusPill({ entry }: { entry: ActivityEntry }) {
   const tone = statusTone(entry.status);
   return (
     <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${TONE_CLASS[tone]}`}
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TONE_CLASS[tone]}`}
     >
       {statusLabel(entry.status)}
     </span>
@@ -61,7 +61,7 @@ function HubChip({ entry }: { entry: ActivityEntry }) {
   const hub = entry.hub ? HUB_BY_KEY[entry.hub] : undefined;
   if (!hub) return null;
   return (
-    <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+    <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
       {hub.label}
     </span>
   );
@@ -85,7 +85,7 @@ function DeleteEntryButton({ entry, onDeleted }: { entry: ActivityEntry; onDelet
       disabled={pending}
       aria-label="Delete entry"
       title="Delete"
-      className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+      className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
     >
       {pending ? "…" : "Delete"}
     </button>
@@ -106,7 +106,7 @@ function EntryRow({ entry, onDeleted }: { entry: ActivityEntry; onDeleted: () =>
           <span className="text-sm font-medium text-fg-primary">{entry.title}</span>
           <HubChip entry={entry} />
           {entry.kind === "artifact" ? (
-            <span className="rounded-full border border-gold-500/30 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300/80">
+            <span className="rounded-full border border-gold-500/30 bg-gold-500/5 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300/80">
               Artifact
             </span>
           ) : null}
@@ -123,13 +123,13 @@ function EntryRow({ entry, onDeleted }: { entry: ActivityEntry; onDeleted: () =>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
           <AgentBadge entry={entry} />
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {relativeTime(entry.when)}
           </span>
           {entry.sessionId ? (
             <Link
               href={`/session/${entry.sessionId}`}
-              className="font-mono text-[10px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
+              className="font-mono text-[11px] uppercase tracking-wider text-gold-400 transition hover:text-gold-300"
             >
               Open session →
             </Link>
@@ -195,7 +195,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
             <button
               key={f.value}
               onClick={() => setStatusFilter(f.value)}
-              className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+              className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
                 statusFilter === f.value
                   ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
                   : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/30 hover:text-fg-secondary"
@@ -214,7 +214,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
             <button
               key={f.value}
               onClick={() => setHubFilter(f.value)}
-              className={`rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+              className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
                 hubFilter === f.value
                   ? "border-gold-500/60 bg-gold-500/15 text-gold-300"
                   : "border-line bg-surface-1 text-fg-muted hover:border-gold-500/30 hover:text-fg-secondary"
@@ -227,7 +227,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
 
         {/* Result count */}
         {(statusFilter !== "all" || hubFilter !== "all") && (
-          <span className="ml-auto font-mono text-[10px] text-fg-muted">
+          <span className="ml-auto font-mono text-[11px] text-fg-muted">
             {filtered.length} result{filtered.length !== 1 ? "s" : ""}
           </span>
         )}
@@ -238,7 +238,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
             type="button"
             onClick={handleClearAll}
             disabled={clearing}
-            className={`rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50 ${
+            className={`rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-red-300 transition hover:bg-red-500/20 disabled:opacity-50 ${
               statusFilter !== "all" || hubFilter !== "all" ? "" : "ml-auto"
             }`}
           >
@@ -258,7 +258,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
         <div className="flex flex-col gap-8">
           {groups.map((group) => (
             <section key={group.day}>
-              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+              <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 {group.label}
               </h2>
               <div className="flex flex-col gap-2">

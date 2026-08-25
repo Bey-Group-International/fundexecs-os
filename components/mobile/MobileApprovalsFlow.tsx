@@ -175,7 +175,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
       <header className="pt-1">
         <div className="flex items-end justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400">Approvals</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">Approvals</p>
             <h1 className="mt-0.5 font-display text-2xl font-semibold tracking-tight text-fg-primary">
               {remaining} to decide
             </h1>
@@ -236,7 +236,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
                 {current.agentLabel}
                 {current.hubLabel ? <span className="text-fg-muted">· {current.hubLabel}</span> : null}
               </span>
-              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide ${risk.cls}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide ${risk.cls}`}>
                 {risk.label}
               </span>
             </div>
@@ -246,7 +246,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
 
             {current.preview && (
               <div className="mt-3 rounded-2xl border border-line/70 bg-surface-0/60 p-3">
-                <p className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <p className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   <EarnIcon width={12} height={12} className="text-gold-400" /> What Earn produced
                 </p>
                 <p className="line-clamp-6 whitespace-pre-wrap text-[12.5px] leading-snug text-fg-primary">{current.preview}</p>
@@ -254,7 +254,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
             )}
 
             {relativeTime(current.requestedAt) && (
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">Requested {relativeTime(current.requestedAt)}</p>
+              <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">Requested {relativeTime(current.requestedAt)}</p>
             )}
           </div>
         </div>
@@ -288,7 +288,7 @@ export function MobileApprovalsFlow({ items }: { items: ApprovalItem[] }) {
           <CheckIcon width={16} height={16} /> Approve
         </button>
       </div>
-      <p className="mt-2.5 text-center font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+      <p className="mt-2.5 text-center font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         Swipe → approve · ← reject · ✦ request revision
       </p>
 

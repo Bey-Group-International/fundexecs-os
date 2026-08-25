@@ -65,7 +65,7 @@ export function StrategyFitControl({
             key={p}
             type="button"
             onClick={() => submit(p)}
-            className={`rounded border px-1.5 py-0.5 font-mono text-[9px] transition ${
+            className={`rounded border px-1.5 py-0.5 font-mono text-[11px] transition ${
               pct === p
                 ? "border-gold-500/50 bg-gold-500/10 text-gold-300"
                 : "border-line text-fg-muted hover:border-gold-500/40 hover:text-gold-300"

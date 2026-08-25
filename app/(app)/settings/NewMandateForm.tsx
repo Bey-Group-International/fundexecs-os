@@ -29,7 +29,7 @@ export function NewMandateForm({
       }
       className="rounded-xl border border-line bg-surface-1 p-4"
     >
-      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+      <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
         New mandate
       </p>
 
@@ -47,7 +47,7 @@ export function NewMandateForm({
         />
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <legend className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Pre-authorize (Tier 2 — runs unattended)
           </legend>
           {tier2Actions.map((a) => (

@@ -393,7 +393,7 @@ function FilterMenu({ filter, onFilter }: { filter: CalendarFilter; onFilter: (f
   return (
     <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-3 shadow-2xl">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Filters</span>
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Filters</span>
         {filterCountActive(filter) > 0 ? (
           <button onClick={() => onFilter(emptyFilter())} className="text-[11px] text-[var(--gold-400)] hover:underline">Clear</button>
         ) : null}
@@ -402,7 +402,7 @@ function FilterMenu({ filter, onFilter }: { filter: CalendarFilter; onFilter: (f
         <input type="checkbox" checked={filter.mineOnly} onChange={(e) => onFilter({ ...filter, mineOnly: e.target.checked })} />
         Only meetings I host
       </label>
-      <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">Type</p>
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">Type</p>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {CALENDAR_TYPE_ORDER.map((t) => {
           const meta = typeMeta(t);
@@ -419,7 +419,7 @@ function FilterMenu({ filter, onFilter }: { filter: CalendarFilter; onFilter: (f
           );
         })}
       </div>
-      <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">Status</p>
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">Status</p>
       <div className="flex flex-wrap gap-1.5">
         {STATUS_ORDER.map((s) => {
           const active = filter.statuses.has(s);
@@ -457,7 +457,7 @@ function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectS
     <div>
       <div className="grid grid-cols-7 border-b border-[var(--line)]">
         {labels.map((l) => (
-          <div key={l} className="px-2 py-1.5 text-center font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">{l}</div>
+          <div key={l} className="px-2 py-1.5 text-center font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">{l}</div>
         ))}
       </div>
       <div className="grid grid-cols-7">
@@ -492,7 +492,7 @@ function MonthView({ anchor, meetings, today, presence, onSelectEvent, onSelectS
                     tabIndex={0}
                     onClick={(e) => { e.stopPropagation(); onExpandDay(day); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onExpandDay(day); } }}
-                    className="cursor-pointer px-1 text-[10px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+                    className="cursor-pointer px-1 text-[11px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
                   >
                     +{extra} more
                   </span>
@@ -514,7 +514,7 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === "Enter") onClick(e as unknown as React.MouseEvent); }}
-      className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[10px] font-medium ${meta.chip}`}
+      className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[11px] font-medium ${meta.chip}`}
       title={m.title}
     >
       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" /> : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />}
@@ -543,7 +543,7 @@ function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelect
           const isToday = isSameDay(d, today);
           return (
             <div key={dayKey(d)} className="flex-1 border-l border-[var(--line)] px-2 py-2 text-center">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">
                 {d.toLocaleDateString("en-US", { weekday: "short" })}
               </div>
               <div className={`mx-auto mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-sm ${isToday ? "bg-[var(--gold-400)] font-semibold text-black" : "text-[var(--fg-primary)]"}`}>
@@ -560,7 +560,7 @@ function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelect
         <div className="w-14 shrink-0">
           {hours.map((h) => (
             <div key={h} className="relative border-b border-transparent" style={{ height: HOUR_PX }}>
-              <span className="absolute -top-2 right-1.5 text-[10px] text-[var(--fg-muted)]">
+              <span className="absolute -top-2 right-1.5 text-[11px] text-[var(--fg-muted)]">
                 {h === 0 ? "" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`}
               </span>
             </div>
@@ -626,7 +626,7 @@ function TimeGridView({ days, meetings, now, today, presence, statusOf, onSelect
                       {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" /> : null}
                       <span className="truncate text-[11px] font-medium text-[var(--fg-primary)]">{m.title}</span>
                     </div>
-                    <div className="truncate text-[10px] text-[var(--fg-muted)]">
+                    <div className="truncate text-[11px] text-[var(--fg-muted)]">
                       {m.scheduled_at ? shortTime(m.scheduled_at) : ""}
                       {ts && (ts.phase === "imminent" || ts.phase === "in_progress") ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
                     </div>
@@ -664,11 +664,11 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
       {withEvents.map(({ d, evs }) => (
         <div key={dayKey(d)} className="flex gap-4 px-2 py-3">
           <div className="w-16 shrink-0 text-center">
-            <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
             <div className={`mx-auto mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold ${isSameDay(d, today) ? "bg-[var(--gold-400)] text-black" : "text-[var(--fg-primary)]"}`}>
               {d.getDate()}
             </div>
-            <div className="text-[10px] text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { month: "short" })}</div>
+            <div className="text-[11px] text-[var(--fg-muted)]">{d.toLocaleDateString("en-US", { month: "short" })}</div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             {evs.map((m) => {
@@ -694,7 +694,7 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
                       {ts && (ts.phase === "imminent" || ts.phase === "in_progress") ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
                     </div>
                   </div>
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">{statusOf(m)}</span>
+                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{statusOf(m)}</span>
                 </button>
               );
             })}
@@ -727,7 +727,7 @@ function MiniMonth({ anchor, onPick, today, meetings }: { anchor: Date; onPick: 
       </div>
       <div className="grid grid-cols-7 gap-0.5">
         {weekdayLabels().map((l) => (
-          <div key={l} className="text-center text-[9px] font-medium uppercase text-[var(--fg-muted)]">{l[0]}</div>
+          <div key={l} className="text-center text-[11px] font-medium uppercase text-[var(--fg-muted)]">{l[0]}</div>
         ))}
         {weeks.flat().map((d, i) => {
           const isToday = isSameDay(d, today);
@@ -760,7 +760,7 @@ function Legend({ meetings }: { meetings: CalendarMeeting[] }) {
   if (present.length === 0) return null;
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
-      <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Meeting types</p>
+      <p className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Meeting types</p>
       <div className="flex flex-wrap gap-x-3 gap-y-1.5">
         {present.map((t) => {
           const meta = typeMeta(t);
@@ -825,10 +825,10 @@ function EventDetail({
         <div className="flex items-start gap-3 border-b border-[var(--line)] p-4" style={{ borderLeft: `3px solid ${meta.accent}` }}>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${meta.chip}`}>{meta.label}</span>
-              <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">{status}</span>
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.chip}`}>{meta.label}</span>
+              <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{status}</span>
               {live ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Live
                 </span>
               ) : null}
@@ -883,7 +883,7 @@ function EventDetail({
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <span className="w-20 shrink-0 font-mono text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">{label}</span>
+      <span className="w-20 shrink-0 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{label}</span>
       <span className="min-w-0 break-words text-xs text-[var(--fg-secondary)]">{value}</span>
     </div>
   );

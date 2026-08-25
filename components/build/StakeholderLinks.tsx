@@ -55,13 +55,13 @@ function StakeholderRow({
 
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <span className="truncate text-fg-primary">{stakeholder.name}</span>
-        <span className="font-mono text-[9px] uppercase tracking-wider text-fg-muted">{stakeholder.kind}</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">{stakeholder.kind}</span>
       </span>
 
       <span className="ml-auto inline-flex items-center gap-1.5">
         {linkedName ? (
           <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
               stakeholder.principal_id
                 ? "border-sky-400/40 text-sky-300"
                 : "border-emerald-400/40 text-emerald-300"
@@ -70,7 +70,7 @@ function StakeholderRow({
             {stakeholder.principal_id ? "◆ person" : "● investor"} · {linkedName}
           </span>
         ) : (
-          <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             unlinked
           </span>
         )}

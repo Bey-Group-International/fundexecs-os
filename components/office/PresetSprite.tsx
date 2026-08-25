@@ -57,7 +57,7 @@ export function PresetSprite({
             type="button"
             onClick={() => setFacing(f)}
             aria-pressed={f === facing}
-            className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider transition ${
+            className={`rounded px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${
               f === facing
                 ? "bg-gold-500/15 text-gold-200"
                 : "text-fg-muted hover:text-fg-secondary"

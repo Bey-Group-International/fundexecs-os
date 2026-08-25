@@ -14,7 +14,7 @@ import { CHARACTER_PRESETS, getCharacterPreset } from "@/lib/office/characterPre
 import { PresetSprite } from "@/components/office/PresetSprite";
 import { saveAvatarConfig } from "./actions";
 
-const labelCls = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelCls = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 const FIRST_PRESET = CHARACTER_PRESETS[0].id;
 
 // The office character is always one of the ready-made presets, so make sure a
@@ -190,7 +190,7 @@ export function CharacterBuilder({
                     />
                   </span>
                   <span
-                    className={`text-center text-[10px] leading-tight ${
+                    className={`text-center text-[11px] leading-tight ${
                       active ? "text-gold-200" : "text-fg-secondary"
                     }`}
                   >

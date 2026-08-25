@@ -40,7 +40,7 @@ async function activeDeals(orgId: string): Promise<Deal[]> {
 
 const fieldClass =
   "rounded-md border border-line bg-surface-0 px-2.5 py-1.5 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/60 focus:outline-none";
-const labelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const labelClass = "font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 
 function DealPicker({ deals }: { deals: Deal[] }) {
   return (
@@ -138,7 +138,7 @@ function CaseControls({ uw }: { uw: Underwriting }) {
     <div className="rounded-lg border border-line/60 bg-surface-2 p-3">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm text-fg-primary">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">{uw.scenario}</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">{uw.scenario}</span>
           <span className="ml-2 text-fg-secondary">{uw.name}</span>
         </span>
         <div className="flex flex-wrap items-center gap-2">

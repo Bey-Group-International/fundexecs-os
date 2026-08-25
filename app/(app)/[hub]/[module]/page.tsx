@@ -187,7 +187,7 @@ export default async function ModulePage(
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
         <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Knowledge Workspace
           </p>
           <WorkspaceDocumentListLive />
@@ -204,7 +204,7 @@ export default async function ModulePage(
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 flex flex-col gap-8">
         <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             People Lookups
           </p>
           <PeopleLookupLive />

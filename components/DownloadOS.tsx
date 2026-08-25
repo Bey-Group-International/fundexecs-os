@@ -29,7 +29,7 @@ export function DownloadOSCard() {
           }}
         />
         <div className="relative">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-400/80">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400/80">
             Native Application
           </span>
           <h3 className="mt-1 font-display text-lg font-semibold tracking-tight text-fg-primary">
@@ -65,11 +65,11 @@ export function DownloadOSCard() {
               <div>
                 <p className="text-sm font-semibold text-fg-primary">{label}</p>
                 <p className="mt-0.5 text-xs text-fg-secondary">{sub}</p>
-                <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                   {hint}
                 </p>
               </div>
-              <span className="mt-auto font-mono text-[9px] uppercase tracking-wider text-gold-400/60 transition duration-200 group-hover:text-gold-400">
+              <span className="mt-auto font-mono text-[11px] uppercase tracking-wider text-gold-400/60 transition duration-200 group-hover:text-gold-400">
                 Download ↓
               </span>
             </a>
@@ -79,7 +79,7 @@ export function DownloadOSCard() {
 
       {/* Footer */}
       <div className="flex items-center justify-between border-t border-line/60 px-6 py-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
           Self-hosted · enterprise-grade · always current
         </p>
         <span className="h-1.5 w-1.5 rounded-full bg-status-success" title="Downloads live" />

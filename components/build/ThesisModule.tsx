@@ -73,13 +73,13 @@ export async function ThesisModule() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-fg-primary">{t.title}</span>
                             {t.is_active ? (
-                              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-status-success">
+                              <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                                 Active
                               </span>
                             ) : (
                               <form action={setActiveThesis}>
                                 <input type="hidden" name="id" value={t.id} />
-                                <button className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
+                                <button className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
                                   Set active
                                 </button>
                               </form>
@@ -99,7 +99,7 @@ export async function ThesisModule() {
                           ) : null}
 
                           {targets.length ? (
-                            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                            <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                               {targets.join(" · ")}
                             </p>
                           ) : null}

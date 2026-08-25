@@ -48,7 +48,7 @@ function SessionCard({ session }: { session: Session }) {
           <p className="truncate text-xs text-fg-muted">{session.lpEmail}</p>
         </div>
         <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_COLOR[session.status]}`}
+          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_COLOR[session.status]}`}
         >
           {session.status.replace("_", " ")}
         </span>
@@ -60,14 +60,14 @@ function SessionCard({ session }: { session: Session }) {
 
       <div className="mt-3">
         <ProgressBar pct={pct} />
-        <p className="mt-1 text-right font-mono text-[10px] text-fg-muted">{pct}% complete</p>
+        <p className="mt-1 text-right font-mono text-[11px] text-fg-muted">{pct}% complete</p>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {steps.map((step) => (
           <span
             key={step.key}
-            className={`rounded-full border px-2 py-0.5 font-mono text-[9px] ${
+            className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${
               step.completed
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                 : step.current

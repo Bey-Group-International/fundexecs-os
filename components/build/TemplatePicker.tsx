@@ -40,7 +40,7 @@ export function TemplatePicker({
           <div className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-3">
             {sectionTemplates.length > 0 && (
               <>
-                <p className="mb-1 px-1 font-mono text-[9px] uppercase tracking-wider text-gold-400">
+                <p className="mb-1 px-1 font-mono text-[11px] uppercase tracking-wider text-gold-400">
                   For this section
                 </p>
                 {sectionTemplates.map((t) => (
@@ -60,7 +60,7 @@ export function TemplatePicker({
                   </button>
                 ))}
                 {others.length > 0 && (
-                  <p className="mb-1 mt-2 px-1 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  <p className="mb-1 mt-2 px-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     All templates
                   </p>
                 )}
@@ -88,7 +88,7 @@ export function TemplatePicker({
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {preview ? (
               <>
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-gold-400">Preview</p>
+                <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gold-400">Preview</p>
                 <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-fg-secondary">
                   {DOCUMENT_TEMPLATE_LIBRARY.find((t) => t.id === preview)?.content ?? ""}
                 </pre>

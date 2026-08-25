@@ -25,7 +25,7 @@ export function DealPipelineTable({ deals }: { deals: Deal[] }) {
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-surface-0/70 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <thead className="bg-surface-0/70 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               <tr>
                 <th scope="col" className="px-4 py-2 font-medium">Target</th>
                 <th scope="col" className="px-4 py-2 font-medium">Stage</th>
@@ -37,7 +37,7 @@ export function DealPipelineTable({ deals }: { deals: Deal[] }) {
               {deals.map((deal) => (
                 <tr key={deal.id}>
                   <td className="px-4 py-3 text-fg-primary">{deal.name}</td>
-                  <td className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-gold-300">
+                  <td className="px-4 py-3 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                     {deal.stage.replace("_", " ")}
                   </td>
                   <td className="px-4 py-3 text-fg-secondary">

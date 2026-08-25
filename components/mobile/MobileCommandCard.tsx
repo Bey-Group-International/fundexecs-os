@@ -57,7 +57,7 @@ export function MobileNextAction({
     >
       <span aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_15%_0%,rgb(var(--fx-accent-rgb)/0.14),transparent_70%)]" />
       <div className="relative">
-        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-neural-300">{eyebrow}</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">{eyebrow}</p>
         <p className="mt-1.5 text-[15px] font-semibold leading-tight text-fg-primary">{title}</p>
         {body && <p className="mt-1 text-[12.5px] leading-snug text-fg-secondary">{body}</p>}
         <span className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-neural-400/40 bg-neural-400/[0.08] px-3 py-1.5 text-[12.5px] font-semibold text-neural-300">

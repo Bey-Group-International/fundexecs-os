@@ -17,7 +17,7 @@ export function DiligenceTemplatePicker({ deals }: { deals: Deal[] }) {
       action={applyDiligenceTemplate}
       className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface-1 p-3"
     >
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Apply checklist</span>
+      <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Apply checklist</span>
       <select name="deal_id" className={fieldClass} required defaultValue="" aria-label="Deal">
         <option value="" disabled>
           Deal…

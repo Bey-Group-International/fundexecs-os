@@ -67,7 +67,7 @@ export function DownloadBanner() {
           />
           <div className="relative flex items-start justify-between gap-3">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
                 FundExecs OS · Native App
               </p>
               <p className="mt-1 text-sm font-semibold text-fg-primary">
@@ -106,7 +106,7 @@ export function DownloadBanner() {
                     platform={platform}
                     className="h-4 w-4 text-fg-muted transition duration-200 group-hover:text-gold-400"
                   />
-                  <span className="font-mono text-[8px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-400/80">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition duration-200 group-hover:text-gold-400/80">
                     {label}
                   </span>
                 </a>
@@ -117,7 +117,7 @@ export function DownloadBanner() {
 
         {/* Footer */}
         <div className="border-t border-line/40 px-5 py-2">
-          <p className="font-mono text-[8px] uppercase tracking-widest text-fg-muted">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted">
             Self-hosted · no app store required
           </p>
         </div>

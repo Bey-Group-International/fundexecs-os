@@ -151,7 +151,7 @@ export default async function SettingsPage() {
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-8">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Settings
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -264,7 +264,7 @@ export default async function SettingsPage() {
                       <span className="text-sm font-medium text-fg-primary">
                         {activeMandate.name}
                       </span>
-                      <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                      <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                         Active
                       </span>
                     </div>
@@ -278,14 +278,14 @@ export default async function SettingsPage() {
                         {activeMandate.auto_approve.map((kind) => (
                           <span
                             key={kind}
-                            className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[10px] text-fg-secondary"
+                            className="rounded-full border border-line bg-surface-0 px-2 py-0.5 text-[11px] text-fg-secondary"
                           >
                             {labelFor(kind)}
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                         No actions pre-authorized
                       </p>
                     )}
@@ -465,7 +465,7 @@ export default async function SettingsPage() {
                   Plans & credits →
                 </Link>
               </div>
-              <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
                 FundExecs OS · {new Date().getFullYear()}
               </p>
             </div>
@@ -500,7 +500,7 @@ function Section({
   return (
     <section id={id} className="scroll-mt-6">
       <header className="mb-4">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400/80">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400/80">
           {eyebrow}
         </span>
         <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-fg-primary">

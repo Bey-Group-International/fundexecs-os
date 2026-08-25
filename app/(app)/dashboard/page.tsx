@@ -57,7 +57,7 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-fg-secondary">
+      <h2 className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">
         <span aria-hidden className="fx-heading-bar" />
         {children}
       </h2>
@@ -77,12 +77,12 @@ function KpiTile({ kpi, delay }: { kpi: KpiMetric; delay: number }) {
         aria-hidden
         className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/55 to-transparent transition-opacity duration-300 group-hover:via-gold-300/80"
       />
-      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-muted">{kpi.label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{kpi.label}</p>
       <p className={`mt-2 font-display text-[1.75rem] font-bold leading-none tracking-tight ${KPI_TONE[kpi.tone]} transition-colors duration-200`}>
         {kpi.value}
       </p>
       {kpi.sub ? (
-        <p className="mt-1.5 truncate font-mono text-[10px] uppercase tracking-wider text-fg-muted/80">
+        <p className="mt-1.5 truncate font-mono text-[11px] uppercase tracking-wider text-fg-muted/80">
           {kpi.sub}
         </p>
       ) : null}
@@ -93,9 +93,9 @@ function KpiTile({ kpi, delay }: { kpi: KpiMetric; delay: number }) {
 function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-lg border border-line/70 bg-surface-2/40 px-3 py-2.5">
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-fg-muted">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">{label}</p>
       <p className="mt-1 font-display text-lg font-bold leading-none tracking-tight text-fg-primary">{value}</p>
-      {sub ? <p className="mt-1 truncate text-[10px] text-fg-muted">{sub}</p> : null}
+      {sub ? <p className="mt-1 truncate text-[11px] text-fg-muted">{sub}</p> : null}
     </div>
   );
 }
@@ -107,7 +107,7 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
     <div className="fx-card p-5">
       <SectionHeading
         action={
-          <Link href="/source/lp_pipeline" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/source/lp_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
             LP pipeline →
           </Link>
         }
@@ -119,8 +119,8 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
           The committed / called headline dollars live in the KPI band above; this
           panel shows deployment and the LP pipeline, not the same totals again. */}
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Capital deployed</span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Capital deployed</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
           {Math.round(calledPct)}% called · {Math.round(distPct)}% returned
         </span>
       </div>
@@ -143,7 +143,7 @@ function CapitalPanel({ data }: { data: CapitalPanelData }) {
       </div>
 
       <div className="mt-4 border-t border-line/60 pt-3">
-        <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-fg-muted/70">LP pipeline by stage</p>
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted/70">LP pipeline by stage</p>
         {data.byStage.length === 0 ? (
           <p className="text-sm text-fg-muted">No investors in the pipeline yet.</p>
         ) : (
@@ -166,7 +166,7 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
     <div className="fx-card p-5">
       <SectionHeading
         action={
-          <Link href="/source/deal_pipeline" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+          <Link href="/source/deal_pipeline" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
             Deal pipeline →
           </Link>
         }
@@ -178,8 +178,8 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
           value and portfolio NAV are headline figures in the KPI band above, so
           this panel shows the funnel and diligence posture, not the totals again. */}
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Deal funnel</span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-secondary">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Deal funnel</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-secondary">
           {data.dealCount} deal{data.dealCount === 1 ? "" : "s"} · {data.assetCount} asset{data.assetCount === 1 ? "" : "s"}
         </span>
       </div>
@@ -210,14 +210,14 @@ function PortfolioPanel({ data }: { data: PortfolioPanelData }) {
               >
                 {count}
               </p>
-              <p className="mt-1 font-mono text-[8px] uppercase tracking-wide text-fg-muted">
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-fg-muted">
                 {stage.replace("_", " ")}
               </p>
             </div>
           );
         })}
       </div>
-      <p className="mt-3 border-t border-line/60 pt-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <p className="mt-3 border-t border-line/60 pt-3 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {data.diligenceOpen} diligence open · {data.icRecent} recent IC decision{data.icRecent === 1 ? "" : "s"}
       </p>
     </div>
@@ -274,11 +274,11 @@ export default async function DashboardPage() {
         <div className="relative flex items-center justify-between gap-3 border-b border-line/60 px-5 py-2.5 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <Logo as="span" variant="coin" />
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">FundExecs OS</span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">FundExecs OS</span>
             <span aria-hidden className="text-fg-muted/50">/</span>
-            <span className="truncate font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">Dashboard</span>
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">Dashboard</span>
           </div>
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-status-success/30 bg-status-success/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-status-success">
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-status-success/30 bg-status-success/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-status-success">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-success opacity-60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-status-success" />
@@ -335,7 +335,7 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2">
           <SectionHeading
             action={
-              <Link href="/activity" className="font-mono text-[10px] uppercase tracking-wider text-gold-400 hover:underline">
+              <Link href="/activity" className="font-mono text-[11px] uppercase tracking-wider text-gold-400 hover:underline">
                 Full activity →
               </Link>
             }
@@ -366,8 +366,8 @@ export default async function DashboardPage() {
       <Link href="/build" className="fx-card fx-card-hover mt-4 flex items-center gap-4 p-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">Investor Readiness</span>
-            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">Investor Readiness</span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
               {readiness.stage.label}
             </span>
           </div>

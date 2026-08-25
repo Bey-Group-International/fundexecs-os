@@ -140,7 +140,7 @@ export function ThesisAlignmentBreakdown({ investor, thesis }: Props) {
   if (!thesis) {
     return (
       <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
-        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Thesis Alignment
         </h3>
         <p className="text-sm text-fg-muted">
@@ -165,7 +165,7 @@ export function ThesisAlignmentBreakdown({ investor, thesis }: Props) {
   return (
     <div className="break-inside-avoid rounded-2xl border border-line bg-surface-1 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold-400">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Thesis Alignment
         </h3>
         <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export function ThesisAlignmentBreakdown({ investor, thesis }: Props) {
             style={{ width: `${score}%` }}
           />
         </div>
-        <span className="font-mono text-[10px] text-fg-muted">
+        <span className="font-mono text-[11px] text-fg-muted">
           {passes} pass · {fails} fail
         </span>
       </div>
@@ -211,7 +211,7 @@ export function ThesisAlignmentBreakdown({ investor, thesis }: Props) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-fg-primary">{dim.label}</span>
                   {dim.weight > 0 && (
-                    <span className="font-mono text-[9px] text-fg-muted">
+                    <span className="font-mono text-[11px] text-fg-muted">
                       {dim.earned}/{dim.weight} pts
                     </span>
                   )}

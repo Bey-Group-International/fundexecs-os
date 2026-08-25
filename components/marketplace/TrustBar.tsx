@@ -18,7 +18,7 @@ export function TrustBar({ stats, note }: { stats: TrustStat[]; note?: string })
             >
               {s.value}
             </div>
-            <div className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-widest text-fg-muted">
               {s.label}
             </div>
           </div>

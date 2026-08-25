@@ -54,19 +54,19 @@ export async function GamificationPanel() {
         {earnedFromExecution > 0 && (
           <div className="flex items-center justify-between rounded-2xl border border-neural-400/25 bg-neural-400/[0.05] px-5 py-4">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                 Earned from execution
               </p>
               <p className="mt-1 font-display text-3xl font-semibold text-fg-primary">
                 <span className="text-neural-400">◆</span>{" "}
                 {formatCredits(earnedFromExecution)}
               </p>
-              <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+              <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
                 credits earned by completing tasks across all hubs
               </p>
             </div>
             <div className="hidden text-right sm:block">
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 Tasks completed
               </p>
               <p className="mt-1 font-display text-2xl font-semibold text-fg-primary">
@@ -90,7 +90,7 @@ export async function GamificationPanel() {
           ].join(" ")}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                   Execution streak
                 </p>
                 <div className="mt-2 flex items-end gap-2">
@@ -101,7 +101,7 @@ export async function GamificationPanel() {
                     day{streak.current !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-neural-300">
+                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                   {sLabel}
                 </p>
               </div>
@@ -123,7 +123,7 @@ export async function GamificationPanel() {
               </p>
             )}
 
-            <div className="mt-4 flex items-center justify-between text-[10px] text-fg-muted font-mono">
+            <div className="mt-4 flex items-center justify-between text-[11px] text-fg-muted font-mono">
               <span>Best: {streak.longest}d</span>
               {mult > 1.0 && (
                 <span className="text-neural-300">
@@ -135,7 +135,7 @@ export async function GamificationPanel() {
 
           {/* Milestone card */}
           <div className="rounded-2xl border border-line/30 bg-surface-1/20 p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
               Execution rank
             </p>
             <div className="mt-2 flex items-end justify-between gap-2">
@@ -148,7 +148,7 @@ export async function GamificationPanel() {
                 </p>
               </div>
               {rank && (
-                <span className="mb-0.5 rounded-full border border-neural-400/30 bg-neural-400/10 px-2 py-0.5 font-mono text-[10px] text-neural-300">
+                <span className="mb-0.5 rounded-full border border-neural-400/30 bg-neural-400/10 px-2 py-0.5 font-mono text-[11px] text-neural-300">
                   {totalTasks} tasks
                 </span>
               )}
@@ -156,19 +156,19 @@ export async function GamificationPanel() {
 
             {next && (
               <div className="mt-4">
-                <div className="mb-1.5 flex justify-between font-mono text-[9px] text-fg-muted">
+                <div className="mb-1.5 flex justify-between font-mono text-[11px] text-fg-muted">
                   <span>{totalTasks} done</span>
                   <span>{next.rank} at {next.threshold} · +{formatCredits(next.bonus)} cr</span>
                 </div>
                 <ProgressBar value={progress} />
-                <p className="mt-1.5 text-[10px] text-fg-muted">
+                <p className="mt-1.5 text-[11px] text-fg-muted">
                   {next.threshold - totalTasks} task{next.threshold - totalTasks !== 1 ? "s" : ""} to next milestone
                 </p>
               </div>
             )}
 
             {!next && (
-              <p className="mt-3 font-mono text-[10px] text-neural-300">
+              <p className="mt-3 font-mono text-[11px] text-neural-300">
                 Maximum rank achieved ◆
               </p>
             )}
@@ -177,7 +177,7 @@ export async function GamificationPanel() {
 
         {/* ── Milestone ladder ────────────────────────────────────────── */}
         <div>
-          <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+          <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-neural-300">
             Milestone ladder
           </h3>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -196,13 +196,13 @@ export async function GamificationPanel() {
                   <p className="font-display text-lg font-semibold text-fg-primary">
                     {reached ? "★" : "○"}
                   </p>
-                  <p className={`mt-0.5 font-mono text-[9px] ${reached ? "text-neural-300" : "text-fg-muted"}`}>
+                  <p className={`mt-0.5 font-mono text-[11px] ${reached ? "text-neural-300" : "text-fg-muted"}`}>
                     {m.rank}
                   </p>
-                  <p className="mt-0.5 font-mono text-[9px] text-fg-muted">
+                  <p className="mt-0.5 font-mono text-[11px] text-fg-muted">
                     {m.threshold} tasks
                   </p>
-                  <p className={`mt-0.5 font-mono text-[9px] ${reached ? "text-neural-300" : "text-fg-muted"}`}>
+                  <p className={`mt-0.5 font-mono text-[11px] ${reached ? "text-neural-300" : "text-fg-muted"}`}>
                     +{formatCredits(m.bonus)}
                   </p>
                 </div>
@@ -214,7 +214,7 @@ export async function GamificationPanel() {
         {/* ── Hub achievements ────────────────────────────────────────── */}
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-mono text-xs uppercase tracking-[0.24em] text-neural-300">
+            <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-neural-300">
               Hub achievements
             </h3>
             <span className="font-mono text-[11px] text-fg-muted">

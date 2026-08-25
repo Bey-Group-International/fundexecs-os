@@ -91,7 +91,7 @@ export function MatchToast({ alert }: { alert: MatchToastAlert | null }) {
               ◈
             </span>
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+              <p className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
                 Earn · new match
               </p>
               <p className="mt-1 truncate text-sm font-medium text-fg-primary">{alert.title}</p>
@@ -100,7 +100,7 @@ export function MatchToast({ alert }: { alert: MatchToastAlert | null }) {
                   {alert.body}
                 </p>
               ) : null}
-              <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <p className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 Click to open · or read later in your inbox
               </p>
             </div>

@@ -13,7 +13,7 @@ export function DashboardHUD({ data }: { data: DashboardData }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-gold-400 shadow-[0_0_12px_rgba(251,191,36,0.9)]" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-gold-300">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
             FundExecs OS live
           </span>
         </div>

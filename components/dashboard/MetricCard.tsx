@@ -10,11 +10,11 @@ export function MetricCard({ metric }: { metric: DashboardMetric }) {
   return (
     <div className="fx-card p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           {metric.label}
         </p>
         <span
-          className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+          className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
             TONE_CLASS[metric.tone ?? "muted"]
           }`}
         >

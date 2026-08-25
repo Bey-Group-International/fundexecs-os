@@ -117,7 +117,7 @@ export function ManageBooking({ token }: { token: string }) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <span className={`font-mono text-[10px] uppercase tracking-wider ${status.tone}`}>{status.label}</span>
+        <span className={`font-mono text-[11px] uppercase tracking-wider ${status.tone}`}>{status.label}</span>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--fg-primary)]">{eventType.title}</h1>
         <p className="text-sm text-[var(--fg-secondary)]">with {page.displayName}</p>
       </header>

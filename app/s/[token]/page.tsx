@@ -28,7 +28,7 @@ const ARTIFACT_LABEL: Record<ArtifactType, string> = {
 function Unavailable() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
-      <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
         FundExecs OS
       </span>
       <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">
@@ -105,10 +105,10 @@ export default async function SharedSessionPage(
       <div className="mx-auto max-w-3xl px-6 py-12">
         <header className="mb-8 border-b border-line pb-6">
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
               Shared session
             </span>
-            <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               Shared read-only
             </span>
           </div>
@@ -139,7 +139,7 @@ export default async function SharedSessionPage(
                   <span className="truncate text-sm text-fg-primary">
                     {w.title}
                   </span>
-                  <span className="ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <span className="ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {w.hub} · {w.status}
                   </span>
                 </div>
@@ -164,7 +164,7 @@ export default async function SharedSessionPage(
                   className="rounded-lg border border-line bg-surface-1 p-3"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                    <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                       {ARTIFACT_LABEL[a.artifact_type]}
                     </span>
                     <span className="truncate text-sm text-fg-primary">
@@ -181,7 +181,7 @@ export default async function SharedSessionPage(
         </section>
 
         <footer className="mt-12 border-t border-line pt-6 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
             Powered by FundExecs OS
           </span>
         </footer>

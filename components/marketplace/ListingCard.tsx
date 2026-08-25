@@ -36,12 +36,12 @@ function Labels({ listing }: { listing: ListingCardData }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {listing.featured ? (
-        <span className="rounded-full border border-gold-500/50 bg-gold-500/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+        <span className="rounded-full border border-gold-500/50 bg-gold-500/15 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
           ★ Featured
         </span>
       ) : null}
       {isNewListing ? (
-        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-emerald-300">
           New
         </span>
       ) : null}
@@ -52,7 +52,7 @@ function Labels({ listing }: { listing: ListingCardData }) {
 function MetaChips({ listing }: { listing: ListingCardData }) {
   const country = resolveCountry(listing.country);
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
       {country ? (
         <span className="inline-flex items-center gap-1 text-fg-secondary">
           <span aria-hidden className="text-xs leading-none">
@@ -85,7 +85,7 @@ function Price({ listing, align = "right" }: { listing: ListingCardData; align?:
   return (
     <div className={align === "right" ? "text-right" : "text-left"}>
       <div className="font-display text-lg font-semibold tracking-tight text-gold-200">{price}</div>
-      <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         {sub.value}
         <span className="opacity-60"> / {sub.label}</span>
       </div>
@@ -136,7 +136,7 @@ export function ListingCard({
         ) : null}
         <div className="mt-3 flex items-end justify-between gap-2 border-t border-line/60 pt-3">
           <Price listing={listing} align="left" />
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {timeAgo(listing.created_at)}
           </span>
         </div>
@@ -174,7 +174,7 @@ export function ListingCard({
               {listing.summary}
             </p>
           ) : null}
-          <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <p className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {timeAgo(listing.created_at)}
           </p>
         </div>

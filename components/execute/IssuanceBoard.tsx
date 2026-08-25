@@ -78,7 +78,7 @@ const STATUS_META: Record<IssuanceLedgerStatus, string> = {
 function StatusBadge({ status }: { status: IssuanceLedgerStatus }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${STATUS_META[status]}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_META[status]}`}
     >
       {LEDGER_STATUS_LABEL[status]}
     </span>
@@ -89,11 +89,11 @@ function StatusBadge({ status }: { status: IssuanceLedgerStatus }) {
 
 const FIELD =
   "w-full rounded-lg border border-line bg-surface-0 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/50 focus:outline-none focus:ring-1 focus:ring-gold-500/40";
-const LABEL = "mb-1 block font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+const LABEL = "mb-1 block font-mono text-[11px] uppercase tracking-wider text-fg-muted";
 const BTN =
   "inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2 text-xs font-medium text-surface-0 transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_GHOST =
-  "inline-flex items-center justify-center rounded-lg border border-line bg-surface-0 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center rounded-lg border border-line bg-surface-0 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-50";
 
 function FormError({ message }: { message: string | null }) {
   if (!message) return null;
@@ -124,7 +124,7 @@ function Panel({
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface-1 p-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-fg-secondary">{title}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-secondary">{title}</p>
       {subtitle && <p className="mt-0.5 text-xs text-fg-muted">{subtitle}</p>}
       <div className="mt-3">{children}</div>
     </div>
@@ -182,14 +182,14 @@ function LedgerList({
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface-1">
       <div className="hidden grid-cols-[1fr_90px_140px_190px] items-center gap-4 border-b border-line bg-surface-2/30 px-4 py-2 sm:grid">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Security
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">Status</span>
-        <span className="text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Status</span>
+        <span className="text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Offering
         </span>
-        <span className="text-right font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+        <span className="text-right font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Actions
         </span>
       </div>
@@ -206,7 +206,7 @@ function LedgerList({
                 <span className="truncate text-sm font-medium text-fg-primary">
                   {row.securityName || "Untitled security"}
                 </span>
-                <p className="mt-0.5 truncate font-mono text-[10px] text-fg-muted">
+                <p className="mt-0.5 truncate font-mono text-[11px] text-fg-muted">
                   {shortId(row.securityId)}
                   {row.dealId ? ` · deal ${shortId(row.dealId)}` : ""} ·{" "}
                   {row.status === "issued" && row.issuedAt
@@ -214,7 +214,7 @@ function LedgerList({
                     : `drafted ${fmtDate(row.createdAt)}`}
                 </p>
                 {rowError && rowError.id === row.securityId && (
-                  <p className="mt-1 font-mono text-[10px] text-red-300">{rowError.message}</p>
+                  <p className="mt-1 font-mono text-[11px] text-red-300">{rowError.message}</p>
                 )}
               </div>
               <div>
@@ -588,7 +588,7 @@ export function IssuanceBoard({ ledger, deals }: Props) {
       </p>
 
       <div>
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Issuance Ledger
         </p>
         <LedgerList

@@ -52,7 +52,7 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
       </div>
 
       {/* Cross-links to the two source views this reconciles */}
-      <div className="mb-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-wider">
+      <div className="mb-4 flex flex-wrap gap-2 font-mono text-[11px] uppercase tracking-wider">
         <Link href="/execute/cap_table" className="rounded-md border border-line px-2.5 py-1 text-fg-muted transition hover:border-gold-500/40 hover:text-gold-300">
           → Fund cap table
         </Link>
@@ -69,7 +69,7 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
                 (h, i) => (
                   <th
                     key={h}
-                    className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 6 ? "text-right" : ""}`}
+                    className={`whitespace-nowrap px-3 py-3 font-mono text-[11px] font-medium uppercase tracking-wider text-fg-muted ${i >= 2 && i <= 6 ? "text-right" : ""}`}
                   >
                     {h}
                   </th>
@@ -99,7 +99,7 @@ export async function ExecuteOwnershipModule({ orgId }: { orgId: string }) {
                 </td>
                 <td className="whitespace-nowrap px-3 py-3">
                   <span
-                    className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                    className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                       h.linked
                         ? "border-emerald-400/40 text-emerald-300"
                         : h.hasFund

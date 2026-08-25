@@ -44,7 +44,7 @@ function dotClass(item: AgendaItem, overdue: boolean): string {
 }
 
 function chipClass(active: boolean): string {
-  return `rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition ${
+  return `rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider transition ${
     active
       ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
       : "border-line bg-surface-2 text-fg-muted hover:text-fg-secondary"
@@ -86,7 +86,7 @@ function ItemRow({ item, overdue }: { item: AgendaItem; overdue: boolean }) {
           >
             {item.title}
           </Link>
-          <span className="shrink-0 rounded-full border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+          <span className="shrink-0 rounded-full border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             {KIND_LABEL[item.kind]}
           </span>
           {item.meta ? (
@@ -94,7 +94,7 @@ function ItemRow({ item, overdue }: { item: AgendaItem; overdue: boolean }) {
           ) : null}
         </div>
         <span
-          className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
+          className={`shrink-0 font-mono text-[11px] uppercase tracking-wider ${
             overdue ? "text-status-danger" : "text-fg-muted"
           }`}
         >
@@ -107,7 +107,7 @@ function ItemRow({ item, overdue }: { item: AgendaItem; overdue: boolean }) {
           type="button"
           onClick={onChase}
           disabled={pending}
-          className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-gold-300 transition hover:text-gold-400 disabled:opacity-50"
+          className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:text-gold-400 disabled:opacity-50"
         >
           {pending ? "Routing…" : "Have Earn chase this"}
         </button>
@@ -171,7 +171,7 @@ export function AgendaControls({ items }: { items: AgendaItem[] }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Kind
           </span>
           {KIND_ORDER.map((k) => (
@@ -186,7 +186,7 @@ export function AgendaControls({ items }: { items: AgendaItem[] }) {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Severity
           </span>
           {SEVERITY_ORDER.map((s) => (
@@ -201,7 +201,7 @@ export function AgendaControls({ items }: { items: AgendaItem[] }) {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Filter
           </span>
           <button
@@ -224,11 +224,11 @@ export function AgendaControls({ items }: { items: AgendaItem[] }) {
             const overdue = bucket.key === "overdue";
             return (
               <section key={bucket.key}>
-                <h2 className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-fg-muted">
+                <h2 className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   <span className={overdue ? "text-status-danger" : undefined}>
                     {bucket.label}
                   </span>
-                  <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 text-[9px] tracking-wider text-fg-muted">
+                  <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 text-[11px] tracking-wider text-fg-muted">
                     {bucket.items.length}
                   </span>
                 </h2>

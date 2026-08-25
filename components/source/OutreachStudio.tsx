@@ -233,11 +233,11 @@ export function OutreachStudio({ live }: { live: boolean }) {
     <div className="mx-auto max-w-3xl">
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
             ✶ Outreach Studio
           </span>
           {!live ? (
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
               local mode
             </span>
           ) : null}
@@ -250,7 +250,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
 
       {/* Build from template */}
       <section className="rounded-2xl border border-gold-500/25 bg-gradient-to-b from-gold-500/[0.06] to-transparent p-4">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
           Build a sequence
         </span>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -263,7 +263,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
               className="rounded-xl border border-line bg-surface-1 p-3 text-left transition hover:border-gold-500/40 disabled:opacity-50"
             >
               <span className="block text-sm font-medium text-fg-primary">{t.name}</span>
-              <span className="mt-0.5 block font-mono text-[9px] uppercase tracking-wider text-gold-400">
+              <span className="mt-0.5 block font-mono text-[11px] uppercase tracking-wider text-gold-400">
                 {humanize(t.channel)}
               </span>
               <span className="mt-1 block text-xs text-fg-secondary">{t.description}</span>
@@ -297,14 +297,14 @@ export function OutreachStudio({ live }: { live: boolean }) {
                   }`}
                 >
                   <span>{s.name}</span>
-                  <span className="font-mono text-[10px] text-fg-muted">{s.steps.length} steps</span>
+                  <span className="font-mono text-[11px] text-fg-muted">{s.steps.length} steps</span>
                 </button>
                 <button
                   type="button"
                   disabled={deleting}
                   onClick={() => deleteSequence(s.id)}
                   aria-label={`Delete ${s.name}`}
-                  className="rounded-r-full border border-l-0 border-line px-2 py-1 text-[10px] text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+                  className="rounded-r-full border border-l-0 border-line px-2 py-1 text-[11px] text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
                 >
                   ✕
                 </button>
@@ -315,7 +315,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
             type="button"
             disabled={deleting}
             onClick={clearSequences}
-            className="mt-2 rounded border border-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
+            className="mt-2 rounded border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:border-status-danger/40 hover:text-status-danger disabled:opacity-40"
           >
             Clear all
           </button>
@@ -333,7 +333,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
           <div className="rounded-2xl border border-line bg-surface-1 p-4">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-fg-primary">{active.name}</span>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 {humanize(active.channel ?? "")}
                 {active.audience ? ` · ${active.audience}` : ""}
               </span>
@@ -341,16 +341,16 @@ export function OutreachStudio({ live }: { live: boolean }) {
             <ol className="mt-3 space-y-2">
               {active.steps.map((st) => (
                 <li key={st.id} className="flex items-start gap-3 rounded-lg border border-line bg-surface-0 p-2.5">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[10px] text-surface-0">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold-400 font-mono text-[11px] text-surface-0">
                     {st.step_order}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm text-fg-primary">{st.subject || "(no subject)"}</span>
-                      <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-300">
+                      <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-gold-300">
                         {humanize(st.action)}
                       </span>
-                      <span className="font-mono text-[10px] text-fg-muted">
+                      <span className="font-mono text-[11px] text-fg-muted">
                         {st.delay_days === 0 ? "immediate" : `+${st.delay_days}d`}
                       </span>
                     </div>
@@ -363,7 +363,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
 
           {/* Enroll */}
           <div className="rounded-2xl border border-line bg-surface-1 p-4">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Enroll a target
             </span>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -406,7 +406,7 @@ export function OutreachStudio({ live }: { live: boolean }) {
 
           {/* Enrollments + progress */}
           <div className="rounded-2xl border border-line bg-surface-1 p-4">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-gold-400">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-gold-400">
               Enrollments
             </span>
             {enrollments.length ? (
@@ -420,21 +420,21 @@ export function OutreachStudio({ live }: { live: boolean }) {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm text-fg-primary">{enrollment.subject_name}</span>
                         {(enrollment as { subject_role?: string | null }).subject_role && (
-                          <span className="font-mono text-[10px] text-fg-muted">
+                          <span className="font-mono text-[11px] text-fg-muted">
                             {(enrollment as { subject_role?: string | null }).subject_role}
                           </span>
                         )}
-                        <span className={`font-mono text-[10px] uppercase tracking-wider ${statusTone(enrollment.status)}`}>
+                        <span className={`font-mono text-[11px] uppercase tracking-wider ${statusTone(enrollment.status)}`}>
                           {progress.label}
                         </span>
                       </div>
                       {((enrollment as { subject_email?: string | null }).subject_email || (enrollment as { subject_phone?: string | null }).subject_phone) && (
                         <div className="flex gap-3 mt-0.5">
                           {(enrollment as { subject_email?: string | null }).subject_email && (
-                            <span className="font-mono text-[10px] text-fg-muted">{(enrollment as { subject_email?: string | null }).subject_email}</span>
+                            <span className="font-mono text-[11px] text-fg-muted">{(enrollment as { subject_email?: string | null }).subject_email}</span>
                           )}
                           {(enrollment as { subject_phone?: string | null }).subject_phone && (
-                            <span className="font-mono text-[10px] text-fg-muted">{(enrollment as { subject_phone?: string | null }).subject_phone}</span>
+                            <span className="font-mono text-[11px] text-fg-muted">{(enrollment as { subject_phone?: string | null }).subject_phone}</span>
                           )}
                         </div>
                       )}

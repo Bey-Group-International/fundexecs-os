@@ -70,7 +70,7 @@ function StepIndicator({ current }: { current: number }) {
               </span>
               <span
                 className={[
-                  "font-mono text-[10px] uppercase tracking-widest",
+                  "font-mono text-[11px] uppercase tracking-widest",
                   active ? "text-gold-400" : "text-[var(--color-fg-muted)]",
                 ].join(" ")}
               >
@@ -121,7 +121,7 @@ function Step1Document({ state, onChange, onNext }: Step1Props) {
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="env-title"
-          className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+          className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
         >
           Document title <span className="text-[var(--color-status-danger)]">*</span>
         </label>
@@ -144,7 +144,7 @@ function Step1Document({ state, onChange, onNext }: Step1Props) {
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="env-message"
-          className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+          className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
         >
           Email message{" "}
           <span className="font-sans normal-case tracking-normal text-[var(--color-fg-muted)]">
@@ -164,7 +164,7 @@ function Step1Document({ state, onChange, onNext }: Step1Props) {
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="env-content"
-          className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+          className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
         >
           Document content <span className="text-[var(--color-status-danger)]">*</span>
         </label>
@@ -260,7 +260,7 @@ function Step2Recipients({ recipients, onChange, onBack, onNext }: Step2Props) {
             className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-1)] p-4"
           >
             <div className="mb-3 flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-gold-400">
+              <span className="font-mono text-[11px] uppercase tracking-widest text-gold-400">
                 Signer {r.routingOrder}
               </span>
               {recipients.length > 1 && (
@@ -268,7 +268,7 @@ function Step2Recipients({ recipients, onChange, onBack, onNext }: Step2Props) {
                   type="button"
                   onClick={() => removeRecipient(r.id)}
                   aria-label={`Remove signer ${r.routingOrder}`}
-                  className="rounded-md border border-[var(--color-status-danger)]/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-status-danger)] transition hover:bg-[var(--color-status-danger)]/10"
+                  className="rounded-md border border-[var(--color-status-danger)]/40 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--color-status-danger)] transition hover:bg-[var(--color-status-danger)]/10"
                 >
                   Remove
                 </button>
@@ -279,7 +279,7 @@ function Step2Recipients({ recipients, onChange, onBack, onNext }: Step2Props) {
               <div className="flex flex-1 flex-col gap-1">
                 <label
                   htmlFor={`rec-name-${r.id}`}
-                  className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+                  className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
                 >
                   Name
                 </label>
@@ -301,7 +301,7 @@ function Step2Recipients({ recipients, onChange, onBack, onNext }: Step2Props) {
               <div className="flex flex-1 flex-col gap-1">
                 <label
                   htmlFor={`rec-email-${r.id}`}
-                  className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+                  className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
                 >
                   Email
                 </label>
@@ -323,7 +323,7 @@ function Step2Recipients({ recipients, onChange, onBack, onNext }: Step2Props) {
               <div className="flex w-28 flex-col gap-1">
                 <label
                   htmlFor={`rec-order-${r.id}`}
-                  className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-fg-muted)]"
+                  className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-fg-muted)]"
                 >
                   Order
                 </label>
@@ -389,7 +389,7 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
     <section className="flex flex-col gap-6">
       {/* Document summary */}
       <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-1)] p-5">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
           Document
         </p>
         <p className="text-base font-semibold text-[var(--color-fg-primary)]">{state.title}</p>
@@ -405,7 +405,7 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
 
       {/* Recipients summary */}
       <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-1)] p-5">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-gold-400">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-widest text-gold-400">
           Signers
         </p>
         <ol className="flex flex-col gap-2">
@@ -416,7 +416,7 @@ function Step3Review({ state, onBack, onSaveDraft, onSend, isPending, error }: S
                 key={r.id}
                 className="flex items-center gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-surface-0)] px-3 py-2"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--color-line)] font-mono text-[10px] text-[var(--color-fg-muted)]">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--color-line)] font-mono text-[11px] text-[var(--color-fg-muted)]">
                   {r.routingOrder}
                 </span>
                 <div className="min-w-0">
@@ -555,7 +555,7 @@ export function EnvelopeWizard() {
   return (
     <div className="fx-ambient mx-auto max-w-2xl">
       <header className="mb-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-gold-400">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-400">
           Envelopes
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-[var(--color-fg-primary)]">

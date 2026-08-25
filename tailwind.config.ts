@@ -5,6 +5,9 @@ import type { Config } from "tailwindcss";
 // Grotesk / DM Sans / JetBrains Mono type stack. The six per-agent colors are
 // preserved for agent identity.
 const config: Config = {
+  // Class-driven, and <html> always carries `dark` — the platform has a single
+  // bold palette, so a dark: utility must never flip with the OS preference.
+  darkMode: "class",
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",

@@ -59,7 +59,7 @@ export default async function GiftEarnPage(
       {/* Page header — mirrors wallet page structure */}
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.32em] text-neural-300">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
             Network &amp; Gifting
           </span>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary sm:text-4xl">
@@ -70,7 +70,7 @@ export default async function GiftEarnPage(
             levels deep with milestone bonuses as your network scales.
           </p>
         </div>
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-gold-400/35 bg-gold-400/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-gold-300">
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-gold-400/35 bg-gold-400/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
           <span className="h-1.5 w-1.5 rounded-full bg-gold-400 shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.9)]" />
           Reward flywheel active
         </div>
@@ -89,7 +89,7 @@ export default async function GiftEarnPage(
                   s.accent ? "border-t-2 border-t-gold-400/70" : "border-t-2 border-t-transparent"
                 }`}
               >
-                <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   {s.label}
                 </p>
                 <p
@@ -113,7 +113,7 @@ export default async function GiftEarnPage(
           {/* Rank + progress */}
           <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-gold-400/20 bg-gold-400/[0.05] px-5 py-4">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-fg-muted">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                 Current rank
               </p>
               <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-gold-300 drop-shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.4)]">
@@ -121,7 +121,7 @@ export default async function GiftEarnPage(
               </p>
             </div>
             <div className="min-w-[220px] flex-1">
-              <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <div className="mb-2 flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                 <span>{next ? `Next: ${next.rank}` : "Top rank reached"}</span>
                 {next && (
                   <span>
@@ -146,7 +146,7 @@ export default async function GiftEarnPage(
           {/* Invite link */}
           <div className="fx-neural-card p-5">
             <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-gold-400/70 shadow-[0_0_18px_rgb(var(--fx-gold-rgb)/0.7)]" />
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gold-300/80">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300/80">
               Your invite link
             </p>
             <p className="mb-4 mt-1 text-sm text-fg-secondary">
@@ -165,12 +165,12 @@ export default async function GiftEarnPage(
 
           {/* How rewards compound */}
           <div className="rounded-2xl border border-neural-400/20 bg-surface-0/85 p-5 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
               How rewards compound
             </p>
             <ul className="mt-4 flex flex-col gap-4">
               <li className="flex gap-3">
-                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gold-400/40 bg-gold-400/10 font-mono text-[9px] text-gold-300">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gold-400/40 bg-gold-400/10 font-mono text-[11px] text-gold-300">
                   1
                 </div>
                 <div className="text-sm">
@@ -185,7 +185,7 @@ export default async function GiftEarnPage(
                 </div>
               </li>
               <li className="flex gap-3">
-                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-neural-400/40 bg-neural-400/10 font-mono text-[9px] text-neural-300">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-neural-400/40 bg-neural-400/10 font-mono text-[11px] text-neural-300">
                   2
                 </div>
                 <div className="text-sm">
@@ -197,7 +197,7 @@ export default async function GiftEarnPage(
                 </div>
               </li>
               <li className="flex gap-3">
-                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gold-400/40 bg-gold-400/10 font-mono text-[9px] text-gold-300">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gold-400/40 bg-gold-400/10 font-mono text-[11px] text-gold-300">
                   3
                 </div>
                 <div className="text-sm">
@@ -212,7 +212,7 @@ export default async function GiftEarnPage(
 
           {/* Redeem */}
           <div className="rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 p-5 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
               Redeem a code
             </p>
             <p className="mb-4 mt-1 text-sm text-fg-secondary">
@@ -226,7 +226,7 @@ export default async function GiftEarnPage(
         <section className="flex flex-col gap-4">
           {/* Your network */}
           <div>
-            <p className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
               Your network
             </p>
             {summary.downline.length === 0 ? (
@@ -242,10 +242,10 @@ export default async function GiftEarnPage(
             ) : (
               <div className="overflow-hidden rounded-2xl border border-neural-400/20 bg-surface-0/85 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
                 <div className="flex items-center justify-between border-b border-neural-400/15 px-4 py-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neural-300">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                     {summary.totalDownline} firm{summary.totalDownline !== 1 ? "s" : ""} in network
                   </p>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                     {summary.directCount} direct
                   </p>
                 </div>
@@ -253,7 +253,7 @@ export default async function GiftEarnPage(
                   {summary.downline.map((row) => (
                     <div key={row.orgId} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-1/40">
                       <span
-                        className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                        className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                           row.level === 1
                             ? "border-gold-400/50 bg-gold-400/10 text-gold-300 shadow-[0_0_8px_rgb(var(--fx-gold-rgb)/0.25)]"
                             : row.level === 2
@@ -267,7 +267,7 @@ export default async function GiftEarnPage(
                         {row.name}
                       </span>
                       <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                        className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                           row.status === "subscribed"
                             ? "bg-status-success/15 text-status-success"
                             : row.status === "joined"
@@ -286,7 +286,7 @@ export default async function GiftEarnPage(
 
           {/* Gift credits */}
           <div className="mt-2">
-            <p className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-gold-400/70">
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-400/70">
               Gift credits
             </p>
             <div className="fx-neural-card p-5">
@@ -303,7 +303,7 @@ export default async function GiftEarnPage(
           {gifts.length > 0 && (
             <div className="overflow-hidden rounded-2xl border border-line/80 bg-gradient-to-b from-surface-1 to-surface-1/40 shadow-[0_1px_2px_rgb(0_0_0/0.25)]">
               <div className="border-b border-line/60 px-4 py-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-fg-muted">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
                   Gifts you&apos;ve sent
                 </p>
               </div>
@@ -317,7 +317,7 @@ export default async function GiftEarnPage(
                         {g.recipient_email}
                       </p>
                       <p
-                        className={`mt-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                        className={`mt-0.5 font-mono text-[11px] uppercase tracking-wider ${
                           g.status === "redeemed"
                             ? "text-status-success"
                             : "text-fg-muted"

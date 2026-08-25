@@ -65,7 +65,7 @@ export default async function MarketplacePage() {
   return (
     <div className="fx-ambient mx-auto max-w-5xl">
       <header className="mb-6 border-b border-line/70 pb-5 animate-fade-up">
-        <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-fg-muted">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
           Marketplace
         </span>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg-primary">
@@ -101,7 +101,7 @@ export default async function MarketplacePage() {
       <NewListingForm deals={deals.map((d) => ({ id: d.id, name: d.name }))} />
 
       <section className="mt-8">
-        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-fg-muted">
+        <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-fg-muted">
           Your listings
         </h2>
         <OwnerListings listings={listings} matchesByListing={matchesByListing} />
