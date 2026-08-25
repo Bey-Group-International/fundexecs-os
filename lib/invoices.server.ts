@@ -95,6 +95,7 @@ export async function createInvoice(
         payUrl: `${base}/pay/${invoice.token}`,
       });
       await sendEmail({
+        orgId: invoice.organization_id,
         to: { name: invoice.customer_name ?? invoice.customer_email, email: invoice.customer_email },
         subject,
         htmlBody: html,
@@ -212,6 +213,7 @@ export async function markInvoicePaid(
         })),
       });
       await sendEmail({
+        orgId: row.organization_id,
         to: { name: row.customer_name ?? row.customer_email, email: row.customer_email },
         subject,
         htmlBody: html,

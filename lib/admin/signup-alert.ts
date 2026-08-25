@@ -76,6 +76,9 @@ export async function notifyNewSignupOnce(userId: string): Promise<void> {
     await Promise.allSettled(
       recipients.map((to) =>
         sendEmail({
+          // Sent from the new member's own org mailbox — the only one this
+          // alert has a credential for.
+          orgId: membership?.organization_id ?? undefined,
           to: { name: "FundExecs Admin", email: to },
           subject: template.subject,
           htmlBody: template.html,

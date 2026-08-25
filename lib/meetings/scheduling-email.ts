@@ -4,12 +4,17 @@
 // cancellation — sends both sides the same facts: what, when (in their own
 // timezone), and the one link that matters next.
 //
-// Like lib/meetings/invite.ts, nothing here throws: an unconfigured email
-// provider must never fail a booking that was otherwise saved.
+// Like lib/meetings/invite.ts, nothing here throws: an unconnected mailbox must
+// never fail a booking that was otherwise saved.
 import { sendEmail, escapeHtml } from "@/lib/email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 
 export interface BookingEmailContext {
+  /**
+   * The org whose connected mailbox sends these. The public booking flow has no
+   * signed-in user, so it comes from the scheduling page's organization.
+   */
+  orgId?: string;
   eventTitle: string;
   hostName: string;
   hostEmail?: string | null;
@@ -131,9 +136,14 @@ export function buildSchedulingEmailHtml(input: TemplateInput): string {
 </html>`;
 }
 
-async function send(to: { name: string; email: string }, subject: string, htmlBody: string): Promise<boolean> {
+async function send(
+  to: { name: string; email: string },
+  subject: string,
+  htmlBody: string,
+  orgId?: string,
+): Promise<boolean> {
   try {
-    const result = await sendEmail({ to, subject, htmlBody });
+    const result = await sendEmail({ orgId, to, subject, htmlBody });
     return result.ok;
   } catch (err) {
     console.error("[scheduling-email] send failed", err);
@@ -381,6 +391,6 @@ export async function sendBookingEmails(
       break;
   }
 
-  const results = await Promise.allSettled(messages.map((m) => send(m.to, m.subject, m.html)));
+  const results = await Promise.allSettled(messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId)));
   return { sent: results.filter((r) => r.status === "fulfilled" && r.value).length };
 }

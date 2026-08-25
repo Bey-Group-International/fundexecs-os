@@ -1,48 +1,84 @@
+// lib/email-config.test.ts
+// The email self-check: can THIS org send right now, and if not, what should an
+// operator do about it? Reports state only — never a secret value.
+const getOrgSecretMock = jest.fn();
+const getGoogleAccessTokenMock = jest.fn();
+
+jest.mock("@/lib/org-secrets", () => ({
+  getOrgSecret: (...args: unknown[]) => getOrgSecretMock(...args),
+}));
+
+jest.mock("@/lib/google-oauth", () => ({
+  getGoogleAccessToken: (...args: unknown[]) => getGoogleAccessTokenMock(...args),
+  googleOAuthConfigured: () => Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID),
+}));
+
 import { getEmailConfigStatus } from "./email";
 
+const OLD = process.env;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env = { ...OLD };
+  delete process.env.GMAIL_ACCESS_TOKEN;
+  delete process.env.FUNDEXECS_FROM_EMAIL;
+  process.env.GOOGLE_OAUTH_CLIENT_ID = "client";
+  getOrgSecretMock.mockResolvedValue(null);
+  getGoogleAccessTokenMock.mockResolvedValue(null);
+});
+
+afterAll(() => {
+  process.env = OLD;
+});
+
 describe("getEmailConfigStatus", () => {
-  const OLD = process.env;
-  beforeEach(() => {
-    process.env = { ...OLD };
-    delete process.env.GMAIL_ACCESS_TOKEN;
-    delete process.env.RESEND_API_KEY;
-    delete process.env.RESEND_FROM_EMAIL;
-  });
-  afterAll(() => {
-    process.env = OLD;
-  });
-
-  it("reports none configured and warns when no provider is set", () => {
-    const s = getEmailConfigStatus();
+  it("tells an org with no mailbox how to connect one", async () => {
+    const s = await getEmailConfigStatus("org1");
+    expect(s.mailboxConnected).toBe(false);
     expect(s.willAttemptSend).toBe(false);
-    expect(s.primaryProvider).toBe("none");
-    expect(s.notes.join(" ")).toMatch(/No email provider configured/);
+    expect(s.source).toBe("none");
+    expect(s.notes.join(" ")).toMatch(/Connect Google in Settings/);
   });
 
-  it("makes Gmail primary but flags token expiry", () => {
-    process.env.GMAIL_ACCESS_TOKEN = "tok";
-    process.env.RESEND_API_KEY = "key";
-    const s = getEmailConfigStatus();
-    expect(s.primaryProvider).toBe("gmail");
-    expect(s.willAttemptSend).toBe(true);
-    expect(s.notes.join(" ")).toMatch(/expires/);
+  it("names the deployment gap when OAuth itself is unconfigured", async () => {
+    delete process.env.GOOGLE_OAUTH_CLIENT_ID;
+    const s = await getEmailConfigStatus("org1");
+    expect(s.oauthConfigured).toBe(false);
+    expect(s.notes.join(" ")).toMatch(/GOOGLE_OAUTH_CLIENT_ID/);
   });
 
-  it("warns when Resend uses the default unverified from-address", () => {
-    process.env.RESEND_API_KEY = "key";
-    const s = getEmailConfigStatus();
-    expect(s.primaryProvider).toBe("resend");
-    expect(s.usingDefaultFrom).toBe(true);
-    expect(s.fromDomain).toBe("fundexecs.com");
-    expect(s.notes.join(" ")).toMatch(/must be verified in Resend/);
+  it("reports a connected org as sending from its own mailbox", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue("minted");
+    const s = await getEmailConfigStatus("org1");
+    expect(s).toMatchObject({ mailboxConnected: true, source: "org-oauth", willAttemptSend: true });
+    expect(s.notes.join(" ")).toMatch(/connected Google mailbox/);
   });
 
-  it("surfaces the configured from-domain to verify", () => {
-    process.env.RESEND_API_KEY = "key";
-    process.env.RESEND_FROM_EMAIL = "meetings@acme.vc";
-    const s = getEmailConfigStatus();
-    expect(s.usingDefaultFrom).toBe(false);
-    expect(s.fromDomain).toBe("acme.vc");
-    expect(s.notes.join(" ")).toMatch(/acme\.vc/);
+  it("flags a stored static token as short-lived", async () => {
+    getOrgSecretMock.mockResolvedValue("pasted");
+    const s = await getEmailConfigStatus("org1");
+    expect(s.source).toBe("org-token");
+    expect(s.notes.join(" ")).toMatch(/about an hour/);
+  });
+
+  it("flags the deploy-wide token as shared and short-lived", async () => {
+    process.env.GMAIL_ACCESS_TOKEN = "env";
+    const s = await getEmailConfigStatus("org1");
+    expect(s.source).toBe("deploy-env");
+    expect(s.notes.join(" ")).toMatch(/shared by every org/);
+  });
+
+  it("warns that an explicit From only works as a verified alias", async () => {
+    getGoogleAccessTokenMock.mockResolvedValue("minted");
+    process.env.FUNDEXECS_FROM_EMAIL = "meetings@acme.vc";
+    const s = await getEmailConfigStatus("org1");
+    expect(s.fromEmail).toBe("meetings@acme.vc");
+    expect(s.notes.join(" ")).toMatch(/verified send-as aliases/);
+  });
+
+  it("never returns a secret value", async () => {
+    getOrgSecretMock.mockResolvedValue("super-secret-token");
+    const s = await getEmailConfigStatus("org1");
+    expect(JSON.stringify(s)).not.toContain("super-secret-token");
   });
 });

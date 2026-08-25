@@ -201,6 +201,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     if (notifiable && newEmails.length > 0) {
       try {
         const sendResult = await sendMeetingInvites({
+          orgId: auth.ctx.orgId,
           // Canonical app URL so the emailed link is stable across hosts/proxies.
           origin: SITE_URL,
           roomCode,
@@ -219,6 +220,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     let notified = 0;
     if (notifiable && timing.changed && retainedEmails.length > 0) {
       const res = await sendMeetingUpdates("rescheduled", {
+        orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
         title,
@@ -234,6 +236,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
 
     if (notifiable && removedEmails.length > 0) {
       const res = await sendMeetingUpdates("removed", {
+        orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
         title,
@@ -247,6 +250,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
 
     if (booking && timing.changed) {
       const res = await sendBookingEmails("rescheduled_by_host", {
+        orgId: auth.ctx.orgId,
         eventTitle: booking.eventType.title,
         hostName: booking.page.display_name,
         hostEmail: auth.ctx.email,
@@ -314,6 +318,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     let notified = 0;
     if (notifiable && emails.length > 0) {
       const res = await sendMeetingUpdates("cancelled", {
+        orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode: (prior?.room_code as string | null) ?? "",
         title: (prior?.title as string | null) ?? "Meeting",
@@ -329,6 +334,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
     if (cancelled) {
       const res = await sendBookingEmails("cancelled_by_host", {
+        orgId: auth.ctx.orgId,
         eventTitle: cancelled.eventType.title,
         hostName: cancelled.page.display_name,
         hostEmail: auth.ctx.email,

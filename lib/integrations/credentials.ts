@@ -19,14 +19,18 @@ import { vaultConfigured } from "@/lib/vault";
  */
 export const CHANNEL_SECRET_KEYS: Record<string, readonly string[]> = {
   gmail: [
+    // A pasted access token. Google expires these after ~1 hour, so it is a
+    // development convenience only — GOOGLE_REFRESH_TOKEN is the real credential.
     "GMAIL_ACCESS_TOKEN",
     // Long-lived Google OAuth refresh token (written by /api/oauth/google/
-    // callback) — the adapter mints fresh access tokens from it, replacing
-    // the static ~1-hour GMAIL_ACCESS_TOKEN.
+    // callback). Outbound email mints a fresh access token from it per send:
+    // the org's own mailbox is the only thing the OS sends through.
     "GOOGLE_REFRESH_TOKEN",
-    "RESEND_API_KEY",
-    "RESEND_FROM_EMAIL",
+    // Optional From override. Gmail honours it only when it is the connected
+    // account or one of its verified send-as aliases.
+    "FUNDEXECS_FROM_EMAIL",
     // Inbound: verifies Resend email.received webhooks (app/api/webhooks/resend).
+    // Inbound is not yet native; outbound no longer touches Resend at all.
     "RESEND_WEBHOOK_SECRET",
   ],
   calendly: [

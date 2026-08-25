@@ -2,10 +2,9 @@
 // Email dispatch for the outreach / reporting family — the bulk of the
 // external-facing (Tier 2) Capital Map actions.
 //
-// Routes through lib/email.ts which chains: Gmail OAuth (GMAIL_ACCESS_TOKEN) →
-// Resend (RESEND_API_KEY) → silent fallback. The adapter is native-first:
-// Resend alone is sufficient for live sends; Gmail OAuth upgrades it to
-// "from your inbox" when connected.
+// Routes through lib/email.ts, which sends natively from the organization's
+// own Google mailbox. An org that has connected Google sends live and from its
+// real inbox; one that has not degrades to a saved draft.
 import type {
   AdapterModule,
   DispatchAdapter,
@@ -16,11 +15,7 @@ import { sendEmail, escapeHtml } from "@/lib/email";
 import { getGoogleAccessToken } from "@/lib/google-oauth";
 
 function configured(): boolean {
-  return Boolean(
-    process.env.GMAIL_ACCESS_TOKEN ||
-    process.env.GOOGLE_OAUTH_CLIENT_ID ||
-    process.env.RESEND_API_KEY,
-  );
+  return Boolean(process.env.GMAIL_ACCESS_TOKEN || process.env.GOOGLE_OAUTH_CLIENT_ID);
 }
 
 export const gmailAdapter: DispatchAdapter = {
@@ -31,11 +26,9 @@ export const gmailAdapter: DispatchAdapter = {
     const recipient = to ?? ctx.target?.name ?? "the contact";
     // The org's own vault credentials (resolved by dispatchAction) count
     // toward "configured" alongside the deploy env — so an org with its own
-    // Gmail/Resend credential sends live even on a deploy with no env creds.
+    // connected mailbox sends live even on a deploy with no env creds.
     const hasOrgCreds = Boolean(
-      ctx.secrets?.GMAIL_ACCESS_TOKEN ||
-        ctx.secrets?.GOOGLE_REFRESH_TOKEN ||
-        ctx.secrets?.RESEND_API_KEY,
+      ctx.secrets?.GMAIL_ACCESS_TOKEN || ctx.secrets?.GOOGLE_REFRESH_TOKEN,
     );
 
     if (!(ctx.connected ?? (configured() || hasOrgCreds))) {
@@ -43,7 +36,7 @@ export const gmailAdapter: DispatchAdapter = {
         ok: true,
         channel: "gmail",
         live: false,
-        detail: `Drafted email to ${recipient} (email not connected — saved as a draft to review).`,
+        detail: `Drafted email to ${recipient} (no mailbox connected — saved as a draft to review).`,
       };
     }
 
@@ -59,8 +52,8 @@ export const gmailAdapter: DispatchAdapter = {
     // Per-org Gmail identity: when the org connected Google via OAuth, mint a
     // fresh access token from its vaulted refresh token — this outlives the
     // static ~1-hour GMAIL_ACCESS_TOKEN. A stored static token still wins
-    // (explicit configuration beats derived), and any failure here just falls
-    // through to the Resend leg of the chain.
+    // (explicit configuration beats derived). Resolved here rather than by
+    // sendEmail because dispatch already holds the org's whole secret set.
     let gmailAccessToken = ctx.secrets?.GMAIL_ACCESS_TOKEN;
     if (!gmailAccessToken && ctx.secrets?.GOOGLE_REFRESH_TOKEN) {
       gmailAccessToken =
@@ -75,11 +68,8 @@ export const gmailAdapter: DispatchAdapter = {
       htmlBody: escaped
         ? `<p>${escaped.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`
         : "",
-      credentials: {
-        gmailAccessToken,
-        resendApiKey: ctx.secrets?.RESEND_API_KEY,
-        fromEmail: ctx.secrets?.RESEND_FROM_EMAIL,
-      },
+      orgId: ctx.orgId,
+      credentials: { gmailAccessToken, fromEmail: ctx.secrets?.FUNDEXECS_FROM_EMAIL },
     });
 
     if (result.ok) {

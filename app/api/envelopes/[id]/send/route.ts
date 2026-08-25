@@ -79,11 +79,12 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
     url: `${baseUrl}/sign/${r.signing_token}`,
   }));
 
-  // Send invitation emails via Gmail or Resend
+  // Send invitation emails from the org's own connected mailbox.
   if (rows.length > 0) {
     await Promise.allSettled(
       signingUrls.map(({ email, name, url }) =>
         sendEmail({
+          orgId,
           to: { name, email },
           subject: `You have been invited to sign: ${envelope.title ?? "Document"}`,
           htmlBody: buildSigningInvitationHtml({

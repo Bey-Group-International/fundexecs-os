@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   if (!meeting) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
 
   const { sent, total } = await sendMeetingInvites({
+    orgId: auth.ctx.orgId,
     // Canonical app URL so the emailed link is stable across hosts/proxies.
     origin: SITE_URL,
     roomCode: body.roomCode,

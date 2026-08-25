@@ -46,10 +46,10 @@ describe("resolveChannelCredentials", () => {
 
   it("resolves every stored key for the channel, keyed by env-var name", async () => {
     getOrgSecret.mockImplementation(async (_orgId: string, key: string) =>
-      key === "RESEND_API_KEY" ? "re_org_key" : null,
+      key === "GOOGLE_REFRESH_TOKEN" ? "rt_org_key" : null,
     );
     const result = await resolveChannelCredentials("org-1", "gmail");
-    expect(result).toEqual({ RESEND_API_KEY: "re_org_key" });
+    expect(result).toEqual({ GOOGLE_REFRESH_TOKEN: "rt_org_key" });
     expect(getOrgSecret).toHaveBeenCalledTimes(CHANNEL_SECRET_KEYS.gmail.length);
     expect(getOrgSecret).toHaveBeenCalledWith("org-1", "GMAIL_ACCESS_TOKEN");
   });
@@ -58,11 +58,11 @@ describe("resolveChannelCredentials", () => {
     const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
     getOrgSecret.mockImplementation(async (_orgId: string, key: string) => {
       if (key === "GMAIL_ACCESS_TOKEN") throw new Error("auth tag mismatch");
-      if (key === "RESEND_API_KEY") return "re_org_key";
+      if (key === "GOOGLE_REFRESH_TOKEN") return "rt_org_key";
       return null;
     });
     const result = await resolveChannelCredentials("org-1", "gmail");
-    expect(result).toEqual({ RESEND_API_KEY: "re_org_key" });
+    expect(result).toEqual({ GOOGLE_REFRESH_TOKEN: "rt_org_key" });
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });
@@ -72,12 +72,12 @@ describe("resolveChannelCredentials", () => {
     const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
     getOrgSecret.mockImplementation((_orgId: string, key: string) => {
       if (key === "GMAIL_ACCESS_TOKEN") return new Promise(() => {}); // hangs forever
-      return Promise.resolve(key === "RESEND_API_KEY" ? "re_org_key" : null);
+      return Promise.resolve(key === "GOOGLE_REFRESH_TOKEN" ? "rt_org_key" : null);
     });
     const pending = resolveChannelCredentials("org-1", "gmail");
     await jest.advanceTimersByTimeAsync(3_001);
     const result = await pending;
-    expect(result).toEqual({ RESEND_API_KEY: "re_org_key" });
+    expect(result).toEqual({ GOOGLE_REFRESH_TOKEN: "rt_org_key" });
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
     jest.useRealTimers();
