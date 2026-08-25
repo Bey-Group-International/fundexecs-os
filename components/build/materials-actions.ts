@@ -123,7 +123,7 @@ async function notifyShareRecipientsDocumentUpdated(orgId: string, docName: stri
       .filter((s) => s.recipient_email)
       .map((s) => {
         const { subject, html } = documentUpdatedEmail(orgName, docName, `${baseUrl}/dataroom/${s.token}`);
-        return sendEmail({ to: { name: "", email: s.recipient_email! }, subject, htmlBody: html });
+        return sendEmail({ orgId, to: { name: "", email: s.recipient_email! }, subject, htmlBody: html });
       }),
   );
 }
@@ -279,7 +279,9 @@ export async function createShare(formData: FormData): Promise<void> {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.fundexecs.com";
       const shareUrl = `${baseUrl}/dataroom/${(inserted as { token: string }).token}`;
       const { subject, html } = shareGrantedEmail(orgRow.name as string, label, shareUrl, expires_at);
-      void sendEmail({ to: { name: "", email: recipientEmail }, subject, htmlBody: html }).catch(() => undefined);
+      void sendEmail({ orgId: ctx.orgId, to: { name: "", email: recipientEmail }, subject, htmlBody: html }).catch(
+        () => undefined,
+      );
     }
   }
 }
@@ -409,7 +411,7 @@ async function notifyGpOnOpen(args: {
   </div>
 </body>
 </html>`;
-  await send({ to: { name: "", email: gpEmail }, subject, htmlBody: html });
+  await send({ orgId: args.orgId, to: { name: "", email: gpEmail }, subject, htmlBody: html });
 }
 
 export async function revokeShare(formData: FormData): Promise<void> {

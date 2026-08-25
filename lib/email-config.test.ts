@@ -5,7 +5,7 @@ const getOrgSecretMock = jest.fn();
 const getGoogleAccessTokenMock = jest.fn();
 
 jest.mock("@/lib/org-secrets", () => ({
-  getOrgSecret: (...args: unknown[]) => getOrgSecretMock(...args),
+  getOrgSecretBounded: (...args: unknown[]) => getOrgSecretMock(...args),
 }));
 
 jest.mock("@/lib/google-oauth", () => ({
@@ -55,10 +55,20 @@ describe("getEmailConfigStatus", () => {
   });
 
   it("flags a stored static token as short-lived", async () => {
-    getOrgSecretMock.mockResolvedValue("pasted");
+    getOrgSecretMock.mockImplementation(async (_org: string, key: string) =>
+      key === "GMAIL_ACCESS_TOKEN" ? "pasted" : null,
+    );
     const s = await getEmailConfigStatus("org1");
     expect(s.source).toBe("org-token");
     expect(s.notes.join(" ")).toMatch(/about an hour/);
+  });
+
+  it("reports the credential a real send would pick, not the stale paste", async () => {
+    // Precedence here must mirror the sender: OAuth first.
+    getGoogleAccessTokenMock.mockResolvedValue("minted");
+    getOrgSecretMock.mockResolvedValue("stale-paste");
+    const s = await getEmailConfigStatus("org1");
+    expect(s.source).toBe("org-oauth");
   });
 
   it("flags the deploy-wide token as shared and short-lived", async () => {
@@ -77,7 +87,9 @@ describe("getEmailConfigStatus", () => {
   });
 
   it("never returns a secret value", async () => {
-    getOrgSecretMock.mockResolvedValue("super-secret-token");
+    getOrgSecretMock.mockImplementation(async (_org: string, key: string) =>
+      key === "GMAIL_ACCESS_TOKEN" ? "super-secret-token" : null,
+    );
     const s = await getEmailConfigStatus("org1");
     expect(JSON.stringify(s)).not.toContain("super-secret-token");
   });

@@ -6,7 +6,12 @@
 const getOrgSecret = jest.fn();
 const vaultConfigured = jest.fn();
 
-jest.mock("@/lib/org-secrets", () => ({ getOrgSecret: (...a: unknown[]) => getOrgSecret(...a) }));
+jest.mock("@/lib/org-secrets", () => ({
+  // Only the read is stubbed — the timeout wrapper is real, so the timeout
+  // tests below exercise the actual deadline logic.
+  ...jest.requireActual("@/lib/org-secrets"),
+  getOrgSecret: (...a: unknown[]) => getOrgSecret(...a),
+}));
 jest.mock("@/lib/vault", () => ({ vaultConfigured: () => vaultConfigured() }));
 
 import { resolveChannelCredentials, CHANNEL_SECRET_KEYS, ALL_SECRET_KEYS } from "./credentials";

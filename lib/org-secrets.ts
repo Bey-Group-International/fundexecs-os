@@ -34,3 +34,42 @@ export async function getOrgSecret(
     authTag: data.auth_tag,
   });
 }
+
+// The Supabase client has no default request timeout, so a hung vault read
+// holds its caller open forever — and an unsettled promise is not something a
+// try/catch can rescue. Every read on a request path must be bounded.
+export const VAULT_READ_TIMEOUT_MS = 3_000;
+
+export function withVaultTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} vault read timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/**
+ * `getOrgSecret` under a deadline. A timeout resolves to null — the same shape
+ * as "no secret stored" — so a slow vault degrades a send to its unconnected
+ * path instead of hanging the request that triggered it.
+ */
+export async function getOrgSecretBounded(
+  orgId: string,
+  provider: string,
+  ms: number = VAULT_READ_TIMEOUT_MS,
+): Promise<string | null> {
+  try {
+    return await withVaultTimeout(getOrgSecret(orgId, provider), ms, provider);
+  } catch (err) {
+    console.warn(`[org-secrets] ${provider} read failed for org ${orgId}:`, err);
+    return null;
+  }
+}

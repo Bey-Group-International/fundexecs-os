@@ -89,19 +89,43 @@ describe("gmail adapter per-org credential gate", () => {
     );
   });
 
-  it("a static GMAIL_ACCESS_TOKEN wins over minting from the refresh token", async () => {
+  it("minting wins over a static GMAIL_ACCESS_TOKEN, which expires within the hour", async () => {
+    getGoogleAccessToken.mockResolvedValue("minted-at");
+    await gmailAdapter.dispatch(
+      ctx({
+        connected: true,
+        secrets: { GMAIL_ACCESS_TOKEN: "stale-static-at", GOOGLE_REFRESH_TOKEN: "rt-org" },
+      }),
+    );
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: expect.objectContaining({ gmailAccessToken: "minted-at" }),
+      }),
+    );
+  });
+
+  it("falls back to the static token when minting fails", async () => {
+    getGoogleAccessToken.mockResolvedValue(null);
     await gmailAdapter.dispatch(
       ctx({
         connected: true,
         secrets: { GMAIL_ACCESS_TOKEN: "static-at", GOOGLE_REFRESH_TOKEN: "rt-org" },
       }),
     );
-    expect(getGoogleAccessToken).not.toHaveBeenCalled();
     expect(sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         credentials: expect.objectContaining({ gmailAccessToken: "static-at" }),
       }),
     );
+  });
+
+  it("drafts rather than attempting a doomed send when no credential exists", async () => {
+    // An OAuth client id on the deploy enables "Connect Google"; it is not
+    // evidence that THIS org connected anything.
+    process.env.GOOGLE_OAUTH_CLIENT_ID = "client";
+    const result = await gmailAdapter.dispatch(ctx({ secrets: {} }));
+    expect(result).toMatchObject({ ok: true, live: false });
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it("hands the send off with orgId when minting fails, letting the sender retry the lookup", async () => {
