@@ -48,6 +48,29 @@ export function isPersistedTurnId(id: string): boolean {
 }
 
 /**
+ * Resolve the single row a client-minted turn refers to: the most recent one in
+ * the session whose text matches. Matching on content alone would address every
+ * repeat of the same question — asking "what changed?" twice and then deleting
+ * one of them would silently delete both — so the match is narrowed to one id
+ * before anything is written.
+ */
+async function findRowIdByContent(
+  supabase: SupabaseClient<Database>,
+  sessionId: string,
+  content: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("session_messages")
+    .select("id")
+    .eq("session_id", sessionId)
+    .eq("content", content)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return data[0].id;
+}
+
+/**
  * Rewrite one persisted turn. Turns created in the current session carry a
  * client-minted id (no row to address yet), so the caller may instead pass the
  * exact text it is replacing and we match on that within the session. Returns
@@ -58,14 +81,16 @@ export async function updateSessionMessage(
   supabase: SupabaseClient<Database>,
   args: { sessionId: string; turnId: string; previousContent: string; content: string },
 ): Promise<number> {
-  const query = supabase
+  const id = isPersistedTurnId(args.turnId)
+    ? args.turnId
+    : await findRowIdByContent(supabase, args.sessionId, args.previousContent);
+  if (!id) return 0;
+  const { data, error } = await supabase
     .from("session_messages")
     .update({ content: args.content })
-    .eq("session_id", args.sessionId);
-  const { data, error } = await (isPersistedTurnId(args.turnId)
-    ? query.eq("id", args.turnId)
-    : query.eq("content", args.previousContent)
-  ).select("id");
+    .eq("session_id", args.sessionId)
+    .eq("id", id)
+    .select("id");
   if (error || !data) return 0;
   return data.length;
 }
@@ -78,11 +103,16 @@ export async function deleteSessionMessage(
   supabase: SupabaseClient<Database>,
   args: { sessionId: string; turnId: string; content: string },
 ): Promise<number> {
-  const query = supabase.from("session_messages").delete().eq("session_id", args.sessionId);
-  const { data, error } = await (isPersistedTurnId(args.turnId)
-    ? query.eq("id", args.turnId)
-    : query.eq("content", args.content)
-  ).select("id");
+  const id = isPersistedTurnId(args.turnId)
+    ? args.turnId
+    : await findRowIdByContent(supabase, args.sessionId, args.content);
+  if (!id) return 0;
+  const { data, error } = await supabase
+    .from("session_messages")
+    .delete()
+    .eq("session_id", args.sessionId)
+    .eq("id", id)
+    .select("id");
   if (error || !data) return 0;
   return data.length;
 }
