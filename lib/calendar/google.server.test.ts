@@ -256,3 +256,122 @@ describe("applyEvents", () => {
     expect(client.calls.filter((c) => c.op === "upsert")).toHaveLength(3);
   });
 });
+
+describe("applyEvents — echoes of our own writes", () => {
+  /**
+   * @param owned  what live_meetings says: meetingId -> external_calendar_event_id
+   */
+  function clientWith(owned: Record<string, string | null>, upserts: unknown[][]) {
+    return {
+      from: (table: string) => {
+        if (table === "live_meetings") {
+          return {
+            select: () => ({
+              in: async (_col: string, ids: string[]) => ({
+                data: ids.filter((id) => id in owned).map((id) => ({ id, external_calendar_event_id: owned[id] })),
+                error: null,
+              }),
+            }),
+          };
+        }
+        return {
+          delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
+          upsert: async (rows: unknown[]) => {
+            upserts.push(rows);
+            return { error: null };
+          },
+        };
+      },
+    } as never;
+  }
+
+  const ourEvent = {
+    id: "ours",
+    status: "confirmed",
+    summary: "Q3 LP update",
+    start: { dateTime: "2026-09-01T15:00:00Z" },
+    end: { dateTime: "2026-09-01T16:00:00Z" },
+    extendedProperties: { private: { fundexecsMeetingId: "mtg-1" } },
+  };
+
+  const theirEvent = {
+    id: "theirs",
+    status: "confirmed",
+    summary: "Dentist",
+    start: { dateTime: "2026-09-01T09:00:00Z" },
+    end: { dateTime: "2026-09-01T10:00:00Z" },
+  };
+
+  function stored(upserts: unknown[][]): string[] {
+    return (upserts.flat() as Array<{ google_event_id: string }>).map((r) => r.google_event_id);
+  }
+
+  it("does not store an event this app pushed", async () => {
+    // Without this, every FundExecs meeting synced to Google returns as a
+    // second, "external" copy of itself — and that copy blocks the very time
+    // the meeting already occupies.
+    const upserts: unknown[][] = [];
+    const summary = await applyEvents(clientWith({ "mtg-1": "ours" }, upserts), "cal-1", "user-1", [
+      ourEvent,
+      theirEvent,
+    ]);
+
+    expect(summary.skipped).toBe(1);
+    expect(summary.upserted).toBe(1);
+    expect(stored(upserts)).toEqual(["theirs"]);
+  });
+
+  it("stores a foreign event that merely carries our marker", async () => {
+    // extendedProperties.private is writable by any integration with access to
+    // the calendar. Trusting the marker alone would let another app hide busy
+    // time from availability and invite a double-booking.
+    const upserts: unknown[][] = [];
+    const impostor = { ...theirEvent, extendedProperties: { private: { fundexecsMeetingId: "mtg-1" } } };
+
+    const summary = await applyEvents(clientWith({ "mtg-1": "ours" }, upserts), "cal-1", "user-1", [impostor]);
+
+    expect(summary.skipped).toBe(0);
+    expect(stored(upserts)).toEqual(["theirs"]);
+  });
+
+  it("stores a marked event naming a meeting that was never synced", async () => {
+    const upserts: unknown[][] = [];
+    const summary = await applyEvents(clientWith({ "mtg-1": null }, upserts), "cal-1", "user-1", [ourEvent]);
+
+    expect(summary.skipped).toBe(0);
+    expect(stored(upserts)).toEqual(["ours"]);
+  });
+
+  it("stores a marked event naming a meeting that does not exist", async () => {
+    const upserts: unknown[][] = [];
+    const summary = await applyEvents(clientWith({}, upserts), "cal-1", "user-1", [ourEvent]);
+
+    expect(summary.skipped).toBe(0);
+    expect(stored(upserts)).toEqual(["ours"]);
+  });
+
+  it("keeps busy time when ownership cannot be confirmed at all", async () => {
+    // A failed lookup must not hide anything: a duplicate is cosmetic, a
+    // hidden meeting is a double-booking.
+    const upserts: unknown[][] = [];
+    const brokenClient = {
+      from: (table: string) => {
+        if (table === "live_meetings") {
+          return { select: () => ({ in: async () => ({ data: null, error: { message: "boom" } }) }) };
+        }
+        return {
+          delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
+          upsert: async (rows: unknown[]) => {
+            upserts.push(rows);
+            return { error: null };
+          },
+        };
+      },
+    } as never;
+
+    const summary = await applyEvents(brokenClient, "cal-1", "user-1", [ourEvent]);
+
+    expect(summary.skipped).toBe(0);
+    expect(stored(upserts)).toEqual(["ours"]);
+  });
+});

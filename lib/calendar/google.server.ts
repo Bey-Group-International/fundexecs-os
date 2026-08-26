@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { decryptSecret, encryptSecret } from "@/lib/vault";
+import { markerMeetingId } from "@/lib/calendar/google-write";
 import { refreshAccessToken } from "@/lib/google-oauth";
 import {
   SYNC_PAGE_SIZE,
@@ -215,6 +216,45 @@ export interface CalendarSyncSummary {
  * deletion by re-sending the event with `status: "cancelled"`, and keeping
  * those is how a cancelled meeting stays on a calendar forever.
  */
+/**
+ * Of the events claiming to be ours, the ones we actually wrote.
+ *
+ * Ownership is the meeting row pointing back at the same Google event id. A
+ * marker that names a meeting we never synced to that event is somebody else's
+ * event wearing our key.
+ *
+ * Unconfirmable means NOT ours, deliberately. Wrongly storing an event shows a
+ * duplicate, which is cosmetic; wrongly skipping one hides busy time, which
+ * lets a member be double-booked.
+ */
+async function confirmOwnedEvents(client: Client, claimed: Map<string, string>): Promise<Set<string>> {
+  const owned = new Set<string>();
+  if (!claimed.size) return owned;
+
+  const meetingIds = [...new Set(claimed.values())];
+  const { data, error } = await client
+    .from("live_meetings")
+    .select("id, external_calendar_event_id")
+    .in("id", meetingIds);
+
+  if (error || !data) {
+    console.error("[google-calendar] could not confirm event ownership", error?.message);
+    return owned;
+  }
+
+  const eventIdByMeeting = new Map(
+    (data as Array<{ id: string; external_calendar_event_id: string | null }>).map((r) => [
+      r.id,
+      r.external_calendar_event_id,
+    ]),
+  );
+
+  for (const [googleEventId, meetingId] of claimed) {
+    if (eventIdByMeeting.get(meetingId) === googleEventId) owned.add(googleEventId);
+  }
+  return owned;
+}
+
 export async function applyEvents(
   client: Client,
   calendarRowId: string,
@@ -226,9 +266,31 @@ export async function applyEvents(
   const tombstones: string[] = [];
   const rows: Array<Record<string, unknown>> = [];
 
+  // Which marked events are genuinely ours, resolved once for the whole page.
+  const claimed = new Map<string, string>();
+  for (const event of events) {
+    if (isTombstone(event)) continue;
+    const meetingId = markerMeetingId(event);
+    if (meetingId && event.id) claimed.set(event.id, meetingId);
+  }
+  const ours = await confirmOwnedEvents(client, claimed);
+
   for (const event of events) {
     if (isTombstone(event)) {
       if (event.id) tombstones.push(event.id);
+      continue;
+    }
+    // Our own writes come straight back down this pipe. Storing them would show
+    // every pushed meeting twice — once as itself and once as an "external"
+    // event — and the copy would then count against the member's availability,
+    // so every FundExecs meeting would block the time it already occupies.
+    //
+    // The marker alone is not proof: extendedProperties.private is writable by
+    // any integration with access to the calendar, so a foreign event carrying
+    // our key would be hidden from availability and invite a double-booking.
+    // Only an event this app recorded against that meeting is skipped.
+    if (event.id && ours.has(event.id)) {
+      summary.skipped++;
       continue;
     }
     const normalized = normalizeEvent(event);

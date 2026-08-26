@@ -24,10 +24,10 @@ beforeEach(() => {
 });
 
 describe("GET /api/meetings/calendar-status", () => {
-  it("never claims provider sync is available", async () => {
-    // Nothing writes to Google Calendar or Outlook today — syncMeetingExternal
-    // mints a local mirror id. This flag is the panel's only licence to stop
-    // disclaiming, so it must stay false until an adapter really exists.
+  it("does not claim provider sync without a writable calendar", async () => {
+    // A Gmail connection is not a calendar this app can write to. The flag is
+    // the panel's only licence to stop disclaiming, so it stays false until a
+    // connection AND a calendar the member can write to both resolve.
     from.mockReturnValue(builder({ maybeSingle: { data: { account_label: "ops@fund.test", status: "connected" } } }));
     const res = await GET();
     expect(res.status).toBe(200);

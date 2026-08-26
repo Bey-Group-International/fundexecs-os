@@ -16,6 +16,7 @@
 import { NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { writeTargetFor } from "@/lib/calendar/google-write.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +28,9 @@ export interface CalendarStatus {
   googleAccountLabel: string | null;
   /**
    * Whether a real two-way calendar provider is wired up. Hard-coded false:
-   * flip this when an adapter actually writes to a provider, and the panel
-   * stops disclaiming on its own.
+   * True once this member has a Google calendar this app can actually write
+   * to — a connection plus a calendar they own or can write to. Read-only
+   * access would 403 on every push, so it does not count.
    */
   providerSyncAvailable: boolean;
   /** Meetings currently flagged to mirror externally, for context. */
@@ -41,7 +43,7 @@ export async function GET() {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const supabase = await createServerClient();
-    const [connection, synced] = await Promise.all([
+    const [connection, synced, writeTarget] = await Promise.all([
       supabase
         .from("integration_connections")
         .select("account_label, status")
@@ -54,6 +56,9 @@ export async function GET() {
         .eq("organization_id", auth.ctx.orgId)
         .is("deleted_at", null)
         .eq("external_calendar_sync_enabled", true),
+      // Reuses the same resolution the push path uses, so the panel cannot
+      // claim a capability the writer does not have.
+      writeTargetFor(supabase, auth.ctx.userId).catch(() => null),
     ]);
 
     const row = connection.data as { account_label: string | null; status: string } | null;
@@ -62,7 +67,7 @@ export async function GET() {
     const status: CalendarStatus = {
       googleAccountConnected: connected,
       googleAccountLabel: connected ? row?.account_label ?? null : null,
-      providerSyncAvailable: false,
+      providerSyncAvailable: Boolean(writeTarget),
       meetingsWithSyncEnabled: synced.count ?? 0,
     };
     return NextResponse.json(status);
