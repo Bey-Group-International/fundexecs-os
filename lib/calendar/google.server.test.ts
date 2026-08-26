@@ -256,3 +256,44 @@ describe("applyEvents", () => {
     expect(client.calls.filter((c) => c.op === "upsert")).toHaveLength(3);
   });
 });
+
+describe("applyEvents — echoes of our own writes", () => {
+  it("does not store an event this app pushed", async () => {
+    // Without this, every FundExecs meeting synced to Google returns as a
+    // second, "external" copy of itself — and that copy blocks the very time
+    // the meeting already occupies.
+    const upserts: unknown[][] = [];
+    const client = {
+      from: () => ({
+        delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
+        upsert: async (rows: unknown[]) => {
+          upserts.push(rows);
+          return { error: null };
+        },
+      }),
+    } as never;
+
+    const summary = await applyEvents(client, "cal-1", "user-1", [
+      {
+        id: "ours",
+        status: "confirmed",
+        summary: "Q3 LP update",
+        start: { dateTime: "2026-09-01T15:00:00Z" },
+        end: { dateTime: "2026-09-01T16:00:00Z" },
+        extendedProperties: { private: { fundexecsMeetingId: "mtg-1" } },
+      },
+      {
+        id: "theirs",
+        status: "confirmed",
+        summary: "Dentist",
+        start: { dateTime: "2026-09-01T09:00:00Z" },
+        end: { dateTime: "2026-09-01T10:00:00Z" },
+      },
+    ]);
+
+    expect(summary.skipped).toBe(1);
+    expect(summary.upserted).toBe(1);
+    const stored = upserts.flat() as Array<{ google_event_id: string }>;
+    expect(stored.map((r) => r.google_event_id)).toEqual(["theirs"]);
+  });
+});

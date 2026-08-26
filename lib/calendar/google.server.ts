@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { decryptSecret, encryptSecret } from "@/lib/vault";
+import { markerMeetingId } from "@/lib/calendar/google-write";
 import { refreshAccessToken } from "@/lib/google-oauth";
 import {
   SYNC_PAGE_SIZE,
@@ -229,6 +230,14 @@ export async function applyEvents(
   for (const event of events) {
     if (isTombstone(event)) {
       if (event.id) tombstones.push(event.id);
+      continue;
+    }
+    // Our own writes come straight back down this pipe. Storing them would show
+    // every pushed meeting twice — once as itself and once as an "external"
+    // event — and the copy would then count against the member's availability,
+    // so every FundExecs meeting would block the time it already occupies.
+    if (markerMeetingId(event)) {
+      summary.skipped++;
       continue;
     }
     const normalized = normalizeEvent(event);

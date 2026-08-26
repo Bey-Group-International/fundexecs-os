@@ -3,6 +3,8 @@ import type { Json, LiveMeeting } from "@/lib/supabase/database.types";
 import { writeDashboardAudit } from "@/lib/dashboard/audit";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { nextExternalSyncStatus, type ExternalSyncStatus } from "@/lib/meetings/schedule";
+import { pushMeetingToGoogle } from "@/lib/calendar/google-write.server";
+import type { WritableMeeting } from "@/lib/calendar/google-write";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -322,9 +324,12 @@ export async function saveScheduledMeeting(
 }
 
 /**
- * Attempt (or simulate) a third-party calendar sync for a saved meeting.
- * Runs only after the native meeting exists. On failure it records the error
- * and flips the status to sync_failed without touching the native meeting.
+ * Push a saved meeting onto the member's connected Google calendar.
+ *
+ * This used to mint a placeholder id and mark the meeting "synced" without
+ * contacting anybody, so the UI reported a sync that had never happened. It now
+ * performs the real write; the mapping and the create/update/delete decision
+ * live in lib/calendar/google-write.ts.
  */
 export async function syncMeetingExternal(
   supabase: ServerClient,
@@ -333,60 +338,41 @@ export async function syncMeetingExternal(
 ): Promise<{ ok: boolean; status: ExternalSyncStatus; error?: string }> {
   const before = await supabase
     .from("live_meetings")
-    .select("id, external_calendar_sync_enabled, external_calendar_provider, external_calendar_event_id, is_draft, locked_at")
+    .select(
+      "id, title, description, location, meeting_url, objective, agenda, scheduled_at, duration_minutes, timezone, calendar_visibility, reminder_minutes, attendees, is_draft, locked_at, deleted_at, external_calendar_provider, external_calendar_event_id, external_calendar_sync_enabled",
+    )
     .eq("id", meetingId)
     .eq("organization_id", actor.orgId)
     .maybeSingle();
   if (before.error) throw new Error(before.error.message);
   if (!before.data) throw new Error("Meeting not found");
 
-  const meeting = before.data as unknown as Pick<
-    LiveMeeting,
-    "id" | "external_calendar_sync_enabled" | "external_calendar_provider" | "external_calendar_event_id" | "is_draft" | "locked_at"
-  >;
+  const meeting = before.data as unknown as WritableMeeting & { is_draft: boolean | null; locked_at: string | null };
 
+  // A meeting still being written has nothing worth publishing, and once guests
+  // are attached a premature push lands in other people's inboxes.
   if (meeting.is_draft || !meeting.locked_at) {
     return { ok: false, status: "sync_pending", error: "Meeting must be saved before it can sync externally." };
   }
-  if (!meeting.external_calendar_provider) {
-    return { ok: false, status: "not_connected", error: "No third-party calendar is connected." };
-  }
-  if (!meeting.external_calendar_sync_enabled) {
-    return { ok: false, status: "sync_off", error: "Third-party sync is turned off for this meeting." };
-  }
 
-  // Mark pending, then perform the provider write. Actual provider dispatch is
-  // handled by the integrations layer; here we mint a mirror event id so the
-  // native record reflects a successful sync while remaining the source of truth.
-  const eventId = meeting.external_calendar_event_id ?? `ext_${crypto.randomUUID()}`;
-  const { error } = await supabase
-    .from("live_meetings")
-    .update({
-      external_calendar_sync_status: "synced",
-      external_calendar_event_id: eventId,
-      external_calendar_last_error: null,
-    } as never)
-    .eq("id", meetingId)
-    .eq("organization_id", actor.orgId);
-  if (error) {
-    await supabase
-      .from("live_meetings")
-      .update({ external_calendar_sync_status: "sync_failed", external_calendar_last_error: error.message } as never)
-      .eq("id", meetingId)
-      .eq("organization_id", actor.orgId);
-    return { ok: false, status: "sync_failed", error: error.message };
-  }
+  const result = await pushMeetingToGoogle(supabase, meeting, actor.userId);
 
   await writeDashboardAudit({
     organizationId: actor.orgId,
     principalId: actor.userId,
-    action: "meeting.external_synced",
+    action: result.ok ? "meeting.external_synced" : "meeting.external_sync_failed",
     entityType: "live_meeting",
     entityId: meetingId,
-    afterState: { external_calendar_event_id: eventId, external_calendar_sync_status: "synced" } as Json,
+    afterState: {
+      external_calendar_event_id: result.eventId,
+      external_calendar_sync_status: result.status,
+      action: result.action,
+    } as Json,
   });
 
-  return { ok: true, status: "synced" };
+  return result.ok
+    ? { ok: true, status: result.status as ExternalSyncStatus }
+    : { ok: false, status: result.status as ExternalSyncStatus, error: result.error };
 }
 
 export async function updateMeeting(

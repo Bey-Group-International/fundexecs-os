@@ -48,6 +48,8 @@ export interface GoogleEvent {
   recurringEventId?: string;
   etag?: string;
   updated?: string;
+  /** Carries our marker on events this app wrote. See google-write.ts. */
+  extendedProperties?: { private?: Record<string, string> };
 }
 
 export interface NormalizedCalendar {
