@@ -532,3 +532,79 @@ describe("toIcsUtc", () => {
     expect(toIcsUtc(new Date("2026-09-02T14:05:09Z"))).toBe("20260902T140509Z");
   });
 });
+
+// An anonymous visitor on a public booking page supplies invitee_name and
+// invitee_notes, which scheduling-service.ts interpolates into the meeting's
+// title and description. Those reach the host's published feed, and from there
+// the host's real calendar client. So hostile text in a TEXT value is reachable
+// by someone with no account at all.
+describe("escapeText refuses to emit a raw line break", () => {
+  it("escapes a bare CR, not just LF", () => {
+    expect(escapeText("Board call\rX-INJECTED:yes")).toBe("Board call\\nX-INJECTED:yes");
+  });
+
+  it("escapes CRLF as one break rather than leaving the CR behind", () => {
+    expect(escapeText("a\r\nb")).toBe("a\\nb");
+  });
+
+  it("still escapes a lone LF", () => {
+    expect(escapeText("a\nb")).toBe("a\\nb");
+  });
+
+  it("drops control characters that RFC 5545 TEXT does not admit", () => {
+    expect(escapeText("a\u0000b\u0007c\u001fd")).toBe("abcd");
+  });
+
+  it("keeps the tab, which TEXT does admit", () => {
+    expect(escapeText("a\tb")).toBe("a\tb");
+  });
+});
+
+describe("a hostile meeting title cannot inject iCalendar content", () => {
+  const build = (summary: string) =>
+    buildIcs(
+      [{
+        uid: "u@t",
+        startIso: "2026-09-01T09:00:00.000Z",
+        endIso: "2026-09-01T10:00:00.000Z",
+        summary,
+        description: null,
+        location: null,
+        url: null,
+        sequence: 0,
+      }],
+      { calendarName: "t" },
+    );
+
+  it("emits no CR outside the CRLF line separators", () => {
+    const body = build("Board call\rX-INJECTED:yes");
+    expect(/\r(?!\n)/.test(body)).toBe(false);
+  });
+
+  it("round-trips the whole title instead of splitting it", () => {
+    const body = build("Board call\rX-INJECTED:yes");
+    const parsed = parseIcs(body, {
+      windowStart: new Date("2026-08-01T00:00:00.000Z"),
+      windowEnd: new Date("2026-10-01T00:00:00.000Z"),
+    });
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].summary).toBe("Board call\nX-INJECTED:yes");
+  });
+
+  it("cannot close the VEVENT early and start another", () => {
+    const body = build("Board call\rEND:VEVENT\rBEGIN:VEVENT\rUID:evil@t");
+
+    // The payload survives as inert text inside the SUMMARY value, so counting
+    // substrings would find it there. What matters is structure: no *line*
+    // begins a second component, and the parser sees exactly one event.
+    const starts = unfoldLines(body).filter((l) => l.trim() === "BEGIN:VEVENT");
+    expect(starts).toHaveLength(1);
+
+    const parsed = parseIcs(body, {
+      windowStart: new Date("2026-08-01T00:00:00.000Z"),
+      windowEnd: new Date("2026-10-01T00:00:00.000Z"),
+    });
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].uid).toBe("u@t");
+  });
+});
