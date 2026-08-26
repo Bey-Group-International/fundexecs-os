@@ -51,6 +51,23 @@ import {
 } from "@/lib/meetings/calendar";
 import { defaultBlockEnd } from "@/lib/meetings/blocks";
 import { actionForKey, SHORTCUT_HELP } from "@/lib/meetings/calendar-shortcuts";
+import {
+  MIN_DURATION_MINUTES,
+  canDragMeeting,
+  columnFromOffset,
+  describeSpan,
+  durationOf,
+  drawsOwnMeeting,
+  isNoOp,
+  minuteFromOffset,
+  needsDragVisitor,
+  movedEnough,
+  previewFor,
+  previewStartIso,
+  type DragMode,
+  type DragOrigin,
+  type DragPreview,
+} from "@/lib/meetings/calendar-drag";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
@@ -134,6 +151,7 @@ export function MeetingsCalendar({
   const [filter, setFilter] = useState<CalendarFilter>(emptyFilter);
   const [filterOpen, setFilterOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [detail, setDetail] = useState<CalendarMeeting | null>(null);
   const [editing, setEditing] = useState<CalendarMeeting | null>(null);
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
@@ -299,6 +317,61 @@ export function MeetingsCalendar({
     await refreshBlocks();
   }
 
+  // `refresh` is redeclared each render; hold it by ref so the drag handler
+  // below stays stable instead of being rebuilt on every tick of the clock.
+  const refreshRef = useRef(refresh);
+  useEffect(() => { refreshRef.current = refresh; });
+
+  // ── Moving a meeting by dragging it ───────────────────────────────────────
+  //
+  // Optimistic: the block stays where it was dropped while the request is in
+  // flight, because a meeting that snaps back for half a second and then
+  // returns reads as a bug. A failure puts it back and says why.
+  const moveMeeting = useCallback(async (m: CalendarMeeting, startIso: string, durationMinutes: number) => {
+    const before = { scheduled_at: m.scheduled_at, duration_minutes: m.duration_minutes };
+    const applyLocal = (next: { scheduled_at: string | null; duration_minutes: number | null }) =>
+      setMeetings((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...next } : x)));
+
+    applyLocal({ scheduled_at: startIso, duration_minutes: durationMinutes });
+
+    async function send(allowConflict: boolean) {
+      return fetch(`/api/meetings/${m.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: startIso, durationMinutes, ...(allowConflict ? { allowConflict: true } : {}) }),
+      });
+    }
+
+    try {
+      let res = await send(false);
+
+      if (res.status === 409) {
+        // The API refuses a clashing reschedule unless told otherwise. Ask,
+        // rather than either silently double-booking or silently refusing.
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        const proceed = window.confirm(`${body.error ?? "That time conflicts with something else."}\n\nMove it anyway?`);
+        if (!proceed) {
+          applyLocal(before);
+          return;
+        }
+        res = await send(true);
+      }
+
+      if (!res.ok) {
+        applyLocal(before);
+        setMoveError("Could not move that meeting. It has been put back.");
+        return;
+      }
+      setMoveError(null);
+      // Re-read rather than trusting the local guess: the server clamps the
+      // duration and may have touched sync status on the way through.
+      await refreshRef.current();
+    } catch {
+      applyLocal(before);
+      setMoveError("Could not reach the server. The meeting has been put back.");
+    }
+  }, []);
+
   // The window the current view covers. Month and week views spill into
   // neighbouring months, so this widens rather than guessing from `anchor`.
   const windowRange = useMemo(() => {
@@ -380,6 +453,7 @@ export function MeetingsCalendar({
       setAnchor(startOfDay(d));
       setView("day");
     },
+    onMoveMeeting: moveMeeting,
   };
 
   return (
@@ -397,6 +471,22 @@ export function MeetingsCalendar({
         setFilterOpen={setFilterOpen}
         onShortcuts={() => setShortcutsOpen(true)}
       />
+
+      {moveError ? (
+        <div
+          role="status"
+          className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[var(--status-danger)]/40 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--fg-secondary)]"
+        >
+          <span>{moveError}</span>
+          <button
+            type="button"
+            onClick={() => setMoveError(null)}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)]"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       <div className="grid gap-6 pb-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Calendar surface */}
@@ -877,6 +967,8 @@ interface SharedViewProps {
   externalEvents: ExternalEvent[];
   layersById: Map<string, CalendarLayer>;
   onExpandDay: (d: Date) => void;
+  /** Commit a drag. Absent in views that cannot express one (month, agenda). */
+  onMoveMeeting?: (m: CalendarMeeting, startIso: string, durationMinutes: number) => void;
 }
 
 function MonthView({ anchor, meetings, blocks, externalEvents, layersById, today, presence, onSelectEvent, onSelectBlock, onSelectSlot, onExpandDay }: SharedViewProps & { anchor: Date }) {
@@ -1013,14 +1105,131 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
 }
 
 // ── Week / Day time grid ────────────────────────────────────────────────────
-function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot }: SharedViewProps & { days: Date[] }) {
+function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot, onMoveMeeting }: SharedViewProps & { days: Date[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const columnsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = DAY_SCROLL_HOUR * HOUR_PX;
   }, [days.length]);
 
   const hours = Array.from({ length: 24 }, (_, h) => h);
   const nowMin = new Date(now).getHours() * 60 + new Date(now).getMinutes();
+
+  // ── Drag to move / resize ─────────────────────────────────────────────────
+  //
+  // A press is not yet a drag: the origin is recorded here and only promoted
+  // once the pointer has travelled far enough, so a click still opens the
+  // event. Everything about what the gesture MEANS lives in calendar-drag.ts;
+  // this owns pixels and pointer events only.
+  const pending = useRef<{ origin: DragOrigin; meeting: CalendarMeeting; clientX: number; clientY: number } | null>(null);
+  const [drag, setDrag] = useState<{ origin: DragOrigin; meeting: CalendarMeeting; preview: DragPreview } | null>(null);
+  const dragRef = useRef(drag);
+  useEffect(() => { dragRef.current = drag; }, [drag]);
+  // A completed drag still produces a click, and because pointerdown and
+  // pointerup land on different elements the browser retargets it to their
+  // common ancestor — the day column — which would open the "New meeting /
+  // Block time" menu on every drop. This swallows exactly that one click.
+  const swallowClick = useRef(false);
+
+  const pointerToGrid = useCallback((clientX: number, clientY: number) => {
+    const el = columnsRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return {
+      minute: minuteFromOffset(clientY - rect.top, HOUR_PX),
+      dayIndex: columnFromOffset(clientX - rect.left, rect.width / Math.max(1, days.length), days.length),
+    };
+  }, [days.length]);
+
+  const beginDrag = useCallback((e: React.PointerEvent, m: CalendarMeeting, mode: DragMode, dayIndex: number) => {
+    if (!onMoveMeeting || !canDragMeeting(m)) return;
+    // Left button only: a right-click is a context menu, and a two-finger
+    // gesture on a trackpad is a scroll.
+    if (e.button !== 0) return;
+
+    const [startMinute, endMinute] = eventSpanMinutes(m);
+    const at = pointerToGrid(e.clientX, e.clientY);
+    pending.current = {
+      meeting: m,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      origin: {
+        meetingId: m.id,
+        mode,
+        startMinute,
+        endMinute,
+        dayIndex,
+        grabOffsetMinute: at ? Math.max(0, at.minute - startMinute) : 0,
+      },
+    };
+  }, [onMoveMeeting, pointerToGrid]);
+
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      const p = pending.current;
+      if (!p) return;
+      if (!dragRef.current && !movedEnough(e.clientX - p.clientX, e.clientY - p.clientY)) return;
+
+      const at = pointerToGrid(e.clientX, e.clientY);
+      if (!at) return;
+      // Once dragging, stop the grid from selecting text under the cursor.
+      e.preventDefault();
+      setDrag({
+        origin: p.origin,
+        meeting: p.meeting,
+        preview: previewFor(p.origin, at, { dayCount: days.length }),
+      });
+    }
+
+    function onUp() {
+      const active = dragRef.current;
+      pending.current = null;
+      if (!active) return;
+      swallowClick.current = true;
+      setDrag(null);
+      if (isNoOp(active.origin, active.preview)) return;
+      const day = days[active.preview.dayIndex] ?? days[active.origin.dayIndex];
+      if (!day) return;
+      onMoveMeeting?.(
+        active.meeting,
+        previewStartIso(day, active.preview),
+        Math.max(MIN_DURATION_MINUTES, durationOf(active.preview)),
+      );
+    }
+
+    function onCancel() {
+      // Escape, or the browser taking the pointer away — abandon, do not save.
+      // The pointer is still down, so a click is still coming; without this it
+      // lands on the day column and opens the "New meeting / Block time" menu,
+      // which is the opposite of cancelling.
+      if (dragRef.current) swallowClick.current = true;
+      pending.current = null;
+      setDrag(null);
+    }
+
+    // Any new interaction clears a suppression left armed by a drop that never
+    // produced its click, so a stale flag cannot eat an unrelated later click.
+    function onDown() {
+      swallowClick.current = false;
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [days, onMoveMeeting, pointerToGrid]);
 
   return (
     <div ref={scrollRef} className="max-h-[70vh] overflow-y-auto">
@@ -1055,9 +1264,24 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
           ))}
         </div>
 
-        {days.map((d) => {
+        <div ref={columnsRef} className="flex flex-1">
+        {days.map((d, dayIndex) => {
           const evs = eventsForDay(meetings, d);
           const layout = layoutDayEvents(evs);
+          // A meeting only appears in the column of the day it is scheduled on,
+          // so dragging it to another day hid it in the old column and never
+          // drew it in the new one — it simply vanished until dropped. Inject it
+          // into whichever column the pointer is over.
+          const visitor =
+            drag &&
+            needsDragVisitor({
+              previewDayIndex: drag.preview.dayIndex,
+              dayIndex,
+              columnContainsMeeting: evs.some((e) => e.id === drag.meeting.id),
+            })
+              ? drag.meeting
+              : null;
+          const rendered = visitor ? [...evs, visitor] : evs;
           const dayBlocks = blocksForDay(blocks, d);
           const isToday = isSameDay(d, today);
           return (
@@ -1066,6 +1290,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
               className="relative flex-1 border-l border-[var(--line)]"
               style={{ height: 24 * HOUR_PX }}
               onClick={(e) => {
+                if (swallowClick.current) { swallowClick.current = false; return; }
                 const rect = e.currentTarget.getBoundingClientRect();
                 const y = e.clientY - rect.top;
                 let minutes = Math.round((y / HOUR_PX) * 60 / 30) * 30;
@@ -1144,27 +1369,49 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
               ) : null}
 
               {/* Events */}
-              {evs.map((m) => {
-                const [startMin, endMin] = eventSpanMinutes(m);
+              {rendered.map((m) => {
+                const [rawStart, rawEnd] = eventSpanMinutes(m);
+                // While this event is being dragged it follows the pointer, and
+                // is drawn in the column the pointer is over rather than its own.
+                const dragging = drag?.origin.meetingId === m.id;
+                const inThisColumn = dragging && drawsOwnMeeting({ previewDayIndex: drag!.preview.dayIndex, dayIndex });
+                if (dragging && !inThisColumn) return null;
+                const startMin = inThisColumn ? drag!.preview.startMinute : rawStart;
+                const endMin = inThisColumn ? drag!.preview.endMinute : rawEnd;
+
                 const { lane, lanes } = layout.get(m.id) ?? { lane: 0, lanes: 1 };
                 const meta = typeMeta(m.meeting_type);
                 const top = (startMin / 60) * HOUR_PX;
                 const height = Math.max(((endMin - startMin) / 60) * HOUR_PX, 22);
-                const widthPct = 100 / lanes;
+                // A dragged event takes the full column width: it is leaving its
+                // old neighbours, and the lanes it lands among are not known
+                // until it is dropped.
+                const widthPct = dragging ? 100 : 100 / lanes;
+                const laneOffset = dragging ? 0 : lane * widthPct;
                 const live = (presence[m.id]?.count ?? 0) > 0;
                 const ts = meetingTimeState(m.scheduled_at, m.duration_minutes, now);
+                const draggable = Boolean(onMoveMeeting) && canDragMeeting(m);
                 return (
                   <button
                     key={m.id}
-                    onClick={(e) => { e.stopPropagation(); onSelectEvent(m); }}
-                    className="absolute overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left shadow-sm"
+                    onPointerDown={(e) => { if (draggable) beginDrag(e, m, "move", dayIndex); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // A drag that just ended must not also open the event.
+                      if (swallowClick.current) { swallowClick.current = false; return; }
+                      onSelectEvent(m);
+                    }}
+                    className={`absolute overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left shadow-sm ${
+                      draggable ? "cursor-grab active:cursor-grabbing" : ""
+                    } ${dragging ? "z-20 opacity-90 shadow-lg ring-2 ring-[var(--gold-400)]" : ""}`}
                     style={{
                       top,
                       height,
-                      left: `calc(${lane * widthPct}% + 2px)`,
+                      left: `calc(${laneOffset}% + 2px)`,
                       width: `calc(${widthPct}% - 4px)`,
                       borderLeftColor: meta.accent,
                       backgroundColor: `color-mix(in srgb, ${meta.accent} 16%, var(--surface-1))`,
+                      touchAction: draggable ? "none" : undefined,
                     }}
                     title={m.title}
                   >
@@ -1173,15 +1420,40 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
                       <span className="truncate text-[11px] font-medium text-[var(--fg-primary)]">{m.title}</span>
                     </div>
                     <div className="truncate text-[11px] text-[var(--fg-muted)]">
-                      {m.scheduled_at ? shortTime(m.scheduled_at) : ""}
-                      {ts && (ts.phase === "imminent" || ts.phase === "in_progress") ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
+                      {inThisColumn
+                        ? describeSpan(drag!.preview)
+                        : (m.scheduled_at ? shortTime(m.scheduled_at) : "")}
+                      {!dragging && ts && (ts.phase === "imminent" || ts.phase === "in_progress")
+                        ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}`
+                        : ""}
                     </div>
+
+                    {/* Resize handles. Rendered inside the block but above its
+                        text, and only when the event can actually be moved —
+                        offering a grip that does nothing is worse than none. */}
+                    {draggable ? (
+                      <>
+                        <span
+                          onPointerDown={(e) => { e.stopPropagation(); beginDrag(e, m, "resize-start", dayIndex); }}
+                          className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize"
+                          style={{ touchAction: "none" }}
+                          aria-hidden="true"
+                        />
+                        <span
+                          onPointerDown={(e) => { e.stopPropagation(); beginDrag(e, m, "resize-end", dayIndex); }}
+                          className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
+                          style={{ touchAction: "none" }}
+                          aria-hidden="true"
+                        />
+                      </>
+                    ) : null}
                   </button>
                 );
               })}
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
