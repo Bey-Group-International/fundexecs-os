@@ -7,10 +7,11 @@
 //   be made and cleared by clicking around the calendar grid, but there was
 //   nowhere to see what you had blocked without hunting week by week.
 //
-//   Calendar connection — honest status only. See
-//   app/api/meetings/calendar-status/route.ts: no provider is actually wired,
-//   so this panel reports that rather than offering a Connect button that
-//   wouldn't connect anything.
+//   Connected calendars — two-way iCalendar interchange. Subscribe to an
+//   external ICS URL and its events become busy time here; publish this
+//   member's own feed and their Google/Outlook/Apple calendar subscribes back.
+//   Provider APIs (real-time Google sync) are still unbuilt, and the panel
+//   continues to say so rather than implying more than ICS delivers.
 //
 // Availability and meeting types deliberately stay under "Manage availability"
 // on the same card: those shape the public booking link, where this shapes the
@@ -18,7 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { defaultBlockEnd, type SerializedBlock } from "@/lib/meetings/blocks";
 
-type Tab = "blocked" | "connection";
+type Tab = "blocked" | "calendars";
 
 interface CalendarStatus {
   googleAccountConnected: boolean;
@@ -154,8 +155,8 @@ export function CalendarManager() {
         <TabButton active={tab === "blocked"} onClick={() => setTab("blocked")}>
           Blocked time
         </TabButton>
-        <TabButton active={tab === "connection"} onClick={() => setTab("connection")}>
-          Calendar connection
+        <TabButton active={tab === "calendars"} onClick={() => setTab("calendars")}>
+          Connected calendars
         </TabButton>
       </div>
 
@@ -251,7 +252,7 @@ export function CalendarManager() {
           )}
         </div>
       ) : (
-        <ConnectionPanel status={status} />
+        <ConnectedCalendarsPanel status={status} />
       )}
     </div>
   );
@@ -356,69 +357,313 @@ function BlockForm({
   );
 }
 
+interface ConnectedFeed {
+  id: string;
+  label: string;
+  urlHint: string;
+  isActive: boolean;
+  lastSuccessAt: string | null;
+  health: { state: "ok" | "never_fetched" | "stale" | "failing"; message: string | null };
+}
+
 /**
- * Calendar connection. Deliberately descriptive rather than interactive: see
- * the note at the top of this file and in the status route. When a provider is
- * genuinely wired, `providerSyncAvailable` flips and this grows real controls.
+ * Two-way iCalendar interchange.
+ *
+ * IN: subscribe to an external ICS URL and its events become busy time, so a
+ * meeting booked in Google or Outlook stops this app offering that slot.
+ * OUT: publish this member's feed for their own calendar to subscribe to.
+ *
+ * A failing feed is called out rather than left quiet: a calendar that imports
+ * nothing looks exactly like a calendar with nothing on it, and the difference
+ * is a double-booking.
  */
-function ConnectionPanel({ status }: { status: CalendarStatus | null }) {
-  if (!status) return <p className="text-xs text-[var(--fg-muted)]">Loading…</p>;
+function ConnectedCalendarsPanel({ status }: { status: CalendarStatus | null }) {
+  const [feeds, setFeeds] = useState<ConnectedFeed[]>([]);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/meetings/calendar-feeds");
+      if (!res.ok) throw new Error("Couldn't load your connected calendars.");
+      const json = (await res.json()) as { feeds?: ConnectedFeed[]; publishedUrl?: string | null };
+      setFeeds(json.feeds ?? []);
+      setPublishedUrl(json.publishedUrl ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load your connected calendars.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function subscribe() {
+    setError(null);
+    setNotice(null);
+    setBusy("__add__");
+    try {
+      const res = await fetch("/api/meetings/calendar-feeds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "subscribe", url, label }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; eventCount?: number };
+      if (!res.ok) throw new Error(json.error ?? "Couldn't connect that calendar.");
+      setUrl("");
+      setLabel("");
+      setNotice(
+        `Connected — ${json.eventCount ?? 0} event${json.eventCount === 1 ? "" : "s"} imported as busy time.`,
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't connect that calendar.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function act(id: string, body: Record<string, unknown>, failMessage: string) {
+    setError(null);
+    setNotice(null);
+    setBusy(id);
+    try {
+      const res = await fetch(`/api/meetings/calendar-feeds/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; eventCount?: number };
+      if (!res.ok) throw new Error(json.error ?? failMessage);
+      if (body.action === "refresh") {
+        setNotice(`Synced — ${json.eventCount ?? 0} event${json.eventCount === 1 ? "" : "s"} busy.`);
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : failMessage);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disconnect(id: string) {
+    setError(null);
+    setBusy(id);
+    try {
+      const res = await fetch(`/api/meetings/calendar-feeds/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Couldn't disconnect that calendar.");
+      setFeeds((prev) => prev.filter((f) => f.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't disconnect that calendar.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function setPublished(publish: boolean) {
+    setError(null);
+    setNotice(null);
+    setBusy("__publish__");
+    try {
+      const res = await fetch("/api/meetings/calendar-feeds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: publish ? "publish" : "unpublish" }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { publishedUrl?: string | null; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Couldn't update your feed.");
+      setPublishedUrl(json.publishedUrl ?? null);
+      if (publish && publishedUrl) {
+        // Rotation is how a leaked link is revoked, so the consequence is
+        // stated rather than left for someone to discover.
+        setNotice("New address created. Anything subscribed to the old one will stop updating.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update your feed.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--fg-primary)]">Google account</p>
-            <p className="truncate text-xs text-[var(--fg-muted)]">
-              {status.googleAccountConnected
-                ? status.googleAccountLabel ?? "Connected"
-                : "Not connected"}
-            </p>
-          </div>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              status.googleAccountConnected
-                ? "bg-emerald-500/15 text-emerald-500"
-                : "bg-[var(--surface-1)] text-[var(--fg-muted)]"
-            }`}
-          >
-            {status.googleAccountConnected ? "Connected" : "Not connected"}
-          </span>
-        </div>
-        <p className="mt-2 text-xs text-[var(--fg-muted)]">
-          This grant is for sending email from your own mailbox. Connect or change it in Settings →
-          Integrations.
+    <div className="flex flex-col gap-5">
+      {error ? (
+        <p className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
+          {error}
         </p>
-      </div>
-
-      {!status.providerSyncAvailable ? (
-        <div className="rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3">
-          <p className="text-xs font-medium text-[var(--fg-primary)]">
-            Two-way calendar sync isn&rsquo;t connected
-          </p>
-          <p className="mt-1 text-xs text-[var(--fg-muted)]">
-            FundExecs is the source of truth for your meetings. Turning on sync for a meeting marks it as
-            mirrored here, but nothing is written to Google Calendar or Outlook yet — no calendar provider
-            is wired up.
-            {status.meetingsWithSyncEnabled > 0 ? (
-              <>
-                {" "}
-                <strong className="font-medium text-[var(--fg-secondary)]">
-                  {status.meetingsWithSyncEnabled} meeting
-                  {status.meetingsWithSyncEnabled === 1 ? " is" : "s are"} flagged to sync
-                </strong>{" "}
-                and will start mirroring once a provider is connected.
-              </>
-            ) : null}
-          </p>
-        </div>
+      ) : null}
+      {notice ? (
+        <p className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-xs text-[var(--fg-secondary)]">
+          {notice}
+        </p>
       ) : null}
 
-      <p className="text-xs text-[var(--fg-muted)]">
-        Your working hours and bookable meeting types live under{" "}
-        <span className="font-medium text-[var(--fg-secondary)]">Manage availability</span>.
-      </p>
+      {/* ── Import ─────────────────────────────────────────────────────── */}
+      <section className="flex flex-col gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--fg-primary)]">Calendars you&rsquo;re busy on</h3>
+          <p className="mt-1 text-xs text-[var(--fg-muted)]">
+            Paste the secret iCal address from Google, Outlook, Apple Calendar, or Calendly. Events there
+            stop your booking link offering those times. Nothing is ever written back to them.
+          </p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+            className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)]"
+          />
+          <button
+            type="button"
+            disabled={busy === "__add__" || !url.trim()}
+            onClick={() => void subscribe()}
+            className="rounded-lg bg-[var(--gold-400)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {busy === "__add__" ? "Checking…" : "Connect"}
+          </button>
+        </div>
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Label (optional) — e.g. Google, work"
+          className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)]"
+        />
+
+        {loading ? (
+          <p className="text-xs text-[var(--fg-muted)]">Loading…</p>
+        ) : feeds.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[var(--line)] px-3 py-4 text-center text-xs text-[var(--fg-muted)]">
+            No calendars connected. Your FundExecs meetings and blocked time already block your slots.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {feeds.map((f) => (
+              <li
+                key={f.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--fg-primary)]">
+                    {f.label}
+                    {!f.isActive ? <span className="ml-2 text-xs text-[var(--fg-muted)]">(paused)</span> : null}
+                  </p>
+                  <p className="truncate font-mono text-[11px] text-[var(--fg-muted)]">{f.urlHint}</p>
+                  {f.health.message ? (
+                    <p
+                      className={`mt-0.5 text-[11px] ${
+                        f.health.state === "failing" ? "text-[var(--status-danger)]" : "text-[var(--fg-muted)]"
+                      }`}
+                    >
+                      {f.health.message}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={busy === f.id}
+                    onClick={() => void act(f.id, { action: "refresh" }, "Couldn't sync that calendar.")}
+                    className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--fg-secondary)] hover:bg-[var(--surface-1)] disabled:opacity-50"
+                  >
+                    {busy === f.id ? "…" : "Sync now"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === f.id}
+                    onClick={() => void act(f.id, { isActive: !f.isActive }, "Couldn't update that calendar.")}
+                    className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--fg-secondary)] hover:bg-[var(--surface-1)] disabled:opacity-50"
+                  >
+                    {f.isActive ? "Pause" : "Resume"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === f.id}
+                    onClick={() => void disconnect(f.id)}
+                    className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10 disabled:opacity-50"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Export ─────────────────────────────────────────────────────── */}
+      <section className="flex flex-col gap-3 border-t border-[var(--line)] pt-5">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--fg-primary)]">Your FundExecs calendar</h3>
+          <p className="mt-1 text-xs text-[var(--fg-muted)]">
+            Subscribe to this address from Google, Outlook, or Apple Calendar and your FundExecs meetings
+            appear there. Treat it as a password: anyone holding it can read your schedule.
+          </p>
+        </div>
+
+        {publishedUrl ? (
+          <>
+            <code className="block truncate rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 font-mono text-xs text-[var(--fg-secondary)]">
+              {publishedUrl}
+            </code>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard.writeText(publishedUrl).catch(() => undefined)}
+                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-0)]"
+              >
+                Copy address
+              </button>
+              <button
+                type="button"
+                disabled={busy === "__publish__"}
+                onClick={() => void setPublished(true)}
+                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-0)] disabled:opacity-50"
+              >
+                Create a new address
+              </button>
+              <button
+                type="button"
+                disabled={busy === "__publish__"}
+                onClick={() => void setPublished(false)}
+                className="rounded-lg px-3 py-1.5 text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10 disabled:opacity-50"
+              >
+                Turn off
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={busy === "__publish__"}
+            onClick={() => void setPublished(true)}
+            className="self-start rounded-lg bg-[var(--gold-400)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {busy === "__publish__" ? "Creating…" : "Publish my calendar"}
+          </button>
+        )}
+      </section>
+
+      {/* ── What this is not ───────────────────────────────────────────── */}
+      <section className="border-t border-[var(--line)] pt-5">
+        <p className="text-xs text-[var(--fg-muted)]">
+          Subscriptions refresh on a schedule — usually within the hour, and on the other calendar&rsquo;s own
+          timetable when it reads yours. That is near-real-time, not instant.
+          {status && !status.providerSyncAvailable ? (
+            <> Direct Google and Outlook sync, which would be instant, isn&rsquo;t connected yet.</>
+          ) : null}{" "}
+          Your working hours and bookable meeting types live under{" "}
+          <span className="font-medium text-[var(--fg-secondary)]">Manage availability</span>.
+        </p>
+      </section>
     </div>
   );
 }
