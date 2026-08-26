@@ -50,6 +50,7 @@ import {
   type CalendarView,
 } from "@/lib/meetings/calendar";
 import { defaultBlockEnd } from "@/lib/meetings/blocks";
+import { actionForKey, SHORTCUT_HELP } from "@/lib/meetings/calendar-shortcuts";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
@@ -132,6 +133,7 @@ export function MeetingsCalendar({
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [filter, setFilter] = useState<CalendarFilter>(emptyFilter);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [detail, setDetail] = useState<CalendarMeeting | null>(null);
   const [editing, setEditing] = useState<CalendarMeeting | null>(null);
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
@@ -226,6 +228,40 @@ export function MeetingsCalendar({
     else if (view === "day") setAnchor((a) => addDays(a, delta));
     else setAnchor((a) => addDays(a, 14 * delta));
   }
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+  //
+  // Suppressed while anything modal is up: a member reading an event detail
+  // means "m" to close-and-go-to-month far less often than they mean to type.
+  const modalOpen =
+    Boolean(detail) || Boolean(editing) || scheduleOpen || Boolean(slotMenu) || Boolean(blockDraft);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && shortcutsOpen) {
+        setShortcutsOpen(false);
+        return;
+      }
+      if (modalOpen || shortcutsOpen) return;
+
+      const action = actionForKey(e, e.target as HTMLElement | null);
+      if (!action) return;
+      e.preventDefault();
+
+      if (action.kind === "view") setView(action.view);
+      else if (action.kind === "today") setAnchor(startOfDay(new Date()));
+      else if (action.kind === "next") go(1);
+      else if (action.kind === "prev") go(-1);
+      else if (action.kind === "help") setShortcutsOpen(true);
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // `go` closes over `view`, so it is re-created each render; depending on
+    // `view` rather than the function keeps this to one listener swap per view
+    // change instead of one per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, modalOpen, shortcutsOpen]);
 
   const title = useMemo(() => {
     if (view === "month") return formatMonthTitle(anchor);
@@ -359,6 +395,7 @@ export function MeetingsCalendar({
         onFilter={setFilter}
         filterOpen={filterOpen}
         setFilterOpen={setFilterOpen}
+        onShortcuts={() => setShortcutsOpen(true)}
       />
 
       <div className="grid gap-6 pb-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -447,6 +484,8 @@ export function MeetingsCalendar({
         />
       ) : null}
 
+      {shortcutsOpen ? <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} /> : null}
+
       {blockDraft ? (
         <BlockDialog
           draft={blockDraft}
@@ -456,6 +495,45 @@ export function MeetingsCalendar({
           onSave={(title) => void createBlock(title, blockDraft.startsAt, blockDraft.endsAt)}
         />
       ) : null}
+    </div>
+  );
+}
+
+// ── Shortcuts help ──────────────────────────────────────────────────────────
+// Reachable by `?`, the way every calendar worth using does it, and by the
+// button in the toolbar for anyone who would never think to press `?`.
+function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] shadow-xl"
+      >
+        <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+          <h3 className="text-sm font-semibold text-[var(--fg-primary)]">Keyboard shortcuts</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-2 py-1 text-xs text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)]"
+          >
+            Close
+          </button>
+        </div>
+        <ul className="flex flex-col divide-y divide-[var(--line)]">
+          {SHORTCUT_HELP.map((row) => (
+            <li key={row.keys} className="flex items-center justify-between gap-4 px-4 py-2.5">
+              <span className="font-mono text-xs text-[var(--fg-secondary)]">{row.keys}</span>
+              <span className="text-xs text-[var(--fg-muted)]">{row.description}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -640,6 +718,7 @@ function Toolbar({
   onFilter,
   filterOpen,
   setFilterOpen,
+  onShortcuts,
 }: {
   title: string;
   view: CalendarView;
@@ -651,6 +730,7 @@ function Toolbar({
   onFilter: (f: CalendarFilter) => void;
   filterOpen: boolean;
   setFilterOpen: (v: boolean) => void;
+  onShortcuts: () => void;
 }) {
   const filterRef = useRef<HTMLDivElement>(null);
   const activeFilters = filterCountActive(filter);
@@ -696,6 +776,16 @@ function Toolbar({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={onShortcuts}
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            className="hidden h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] font-mono text-xs text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)] sm:flex"
+          >
+            ?
+          </button>
 
           {/* Filters */}
           <div className="relative" ref={filterRef}>
