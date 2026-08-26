@@ -136,7 +136,17 @@ export function unescapeText(value: string): string {
 export function escapeText(value: string): string {
   return value
     .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
+    // Every line break, not just LF. Escaping \n alone left a raw CR in the
+    // output, and a parser that treats a lone CR as a line terminator — ours
+    // among them — reads whatever follows it as a fresh content line. That is
+    // an injection: meeting titles and descriptions carry text supplied by an
+    // anonymous visitor on a public booking page, and this feed is consumed by
+    // the host's real calendar client.
+    .replace(/\r\n|\r|\n/g, "\\n")
+    // RFC 5545 TEXT admits no control characters but HTAB. Dropping the rest
+    // keeps a hostile value from depending on how leniently a given calendar
+    // client recovers from them.
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
     .replace(/,/g, "\\,")
     .replace(/;/g, "\\;");
 }
