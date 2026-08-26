@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CalendarLayers from "./CalendarLayers";
+import {
+  type CalendarLayer,
+  type ExternalEvent,
+  colorForLayer,
+  allDayEventsForDay,
+  eventSpansForDay,
+  layerIndex,
+  visibleEvents,
+} from "@/lib/calendar/layers";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -127,6 +137,13 @@ export function MeetingsCalendar({
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [blocks, setBlocks] = useState<CalendarBlock[]>([]);
+  // Connected calendars and their events. Fetched per visible window rather
+  // than all at once: a member with years of history should not pay for them
+  // to look at one week.
+  const [layers, setLayers] = useState<CalendarLayer[]>([]);
+  const [externalEvents, setExternalEvents] = useState<ExternalEvent[]>([]);
+  const [connectedAs, setConnectedAs] = useState<string | null>(null);
+  const [googleConfigured, setGoogleConfigured] = useState(false);
   // What a click on empty calendar space offers: schedule, or block the time.
   const [slotMenu, setSlotMenu] = useState<{ iso: string; x: number; y: number } | null>(null);
   const [blockDraft, setBlockDraft] = useState<{ startsAt: string; endsAt: string } | null>(null);
@@ -246,6 +263,72 @@ export function MeetingsCalendar({
     await refreshBlocks();
   }
 
+  // The window the current view covers. Month and week views spill into
+  // neighbouring months, so this widens rather than guessing from `anchor`.
+  const windowRange = useMemo(() => {
+    const from = startOfDay(addDays(anchor, view === "month" ? -45 : -10));
+    const to = startOfDay(addDays(anchor, view === "month" ? 45 : 10));
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [anchor, view]);
+
+  const loadCalendars = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/meetings/calendars?from=${encodeURIComponent(windowRange.from)}&to=${encodeURIComponent(windowRange.to)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const body = (await res.json()) as {
+        layers?: CalendarLayer[];
+        events?: ExternalEvent[];
+        connectedAs?: string | null;
+        googleConfigured?: boolean;
+      };
+      setLayers(body.layers ?? []);
+      setExternalEvents(body.events ?? []);
+      setConnectedAs(body.connectedAs ?? null);
+      setGoogleConfigured(Boolean(body.googleConfigured));
+    } catch {
+      // A calendar rail that fails to load must not take the grid down with
+      // it: the member's own meetings are the part that matters.
+    }
+  }, [windowRange.from, windowRange.to]);
+
+  useEffect(() => {
+    void loadCalendars();
+  }, [loadCalendars]);
+
+  // Only events from layers the member is showing, and indexed so each draws
+  // in its own calendar's colour.
+  const shownExternal = useMemo(() => visibleEvents(externalEvents, layers), [externalEvents, layers]);
+  const layersById = useMemo(() => layerIndex(layers), [layers]);
+
+  const toggleLayer = useCallback(
+    async (layer: CalendarLayer, isVisible: boolean) => {
+      // Optimistic: a checkbox that waits on a round trip feels broken.
+      setLayers((prev) => prev.map((l) => (l.id === layer.id ? { ...l, isVisible } : l)));
+      await fetch("/api/meetings/calendars", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: layer.id, source: layer.source, isVisible }),
+      }).catch(() => undefined);
+      void loadCalendars();
+    },
+    [loadCalendars],
+  );
+
+  const toggleLayerAvailability = useCallback(
+    async (layer: CalendarLayer, blocksAvailability: boolean) => {
+      setLayers((prev) => prev.map((l) => (l.id === layer.id ? { ...l, blocksAvailability } : l)));
+      await fetch("/api/meetings/calendars", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: layer.id, source: layer.source, blocksAvailability }),
+      }).catch(() => undefined);
+    },
+    [],
+  );
+
   const shared = {
     now,
     today,
@@ -255,6 +338,8 @@ export function MeetingsCalendar({
     onSelectEvent: (m: CalendarMeeting) => setDetail(m),
     onSelectBlock: (b: CalendarBlock) => clearBlock(b.id),
     onSelectSlot: (iso: string, x: number, y: number) => setSlotMenu({ iso, x, y }),
+    externalEvents: shownExternal,
+    layersById,
     onExpandDay: (d: Date) => {
       setAnchor(startOfDay(d));
       setView("day");
@@ -288,6 +373,13 @@ export function MeetingsCalendar({
         {/* Side rail */}
         <aside className="flex flex-col gap-6">
           <MiniMonth anchor={anchor} onPick={(d) => { setAnchor(startOfDay(d)); }} today={today} meetings={meetings} />
+          <CalendarLayers
+            layers={layers}
+            connectedAs={connectedAs}
+            googleConfigured={googleConfigured}
+            onToggle={toggleLayer}
+            onToggleAvailability={toggleLayerAvailability}
+          />
           <Legend meetings={meetings} />
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">
             <UpcomingMeetingsList compact initialMeetings={initialUpcoming} />
@@ -692,10 +784,12 @@ interface SharedViewProps {
   onSelectEvent: (m: CalendarMeeting) => void;
   onSelectBlock: (b: CalendarBlock) => void;
   onSelectSlot: (iso: string, x: number, y: number) => void;
+  externalEvents: ExternalEvent[];
+  layersById: Map<string, CalendarLayer>;
   onExpandDay: (d: Date) => void;
 }
 
-function MonthView({ anchor, meetings, blocks, today, presence, onSelectEvent, onSelectBlock, onSelectSlot, onExpandDay }: SharedViewProps & { anchor: Date }) {
+function MonthView({ anchor, meetings, blocks, externalEvents, layersById, today, presence, onSelectEvent, onSelectBlock, onSelectSlot, onExpandDay }: SharedViewProps & { anchor: Date }) {
   const weeks = monthMatrix(anchor);
   const labels = weekdayLabels();
   return (
@@ -711,6 +805,15 @@ function MonthView({ anchor, meetings, blocks, today, presence, onSelectEvent, o
           const isToday = isSameDay(day, today);
           const evs = eventsForDay(meetings, day);
           const dayBlocks = blocksForDay(blocks, day);
+          // Connected-calendar events get a row of dots rather than chips. A
+          // month cell has room for about three things, and this app's own
+          // meetings are what a member came here to act on — but a day that
+          // looks empty while Google says otherwise is the exact confusion
+          // this whole feature exists to remove.
+          const externalToday = [
+            ...eventSpansForDay(externalEvents, day).map((s) => s.event),
+            ...allDayEventsForDay(externalEvents, day),
+          ];
           // Blocks take the first row so a busy day reads as busy at a glance,
           // then meetings fill what's left of the three-chip budget.
           const shown = evs.slice(0, Math.max(1, 3 - dayBlocks.length));
@@ -736,6 +839,24 @@ function MonthView({ anchor, meetings, blocks, today, presence, onSelectEvent, o
               >
                 {day.getDate()}
               </span>
+              {externalToday.length ? (
+                <div className="flex flex-wrap items-center gap-1" title={externalToday.map((e) => e.title).join("\n")}>
+                  {externalToday.slice(0, 6).map((e) => {
+                    const layer = layersById.get(e.calendarId);
+                    return (
+                      <span
+                        key={e.id}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: layer ? colorForLayer(layer) : "var(--fg-muted)" }}
+                      />
+                    );
+                  })}
+                  {externalToday.length > 6 ? (
+                    <span className="text-[10px] leading-none text-[var(--fg-muted)]">+{externalToday.length - 6}</span>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-0.5">
                 {dayBlocks.map((b) => (
                   <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onSelectBlock(b); }} />
@@ -802,7 +923,7 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
 }
 
 // ── Week / Day time grid ────────────────────────────────────────────────────
-function TimeGridView({ days, meetings, blocks, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot }: SharedViewProps & { days: Date[] }) {
+function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now, today, presence, statusOf, onSelectEvent, onSelectBlock, onSelectSlot }: SharedViewProps & { days: Date[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = DAY_SCROLL_HOUR * HOUR_PX;
@@ -870,6 +991,32 @@ function TimeGridView({ days, meetings, blocks, now, today, presence, statusOf, 
               {hours.map((h) => (
                 <div key={h} className="absolute left-0 right-0 border-b border-[var(--line)]/60" style={{ top: h * HOUR_PX, height: HOUR_PX }} />
               ))}
+
+              {/* Events from connected calendars, drawn beneath everything
+                  this app owns. They are context for a decision, not the
+                  subject of one — and they are read-only, so nothing here is
+                  clickable in a way that implies otherwise. */}
+              {eventSpansForDay(externalEvents, d).map(({ event, startMinute, endMinute }) => {
+                const layer = layersById.get(event.calendarId);
+                const color = layer ? colorForLayer(layer) : "var(--fg-muted)";
+                return (
+                  <div
+                    key={event.id}
+                    className="pointer-events-none absolute left-0 right-0 overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5"
+                    style={{
+                      top: (startMinute / 60) * HOUR_PX,
+                      height: Math.max(((endMinute - startMinute) / 60) * HOUR_PX, 16),
+                      borderLeftColor: color,
+                      // A free-marked event is visible but must not read as a
+                      // conflict, so it is drawn fainter than a busy one.
+                      backgroundColor: `color-mix(in srgb, ${color} ${event.isBusy ? 16 : 7}%, transparent)`,
+                    }}
+                    title={`${event.title}${layer ? ` — ${layer.name}` : ""}`}
+                  >
+                    <span className="truncate text-[11px] text-[var(--fg-secondary)]">{event.title}</span>
+                  </div>
+                );
+              })}
 
               {/* Blocked time sits under the events: a meeting deliberately
                   scheduled over a block must still be readable. */}
