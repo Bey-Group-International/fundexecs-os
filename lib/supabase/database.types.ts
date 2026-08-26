@@ -2456,6 +2456,72 @@ export type SchedulingBookingStatus = "pending" | "confirmed" | "declined" | "ca
 
 // An external iCalendar (ICS) URL a member subscribes to. Imported events are
 // read-only busy time: they block booking slots, never edit a meeting here.
+// Google Calendar sync. Three levels, matching what Google exposes: one OAuth
+// grant per member, the calendars that grant can see, and the events inside
+// them. Per-USER rather than per-org — a calendar is personal, and one member's
+// grant must never expose another's schedule.
+export type GoogleCalendarConnection = {
+  id: string;
+  user_id: string;
+  organization_id: string | null;
+  google_email: string | null;
+  refresh_ciphertext: string;
+  refresh_iv: string;
+  refresh_auth_tag: string;
+  granted_scope: string | null;
+  connected_at: string;
+  last_sync_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GoogleCalendarRow = {
+  id: string;
+  connection_id: string;
+  user_id: string;
+  google_calendar_id: string;
+  summary: string;
+  description: string | null;
+  time_zone: string | null;
+  background_color: string | null;
+  foreground_color: string | null;
+  access_role: string | null;
+  is_primary: boolean;
+  // The member's own choices. A routine sync must never overwrite these.
+  is_visible: boolean;
+  blocks_availability: boolean;
+  sync_token: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// A cached event from a connected calendar. Read-only by design: FundExecs owns
+// its own meetings, and an event that originated in Google is edited in Google.
+export type ExternalEvent = {
+  id: string;
+  calendar_id: string;
+  user_id: string;
+  google_event_id: string;
+  ical_uid: string | null;
+  summary: string | null;
+  description: string | null;
+  location: string | null;
+  html_link: string | null;
+  starts_at: string;
+  ends_at: string;
+  is_all_day: boolean;
+  status: string | null;
+  transparency: string | null;
+  recurring_event_id: string | null;
+  etag: string | null;
+  google_updated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CalendarFeed = {
   id: string;
   user_id: string;
@@ -2787,6 +2853,9 @@ export type Database = {
       scheduling_bookings: TableShape<SchedulingBooking>;
       scheduling_blocks: TableShape<SchedulingBlock>;
       calendar_feeds: TableShape<CalendarFeed>;
+      google_calendar_connections: TableShape<GoogleCalendarConnection>;
+      google_calendars: TableShape<GoogleCalendarRow>;
+      external_events: TableShape<ExternalEvent>;
       meeting_notes: TableShape<MeetingNote>;
       agent_memories: TableShape<AgentMemory>;
       pipeline_stages: TableShape<PipelineStage>;
@@ -3025,12 +3094,16 @@ export type Database = {
           similarity: number;
         }[];
       };
-      // Atomically add to an org's reputation score (creating the row if absent),
-      // clamped at 0 (migration 0048). Returns the new score.
       increment_calendar_feed_failures: {
         Args: { feed_id: string };
         Returns: void;
       };
+      increment_google_calendar_failures: {
+        Args: { connection_id: string };
+        Returns: void;
+      };
+      // Atomically add to an org's reputation score (creating the row if absent),
+      // clamped at 0 (migration 0048). Returns the new score.
       increment_org_reputation: {
         Args: {
           p_org: string;

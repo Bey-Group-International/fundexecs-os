@@ -8,6 +8,7 @@ import { runWebhookDeliveries, type DeliveryStats } from "@/lib/webhooks-outboun
 import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
 import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
+import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -194,6 +195,18 @@ export async function GET(request: Request) {
     console.error("calendar_feed_refresh failed", e);
   }
 
+  // Google Calendar connections, same reasoning as the ICS feeds above: the
+  // grid and the availability lookup both read cached rows, so without this
+  // sweep a meeting booked in Google would neither appear here nor block a
+  // slot. Best-effort — one member's revoked grant never aborts the sweep, and
+  // each connection's own failure count drives what its owner is told.
+  let googleCalendars = { connections: 0, upserted: 0, deleted: 0, failed: 0 };
+  try {
+    googleCalendars = await syncStaleGoogleConnections(supabase, { limit: 25 });
+  } catch (e) {
+    console.error("google_calendar_sync failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -206,6 +219,9 @@ export async function GET(request: Request) {
         scannedOrgs: radar.scannedOrgs,
         generated: radar.generated,
         escalated,
+        googleCalendarConnectionsSynced: googleCalendars.connections,
+        googleCalendarEventsUpserted: googleCalendars.upserted,
+        googleCalendarSyncFailures: googleCalendars.failed,
         webhooksDelivered: webhooks.delivered,
         webhooksFailed: webhooks.failed,
         proactiveSurfaced: proactive.surfaced,

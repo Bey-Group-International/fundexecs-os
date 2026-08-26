@@ -43,6 +43,19 @@ export const GOOGLE_PEOPLE_REFRESH_TOKEN_KEY = "GOOGLE_PEOPLE_REFRESH_TOKEN";
 export const GOOGLE_PEOPLE_SCOPES =
   "openid email https://www.googleapis.com/auth/contacts.readonly";
 
+// Calendar is a THIRD distinct grant, and the only per-USER one: Gmail and
+// People are org-level (one outbound mailbox, one contacts import), but a
+// calendar is personal — every member connects their own, and one member's
+// grant must never expose another's schedule. So the refresh token for this
+// scope lives in google_calendar_connections, keyed by user, not in org_secrets.
+//
+// `calendar` (read/write) rather than `calendar.readonly` because FundExecs
+// meetings are pushed back into Google. Note this is a RESTRICTED scope, in the
+// same tier as gmail.send: it needs Google verification and a CASA assessment
+// before it works for users outside the project's test list.
+export const GOOGLE_CALENDAR_SCOPES =
+  "openid email https://www.googleapis.com/auth/calendar";
+
 export function googleOAuthConfigured(): boolean {
   return Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET,
