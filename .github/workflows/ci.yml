@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # Deliberately NOT scoped to `branches: [main]`. That filter matches the PR's
+  # BASE, so a pull request stacked on another branch ran no tests at all — it
+  # simply looked quiet rather than unverified, and #997 reached main that way.
+  # Every pull request gets checked now, whatever it targets.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
