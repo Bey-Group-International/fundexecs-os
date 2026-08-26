@@ -57,8 +57,10 @@ import {
   columnFromOffset,
   describeSpan,
   durationOf,
+  drawsOwnMeeting,
   isNoOp,
   minuteFromOffset,
+  needsDragVisitor,
   movedEnough,
   previewFor,
   previewStartIso,
@@ -1197,19 +1199,31 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
 
     function onCancel() {
       // Escape, or the browser taking the pointer away — abandon, do not save.
+      // The pointer is still down, so a click is still coming; without this it
+      // lands on the day column and opens the "New meeting / Block time" menu,
+      // which is the opposite of cancelling.
+      if (dragRef.current) swallowClick.current = true;
       pending.current = null;
       setDrag(null);
+    }
+
+    // Any new interaction clears a suppression left armed by a drop that never
+    // produced its click, so a stale flag cannot eat an unrelated later click.
+    function onDown() {
+      swallowClick.current = false;
     }
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onCancel();
     }
 
+    window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", onKey);
     return () => {
+      window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
@@ -1254,6 +1268,20 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
         {days.map((d, dayIndex) => {
           const evs = eventsForDay(meetings, d);
           const layout = layoutDayEvents(evs);
+          // A meeting only appears in the column of the day it is scheduled on,
+          // so dragging it to another day hid it in the old column and never
+          // drew it in the new one — it simply vanished until dropped. Inject it
+          // into whichever column the pointer is over.
+          const visitor =
+            drag &&
+            needsDragVisitor({
+              previewDayIndex: drag.preview.dayIndex,
+              dayIndex,
+              columnContainsMeeting: evs.some((e) => e.id === drag.meeting.id),
+            })
+              ? drag.meeting
+              : null;
+          const rendered = visitor ? [...evs, visitor] : evs;
           const dayBlocks = blocksForDay(blocks, d);
           const isToday = isSameDay(d, today);
           return (
@@ -1341,12 +1369,12 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
               ) : null}
 
               {/* Events */}
-              {evs.map((m) => {
+              {rendered.map((m) => {
                 const [rawStart, rawEnd] = eventSpanMinutes(m);
                 // While this event is being dragged it follows the pointer, and
                 // is drawn in the column the pointer is over rather than its own.
                 const dragging = drag?.origin.meetingId === m.id;
-                const inThisColumn = dragging && drag!.preview.dayIndex === dayIndex;
+                const inThisColumn = dragging && drawsOwnMeeting({ previewDayIndex: drag!.preview.dayIndex, dayIndex });
                 if (dragging && !inThisColumn) return null;
                 const startMin = inThisColumn ? drag!.preview.startMinute : rawStart;
                 const endMin = inThisColumn ? drag!.preview.endMinute : rawEnd;

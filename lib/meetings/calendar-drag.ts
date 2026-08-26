@@ -127,6 +127,27 @@ export function previewFor(
   return { startMinute: start, endMinute: origin.endMinute, dayIndex: origin.dayIndex };
 }
 
+/**
+ * Whether a day column must draw a meeting that is being dragged into it.
+ *
+ * A meeting is only listed under the day it is scheduled on, so during a
+ * cross-day drag the origin column stops drawing it and the target column has
+ * never heard of it — the block vanishes until it is dropped. The target column
+ * injects it instead. Exactly one column draws it: the preview's.
+ */
+export function needsDragVisitor(opts: {
+  previewDayIndex: number;
+  dayIndex: number;
+  columnContainsMeeting: boolean;
+}): boolean {
+  return opts.previewDayIndex === opts.dayIndex && !opts.columnContainsMeeting;
+}
+
+/** Whether a column that already lists the meeting should draw it right now. */
+export function drawsOwnMeeting(opts: { previewDayIndex: number; dayIndex: number }): boolean {
+  return opts.previewDayIndex === opts.dayIndex;
+}
+
 /** Whether the drag ended where it started, so nothing should be saved. */
 export function isNoOp(origin: DragOrigin, preview: DragPreview): boolean {
   return (

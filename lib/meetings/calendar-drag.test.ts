@@ -8,7 +8,9 @@ import {
   formatMinute,
   isNoOp,
   minuteFromOffset,
+  drawsOwnMeeting,
   movedEnough,
+  needsDragVisitor,
   previewFor,
   previewStartIso,
   snapMinute,
@@ -260,5 +262,43 @@ describe("previewStartIso", () => {
     expect(back.getMinutes()).toBe(0);
     expect(back.getSeconds()).toBe(0);
     expect(back.getMilliseconds()).toBe(0);
+  });
+});
+
+describe("which column draws a dragged meeting", () => {
+  // Regression: a meeting is only listed under the day it is scheduled on, so a
+  // cross-day drag hid it in the origin column and never drew it in the target
+  // one. It disappeared entirely until dropped.
+  const SCHEDULED_COLUMN = 2;
+  const columns = [0, 1, 2, 3, 4, 5, 6];
+
+  function drawnBy(previewDayIndex: number): number[] {
+    return columns.filter((dayIndex) => {
+      const columnContainsMeeting = dayIndex === SCHEDULED_COLUMN;
+      return columnContainsMeeting
+        ? drawsOwnMeeting({ previewDayIndex, dayIndex })
+        : needsDragVisitor({ previewDayIndex, dayIndex, columnContainsMeeting });
+    });
+  }
+
+  it("draws it in its own column when the drag stays put", () => {
+    expect(drawnBy(SCHEDULED_COLUMN)).toEqual([SCHEDULED_COLUMN]);
+  });
+
+  it("draws it in the target column when dragged across days", () => {
+    expect(drawnBy(5)).toEqual([5]);
+    expect(drawnBy(0)).toEqual([0]);
+  });
+
+  it("draws it in exactly one column, wherever the pointer is", () => {
+    for (const preview of columns) {
+      expect(drawnBy(preview)).toHaveLength(1);
+    }
+  });
+
+  it("never asks a column that already lists it to inject a duplicate", () => {
+    expect(
+      needsDragVisitor({ previewDayIndex: SCHEDULED_COLUMN, dayIndex: SCHEDULED_COLUMN, columnContainsMeeting: true }),
+    ).toBe(false);
   });
 });
