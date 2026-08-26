@@ -98,6 +98,7 @@ export const SHORTCUT_HELP: ShortcutHelp[] = [
   { keys: "T", description: "Jump to today" },
   { keys: "J · N · →", description: "Next period" },
   { keys: "K · P · ←", description: "Previous period" },
+  { keys: "Drag", description: "Move a meeting; drag its edges to resize" },
   { keys: "?", description: "Show this list" },
   { keys: "Esc", description: "Close" },
 ];
