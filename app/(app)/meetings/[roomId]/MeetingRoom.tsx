@@ -6,6 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
 import { MeetingCopilotConsole } from "@/app/(app)/meetings/MeetingCopilotConsole";
+import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
+import { constraintsFor } from "@/lib/meetings/devices";
+import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -385,7 +388,6 @@ function ControlBar({
   const mins = String(Math.floor(duration / 60)).padStart(2, "0");
   const secs = String(duration % 60).padStart(2, "0");
   const [reactionOpen, setReactionOpen] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
   const reactionBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
@@ -477,15 +479,7 @@ function ControlBar({
             📶 <span className="hidden sm:inline">Low BW</span>
           </span>
         )}
-        <button
-          onClick={() => {
-            const link = `${window.location.origin}/meeting-invite/${roomCode}`;
-            void navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
-          }}
-          title="Copy meeting link"
-          className="hidden sm:flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] px-3 h-8 text-xs font-medium transition-colors">
-          {linkCopied ? "✓ Copied" : "Copy link"}
-        </button>
+        <span className="hidden sm:flex"><MeetingShareLink roomCode={roomCode} compact /></span>
         <button onClick={onToggleCopilot}
           className={`relative flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
             copilotOpen ? "border-[var(--gold-400)] bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
@@ -645,11 +639,9 @@ function CopilotSidebar({
   onWalkthroughNudgeDismiss: () => void;
 }) {
   const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "chat" | "people" | "walkthrough" | "analyze">("transcript");
-  const [copied, setCopied] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const txBottomRef = useRef<HTMLDivElement>(null);
-  const inviteLink = typeof window !== "undefined" ? `${window.location.origin}/meeting-invite/${roomCode}` : "";
   const [emailInput, setEmailInput] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -820,11 +812,7 @@ function CopilotSidebar({
             {/* Invite */}
             <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-3 flex flex-col gap-2">
               <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Invite people</p>
-              <button
-                onClick={() => { void navigator.clipboard.writeText(inviteLink).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-white text-xs font-semibold py-2 transition-colors">
-                {copied ? "Link copied!" : "Copy invite link"}
-              </button>
+              <MeetingShareLink roomCode={roomCode} />
               <div className="flex gap-1.5 mt-1">
                 <input
                   value={emailInput}
@@ -999,11 +987,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [meetingTitle, setMeetingTitle] = useState("Meeting");
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
-  // Pre-join devices
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  // Pre-join devices. The green room enumerates and picks; these hold what it
+  // settled on, for the in-call speaker routing and device switcher.
   const [selectedMicId, setSelectedMicId] = useState("");
   const [selectedCamId, setSelectedCamId] = useState("");
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  // Read synchronously by `enterRoom`, which runs in the same tick as the click
+  // that produced the choice — a state update would not be visible to it yet.
+  const joinChoiceRef = useRef<GreenRoomChoice | null>(null);
 
   // Waiting room state
   const [waitingForAdmit, setWaitingForAdmit] = useState(false);
@@ -1261,18 +1252,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, [roomCode, supabase]);
 
   // ── Preview camera ────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(async (s) => {
-        previewStreamRef.current = s; setPreviewStream(s);
-        const all = await navigator.mediaDevices.enumerateDevices();
-        setDevices(all);
-        setSelectedCamId(s.getVideoTracks()[0]?.getSettings().deviceId ?? "");
-        setSelectedMicId(s.getAudioTracks()[0]?.getSettings().deviceId ?? "");
-      }).catch(() => {});
-    return () => { previewStreamRef.current?.getTracks().forEach((t) => t.stop()); previewStreamRef.current = null; };
-  }, []);
+  //
+  // Owned by the green room now: it picks the device, meters the mic and hands
+  // the stream up here so `enterRoom` can release it before opening the real
+  // sending stream. Acquiring it in both places raced for the same camera.
 
   // ── Auto-join for guests arriving from invite link ────────────────────────
 
@@ -1319,18 +1302,26 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     previewStreamRef.current?.getTracks().forEach((t) => t.stop());
     previewStreamRef.current = null; setPreviewStream(null);
 
+    const choice = joinChoiceRef.current;
+    const camId = choice?.cameraId ?? "";
+    const micId = choice?.micId ?? "";
+    // Camera off in the green room means we never open the camera at all, not
+    // that we open it and disable the track: the hardware light staying dark is
+    // the whole point of the toggle.
+    const wantCam = choice ? choice.cameraEnabled : true;
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: selectedCamId ? { deviceId: { exact: selectedCamId } } : true,
-        audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true,
+        video: wantCam ? constraintsFor("videoinput", camId || null) : false,
+        audio: constraintsFor("audioinput", micId || null),
       });
     } catch (err) {
       const errName = err instanceof Error ? err.name : "";
       // Stale/unavailable exact device id (e.g. virtual cameras) → retry unconstrained.
       let recovered: MediaStream | null = null;
-      if ((errName === "OverconstrainedError" || errName === "NotFoundError") && (selectedCamId || selectedMicId)) {
-        try { recovered = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); }
+      if ((errName === "OverconstrainedError" || errName === "NotFoundError") && (camId || micId)) {
+        try { recovered = await navigator.mediaDevices.getUserMedia({ video: wantCam, audio: true }); }
         catch { recovered = null; }
       }
       if (recovered) {
@@ -1346,6 +1337,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         stream = new MediaStream();
       }
     }
+    // Carry the green room's mic/camera state into the call, so someone who
+    // muted themselves before joining is still muted a second later.
+    const micWanted = choice ? choice.micEnabled : true;
+    stream.getAudioTracks().forEach((t) => { t.enabled = micWanted; });
+    setMicOn(micWanted && stream.getAudioTracks().length > 0);
+    const camLive = wantCam && stream.getVideoTracks().length > 0;
+    setCamOn(camLive);
+    camOnRef.current = camLive;
+
     localStreamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
@@ -1366,14 +1366,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setWaitingTimedOut(false);
     setReady(true);
     setJoining(false);
-  }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers, selectedCamId, selectedMicId]);
+  }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers]);
 
   // Stable handle so the waiting-room poll can enter without re-creating itself.
   const enterRoomRef = useRef(enterRoom);
   useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
-  const joinMeeting = useCallback(async () => {
+  const joinMeeting = useCallback(async (choice?: GreenRoomChoice) => {
+    if (choice) {
+      joinChoiceRef.current = choice;
+      setSelectedCamId(choice.cameraId);
+      setSelectedMicId(choice.micId);
+      setSelectedSpeakerId(choice.speakerId);
+    }
     setJoining(true);
     const name = displayName.trim() || "Participant";
     setLocalName(name);
@@ -1952,109 +1958,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   if (!ready) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-5 px-4">
-        <div className="w-full max-w-sm flex flex-col gap-3">
-          {/* Camera preview */}
-          <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
-            {previewStream ? <PreviewVideo stream={previewStream} /> : (
-              <div className="flex items-center justify-center h-full">
-                <span className="text-xs text-[var(--fg-muted)]">Camera off</span>
-              </div>
-            )}
-            {/* Flip camera — mobile only */}
-            {previewStream && (
-              <button
-                onClick={() => {
-                  const next = facingMode === "user" ? "environment" : "user";
-                  previewStreamRef.current?.getTracks().forEach((t) => t.stop());
-                  void navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: true })
-                    .then((s) => { previewStreamRef.current = s; setPreviewStream(s); setFacingMode(next); })
-                    .catch(() => {});
-                }}
-                className="sm:hidden absolute top-2 right-2 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center text-base backdrop-blur-sm"
-                title="Flip camera"
-              >
-                🔄
-              </button>
-            )}
-          </div>
-
-          {/* Join card */}
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] overflow-hidden">
-            <div className="px-5 pt-5 pb-4 flex flex-col gap-4">
-              <p className="text-base font-semibold text-[var(--fg-primary)]">{isHost ? "Ready to start?" : "Ready to join?"}</p>
-
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your name"
-                className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)]"
-              />
-
-              {devices.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs text-[var(--fg-muted)]">Devices</p>
-                  {devices.some((d) => d.kind === "videoinput") && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[var(--fg-muted)] shrink-0"><CamIcon /></span>
-                      <select value={selectedCamId}
-                        onChange={(e) => {
-                          setSelectedCamId(e.target.value);
-                          previewStreamRef.current?.getTracks().forEach((t) => t.stop());
-                          void navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: e.target.value } }, audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true })
-                            .then((s) => { previewStreamRef.current = s; setPreviewStream(s); }).catch(() => {});
-                        }}
-                        className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate">
-                        {devices.filter((d) => d.kind === "videoinput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {devices.some((d) => d.kind === "audioinput") && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[var(--fg-muted)] shrink-0"><MicIcon /></span>
-                      <select value={selectedMicId} onChange={(e) => setSelectedMicId(e.target.value)}
-                        className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate">
-                        {devices.filter((d) => d.kind === "audioinput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {devices.some((d) => d.kind === "audiooutput") && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[var(--fg-muted)] shrink-0"><SpeakerIcon /></span>
-                      <select value={selectedSpeakerId} onChange={(e) => setSelectedSpeakerId(e.target.value)}
-                        className="flex-1 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-2.5 py-1.5 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-400)] truncate">
-                        {devices.filter((d) => d.kind === "audiooutput").map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Speaker"}</option>)}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer row */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--line)] bg-[var(--surface-0)]">
-              <span className="font-mono text-xs text-[var(--fg-muted)] bg-[var(--surface-2)] rounded-md px-2 py-1 select-all">{roomCode}</span>
-              <button
-                onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/meeting-invite/${roomCode}`)}
-                className="text-xs text-[var(--gold-400)] hover:text-[var(--gold-500)] transition-colors"
-              >
-                Copy invite link
-              </button>
-            </div>
-
-            <div className="px-5 pb-5 pt-3">
-              <button
-                onClick={() => void joinMeeting()}
-                disabled={joining}
-                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
-              >
-                {joining ? (isHost ? "Starting…" : "Joining…") : (isHost ? "Start meeting" : "Join meeting")}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <MeetingGreenRoom
+        roomCode={roomCode}
+        isHost={isHost}
+        joining={joining}
+        displayName={displayName}
+        onDisplayNameChange={setDisplayName}
+        meetingTitle={meetingTitle}
+        onJoin={(choice) => void joinMeeting(choice)}
+        onPreviewStream={(s) => { previewStreamRef.current = s; setPreviewStream(s); }}
+      />
     );
   }
 

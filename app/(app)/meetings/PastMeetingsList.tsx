@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isPastMeeting } from "@/lib/meetings/schedule";
 import { nextChannelName } from "./hooks";
+import { MeetingShareLink } from "./MeetingShareLink";
 
 export interface PastMeeting {
   id: string;
@@ -372,6 +373,19 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                             : `Created ${formatTime(m.created_at)}`}
                         </span>
                       </div>
+                    </div>
+
+                    {/* The link anyone can join from — a room code alone is not
+                        something you paste into a client's inbox. */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[11px] text-[var(--fg-muted)] uppercase tracking-wide font-medium">
+                        Meeting link
+                      </span>
+                      <MeetingShareLink
+                        roomCode={m.room_code}
+                        title={m.title}
+                        scheduledAt={m.scheduled_at}
+                      />
                     </div>
 
                     <div className="flex items-center gap-2">
