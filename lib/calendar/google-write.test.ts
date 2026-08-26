@@ -199,9 +199,10 @@ describe("toGoogleEvent", () => {
     expect(e.reminders).toEqual({ useDefault: false, overrides: [{ method: "popup", minutes: 15 }] });
   });
 
-  it("leaves Google's own defaults alone when no reminder is set", () => {
-    expect(toGoogleEvent(meeting({ reminder_minutes: null })).reminders).toBeUndefined();
-    expect(toGoogleEvent(meeting({ reminder_minutes: 0 })).reminders).toBeUndefined();
+  it("hands a removed reminder back to Google's defaults, explicitly", () => {
+    // Omitting `reminders` on a patch would keep the old override forever.
+    expect(toGoogleEvent(meeting({ reminder_minutes: null })).reminders).toEqual({ useDefault: true });
+    expect(toGoogleEvent(meeting({ reminder_minutes: 0 })).reminders).toEqual({ useDefault: true });
   });
 
   it("refuses to build an event with nowhere to be", () => {
@@ -314,5 +315,45 @@ describe("outcomeForStatus", () => {
 
   it("treats a bad request as ours to fix, not to retry", () => {
     expect(outcomeForStatus(400)).toEqual({ outcome: "sync_failed", forgetEventId: false, retryable: false });
+  });
+});
+
+describe("toGoogleEvent — clearing fields over PATCH", () => {
+  // Google's events.patch leaves omitted fields untouched, so an emptied field
+  // must be sent as its empty value or the old one survives on the calendar.
+  it("states every optional field, even when the meeting has nothing for it", () => {
+    const e = toGoogleEvent(meeting({
+      attendees: null,
+      description: null,
+      objective: null,
+      agenda: null,
+      location: null,
+      meeting_url: null,
+      calendar_visibility: null,
+      reminder_minutes: null,
+    }));
+
+    expect(e.attendees).toEqual([]);
+    expect(e.description).toBe("");
+    expect(e.location).toBe("");
+    expect(e.visibility).toBe("default");
+    expect(e.reminders).toEqual({ useDefault: true });
+  });
+
+  it("clears the guest list when the last attendee is removed", () => {
+    // Not merely absent: an omitted attendees array leaves everyone invited.
+    const e = toGoogleEvent(meeting({ attendees: [] }));
+    expect(e.attendees).toEqual([]);
+    expect(Object.prototype.hasOwnProperty.call(e, "attendees")).toBe(true);
+  });
+
+  it("clears a guest list that held only unusable addresses", () => {
+    const e = toGoogleEvent(meeting({ attendees: [{ name: "No Email" }, { email: "junk" }] }));
+    expect(e.attendees).toEqual([]);
+  });
+
+  it("returns visibility to default rather than leaving it private", () => {
+    expect(toGoogleEvent(meeting({ calendar_visibility: "default" })).visibility).toBe("default");
+    expect(toGoogleEvent(meeting({ calendar_visibility: "private" })).visibility).toBe("private");
   });
 });

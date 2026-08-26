@@ -41,13 +41,23 @@ export interface WritableMeeting {
 
 export interface GoogleEventWrite {
   summary: string;
-  description?: string;
-  location?: string;
+  /**
+   * Every optional field is REQUIRED in this body, and carries an explicit
+   * reset value when the meeting has nothing for it.
+   *
+   * Google's events.patch leaves omitted fields untouched. Omitting an emptied
+   * field would therefore preserve the old one: removing every guest would
+   * leave them invited, and clearing a description would leave it on the
+   * calendar. The only way to clear a field over PATCH is to send its empty
+   * value, so this body always states all of them.
+   */
+  description: string;
+  location: string;
   start: { dateTime: string; timeZone?: string };
   end: { dateTime: string; timeZone?: string };
-  attendees?: Array<{ email: string; displayName?: string }>;
-  visibility?: "default" | "public" | "private";
-  reminders?: { useDefault: boolean; overrides?: Array<{ method: "popup"; minutes: number }> };
+  attendees: Array<{ email: string; displayName?: string }>;
+  visibility: "default" | "public" | "private";
+  reminders: { useDefault: boolean; overrides?: Array<{ method: "popup"; minutes: number }> };
   extendedProperties: { private: Record<string, string> };
 }
 
@@ -147,35 +157,28 @@ export function toGoogleEvent(meeting: WritableMeeting, opts: { joinUrl?: string
   const minutes = clampDuration(meeting.duration_minutes);
   const end = new Date(start.getTime() + minutes * 60_000);
 
-  const body: GoogleEventWrite = {
+  const reminder = meeting.reminder_minutes;
+  const hasReminder = typeof reminder === "number" && Number.isFinite(reminder) && reminder > 0;
+
+  return {
     summary: meeting.title?.trim() || "Meeting",
     start: { dateTime: start.toISOString(), ...(meeting.timezone ? { timeZone: meeting.timezone } : {}) },
     end: { dateTime: end.toISOString(), ...(meeting.timezone ? { timeZone: meeting.timezone } : {}) },
+    // Explicit empties, not omissions — see GoogleEventWrite. A patch that
+    // omits these silently keeps whatever was there before.
+    description: buildDescription(meeting, opts.joinUrl ?? meeting.meeting_url ?? null),
+    location: meeting.location?.trim() || opts.joinUrl?.trim() || meeting.meeting_url?.trim() || "",
+    attendees: attendeesFor(meeting),
+    visibility: mapVisibility(meeting.calendar_visibility) ?? "default",
+    reminders: hasReminder
+      ? { useDefault: false, overrides: [{ method: "popup", minutes: Math.min(40_320, Math.trunc(reminder!)) }] }
+      : { useDefault: true },
     // The marker is the whole echo-prevention story: the read sync pulls every
     // event on the calendar back down, and without a way to recognise our own
     // writes each pushed meeting would return as a second, external copy of
     // itself — and then count against the member's own availability.
     extendedProperties: { private: { [FUNDEXECS_MARKER_KEY]: meeting.id } },
   };
-
-  const description = buildDescription(meeting, opts.joinUrl ?? meeting.meeting_url ?? null);
-  if (description) body.description = description;
-
-  const location = meeting.location?.trim() || opts.joinUrl?.trim() || meeting.meeting_url?.trim();
-  if (location) body.location = location;
-
-  const guests = attendeesFor(meeting);
-  if (guests.length) body.attendees = guests;
-
-  const visibility = mapVisibility(meeting.calendar_visibility);
-  if (visibility) body.visibility = visibility;
-
-  const reminder = meeting.reminder_minutes;
-  if (typeof reminder === "number" && Number.isFinite(reminder) && reminder > 0) {
-    body.reminders = { useDefault: false, overrides: [{ method: "popup", minutes: Math.min(40_320, Math.trunc(reminder)) }] };
-  }
-
-  return body;
 }
 
 /** Google accepts 15 minutes to 8 hours here, matching what the API already clamps to. */

@@ -78,9 +78,34 @@ function chain(terminal: { maybeSingle: () => Promise<{ data: unknown }> }) {
 
 function respond(status: number, body: unknown = {}) {
   return {
+    ok: status >= 200 && status < 300,
     status,
     text: async () => (status === 204 ? "" : JSON.stringify(body)),
+    json: async () => body,
   };
+}
+
+/**
+ * Route the marker lookup and the write separately.
+ *
+ * A create now asks Google whether an event for this meeting already exists
+ * before making one, so the write is no longer the first fetch.
+ */
+function routeFetch(opts: { existing?: string | null; write: ReturnType<typeof respond> }) {
+  return (url: URL | string, init?: { method?: string }) => {
+    const method = init?.method ?? "GET";
+    if (method === "GET" && String(url).includes("privateExtendedProperty")) {
+      return Promise.resolve(
+        respond(200, { items: opts.existing ? [{ id: opts.existing, status: "confirmed" }] : [] }),
+      );
+    }
+    return Promise.resolve(opts.write);
+  };
+}
+
+/** The write call, skipping the marker lookup. */
+function writeCall() {
+  return fetchMock.mock.calls.find(([, init]) => (init as { method?: string } | undefined)?.method);
 }
 
 beforeEach(() => {
@@ -111,15 +136,15 @@ describe("writeTargetFor", () => {
 
 describe("pushMeetingToGoogle — create", () => {
   it("POSTs a new event and stores the id Google returns", async () => {
-    fetchMock.mockResolvedValue(respond(200, { id: "gcal-new" }));
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
     const { api, recorded } = client();
 
     const r = await pushMeetingToGoogle(api, meeting(), "u1");
 
     expect(r).toMatchObject({ ok: true, status: "synced", eventId: "gcal-new", action: "created" });
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = writeCall()!;
     expect(String(url)).toContain("/calendars/primary%40example.com/events");
-    expect(init.method).toBe("POST");
+    expect((init as { method: string }).method).toBe("POST");
     expect(recorded.updates.at(-1)).toMatchObject({
       external_calendar_sync_status: "synced",
       external_calendar_event_id: "gcal-new",
@@ -128,37 +153,85 @@ describe("pushMeetingToGoogle — create", () => {
   });
 
   it("tells Google to notify the guests", async () => {
-    fetchMock.mockResolvedValue(respond(200, { id: "gcal-new" }));
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
     const { api } = client();
     await pushMeetingToGoogle(api, meeting(), "u1");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("sendUpdates=all");
+    expect(String(writeCall()![0])).toContain("sendUpdates=all");
   });
 
   it("creates rather than patches when the id is a legacy stub", async () => {
-    fetchMock.mockResolvedValue(respond(200, { id: "gcal-real" }));
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-real" }) }));
     const { api } = client();
     await pushMeetingToGoogle(api, meeting({ external_calendar_event_id: "ext_old-fake" }), "u1");
-    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect((writeCall()![1] as { method: string }).method).toBe("POST");
+  });
+
+  it("adopts an orphaned event instead of creating a duplicate", async () => {
+    // A previous run wrote the event but lost the id before storing it. Making
+    // a second one would put the same meeting on the calendar twice.
+    fetchMock.mockImplementation(routeFetch({ existing: "gcal-orphan", write: respond(200, { id: "gcal-orphan" }) }));
+    const { api, recorded } = client();
+
+    const r = await pushMeetingToGoogle(api, meeting({ external_calendar_event_id: null }), "u1");
+
+    expect((writeCall()![1] as { method: string }).method).toBe("PATCH");
+    expect(String(writeCall()![0])).toContain("/events/gcal-orphan");
+    expect(r).toMatchObject({ ok: true, action: "updated", eventId: "gcal-orphan" });
+    expect(recorded.updates.at(-1)).toMatchObject({ external_calendar_event_id: "gcal-orphan" });
+  });
+
+  it("does not claim a sync when the event id could not be recorded", async () => {
+    // The event exists on Google but the row does not know its id. Reporting
+    // "synced" would be exactly the lie this change removes.
+    const recorded: Recorded = { updates: [] };
+    const api = {
+      from(table: string) {
+        if (table === "google_calendar_connections") {
+          return chain({ maybeSingle: async () => ({ data: { id: "c1", user_id: "u1" } }) });
+        }
+        if (table === "google_calendars") {
+          return chain({ maybeSingle: async () => ({ data: { google_calendar_id: "primary@example.com", access_role: "owner" } }) });
+        }
+        return {
+          update(payload: Record<string, unknown>) {
+            recorded.updates.push(payload);
+            return { eq: async () => ({ error: { message: "row level security" } }) };
+          },
+        };
+      },
+    } as never;
+
+    fetchMock.mockImplementation(routeFetch({ existing: null, write: respond(200, { id: "gcal-new" }) }));
+
+    const r = await pushMeetingToGoogle(api, meeting(), "u1");
+
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe("sync_pending");
+    expect(r.eventId).toBe("gcal-new");
+    expect(String(r.error)).toContain("could not be recorded");
   });
 });
 
 describe("pushMeetingToGoogle — update", () => {
   it("PATCHes an existing event and keeps its id", async () => {
-    fetchMock.mockResolvedValue(respond(200, { id: "gcal-1" }));
+    fetchMock.mockImplementation(routeFetch({ write: respond(200, { id: "gcal-1" }) }));
     const { api, recorded } = client();
 
     const r = await pushMeetingToGoogle(api, meeting({ external_calendar_event_id: "gcal-1" }), "u1");
 
     expect(r).toMatchObject({ ok: true, action: "updated", eventId: "gcal-1" });
-    expect(fetchMock.mock.calls[0][1].method).toBe("PATCH");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/events/gcal-1");
+    expect((writeCall()![1] as { method: string }).method).toBe("PATCH");
+    expect(String(writeCall()![0])).toContain("/events/gcal-1");
+
+    // A known id needs no lookup — that request is only for recovering orphans.
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes("privateExtendedProperty"))).toBe(false);
     expect(recorded.updates.at(-1)).toMatchObject({ external_calendar_sync_status: "synced" });
   });
 });
 
 describe("pushMeetingToGoogle — delete", () => {
   it("removes the event when sync is switched off", async () => {
-    fetchMock.mockResolvedValue(respond(204));
+    fetchMock.mockImplementation(routeFetch({ write: respond(204) }));
     const { api, recorded } = client();
 
     const r = await pushMeetingToGoogle(
@@ -168,12 +241,12 @@ describe("pushMeetingToGoogle — delete", () => {
     );
 
     expect(r).toMatchObject({ ok: true, status: "sync_off", action: "deleted", eventId: null });
-    expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
+    expect((writeCall()![1] as { method: string }).method).toBe("DELETE");
     expect(recorded.updates.at(-1)).toMatchObject({ external_calendar_event_id: null });
   });
 
   it("treats an already-deleted event as success rather than a stuck id", async () => {
-    fetchMock.mockResolvedValue(respond(404, { error: { message: "Not Found" } }));
+    fetchMock.mockImplementation(routeFetch({ write: respond(404, { error: { message: "Not Found" } }) }));
     const { api, recorded } = client();
 
     const r = await pushMeetingToGoogle(
@@ -226,7 +299,7 @@ describe("pushMeetingToGoogle — failures", () => {
   });
 
   it("forgets the event id when Google no longer has it", async () => {
-    fetchMock.mockResolvedValue(respond(404, { error: { message: "Not Found" } }));
+    fetchMock.mockImplementation(routeFetch({ write: respond(404, { error: { message: "Not Found" } }) }));
     const { api, recorded } = client();
 
     const r = await pushMeetingToGoogle(api, meeting({ external_calendar_event_id: "gcal-gone" }), "u1");
@@ -238,7 +311,7 @@ describe("pushMeetingToGoogle — failures", () => {
   });
 
   it("keeps the id on a rate limit, which is worth retrying", async () => {
-    fetchMock.mockResolvedValue(respond(429, { error: { message: "Rate Limit Exceeded" } }));
+    fetchMock.mockImplementation(routeFetch({ write: respond(429, { error: { message: "Rate Limit Exceeded" } }) }));
     const { api, recorded } = client();
 
     const r = await pushMeetingToGoogle(api, meeting({ external_calendar_event_id: "gcal-1" }), "u1");

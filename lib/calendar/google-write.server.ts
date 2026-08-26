@@ -10,6 +10,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { accessTokenFor, type ConnectionRow } from "@/lib/calendar/google.server";
 import { describeGoogleError } from "@/lib/calendar/google";
 import {
+  FUNDEXECS_MARKER_KEY,
   decideWrite,
   outcomeForStatus,
   toGoogleEvent,
@@ -174,23 +175,45 @@ export async function pushMeetingToGoogle(
     return { ok: false, status: "sync_failed", eventId: null, error, action: "skipped" };
   }
 
-  const res =
-    decision.kind === "create"
-      ? await apiWrite(token.data, "POST", `/calendars/${encodedCal}/events`, body, { sendUpdates: "all" })
-      : await apiWrite(
-          token.data,
-          "PATCH",
-          `/calendars/${encodedCal}/events/${encodeURIComponent(decision.eventId)}`,
-          body,
-          { sendUpdates: "all" },
-        );
+  // A create is only a create if no event for this meeting already exists.
+  // One may, if an earlier run wrote it and then failed to store the id; making
+  // a second one is how a member ends up with the same meeting twice.
+  let targetEventId = decision.kind === "update" ? decision.eventId : null;
+  if (decision.kind === "create") {
+    targetEventId = await findEventByMarker(token.data, calendarId, meeting.id);
+  }
+
+  const res = targetEventId
+    ? await apiWrite(
+        token.data,
+        "PATCH",
+        `/calendars/${encodedCal}/events/${encodeURIComponent(targetEventId)}`,
+        body,
+        { sendUpdates: "all" },
+      )
+    : await apiWrite(token.data, "POST", `/calendars/${encodedCal}/events`, body, { sendUpdates: "all" });
 
   const verdict = outcomeForStatus(res.status);
 
   if (verdict.outcome === "synced") {
-    const eventId = res.json?.id ?? (decision.kind === "update" ? decision.eventId : null);
-    await recordSync(client, meeting.id, { status: "synced", eventId, error: null });
-    return { ok: true, status: "synced", eventId, action: decision.kind === "create" ? "created" : "updated" };
+    const eventId = res.json?.id ?? targetEventId;
+    const recorded = await recordSync(client, meeting.id, { status: "synced", eventId, error: null });
+    const action = targetEventId ? "updated" : "created";
+
+    if (!recorded.ok) {
+      // The event is on the calendar but its id is not on the row. Saying
+      // "synced" here would be the same lie this whole change exists to remove,
+      // and the next push would rely on the marker lookup above to avoid a
+      // duplicate rather than on a stored id.
+      return {
+        ok: false,
+        status: "sync_pending",
+        eventId,
+        error: `The calendar event was written but could not be recorded: ${recorded.error ?? "unknown error"}`,
+        action,
+      };
+    }
+    return { ok: true, status: "synced", eventId, action };
   }
 
   const error = describeGoogleError(res.status, res.body);
@@ -204,14 +227,21 @@ export async function pushMeetingToGoogle(
   return { ok: false, status: verdict.outcome, eventId: null, error, action: "skipped" };
 }
 
-/** Persist the sync outcome on the meeting row. */
+/**
+ * Persist the sync outcome on the meeting row.
+ *
+ * Returns whether it stuck. supabase-js resolves with `{ error }` rather than
+ * throwing, so a discarded result is a silently lost write — and losing the
+ * event id after a successful create is what makes the next push produce a
+ * duplicate event on someone's calendar.
+ */
 export async function recordSync(
   client: ServiceClient,
   meetingId: string,
   next: { status: WriteOutcome; eventId: string | null; error: string | null },
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
-    await client
+    const { error } = await client
       .from("live_meetings")
       .update({
         external_calendar_provider: "google",
@@ -220,10 +250,50 @@ export async function recordSync(
         external_calendar_last_error: next.error,
       } as never)
       .eq("id", meetingId);
+
+    if (error) {
+      console.error("[google-calendar] could not record sync status for", meetingId, error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
   } catch (err) {
-    // The write to Google may well have succeeded; losing the bookkeeping is
-    // bad but must not turn into a thrown error the caller reports as a
-    // failed sync.
+    const message = err instanceof Error ? err.message : String(err);
     console.error("[google-calendar] could not record sync status for", meetingId, err);
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * An event this app already wrote for a meeting, found by its private marker.
+ *
+ * Makes a create idempotent. If a previous run wrote the event but failed to
+ * store its id — a lost update, a crash between the two — creating again would
+ * put a second copy of the same meeting on the calendar. Google can query the
+ * private property directly, so the orphan is recoverable rather than doubled.
+ */
+export async function findEventByMarker(
+  accessToken: string,
+  calendarId: string,
+  meetingId: string,
+): Promise<string | null> {
+  const url = new URL(`${API}/calendars/${encodeURIComponent(calendarId)}/events`);
+  url.searchParams.set("privateExtendedProperty", `${FUNDEXECS_MARKER_KEY}=${meetingId}`);
+  url.searchParams.set("maxResults", "1");
+  url.searchParams.set("showDeleted", "false");
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { items?: Array<{ id?: string; status?: string }> };
+    const found = (body.items ?? []).find((e) => e?.id && e.status !== "cancelled");
+    return found?.id ?? null;
+  } catch {
+    // Recovery is best-effort: failing to find an orphan must not stop the
+    // write, it just means this one may create a second copy.
+    return null;
   }
 }
