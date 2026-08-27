@@ -73,10 +73,16 @@ export default function CalendarLayers({
 
       {/* The grant covers sending as well as the calendar, so the button cannot
           be labelled for the calendar alone — a member should know what they
-          are authorizing before the consent screen, not after. */}
+          are authorizing before the consent screen, not after.
+
+          The second line matters because meeting email already works without
+          this: the organization's Google integration can send. Connecting here
+          changes whose address guests see, not whether email goes out. */}
       {googleConfigured ? (
         <p className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
           Grants calendar access and permission to send meeting email as you.
+          Without it, meeting email sends from your organization&rsquo;s connected
+          Google account instead of your address.
         </p>
       ) : null}
 

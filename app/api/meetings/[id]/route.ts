@@ -189,7 +189,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     // Non-blocking on purpose: email here is a side effect of saving the
     // meeting, and losing the save over an unconnected mailbox would cost more
     // than falling back to the org's.
-    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId);
+    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId);
     const notifiable = !isDraft && !!roomCode;
 
     // The link invitee is already a guest on the meeting, but their booking
@@ -331,7 +331,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
     // Same as the PATCH handler: the host's own mailbox, non-blocking, because
     // a cancellation must not fail over an unconnected mailbox.
-    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId);
+    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId);
 
     const bookingInviteeEmail = cancelled?.booking.invitee_email?.trim().toLowerCase() ?? null;
     const emails = guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []).filter(

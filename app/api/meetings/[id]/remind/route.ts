@@ -70,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     //
     // Resolved BEFORE the cooldown is claimed: a claim taken for a send that
     // cannot happen would lock the host out for ten minutes over a refusal.
-    const mailbox = await mailboxFor(supabase, auth.ctx.userId);
+    const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
     if (!mailbox.ok) {
       return NextResponse.json(
         {
@@ -178,12 +178,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           sent === 0
             ? `Google would not send from ${mailbox.email ?? "your connected account"}. Check the address is still active, then try again.`
             : undefined,
+        // Which connection it went out through. Silent when it was the host's
+        // own account; named when it was the organization's, because the guest
+        // saw somebody else's address and the host should not learn that from
+        // the guest.
+        sentFrom: mailbox.source,
         // Nothing was sent and the claim could not be given back, so the button
         // will refuse for the next ten minutes over a send that never happened.
         // Better to say so than leave the host guessing at the refusal.
-        warning: cooldownReleased
-          ? undefined
-          : "Nothing was sent, but the cooldown could not be cleared — the next attempt may be refused for up to ten minutes.",
+        warning:
+          !cooldownReleased
+            ? "Nothing was sent, but the cooldown could not be cleared — the next attempt may be refused for up to ten minutes."
+            : mailbox.source === "organization" && sent > 0
+              ? "Sent from your organization's connected Google account, not your own. Connect your calendar to send from your address."
+              : undefined,
       },
       { status: sent > 0 ? 200 : 502 },
     );

@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
             // The scheduling member's own mailbox. Non-blocking: the meeting is
             // already created by this point and must not be lost to a missing
             // connection.
-            credentials: await hostCredentials(supabase, auth.ctx.userId),
+            credentials: await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId),
             orgId: auth.ctx.orgId,
             // Canonical app URL so the emailed link is correct regardless of
             // which host/proxy served this request.

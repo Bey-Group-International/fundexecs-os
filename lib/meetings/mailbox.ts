@@ -15,6 +15,13 @@
 //
 // Pure. The lookup and the token mint live in mailbox.server.ts.
 
+/** Which connection a send went out through. */
+export type MailboxSource =
+  /** The member's own Google grant — their address on the message. */
+  | "member"
+  /** The organization's connected Google integration, authorized by someone else. */
+  | "organization";
+
 /** Why a member's mailbox cannot send right now. */
 export type MailboxProblem =
   /** No Google grant at all for this member. */
@@ -46,13 +53,18 @@ export function grantCanSend(grantedScope: string | null | undefined): boolean {
 /**
  * What to tell the member. Each names the action that fixes it, because
  * "could not send" on its own leaves them nowhere to go.
+ *
+ * Each also names BOTH ways out. There is more than one Google grant in this
+ * app — the per-user calendar one and the org-level integration — and either
+ * can send. Naming only the one the member happens to be missing would send
+ * somebody to re-authorize an account they had already connected elsewhere.
  */
 export function mailboxProblemMessage(problem: MailboxProblem): string {
   switch (problem) {
     case "not_connected":
-      return "Connect your Google account in Calendar settings to send from your address.";
+      return "No Google account is connected. Connect one in Settings › Integrations, or connect your calendar, and meeting email will send from it.";
     case "scope_missing":
-      return "Reconnect your Google account to allow sending — the current connection covers your calendar but not email.";
+      return "Reconnect your Google account to allow sending — the current connection covers your calendar but not email. Connecting Google in Settings › Integrations works too.";
     case "revoked":
       return "Your Google connection was revoked. Reconnect it to send from your address.";
     case "unavailable":

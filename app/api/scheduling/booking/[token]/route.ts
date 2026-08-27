@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     await sendBookingEmails(body.action === "cancel" ? "cancelled_by_invitee" : "rescheduled", {
       // The invitee holds only a manage token, so there is no acting user.
       // The host is who this is from.
-      credentials: await hostCredentials(service, next.booking.host_user_id),
+      credentials: await hostCredentials(service, next.booking.host_user_id, next.booking.organization_id ?? undefined),
       // Anonymous invitee: the host org's mailbox sends, as on the public
       // booking route.
       orgId: next.page.organization_id ?? undefined,
