@@ -240,9 +240,16 @@ export function UpcomingMeetingsList({
       }
     } catch {
       setReminded((prev) => ({ ...prev, [id]: { state: "failed", message: "Could not reach the server" } }));
+    } finally {
+      // refresh() can reject on its own. Outside a finally that would leave
+      // busy set forever, and this meeting's buttons disabled until the page is
+      // reloaded — a failed refresh must not cost the host the row.
+      try {
+        await refresh();
+      } finally {
+        setBusy(null);
+      }
     }
-    await refresh();
-    setBusy(null);
   }
 
   async function clearAll() {

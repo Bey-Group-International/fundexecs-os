@@ -10,6 +10,7 @@ import {
   buildReminderEmail,
   canSendReminder,
   describeTimeUntil,
+  REMINDER_COOLDOWN_MS,
   type RemindableMeeting,
 } from "@/lib/meetings/reminder";
 
@@ -60,6 +61,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
+    // Claim the cooldown BEFORE sending, not after.
+    //
+    // canSendReminder above only reads the timestamp, so two requests arriving
+    // together would both find it clear and both send — and these land in
+    // external inboxes, where a duplicate is the exact thing the cooldown
+    // exists to prevent. This update matches only a row whose cooldown is still
+    // clear, so the database decides which request wins and the loser is turned
+    // away having sent nothing.
+    const claimedAt = new Date().toISOString();
+    const cutoff = new Date(Date.now() - REMINDER_COOLDOWN_MS).toISOString();
+    const { data: claimed, error: claimError } = await supabase
+      .from("live_meetings")
+      .update({ last_reminder_sent_at: claimedAt } as never)
+      .eq("id", id)
+      .eq("organization_id", auth.ctx.orgId)
+      .or(`last_reminder_sent_at.is.null,last_reminder_sent_at.lt.${cutoff}`)
+      .select("id")
+      .maybeSingle();
+
+    if (claimError) throw new Error(claimError.message);
+    if (!claimed) {
+      return NextResponse.json(
+        { error: "A reminder just went out. Try again shortly.", recipients: verdict.recipients.length },
+        { status: 409 },
+      );
+    }
+
     const joinUrl =
       meeting.meeting_url?.trim() ||
       (meeting.room_code ? buildMeetingInviteUrl(SITE_URL, meeting.room_code) : null);
@@ -82,33 +110,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
     const sent = results.filter((r) => r.status === "fulfilled" && r.value.ok).length;
 
-    // Only stamp the cooldown when something actually went out. A send that
-    // reached nobody — no mailbox connected, say — must not lock the host out
-    // for ten minutes with nothing to show for it.
-    let cooldownRecorded = true;
-    if (sent > 0) {
-      // supabase-js resolves with { error } rather than throwing, so a discarded
-      // result here would be a silent lost write — and the cooldown is the only
-      // thing standing between a second click and a second email in somebody
-      // else's inbox. If it does not stick, say so rather than reporting a
-      // clean send the host cannot trust.
-      const { error: stampError } = await supabase
+    // A claim that bought nothing is given back. A send that reached nobody —
+    // no mailbox connected, say — must not lock the host out for ten minutes
+    // with nothing to show for it, which is why the claim is released here
+    // rather than left standing.
+    let cooldownReleased = true;
+    if (sent === 0) {
+      // supabase-js resolves with { error } rather than throwing, so discarding
+      // this result would silently strand the claim.
+      const { error: releaseError } = await supabase
         .from("live_meetings")
-        .update({ last_reminder_sent_at: new Date().toISOString() } as never)
+        .update({ last_reminder_sent_at: meeting.last_reminder_sent_at ?? null } as never)
         .eq("id", id)
         .eq("organization_id", auth.ctx.orgId);
-      if (stampError) {
-        cooldownRecorded = false;
-        console.error("[meetings/remind] could not record the reminder cooldown", stampError.message);
+      if (releaseError) {
+        cooldownReleased = false;
+        console.error("[meetings/remind] could not release the reminder cooldown", releaseError.message);
       }
-
+    } else {
       await writeDashboardAudit({
         organizationId: auth.ctx.orgId,
         principalId: auth.ctx.userId,
         action: "meeting.reminder_sent",
         entityType: "live_meeting",
         entityId: id,
-        afterState: { sent, total: verdict.recipients.length, cooldownRecorded },
+        afterState: { sent, total: verdict.recipients.length },
       });
     }
 
@@ -119,9 +145,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // A connected mailbox is the usual reason nothing left, and the host
         // cannot guess that from a bare zero.
         error: sent === 0 ? "Could not send — no mailbox is connected for this organization." : undefined,
-        // The emails did go out, so this is not a failure — but the next click
-        // will not be held back, and the host should know that before making it.
-        warning: cooldownRecorded ? undefined : "Sent, but the send-again cooldown could not be recorded.",
+        // Nothing was sent and the claim could not be given back, so the button
+        // will refuse for the next ten minutes over a send that never happened.
+        // Better to say so than leave the host guessing at the refusal.
+        warning: cooldownReleased
+          ? undefined
+          : "Nothing was sent, but the cooldown could not be cleared — the next attempt may be refused for up to ten minutes.",
       },
       { status: sent > 0 ? 200 : 502 },
     );

@@ -90,10 +90,49 @@ describe("canSendReminder", () => {
   });
 
   it("says plainly when there is nobody to remind", () => {
-    // The most useful refusal, so it must win over the others that could apply.
     const v = canSendReminder(meeting({ attendees: [{ name: "No Email" }] }), NOW);
     expect(v.ok).toBe(false);
     expect(v.reason).toMatch(/Nobody on this meeting/);
+  });
+
+  it("puts the empty guest list ahead of every refusal but deletion", () => {
+    // The earlier test proved nothing about precedence: no other refusal
+    // applied to it. These each pair the empty list with a refusal that would
+    // otherwise win, because an empty list is the one thing the host can act on
+    // now and it stays true after the draft is saved or the date comes closer.
+    const noOne = [{ name: "No Email" }];
+    for (const over of [
+      { is_draft: true },
+      { status: "ended" },
+      { status: "active" },
+      { scheduled_at: null },
+      { scheduled_at: "2026-08-01T15:00:00.000Z" },
+      { scheduled_at: "2026-10-01T15:00:00.000Z" },
+      { last_reminder_sent_at: "2026-09-01T11:58:00.000Z" },
+    ]) {
+      const v = canSendReminder(meeting({ attendees: noOne, ...over }), NOW);
+      expect(v.ok).toBe(false);
+      expect(v.reason).toMatch(/Nobody on this meeting/);
+    }
+  });
+
+  it("still leads with deletion, which is about the meeting existing at all", () => {
+    // "Nobody has an email address" would answer a question the host did not
+    // ask about a meeting that is gone.
+    const v = canSendReminder(
+      meeting({ attendees: [{ name: "No Email" }], deleted_at: "2026-09-01T10:00:00Z" }),
+      NOW,
+    );
+    expect(v.reason).toMatch(/deleted/);
+  });
+
+  it("refuses a meeting somebody has already opened", () => {
+    // A host can start a room before its scheduled time, so the clock check
+    // alone would let this through and remind people about a meeting they can
+    // already join.
+    const v = canSendReminder(meeting({ status: "active" }), NOW);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(/already started/);
   });
 
   it("refuses a second reminder inside the cooldown", () => {
@@ -152,8 +191,10 @@ describe("describeDuration", () => {
     expect(describeDuration(9 * 60_000)).toBe("9 minutes");
   });
 
-  it("never says zero seconds", () => {
-    expect(describeDuration(1)).toBe("1 seconds");
+  it("never says zero seconds, and says it in the singular", () => {
+    expect(describeDuration(1)).toBe("1 second");
+    expect(describeDuration(1000)).toBe("1 second");
+    expect(describeDuration(1001)).toBe("2 seconds");
   });
 });
 

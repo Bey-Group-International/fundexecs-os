@@ -96,9 +96,29 @@ export interface ReminderVerdict {
 export function canSendReminder(meeting: RemindableMeeting, now: Date = new Date()): ReminderVerdict {
   const recipients = reminderRecipients(meeting.attendees);
 
+  // Deletion comes first because it is the only check about whether the meeting
+  // exists at all; telling someone their deleted meeting has no guest addresses
+  // would answer a question they did not ask.
   if (meeting.deleted_at) return { ok: false, reason: "That meeting was deleted.", recipients };
+
+  // Everything below is about whether a send makes sense, and among those an
+  // empty guest list is the most useful thing to say: it is the one the host
+  // can act on now, and it does not stop being true once the meeting is saved
+  // or the date comes closer. Ordering it after "more than two weeks away"
+  // would send a host off to wait a week only to find there was nobody to
+  // remind all along.
+  if (recipients.length === 0) {
+    return { ok: false, reason: "Nobody on this meeting has an email address.", recipients };
+  }
+
   if (meeting.is_draft) return { ok: false, reason: "Save the meeting before reminding anyone.", recipients };
   if (meeting.status === "ended") return { ok: false, reason: "That meeting has already ended.", recipients };
+  // 'active' means somebody opened the room. That can happen before
+  // scheduled_at — a host who starts early — so the clock check below would
+  // miss it and remind people about a meeting they are already able to join.
+  if (meeting.status === "active") {
+    return { ok: false, reason: "That meeting has already started.", recipients };
+  }
   if (!meeting.scheduled_at) return { ok: false, reason: "That meeting has no scheduled time.", recipients };
 
   const start = new Date(meeting.scheduled_at);
@@ -110,9 +130,6 @@ export function canSendReminder(meeting: RemindableMeeting, now: Date = new Date
   }
   if (start.getTime() - now.getTime() > REMINDER_MAX_LEAD_MS) {
     return { ok: false, reason: "That meeting is more than two weeks away.", recipients };
-  }
-  if (recipients.length === 0) {
-    return { ok: false, reason: "Nobody on this meeting has an email address.", recipients };
   }
 
   const wait = reminderCooldownRemaining(meeting.last_reminder_sent_at, now);
@@ -136,10 +153,13 @@ export function reminderCooldownRemaining(
   return Math.max(0, cooldownMs - (now.getTime() - last));
 }
 
-/** "9 minutes", "1 minute", "30 seconds" — for a wait, not a date. */
+/** "9 minutes", "1 minute", "30 seconds", "1 second" — for a wait, not a date. */
 export function describeDuration(ms: number): string {
+  if (ms < 60_000) {
+    const seconds = Math.max(1, Math.ceil(ms / 1000));
+    return seconds === 1 ? "1 second" : `${seconds} seconds`;
+  }
   const minutes = Math.ceil(ms / 60_000);
-  if (ms < 60_000) return `${Math.max(1, Math.ceil(ms / 1000))} seconds`;
   return minutes === 1 ? "1 minute" : `${minutes} minutes`;
 }
 

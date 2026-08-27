@@ -41,7 +41,24 @@ function meetingRow(over: Record<string, unknown> = {}) {
 /** Captures the update payload so the cooldown stamp can be asserted. */
 let updates: Array<Record<string, unknown>>;
 
-function mockDb(row: Record<string, unknown> | null, updateError: { message: string } | null = null) {
+/**
+ * The cooldown is claimed with a conditional update before anything is sent, so
+ * the double models both shapes: `.eq().eq().or().select().maybeSingle()` for
+ * the claim, and `.eq().eq()` for the plain release afterwards.
+ *
+ * `claimWins: false` stands in for a concurrent request that got there first —
+ * the row no longer matches the filter, so the update touches nothing.
+ */
+function mockDb(
+  row: Record<string, unknown> | null,
+  opts: {
+    updateError?: { message: string } | null;
+    /** Fails only the release, leaving the claim to succeed. */
+    releaseError?: { message: string } | null;
+    claimWins?: boolean;
+  } = {},
+) {
+  const { updateError = null, releaseError = null, claimWins = true } = opts;
   updates = [];
   from.mockImplementation(() => ({
     select: () => ({
@@ -49,7 +66,21 @@ function mockDb(row: Record<string, unknown> | null, updateError: { message: str
     }),
     update(payload: Record<string, unknown>) {
       updates.push(payload);
-      return { eq: () => ({ eq: async () => ({ error: updateError }) }) };
+      // Awaitable *and* chainable: the release awaits `.eq().eq()` directly
+      // while the claim carries on into `.or().select().maybeSingle()`.
+      const result = {
+        or: () => ({
+          select: () => ({
+            maybeSingle: async () => ({
+              data: claimWins ? { id: "m1" } : null,
+              error: updateError,
+            }),
+          }),
+        }),
+        then: (resolve: (v: { error: { message: string } | null }) => void) =>
+          resolve({ error: releaseError ?? updateError }),
+      };
+      return { eq: () => ({ eq: () => result }) };
     },
   }));
 }
@@ -94,17 +125,19 @@ describe("POST /api/meetings/[id]/remind", () => {
     expect(auditMock).toHaveBeenCalled();
   });
 
-  it("does not stamp the cooldown when nothing was sent", async () => {
+  it("leaves no cooldown behind when nothing was sent", async () => {
     // No mailbox connected. Locking the host out for ten minutes with nothing
-    // to show for it would be the worst of both outcomes.
+    // to show for it would be the worst of both outcomes. The claim is taken
+    // before the send, so what matters is that it is handed back — not that
+    // no write happened.
     sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox connected" });
-    mockDb(meetingRow());
+    mockDb(meetingRow({ last_reminder_sent_at: null }));
 
     const res = await POST(req(), { params });
 
     expect(res.status).toBe(502);
     expect((await res.json()).error).toMatch(/no mailbox is connected/i);
-    expect(updates).toHaveLength(0);
+    expect(updates.at(-1)).toEqual({ last_reminder_sent_at: null });
     expect(auditMock).not.toHaveBeenCalled();
   });
 
@@ -175,34 +208,63 @@ describe("POST /api/meetings/[id]/remind", () => {
   });
 });
 
-describe("POST /api/meetings/[id]/remind — a cooldown that would not stick", () => {
-  it("says so rather than reporting a clean send", async () => {
-    // supabase-js resolves with { error } instead of throwing, so discarding
-    // this result would be a silent lost write — and the cooldown is the only
-    // thing between a second click and a second email in a guest's inbox.
-    const warn = jest.spyOn(console, "error").mockImplementation(() => {});
-    mockDb(meetingRow(), { message: "permission denied for table live_meetings" });
-    const res = await POST(req(), { params });
-    const json = await res.json();
+describe("POST /api/meetings/[id]/remind — the cooldown claim", () => {
+  it("claims the cooldown before sending, not after", async () => {
+    // Reading the timestamp and then sending leaves a window where two
+    // requests both find it clear. The claim is a conditional update, so the
+    // database picks the winner before any email is built.
+    mockDb(meetingRow());
+    await POST(req(), { params });
+    expect(updates[0]).toHaveProperty("last_reminder_sent_at");
+    expect(sendEmailMock).toHaveBeenCalled();
+  });
 
-    // The emails did go out, so this is not a failure.
-    expect(res.status).toBe(200);
-    expect(json.sent).toBe(1);
-    expect(json.warning).toMatch(/cooldown could not be recorded/i);
+  it("sends nothing when a concurrent request claimed it first", async () => {
+    // The row no longer matches the filter, so the update touches nothing.
+    mockDb(meetingRow(), { claimWins: false });
+    const res = await POST(req(), { params });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/just went out/i);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("gives the claim back when the send reached nobody", async () => {
+    // Otherwise a missing mailbox would lock the host out for ten minutes over
+    // a send that never happened.
+    sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox connected" });
+    mockDb(meetingRow({ last_reminder_sent_at: null }));
+    const res = await POST(req(), { params });
+
+    expect(res.status).toBe(502);
+    expect(updates.at(-1)).toEqual({ last_reminder_sent_at: null });
+    expect(auditMock).not.toHaveBeenCalled();
+  });
+
+  it("restores the previous stamp rather than clearing it outright", async () => {
+    const previous = "2026-08-27T00:00:00.000Z";
+    sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
+    mockDb(meetingRow({ last_reminder_sent_at: previous }));
+    await POST(req(), { params });
+    expect(updates.at(-1)).toEqual({ last_reminder_sent_at: previous });
+  });
+
+  it("says so when the claim could not be given back", async () => {
+    // supabase-js resolves with { error } instead of throwing, so discarding
+    // this result would strand the claim silently.
+    const warn = jest.spyOn(console, "error").mockImplementation(() => {});
+    sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
+    mockDb(meetingRow(), { releaseError: { message: "permission denied" } });
+    const json = await (await POST(req(), { params })).json();
+
+    expect(json.warning).toMatch(/cooldown could not be cleared/i);
     warn.mockRestore();
   });
 
-  it("stays quiet when the stamp lands", async () => {
+  it("stays quiet on a send that reached someone", async () => {
     mockDb(meetingRow());
     const json = await (await POST(req(), { params })).json();
     expect(json.warning).toBeUndefined();
-  });
-
-  it("records in the audit trail whether the cooldown stuck", async () => {
-    const warn = jest.spyOn(console, "error").mockImplementation(() => {});
-    mockDb(meetingRow(), { message: "permission denied" });
-    await POST(req(), { params });
-    expect(auditMock.mock.calls[0][0].afterState).toMatchObject({ cooldownRecorded: false });
-    warn.mockRestore();
+    expect(auditMock).toHaveBeenCalled();
   });
 });
