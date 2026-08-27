@@ -182,9 +182,12 @@ export function buildReminderEmail(input: ReminderEmailInput): { subject: string
   const safeWhen = escapeHtml(input.whenLabel);
   const safeUntil = escapeHtml(input.timeUntil);
   const safeNote = input.note?.trim() ? escapeHtml(input.note.trim()) : "";
-  // Only http(s) reaches an href — a note or a stored URL is not a place to
-  // accept javascript:.
-  const url = input.joinUrl && /^https?:\/\//i.test(input.joinUrl) ? input.joinUrl : null;
+  // Two separate hazards. The scheme test keeps javascript: out of an href; the
+  // escaping keeps a quote in the rest of the URL from closing the attribute and
+  // opening another one. A scheme check alone would let
+  // `https://x.test/" onmouseover="…` through as markup.
+  const url =
+    input.joinUrl && /^https?:\/\//i.test(input.joinUrl) ? escapeHtml(input.joinUrl) : null;
 
   return {
     subject: `Reminder: ${title} — ${input.timeUntil}`,

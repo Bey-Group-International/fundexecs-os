@@ -195,6 +195,18 @@ describe("buildReminderEmail", () => {
     expect(html).not.toContain("Join meeting");
   });
 
+  it("cannot be made to open a second attribute", () => {
+    // The scheme test alone is not enough: a quote later in the URL would close
+    // href and let whatever follows be read as markup. meeting_url is stored
+    // data, not a constant.
+    const html = buildReminderEmail({
+      ...input,
+      joinUrl: 'https://app.test/r/1" onmouseover="steal()',
+    }).html;
+    expect(html).toContain("&quot;");
+    expect(html).not.toContain('onmouseover="steal()');
+  });
+
   it("refuses a javascript: url rather than rendering it", () => {
     // A stored meeting_url is not a place to accept a script.
     const html = buildReminderEmail({ ...input, joinUrl: "javascript:alert(1)" }).html;
