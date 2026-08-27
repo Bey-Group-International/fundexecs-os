@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
-import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { getAppUrlFromRequest } from "@/lib/integrations/adapters/app-url";
 import { writeDashboardAudit } from "@/lib/dashboard/audit";
 import {
   CARTA_CALLBACK_PATH,
@@ -26,56 +26,57 @@ import {
 // token is written through the RLS-enforced client under the caller's session.
 export const dynamic = "force-dynamic";
 
-function settingsRedirect(param: string): NextResponse {
-  const res = NextResponse.redirect(`${getAppUrl()}/settings?carta=${param}#integrations`);
+function settingsRedirect(base: string, param: string): NextResponse {
+  const res = NextResponse.redirect(`${base}/settings?carta=${param}#integrations`);
   // Always clear the one-shot PKCE cookie on the way out.
   res.cookies.set(CARTA_PKCE_COOKIE, "", { path: CARTA_CALLBACK_PATH, maxAge: 0 });
   return res;
 }
 
 export async function GET(req: NextRequest) {
-  if (req.nextUrl.searchParams.get("error")) return settingsRedirect("denied");
+  const base = getAppUrlFromRequest(req);
+  if (req.nextUrl.searchParams.get("error")) return settingsRedirect(base, "denied");
 
   const code = req.nextUrl.searchParams.get("code");
   const rawState = req.nextUrl.searchParams.get("state");
-  if (!code || !rawState) return settingsRedirect("invalid_callback");
-  if (!cartaAuthConfigured() || !vaultConfigured()) return settingsRedirect("not_configured");
+  if (!code || !rawState) return settingsRedirect(base, "invalid_callback");
+  if (!cartaAuthConfigured() || !vaultConfigured()) return settingsRedirect(base, "not_configured");
 
   const state = verifyCartaOAuthState(rawState);
-  if (!state) return settingsRedirect("invalid_state");
+  if (!state) return settingsRedirect(base, "invalid_state");
 
   const ctx = await getSessionContext();
   if (!ctx?.orgId || ctx.orgId !== state.orgId || ctx.userId !== state.userId) {
-    return settingsRedirect("session_mismatch");
+    return settingsRedirect(base, "session_mismatch");
   }
-  if (ctx.role !== "owner" && ctx.role !== "admin") return settingsRedirect("forbidden");
+  if (ctx.role !== "owner" && ctx.role !== "admin") return settingsRedirect(base, "forbidden");
 
   const verifier = req.cookies.get(CARTA_PKCE_COOKIE)?.value;
-  if (!verifier) return settingsRedirect("pkce_missing");
+  if (!verifier) return settingsRedirect(base, "pkce_missing");
 
   const creds = await resolveClientCreds(ctx.orgId);
-  if (!creds) return settingsRedirect("missing_client_credentials");
+  if (!creds) return settingsRedirect(base, "missing_client_credentials");
 
   // Token endpoint: manual (CARTA_TOKEN_URL) or discovered from CARTA_MCP_URL.
   const endpoints = await resolveCartaEndpoints();
-  if (!endpoints?.tokenEndpoint) return settingsRedirect("discovery_failed");
+  if (!endpoints?.tokenEndpoint) return settingsRedirect(base, "discovery_failed");
 
   let tokens;
   try {
     tokens = await exchangeCartaCode({
       code,
       codeVerifier: verifier,
-      redirectUri: `${getAppUrl()}${CARTA_CALLBACK_PATH}`,
+      redirectUri: `${base}${CARTA_CALLBACK_PATH}`,
       tokenUrl: endpoints.tokenEndpoint,
       creds,
     });
   } catch {
-    return settingsRedirect("exchange_failed");
+    return settingsRedirect(base, "exchange_failed");
   }
   if (!tokens.refreshToken) {
     // Without a refresh token the connection would silently die at the access
     // token's expiry — surface it rather than storing a dead connection.
-    return settingsRedirect("no_refresh_token");
+    return settingsRedirect(base, "no_refresh_token");
   }
 
   // Refresh token → vault (RLS-enforced write under the caller's session).
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
     },
     { onConflict: "organization_id,provider" },
   );
-  if (secretError) return settingsRedirect("store_failed");
+  if (secretError) return settingsRedirect(base, "store_failed");
 
   // A reconnect may be a different Carta grant; drop any cached access token so
   // the next sweep mints from the new refresh token.
@@ -108,5 +109,5 @@ export async function GET(req: NextRequest) {
     afterState: { channel: "carta", status: "connected", grant: "authorization_code" },
   });
 
-  return settingsRedirect("connected");
+  return settingsRedirect(base, "connected");
 }

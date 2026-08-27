@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { vaultConfigured } from "@/lib/vault";
-import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { getAppUrlFromRequest } from "@/lib/integrations/adapters/app-url";
 import {
   GOOGLE_CALENDAR_SCOPES,
   buildGoogleAuthUrl,
@@ -21,24 +21,25 @@ import {
 // than a bare 500.
 export const dynamic = "force-dynamic";
 
-function back(param: string): NextResponse {
-  return NextResponse.redirect(`${getAppUrl()}/meetings?google_calendar=${param}`);
+function back(base: string, param: string): NextResponse {
+  return NextResponse.redirect(`${base}/meetings?google_calendar=${param}`);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const base = getAppUrlFromRequest(req);
   const ctx = await getSessionContext();
   if (!ctx?.userId) {
-    return NextResponse.redirect(`${getAppUrl()}/login`);
+    return NextResponse.redirect(`${base}/login`);
   }
   if (!googleOAuthConfigured()) {
-    return back("not_configured");
+    return back(base, "not_configured");
   }
   if (!vaultConfigured()) {
     // Nowhere safe to put the refresh token — refuse before consent, not after.
-    return back("vault_not_configured");
+    return back(base, "vault_not_configured");
   }
 
   const state = createOAuthState({ orgId: ctx.orgId ?? "", userId: ctx.userId });
-  const redirectUri = `${getAppUrl()}/api/oauth/google/calendar/callback`;
+  const redirectUri = `${base}/api/oauth/google/calendar/callback`;
   return NextResponse.redirect(buildGoogleAuthUrl(state, redirectUri, GOOGLE_CALENDAR_SCOPES));
 }

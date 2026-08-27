@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { vaultConfigured } from "@/lib/vault";
-import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { getAppUrlFromRequest } from "@/lib/integrations/adapters/app-url";
 import {
   exchangeCodeForTokens,
   googleOAuthConfigured,
@@ -24,36 +24,40 @@ import { sealRefreshToken } from "@/lib/calendar/google.server";
 // their own user_id.
 export const dynamic = "force-dynamic";
 
-function back(param: string): NextResponse {
-  return NextResponse.redirect(`${getAppUrl()}/meetings?google_calendar=${param}`);
+function back(base: string, param: string): NextResponse {
+  return NextResponse.redirect(`${base}/meetings?google_calendar=${param}`);
 }
 
 export async function GET(req: NextRequest) {
+  // Same derivation as /start, so the redirect_uri sent to the token endpoint
+  // matches the one consent was granted against.
+  const base = getAppUrlFromRequest(req);
+
   // The member said no on Google's screen — not an error on our side.
-  if (req.nextUrl.searchParams.get("error")) return back("denied");
+  if (req.nextUrl.searchParams.get("error")) return back(base, "denied");
 
   const code = req.nextUrl.searchParams.get("code");
   const rawState = req.nextUrl.searchParams.get("state");
-  if (!code || !rawState) return back("invalid_callback");
-  if (!googleOAuthConfigured() || !vaultConfigured()) return back("not_configured");
+  if (!code || !rawState) return back(base, "invalid_callback");
+  if (!googleOAuthConfigured() || !vaultConfigured()) return back(base, "not_configured");
 
   const state = verifyOAuthState(rawState);
-  if (!state) return back("invalid_state");
+  if (!state) return back(base, "invalid_state");
 
   const ctx = await getSessionContext();
-  if (!ctx?.userId || ctx.userId !== state.userId) return back("session_mismatch");
+  if (!ctx?.userId || ctx.userId !== state.userId) return back(base, "session_mismatch");
 
   let tokens;
   try {
-    tokens = await exchangeCodeForTokens(code, `${getAppUrl()}/api/oauth/google/calendar/callback`);
+    tokens = await exchangeCodeForTokens(code, `${base}/api/oauth/google/calendar/callback`);
   } catch {
-    return back("exchange_failed");
+    return back(base, "exchange_failed");
   }
 
   // Google withholds the refresh token when the member has already granted this
   // scope and did not re-consent. Without it there is nothing durable to store,
   // so say so rather than saving a connection that dies in an hour.
-  if (!tokens.refreshToken) return back("no_refresh_token");
+  if (!tokens.refreshToken) return back(base, "no_refresh_token");
 
   try {
     const supabase = await createServerClient();
@@ -82,8 +86,8 @@ export async function GET(req: NextRequest) {
     if (error) throw new Error(error.message);
   } catch (err) {
     console.error("[/api/oauth/google/calendar/callback]", err);
-    return back("save_failed");
+    return back(base, "save_failed");
   }
 
-  return back("connected");
+  return back(base, "connected");
 }

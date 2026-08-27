@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
-import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { getAppUrlFromRequest } from "@/lib/integrations/adapters/app-url";
 import { registerDynamicClient } from "@/lib/integrations/carta/discovery.server";
 import {
   buildCartaAuthUrl,
@@ -30,21 +30,22 @@ import {
 // on Settings › Integrations with a readable reason — never a bare 500.
 export const dynamic = "force-dynamic";
 
-function settingsRedirect(param: string): NextResponse {
-  return NextResponse.redirect(`${getAppUrl()}/settings?carta=${param}#integrations`);
+function settingsRedirect(base: string, param: string): NextResponse {
+  return NextResponse.redirect(`${base}/settings?carta=${param}#integrations`);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const base = getAppUrlFromRequest(req);
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return NextResponse.redirect(`${getAppUrl()}/login`);
-  if (ctx.role !== "owner" && ctx.role !== "admin") return settingsRedirect("forbidden");
-  if (!vaultConfigured()) return settingsRedirect("vault_not_configured");
-  if (!cartaAuthConfigured()) return settingsRedirect("not_configured");
+  if (!ctx?.orgId) return NextResponse.redirect(`${base}/login`);
+  if (ctx.role !== "owner" && ctx.role !== "admin") return settingsRedirect(base, "forbidden");
+  if (!vaultConfigured()) return settingsRedirect(base, "vault_not_configured");
+  if (!cartaAuthConfigured()) return settingsRedirect(base, "not_configured");
 
   const endpoints = await resolveCartaEndpoints();
-  if (!endpoints?.authorizationEndpoint) return settingsRedirect("discovery_failed");
+  if (!endpoints?.authorizationEndpoint) return settingsRedirect(base, "discovery_failed");
 
-  const redirectUri = `${getAppUrl()}${CARTA_CALLBACK_PATH}`;
+  const redirectUri = `${base}${CARTA_CALLBACK_PATH}`;
 
   // Resolve client creds; dynamically register one if the org has none and the
   // server advertises a registration endpoint (the no-manual-credentials path).
@@ -78,7 +79,7 @@ export async function GET() {
       creds = { clientId: registered.clientId, clientSecret: registered.clientSecret };
     }
   }
-  if (!creds) return settingsRedirect("missing_client_credentials");
+  if (!creds) return settingsRedirect(base, "missing_client_credentials");
 
   const { verifier, challenge } = createPkcePair();
   const state = createCartaOAuthState({ orgId: ctx.orgId, userId: ctx.userId });
