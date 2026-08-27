@@ -56,8 +56,9 @@ export default function CalendarLayers({
 
       {layers.length === 0 ? (
         <p className="text-xs leading-relaxed text-[var(--fg-muted)]">
-          No calendars connected yet. Connecting one shows its events here and stops this
-          app offering times you are already busy.
+          No calendars connected yet. Connecting one shows its events here, stops this
+          app offering times you are already busy, and lets meeting email go out
+          from your own address.
         </p>
       ) : null}
 
@@ -66,8 +67,17 @@ export default function CalendarLayers({
           href="/api/oauth/google/calendar/start"
           className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-[var(--gold-400)]/50 hover:text-[var(--gold-400)]"
         >
-          {connectedAs ? "Reconnect Google" : "Connect Google Calendar"}
+          {connectedAs ? "Reconnect Google" : "Connect Google"}
         </a>
+      ) : null}
+
+      {/* The grant covers sending as well as the calendar, so the button cannot
+          be labelled for the calendar alone — a member should know what they
+          are authorizing before the consent screen, not after. */}
+      {googleConfigured ? (
+        <p className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
+          Grants calendar access and permission to send meeting email as you.
+        </p>
       ) : null}
 
       {connectedAs ? (

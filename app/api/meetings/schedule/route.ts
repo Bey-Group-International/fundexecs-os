@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -176,6 +177,10 @@ export async function POST(req: NextRequest) {
         try {
           const { data: userData } = await supabase.auth.getUser();
           const result = await sendMeetingInvites({
+            // The scheduling member's own mailbox. Non-blocking: the meeting is
+            // already created by this point and must not be lost to a missing
+            // connection.
+            credentials: await hostCredentials(supabase, auth.ctx.userId),
             orgId: auth.ctx.orgId,
             // Canonical app URL so the emailed link is correct regardless of
             // which host/proxy served this request.

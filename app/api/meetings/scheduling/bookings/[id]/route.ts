@@ -6,6 +6,7 @@
 // ownership check against the signed-in host.
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import { requireOrgContext } from "@/lib/auth";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
@@ -78,6 +79,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Notifying is best-effort: the decision is already recorded, and a failed
     // send must not leave the host unsure whether it went through.
     await sendBookingEmails(emailKind, {
+      // The host is the acting user here — the route already refuses anyone
+      // else — so this is their own mailbox.
+      credentials: await hostCredentials(service, auth.ctx.userId),
       orgId: auth.ctx.orgId,
       eventTitle: next.eventType.title,
       hostName: next.page.display_name,

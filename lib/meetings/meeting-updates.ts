@@ -10,7 +10,7 @@
 //      `diffMeetingTiming` decide whether anything actually moved.
 //   2. Nothing throws. The edit is already saved by the time a notice goes out;
 //      an unconnected mailbox must never surface as a failed save.
-import { sendEmail } from "@/lib/email";
+import { sendEmail, type SendEmailCredentials } from "@/lib/email";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 
@@ -69,6 +69,12 @@ export interface MeetingUpdateContext {
   previousStartIso?: string | null;
   durationMinutes?: number | null;
   reason?: string | null;
+  /**
+   * The host's own mailbox, resolved by the caller. A reschedule or a
+   * cancellation is sent by a person and should arrive from their address;
+   * omitted, the org mailbox is used as before.
+   */
+  credentials?: SendEmailCredentials;
 }
 
 function whenIn(iso: string | null | undefined, timezone: string, durationMinutes?: number | null): string {
@@ -155,6 +161,7 @@ export async function sendMeetingUpdates(
     emails.map((email) =>
       sendEmail({
         orgId: ctx.orgId,
+        credentials: ctx.credentials,
         to: { name: email.split("@")[0] ?? email, email },
         subject,
         htmlBody: html,

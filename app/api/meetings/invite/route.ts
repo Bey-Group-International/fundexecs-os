@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
+import { mailboxFor } from "@/lib/meetings/mailbox.server";
 import { sendMeetingInvites } from "@/lib/meetings/invite";
 import { SITE_URL } from "@/lib/site";
 
@@ -30,7 +32,20 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!meeting) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
 
+  // Sending IS this route's action, so a missing mailbox is a refusal the
+  // member can act on rather than a silent zero. (Routes where email is a side
+  // effect of a save use hostCredentials and degrade instead — losing the save
+  // over a mailbox would be the worse trade.)
+  const mailbox = await mailboxFor(supabase, auth.ctx.userId);
+  if (!mailbox.ok) {
+    return NextResponse.json(
+      { error: mailboxProblemMessage(mailbox.problem), mailbox: mailbox.problem },
+      { status: 409 },
+    );
+  }
+
   const { sent, total } = await sendMeetingInvites({
+    credentials: { gmailAccessToken: mailbox.token },
     orgId: auth.ctx.orgId,
     // Canonical app URL so the emailed link is stable across hosts/proxies.
     origin: SITE_URL,

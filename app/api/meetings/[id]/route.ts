@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
@@ -184,6 +185,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     const title = body.title ? String(body.title) : ((prior?.title as string | null) ?? "Meeting");
     const timezone = (cleanString(body.timezone) ?? (prior?.timezone as string | null)) || "UTC";
     const senderName = auth.ctx.email ?? "Someone";
+    // The host's own mailbox. Resolved once for every send this handler makes.
+    // Non-blocking on purpose: email here is a side effect of saving the
+    // meeting, and losing the save over an unconnected mailbox would cost more
+    // than falling back to the org's.
+    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId);
     const notifiable = !isDraft && !!roomCode;
 
     // The link invitee is already a guest on the meeting, but their booking
@@ -206,6 +212,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     if (notifiable && newEmails.length > 0) {
       try {
         const sendResult = await sendMeetingInvites({
+          credentials: senderMailbox,
           orgId: auth.ctx.orgId,
           // Canonical app URL so the emailed link is stable across hosts/proxies.
           origin: SITE_URL,
@@ -225,6 +232,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     let notified = 0;
     if (notifiable && timing.changed && retainedEmails.length > 0) {
       const res = await sendMeetingUpdates("rescheduled", {
+        credentials: senderMailbox,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -241,6 +249,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
 
     if (notifiable && removedEmails.length > 0) {
       const res = await sendMeetingUpdates("removed", {
+        credentials: senderMailbox,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -255,6 +264,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
 
     if (booking && timing.changed) {
       const res = await sendBookingEmails("rescheduled_by_host", {
+        credentials: senderMailbox,
         orgId: auth.ctx.orgId,
         eventTitle: booking.eventType.title,
         hostName: booking.page.display_name,
@@ -319,6 +329,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
     const result = await deleteMeetingLocal(supabase, { orgId: auth.ctx.orgId, userId: auth.ctx.userId }, id);
 
+    // Same as the PATCH handler: the host's own mailbox, non-blocking, because
+    // a cancellation must not fail over an unconnected mailbox.
+    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId);
+
     const bookingInviteeEmail = cancelled?.booking.invitee_email?.trim().toLowerCase() ?? null;
     const emails = guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []).filter(
       (e) => e !== bookingInviteeEmail,
@@ -328,6 +342,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     let notified = 0;
     if (notifiable && emails.length > 0) {
       const res = await sendMeetingUpdates("cancelled", {
+        credentials: senderMailbox,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode: (prior?.room_code as string | null) ?? "",
@@ -344,6 +359,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
     if (cancelled) {
       const res = await sendBookingEmails("cancelled_by_host", {
+        credentials: senderMailbox,
         orgId: auth.ctx.orgId,
         eventTitle: cancelled.eventType.title,
         hostName: cancelled.page.display_name,

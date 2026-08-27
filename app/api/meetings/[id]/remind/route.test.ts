@@ -4,6 +4,7 @@ const authMock = jest.fn();
 const from = jest.fn();
 const sendEmailMock = jest.fn();
 const auditMock = jest.fn();
+const mailboxMock = jest.fn();
 
 jest.mock("@/lib/auth", () => ({ requireOrgContext: () => authMock() }));
 jest.mock("@/lib/supabase/server", () => ({ createServerClient: () => ({ from }) }));
@@ -13,6 +14,9 @@ jest.mock("@/lib/email", () => ({
 }));
 jest.mock("@/lib/dashboard/audit", () => ({
   writeDashboardAudit: (...args: unknown[]) => auditMock(...args),
+}));
+jest.mock("@/lib/meetings/mailbox.server", () => ({
+  mailboxFor: (...args: unknown[]) => mailboxMock(...args),
 }));
 jest.mock("@/lib/site", () => ({ SITE_URL: "https://app.test" }));
 
@@ -98,6 +102,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   authMock.mockResolvedValue({ ok: true, ctx: { orgId: "org1", userId: "u1", email: "rae@fund.test" } });
   sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+  // The host's own Google grant. Every send now goes out through it.
+  mailboxMock.mockResolvedValue({ ok: true, token: "host-token", email: "rae@fund.test" });
 });
 
 describe("POST /api/meetings/[id]/remind", () => {
@@ -136,7 +142,9 @@ describe("POST /api/meetings/[id]/remind", () => {
     const res = await POST(req(), { params });
 
     expect(res.status).toBe(502);
-    expect((await res.json()).error).toMatch(/no mailbox is connected/i);
+    // The mailbox resolved, so a zero is Gmail refusing rather than a missing
+    // connection — the message names the account to check.
+    expect((await res.json()).error).toMatch(/rae@fund\.test/);
     expect(updates.at(-1)).toEqual({ last_reminder_sent_at: null });
     expect(auditMock).not.toHaveBeenCalled();
   });
@@ -266,5 +274,60 @@ describe("POST /api/meetings/[id]/remind — the cooldown claim", () => {
     const json = await (await POST(req(), { params })).json();
     expect(json.warning).toBeUndefined();
     expect(auditMock).toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/meetings/[id]/remind — sending as the host", () => {
+  it("sends through the host's own Google grant", async () => {
+    // Not the org mailbox. A reminder is from a person, and the guest should
+    // see that person's address.
+    mockDb(meetingRow());
+    await POST(req(), { params });
+    expect(sendEmailMock.mock.calls[0][0].credentials).toEqual({ gmailAccessToken: "host-token" });
+  });
+
+  it("sets no From header, leaving Gmail to stamp the account", async () => {
+    // Forcing a From that is not a verified alias only gets it rewritten; the
+    // authenticated account's own address is the one that always matches.
+    mockDb(meetingRow());
+    await POST(req(), { params });
+    expect(sendEmailMock.mock.calls[0][0].credentials.fromEmail).toBeUndefined();
+  });
+
+  it("refuses with an action when the host has never connected", async () => {
+    mailboxMock.mockResolvedValue({ ok: false, problem: "not_connected" });
+    mockDb(meetingRow());
+    const res = await POST(req(), { params });
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.mailbox).toBe("not_connected");
+    expect(json.error).toMatch(/^Connect your Google account/);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("tells a calendar-only member to reconnect, not to connect", async () => {
+    mailboxMock.mockResolvedValue({ ok: false, problem: "scope_missing" });
+    mockDb(meetingRow());
+    const json = await (await POST(req(), { params })).json();
+    expect(json.error).toMatch(/^Reconnect/);
+  });
+
+  it("claims no cooldown for a send it refuses", async () => {
+    // The claim is taken after the mailbox resolves. Taking it first would lock
+    // the host out for ten minutes over a refusal.
+    mailboxMock.mockResolvedValue({ ok: false, problem: "not_connected" });
+    mockDb(meetingRow());
+    await POST(req(), { params });
+    expect(updates).toHaveLength(0);
+  });
+
+  it("still reports the recipients it would have reached", async () => {
+    // The host asked "can I remind these people" — the count is part of the
+    // answer even when the answer is no.
+    mailboxMock.mockResolvedValue({ ok: false, problem: "revoked" });
+    mockDb(meetingRow({ attendees: [{ email: "ada@example.com" }, { email: "bo@example.com" }] }));
+    const json = await (await POST(req(), { params })).json();
+    expect(json.recipients).toBe(2);
   });
 });

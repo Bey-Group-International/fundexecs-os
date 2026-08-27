@@ -2,7 +2,7 @@
 // Shared meeting-invite email logic used by the manual invite route
 // (/api/meetings/invite) and the schedule/edit flows, so adding a guest email
 // to a scheduled meeting actually reaches them.
-import { sendEmail, escapeHtml } from "@/lib/email";
+import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 
 export function buildMeetingInviteHtml({
@@ -50,6 +50,15 @@ export async function sendMeetingInvites(args: {
   emails: string[];
   /** The org whose connected mailbox sends these. Without it nothing sends. */
   orgId?: string;
+  /**
+   * The host's own mailbox, resolved by the caller.
+   *
+   * An invitation is sent by a person, so it should arrive from that person's
+   * address. Supplied, it takes precedence over the org mailbox; omitted, the
+   * org mailbox is used as before, so a caller that has not been updated keeps
+   * working rather than going silent.
+   */
+  credentials?: SendEmailCredentials;
 }): Promise<{ sent: number; total: number }> {
   const emails = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (emails.length === 0) return { sent: 0, total: 0 };
@@ -62,6 +71,7 @@ export async function sendMeetingInvites(args: {
     emails.map((email) =>
       sendEmail({
         orgId: args.orgId,
+        credentials: args.credentials,
         to: { name: email.split("@")[0] ?? email, email },
         subject: `You're invited to join "${args.title}" on FundExecs OS`,
         htmlBody: html,

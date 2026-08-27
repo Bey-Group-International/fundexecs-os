@@ -16,6 +16,7 @@ import {
 } from "@/lib/meetings/scheduling-service";
 import { sendBookingEmails } from "@/lib/meetings/scheduling-email";
 import { hostContactFor } from "@/lib/meetings/scheduling-host";
+import { hostCredentials } from "@/lib/meetings/mailbox.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,9 +83,12 @@ export async function POST(
     const manageUrl = buildBookingManageUrl(SITE_URL, booking.manage_token);
 
     await sendBookingEmails(booking.status === "pending" ? "requested" : "confirmed", {
-      // The invitee is anonymous, so the sending mailbox comes from the
-      // scheduling page's organization — the host's own, which is whose name
-      // is on the email anyway.
+      // The invitee is anonymous, so there is no acting user to send as. The
+      // person this is from is the host whose link was booked, so it goes out
+      // from their mailbox; without one it falls back to the org's, because a
+      // booking confirmation the invitee never receives is worse than one from
+      // a shared address.
+      credentials: await hostCredentials(service, resolved.page.user_id),
       orgId: resolved.page.organization_id ?? undefined,
       eventTitle: eventType.title,
       hostName: resolved.page.display_name,

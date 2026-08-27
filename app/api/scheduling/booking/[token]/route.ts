@@ -4,6 +4,7 @@
 // enough to act on this one booking, and useless for anything else.
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import { checkRateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
@@ -108,6 +109,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     }
 
     await sendBookingEmails(body.action === "cancel" ? "cancelled_by_invitee" : "rescheduled", {
+      // The invitee holds only a manage token, so there is no acting user.
+      // The host is who this is from.
+      credentials: await hostCredentials(service, next.booking.host_user_id),
       // Anonymous invitee: the host org's mailbox sends, as on the public
       // booking route.
       orgId: next.page.organization_id ?? undefined,
