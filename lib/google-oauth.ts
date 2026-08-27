@@ -151,6 +151,12 @@ export interface GoogleTokens {
   // The connected Google account's email, from the id_token — display label
   // only (the token came straight from Google over TLS, not a third party).
   email: string | null;
+  // The scopes Google ACTUALLY granted, space separated. Not the same as the
+  // ones asked for: a member can untick a permission on the consent screen, and
+  // a grant made before a scope was added to the request carries the old set.
+  // Storing it is what lets a caller distinguish "connect" from "reconnect"
+  // instead of failing at the API call with no explanation.
+  scope: string | null;
 }
 
 function parseIdTokenEmail(idToken: string | undefined): string | null {
@@ -186,12 +192,14 @@ export async function exchangeCodeForTokens(
     access_token?: string;
     refresh_token?: string;
     id_token?: string;
+    scope?: string;
   };
   if (!body.access_token) throw new Error("google token exchange returned no access token");
   return {
     accessToken: body.access_token,
     refreshToken: body.refresh_token ?? null,
     email: parseIdTokenEmail(body.id_token),
+    scope: body.scope ?? null,
   };
 }
 

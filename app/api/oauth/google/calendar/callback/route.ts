@@ -65,6 +65,10 @@ export async function GET(req: NextRequest) {
           user_id: ctx.userId,
           organization_id: ctx.orgId ?? null,
           google_email: tokens.email,
+          // What Google actually granted, which is not always what was asked
+          // for. Read back before every send: without it stored, a grant that
+          // covers sending is indistinguishable from one that does not.
+          granted_scope: tokens.scope,
           ...sealRefreshToken(tokens.refreshToken),
           connected_at: now,
           // A reconnection is how a member fixes a revoked grant, so the old
