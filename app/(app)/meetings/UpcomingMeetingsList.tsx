@@ -134,6 +134,9 @@ export function UpcomingMeetingsList({
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Per-meeting outcome of the reminder button, so one meeting's result never
+  // appears under another.
+  const [reminded, setReminded] = useState<Record<string, { state: "sending" | "sent" | "failed"; message?: string }>>({});
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -202,6 +205,51 @@ export function UpcomingMeetingsList({
     }
     await refresh();
     setBusy(null);
+  }
+
+  /**
+   * Email everyone on the meeting a reminder, now.
+   *
+   * The outcome is reported per meeting rather than in the shared error banner:
+   * "sent to 3" is the answer to the question the host just asked, and a
+   * refusal (too far out, nobody has an address, one just went out) is
+   * information rather than a failure.
+   */
+  async function sendReminder(id: string) {
+    setBusy(id);
+    setError(null);
+    setReminded((prev) => ({ ...prev, [id]: { state: "sending" } }));
+    try {
+      const res = await fetch(`/api/meetings/${id}/remind`, { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as {
+        sent?: number;
+        total?: number;
+        error?: string;
+        warning?: string;
+      };
+      if (res.ok && (json.sent ?? 0) > 0) {
+        const reach = `Reminder sent to ${json.sent}${json.total && json.total !== json.sent ? ` of ${json.total}` : ""}`;
+        setReminded((prev) => ({
+          ...prev,
+          // A warning still means the emails went out, so it reads as sent —
+          // but the host is told before they press the button a second time.
+          [id]: { state: "sent", message: json.warning ? `${reach}. ${json.warning}` : reach },
+        }));
+      } else {
+        setReminded((prev) => ({ ...prev, [id]: { state: "failed", message: json.error ?? "Could not send the reminder" } }));
+      }
+    } catch {
+      setReminded((prev) => ({ ...prev, [id]: { state: "failed", message: "Could not reach the server" } }));
+    } finally {
+      // refresh() can reject on its own. Outside a finally that would leave
+      // busy set forever, and this meeting's buttons disabled until the page is
+      // reloaded — a failed refresh must not cost the host the row.
+      try {
+        await refresh();
+      } finally {
+        setBusy(null);
+      }
+    }
   }
 
   async function clearAll() {
@@ -398,7 +446,25 @@ export function UpcomingMeetingsList({
                 <ActionButton danger onClick={() => setDeleteId(meeting.id)}>Delete</ActionButton>
                 <ActionButton onClick={() => prepareWithEarn(meeting)}>Prepare with Earn</ActionButton>
                 <ActionButton onClick={() => followUpWithEarn(meeting)}>Follow up</ActionButton>
+                <ActionButton
+                  disabled={busy === meeting.id || reminded[meeting.id]?.state === "sending"}
+                  onClick={() => void sendReminder(meeting.id)}
+                >
+                  {reminded[meeting.id]?.state === "sending" ? "Sending…" : "Send reminder"}
+                </ActionButton>
               </div>
+              {reminded[meeting.id]?.message ? (
+                <p
+                  role="status"
+                  className={`mt-2 text-xs ${
+                    reminded[meeting.id]!.state === "sent"
+                      ? "text-[var(--status-success)]"
+                      : "text-[var(--status-warning)]"
+                  }`}
+                >
+                  {reminded[meeting.id]!.message}
+                </p>
+              ) : null}
 
               {detailsMeeting?.id === meeting.id ? <MeetingDetails meeting={meeting} /> : null}
 
@@ -472,12 +538,23 @@ function StatusPill({ label }: { label: string }) {
   );
 }
 
-function ActionButton({ children, onClick, danger = false }: { children: React.ReactNode; onClick: () => void; danger?: boolean }) {
+function ActionButton({
+  children,
+  onClick,
+  danger = false,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-md border px-2 py-1 text-xs transition ${
+      disabled={disabled}
+      className={`rounded-md border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-50 ${
         danger
           ? "border-[var(--status-danger)]/35 text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10"
           : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
