@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { vaultConfigured } from "@/lib/vault";
-import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { getAppUrlFromRequest } from "@/lib/integrations/adapters/app-url";
 import {
   buildGoogleAuthUrl,
   createOAuthState,
@@ -17,27 +17,30 @@ import {
 // Settings › Integrations with a readable reason — never a bare 500.
 export const dynamic = "force-dynamic";
 
-function settingsRedirect(param: string): NextResponse {
-  return NextResponse.redirect(`${getAppUrl()}/settings?google=${param}#integrations`);
+function settingsRedirect(base: string, param: string): NextResponse {
+  return NextResponse.redirect(`${base}/settings?google=${param}#integrations`);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Derived from the request the operator actually made, so an unconfigured
+  // deploy sends them back to this site rather than to localhost.
+  const base = getAppUrlFromRequest(req);
   const ctx = await getSessionContext();
   if (!ctx?.orgId) {
-    return NextResponse.redirect(`${getAppUrl()}/login`);
+    return NextResponse.redirect(`${base}/login`);
   }
   if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return settingsRedirect("forbidden");
+    return settingsRedirect(base, "forbidden");
   }
   if (!googleOAuthConfigured()) {
-    return settingsRedirect("not_configured");
+    return settingsRedirect(base, "not_configured");
   }
   if (!vaultConfigured()) {
     // Nowhere safe to put the refresh token — refuse before consent, not after.
-    return settingsRedirect("vault_not_configured");
+    return settingsRedirect(base, "vault_not_configured");
   }
 
   const state = createOAuthState({ orgId: ctx.orgId, userId: ctx.userId });
-  const redirectUri = `${getAppUrl()}/api/oauth/google/callback`;
+  const redirectUri = `${base}/api/oauth/google/callback`;
   return NextResponse.redirect(buildGoogleAuthUrl(state, redirectUri));
 }

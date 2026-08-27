@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { encryptSecret, vaultConfigured } from "@/lib/vault";
-import { getAppUrl } from "@/lib/integrations/adapters/app-url";
+import { getAppUrlFromRequest } from "@/lib/integrations/adapters/app-url";
 import { writeDashboardAudit } from "@/lib/dashboard/audit";
 import {
   GOOGLE_PEOPLE_REFRESH_TOKEN_KEY,
@@ -23,45 +23,49 @@ import {
 // rather than overwriting it. Never logs or returns the token itself.
 export const dynamic = "force-dynamic";
 
-function settingsRedirect(param: string): NextResponse {
-  return NextResponse.redirect(`${getAppUrl()}/settings?google_people=${param}#integrations`);
+function settingsRedirect(base: string, param: string): NextResponse {
+  return NextResponse.redirect(`${base}/settings?google_people=${param}#integrations`);
 }
 
 export async function GET(req: NextRequest) {
+  // Same derivation as /start, so the redirect_uri sent to the token endpoint
+  // matches the one consent was granted against.
+  const base = getAppUrlFromRequest(req);
+
   // The user said no on Google's screen — not an error on our side.
   if (req.nextUrl.searchParams.get("error")) {
-    return settingsRedirect("denied");
+    return settingsRedirect(base, "denied");
   }
 
   const code = req.nextUrl.searchParams.get("code");
   const rawState = req.nextUrl.searchParams.get("state");
-  if (!code || !rawState) return settingsRedirect("invalid_callback");
+  if (!code || !rawState) return settingsRedirect(base, "invalid_callback");
   if (!googleOAuthConfigured() || !vaultConfigured()) {
-    return settingsRedirect("not_configured");
+    return settingsRedirect(base, "not_configured");
   }
 
   const state = verifyOAuthState(rawState);
-  if (!state) return settingsRedirect("invalid_state");
+  if (!state) return settingsRedirect(base, "invalid_state");
 
   const ctx = await getSessionContext();
   if (!ctx?.orgId || ctx.orgId !== state.orgId || ctx.userId !== state.userId) {
-    return settingsRedirect("session_mismatch");
+    return settingsRedirect(base, "session_mismatch");
   }
   if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return settingsRedirect("forbidden");
+    return settingsRedirect(base, "forbidden");
   }
 
   let tokens;
   try {
-    tokens = await exchangeCodeForTokens(code, `${getAppUrl()}/api/oauth/google/people/callback`);
+    tokens = await exchangeCodeForTokens(code, `${base}/api/oauth/google/people/callback`);
   } catch {
-    return settingsRedirect("exchange_failed");
+    return settingsRedirect(base, "exchange_failed");
   }
   if (!tokens.refreshToken) {
     // Google only issues a refresh token on a consent-mode grant; without one
     // the connection would silently die in an hour. Our /start always sends
     // prompt=consent, so this is a defensive path — ask the user to retry.
-    return settingsRedirect("no_refresh_token");
+    return settingsRedirect(base, "no_refresh_token");
   }
 
   const supabase = await createServerClient();
@@ -81,7 +85,7 @@ export async function GET(req: NextRequest) {
     },
     { onConflict: "organization_id,provider" },
   );
-  if (secretError) return settingsRedirect("store_failed");
+  if (secretError) return settingsRedirect(base, "store_failed");
 
   // A reconnect may be a different Google account; drop any People access token
   // cached from the old grant so the next sync mints from the new one.
@@ -100,5 +104,5 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  return settingsRedirect("connected");
+  return settingsRedirect(base, "connected");
 }
