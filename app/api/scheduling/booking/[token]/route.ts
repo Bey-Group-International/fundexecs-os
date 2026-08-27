@@ -128,6 +128,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       bookingId: next.booking.id,
       bookingCreatedAt: next.booking.created_at,
       bookingUpdatedAt: next.booking.updated_at,
+      bookingSequence: next.booking.calendar_sequence,
       siteUrl: SITE_URL,
     });
 

@@ -89,6 +89,13 @@ function boundary(tag: string): string {
   return `----=_FundExecs_${tag}`;
 }
 
+/** The METHOD line of an iTIP body, if it carries one we recognise. */
+function methodOf(ics: string): string | null {
+  const m = /^METHOD:([A-Za-z]+)\s*$/m.exec(ics);
+  const value = m?.[1]?.toUpperCase();
+  return value === "REQUEST" || value === "CANCEL" || value === "PUBLISH" ? value : null;
+}
+
 function buildRfc2822(args: SendEmailArgs, from: string | null): string {
   const headers = [
     // No From header by default: Gmail stamps the connected account's own
@@ -120,6 +127,11 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
   // Base64 with hard-wrapped lines: an .ics carries CRLFs and can exceed the
   // 998-octet line limit, and quoted-printable mangles the folding clients rely on.
   const encoded = Buffer.from(invite.content, "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
+  // One method, taken from the body that actually ships. The MIME parameter is
+  // what Gmail reads to decide between an Accept/Decline card and a "this was
+  // cancelled" notice; if it disagreed with the METHOD inside the .ics the two
+  // readers of the same message would act on different instructions.
+  const method = methodOf(invite.content) ?? invite.method;
 
   return [
     ...headers,
@@ -134,7 +146,7 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
     args.htmlBody,
     ``,
     `--${inner}`,
-    `Content-Type: text/calendar; charset=utf-8; method=${invite.method}`,
+    `Content-Type: text/calendar; charset=utf-8; method=${method}`,
     `Content-Transfer-Encoding: 7bit`,
     ``,
     invite.content,

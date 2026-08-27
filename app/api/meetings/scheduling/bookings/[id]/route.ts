@@ -101,6 +101,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       bookingId: next.booking.id,
       bookingCreatedAt: next.booking.created_at,
       bookingUpdatedAt: next.booking.updated_at,
+      bookingSequence: next.booking.calendar_sequence,
       siteUrl: SITE_URL,
     });
 

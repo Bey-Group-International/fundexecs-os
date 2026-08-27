@@ -55,12 +55,13 @@ function hostOf(origin: string): string {
 }
 
 /**
- * Which revision of the booking this is.
+ * Last-resort revision number, for a caller that has no stored sequence.
  *
- * Seconds since the booking was created, so it starts at 0 and rises with every
- * change without needing a column to count them. Clients ignore an update whose
- * SEQUENCE is not greater than the one they already hold, so this must never go
- * backwards.
+ * Seconds since the booking was created. Prefer the booking's own
+ * `calendar_sequence`, which a trigger bumps on every update: this derivation
+ * cannot tell two changes inside the same second apart, and a client ignores an
+ * update whose SEQUENCE is not greater than the one it already holds — so the
+ * second change of the second would never reach anyone's calendar.
  */
 export function inviteSequence(createdAt: string, updatedAt?: string | null): number {
   const created = new Date(createdAt).getTime();

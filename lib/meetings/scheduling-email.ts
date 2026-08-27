@@ -43,6 +43,12 @@ export interface BookingEmailContext {
   bookingId?: string | null;
   bookingCreatedAt?: string | null;
   bookingUpdatedAt?: string | null;
+  /**
+   * The booking's stored `calendar_sequence`, bumped by a trigger on every
+   * update. Always pass it: the timestamp fallback below cannot separate two
+   * changes made inside the same second, and the second one would be ignored.
+   */
+  bookingSequence?: number | null;
   /** Origin the UID is namespaced to, so two deployments never collide. */
   siteUrl?: string | null;
 }
@@ -205,7 +211,10 @@ function inviteFor(kind: BookingEmailKind, ctx: BookingEmailContext) {
         { name: ctx.inviteeName, email: ctx.inviteeEmail },
         { name: ctx.hostName, email: ctx.hostEmail },
       ],
-      sequence: inviteSequence(ctx.bookingCreatedAt ?? new Date(0).toISOString(), ctx.bookingUpdatedAt),
+      sequence:
+        typeof ctx.bookingSequence === "number" && Number.isFinite(ctx.bookingSequence)
+          ? Math.max(0, Math.floor(ctx.bookingSequence))
+          : inviteSequence(ctx.bookingCreatedAt ?? new Date(0).toISOString(), ctx.bookingUpdatedAt),
     });
     return { content, method, filename: "invite.ics" };
   } catch (err) {
@@ -249,6 +258,9 @@ export async function sendBookingEmails(
   const hostWhen = whenFor(ctx, ctx.hostTimezone);
   const inviteePrevious = ctx.previousStartIso
     ? formatSlotFull(ctx.previousStartIso, ctx.inviteeTimezone)
+    : "";
+  const hostPrevious = ctx.previousStartIso
+    ? formatSlotFull(ctx.previousStartIso, ctx.hostTimezone)
     : "";
   const messages: Array<{ to: { name: string; email: string }; subject: string; html: string }> = [];
 
@@ -405,6 +417,27 @@ export async function sendBookingEmails(
             : null,
         }),
       });
+      // The host holds a calendar entry of their own — they were an ATTENDEE on
+      // the original REQUEST. Only mailing the invitee leaves the host's own
+      // calendar showing the old time, which is how a host misses a meeting
+      // they themselves moved.
+      if (hostTo) {
+        messages.push({
+          to: hostTo,
+          subject: `Moved: ${ctx.inviteeName} — ${ctx.eventTitle}`,
+          html: buildSchedulingEmailHtml({
+            heading: "You moved this meeting",
+            intro: `${ctx.inviteeName} has been told. Your calendar entry is updated to the new time.`,
+            rows: [
+              ["Meeting", ctx.eventTitle],
+              ["New time", hostWhen],
+              ["Previously", hostPrevious],
+              ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+            ],
+            cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
+          }),
+        });
+      }
       break;
 
     case "cancelled_by_invitee":
@@ -453,6 +486,24 @@ export async function sendBookingEmails(
           cta: ctx.manageUrl ? { label: "Pick another time", url: ctx.manageUrl } : null,
         }),
       });
+      // Without this the CANCEL never reaches the host's own calendar and the
+      // meeting they cancelled stays on it, blocking the slot they just freed.
+      if (hostTo) {
+        messages.push({
+          to: hostTo,
+          subject: `Cancelled: ${ctx.inviteeName} — ${ctx.eventTitle}`,
+          html: buildSchedulingEmailHtml({
+            heading: "You cancelled this meeting",
+            intro: `${ctx.inviteeName} has been told and the slot is open again.`,
+            rows: [
+              ["Meeting", ctx.eventTitle],
+              ["Was", hostWhen],
+              ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+              ["Reason", ctx.reason ?? ""],
+            ],
+          }),
+        });
+      }
       break;
   }
 

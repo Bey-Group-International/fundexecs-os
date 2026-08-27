@@ -30,9 +30,15 @@ function ctx(over: Partial<BookingEmailContext> = {}): BookingEmailContext {
     bookingId: "bk-1",
     bookingCreatedAt: "2026-09-01T12:00:00.000Z",
     bookingUpdatedAt: "2026-09-01T12:00:00.000Z",
+    bookingSequence: 0,
     siteUrl: "https://app.test",
     ...over,
   };
+}
+
+/** Every address the mailer was handed, in order. */
+function recipients(): string[] {
+  return sendEmailMock.mock.calls.map(([args]) => (args as { to: { email: string } }).to.email);
 }
 
 /** Every calendar invite handed to the mailer. */
@@ -101,6 +107,7 @@ describe("sendBookingEmails — the invitation", () => {
       startIso: "2026-09-11T15:00:00.000Z",
       endIso: "2026-09-11T15:30:00.000Z",
       bookingUpdatedAt: "2026-09-01T12:10:00.000Z",
+      bookingSequence: 1,
     }));
     const second = invites()[0].content;
 
@@ -145,5 +152,66 @@ describe("sendBookingEmails — the invitation", () => {
     sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
     const result = await sendBookingEmails("confirmed", ctx());
     expect(result.sent).toBe(0);
+  });
+});
+
+describe("sendBookingEmails — SEQUENCE", () => {
+  const seq = (t: string) => Number(t.split("\r\n").find((l) => l.startsWith("SEQUENCE:"))!.split(":")[1]);
+
+  it("takes the revision from the booking, not from the clock", async () => {
+    await sendBookingEmails("confirmed", ctx({ bookingSequence: 7 }));
+    expect(seq(invites()[0].content)).toBe(7);
+  });
+
+  it("separates two changes made inside the same second", async () => {
+    // The old derivation floored (updated_at - created_at) to seconds, so a
+    // confirmation and the cancellation that followed it milliseconds later
+    // shared a SEQUENCE — and a client drops an update that is not newer, which
+    // left the cancelled meeting sitting in the invitee's calendar.
+    const at = "2026-09-01T12:00:00.400Z";
+    await sendBookingEmails("confirmed", ctx({ bookingUpdatedAt: at, bookingSequence: 4 }));
+    const first = seq(invites()[0].content);
+
+    jest.clearAllMocks();
+    sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+    await sendBookingEmails("cancelled_by_host", ctx({ bookingUpdatedAt: at, bookingSequence: 5 }));
+
+    expect(seq(invites()[0].content)).toBeGreaterThan(first);
+  });
+
+  it("falls back to the timestamp when a caller sends no revision", async () => {
+    await sendBookingEmails("confirmed", ctx({
+      bookingSequence: undefined,
+      bookingUpdatedAt: "2026-09-01T12:01:00.000Z",
+    }));
+    expect(seq(invites()[0].content)).toBe(60);
+  });
+
+  it("never emits a negative revision", async () => {
+    await sendBookingEmails("confirmed", ctx({ bookingSequence: -3 }));
+    expect(seq(invites()[0].content)).toBe(0);
+  });
+});
+
+describe("sendBookingEmails — host-initiated changes reach the host", () => {
+  it("moves the host's own calendar entry when the host reschedules", async () => {
+    // The host was an ATTENDEE on the original REQUEST, so their calendar holds
+    // the old time. Mailing only the invitee leaves the host with a meeting at
+    // an hour that no longer exists.
+    await sendBookingEmails("rescheduled_by_host", ctx({ previousStartIso: "2026-09-09T15:00:00.000Z" }));
+    expect(recipients()).toContain("rae@fund.test");
+    expect(recipients()).toContain("ada@example.com");
+    expect(invites().filter((i) => i.method === "REQUEST")).toHaveLength(2);
+  });
+
+  it("clears the host's own entry when the host cancels", async () => {
+    await sendBookingEmails("cancelled_by_host", ctx());
+    expect(recipients()).toContain("rae@fund.test");
+    expect(invites().filter((i) => i.method === "CANCEL")).toHaveLength(2);
+  });
+
+  it("still reaches the invitee when the host has no address", async () => {
+    await sendBookingEmails("cancelled_by_host", ctx({ hostEmail: null }));
+    expect(recipients()).toEqual(["ada@example.com"]);
   });
 });

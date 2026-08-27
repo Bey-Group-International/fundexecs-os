@@ -202,6 +202,7 @@ describe("invoiceReceiptEmail", () => {
 
 describe("sendEmail with a calendar invitation", () => {
   const ICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n";
+  const CANCEL_ICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:CANCEL\r\nEND:VCALENDAR\r\n";
 
   beforeEach(() => {
     getGoogleAccessTokenMock.mockResolvedValue("minted-token");
@@ -241,8 +242,24 @@ describe("sendEmail with a calendar invitation", () => {
   });
 
   it("states the method on the part, since clients read it from there", async () => {
-    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: ICS, method: "CANCEL" } });
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: CANCEL_ICS, method: "CANCEL" } });
     expect(sentMessage()).toContain("method=CANCEL");
+  });
+
+  it("takes the method from the body it actually ships", async () => {
+    // The parameter and the METHOD line are read by different clients. If a
+    // caller ever passes one that contradicts the other, the body wins — it is
+    // the thing the calendar imports.
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: CANCEL_ICS, method: "REQUEST" } });
+    const msg = sentMessage();
+    expect(msg).toContain("method=CANCEL");
+    expect(msg).not.toContain("method=REQUEST");
+  });
+
+  it("falls back to the declared method when the body names none", async () => {
+    const bare = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: bare, method: "REQUEST" } });
+    expect(sentMessage()).toContain("method=REQUEST");
   });
 
   it("closes every boundary it opens", async () => {

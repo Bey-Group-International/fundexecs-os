@@ -49,7 +49,7 @@ const PAGE_COLUMNS =
 const EVENT_TYPE_COLUMNS =
   "id, page_id, user_id, organization_id, slug, title, description, duration_minutes, slot_interval_minutes, meeting_type, requires_approval, is_active, sort_order, created_at, updated_at";
 const BOOKING_COLUMNS =
-  "id, page_id, event_type_id, host_user_id, organization_id, meeting_id, invitee_name, invitee_email, invitee_notes, invitee_timezone, starts_at, ends_at, status, cancelled_by, cancellation_reason, manage_token, rescheduled_at, decided_at, created_at, updated_at";
+  "id, page_id, event_type_id, host_user_id, organization_id, meeting_id, invitee_name, invitee_email, invitee_notes, invitee_timezone, starts_at, ends_at, status, cancelled_by, cancellation_reason, manage_token, rescheduled_at, decided_at, calendar_sequence, created_at, updated_at";
 
 /** Longest meeting the platform allows — bounds every "started before" lookback. */
 const MAX_MEETING_MINUTES = 480;
