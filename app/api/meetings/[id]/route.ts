@@ -272,6 +272,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         bookingId: booking.booking.id,
         bookingCreatedAt: booking.booking.created_at,
         bookingUpdatedAt: booking.booking.updated_at,
+        bookingSequence: booking.booking.calendar_sequence,
         siteUrl: SITE_URL,
       });
       notified += res.sent;
@@ -361,6 +362,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
         bookingId: cancelled.booking.id,
         bookingCreatedAt: cancelled.booking.created_at,
         bookingUpdatedAt: cancelled.booking.updated_at,
+        bookingSequence: cancelled.booking.calendar_sequence,
         siteUrl: SITE_URL,
       });
       notified += res.sent;

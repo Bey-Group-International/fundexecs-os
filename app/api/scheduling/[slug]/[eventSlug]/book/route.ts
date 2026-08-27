@@ -103,6 +103,7 @@ export async function POST(
       bookingId: booking.id,
       bookingCreatedAt: booking.created_at,
       bookingUpdatedAt: booking.updated_at,
+      bookingSequence: booking.calendar_sequence,
       siteUrl: SITE_URL,
     });
 
