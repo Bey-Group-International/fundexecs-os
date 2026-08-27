@@ -74,6 +74,16 @@ describe("buildGoogleAuthUrl", () => {
   });
 });
 
+describe("the per-user calendar grant", () => {
+  it("asks for sending as well as the calendar", async () => {
+    // Meeting email goes out through this same grant. Dropping gmail.send here
+    // would leave every member's mailbox unusable with no failure until a send.
+    const { GOOGLE_CALENDAR_SCOPES } = await import("./google-oauth");
+    expect(GOOGLE_CALENDAR_SCOPES).toContain("https://www.googleapis.com/auth/calendar");
+    expect(GOOGLE_CALENDAR_SCOPES).toContain("https://www.googleapis.com/auth/gmail.send");
+  });
+});
+
 describe("token exchange and refresh", () => {
   it("parses tokens and the connected address from the id_token", async () => {
     const idToken = `x.${Buffer.from(JSON.stringify({ email: "gp@fund.test" })).toString("base64url")}.y`;
@@ -82,11 +92,27 @@ describe("token exchange and refresh", () => {
       json: async () => ({ access_token: "at", refresh_token: "rt", id_token: idToken }),
     });
     const tokens = await exchangeCodeForTokens("code-1", "https://app.test/cb");
-    expect(tokens).toEqual({ accessToken: "at", refreshToken: "rt", email: "gp@fund.test" });
+    expect(tokens).toEqual({ accessToken: "at", refreshToken: "rt", email: "gp@fund.test", scope: null });
 
     const body = String((fetchMock.mock.calls[0][1] as { body: URLSearchParams }).body);
     expect(body).toContain("grant_type=authorization_code");
     expect(body).toContain("client_secret=client-secret");
+  });
+
+  it("keeps the scopes Google actually granted", async () => {
+    // What was asked for and what was granted are different things — a member
+    // can untick a permission — and every send reads this back to decide
+    // whether the grant can send at all.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: "at",
+        refresh_token: "rt",
+        scope: "openid email https://www.googleapis.com/auth/calendar",
+      }),
+    });
+    const tokens = await exchangeCodeForTokens("code-1", "https://app.test/cb");
+    expect(tokens.scope).toBe("openid email https://www.googleapis.com/auth/calendar");
   });
 
   it("throws on failure so callers surface it, not swallow it", async () => {

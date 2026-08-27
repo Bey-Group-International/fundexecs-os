@@ -13,6 +13,8 @@ import {
   REMINDER_COOLDOWN_MS,
   type RemindableMeeting,
 } from "@/lib/meetings/reminder";
+import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
+import { mailboxFor } from "@/lib/meetings/mailbox.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -61,6 +63,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
+    // Whose mailbox this goes out from. A reminder is sent by a person and
+    // should arrive from that person's address, so it is their Google grant
+    // that sends it — not a shared org mailbox, which is what used to be
+    // looked up and which most organizations have never connected.
+    //
+    // Resolved BEFORE the cooldown is claimed: a claim taken for a send that
+    // cannot happen would lock the host out for ten minutes over a refusal.
+    const mailbox = await mailboxFor(supabase, auth.ctx.userId);
+    if (!mailbox.ok) {
+      return NextResponse.json(
+        {
+          error: mailboxProblemMessage(mailbox.problem),
+          mailbox: mailbox.problem,
+          recipients: verdict.recipients.length,
+        },
+        { status: 409 },
+      );
+    }
+
     // Claim the cooldown BEFORE sending, not after.
     //
     // canSendReminder above only reads the timestamp, so two requests arriving
@@ -105,7 +126,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // three of four people is better than one that reached nobody.
     const results = await Promise.allSettled(
       verdict.recipients.map((r) =>
-        sendEmail({ orgId: auth.ctx.orgId, to: r, subject, htmlBody: html }),
+        // No fromEmail: Gmail stamps the authenticated account's own address,
+        // which is the one address guaranteed to match the token.
+        sendEmail({
+          orgId: auth.ctx.orgId,
+          to: r,
+          subject,
+          htmlBody: html,
+          credentials: { gmailAccessToken: mailbox.token },
+        }),
       ),
     );
     const sent = results.filter((r) => r.status === "fulfilled" && r.value.ok).length;
@@ -142,9 +171,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       {
         sent,
         total: verdict.recipients.length,
-        // A connected mailbox is the usual reason nothing left, and the host
-        // cannot guess that from a bare zero.
-        error: sent === 0 ? "Could not send — no mailbox is connected for this organization." : undefined,
+        // The mailbox resolved, so a zero here is Gmail rejecting the
+        // messages rather than a missing connection. Name the account it went
+        // out from, since that is the thing to check.
+        error:
+          sent === 0
+            ? `Google would not send from ${mailbox.email ?? "your connected account"}. Check the address is still active, then try again.`
+            : undefined,
         // Nothing was sent and the claim could not be given back, so the button
         // will refuse for the next ten minutes over a send that never happened.
         // Better to say so than leave the host guessing at the refusal.

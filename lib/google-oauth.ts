@@ -53,8 +53,18 @@ export const GOOGLE_PEOPLE_SCOPES =
 // meetings are pushed back into Google. Note this is a RESTRICTED scope, in the
 // same tier as gmail.send: it needs Google verification and a CASA assessment
 // before it works for users outside the project's test list.
+//
+// gmail.send rides on the SAME grant. Meeting email is sent by a person — a
+// reminder, an invitation, a cancellation all come from the host — so the guest
+// should see the host's address rather than a shared org mailbox. The per-user
+// grant is the only place a personal identity exists, and asking twice for one
+// Google account would be two buttons for one decision.
+//
+// A member who connected before this scope was added has calendar and not
+// send. granted_scope records what Google actually returned, so that case is
+// detectable and the member is told to reconnect rather than left wondering.
 export const GOOGLE_CALENDAR_SCOPES =
-  "openid email https://www.googleapis.com/auth/calendar";
+  "openid email https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.send";
 
 export function googleOAuthConfigured(): boolean {
   return Boolean(
@@ -141,6 +151,12 @@ export interface GoogleTokens {
   // The connected Google account's email, from the id_token — display label
   // only (the token came straight from Google over TLS, not a third party).
   email: string | null;
+  // The scopes Google ACTUALLY granted, space separated. Not the same as the
+  // ones asked for: a member can untick a permission on the consent screen, and
+  // a grant made before a scope was added to the request carries the old set.
+  // Storing it is what lets a caller distinguish "connect" from "reconnect"
+  // instead of failing at the API call with no explanation.
+  scope: string | null;
 }
 
 function parseIdTokenEmail(idToken: string | undefined): string | null {
@@ -176,12 +192,14 @@ export async function exchangeCodeForTokens(
     access_token?: string;
     refresh_token?: string;
     id_token?: string;
+    scope?: string;
   };
   if (!body.access_token) throw new Error("google token exchange returned no access token");
   return {
     accessToken: body.access_token,
     refreshToken: body.refresh_token ?? null,
     email: parseIdTokenEmail(body.id_token),
+    scope: body.scope ?? null,
   };
 }
 

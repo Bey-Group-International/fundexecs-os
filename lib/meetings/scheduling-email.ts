@@ -6,7 +6,7 @@
 //
 // Like lib/meetings/invite.ts, nothing here throws: an unconnected mailbox must
 // never fail a booking that was otherwise saved.
-import { sendEmail, escapeHtml } from "@/lib/email";
+import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { buildInviteIcs, inviteSequence, inviteUid } from "@/lib/calendar/invite";
 
@@ -51,6 +51,14 @@ export interface BookingEmailContext {
   bookingSequence?: number | null;
   /** Origin the UID is namespaced to, so two deployments never collide. */
   siteUrl?: string | null;
+  /**
+   * The host's own mailbox, resolved by the caller.
+   *
+   * Booking email has no logged-in sender — an anonymous visitor triggers it —
+   * so the person it should come from is the host whose link was used. Omitted,
+   * the org mailbox is used as before.
+   */
+  credentials?: SendEmailCredentials;
 }
 
 function pad2(n: number) {
@@ -158,9 +166,10 @@ async function send(
   htmlBody: string,
   orgId?: string,
   calendarInvite?: { content: string; method: "REQUEST" | "CANCEL"; filename?: string },
+  credentials?: SendEmailCredentials,
 ): Promise<boolean> {
   try {
-    const result = await sendEmail({ orgId, to, subject, htmlBody, calendarInvite });
+    const result = await sendEmail({ orgId, to, subject, htmlBody, calendarInvite, credentials });
     return result.ok;
   } catch (err) {
     console.error("[scheduling-email] send failed", err);
@@ -511,7 +520,7 @@ export async function sendBookingEmails(
   // to move when a booking is rescheduled, not only the invitee's.
   const invite = inviteFor(kind, ctx);
   const results = await Promise.allSettled(
-    messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId, invite)),
+    messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId, invite, ctx.credentials)),
   );
   return { sent: results.filter((r) => r.status === "fulfilled" && r.value).length };
 }
