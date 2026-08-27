@@ -199,3 +199,66 @@ describe("invoiceReceiptEmail", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 });
+
+describe("sendEmail with a calendar invitation", () => {
+  const ICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n";
+
+  beforeEach(() => {
+    getGoogleAccessTokenMock.mockResolvedValue("minted-token");
+  });
+
+  it("stays a plain single-part message when there is no invite", async () => {
+    await sendEmail({ ...ARGS, orgId: "org1" });
+    const msg = sentMessage();
+    expect(msg).toContain("Content-Type: text/html; charset=utf-8");
+    expect(msg).not.toContain("multipart");
+  });
+
+  it("carries the .ics inline so Gmail and Apple Mail show Accept/Decline", async () => {
+    // An attachment alone does not produce the RSVP card; the text/calendar
+    // alternative part is what does.
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: ICS, method: "REQUEST" } });
+    const msg = sentMessage();
+    expect(msg).toContain("Content-Type: multipart/alternative");
+    expect(msg).toContain("Content-Type: text/calendar; charset=utf-8; method=REQUEST");
+    expect(msg).toContain("METHOD:REQUEST");
+  });
+
+  it("also attaches the .ics, for clients that only read attachments", async () => {
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: ICS, method: "REQUEST" } });
+    const msg = sentMessage();
+    expect(msg).toContain("Content-Type: multipart/mixed");
+    expect(msg).toContain('Content-Disposition: attachment; filename="invite.ics"');
+    expect(msg).toContain("Content-Transfer-Encoding: base64");
+    // The attachment decodes back to exactly the calendar body.
+    const encoded = msg.split("Content-Transfer-Encoding: base64")[1].split("\r\n\r\n")[1].split("\r\n--")[0];
+    expect(Buffer.from(encoded.replace(/\r\n/g, ""), "base64").toString()).toBe(ICS);
+  });
+
+  it("keeps the html body alongside the invite", async () => {
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: ICS, method: "REQUEST" } });
+    expect(sentMessage()).toContain("<p>hi</p>");
+  });
+
+  it("states the method on the part, since clients read it from there", async () => {
+    await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: ICS, method: "CANCEL" } });
+    expect(sentMessage()).toContain("method=CANCEL");
+  });
+
+  it("closes every boundary it opens", async () => {
+    // An unterminated multipart is shown as raw source by most clients.
+    const msg = await sendEmail({ ...ARGS, orgId: "org1", calendarInvite: { content: ICS, method: "REQUEST" } })
+      .then(() => sentMessage());
+    expect(msg).toContain("----=_FundExecs_alt--");
+    expect(msg).toContain("----=_FundExecs_mixed--");
+  });
+
+  it("honours a filename when one is given", async () => {
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      calendarInvite: { content: ICS, method: "REQUEST", filename: "meeting.ics" },
+    });
+    expect(sentMessage()).toContain('filename="meeting.ics"');
+  });
+});

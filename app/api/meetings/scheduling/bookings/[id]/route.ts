@@ -98,6 +98,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ? buildBookingManageUrl(SITE_URL, next.booking.manage_token)
           : buildBookingPageUrl(SITE_URL, next.page.slug),
       reason: body.reason ?? null,
+      bookingId: next.booking.id,
+      bookingCreatedAt: next.booking.created_at,
+      bookingUpdatedAt: next.booking.updated_at,
+      siteUrl: SITE_URL,
     });
 
     return NextResponse.json({

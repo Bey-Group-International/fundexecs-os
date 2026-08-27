@@ -269,6 +269,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         durationMinutes: nextDuration ?? booking.eventType.duration_minutes,
         joinUrl: booking.roomCode ? buildMeetingInviteUrl(SITE_URL, booking.roomCode) : null,
         manageUrl: buildBookingManageUrl(SITE_URL, booking.booking.manage_token),
+        bookingId: booking.booking.id,
+        bookingCreatedAt: booking.booking.created_at,
+        bookingUpdatedAt: booking.booking.updated_at,
+        siteUrl: SITE_URL,
       });
       notified += res.sent;
     }
@@ -354,6 +358,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
         // than a manage link for something that no longer exists.
         manageUrl: buildBookingPageUrl(SITE_URL, cancelled.page.slug),
         reason,
+        bookingId: cancelled.booking.id,
+        bookingCreatedAt: cancelled.booking.created_at,
+        bookingUpdatedAt: cancelled.booking.updated_at,
+        siteUrl: SITE_URL,
       });
       notified += res.sent;
     }
