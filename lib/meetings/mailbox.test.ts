@@ -65,9 +65,16 @@ describe("mailboxProblemMessage", () => {
   it("distinguishes connecting from reconnecting", () => {
     // Telling a connected member to "connect" sends them looking for a button
     // they already pressed.
-    expect(mailboxProblemMessage("not_connected")).toMatch(/^Connect/);
+    expect(mailboxProblemMessage("not_connected")).toMatch(/No Google account is connected/);
     expect(mailboxProblemMessage("scope_missing")).toMatch(/^Reconnect/);
     expect(mailboxProblemMessage("scope_missing")).toMatch(/calendar but not email/);
+  });
+
+  it("names both ways out, not just the calendar one", () => {
+    // There are two grants that can send. A member whose org already connected
+    // Google in Settings should not be sent to authorize a second account.
+    expect(mailboxProblemMessage("not_connected")).toMatch(/Settings › Integrations/);
+    expect(mailboxProblemMessage("scope_missing")).toMatch(/Settings › Integrations/);
   });
 
   it("never blames the organization", () => {

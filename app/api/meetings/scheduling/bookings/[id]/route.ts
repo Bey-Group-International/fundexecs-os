@@ -81,7 +81,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await sendBookingEmails(emailKind, {
       // The host is the acting user here — the route already refuses anyone
       // else — so this is their own mailbox.
-      credentials: await hostCredentials(service, auth.ctx.userId),
+      credentials: await hostCredentials(service, auth.ctx.userId, auth.ctx.orgId),
       orgId: auth.ctx.orgId,
       eventTitle: next.eventType.title,
       hostName: next.page.display_name,

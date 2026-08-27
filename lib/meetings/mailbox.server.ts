@@ -8,26 +8,63 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { accessTokenFor, type ConnectionRow } from "@/lib/calendar/google.server";
+import { resolveGmailToken } from "@/lib/email";
 import {
   grantCanSend,
   problemFromTokenError,
   type MailboxProblem,
+  type MailboxSource,
 } from "@/lib/meetings/mailbox";
 
 type ServiceClient = SupabaseClient<Database>;
 
 export type MailboxResolution =
-  | { ok: true; token: string; email: string | null }
+  | { ok: true; token: string; email: string | null; source: MailboxSource }
   | { ok: false; problem: MailboxProblem };
 
 /**
- * A short-lived Gmail token for this member, or the reason there isn't one.
+ * A Gmail token to send this member's meeting email through, or the reason
+ * there isn't one.
  *
- * Never throws and never falls back to another mailbox: a caller that asked to
- * send as a particular person must not quietly send as somebody else. The
- * reason it returns is the thing the member is shown.
+ * Tries every Google grant the app already holds before asking anyone to
+ * authorize anything. There are two that can send, and a member who has done
+ * either should not be sent back to a consent screen:
+ *
+ *   1. The member's OWN grant, in google_calendar_connections. Preferred,
+ *      because the message then carries their address.
+ *   2. The organization's connected Google integration (Settings ›
+ *      Integrations), whose scope is gmail.send by construction. Authorized by
+ *      one member on the org's behalf, so the address is a real person's — just
+ *      not necessarily this one's, which is why the source is reported back
+ *      rather than passed off as the caller's own.
+ *
+ * Never throws. A refusal means neither exists.
  */
 export async function mailboxFor(
+  client: ServiceClient,
+  userId: string,
+  orgId?: string,
+): Promise<MailboxResolution> {
+  const own = await memberMailbox(client, userId);
+  if (own.ok) return own;
+
+  // Fall through to the org integration before refusing. Requiring a fresh
+  // grant from someone whose organization already connected Google is asking
+  // twice for a permission the app is holding.
+  if (orgId) {
+    try {
+      const token = await resolveGmailToken({ orgId });
+      if (token) return { ok: true, token, email: null, source: "organization" };
+    } catch {
+      // A broken org lookup must not mask the member-level reason below.
+    }
+  }
+
+  return own;
+}
+
+/** The member's own grant, with the reason when there isn't a usable one. */
+async function memberMailbox(
   client: ServiceClient,
   userId: string,
 ): Promise<MailboxResolution> {
@@ -51,7 +88,7 @@ export async function mailboxFor(
     return { ok: false, problem: problemFromTokenError(token.error) };
   }
 
-  return { ok: true, token: token.data, email: conn.google_email };
+  return { ok: true, token: token.data, email: conn.google_email, source: "member" };
 }
 
 /**
@@ -68,8 +105,9 @@ export async function mailboxFor(
 export async function hostCredentials(
   client: ServiceClient,
   userId: string | null | undefined,
+  orgId?: string,
 ): Promise<{ gmailAccessToken: string } | undefined> {
   if (!userId) return undefined;
-  const mailbox = await mailboxFor(client, userId);
+  const mailbox = await mailboxFor(client, userId, orgId);
   return mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined;
 }

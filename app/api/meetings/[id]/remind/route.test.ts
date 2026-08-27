@@ -103,7 +103,7 @@ beforeEach(() => {
   authMock.mockResolvedValue({ ok: true, ctx: { orgId: "org1", userId: "u1", email: "rae@fund.test" } });
   sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
   // The host's own Google grant. Every send now goes out through it.
-  mailboxMock.mockResolvedValue({ ok: true, token: "host-token", email: "rae@fund.test" });
+  mailboxMock.mockResolvedValue({ ok: true, token: "host-token", email: "rae@fund.test", source: "member" });
 });
 
 describe("POST /api/meetings/[id]/remind", () => {
@@ -302,7 +302,7 @@ describe("POST /api/meetings/[id]/remind — sending as the host", () => {
 
     expect(res.status).toBe(409);
     expect(json.mailbox).toBe("not_connected");
-    expect(json.error).toMatch(/^Connect your Google account/);
+    expect(json.error).toMatch(/No Google account is connected/);
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
@@ -329,5 +329,35 @@ describe("POST /api/meetings/[id]/remind — sending as the host", () => {
     mockDb(meetingRow({ attendees: [{ email: "ada@example.com" }, { email: "bo@example.com" }] }));
     const json = await (await POST(req(), { params })).json();
     expect(json.recipients).toBe(2);
+  });
+});
+
+describe("POST /api/meetings/[id]/remind — falling back to the org connection", () => {
+  it("sends rather than refusing when only the org has Google connected", async () => {
+    // The org-level grant already carries gmail.send. Refusing here would ask a
+    // member to authorize a second Google account the app is already holding.
+    mailboxMock.mockResolvedValue({ ok: true, token: "org-token", email: null, source: "organization" });
+    mockDb(meetingRow());
+    const res = await POST(req(), { params });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(sendEmailMock.mock.calls[0][0].credentials).toEqual({ gmailAccessToken: "org-token" });
+    expect(json.sentFrom).toBe("organization");
+  });
+
+  it("says the guest saw somebody else's address", async () => {
+    // The host should not learn whose address went out from the guest.
+    mailboxMock.mockResolvedValue({ ok: true, token: "org-token", email: null, source: "organization" });
+    mockDb(meetingRow());
+    const json = await (await POST(req(), { params })).json();
+    expect(json.warning).toMatch(/organization's connected Google account/);
+  });
+
+  it("stays quiet when it was the host's own account", async () => {
+    mockDb(meetingRow());
+    const json = await (await POST(req(), { params })).json();
+    expect(json.sentFrom).toBe("member");
+    expect(json.warning).toBeUndefined();
   });
 });

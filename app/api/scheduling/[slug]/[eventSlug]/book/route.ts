@@ -88,7 +88,7 @@ export async function POST(
       // from their mailbox; without one it falls back to the org's, because a
       // booking confirmation the invitee never receives is worse than one from
       // a shared address.
-      credentials: await hostCredentials(service, resolved.page.user_id),
+      credentials: await hostCredentials(service, resolved.page.user_id, resolved.page.organization_id ?? undefined),
       orgId: resolved.page.organization_id ?? undefined,
       eventTitle: eventType.title,
       hostName: resolved.page.display_name,

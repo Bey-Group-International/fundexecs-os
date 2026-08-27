@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   // member can act on rather than a silent zero. (Routes where email is a side
   // effect of a save use hostCredentials and degrade instead — losing the save
   // over a mailbox would be the worse trade.)
-  const mailbox = await mailboxFor(supabase, auth.ctx.userId);
+  const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
   if (!mailbox.ok) {
     return NextResponse.json(
       { error: mailboxProblemMessage(mailbox.problem), mailbox: mailbox.problem },
