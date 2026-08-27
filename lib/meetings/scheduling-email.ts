@@ -8,6 +8,7 @@
 // never fail a booking that was otherwise saved.
 import { sendEmail, escapeHtml } from "@/lib/email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
+import { buildInviteIcs, inviteSequence, inviteUid } from "@/lib/calendar/invite";
 
 export interface BookingEmailContext {
   /**
@@ -35,6 +36,21 @@ export interface BookingEmailContext {
   /** Where the booking used to sit — shown on a reschedule so the move reads clearly. */
   previousStartIso?: string | null;
   reason?: string | null;
+  /**
+   * Identity for the calendar invitation. Without these the emails still send,
+   * they simply carry no .ics — so an older caller degrades rather than breaks.
+   */
+  bookingId?: string | null;
+  bookingCreatedAt?: string | null;
+  bookingUpdatedAt?: string | null;
+  /**
+   * The booking's stored `calendar_sequence`, bumped by a trigger on every
+   * update. Always pass it: the timestamp fallback below cannot separate two
+   * changes made inside the same second, and the second one would be ignored.
+   */
+  bookingSequence?: number | null;
+  /** Origin the UID is namespaced to, so two deployments never collide. */
+  siteUrl?: string | null;
 }
 
 function pad2(n: number) {
@@ -141,13 +157,71 @@ async function send(
   subject: string,
   htmlBody: string,
   orgId?: string,
+  calendarInvite?: { content: string; method: "REQUEST" | "CANCEL"; filename?: string },
 ): Promise<boolean> {
   try {
-    const result = await sendEmail({ orgId, to, subject, htmlBody });
+    const result = await sendEmail({ orgId, to, subject, htmlBody, calendarInvite });
     return result.ok;
   } catch (err) {
     console.error("[scheduling-email] send failed", err);
     return false;
+  }
+}
+
+/**
+ * Which iTIP message, if any, belongs on this email.
+ *
+ * A request that has not been accepted yet is not a meeting, so no invite goes
+ * out until it is confirmed — putting a tentative hold in someone's calendar
+ * that the host then declines is worse than sending nothing. A decline or a
+ * cancellation carries CANCEL so the entry is removed rather than left behind.
+ */
+export function inviteMethodFor(kind: BookingEmailKind): "REQUEST" | "CANCEL" | null {
+  switch (kind) {
+    case "confirmed":
+    case "rescheduled":
+    case "rescheduled_by_host":
+      return "REQUEST";
+    case "declined":
+    case "cancelled_by_invitee":
+    case "cancelled_by_host":
+      return "CANCEL";
+    case "requested":
+      return null;
+  }
+}
+
+/** The .ics for this transition, or null when there is nothing to send. */
+function inviteFor(kind: BookingEmailKind, ctx: BookingEmailContext) {
+  const method = inviteMethodFor(kind);
+  if (!method || !ctx.bookingId || !ctx.hostEmail) return undefined;
+
+  try {
+    const content = buildInviteIcs({
+      uid: inviteUid(ctx.bookingId, ctx.siteUrl ?? ""),
+      method,
+      title: `${ctx.eventTitle} with ${ctx.hostName}`,
+      startIso: ctx.startIso,
+      endIso: ctx.endIso,
+      description: ctx.joinUrl ? `Join: ${ctx.joinUrl}` : ctx.notes ?? null,
+      location: ctx.joinUrl ?? null,
+      url: ctx.joinUrl ?? null,
+      organizer: { name: ctx.hostName, email: ctx.hostEmail },
+      attendees: [
+        { name: ctx.inviteeName, email: ctx.inviteeEmail },
+        { name: ctx.hostName, email: ctx.hostEmail },
+      ],
+      sequence:
+        typeof ctx.bookingSequence === "number" && Number.isFinite(ctx.bookingSequence)
+          ? Math.max(0, Math.floor(ctx.bookingSequence))
+          : inviteSequence(ctx.bookingCreatedAt ?? new Date(0).toISOString(), ctx.bookingUpdatedAt),
+    });
+    return { content, method, filename: "invite.ics" };
+  } catch (err) {
+    // A malformed invite must never stop the email that carries the actual
+    // information — the recipient still needs to know the meeting changed.
+    console.error("[scheduling-email] could not build calendar invite", err);
+    return undefined;
   }
 }
 
@@ -184,6 +258,9 @@ export async function sendBookingEmails(
   const hostWhen = whenFor(ctx, ctx.hostTimezone);
   const inviteePrevious = ctx.previousStartIso
     ? formatSlotFull(ctx.previousStartIso, ctx.inviteeTimezone)
+    : "";
+  const hostPrevious = ctx.previousStartIso
+    ? formatSlotFull(ctx.previousStartIso, ctx.hostTimezone)
     : "";
   const messages: Array<{ to: { name: string; email: string }; subject: string; html: string }> = [];
 
@@ -340,6 +417,27 @@ export async function sendBookingEmails(
             : null,
         }),
       });
+      // The host holds a calendar entry of their own — they were an ATTENDEE on
+      // the original REQUEST. Only mailing the invitee leaves the host's own
+      // calendar showing the old time, which is how a host misses a meeting
+      // they themselves moved.
+      if (hostTo) {
+        messages.push({
+          to: hostTo,
+          subject: `Moved: ${ctx.inviteeName} — ${ctx.eventTitle}`,
+          html: buildSchedulingEmailHtml({
+            heading: "You moved this meeting",
+            intro: `${ctx.inviteeName} has been told. Your calendar entry is updated to the new time.`,
+            rows: [
+              ["Meeting", ctx.eventTitle],
+              ["New time", hostWhen],
+              ["Previously", hostPrevious],
+              ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+            ],
+            cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
+          }),
+        });
+      }
       break;
 
     case "cancelled_by_invitee":
@@ -388,9 +486,32 @@ export async function sendBookingEmails(
           cta: ctx.manageUrl ? { label: "Pick another time", url: ctx.manageUrl } : null,
         }),
       });
+      // Without this the CANCEL never reaches the host's own calendar and the
+      // meeting they cancelled stays on it, blocking the slot they just freed.
+      if (hostTo) {
+        messages.push({
+          to: hostTo,
+          subject: `Cancelled: ${ctx.inviteeName} — ${ctx.eventTitle}`,
+          html: buildSchedulingEmailHtml({
+            heading: "You cancelled this meeting",
+            intro: `${ctx.inviteeName} has been told and the slot is open again.`,
+            rows: [
+              ["Meeting", ctx.eventTitle],
+              ["Was", hostWhen],
+              ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
+              ["Reason", ctx.reason ?? ""],
+            ],
+          }),
+        });
+      }
       break;
   }
 
-  const results = await Promise.allSettled(messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId)));
+  // The same invitation goes to both sides: the host's own calendar entry has
+  // to move when a booking is rescheduled, not only the invitee's.
+  const invite = inviteFor(kind, ctx);
+  const results = await Promise.allSettled(
+    messages.map((m) => send(m.to, m.subject, m.html, ctx.orgId, invite)),
+  );
   return { sent: results.filter((r) => r.status === "fulfilled" && r.value).length };
 }

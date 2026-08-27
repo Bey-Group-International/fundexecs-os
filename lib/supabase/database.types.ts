@@ -2572,6 +2572,8 @@ export type SchedulingBooking = {
   manage_token: string;
   rescheduled_at: string | null;
   decided_at: string | null;
+  /** iCalendar SEQUENCE. Bumped by a trigger on every update — never derived. */
+  calendar_sequence: number;
   created_at: string;
   updated_at: string;
 };

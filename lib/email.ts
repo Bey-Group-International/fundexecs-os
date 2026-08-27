@@ -48,6 +48,21 @@ export interface SendEmailArgs {
    */
   orgId?: string;
   /**
+   * A calendar invitation to travel with this message.
+   *
+   * Present it and the message becomes multipart, carrying the .ics both as an
+   * inline text/calendar alternative (for the Accept/Decline card) and as an
+   * attachment (for clients that only read attachments). Absent, the message
+   * stays a plain single-part text/html send.
+   */
+  calendarInvite?: {
+    /** RFC 5545 body. */
+    content: string;
+    /** iTIP method, which must match the METHOD inside the body. */
+    method: "REQUEST" | "CANCEL";
+    filename?: string;
+  };
+  /**
    * Explicit sender address. Gmail accepts this only when it is the connected
    * account or one of its verified send-as aliases; otherwise Gmail rewrites
    * it. Leave it unset (the normal case) and the message simply comes from the
@@ -64,19 +79,90 @@ export interface SendEmailResult {
   detail: string;
 }
 
+/**
+ * A MIME boundary that cannot occur in the parts it separates.
+ *
+ * Derived rather than random so a message is reproducible in tests; the suffix
+ * only has to be unique within one message.
+ */
+function boundary(tag: string): string {
+  return `----=_FundExecs_${tag}`;
+}
+
+/** The METHOD line of an iTIP body, if it carries one we recognise. */
+function methodOf(ics: string): string | null {
+  const m = /^METHOD:([A-Za-z]+)\s*$/m.exec(ics);
+  const value = m?.[1]?.toUpperCase();
+  return value === "REQUEST" || value === "CANCEL" || value === "PUBLISH" ? value : null;
+}
+
 function buildRfc2822(args: SendEmailArgs, from: string | null): string {
-  const lines = [
+  const headers = [
     // No From header by default: Gmail stamps the connected account's own
     // address. Forcing one that isn't a verified alias only gets it rewritten.
     ...(from ? [`From: ${args.fromName ?? "FundExecs"} <${from}>`] : []),
     `To: ${args.to.name} <${args.to.email}>`,
     `Subject: ${args.subject}`,
     `MIME-Version: 1.0`,
+  ];
+
+  const invite = args.calendarInvite;
+  if (!invite) {
+    return [...headers, `Content-Type: text/html; charset=utf-8`, ``, args.htmlBody].join("\r\n");
+  }
+
+  // A calendar invitation needs the .ics twice, for two different readers.
+  //
+  //   text/calendar inside multipart/alternative is what makes Gmail and Apple
+  //   Mail render an Accept/Decline card inline — an attachment alone does not.
+  //
+  //   The application/ics attachment is what Outlook and every other client
+  //   falls back to. Sending only the alternative part leaves those users with
+  //   an email and no way to add the meeting.
+  //
+  // Hence mixed{ alternative{ html, calendar }, attachment }.
+  const outer = boundary("mixed");
+  const inner = boundary("alt");
+  const filename = invite.filename || "invite.ics";
+  // Base64 with hard-wrapped lines: an .ics carries CRLFs and can exceed the
+  // 998-octet line limit, and quoted-printable mangles the folding clients rely on.
+  const encoded = Buffer.from(invite.content, "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
+  // One method, taken from the body that actually ships. The MIME parameter is
+  // what Gmail reads to decide between an Accept/Decline card and a "this was
+  // cancelled" notice; if it disagreed with the METHOD inside the .ics the two
+  // readers of the same message would act on different instructions.
+  const method = methodOf(invite.content) ?? invite.method;
+
+  return [
+    ...headers,
+    `Content-Type: multipart/mixed; boundary="${outer}"`,
+    ``,
+    `--${outer}`,
+    `Content-Type: multipart/alternative; boundary="${inner}"`,
+    ``,
+    `--${inner}`,
     `Content-Type: text/html; charset=utf-8`,
     ``,
     args.htmlBody,
-  ];
-  return lines.join("\r\n");
+    ``,
+    `--${inner}`,
+    `Content-Type: text/calendar; charset=utf-8; method=${method}`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    invite.content,
+    ``,
+    `--${inner}--`,
+    ``,
+    `--${outer}`,
+    `Content-Type: application/ics; name="${filename}"`,
+    `Content-Disposition: attachment; filename="${filename}"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    encoded,
+    ``,
+    `--${outer}--`,
+    ``,
+  ].join("\r\n");
 }
 
 function base64url(str: string): string {

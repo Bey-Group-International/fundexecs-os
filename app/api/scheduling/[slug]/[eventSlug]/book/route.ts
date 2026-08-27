@@ -100,6 +100,11 @@ export async function POST(
       joinUrl,
       manageUrl,
       hostMeetingsUrl: `${SITE_URL}/meetings`,
+      bookingId: booking.id,
+      bookingCreatedAt: booking.created_at,
+      bookingUpdatedAt: booking.updated_at,
+      bookingSequence: booking.calendar_sequence,
+      siteUrl: SITE_URL,
     });
 
     return NextResponse.json({

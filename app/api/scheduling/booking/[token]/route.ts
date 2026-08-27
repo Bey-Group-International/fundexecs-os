@@ -125,6 +125,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       joinUrl: next.roomCode ? buildMeetingInviteUrl(SITE_URL, next.roomCode) : null,
       manageUrl: buildBookingManageUrl(SITE_URL, next.booking.manage_token),
       reason: body.reason ?? null,
+      bookingId: next.booking.id,
+      bookingCreatedAt: next.booking.created_at,
+      bookingUpdatedAt: next.booking.updated_at,
+      bookingSequence: next.booking.calendar_sequence,
+      siteUrl: SITE_URL,
     });
 
     return NextResponse.json({
