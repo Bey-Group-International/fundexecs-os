@@ -41,7 +41,7 @@ function meetingRow(over: Record<string, unknown> = {}) {
 /** Captures the update payload so the cooldown stamp can be asserted. */
 let updates: Array<Record<string, unknown>>;
 
-function mockDb(row: Record<string, unknown> | null) {
+function mockDb(row: Record<string, unknown> | null, updateError: { message: string } | null = null) {
   updates = [];
   from.mockImplementation(() => ({
     select: () => ({
@@ -49,7 +49,7 @@ function mockDb(row: Record<string, unknown> | null) {
     }),
     update(payload: Record<string, unknown>) {
       updates.push(payload);
-      return { eq: () => ({ eq: async () => ({ error: null }) }) };
+      return { eq: () => ({ eq: async () => ({ error: updateError }) }) };
     },
   }));
 }
@@ -172,5 +172,37 @@ describe("POST /api/meetings/[id]/remind", () => {
     await POST(req({ note: "x".repeat(5000) }), { params });
     const html = sendEmailMock.mock.calls[0][0].htmlBody as string;
     expect(html).not.toContain("x".repeat(600));
+  });
+});
+
+describe("POST /api/meetings/[id]/remind — a cooldown that would not stick", () => {
+  it("says so rather than reporting a clean send", async () => {
+    // supabase-js resolves with { error } instead of throwing, so discarding
+    // this result would be a silent lost write — and the cooldown is the only
+    // thing between a second click and a second email in a guest's inbox.
+    const warn = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockDb(meetingRow(), { message: "permission denied for table live_meetings" });
+    const res = await POST(req(), { params });
+    const json = await res.json();
+
+    // The emails did go out, so this is not a failure.
+    expect(res.status).toBe(200);
+    expect(json.sent).toBe(1);
+    expect(json.warning).toMatch(/cooldown could not be recorded/i);
+    warn.mockRestore();
+  });
+
+  it("stays quiet when the stamp lands", async () => {
+    mockDb(meetingRow());
+    const json = await (await POST(req(), { params })).json();
+    expect(json.warning).toBeUndefined();
+  });
+
+  it("records in the audit trail whether the cooldown stuck", async () => {
+    const warn = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockDb(meetingRow(), { message: "permission denied" });
+    await POST(req(), { params });
+    expect(auditMock.mock.calls[0][0].afterState).toMatchObject({ cooldownRecorded: false });
+    warn.mockRestore();
   });
 });

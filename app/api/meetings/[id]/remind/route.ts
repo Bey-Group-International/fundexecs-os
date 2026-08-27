@@ -85,12 +85,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Only stamp the cooldown when something actually went out. A send that
     // reached nobody — no mailbox connected, say — must not lock the host out
     // for ten minutes with nothing to show for it.
+    let cooldownRecorded = true;
     if (sent > 0) {
-      await supabase
+      // supabase-js resolves with { error } rather than throwing, so a discarded
+      // result here would be a silent lost write — and the cooldown is the only
+      // thing standing between a second click and a second email in somebody
+      // else's inbox. If it does not stick, say so rather than reporting a
+      // clean send the host cannot trust.
+      const { error: stampError } = await supabase
         .from("live_meetings")
         .update({ last_reminder_sent_at: new Date().toISOString() } as never)
         .eq("id", id)
         .eq("organization_id", auth.ctx.orgId);
+      if (stampError) {
+        cooldownRecorded = false;
+        console.error("[meetings/remind] could not record the reminder cooldown", stampError.message);
+      }
 
       await writeDashboardAudit({
         organizationId: auth.ctx.orgId,
@@ -98,7 +108,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         action: "meeting.reminder_sent",
         entityType: "live_meeting",
         entityId: id,
-        afterState: { sent, total: verdict.recipients.length },
+        afterState: { sent, total: verdict.recipients.length, cooldownRecorded },
       });
     }
 
@@ -109,6 +119,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // A connected mailbox is the usual reason nothing left, and the host
         // cannot guess that from a bare zero.
         error: sent === 0 ? "Could not send — no mailbox is connected for this organization." : undefined,
+        // The emails did go out, so this is not a failure — but the next click
+        // will not be held back, and the host should know that before making it.
+        warning: cooldownRecorded ? undefined : "Sent, but the send-again cooldown could not be recorded.",
       },
       { status: sent > 0 ? 200 : 502 },
     );

@@ -221,11 +221,19 @@ export function UpcomingMeetingsList({
     setReminded((prev) => ({ ...prev, [id]: { state: "sending" } }));
     try {
       const res = await fetch(`/api/meetings/${id}/remind`, { method: "POST" });
-      const json = (await res.json().catch(() => ({}))) as { sent?: number; total?: number; error?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        sent?: number;
+        total?: number;
+        error?: string;
+        warning?: string;
+      };
       if (res.ok && (json.sent ?? 0) > 0) {
+        const reach = `Reminder sent to ${json.sent}${json.total && json.total !== json.sent ? ` of ${json.total}` : ""}`;
         setReminded((prev) => ({
           ...prev,
-          [id]: { state: "sent", message: `Reminder sent to ${json.sent}${json.total && json.total !== json.sent ? ` of ${json.total}` : ""}` },
+          // A warning still means the emails went out, so it reads as sent —
+          // but the host is told before they press the button a second time.
+          [id]: { state: "sent", message: json.warning ? `${reach}. ${json.warning}` : reach },
         }));
       } else {
         setReminded((prev) => ({ ...prev, [id]: { state: "failed", message: json.error ?? "Could not send the reminder" } }));
