@@ -2401,6 +2401,8 @@ export type LiveMeeting = {
   external_calendar_sync_enabled: boolean;
   external_calendar_sync_status: string;
   external_calendar_last_error: string | null;
+  /** When a manual reminder last went out to this meeting's attendees. */
+  last_reminder_sent_at: string | null;
   is_draft: boolean;
   locked_at: string | null;
   updated_at: string;
