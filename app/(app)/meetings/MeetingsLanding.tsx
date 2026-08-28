@@ -18,11 +18,10 @@ import type { CalendarMeeting } from "@/lib/meetings/calendar";
  * shell's `animate-fade-up` transform (which would otherwise trap/collapse a
  * `fixed inset-0` overlay — the same issue the live-call overlay hit).
  *
- * One overlay, two doors. "Schedule for later" and "Manage calendar" both open
- * the calendar itself; blocked time and connected calendars sit behind the
- * Settings toggle in its header. "Manage calendar" used to open those settings
- * *instead of* a calendar, which meant the one control named after the calendar
- * was the one that never showed you one.
+ * One overlay, one door. "Schedule for later" in the lobby menu opens the
+ * calendar; blocked time and connected calendars sit behind the Settings toggle
+ * in its header. The scheduling card used to carry a second "Manage calendar"
+ * button onto the same overlay — two names for one room — so it's gone.
  */
 export function MeetingsLanding({
   initialMeetings,
@@ -61,11 +60,12 @@ export function MeetingsLanding({
   }, [calendarOpen, pane]);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5">
       <MeetingLobby onScheduleLater={() => openCalendar("calendar")} />
       {/* Booking link sits between "start a meeting" and "meetings you have":
-          it's how meetings arrive when someone else picks the time. */}
-      <SchedulingLinkCard onOpenCalendar={() => openCalendar("calendar")} />
+          it's how meetings arrive when someone else picks the time. Collapsed to
+          a single row — it no longer competes with the meetings themselves. */}
+      <SchedulingLinkCard />
       <UpcomingMeetingsList initialMeetings={initialUpcoming} />
 
       {calendarOpen && mounted

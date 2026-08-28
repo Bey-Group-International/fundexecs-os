@@ -4,6 +4,13 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MeetingEditScreen } from "./MeetingEditScreen";
 
+/**
+ * The one action bar at the top of Meetings: start a meeting, or join one by
+ * code. This used to be a marketing hero — headline, blurb, capability strip
+ * and a decorative graphic — which is the wrong shape for a page a member
+ * opens every day. The meetings themselves are the content; this is the
+ * toolbar above them.
+ */
 export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void } = {}) {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState("");
@@ -52,6 +59,15 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
     });
   }
 
+  function openCalendar() {
+    setMenuOpen(false);
+    // On the Meetings page this opens the full calendar overlay — the single
+    // entry point to it, now that the scheduling card no longer duplicates the
+    // door. Falls back to the inline schedule form when used standalone.
+    if (onScheduleLater) onScheduleLater();
+    else setScheduleOpen(true);
+  }
+
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     const code = joinCode.trim().toLowerCase().replace(/\s/g, "");
@@ -61,114 +77,73 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
   }
 
   return (
-    <div className="px-4 pt-4 sm:pt-10">
-      <div className="mx-auto grid w-full max-w-5xl items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-        {/* Left column — hero + actions */}
-        <div className="flex flex-col gap-7">
-          <div className="flex flex-col gap-3">
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[var(--gold-400)]/25 bg-[var(--gold-400)]/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-[var(--gold-400)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--gold-400)]" />
-              FundExecs Meetings
-            </span>
-            <h1 className="text-3xl font-semibold leading-[1.1] tracking-tight text-[var(--fg-primary)] sm:text-[2.75rem]">
-              Secure video meetings for your firm
-            </h1>
-            <p className="max-w-md text-sm text-[var(--fg-muted)] sm:text-base">
-              Convene LPs, deal teams, and advisors in institutional-grade rooms — with live transcription,
-              briefing notes, and tracked action items.
-            </p>
-          </div>
+    <div className="px-4 pt-4 sm:pt-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              disabled={isPending}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {isPending ? <SpinnerIcon /> : <VideoIcon />}
+              {isPending ? "Starting…" : "New meeting"}
+              <CaretIcon />
+            </button>
 
-          {/* Action row — New meeting dropdown + code entry, Google Meet style */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                disabled={isPending}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            {menuOpen ? (
+              <div
+                role="menu"
+                className="absolute left-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl"
               >
-                {isPending ? <SpinnerIcon /> : <VideoIcon />}
-                {isPending ? "Starting…" : "New meeting"}
-                <CaretIcon />
-              </button>
-
-              {menuOpen ? (
-                <div
-                  role="menu"
-                  className="absolute left-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl"
-                >
-                  <MenuItem
-                    icon={<BoltIcon />}
-                    title="Start an instant meeting"
-                    subtitle="Create a room and join now"
-                    onClick={startInstant}
-                  />
-                  <div className="h-px bg-[var(--line)]" />
-                  <MenuItem
-                    icon={<CalendarIcon />}
-                    title="Schedule for later"
-                    subtitle="Open the calendar to pick a time"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      // On the Meetings page this opens the full calendar; falls
-                      // back to the inline schedule form when used standalone.
-                      if (onScheduleLater) onScheduleLater();
-                      else setScheduleOpen(true);
-                    }}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {/* Code entry */}
-            <form onSubmit={handleJoin} className="flex flex-1 items-center gap-2">
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2.5 focus-within:ring-2 focus-within:ring-[var(--gold-400)]">
-                <KeyboardIcon />
-                <input
-                  type="text"
-                  aria-label="Meeting code"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
-                  placeholder="Enter a meeting code"
-                  className="w-full bg-transparent text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none"
+                <MenuItem
+                  icon={<BoltIcon />}
+                  title="Start an instant meeting"
+                  subtitle="Create a room and join now"
+                  onClick={startInstant}
+                />
+                <div className="h-px bg-[var(--line)]" />
+                <MenuItem
+                  icon={<CalendarIcon />}
+                  title="Schedule for later"
+                  subtitle="Open the calendar to pick a time"
+                  onClick={openCalendar}
                 />
               </div>
-              <button
-                type="submit"
-                disabled={!joinCode.trim()}
-                className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
-                  joinCode.trim()
-                    ? "text-[var(--gold-400)] hover:bg-[var(--gold-400)]/10"
-                    : "cursor-not-allowed text-[var(--fg-muted)]"
-                }`}
-              >
-                Join
-              </button>
-            </form>
+            ) : null}
           </div>
 
-          {error ? <ErrorMsg msg={error} /> : null}
-
-          <div className="h-px w-full bg-[var(--line)]" />
-
-          {/* Capability strip */}
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-[var(--fg-muted)]">
-            {["Live transcription", "AI-generated notes", "Action items", "Scheduling links"].map((f) => (
-              <span key={f} className="inline-flex items-center gap-1.5">
-                <CheckIcon />
-                {f}
-              </span>
-            ))}
-          </div>
+          {/* Code entry */}
+          <form onSubmit={handleJoin} className="flex flex-1 items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 focus-within:ring-2 focus-within:ring-[var(--gold-400)]">
+              <KeyboardIcon />
+              <input
+                type="text"
+                aria-label="Meeting code"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="Enter a meeting code"
+                className="w-full bg-transparent text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!joinCode.trim()}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                joinCode.trim()
+                  ? "text-[var(--gold-400)] hover:bg-[var(--gold-400)]/10"
+                  : "cursor-not-allowed text-[var(--fg-muted)]"
+              }`}
+            >
+              Join
+            </button>
+          </form>
         </div>
 
-        {/* Right column — branded graphic */}
-        <div className="hidden lg:flex lg:items-center lg:justify-center">
-          <LobbyGraphic />
-        </div>
+        {error ? <ErrorMsg msg={error} /> : null}
       </div>
 
       {scheduleOpen ? (
@@ -219,50 +194,6 @@ function ErrorMsg({ msg }: { msg: string }) {
     <p className="w-fit rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
       {msg}
     </p>
-  );
-}
-
-function LobbyGraphic() {
-  // A restrained, on-brand illustration echoing Google Meet's hero graphic:
-  // a video-call grid with a gold "connected" link badge. Purely decorative.
-  return (
-    <svg
-      viewBox="0 0 360 300"
-      className="w-full max-w-sm"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <circle cx="180" cy="150" r="140" fill="var(--gold-400)" opacity="0.05" />
-      <circle cx="180" cy="150" r="100" fill="var(--gold-400)" opacity="0.04" />
-      {/* Video tiles */}
-      <g>
-        <rect x="70" y="78" width="98" height="74" rx="12" fill="var(--surface-1)" stroke="var(--line)" />
-        <circle cx="119" cy="108" r="16" fill="var(--gold-400)" opacity="0.35" />
-        <rect x="94" y="130" width="50" height="8" rx="4" fill="var(--line)" />
-      </g>
-      <g>
-        <rect x="192" y="78" width="98" height="74" rx="12" fill="var(--surface-1)" stroke="var(--line)" />
-        <circle cx="241" cy="108" r="16" fill="var(--gold-400)" opacity="0.55" />
-        <rect x="216" y="130" width="50" height="8" rx="4" fill="var(--line)" />
-      </g>
-      <g>
-        <rect x="70" y="164" width="98" height="74" rx="12" fill="var(--surface-1)" stroke="var(--line)" />
-        <circle cx="119" cy="194" r="16" fill="var(--gold-400)" opacity="0.45" />
-        <rect x="94" y="216" width="50" height="8" rx="4" fill="var(--line)" />
-      </g>
-      <g>
-        <rect x="192" y="164" width="98" height="74" rx="12" fill="var(--surface-1)" stroke="var(--line)" />
-        <circle cx="241" cy="194" r="16" fill="var(--gold-400)" opacity="0.3" />
-        <rect x="216" y="216" width="50" height="8" rx="4" fill="var(--line)" />
-      </g>
-      {/* Connected link badge */}
-      <circle cx="180" cy="158" r="26" fill="var(--gold-400)" />
-      <g stroke="#000" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M175 158a6 6 0 0 1 6-6h4a6 6 0 0 1 0 12h-2" />
-        <path d="M185 158a6 6 0 0 1-6 6h-4a6 6 0 0 1 0-12h2" />
-      </g>
-    </svg>
   );
 }
 
@@ -320,10 +251,3 @@ function CalendarIcon() {
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--gold-400)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}

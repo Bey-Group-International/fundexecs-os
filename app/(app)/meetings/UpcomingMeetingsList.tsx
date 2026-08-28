@@ -302,7 +302,7 @@ export function UpcomingMeetingsList({
   }).length;
 
   return (
-    <section className={compact ? "w-full" : "mx-auto w-full max-w-2xl px-4"}>
+    <section className={compact ? "w-full" : "mx-auto w-full max-w-3xl px-4"}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
@@ -318,16 +318,15 @@ export function UpcomingMeetingsList({
             {startingSoon > 0 ? <span>{startingSoon} within the hour</span> : null}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => void refresh()} className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)]">
-            Refresh
-          </button>
-          {meetings.length > 0 ? (
-            <button onClick={() => setClearConfirm(true)} className="rounded-md border border-[var(--status-danger)]/35 px-2 py-1 text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10">
-              Clear All
-            </button>
-          ) : null}
-        </div>
+        {/* No Refresh button: the realtime subscription below already refetches
+            on every change, so offering the control implied it didn't. Clear
+            All is destructive and rare — it lives in the menu, not on top. */}
+        {meetings.length > 0 ? (
+          <OverflowMenu
+            label="Upcoming meetings options"
+            items={[{ label: "Clear all upcoming", danger: true, onSelect: () => setClearConfirm(true) }]}
+          />
+        ) : null}
       </div>
       {error ? <p className="mb-2 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">{error}</p> : null}
 
@@ -367,6 +366,8 @@ export function UpcomingMeetingsList({
           const syncStatus: ExternalSyncStatus =
             rawSync && rawSync in EXTERNAL_SYNC_STATUS_LABELS ? (rawSync as ExternalSyncStatus) : "not_connected";
           const prep = meeting.preparation_status ?? "prep_needed";
+          // A meeting that has run its clock wants a follow-up, not a prep.
+          const ended = timeState?.phase === "ended" || meeting.status === "ended";
           return (
             <div
               key={meeting.id}
@@ -410,19 +411,22 @@ export function UpcomingMeetingsList({
                     <p className="mt-1 text-[11px] text-emerald-400/80">{joinLabel.name} just joined</p>
                   ) : null}
 
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <StatusPill label={`prep: ${prep}`} />
-                    {copilot ? <StatusPill label={`copilot: ${copilot}`} /> : null}
-                    <StatusPill label={`calendar: ${EXTERNAL_SYNC_STATUS_LABELS[syncStatus]}`} />
-                    {meeting.attendees?.length ? (
-                      <StatusPill label={`${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`} />
-                    ) : null}
-                  </div>
-                  {meeting.attendees?.length ? (
-                    <p className="mt-2 max-w-xl truncate text-xs text-[var(--fg-muted)]">
-                      {meeting.attendees.map((a) => a.email ?? a.name).join(", ")}
-                    </p>
-                  ) : null}
+                  {/* One quiet line rather than four bordered pills, and no
+                      second copy of the attendee list underneath it — the names
+                      themselves live in Details. */}
+                  <p className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">
+                    {[
+                      `prep: ${prep}`,
+                      copilot ? `copilot: ${copilot}` : null,
+                      `calendar: ${EXTERNAL_SYNC_STATUS_LABELS[syncStatus]}`,
+                      meeting.attendees?.length
+                        ? `${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                      .replace(/_/g, " ")}
+                  </p>
                 </div>
                 <Link
                   href={`/meetings/${meeting.room_code}`}
@@ -435,23 +439,39 @@ export function UpcomingMeetingsList({
                   {live ? "Join live →" : "Join →"}
                 </Link>
               </div>
-              <div className="flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
-                <ActionButton onClick={() => setDetailsId(detailsId === meeting.id ? null : meeting.id)}>
-                  {detailsId === meeting.id ? "Hide details" : "Open details"}
-                </ActionButton>
-                <ActionButton onClick={() => setEditingId(meeting.id)}>Edit meeting</ActionButton>
-                {syncStatus === "sync_failed" || syncStatus === "needs_resync" ? (
-                  <ActionButton onClick={() => void retrySync(meeting.id)}>Retry sync</ActionButton>
-                ) : null}
-                <ActionButton danger onClick={() => setDeleteId(meeting.id)}>Delete</ActionButton>
-                <ActionButton onClick={() => prepareWithEarn(meeting)}>Prepare with Earn</ActionButton>
-                <ActionButton onClick={() => followUpWithEarn(meeting)}>Follow up</ActionButton>
+              {/* Two actions on the card — Join, top right, and the one thing
+                  the meeting's phase says you'd do next. Everything else is a
+                  keystroke away in the menu instead of seven buttons per card
+                  multiplied by every meeting on screen. */}
+              <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
                 <ActionButton
-                  disabled={busy === meeting.id || reminded[meeting.id]?.state === "sending"}
-                  onClick={() => void sendReminder(meeting.id)}
+                  onClick={() => (ended ? followUpWithEarn(meeting) : prepareWithEarn(meeting))}
                 >
-                  {reminded[meeting.id]?.state === "sending" ? "Sending…" : "Send reminder"}
+                  {ended ? "Follow up" : "Prepare with Earn"}
                 </ActionButton>
+                <OverflowMenu
+                  label={`More actions for ${meeting.title}`}
+                  items={[
+                    {
+                      label: detailsId === meeting.id ? "Hide details" : "Open details",
+                      onSelect: () => setDetailsId(detailsId === meeting.id ? null : meeting.id),
+                    },
+                    { label: "Edit meeting", onSelect: () => setEditingId(meeting.id) },
+                    {
+                      label: ended ? "Prepare with Earn" : "Follow up",
+                      onSelect: () => (ended ? prepareWithEarn(meeting) : followUpWithEarn(meeting)),
+                    },
+                    {
+                      label: reminded[meeting.id]?.state === "sending" ? "Sending…" : "Send reminder",
+                      disabled: busy === meeting.id || reminded[meeting.id]?.state === "sending",
+                      onSelect: () => void sendReminder(meeting.id),
+                    },
+                    ...(syncStatus === "sync_failed" || syncStatus === "needs_resync"
+                      ? [{ label: "Retry sync", onSelect: () => void retrySync(meeting.id) }]
+                      : []),
+                    { label: "Delete", danger: true, onSelect: () => setDeleteId(meeting.id) },
+                  ]}
+                />
               </div>
               {reminded[meeting.id]?.message ? (
                 <p
@@ -510,6 +530,7 @@ function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
     ["Objective", meeting.objective],
     ["Agenda", meeting.agenda],
     ["Preparation", meeting.preparation_requirements],
+    ["Attendees", meeting.attendees?.length ? meeting.attendees.map((a) => a.email ?? a.name).join(", ") : null],
     ["Related", meeting.related_record_type ? `${meeting.related_record_type}${meeting.related_record_id ? ` · ${meeting.related_record_id}` : ""}` : null],
     ["Visibility", meeting.calendar_visibility],
     ["Reminder", meeting.reminder_minutes != null ? `${meeting.reminder_minutes} min before` : null],
@@ -530,11 +551,76 @@ function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
   );
 }
 
-function StatusPill({ label }: { label: string }) {
+
+/**
+ * A "⋯" disclosure for the actions that don't need to be on screen at rest.
+ * Closes on outside click, on Escape, and after any selection.
+ */
+function OverflowMenu({
+  label,
+  items,
+}: {
+  label: string;
+  items: Array<{ label: string; onSelect: () => void; danger?: boolean; disabled?: boolean }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">
-      {label.replace(/_/g, " ")}
-    </span>
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-md border border-[var(--line)] px-2 py-1 text-xs leading-none text-[var(--fg-muted)] transition hover:text-[var(--fg-primary)]"
+      >
+        <span aria-hidden="true">⋯</span>
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface-1)] py-1 shadow-2xl"
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+              className={`block w-full px-3 py-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                item.danger
+                  ? "text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10"
+                  : "text-[var(--fg-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--fg-primary)]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
