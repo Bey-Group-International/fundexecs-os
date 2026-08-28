@@ -560,3 +560,100 @@ export async function getConversationDealName(pathname: string): Promise<string 
     return null;
   }
 }
+
+export interface ShareConversationResult {
+  ok: boolean;
+  url?: string;
+  error?: string;
+}
+
+/**
+ * Mint (or reuse) a read-only link for an Earn conversation.
+ *
+ * Two reaches, one mechanism. `'org'` is gated on membership of the sharing
+ * org at view time, so the link is safe to drop in a team channel; `'public'`
+ * is gated on the token alone, so anyone holding the URL can read it. Both
+ * resolve through /s/[token] — the viewer decides which gate to apply.
+ *
+ * Reuses an existing share of the SAME scope rather than minting a second
+ * token, so sharing twice hands out the same URL instead of quietly
+ * accumulating live links the operator can't see or revoke. Scopes are tracked
+ * separately: asking for a team link must never hand back a public one that
+ * happens to already exist, which would silently widen the reach the operator
+ * asked for.
+ */
+export async function shareEarnConversation(
+  sessionId: string,
+  scope: "public" | "org" = "public",
+): Promise<ShareConversationResult> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
+  if (!sessionId) return { ok: false, error: "Ask Earn something first — there's nothing to share yet." };
+
+  const supabase = await createServerClient();
+
+  // The session must belong to the caller's org. RLS enforces this on both
+  // tables too; checking here turns a silent empty result into a clear answer.
+  const { data: session } = await supabase
+    .from("sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!session) return { ok: false, error: "That conversation is no longer available." };
+
+  const { data: existing } = await supabase
+    .from("session_shares")
+    .select("token")
+    .eq("session_id", sessionId)
+    .eq("organization_id", ctx.orgId)
+    .eq("scope", scope)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  let token = (existing as { token: string } | null)?.token;
+
+  if (!token) {
+    const { data: created, error } = await supabase
+      .from("session_shares")
+      .insert({
+        organization_id: ctx.orgId,
+        session_id: sessionId,
+        scope,
+        created_by: ctx.userId,
+      })
+      .select("token")
+      .single();
+    if (error || !created) {
+      console.error("[shareEarnConversation]", error?.message);
+      return { ok: false, error: "Couldn't create a share link just now." };
+    }
+    token = (created as { token: string }).token;
+
+    // The lookup above and this insert are not one operation, so two requests
+    // racing on the same conversation can both find nothing and both insert.
+    // Re-read afterwards and always hand back the OLDEST row for this
+    // (session, org, scope): whoever wins the race, every caller converges on
+    // one URL, which is the guarantee that actually matters to the operator.
+    //
+    // A unique index on (session_id, organization_id, scope) would prevent the
+    // duplicate row itself, but it cannot be added blind: `createSessionShare`
+    // has inserted unconditionally since migration 0018 — one row per click,
+    // no reuse — so duplicates almost certainly exist already and the index
+    // would fail to build on deploy. That needs a dedup backfill first, which
+    // is a migration of its own and not this change's to make.
+    const { data: settled } = await supabase
+      .from("session_shares")
+      .select("token")
+      .eq("session_id", sessionId)
+      .eq("organization_id", ctx.orgId)
+      .eq("scope", scope)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    token = (settled as { token: string } | null)?.token ?? token;
+  }
+
+  return { ok: true, url: `/s/${token}` };
+}

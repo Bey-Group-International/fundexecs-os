@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { conversationFilename, threadToMarkdown } from "./conversation-export";
+import type { ShareScope } from "@/lib/session-share";
 import { AGENTS, AGENT_BY_KEY } from "@/lib/agents";
 import { TIER_LABEL } from "@/lib/gates";
 import {
   copilotContextFromPath,
+  dockHiddenOn,
   onPointAgent,
   suggestionsFor,
   suggestionTier,
@@ -17,6 +20,7 @@ import {
   deleteSessionTurn,
   editSessionTurn,
   launchCopilotSuggestion,
+  shareEarnConversation,
   getConversationDealName,
   getCopilotBriefing,
   getMandateSummary,
@@ -108,20 +112,6 @@ function turnText(turn: Turn): string {
 }
 
 /**
- * Routes where the Earn dock is suppressed: the session/workspace surfaces
- * (which *are* an Earn conversation, so the floating dock is redundant) and the
- * Workflows screen. Matched against the pathname.
- */
-function dockHiddenOn(pathname: string): boolean {
-  return (
-    pathname === "/workspace" ||
-    pathname === "/sessions" ||
-    pathname === "/automations" ||
-    pathname.startsWith("/session/")
-  );
-}
-
-/**
  * The app-wide Earn copilot dock: a ⌘K slide-over present on every page that
  * reads the operator's current location, surfaces the on-point specialist plus
  * a live briefing and context suggestions, and maintains a multi-turn
@@ -168,6 +158,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const [draft, setDraft] = useState("");
   // Whether the recent-conversations menu is open.
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  // Whether the share menu is open, and the outcome of the last share attempt.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareState, setShareState] = useState<
+    | { kind: "idle" }
+    | { kind: "working"; scope: ShareScope }
+    | { kind: "linked"; url: string; scope: ShareScope }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   // The in-flight answer stream, so Stop can end it and keep what arrived.
@@ -223,6 +221,53 @@ export function EarnCopilotDock({ name }: { name: string }) {
   const thread = active?.thread ?? EMPTY_THREAD;
   const sessionId = active?.sessionId ?? null;
   const recent = otherConversations(store, conversationKey);
+
+  /**
+   * Hand the conversation to someone else. A public link reuses the share
+   * plumbing that already backs /s/[token]; the download needs no server at all.
+   * Both are no-ops on an empty thread — there is nothing to hand over yet.
+   */
+  async function shareLink(scope: ShareScope) {
+    if (!sessionId) {
+      setShareState({ kind: "error", message: "Ask Earn something first — a conversation is created on the first reply." });
+      return;
+    }
+    setShareState({ kind: "working", scope });
+    const result = await shareEarnConversation(sessionId, scope);
+    if (!result.ok || !result.url) {
+      setShareState({ kind: "error", message: result.error ?? "Couldn't create a share link." });
+      return;
+    }
+    const url = `${window.location.origin}${result.url}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard can be denied; the link is still shown for manual copying.
+    }
+    // The scope rides along so the confirmation states this link's real reach —
+    // a team link and a public link look identical, and the operator is about
+    // to paste one of them somewhere.
+    setShareState({ kind: "linked", url, scope });
+  }
+
+  function downloadTranscript() {
+    const markdown = threadToMarkdown(thread, {
+      label: conversationLabel,
+      operator: name,
+      exportedAt: new Date(),
+    });
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = conversationFilename(conversationLabel, new Date());
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    // Revoke on the next tick so the click has already been handled.
+    setTimeout(() => URL.revokeObjectURL(href), 0);
+    setShareOpen(false);
+  }
 
   /** Replace this conversation's turns, filing it under the current place. */
   function setThread(update: Turn[] | ((prev: Turn[]) => Turn[])) {
@@ -313,6 +358,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
           // in this tab. `pathname` names it after the place it happened.
           start_session: !sessionId,
           pathname,
+          // The server runs in UTC; without the operator's zone "today" is a
+          // day off for anyone west of Greenwich in the evening — exactly the
+          // person most likely to ask what's on their plate today.
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
         signal: controller.signal,
       });
@@ -420,6 +469,8 @@ export function EarnCopilotDock({ name }: { name: string }) {
     setError(null);
     setEditingId(null);
     setSwitcherOpen(false);
+    setShareOpen(false);
+    setShareState({ kind: "idle" });
     setBody("");
     inputRef.current?.focus();
   }
@@ -560,6 +611,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
   useEffect(() => {
     setBriefing(null);
     setSwitcherOpen(false);
+    // A share link is minted for one conversation; carrying it into another
+    // place's menu would offer the wrong thread's URL.
+    setShareOpen(false);
+    setShareState({ kind: "idle" });
     setEditingId(null);
     setError(null);
     stopAnswer();
@@ -722,6 +777,86 @@ export function EarnCopilotDock({ name }: { name: string }) {
                   >
                     All conversations →
                   </Link>
+                </div>
+              ) : null}
+            </div>
+            {/* Share. The conversation already lives in a real session and
+                /s/[token] already renders one publicly — this is the control
+                that was missing, not the plumbing. */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShareOpen((o) => !o);
+                  setShareState({ kind: "idle" });
+                }}
+                aria-haspopup="menu"
+                aria-expanded={shareOpen}
+                title="Share this conversation"
+                className="rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition hover:text-neural-300"
+              >
+                Share ▾
+              </button>
+              {shareOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-line bg-surface-1 p-1 shadow-[0_20px_48px_-28px_rgb(15_23_42/0.45)]">
+                  {thread.length === 0 ? (
+                    <p className="px-2.5 py-2 text-xs text-fg-muted">
+                      Nothing to share yet — ask Earn something first.
+                    </p>
+                  ) : (
+                    <>
+                      {/* Team first, deliberately: it is the safer default, and
+                          the one an operator sharing internally actually wants. */}
+                      <button
+                        onClick={() => void shareLink("org")}
+                        disabled={shareState.kind === "working"}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left transition hover:bg-surface-2 disabled:opacity-50"
+                      >
+                        <span className="block text-xs font-medium text-fg-primary">
+                          {shareState.kind === "working" && shareState.scope === "org"
+                            ? "Creating link…"
+                            : "Copy team link"}
+                        </span>
+                        <span className="block text-[11px] text-fg-muted">
+                          Only signed-in members of your firm can open it
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => void shareLink("public")}
+                        disabled={shareState.kind === "working"}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left transition hover:bg-surface-2 disabled:opacity-50"
+                      >
+                        <span className="block text-xs font-medium text-fg-primary">
+                          {shareState.kind === "working" && shareState.scope === "public"
+                            ? "Creating link…"
+                            : "Copy public link"}
+                        </span>
+                        <span className="block text-[11px] text-status-warning">
+                          Anyone with the link can read this conversation
+                        </span>
+                      </button>
+                      <button
+                        onClick={downloadTranscript}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left transition hover:bg-surface-2"
+                      >
+                        <span className="block text-xs font-medium text-fg-primary">Download as Markdown</span>
+                        <span className="block text-[11px] text-fg-muted">A .md file of the full thread</span>
+                      </button>
+                    </>
+                  )}
+                  {shareState.kind === "linked" ? (
+                    <p className="mt-1 break-all border-t border-line px-2.5 py-1.5 text-[11px] text-neural-300">
+                      <span className="font-medium">
+                        {shareState.scope === "org" ? "Team link copied" : "Public link copied"}
+                      </span>
+                      {" · "}
+                      {shareState.url}
+                    </p>
+                  ) : null}
+                  {shareState.kind === "error" ? (
+                    <p className="mt-1 border-t border-line px-2.5 py-1.5 text-[11px] text-status-danger">
+                      {shareState.message}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
             </div>

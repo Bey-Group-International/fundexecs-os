@@ -11,6 +11,7 @@ import { buildContactAppendix, detectSourcingIntent } from "@/lib/chat-enrichmen
 import { StreamingContactRedactor, redactContacts } from "@/lib/contact-sanitize";
 import { loadMeetingPrepContext, loadMeetingFollowupContext } from "@/lib/meetings/meeting-context";
 import { getActiveMandateRow, mandateContextBlock } from "@/lib/mandates";
+import { formatOperatorIdentity, loadOperatorIdentity, sanitizeTimeZone } from "@/lib/copilot/identity";
 
 // Conversational replies stream token-by-token; give Claude room beyond the
 // default request window.
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname } =
+  const { body, model: requestedModel, prior, session_id, meeting_context, start_session, pathname, timezone } =
     await request.json().catch(() => ({ body: "" }));
   if (!body || typeof body !== "string") {
     return new Response(JSON.stringify({ error: "Missing 'body'" }), {
@@ -104,6 +105,26 @@ export async function POST(request: Request) {
   const needsWebSearch =
     /\b(news|recent|latest|current|market|rate|price|comps|comparable|filing|SEC|EDGAR)\b/i.test(body) ||
     /\b[A-Z][a-z]+ (Capital|Partners|Group|Fund|REIT|Inc|LLC|Corp)\b/.test(body);
+
+  // Who Earn is talking to, and what day it is for them. Deliberately NOT behind
+  // `inSession`: the operator's own name, firm and date are facts about the
+  // person asking, not state carried in from elsewhere in the product, so a
+  // fresh open is not "preloaded" by knowing whose dock it is. Without this the
+  // chat greeted a managing partner anonymously and dated "recent" from its
+  // training cutoff instead of from today.
+  //
+  // Started here but awaited just before the model call, so it overlaps the
+  // context queries below instead of adding a serial round-trip to the front of
+  // every reply. Resolves to "" on any failure — never blocks a reply.
+  const identityPromise: Promise<string> = (async () => {
+    try {
+      const supabase = await createServerClient();
+      const identity = await loadOperatorIdentity(supabase, orgId, userId);
+      return formatOperatorIdentity(identity, new Date(), sanitizeTimeZone(timezone));
+    } catch {
+      return "";
+    }
+  })();
 
   // --- Live DB context loading — parallel queries to minimize latency ---
   let liveContext = "";
@@ -345,7 +366,16 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
-  const stream = earnChatStream({ body, modelLabel, priorContext, liveContext: liveContext || undefined, priorArtifacts, model });
+  const identityBlock = await identityPromise;
+  const stream = earnChatStream({
+    body,
+    modelLabel,
+    priorContext,
+    liveContext: liveContext || undefined,
+    priorArtifacts,
+    identity: identityBlock || undefined,
+    model,
+  });
 
   // No API key — stream the deterministic fallback as a single chunk (still
   // redacted, so no contact-like text can ever slip through).

@@ -212,6 +212,9 @@ export function earnChatStream(args: {
   priorContext?: Array<{role: string; content: string} | string>;
   liveContext?: string;
   priorArtifacts?: string;
+  /** Who the operator is and what day it is for them. Its own section rather
+   *  than part of liveContext: the person asking is not workspace state. */
+  identity?: string;
   model?: string;
 }) {
   const anthropic = client();
@@ -232,6 +235,11 @@ export function earnChatStream(args: {
         : { role: (turn.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: cleanContent(turn.content) }
     );
   let systemContent = earnChatSystem(args.modelLabel);
+  // Identity comes first: every other block is read in reference to who is
+  // asking and what day it is for them.
+  if (args.identity) {
+    systemContent += `\n\n${args.identity}`;
+  }
   if (args.liveContext) {
     systemContent += `\n\n## Live workspace state\n${args.liveContext}`;
   }
