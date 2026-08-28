@@ -11,10 +11,24 @@
 //   2. Nothing throws. The edit is already saved by the time a notice goes out;
 //      an unconnected mailbox must never surface as a failed save.
 import { sendEmail, type SendEmailCredentials } from "@/lib/email";
+import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
+import { canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 
 export type MeetingUpdateKind = "rescheduled" | "cancelled" | "removed";
+
+/**
+ * What the calendar should be told, as opposed to what the email says.
+ *
+ * A reschedule REQUESTs the same UID at a new time, so the entry moves rather
+ * than doubling. Cancelled and removed both CANCEL it — from the calendar's
+ * point of view "the meeting is off" and "you are no longer on it" are the same
+ * instruction, and leaving a stale entry behind is the worse failure either way.
+ */
+export function updateInviteMethod(kind: MeetingUpdateKind): "REQUEST" | "CANCEL" {
+  return kind === "rescheduled" ? "REQUEST" : "CANCEL";
+}
 
 export interface MeetingTiming {
   startIso: string | null;
@@ -75,6 +89,15 @@ export interface MeetingUpdateContext {
    * omitted, the org mailbox is used as before.
    */
   credentials?: SendEmailCredentials;
+  /**
+   * Identity of the calendar entry this update refers to. Without it the email
+   * still goes out, it simply carries no .ics — so a caller that has not been
+   * updated degrades rather than breaking.
+   */
+  meetingId?: string | null;
+  hostEmail?: string | null;
+  /** The meeting's stored calendar_sequence, which must rise on every change. */
+  sequence?: number | null;
 }
 
 function whenIn(iso: string | null | undefined, timezone: string, durationMinutes?: number | null): string {
@@ -157,6 +180,11 @@ export async function sendMeetingUpdates(
 
   const { subject, html } = buildMeetingUpdateEmail(kind, ctx);
 
+  // The same UID the invitation used, at a higher SEQUENCE. Without it a
+  // reschedule leaves the old time in every calendar and adds a second entry
+  // beside it, which is the failure the booking flow already learned to avoid.
+  const invite = buildUpdateInvite(kind, ctx, emails);
+
   const results = await Promise.allSettled(
     emails.map((email) =>
       sendEmail({
@@ -165,10 +193,56 @@ export async function sendMeetingUpdates(
         to: { name: email.split("@")[0] ?? email, email },
         subject,
         htmlBody: html,
+        calendarInvite: invite,
       }),
     ),
   );
 
   const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
   return { sent, total: emails.length };
+}
+
+/** The .ics for an update, or undefined when the meeting has no calendar identity. */
+function buildUpdateInvite(
+  kind: MeetingUpdateKind,
+  ctx: MeetingUpdateContext,
+  emails: string[],
+): { content: string; method: "REQUEST" | "CANCEL"; filename: string } | undefined {
+  const method = updateInviteMethod(kind);
+  // A cancellation still needs a time: STATUS:CANCELLED on a VEVENT with no
+  // DTSTART is not something a client can match to what it holds. On a
+  // reschedule the new time is the whole point.
+  const startIso = kind === "rescheduled" ? ctx.startIso : ctx.startIso ?? ctx.previousStartIso;
+  if (
+    !canInviteToCalendar({ meetingId: ctx.meetingId, startIso, hostEmail: ctx.hostEmail })
+  ) {
+    return undefined;
+  }
+
+  const origin = (ctx.origin || "").replace(/\/$/, "");
+  const joinUrl = `${origin}/meeting-invite/${ctx.roomCode}`;
+
+  try {
+    return {
+      content: buildInviteIcs({
+        uid: meetingInviteUid(ctx.meetingId!, origin),
+        method,
+        title: ctx.title || "Meeting",
+        startIso: startIso!,
+        endIso: inviteEndIso(startIso!, ctx.durationMinutes),
+        description: `Join: ${joinUrl}`,
+        location: joinUrl,
+        url: joinUrl,
+        organizer: { name: ctx.senderName, email: ctx.hostEmail! },
+        attendees: emails.map((email) => ({ name: email.split("@")[0] ?? email, email })),
+        sequence: Math.max(0, Math.floor(ctx.sequence ?? 0)),
+      }),
+      method,
+      filename: "invite.ics",
+    };
+  } catch (err) {
+    // The recipient still needs to know the meeting changed.
+    console.error("[meetings/updates] could not build calendar invite", err);
+    return undefined;
+  }
 }

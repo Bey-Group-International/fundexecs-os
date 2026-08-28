@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   // to everyone who was already on the meeting.
   const { data: prior } = await supabase
     .from("live_meetings")
-    .select("attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone")
+    .select("attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence")
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
@@ -233,6 +233,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     if (notifiable && timing.changed && retainedEmails.length > 0) {
       const res = await sendMeetingUpdates("rescheduled", {
         credentials: senderMailbox,
+        // Same calendar entry as the invitation, at the sequence the trigger
+        // has since bumped — so this moves or clears it rather than adding one.
+        meetingId: id,
+        hostEmail: auth.ctx.email ?? null,
+        sequence: (prior?.calendar_sequence as number | null) ?? null,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -250,6 +255,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     if (notifiable && removedEmails.length > 0) {
       const res = await sendMeetingUpdates("removed", {
         credentials: senderMailbox,
+        // Same calendar entry as the invitation, at the sequence the trigger
+        // has since bumped — so this moves or clears it rather than adding one.
+        meetingId: id,
+        hostEmail: auth.ctx.email ?? null,
+        sequence: (prior?.calendar_sequence as number | null) ?? null,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -304,7 +314,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
   const { data: prior } = await supabase
     .from("live_meetings")
-    .select("attendees, room_code, is_draft, scheduled_at, duration_minutes, title, timezone")
+    .select("attendees, room_code, is_draft, scheduled_at, duration_minutes, title, timezone, calendar_sequence")
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
@@ -343,6 +353,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     if (notifiable && emails.length > 0) {
       const res = await sendMeetingUpdates("cancelled", {
         credentials: senderMailbox,
+        // Same calendar entry as the invitation, at the sequence the trigger
+        // has since bumped — so this moves or clears it rather than adding one.
+        meetingId: id,
+        hostEmail: auth.ctx.email ?? null,
+        sequence: (prior?.calendar_sequence as number | null) ?? null,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode: (prior?.room_code as string | null) ?? "",

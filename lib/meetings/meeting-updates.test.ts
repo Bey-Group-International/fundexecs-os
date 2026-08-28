@@ -1,11 +1,17 @@
 const sendEmailMock = jest.fn();
 
 jest.mock("@/lib/email", () => ({
+  ...jest.requireActual("@/lib/email"),
   sendEmail: (...args: unknown[]) => sendEmailMock(...args),
   escapeHtml: (v: string) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
 }));
 
-import { buildMeetingUpdateEmail, diffMeetingTiming, sendMeetingUpdates } from "./meeting-updates";
+import {
+  buildMeetingUpdateEmail,
+  diffMeetingTiming,
+  sendMeetingUpdates,
+  updateInviteMethod,
+} from "./meeting-updates";
 
 const CTX = {
   origin: "https://app.test",
@@ -128,5 +134,69 @@ describe("sendMeetingUpdates", () => {
   it("counts a provider that reports a refusal as unsent", async () => {
     sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no provider" });
     expect(await sendMeetingUpdates("cancelled", CTX)).toEqual({ sent: 0, total: 2 });
+  });
+});
+
+describe("updateInviteMethod", () => {
+  it("moves the entry on a reschedule and clears it otherwise", () => {
+    // "The meeting is off" and "you are no longer on it" are the same
+    // instruction to a calendar, and a stale entry is the worse failure either
+    // way.
+    expect(updateInviteMethod("rescheduled")).toBe("REQUEST");
+    expect(updateInviteMethod("cancelled")).toBe("CANCEL");
+    expect(updateInviteMethod("removed")).toBe("CANCEL");
+  });
+});
+
+describe("sendMeetingUpdates — the calendar entry", () => {
+  const CAL = {
+    origin: "https://app.test",
+    roomCode: "abc",
+    title: "Quarterly review",
+    senderName: "rae@fund.test",
+    emails: ["ada@example.com"],
+    timezone: "UTC",
+    orgId: "org1",
+    meetingId: "m1",
+    hostEmail: "rae@fund.test",
+    startIso: "2026-09-11T15:00:00.000Z",
+    previousStartIso: "2026-09-10T15:00:00.000Z",
+    durationMinutes: 30,
+    sequence: 4,
+  };
+
+  const invite = () =>
+    (sendEmailMock.mock.calls[0]?.[0] as { calendarInvite?: { content: string; method: string } })
+      ?.calendarInvite;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sendEmailMock.mockResolvedValue({ ok: true, channel: "gmail", detail: "sent" });
+  });
+
+  it("moves the meeting rather than adding a second one", async () => {
+    // Same UID as the invitation, at a higher SEQUENCE. A fresh UID would leave
+    // the old time sitting in every calendar beside the new one.
+    await sendMeetingUpdates("rescheduled", CAL);
+    const ics = invite()!;
+    expect(ics.method).toBe("REQUEST");
+    expect(ics.content).toContain("UID:meeting-m1@app.test");
+    expect(ics.content).toContain("SEQUENCE:4");
+    expect(ics.content).toContain("DTSTART:20260911T150000Z");
+  });
+
+  it("clears the entry on a cancellation", async () => {
+    await sendMeetingUpdates("cancelled", { ...CAL, startIso: null });
+    const ics = invite()!;
+    expect(ics.method).toBe("CANCEL");
+    expect(ics.content).toContain("STATUS:CANCELLED");
+    // Falls back to the old time so the client can match what it holds.
+    expect(ics.content).toContain("DTSTART:20260910T150000Z");
+  });
+
+  it("still emails when the meeting has no calendar identity", async () => {
+    await sendMeetingUpdates("rescheduled", { ...CAL, meetingId: null });
+    expect(sendEmailMock).toHaveBeenCalled();
+    expect(invite()).toBeUndefined();
   });
 });

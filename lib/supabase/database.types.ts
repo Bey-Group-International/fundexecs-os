@@ -2403,6 +2403,8 @@ export type LiveMeeting = {
   external_calendar_last_error: string | null;
   /** When a manual reminder last went out to this meeting's attendees. */
   last_reminder_sent_at: string | null;
+  /** iCalendar SEQUENCE. Bumped by a trigger on every update — never derived. */
+  calendar_sequence: number;
   is_draft: boolean;
   locked_at: string | null;
   updated_at: string;
