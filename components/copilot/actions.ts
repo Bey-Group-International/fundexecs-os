@@ -630,6 +630,29 @@ export async function shareEarnConversation(
       return { ok: false, error: "Couldn't create a share link just now." };
     }
     token = (created as { token: string }).token;
+
+    // The lookup above and this insert are not one operation, so two requests
+    // racing on the same conversation can both find nothing and both insert.
+    // Re-read afterwards and always hand back the OLDEST row for this
+    // (session, org, scope): whoever wins the race, every caller converges on
+    // one URL, which is the guarantee that actually matters to the operator.
+    //
+    // A unique index on (session_id, organization_id, scope) would prevent the
+    // duplicate row itself, but it cannot be added blind: `createSessionShare`
+    // has inserted unconditionally since migration 0018 — one row per click,
+    // no reuse — so duplicates almost certainly exist already and the index
+    // would fail to build on deploy. That needs a dedup backfill first, which
+    // is a migration of its own and not this change's to make.
+    const { data: settled } = await supabase
+      .from("session_shares")
+      .select("token")
+      .eq("session_id", sessionId)
+      .eq("organization_id", ctx.orgId)
+      .eq("scope", scope)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    token = (settled as { token: string } | null)?.token ?? token;
   }
 
   return { ok: true, url: `/s/${token}` };

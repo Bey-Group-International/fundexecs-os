@@ -56,6 +56,31 @@ export function sanitizeTimeZone(raw: unknown): string | null {
 }
 
 /**
+ * Flatten a profile field to a single safe line before it reaches the prompt.
+ *
+ * `principals.full_name`, `principals.title` and `organizations.name` are all
+ * user-editable, and this block lands in Anthropic *system* content — the most
+ * trusted tier. Left raw, a name containing newlines could open what reads to
+ * the model as a new instruction section. The firm name is the sharper edge:
+ * an org admin sets it and it is read by every member's assistant, so it
+ * crosses between users rather than only affecting its own author.
+ *
+ * Newlines, control characters and runs of whitespace collapse to single
+ * spaces, and the result is length-capped — a real name or job title needs
+ * none of them. Returns null when nothing legible survives, so the caller
+ * omits the line rather than printing an empty one.
+ */
+export function sanitizeIdentityText(raw: string | null | undefined, maxLength = 120): string | null {
+  if (typeof raw !== "string") return null;
+  const flattened = raw
+    .replace(/[\u0000-\u001F\u007F-\u009F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!flattened) return null;
+  return flattened.length > maxLength ? `${flattened.slice(0, maxLength).trimEnd()}…` : flattened;
+}
+
+/**
  * The prompt block. Pure and deterministic so it can be asserted in tests —
  * the IO lives in `loadOperatorIdentity` below.
  *
@@ -69,11 +94,17 @@ export function formatOperatorIdentity(
 ): string {
   const lines: string[] = [];
 
-  if (identity.operatorName) {
-    const title = identity.operatorTitle?.trim();
-    lines.push(`- Operator: ${identity.operatorName}${title ? ` (${title})` : ""}`);
+  // Sanitized here rather than at the call site: this is the one point every
+  // path funnels through on its way into system content, so the guarantee
+  // holds no matter who assembles the identity.
+  const operatorName = sanitizeIdentityText(identity.operatorName);
+  const operatorTitle = sanitizeIdentityText(identity.operatorTitle);
+  const firmName = sanitizeIdentityText(identity.firmName);
+
+  if (operatorName) {
+    lines.push(`- Operator: ${operatorName}${operatorTitle ? ` (${operatorTitle})` : ""}`);
   }
-  if (identity.firmName) lines.push(`- Firm: ${identity.firmName}`);
+  if (firmName) lines.push(`- Firm: ${firmName}`);
   lines.push(`- Today: ${formatOperatorDate(now, timeZone)}`);
 
   // The date alone is worth stating — it is what keeps "recent" and "this
