@@ -97,3 +97,14 @@ describe("mintShareLink", () => {
     expect(result.url).toBeUndefined();
   });
 });
+
+describe("mintShareLink — typed client", () => {
+  it("reads the token off the typed row without a hand-written assertion", async () => {
+    // Regression guard for the client being typed as SupabaseClient<Database>:
+    // if it reverts to a bare client the token becomes `any` and this file's
+    // narrowing stops meaning anything.
+    const { client } = makeClient({ session: { id: "sess-1" }, upsertToken: "tok" });
+    const result = await mintShareLink(client, INPUT);
+    expect(result.url).toBe("/s/tok");
+  });
+});

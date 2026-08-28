@@ -55,9 +55,14 @@ export function SessionCommandBar({
     const formData = new FormData();
     formData.set("id", sessionId);
     formData.set("scope", scope);
-    const result = await createSessionShare(formData);
-    if (!result.ok || !result.url) {
-      setShareState({ kind: "error", message: result.error ?? "Couldn't create a share link." });
+    // A rejection here (network drop, server error) would otherwise leave the
+    // state on "working" and both buttons disabled until the menu is reopened.
+    const result = await createSessionShare(formData).catch(() => null);
+    if (!result?.ok || !result.url) {
+      setShareState({
+        kind: "error",
+        message: result?.error ?? "Couldn't create a share link — try again.",
+      });
       return;
     }
     const url = `${window.location.origin}${result.url}`;

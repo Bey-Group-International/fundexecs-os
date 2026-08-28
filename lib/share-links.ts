@@ -15,9 +15,13 @@
 // however many times it is asked for.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
 // One definition of the scope, in the pure module the viewer's access policy
 // already lives in — a second copy here could drift out of step with it.
 import type { ShareScope } from "@/lib/session-share";
+
+/** Matches the alias every other lib module uses for a typed client. */
+type Client = SupabaseClient<Database>;
 
 export type { ShareScope };
 
@@ -41,7 +45,7 @@ export interface MintShareLinkInput {
  * that too, but checking here turns a silent empty result into a clear answer.
  */
 export async function mintShareLink(
-  supabase: SupabaseClient,
+  supabase: Client,
   { orgId, userId, sessionId, scope }: MintShareLinkInput,
 ): Promise<MintShareLinkResult> {
   if (!sessionId) return { ok: false, error: "There's nothing to share yet." };
@@ -79,7 +83,7 @@ export async function mintShareLink(
 
   // `ignoreDuplicates` returns no row when one already existed, which is the
   // common case for a second share of the same conversation — read it back.
-  let token = (data as { token: string } | null)?.token;
+  let token = data?.token;
   if (!token) {
     const { data: existing } = await supabase
       .from("session_shares")
@@ -88,7 +92,7 @@ export async function mintShareLink(
       .eq("organization_id", orgId)
       .eq("scope", scope)
       .maybeSingle();
-    token = (existing as { token: string } | null)?.token;
+    token = existing?.token;
   }
 
   if (!token) return { ok: false, error: "Couldn't create a share link just now." };

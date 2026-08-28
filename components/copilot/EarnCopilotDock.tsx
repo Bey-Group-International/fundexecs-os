@@ -233,9 +233,14 @@ export function EarnCopilotDock({ name }: { name: string }) {
       return;
     }
     setShareState({ kind: "working", scope });
-    const result = await shareEarnConversation(sessionId, scope);
-    if (!result.ok || !result.url) {
-      setShareState({ kind: "error", message: result.error ?? "Couldn't create a share link." });
+    // As in the sessions command bar: a rejection must not strand the menu on
+    // "working" with its buttons disabled.
+    const result = await shareEarnConversation(sessionId, scope).catch(() => null);
+    if (!result?.ok || !result.url) {
+      setShareState({
+        kind: "error",
+        message: result?.error ?? "Couldn't create a share link — try again.",
+      });
       return;
     }
     const url = `${window.location.origin}${result.url}`;
