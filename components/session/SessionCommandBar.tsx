@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { HUB_BY_KEY, HUB_ORDER } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
+import type { ShareScope } from "@/lib/session-share";
 import { formatCredits } from "@/lib/billing";
 import { MobileNavToggle } from "@/components/nav/MobileNavToggle";
 import {
@@ -41,6 +42,34 @@ export function SessionCommandBar({
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [share, setShare] = useState(false);
+  const [shareState, setShareState] = useState<
+    | { kind: "idle" }
+    | { kind: "working"; scope: ShareScope }
+    | { kind: "linked"; url: string; scope: ShareScope }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  /** Mint (or reuse) this session's link for a scope, and put it on the clipboard. */
+  async function makeShareLink(scope: ShareScope) {
+    setShareState({ kind: "working", scope });
+    const formData = new FormData();
+    formData.set("id", sessionId);
+    formData.set("scope", scope);
+    const result = await createSessionShare(formData);
+    if (!result.ok || !result.url) {
+      setShareState({ kind: "error", message: result.error ?? "Couldn't create a share link." });
+      return;
+    }
+    const url = `${window.location.origin}${result.url}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard can be denied; the link is still shown for manual copying.
+    }
+    // The scope rides along: a team link and a public link look identical, and
+    // the operator is about to paste one somewhere.
+    setShareState({ kind: "linked", url, scope });
+  }
   const [notif, setNotif] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [hoverHub, setHoverHub] = useState<Hub | null>(null);
@@ -106,27 +135,66 @@ export function SessionCommandBar({
         {/* Share */}
         <div className="relative">
           <button
-            onClick={() => setShare((v) => !v)}
+            onClick={() => {
+              // Reopening starts clean: a stale "Team link copied" line under a
+              // freshly opened menu reads as though it just happened.
+              setShare((v) => !v);
+              setShareState({ kind: "idle" });
+            }}
             className="hidden rounded-md px-2 py-1.5 text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:inline-flex"
           >
             Share
           </button>
           {share ? (
-            <div className="absolute right-0 top-9 z-50 w-60 rounded-lg border border-line bg-surface-1 p-2 shadow-xl">
-              <form action={createSessionShare}>
-                <input type="hidden" name="id" value={sessionId} />
-                <input type="hidden" name="scope" value="org" />
-                <button className="w-full rounded-md px-2 py-1.5 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
-                  Share with your team
-                </button>
-              </form>
-              <form action={createSessionShare}>
-                <input type="hidden" name="id" value={sessionId} />
-                <input type="hidden" name="scope" value="public" />
-                <button className="w-full rounded-md px-2 py-1.5 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary">
-                  Create read-only link
-                </button>
-              </form>
+            <div className="absolute right-0 top-9 z-50 w-72 rounded-lg border border-line bg-surface-1 p-2 shadow-xl">
+              {/* These were forms posting a server action that returned
+                  nothing, so every click minted another live token and showed
+                  the operator none of them. Now the link comes back and is put
+                  on the clipboard. */}
+              <button
+                type="button"
+                disabled={shareState.kind === "working"}
+                onClick={() => void makeShareLink("org")}
+                className="w-full rounded-md px-2 py-1.5 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-50"
+              >
+                <span className="block">
+                  {shareState.kind === "working" && shareState.scope === "org"
+                    ? "Creating link…"
+                    : "Share with your team"}
+                </span>
+                <span className="block text-[11px] text-fg-muted">
+                  Only signed-in members of your firm can open it
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={shareState.kind === "working"}
+                onClick={() => void makeShareLink("public")}
+                className="w-full rounded-md px-2 py-1.5 text-left text-sm text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary disabled:opacity-50"
+              >
+                <span className="block">
+                  {shareState.kind === "working" && shareState.scope === "public"
+                    ? "Creating link…"
+                    : "Create read-only link"}
+                </span>
+                <span className="block text-[11px] text-status-warning">
+                  Anyone with the link can read it
+                </span>
+              </button>
+              {shareState.kind === "linked" ? (
+                <p className="mt-1 break-all border-t border-line px-2 py-1.5 text-[11px] text-fg-secondary">
+                  <span className="font-medium">
+                    {shareState.scope === "org" ? "Team link copied" : "Public link copied"}
+                  </span>
+                  {" · "}
+                  {shareState.url}
+                </p>
+              ) : null}
+              {shareState.kind === "error" ? (
+                <p className="mt-1 border-t border-line px-2 py-1.5 text-[11px] text-status-danger">
+                  {shareState.message}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
