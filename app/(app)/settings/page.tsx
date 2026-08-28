@@ -4,7 +4,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
-import { loadOrgConnections } from "@/lib/integrations/gateway";
+import { loadOrgConnections, orgConnectedChannels } from "@/lib/integrations/gateway";
 import { CHANNEL_SECRET_KEYS } from "@/lib/integrations/credentials";
 import { vaultConfigured } from "@/lib/vault";
 import { NewMandateForm } from "./NewMandateForm";
@@ -123,6 +123,9 @@ export default async function SettingsPage() {
 
   // Per-org integration connections brokered by the unified gateway.
   const connections = await loadOrgConnections(supabase, ctx.orgId);
+  // What the panel reports as connected, resolved from credentials that
+  // actually exist rather than from the rows above — the rows can only revoke.
+  const connectedChannels = await orgConnectedChannels(supabase, ctx.orgId);
 
   // The org's stored provider credentials (masked metadata only) and the
   // display catalog of keys the dispatch layer can resolve
@@ -316,12 +319,12 @@ export default async function SettingsPage() {
             title="Integrations"
             description="Dispatch channels carry approved external actions to the outside world. Today only Gmail actually sends live once connected — every other channel below prepares the action but does not yet deliver it, regardless of connection state (real provider plumbing is on the roadmap)."
           >
-            <Connections connections={connections} />
+            <Connections connections={connections} connectedChannels={[...connectedChannels]} />
 
             {/* Per-org provider credentials — the vault the dispatch layer
                 resolves before every send, so an org acts under its own
                 identity instead of the deploy-wide env credential. */}
-            <div className="mt-4">
+            <div id="org-credentials" className="mt-4 scroll-mt-6">
               <h3 className="mb-1 text-sm font-medium text-fg-primary">Organization credentials</h3>
               <p className="mb-3 text-xs leading-snug text-fg-muted">
                 Store your own provider credentials so outbound actions run under your
