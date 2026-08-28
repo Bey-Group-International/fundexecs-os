@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { conversationFilename, threadToMarkdown } from "./conversation-export";
+import type { ShareScope } from "@/lib/session-share";
 import { AGENTS, AGENT_BY_KEY } from "@/lib/agents";
 import { TIER_LABEL } from "@/lib/gates";
 import {
@@ -160,7 +161,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
   // Whether the share menu is open, and the outcome of the last share attempt.
   const [shareOpen, setShareOpen] = useState(false);
   const [shareState, setShareState] = useState<
-    { kind: "idle" } | { kind: "working" } | { kind: "linked"; url: string } | { kind: "error"; message: string }
+    | { kind: "idle" }
+    | { kind: "working"; scope: ShareScope }
+    | { kind: "linked"; url: string; scope: ShareScope }
+    | { kind: "error"; message: string }
   >({ kind: "idle" });
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -223,13 +227,13 @@ export function EarnCopilotDock({ name }: { name: string }) {
    * plumbing that already backs /s/[token]; the download needs no server at all.
    * Both are no-ops on an empty thread — there is nothing to hand over yet.
    */
-  async function shareLink() {
+  async function shareLink(scope: ShareScope) {
     if (!sessionId) {
       setShareState({ kind: "error", message: "Ask Earn something first — a conversation is created on the first reply." });
       return;
     }
-    setShareState({ kind: "working" });
-    const result = await shareEarnConversation(sessionId);
+    setShareState({ kind: "working", scope });
+    const result = await shareEarnConversation(sessionId, scope);
     if (!result.ok || !result.url) {
       setShareState({ kind: "error", message: result.error ?? "Couldn't create a share link." });
       return;
@@ -240,7 +244,10 @@ export function EarnCopilotDock({ name }: { name: string }) {
     } catch {
       // Clipboard can be denied; the link is still shown for manual copying.
     }
-    setShareState({ kind: "linked", url });
+    // The scope rides along so the confirmation states this link's real reach —
+    // a team link and a public link look identical, and the operator is about
+    // to paste one of them somewhere.
+    setShareState({ kind: "linked", url, scope });
   }
 
   function downloadTranscript() {
@@ -797,15 +804,33 @@ export function EarnCopilotDock({ name }: { name: string }) {
                     </p>
                   ) : (
                     <>
+                      {/* Team first, deliberately: it is the safer default, and
+                          the one an operator sharing internally actually wants. */}
                       <button
-                        onClick={() => void shareLink()}
+                        onClick={() => void shareLink("org")}
                         disabled={shareState.kind === "working"}
                         className="block w-full rounded-lg px-2.5 py-1.5 text-left transition hover:bg-surface-2 disabled:opacity-50"
                       >
                         <span className="block text-xs font-medium text-fg-primary">
-                          {shareState.kind === "working" ? "Creating link…" : "Copy public link"}
+                          {shareState.kind === "working" && shareState.scope === "org"
+                            ? "Creating link…"
+                            : "Copy team link"}
                         </span>
                         <span className="block text-[11px] text-fg-muted">
+                          Only signed-in members of your firm can open it
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => void shareLink("public")}
+                        disabled={shareState.kind === "working"}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left transition hover:bg-surface-2 disabled:opacity-50"
+                      >
+                        <span className="block text-xs font-medium text-fg-primary">
+                          {shareState.kind === "working" && shareState.scope === "public"
+                            ? "Creating link…"
+                            : "Copy public link"}
+                        </span>
+                        <span className="block text-[11px] text-status-warning">
                           Anyone with the link can read this conversation
                         </span>
                       </button>
@@ -820,7 +845,11 @@ export function EarnCopilotDock({ name }: { name: string }) {
                   )}
                   {shareState.kind === "linked" ? (
                     <p className="mt-1 break-all border-t border-line px-2.5 py-1.5 text-[11px] text-neural-300">
-                      Link copied · {shareState.url}
+                      <span className="font-medium">
+                        {shareState.scope === "org" ? "Team link copied" : "Public link copied"}
+                      </span>
+                      {" · "}
+                      {shareState.url}
                     </p>
                   ) : null}
                   {shareState.kind === "error" ? (

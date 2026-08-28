@@ -568,18 +568,24 @@ export interface ShareConversationResult {
 }
 
 /**
- * Mint (or reuse) a read-only public link for an Earn conversation.
+ * Mint (or reuse) a read-only link for an Earn conversation.
  *
- * The plumbing already existed and was simply never wired to the dock: the
- * dock's first reply opens a real session (returned on `X-Earn-Session`),
- * `session_shares` has held public tokens since 0018, and `/s/[token]` is a
- * working anonymous viewer. All that was missing was a way to ask for the link.
+ * Two reaches, one mechanism. `'org'` is gated on membership of the sharing
+ * org at view time, so the link is safe to drop in a team channel; `'public'`
+ * is gated on the token alone, so anyone holding the URL can read it. Both
+ * resolve through /s/[token] — the viewer decides which gate to apply.
  *
- * Reuses an existing public share for the session rather than minting a second
- * token, so sharing the same conversation twice hands out the same URL instead
- * of quietly accumulating live links the operator can't see or revoke.
+ * Reuses an existing share of the SAME scope rather than minting a second
+ * token, so sharing twice hands out the same URL instead of quietly
+ * accumulating live links the operator can't see or revoke. Scopes are tracked
+ * separately: asking for a team link must never hand back a public one that
+ * happens to already exist, which would silently widen the reach the operator
+ * asked for.
  */
-export async function shareEarnConversation(sessionId: string): Promise<ShareConversationResult> {
+export async function shareEarnConversation(
+  sessionId: string,
+  scope: "public" | "org" = "public",
+): Promise<ShareConversationResult> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
   if (!sessionId) return { ok: false, error: "Ask Earn something first — there's nothing to share yet." };
@@ -601,7 +607,7 @@ export async function shareEarnConversation(sessionId: string): Promise<ShareCon
     .select("token")
     .eq("session_id", sessionId)
     .eq("organization_id", ctx.orgId)
-    .eq("scope", "public")
+    .eq("scope", scope)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -614,7 +620,7 @@ export async function shareEarnConversation(sessionId: string): Promise<ShareCon
       .insert({
         organization_id: ctx.orgId,
         session_id: sessionId,
-        scope: "public",
+        scope,
         created_by: ctx.userId,
       })
       .select("token")

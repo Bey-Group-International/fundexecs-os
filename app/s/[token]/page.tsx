@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/auth";
+import { resolveShareAccess, shareScopeLabel, type ShareScope } from "@/lib/session-share";
 import type {
   Session,
   Task,
@@ -25,6 +28,29 @@ const ARTIFACT_LABEL: Record<ArtifactType, string> = {
   summary: "Summary",
   other: "Deliverable",
 };
+
+function SignInRequired() {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-surface-0 px-6 text-center">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
+        FundExecs OS
+      </span>
+      <h1 className="mt-3 font-display text-2xl font-semibold text-fg-primary">
+        Sign in to view this
+      </h1>
+      <p className="mt-2 max-w-sm text-sm text-fg-secondary">
+        This session was shared with a team rather than publicly. Sign in with
+        an account in that organization to read it.
+      </p>
+      <Link
+        href="/login"
+        className="mt-5 rounded-lg border border-gold-500/40 px-4 py-2 text-sm font-medium text-gold-300 transition hover:bg-gold-500/10"
+      >
+        Sign in
+      </Link>
+    </main>
+  );
+}
 
 function Unavailable() {
   return (
@@ -63,8 +89,33 @@ export default async function SharedSessionPage(
 
   const share = shareRow as SessionShare | null;
 
-  // Unknown token OR an org-scoped share → not publicly viewable.
-  if (!share || share.scope !== "public") return <Unavailable />;
+  // An org-scoped share is gated on membership of the sharing org, not on the
+  // token alone. Resolve the viewer first — `getSessionContext` reads the
+  // request's own auth cookie, so it answers for the visitor, never for the
+  // sharer. The membership probe below runs on the service client because the
+  // visitor may have no RLS visibility here at all; it is an exact-match
+  // existence check on (this org, this viewer) and returns nothing else.
+  const viewer = share?.scope === "org" ? await getSessionContext() : null;
+  let viewerIsOrgMember = false;
+  if (share?.scope === "org" && viewer) {
+    const { data: membership } = await supabase
+      .from("organization_members")
+      .select("principal_id")
+      .eq("organization_id", share.organization_id)
+      .eq("principal_id", viewer.userId)
+      .maybeSingle();
+    viewerIsOrgMember = Boolean(membership);
+  }
+
+  const access = resolveShareAccess({
+    scope: (share?.scope as ShareScope | undefined) ?? null,
+    shareOrgId: share?.organization_id ?? null,
+    viewer: viewer ? { userId: viewer.userId } : null,
+    viewerIsOrgMember,
+  });
+
+  if (access === "sign_in") return <SignInRequired />;
+  if (access !== "allow" || !share) return <Unavailable />;
 
   const { data: sessionRow } = await supabase
     .from("sessions")
@@ -122,7 +173,7 @@ export default async function SharedSessionPage(
               Shared session
             </span>
             <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-              Shared read-only
+              {shareScopeLabel(share.scope as ShareScope)}
             </span>
           </div>
           <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg-primary">
