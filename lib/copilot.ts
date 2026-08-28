@@ -324,3 +324,21 @@ export function contextPreamble(ctx: CopilotContext): string {
         : "the workspace";
   return `[The operator is working in ${where}.]`;
 }
+
+/**
+ * Routes where the Earn dock is suppressed: the session/workspace surfaces
+ * (which *are* an Earn conversation, so the floating dock is redundant) and the
+ * Workflows screen. Matched against the pathname.
+ *
+ * Lives here rather than in the dock because the top-bar entry point has to ask
+ * the same question — a visible "Ask Earn" control on a route where the dock
+ * cannot open is a button that does nothing.
+ */
+export function dockHiddenOn(pathname: string): boolean {
+  return (
+    pathname === "/workspace" ||
+    pathname === "/sessions" ||
+    pathname === "/automations" ||
+    pathname.startsWith("/session/")
+  );
+}

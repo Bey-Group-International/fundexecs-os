@@ -4,6 +4,7 @@ import type {
   Task,
   Artifact,
   ArtifactType,
+  SessionMessage,
   SessionShare,
 } from "@/lib/supabase/database.types";
 
@@ -74,6 +75,18 @@ export default async function SharedSessionPage(
   const session = sessionRow as Session | null;
   if (!session) return <Unavailable />;
 
+  // The conversation itself. An Earn chat that never routed a workflow has no
+  // tasks and no artifacts, so without these turns the shared page rendered
+  // empty — a link that promised a conversation and showed none.
+  const { data: messageRows } = await supabase
+    .from("session_messages")
+    .select("*")
+    .eq("session_id", session.id)
+    .order("created_at", { ascending: true })
+    .limit(200);
+
+  const messages = (messageRows ?? []) as SessionMessage[];
+
   // Top-level workflow runs for this session (steps have parent_task_id set).
   const { data: workflowRows } = await supabase
     .from("tasks")
@@ -116,10 +129,40 @@ export default async function SharedSessionPage(
             {session.name}
           </h1>
           <p className="mt-1 text-sm text-fg-secondary">
-            A read-only snapshot of this session&apos;s workflows and
-            deliverables.
+            A read-only snapshot of this session&apos;s conversation, workflows
+            and deliverables.
           </p>
         </header>
+
+        {messages.length > 0 ? (
+          <section className="mb-10">
+            <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">
+              Conversation
+            </h2>
+            <div className="flex flex-col gap-3">
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`rounded-lg border px-3 py-2.5 ${
+                    m.role === "user"
+                      ? "border-line bg-surface-1"
+                      : "border-gold-500/25 bg-gold-500/5"
+                  }`}
+                >
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                    {m.role === "user" ? "Operator" : "Earn"}
+                  </span>
+                  {/* Plain text, deliberately: the transcript is untrusted
+                      content on a public page, so it is never rendered as
+                      markup. `whitespace-pre-wrap` keeps the shape readable. */}
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-fg-primary">
+                    {m.content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mb-10">
           <h2 className="mb-3 font-mono text-xs uppercase tracking-wider text-fg-muted">

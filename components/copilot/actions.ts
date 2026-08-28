@@ -560,3 +560,71 @@ export async function getConversationDealName(pathname: string): Promise<string 
     return null;
   }
 }
+
+export interface ShareConversationResult {
+  ok: boolean;
+  url?: string;
+  error?: string;
+}
+
+/**
+ * Mint (or reuse) a read-only public link for an Earn conversation.
+ *
+ * The plumbing already existed and was simply never wired to the dock: the
+ * dock's first reply opens a real session (returned on `X-Earn-Session`),
+ * `session_shares` has held public tokens since 0018, and `/s/[token]` is a
+ * working anonymous viewer. All that was missing was a way to ask for the link.
+ *
+ * Reuses an existing public share for the session rather than minting a second
+ * token, so sharing the same conversation twice hands out the same URL instead
+ * of quietly accumulating live links the operator can't see or revoke.
+ */
+export async function shareEarnConversation(sessionId: string): Promise<ShareConversationResult> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
+  if (!sessionId) return { ok: false, error: "Ask Earn something first — there's nothing to share yet." };
+
+  const supabase = await createServerClient();
+
+  // The session must belong to the caller's org. RLS enforces this on both
+  // tables too; checking here turns a silent empty result into a clear answer.
+  const { data: session } = await supabase
+    .from("sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (!session) return { ok: false, error: "That conversation is no longer available." };
+
+  const { data: existing } = await supabase
+    .from("session_shares")
+    .select("token")
+    .eq("session_id", sessionId)
+    .eq("organization_id", ctx.orgId)
+    .eq("scope", "public")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  let token = (existing as { token: string } | null)?.token;
+
+  if (!token) {
+    const { data: created, error } = await supabase
+      .from("session_shares")
+      .insert({
+        organization_id: ctx.orgId,
+        session_id: sessionId,
+        scope: "public",
+        created_by: ctx.userId,
+      })
+      .select("token")
+      .single();
+    if (error || !created) {
+      console.error("[shareEarnConversation]", error?.message);
+      return { ok: false, error: "Couldn't create a share link just now." };
+    }
+    token = (created as { token: string }).token;
+  }
+
+  return { ok: true, url: `/s/${token}` };
+}
