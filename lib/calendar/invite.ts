@@ -46,6 +46,19 @@ export function inviteUid(bookingId: string, origin: string): string {
   return `booking-${bookingId}@${host}`;
 }
 
+/**
+ * The identity of a meeting scheduled inside the app, as opposed to one booked
+ * through a scheduling link.
+ *
+ * A distinct prefix from `inviteUid` so a meeting and a booking can never
+ * collide on one UID — they are different rows in different tables, and a
+ * collision would make one overwrite the other in somebody's calendar.
+ */
+export function meetingInviteUid(meetingId: string, origin: string): string {
+  const host = hostOf(origin) || "fundexecs";
+  return `meeting-${meetingId}@${host}`;
+}
+
 function hostOf(origin: string): string {
   try {
     return new URL(origin).host.replace(/[^A-Za-z0-9.\-:]/g, "");

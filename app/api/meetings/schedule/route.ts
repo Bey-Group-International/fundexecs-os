@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { hostCredentials } from "@/lib/meetings/mailbox.server";
+import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -170,10 +171,13 @@ export async function POST(req: NextRequest) {
 
     // Email guest invites once the meeting is a real (non-draft) saved meeting.
     // Non-fatal: an unconnected mailbox or send failure never blocks the meeting.
+    // The host is emailed too, and both sides get a real calendar invitation —
+    // so this runs even with no guests, because the host's own confirmation is
+    // what puts the meeting in their calendar.
     let invited = 0;
     if (!saved.isDraft) {
       const emails = guestEmails(attendees);
-      if (emails.length > 0) {
+      {
         try {
           const { data: userData } = await supabase.auth.getUser();
           const result = await sendMeetingInvites({
@@ -189,6 +193,16 @@ export async function POST(req: NextRequest) {
             title: body.title ?? "Meeting",
             senderName: userData.user?.email ?? "Someone",
             emails,
+            hostEmail: auth.ctx.email ?? userData.user?.email ?? null,
+            // Identity of the calendar entry, so the reschedule and cancel
+            // paths move this one rather than adding a second.
+            meetingId: saved.id,
+            startIso: saved.scheduledAt,
+            durationMinutes: saved.durationMinutes,
+            // A meeting that was just created has never been updated, so its
+            // trigger-maintained sequence is still zero.
+            sequence: 0,
+            whenLabel: saved.scheduledAt ? formatSlotFull(saved.scheduledAt, timezone) : null,
           });
           invited = result.sent;
         } catch (err) {
