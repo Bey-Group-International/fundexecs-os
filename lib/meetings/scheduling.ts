@@ -401,6 +401,13 @@ export interface BookingValidation {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// A line ending here becomes a header break downstream: the name reaches the
+// host's subject line, and the email reaches a To. lib/email-headers.ts makes
+// that harmless on the wire, but a booking is also stored and rendered in the
+// app, and a name is not a place for a control character under any reading.
+// Rejecting says so plainly instead of silently keeping a mangled name.
+const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/;
+
 /** Field-level validation for the public booking form. */
 export function validateBookingRequest(input: {
   name?: string | null;
@@ -408,10 +415,18 @@ export function validateBookingRequest(input: {
   startIso?: string | null;
 }): BookingValidation {
   const errors: BookingValidation = {};
-  if (!input.name?.trim()) errors.name = "Your name is required.";
+  const name = input.name ?? "";
+  if (!name.trim()) errors.name = "Your name is required.";
+  else if (CONTROL_CHARS.test(name)) errors.name = "Your name can't contain line breaks.";
+
   const email = input.email?.trim() ?? "";
   if (!email) errors.email = "Your email is required.";
-  else if (!EMAIL_RE.test(email)) errors.email = "Enter a valid email address.";
+  // EMAIL_RE rejects whitespace but not the other control characters, and a
+  // valid address contains none of them.
+  else if (!EMAIL_RE.test(email) || CONTROL_CHARS.test(email)) {
+    errors.email = "Enter a valid email address.";
+  }
+
   if (!input.startIso || isNaN(new Date(input.startIso).getTime())) errors.slot = "Pick a time.";
   return errors;
 }

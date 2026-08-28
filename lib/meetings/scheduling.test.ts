@@ -355,6 +355,47 @@ describe("validateBookingRequest", () => {
     expect(errors.email).toBeTruthy();
     expect(errors.slot).toBeTruthy();
   });
+
+  it("rejects a name carrying a header break", () => {
+    // This is the booking-form end of the mail header injection: the name
+    // reaches the host's subject line. lib/email-headers.ts makes it harmless
+    // on the wire; this stops it being stored and shown in the app at all.
+    const errors = validateBookingRequest({
+      name: "Bob\r\nBcc: attacker@evil.test",
+      email: "bob@x.com",
+      startIso: "2026-03-02T09:00:00Z",
+    });
+    expect(errors.name).toBeTruthy();
+  });
+
+  it("rejects a bare newline as well as a CRLF", () => {
+    expect(
+      validateBookingRequest({ name: "Bob\nBcc: x@evil.test", email: "b@x.com", startIso: "2026-03-02T09:00:00Z" }).name,
+    ).toBeTruthy();
+  });
+
+  it("rejects other control characters in a name", () => {
+    expect(
+      validateBookingRequest({ name: "Bob\u0007", email: "b@x.com", startIso: "2026-03-02T09:00:00Z" }).name,
+    ).toBeTruthy();
+  });
+
+  it("rejects a control character in an email", () => {
+    expect(
+      validateBookingRequest({ name: "Bob", email: "b@x.com\u0000", startIso: "2026-03-02T09:00:00Z" }).email,
+    ).toBeTruthy();
+  });
+
+  it("still accepts ordinary names with punctuation and accents", () => {
+    // The check is for control characters, not for anything that looks unusual
+    // to an English reader — a name is not a place to be clever about what is
+    // allowed.
+    for (const name of ["Ada Lovelace", "O'Neill", "Jean-Luc", "Müller", "李雷", "Simmons, Bey"]) {
+      expect(
+        validateBookingRequest({ name, email: "a@x.com", startIso: "2026-03-02T09:00:00Z" }),
+      ).toEqual({});
+    }
+  });
 });
 
 describe("public URLs", () => {

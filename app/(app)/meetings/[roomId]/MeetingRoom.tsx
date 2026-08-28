@@ -369,15 +369,95 @@ function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon }: {
   );
 }
 
+// ─── WaitingRoomBar ──────────────────────────────────────────────────────────
+
+/**
+ * The host's waiting room, where the host can actually see it.
+ *
+ * Admissions used to live only in the Copilot sidebar's People tab. That tab is
+ * not the default one, and the sidebar closes entirely — so a host could sit in
+ * a meeting with no indication at all that someone was knocking, and the guest
+ * waited until they gave up. A waiting room nobody notices is the same as no
+ * waiting room, except the guest is stuck outside.
+ *
+ * So this sits above the control bar, in the main column, for as long as
+ * anybody is waiting: visible whatever tab is open and whether or not the
+ * sidebar is. Admit and Deny are here rather than behind a "review" link,
+ * because letting someone in is one decision and should cost one click.
+ */
+function WaitingRoomBar({
+  waitingPeers, onAdmit, onDeny, onAdmitAll,
+}: {
+  waitingPeers: WaitingPeer[];
+  onAdmit: (id: string) => void;
+  onDeny: (id: string) => void;
+  onAdmitAll: () => void;
+}) {
+  const count = waitingPeers.length;
+  if (count === 0) return null;
+
+  return (
+    <div
+      role="region"
+      aria-label={`${count} ${count === 1 ? "person" : "people"} waiting to join`}
+      className="shrink-0 border-t border-[var(--gold-400)]/40 bg-[var(--gold-400)]/10 px-3 sm:px-6 py-2"
+    >
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="flex items-center gap-2 text-xs font-semibold text-[var(--gold-400)] uppercase tracking-wide">
+          <span className="w-2 h-2 rounded-full bg-[var(--gold-400)] animate-pulse" />
+          {count === 1 ? "Waiting to join" : `${count} waiting to join`}
+        </span>
+
+        {/* Each waiting person, admittable without opening anything. The list
+            scrolls rather than growing the bar, so a rush of guests can never
+            push the meeting controls off screen. */}
+        <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
+          {waitingPeers.map((wp) => (
+            <div
+              key={wp.id}
+              className="flex items-center gap-1.5 shrink-0 rounded-full border border-[var(--line)] bg-[var(--surface-1)] pl-3 pr-1.5 py-1"
+            >
+              <span className="text-sm text-[var(--fg-primary)] truncate max-w-[10rem]">{wp.displayName}</span>
+              <button
+                onClick={() => onAdmit(wp.id)}
+                className="rounded-full bg-[var(--status-success)] px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Admit
+              </button>
+              <button
+                onClick={() => onDeny(wp.id)}
+                title={`Deny ${wp.displayName}`}
+                aria-label={`Deny ${wp.displayName}`}
+                className="rounded-full border border-[var(--line)] px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--status-danger)]"
+              >
+                Deny
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {count > 1 && (
+          <button
+            onClick={onAdmitAll}
+            className="shrink-0 rounded-full bg-[var(--status-success)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Admit all
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
-  micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, duration, roomCode, bwMode,
+  micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
 }: {
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
-  handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; duration: number;
+  handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; duration: number;
   roomCode: string; bwMode: "normal" | "degraded" | "audio-only";
   onToggleMic: () => void; onToggleCam: () => void; onToggleScreen: () => void;
   onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
@@ -486,11 +566,20 @@ function ControlBar({
                         : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
           }`}>
           ✨ <span className="hidden sm:inline">Copilot</span>
-          {chatUnread > 0 && !copilotOpen && (
+          {/* Someone waiting outranks unread chat: one is a person held at the
+              door, the other is a message that will keep. */}
+          {waitingCount > 0 ? (
+            <span
+              title={`${waitingCount} waiting to join`}
+              className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--status-success)] text-white text-[11px] font-bold flex items-center justify-center"
+            >
+              {waitingCount}
+            </span>
+          ) : chatUnread > 0 && !copilotOpen ? (
             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--gold-400)] text-white text-[11px] font-bold flex items-center justify-center">
               {chatUnread}
             </span>
-          )}
+          ) : null}
         </button>
       </div>
     </div>
@@ -704,6 +793,14 @@ function CopilotSidebar({
             {t === "people" ? `People ${participants.length}` : t === "chat" ? "Chat" : t === "actions" ? "Actions" : t === "notes" ? "Notes" : t === "analyze" ? "Analyze" : t === "walkthrough" ? "Guide" : "Live"}
             {t === "walkthrough" && walkthroughNudge && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)]" />
+            )}
+            {t === "people" && isHost && waitingPeers.length > 0 && (
+              <span
+                title={`${waitingPeers.length} waiting to join`}
+                className="absolute top-0.5 right-0.5 min-w-3.5 h-3.5 px-1 rounded-full bg-[var(--status-success)] text-white text-[10px] font-bold flex items-center justify-center"
+              >
+                {waitingPeers.length}
+              </span>
             )}
           </button>
         ))}
@@ -1498,6 +1595,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => { cancelled = true; void supabase.removeChannel(channel); };
   }, [isHost, ready, meetingId, supabase]);
 
+  // Carry the waiting count into the browser tab title. A host who has tabbed
+  // away to pull up a document is exactly the host most likely to leave someone
+  // standing outside, and the in-page bar cannot reach them there.
+  useEffect(() => {
+    if (!isHost) return;
+    const original = document.title;
+    if (waitingPeers.length > 0) document.title = `(${waitingPeers.length}) Waiting to join · ${original}`;
+    return () => { document.title = original; };
+  }, [isHost, waitingPeers.length]);
+
   // Apply selected speaker on join
   useEffect(() => {
     if (!ready || !selectedSpeakerId) return;
@@ -2144,9 +2251,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         )}
       </div>
 
+      {isHost && (
+        <WaitingRoomBar
+          waitingPeers={waitingPeers}
+          onAdmit={admitPeer}
+          onDeny={denyPeer}
+          onAdmitAll={admitAll}
+        />
+      )}
+
       <ControlBar
         micOn={micOn} camOn={camOn} shareOn={shareOn} copilotOpen={copilotOpen}
-        isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread} duration={duration}
+        isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
+        waitingCount={isHost ? waitingPeers.length : 0} duration={duration}
         roomCode={roomCode} bwMode={bwMode}
         onToggleMic={toggleMic} onToggleCam={toggleCam}
         onToggleScreen={() => void toggleScreen()}
