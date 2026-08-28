@@ -279,3 +279,86 @@ describe("sendEmail with a calendar invitation", () => {
     expect(sentMessage()).toContain('filename="meeting.ics"');
   });
 });
+
+describe("sendEmail header injection", () => {
+  beforeEach(() => {
+    getGoogleAccessTokenMock.mockResolvedValue("tok");
+  });
+
+  /** The header block: everything up to the first empty line. */
+  const headerLines = (): string[] => {
+    const msg = sentMessage();
+    return msg.slice(0, msg.indexOf("\r\n\r\n")).split("\r\n");
+  };
+
+  it("does not let a subject open a second header", async () => {
+    // The invitee names themselves on a public booking page, and that name is
+    // interpolated into the host's subject line.
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      subject: "New booking: Bob\r\nBcc: attacker@evil.test",
+    });
+    expect(headerLines().some((l) => /^Bcc:/i.test(l))).toBe(false);
+    expect(sentMessage()).toContain("Subject: New booking: Bob Bcc: attacker@evil.test");
+  });
+
+  it("does not let a recipient display name open a second header", async () => {
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      to: { name: "Bob\r\nBcc: attacker@evil.test", email: "bob@acme.test" },
+    });
+    expect(headerLines().some((l) => /^Bcc:/i.test(l))).toBe(false);
+  });
+
+  it("does not let a recipient address add a second recipient", async () => {
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      to: { name: "LP", email: "lp@acme.test>, attacker@evil.test" },
+    });
+    // The two addresses fuse into one unusable mailbox rather than becoming
+    // two recipients. Gmail rejects it, which is the outcome we want: better a
+    // refused send than a delivered one with a recipient nobody asked for.
+    expect(headerLines().filter((l) => /^To:/i.test(l))).toEqual([
+      "To: LP <lp@acme.testattacker@evil.test>",
+    ]);
+  });
+
+  it("does not let a From display name open a second header", async () => {
+    process.env.FUNDEXECS_FROM_EMAIL = "meetings@acme.vc";
+    await sendEmail({ ...ARGS, orgId: "org1", fromName: "Acme\r\nBcc: attacker@evil.test" });
+    expect(headerLines().some((l) => /^Bcc:/i.test(l))).toBe(false);
+  });
+
+  it("does not let an attachment filename escape its MIME parameter", async () => {
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      calendarInvite: {
+        content: "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n",
+        method: "REQUEST",
+        filename: 'a.ics"\r\nBcc: attacker@evil.test',
+      },
+    });
+    expect(sentMessage()).not.toContain("Bcc: attacker@evil.test\r\n");
+    expect(sentMessage()).toContain('filename="a.ics Bcc: attacker@evil.test"');
+  });
+
+  it("keeps the header block to exactly the headers it meant to send", async () => {
+    await sendEmail({
+      ...ARGS,
+      orgId: "org1",
+      subject: "a\r\nX-Injected: 1",
+      to: { name: "b\r\nX-Injected: 2", email: "lp@acme.test" },
+    });
+    expect(headerLines()).toEqual([
+      // Quoted because the injected text left a colon in the phrase.
+      'To: "b X-Injected: 2" <lp@acme.test>',
+      "Subject: a X-Injected: 1",
+      "MIME-Version: 1.0",
+      "Content-Type: text/html; charset=utf-8",
+    ]);
+  });
+});

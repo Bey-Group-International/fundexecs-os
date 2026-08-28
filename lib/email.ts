@@ -28,6 +28,7 @@
 // deliberate — an org that has not connected a mailbox yet must still be able
 // to save a meeting, cancel a booking, or issue an invoice. Nothing in this
 // module throws.
+import { encodeHeaderValue, formatMailbox, sanitizeMimeParam } from "@/lib/email-headers";
 import { getGoogleAccessToken, googleOAuthConfigured } from "@/lib/google-oauth";
 import { getOrgSecretBounded } from "@/lib/org-secrets";
 
@@ -97,12 +98,17 @@ function methodOf(ics: string): string | null {
 }
 
 function buildRfc2822(args: SendEmailArgs, from: string | null): string {
+  // Every value below is caller-supplied and some of it is typed by strangers:
+  // an invitee names themselves on a public booking page, and that name reaches
+  // both the subject and a To phrase. A bare CRLF in any of it would end the
+  // header and start a new one — a Bcc, a second To, a replaced body. See
+  // lib/email-headers.ts; nothing reaches a header without going through it.
   const headers = [
     // No From header by default: Gmail stamps the connected account's own
     // address. Forcing one that isn't a verified alias only gets it rewritten.
-    ...(from ? [`From: ${args.fromName ?? "FundExecs"} <${from}>`] : []),
-    `To: ${args.to.name} <${args.to.email}>`,
-    `Subject: ${args.subject}`,
+    ...(from ? [`From: ${formatMailbox(args.fromName ?? "FundExecs", from)}`] : []),
+    `To: ${formatMailbox(args.to.name, args.to.email)}`,
+    `Subject: ${encodeHeaderValue(args.subject)}`,
     `MIME-Version: 1.0`,
   ];
 
@@ -123,7 +129,9 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
   // Hence mixed{ alternative{ html, calendar }, attachment }.
   const outer = boundary("mixed");
   const inner = boundary("alt");
-  const filename = invite.filename || "invite.ics";
+  // The filename sits inside a quoted MIME parameter, so it can end that
+  // parameter and reach the header the same way a subject can.
+  const filename = sanitizeMimeParam(invite.filename || "") || "invite.ics";
   // Base64 with hard-wrapped lines: an .ics carries CRLFs and can exceed the
   // 998-octet line limit, and quoted-printable mangles the folding clients rely on.
   const encoded = Buffer.from(invite.content, "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
@@ -131,7 +139,9 @@ function buildRfc2822(args: SendEmailArgs, from: string | null): string {
   // what Gmail reads to decide between an Accept/Decline card and a "this was
   // cancelled" notice; if it disagreed with the METHOD inside the .ics the two
   // readers of the same message would act on different instructions.
-  const method = methodOf(invite.content) ?? invite.method;
+  // Narrowed rather than interpolated: `method` is a typed union, but types are
+  // a compile-time promise and this one crosses a JSON boundary on some paths.
+  const method = methodOf(invite.content) ?? (invite.method === "CANCEL" ? "CANCEL" : "REQUEST");
 
   return [
     ...headers,
