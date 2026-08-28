@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
+import { mintShareLink } from "@/lib/share-links";
 
 // Sessions can be named and filed into groups. All mutations are org-scoped
 // (defense-in-depth alongside RLS).
@@ -136,20 +137,32 @@ export async function deleteSession(formData: FormData): Promise<void> {
   if (!noRedirect) redirect("/workspace");
 }
 
-// Share: create a link (scope 'public' read-only via /s/<token>, or 'org').
-export async function createSessionShare(formData: FormData): Promise<void> {
+/**
+ * Share: create a link (scope 'public' read-only via /s/<token>, or 'org'), or
+ * return the one this session already has for that scope.
+ *
+ * This used to insert unconditionally and return nothing — a fresh row and a
+ * fresh live token on every click, none of which the operator was ever shown,
+ * so a session could accumulate links nobody could see or revoke. Minting now
+ * goes through `mintShareLink`, shared with the Earn dock, and the URL comes
+ * back so the caller can actually hand it over.
+ */
+export async function createSessionShare(
+  formData: FormData,
+): Promise<{ ok: boolean; url?: string; error?: string }> {
   const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
+  if (!ctx?.orgId) return { ok: false, error: "Not signed in." };
   const id = String(formData.get("id") ?? "");
   const scope = String(formData.get("scope") ?? "org") === "public" ? "public" : "org";
-  if (!id) return;
+  if (!id) return { ok: false, error: "No session to share." };
+
   const supabase = await createServerClient();
-  const { error } = await supabase.from("session_shares").insert({
-    organization_id: ctx.orgId,
-    session_id: id,
+  const result = await mintShareLink(supabase, {
+    orgId: ctx.orgId,
+    userId: ctx.userId,
+    sessionId: id,
     scope,
-    created_by: ctx.userId,
   });
-  if (error) { console.error("[createSessionShare]", error.message); return; }
-  revalidatePath(`/session/${id}`);
+  if (result.ok) revalidatePath(`/session/${id}`);
+  return result;
 }

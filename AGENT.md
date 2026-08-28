@@ -1101,6 +1101,28 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, production build passes, Jest +28 new
              |  (3724 total green, no regressions). Additive UI + two lib modules + one
              |  route; no migration, no engine change, no new deps.
+2026-08-28  |  session_shares scoped uniqueness  |  One share row per session per scope.
+             |  Decision: a session has at most one share link per scope, and where
+             |  duplicates exist the EARLIEST row is the one kept and handed out — its
+             |  token is the one most likely already circulating, so rotating to a newer
+             |  row would silently break a link someone holds.
+             |  Context: session_shares only ever enforced token uniqueness, and
+             |  createSessionShare inserted unconditionally from migration 0018 — a new
+             |  row and a new live token on every click, none ever shown to the operator.
+             |  Measured before acting: session_shares is empty in production (0 rows
+             |  against 12 orgs / 17 sessions), so nobody had ever created a share and no
+             |  live link is revoked by the dedup. The dedup ships anyway, defensively,
+             |  for environments that may not be empty.
+             |  Built: migration 20260828193000 (dedup keeping earliest per triple, then a
+             |  unique index on (session_id, organization_id, scope)); lib/share-links.ts
+             |  as the single minting path for both writers, upserting with
+             |  ignoreDuplicates so an existing token is reused rather than rotated;
+             |  createSessionShare now returns its URL instead of discarding it.
+             |  Rejected: adding the unique index alone. It cannot build while duplicates
+             |  exist, and the writer producing them had to be fixed first or the table
+             |  would simply refill between backfill and index.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +6 new
+             |  (4328 total green). One migration, one new lib module, no new deps.
 ```
 
 ---
