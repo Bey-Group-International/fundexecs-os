@@ -38,46 +38,18 @@ async function currentStatus(
   return data?.status ?? null;
 }
 
-export async function connectIntegration(formData: FormData): Promise<{ error?: string }> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return { error: "Not authenticated" };
-  const channel = String(formData.get("channel") ?? "");
-  if (!isKnownChannel(channel)) return { error: "Unknown integration" };
-
-  const supabase = await createServerClient();
-  const priorStatus = await currentStatus(supabase, ctx.orgId, channel);
-
-  // SEAM: a real gateway runs its hosted-auth handshake (Merge Link / Zernio
-  // connect) here and returns the account handle + opaque ref. We record the
-  // connection so dispatch and the composer treat the channel as live for this org.
-  const accountLabel = mockAccountLabel(channel);
-  const { error } = await supabase.from("integration_connections").upsert(
-    {
-      organization_id: ctx.orgId,
-      channel,
-      status: "connected",
-      gateway: GATEWAY_PROVIDER,
-      account_label: accountLabel,
-      account_ref: `${GATEWAY_PROVIDER}:${channel}:${ctx.orgId}`,
-      connected_by: ctx.userId,
-      revoked_at: null,
-    },
-    { onConflict: "organization_id,channel" },
-  );
-
-  if (error) return { error: error.message };
-  await writeDashboardAudit({
-    organizationId: ctx.orgId,
-    principalId: ctx.userId,
-    action: "integration.connected",
-    entityType: "integration_connection",
-    beforeState: { channel, status: priorStatus },
-    afterState: { channel, status: "connected", gateway: GATEWAY_PROVIDER, account_label: accountLabel },
-  });
-  revalidatePath("/settings");
-  revalidatePath("/workspace");
-  return {};
-}
+// connectIntegration is deliberately gone.
+//
+// It wrote an integration_connections row with status 'connected' and a
+// mockAccountLabel, ran no handshake, and stored no credential — so pressing
+// Connect made the panel claim a channel was live with nothing behind it, and
+// dispatch believed it too. Leaving it exported would keep that reachable as a
+// server action even with the button rewired.
+//
+// Connecting now goes to something that actually yields a credential: the
+// provider's consent screen, or the organization credentials vault. When a real
+// gateway handshake lands, it belongs here — writing the row only AFTER the
+// exchange returns a credential.
 
 export async function disconnectIntegration(formData: FormData): Promise<{ error?: string }> {
   const ctx = await getSessionContext();

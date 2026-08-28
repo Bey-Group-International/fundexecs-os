@@ -34,7 +34,7 @@ jest.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { connectIntegration, disconnectIntegration } from "./connections-actions";
+import { disconnectIntegration } from "./connections-actions";
 
 function form(channel: string): FormData {
   const fd = new FormData();
@@ -49,46 +49,9 @@ beforeEach(() => {
   maybeSingle.mockResolvedValue({ data: null, error: null });
 });
 
-describe("connectIntegration", () => {
-  it("appends an integration.connected audit row with the prior status", async () => {
-    maybeSingle.mockResolvedValue({ data: { status: "revoked" }, error: null });
-    const result = await connectIntegration(form("gmail"));
-    expect(result).toEqual({});
-
-    expect(writeDashboardAudit).toHaveBeenCalledTimes(1);
-    const event = writeDashboardAudit.mock.calls[0][0];
-    expect(event.action).toBe("integration.connected");
-    expect(event.entityType).toBe("integration_connection");
-    expect(event.organizationId).toBe("org-1");
-    expect(event.principalId).toBe("user-1");
-    expect(event.beforeState).toMatchObject({ channel: "gmail", status: "revoked" });
-    expect(event.afterState).toMatchObject({ channel: "gmail", status: "connected" });
-  });
-
-  it("records a never-connected channel's prior status as null", async () => {
-    await connectIntegration(form("gmail"));
-    expect(writeDashboardAudit.mock.calls[0][0].beforeState).toMatchObject({
-      channel: "gmail",
-      status: null,
-    });
-  });
-
-  it("writes no history when the upsert fails — nothing happened", async () => {
-    upsert.mockResolvedValue({ error: { message: "denied" } });
-    const result = await connectIntegration(form("gmail"));
-    expect(result).toEqual({ error: "denied" });
-    expect(writeDashboardAudit).not.toHaveBeenCalled();
-  });
-
-  it("writes no history for unknown channels or unauthenticated callers", async () => {
-    expect(await connectIntegration(form("not-a-channel"))).toEqual({
-      error: "Unknown integration",
-    });
-    getSessionContext.mockResolvedValue(null);
-    expect(await connectIntegration(form("gmail"))).toEqual({ error: "Not authenticated" });
-    expect(writeDashboardAudit).not.toHaveBeenCalled();
-  });
-});
+// connectIntegration's tests are gone with the function. They asserted that a
+// button press writes a 'connected' row with a placeholder label and no
+// credential — which was the defect, so keeping them would have pinned it.
 
 describe("disconnectIntegration", () => {
   it("appends an integration.revoked audit row with the prior status", async () => {

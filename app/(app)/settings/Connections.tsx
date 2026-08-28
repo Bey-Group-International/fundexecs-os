@@ -19,23 +19,41 @@ type ChannelState = "connected_gateway" | "connected_env" | "prepared";
 // those channels says so rather than implying parity with Gmail.
 const LIVE_CAPABLE = new Set(["gmail"]);
 
-export function Connections({ connections }: { connections: IntegrationConnection[] }) {
+export function Connections({
+  connections,
+  connectedChannels,
+}: {
+  connections: IntegrationConnection[];
+  /**
+   * The channels whose credentials actually resolve, from the server.
+   *
+   * Passed in rather than derived here: this component used to read a
+   * 'connected' row as proof, which is exactly how a channel with an empty
+   * vault came to show a green dot. There is now one resolver and this is its
+   * answer.
+   */
+  connectedChannels: string[];
+}) {
   // One row per (org, channel) by the table's unique constraint.
   const rowByChannel = new Map(connections.map((c) => [c.channel, c]));
   const env = envConfiguredChannels();
+  const live = new Set(connectedChannels);
 
   return (
     <div className="flex flex-col gap-2">
       {integrationCatalog().map((descriptor) => {
         const row = rowByChannel.get(descriptor.channel);
-        const state: ChannelState = row
-          ? row.status === "connected"
-            ? "connected_gateway"
-            : "prepared"
+        const connected = live.has(descriptor.channel);
+        // A row that claims connection while nothing backs it. These are what
+        // the old Connect button wrote, and saying so is more use than showing
+        // the channel as merely unconnected — it tells the member the thing
+        // they already pressed did not do what it appeared to.
+        const claimedButUnbacked = row?.status === "connected" && !connected;
+        const state: ChannelState = !connected
+          ? "prepared"
           : env.has(descriptor.channel)
             ? "connected_env"
-            : "prepared";
-        const connected = state !== "prepared";
+            : "connected_gateway";
 
         return (
           <div key={descriptor.channel} className="rounded-xl border border-line bg-surface-1 p-4">
@@ -57,15 +75,29 @@ export function Connections({ connections }: { connections: IntegrationConnectio
                     <span className="rounded-full border border-status-success/40 bg-status-success/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-success">
                       Connected · environment
                     </span>
+                  ) : claimedButUnbacked ? (
+                    <span className="rounded-full border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-status-warning">
+                      Setup incomplete
+                    </span>
                   ) : (
                     <span className="rounded-full border border-line bg-surface-0 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                       Prepared only
                     </span>
                   )}
-                  {row?.status === "connected" && row.account_label ? (
+                  {/* Only an account label from a real grant. The placeholder
+                      the old Connect button wrote is not an account, and
+                      showing it beside a channel is what made it look like one. */}
+                  {connected && row?.account_label ? (
                     <span className="font-mono text-[11px] text-fg-muted">{row.account_label}</span>
                   ) : null}
                 </div>
+
+                {claimedButUnbacked ? (
+                  <p className="mt-2 text-xs leading-snug text-status-warning">
+                    This was marked connected, but no credentials for it exist — so nothing
+                    can send through it. Add them below, or connect the provider directly.
+                  </p>
+                ) : null}
 
                 {connected && !LIVE_CAPABLE.has(descriptor.channel) ? (
                   <p className="mt-1.5 text-[11px] leading-snug text-fg-muted">
@@ -96,15 +128,11 @@ export function Connections({ connections }: { connections: IntegrationConnectio
               <ConnectionControls
                 channel={descriptor.channel}
                 connected={connected}
-                gatewayConnected={state === "connected_gateway"}
-                // Gmail gets the REAL hosted-auth flow when the deploy has a
-                // Google OAuth client: Connect goes to Google's consent screen
-                // and stores a per-org refresh token, not a placeholder row.
-                oauthHref={
-                  descriptor.channel === "gmail" && googleOAuthConfigured()
-                    ? "/api/oauth/google/start"
-                    : undefined
-                }
+                revocable={connected}
+                // The channels with a REAL consent screen, when the deploy has
+                // a Google OAuth client. Everything else points at the vault
+                // fields, because that is where its credential comes from.
+                oauthHref={oauthStartFor(descriptor.channel)}
               />
             </div>
           </div>
@@ -178,4 +206,14 @@ export function Connections({ connections }: { connections: IntegrationConnectio
       </div>
     </div>
   );
+}
+
+/** The provider consent screen for a channel, when the deploy has one. */
+function oauthStartFor(channel: string): string | undefined {
+  if (!googleOAuthConfigured()) return undefined;
+  if (channel === "gmail") return "/api/oauth/google/start";
+  // Per-member rather than per-org, but it is still the real grant and still
+  // the thing that makes the channel reachable.
+  if (channel === "google_calendar") return "/api/oauth/google/calendar/start";
+  return undefined;
 }
