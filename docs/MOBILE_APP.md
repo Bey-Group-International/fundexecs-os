@@ -610,3 +610,36 @@ including a spoofed `Host` and the delegation agreeing with the request path.
 **Not covered here:** the ~40 `redirect("/login")` call sites in `app/(app)/`
 still drop the destination — they never passed `next` to begin with, and
 threading it through each is a separate, much wider change.
+
+## 21. OAuth connect outcomes are visible
+
+Every route under `app/api/oauth/*` already diagnosed its failure precisely and
+reported it on the query string — `/settings?google=exchange_failed`,
+`/meetings?google_calendar=denied`, `?carta=pkce_missing`. **Nothing read any of
+it.** `app/(app)/settings/page.tsx` accepted no `searchParams` at all and
+`/meetings` never looked at `google_calendar`, so 15 distinct codes across 55
+emit sites in 8 route files were discarded. Declined consent, a missing vault
+key, a refused token exchange and outright success all rendered as the same
+unchanged page: the operator bounced out to the provider, came back, and had no
+way to tell whether anything had happened.
+
+`lib/oauth-outcome.ts` translates the routes' vocabulary once — title, tone, and
+what to actually do about it — and `readOAuthOutcome` picks whichever provider
+reported. An unrecognized code still surfaces, quoting the raw string, because
+reporting a code with no copy beats swallowing it, which is the whole bug.
+`components/OAuthOutcomeBanner.tsx` renders it on both destination pages; it is
+a server component, so the result is in the first paint rather than after
+hydration, and dismissal is a link back to the clean URL.
+
+Its colors come from the `--status-*` custom properties rather than Tailwind's
+`status.*` scale. That scale still holds the dark theme's pastels, which
+`globals.css` itself notes "wash out to nothing on white"; the custom properties
+are the re-saturated light-page tones. A banner carrying failure text has to be
+readable, so it takes the readable pair. (The stale Tailwind `status.*` scale is
+a separate inconsistency, untouched here.)
+
+`lib/oauth-outcome.test.ts` reads the route files, extracts every code they hand
+their redirect helper, and asserts each one has real copy — so a new failure
+path added to a route fails the suite instead of silently regressing to a blank
+page. Verified the guard bites by deleting one entry (`pkce_missing`) and
+watching `carta/callback` fail. `tsc`/`eslint`/`jest`/`build` clean.

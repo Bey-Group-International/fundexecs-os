@@ -24,6 +24,8 @@ import { TIER_2_ACTIONS } from "./tier2-actions";
 import { deactivateMandate, setDiscoverable, setFirmBookingUrl } from "./actions";
 import { UserProfileForm } from "./UserProfileForm";
 import { canAdminOrg } from "@/lib/rbac";
+import { readOAuthOutcome } from "@/lib/oauth-outcome";
+import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +73,14 @@ const SECTIONS: SettingsSection[] = [
   { id: "about", label: "About" },
 ];
 
-export default async function SettingsPage() {
+export default async function SettingsPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // The OAuth connect routes report every outcome here — `?google=connected`,
+  // `?carta=exchange_failed`, and so on. This page previously accepted no
+  // searchParams at all, so all of it, successes included, was thrown away and
+  // the operator saw an unchanged page after every connect attempt.
+  const oauthOutcome = readOAuthOutcome(await props.searchParams);
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
@@ -319,6 +328,10 @@ export default async function SettingsPage() {
             title="Integrations"
             description="Dispatch channels carry approved external actions to the outside world. Today only Gmail actually sends live once connected — every other channel below prepares the action but does not yet deliver it, regardless of connection state (real provider plumbing is on the roadmap)."
           >
+            {oauthOutcome && (
+              <OAuthOutcomeBanner outcome={oauthOutcome} dismissHref="/settings#integrations" />
+            )}
+
             <Connections connections={connections} connectedChannels={[...connectedChannels]} />
 
             {/* Per-org provider credentials — the vault the dispatch layer
