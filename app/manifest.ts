@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { BRAND, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, THEME_COLOR } from "@/lib/site";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -13,8 +13,12 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     orientation: "portrait",
-    background_color: BRAND.background,
-    theme_color: BRAND.background,
+    // Both paint pre-content pixels on an installed launch: background_color is
+    // the splash behind the icon, theme_color the surrounding app chrome. They
+    // track the root layout's viewport themeColor so the launch never flashes a
+    // color the app itself never renders.
+    background_color: THEME_COLOR,
+    theme_color: THEME_COLOR,
     categories: ["business", "finance", "productivity"],
     icons: [
       { src: "/icon-192.png", type: "image/png", sizes: "192x192" },

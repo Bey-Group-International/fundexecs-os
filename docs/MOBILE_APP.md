@@ -513,3 +513,53 @@ exactly `translateY(-300px)`, resetting to 0 on close; re-tapping the current
 route scrolls a scrolled page back to the top while re-tapping a different route
 leaves the scroll position untouched. `tsc`/`eslint`/`build` clean. Both hooks
 are mobile-only in use; desktop/web untouched.
+
+## 19. Installed-app version hygiene — launch color, cache lifecycle, one prompt
+
+Four defects on the installed (PWA) surface, all invisible on web and none of
+which failed anything:
+
+- **Black splash on every cold launch.** `BRAND` in `lib/site.ts` is
+  hand-maintained hex mirroring CSS custom properties it can't read, and the
+  mirror had gone stale: it still described the pre-refresh dark/gold theme
+  (`#0B0A08`) long after the app moved to the light palette. The manifest derives
+  `background_color` and `theme_color` from it, so the installed app painted a
+  near-black splash and title bar before snapping to a light `#F0F5FC` UI — while
+  the root layout's `viewport.themeColor` said `#F0F5FC` all along. `BRAND` is now
+  synced to the live tokens (each field naming the token it mirrors), and layout
+  and manifest read one shared `THEME_COLOR` so they can't disagree again.
+- **A cache that never turned over.** `public/sw.js` hardcoded
+  `VERSION = "fx-os-v1"`, a constant no deploy changed. `install` therefore ran
+  exactly once per device — pinning the precached `/offline` page to whatever
+  shipped the day the user first loaded the app — and `activate`'s prune, which
+  only deletes caches not matching the current `VERSION`, could never delete
+  anything, so every deploy's `_next/static` chunks accumulated in the installed
+  app's storage without bound. The version is now stamped from the build id that
+  `ServiceWorkerRegister` puts on the registration URL (`/sw.js?v=<build>`,
+  inlined by `next.config.mjs` from `NEXT_PUBLIC_BUILD_ID` / the deploying
+  commit). Registration is keyed by scope, so a new build updates the existing
+  registration rather than adding a second one, and the changed script URL is
+  what makes the browser re-run `install` and sweep its predecessors. Navigations
+  are network-first, so a cold launch fetches fresh HTML carrying the new build
+  id — the update signal arrives on its own.
+- **Update timing and a revalidation that could be killed.** `skipWaiting()` is
+  gone: with a per-build cache key it would have run the prune while a loaded
+  page still depended on the previous build's chunks, which a redeploy has
+  already removed from the origin — turning a routine deploy into a chunk-load
+  error for anyone with the app open. The new worker takes over on the next cold
+  launch instead. Separately, when a static asset is answered from cache the
+  stale-while-revalidate fetch is the only work left, and an idle worker can be
+  terminated before its cache write lands (re-serving the same stale asset
+  forever); that fetch is now held open with `event.waitUntil`.
+- **Two install prompts on `/dashboard`.** The route sits inside the `(app)`
+  layout, which mounts `MobileInstallPrompt` as a fixed bottom sheet, while
+  `AppShell` renders `PWAInstallPrompt` inline — both listening for the same
+  `beforeinstallprompt`. A mobile visitor to the dashboard got two competing UIs
+  for one install. The dashboard card is now `md:`-scoped, which is what its own
+  copy ("focused desktop access") always described.
+
+`lib/brand-tokens.test.ts` parses `app/globals.css` and asserts every `BRAND`
+field still equals its token, that the manifest's launch colors equal the page's
+real background, and that the layout hasn't re-hardcoded its `themeColor` — the
+check the hand-maintained mirror never had. `tsc`/`eslint`/`jest`/`build` clean;
+desktop/web untouched.

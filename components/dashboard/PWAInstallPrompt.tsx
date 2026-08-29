@@ -7,6 +7,12 @@ type InstallEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+// The dashboard's inline install card. Desktop-only on purpose: `/dashboard`
+// sits inside the (app) layout, which already mounts MobileInstallPrompt as a
+// fixed bottom sheet, and both listen for the same `beforeinstallprompt`. Left
+// unscoped, a mobile visitor to the dashboard gets two competing install UIs
+// for one install. The copy below ("focused desktop access") was always the
+// desktop half of that pair.
 export function PWAInstallPrompt() {
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -23,7 +29,7 @@ export function PWAInstallPrompt() {
   if (dismissed || !installEvent) return null;
 
   return (
-    <div className="rounded-2xl border border-line bg-surface-1/80 p-3 text-xs text-fg-secondary">
+    <div className="hidden rounded-2xl border border-line bg-surface-1/80 p-3 text-xs text-fg-secondary md:block">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 text-gold-300" aria-hidden>
           ★

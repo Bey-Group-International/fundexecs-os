@@ -44,15 +44,30 @@ export const SITE_DESCRIPTION =
 export const SITE_URL =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://fundexecs.com";
 
-// Brand colors, kept in sync with tailwind.config.ts / globals.css. Used by the
-// runtime-rendered icon and OG image, which can't read Tailwind classes.
+// Brand colors as fully-resolved hex, mirroring the `:root` tokens in
+// app/globals.css. Used anywhere Tailwind classes can't reach — the web app
+// manifest, the runtime-rendered icon, and the OG image. Each field names the
+// token it mirrors so the two can be diffed by eye; if a token moves, move the
+// hex with it.
 export const BRAND = {
-  background: "#0B0A08",
-  gold: "#D4AF6A",
-  goldLight: "#E4CD93",
-  fg: "#F5F1E8",
-  fgMuted: "#7E7869",
+  /** --fx-surface-0 · rgb(240 245 252) — the page itself. */
+  background: "#F0F5FC",
+  /** --fx-gold-rgb · rgb(217 119 6) — the canonical amber fill. */
+  gold: "#D97706",
+  /** --fx-gold-500 · rgb(245 158 11) — the brightest amber step. */
+  goldLight: "#F59E0B",
+  /** --fx-fg-primary · rgb(9 20 38) — near-black body ink. */
+  fg: "#091426",
+  /** --fx-fg-muted · rgb(88 108 138) — the quietest readable label. */
+  fgMuted: "#586C8A",
 } as const;
+
+// The single UI theme color, consumed by BOTH the root layout's viewport and
+// the web app manifest. They have to agree: the manifest's value paints the
+// installed app's launch splash and its Android title bar, so any drift from
+// the page's real background shows up as a colored flash on every cold launch
+// of the installed app before the first paint lands.
+export const THEME_COLOR = BRAND.background;
 
 // Absolute URL to the brand logo used by JSON-LD (ImageObject). Points at the
 // 512×512 Earn coin mark shipped in /public.

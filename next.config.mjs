@@ -1,6 +1,27 @@
+// A short, stable identifier for this build. It is appended to the service
+// worker's registration URL, which makes it the app-shell cache's version key:
+// a new build is a new worker script URL, so the browser installs it, refreshes
+// the precache, and drops the previous build's caches. Prefer an explicit
+// override, then the deploying commit; "dev" keeps local builds on one key so
+// repeated `next build` runs don't churn the cache. Non-alphanumerics are
+// stripped because the value is interpolated into a query string.
+const BUILD_ID = (
+  process.env.NEXT_PUBLIC_BUILD_ID ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  "dev"
+)
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, "")
+  .slice(0, 12) || "dev";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Inlined at build time so client bundles (and the service worker
+  // registration in particular) can read it without a runtime round trip.
+  env: {
+    NEXT_PUBLIC_BUILD_ID: BUILD_ID,
+  },
   async headers() {
     return [
       {
