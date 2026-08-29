@@ -5,6 +5,7 @@ import {
   SITE_NAME,
   SITE_TITLE,
   SITE_URL,
+  THEME_COLOR,
 } from "@/lib/site";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { globalGraph } from "@/lib/seo/structured-data";
@@ -112,8 +113,10 @@ export const metadata: Metadata = {
 
 export const viewport = {
   // One scheme, everywhere: the platform renders in its single bold daylight
-  // palette regardless of the device's light/dark preference.
-  themeColor: "#F0F5FC",
+  // palette regardless of the device's light/dark preference. Shared with the
+  // web app manifest so the browser chrome and the installed app's launch
+  // splash are the same color.
+  themeColor: THEME_COLOR,
   colorScheme: "light" as const,
   // Extend content beneath the notch / home indicator so the app shell can
   // draw its own safe-area padding for an edge-to-edge installed experience.
