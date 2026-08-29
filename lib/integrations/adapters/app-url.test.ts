@@ -4,7 +4,7 @@
 // configured at all) used to fall back to http://localhost:3000, so clicking
 // "Connect" on Settings › Integrations sent the operator to a dead localhost
 // tab instead of Google's consent screen.
-import { getAppUrl, getAppUrlFromRequest } from "./app-url";
+import { getAppUrl, getAppUrlFromHeaders, getAppUrlFromRequest } from "./app-url";
 
 const ORIGINAL_ENV = process.env;
 
@@ -91,5 +91,52 @@ describe("getAppUrlFromRequest", () => {
   it("falls back to configuration when the request carries no host", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://fundexecs.com";
     expect(getAppUrlFromRequest(new Request("https://x.invalid/"))).toBe("https://fundexecs.com");
+  });
+});
+
+describe("getAppUrlFromHeaders", () => {
+  // Server Actions get `headers()`, never a Request. Google sign-in used to
+  // read the raw `Origin` header here instead, with a fallback chain that
+  // ended at http://localhost:3000 — so an installed PWA launched from a
+  // non-canonical host minted a redirectTo the provider's allow-list had never
+  // seen, and the sign-in died at the provider.
+  function headers(init: Record<string, string>): Headers {
+    return new Headers(init);
+  }
+
+  it("prefers the configured canonical host over the host being browsed", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://fundexecs.com";
+    expect(
+      getAppUrlFromHeaders(headers({ "x-forwarded-host": "fundexecs-os-abc.vercel.app" })),
+    ).toBe("https://fundexecs.com");
+  });
+
+  it("uses the forwarded host when nothing is configured", () => {
+    expect(
+      getAppUrlFromHeaders(
+        headers({ "x-forwarded-host": "app.fundexecs.com", "x-forwarded-proto": "https" }),
+      ),
+    ).toBe("https://app.fundexecs.com");
+  });
+
+  it("never mints an off-platform callback from a spoofed host header", () => {
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "fundexecs-os.vercel.app";
+    expect(getAppUrlFromHeaders(headers({ host: "evil.example.com" }))).toBe(
+      "https://fundexecs-os.vercel.app",
+    );
+  });
+
+  it("keeps localhost on http for local development", () => {
+    expect(getAppUrlFromHeaders(headers({ host: "localhost:3000" }))).toBe(
+      "http://localhost:3000",
+    );
+  });
+
+  it("agrees with getAppUrlFromRequest, which now delegates to it", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://fundexecs.com";
+    const init = { "x-forwarded-host": "app.fundexecs.com" };
+    expect(getAppUrlFromHeaders(headers(init))).toBe(
+      getAppUrlFromRequest(new Request("https://example.invalid/x", { headers: init })),
+    );
   });
 });

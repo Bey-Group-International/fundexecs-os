@@ -70,12 +70,25 @@ export function getAppUrl(): string {
  * instead of to localhost.
  */
 export function getAppUrlFromRequest(req: Request): string {
+  return getAppUrlFromHeaders(req.headers);
+}
+
+/**
+ * The same resolution as getAppUrlFromRequest, from a bare Headers bag.
+ *
+ * Server Actions never see a Request — they get `headers()` — so without this
+ * they are pushed toward reading the raw `Origin` header and hand-rolling a
+ * fallback chain. That is how an OAuth redirect target ends up on a host the
+ * provider's allow-list has never heard of, or on localhost in production.
+ * Anything minting an absolute URL should come through here.
+ */
+export function getAppUrlFromHeaders(headers: Headers): string {
   const configured = normalize(process.env.NEXT_PUBLIC_APP_URL) ?? normalize(process.env.NEXTAUTH_URL);
   if (configured) return configured;
 
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const host = headers.get("x-forwarded-host") ?? headers.get("host");
   if (host) {
-    const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const proto = headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
     const scheme = proto || (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
     const fromHost = normalize(`${scheme}://${host}`);
     if (fromHost) return fromHost;

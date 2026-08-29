@@ -563,3 +563,50 @@ field still equals its token, that the manifest's launch colors equal the page's
 real background, and that the layout hasn't re-hardcoded its `themeColor` — the
 check the hand-maintained mirror never had. `tsc`/`eslint`/`jest`/`build` clean;
 desktop/web untouched.
+
+## 20. Google sign-in from the installed app
+
+Sign-in built its OAuth callback from the raw `Origin` header:
+
+```ts
+const origin = (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+options: { redirectTo: `${origin}/auth/callback` }
+```
+
+`Origin` is whatever host the browser is on, and an **installed PWA carries the
+host it was installed from for the life of the install**. Installed from a
+preview domain, a `www.` alias, or any host other than the canonical one, the
+flow minted a `redirectTo` that the provider's allow-list had never seen and the
+sign-in died at the provider rather than coming back. The fallback chain ended
+at `http://localhost:3000` — the production incident
+`lib/integrations/adapters/app-url.ts` was written to prevent, and which every
+*other* OAuth route in the app already routes around via the allow-listed
+`getAppUrlFromRequest`. Sign-in was the one that never got the fix.
+
+`getAppUrlFromHeaders` is that same resolver for callers holding a `Headers`
+bag rather than a `Request` — which is every Server Action, since Server Actions
+never see a `Request`. Its absence is what pushed this code onto `Origin` in the
+first place. `getAppUrlFromRequest` now delegates to it, so both paths resolve
+identically.
+
+**`?next=` is honored end to end.** `app/admin/layout.tsx` was already
+redirecting to `/login?next=/admin`, but the login page didn't read `next`, the
+sign-in action didn't forward it, and `/auth/callback`'s `sanitizeNextPath` —
+security comment and all — was unreachable code. A gated deep link always
+dumped the operator on `/workspace`. That matters most on the installed app,
+whose long-press shortcuts point straight at `/earn`, `/deals/feed`, and
+`/approvals`: opening one while signed out lost the destination. The parameter
+now flows login page → both sign-in actions → callback, through one shared
+sanitizer in `lib/safe-next-path.ts`. The login page only carries the value; it
+is re-validated server-side against the resolved origin, because `next` is
+attacker-supplied and an unchecked one turns sign-in into an open redirect.
+
+`lib/safe-next-path.test.ts` covers the redirect refusals (absolute,
+protocol-relative, backslash-smuggled, scheme-only, suffix-host) and the
+shortcut targets; `app-url.test.ts` covers the header-based resolution,
+including a spoofed `Host` and the delegation agreeing with the request path.
+`tsc`/`eslint`/`jest`/`build` clean.
+
+**Not covered here:** the ~40 `redirect("/login")` call sites in `app/(app)/`
+still drop the destination — they never passed `next` to begin with, and
+threading it through each is a separate, much wider change.

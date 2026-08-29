@@ -6,7 +6,7 @@ import { signIn, signUp, signInWithGoogle } from "./actions";
 
 export default async function LoginPage(
   props: {
-    searchParams: Promise<{ error?: string; mode?: string; message?: string }>;
+    searchParams: Promise<{ error?: string; mode?: string; message?: string; next?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -14,6 +14,11 @@ export default async function LoginPage(
   if (ctx) redirect(ctx.orgId ? "/workspace" : "/onboarding");
 
   const isSignup = searchParams.mode === "signup";
+  // Where the operator was headed before the auth gate bounced them here, e.g.
+  // /login?next=/admin, or an installed-app shortcut into /earn or /approvals.
+  // Passed through both sign-in forms and re-validated server-side; this is
+  // only the carrier, never the authority on whether the path is safe.
+  const next = typeof searchParams.next === "string" ? searchParams.next : undefined;
 
   return (
     <div className="fx-blueprint flex min-h-screen bg-surface-0">
@@ -59,6 +64,7 @@ export default async function LoginPage(
           )}
 
           <form action={signInWithGoogle} className="mt-6">
+            {next && <input type="hidden" name="next" value={next} />}
             <button
               type="submit"
               className="flex w-full items-center justify-center gap-2.5 rounded-md border border-line bg-surface-2 py-2.5 text-sm font-medium text-fg-primary transition hover:bg-surface-1"
@@ -92,6 +98,7 @@ export default async function LoginPage(
           </div>
 
           <form className="flex flex-col gap-3">
+            {next && <input type="hidden" name="next" value={next} />}
             {isSignup && (
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-fg-secondary">Full name</label>
@@ -138,14 +145,24 @@ export default async function LoginPage(
             {isSignup ? (
               <>
                 Already have an account?{" "}
-                <Link href="/login" className="text-gold-300 hover:underline">
+                <Link
+                  href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+                  className="text-gold-300 hover:underline"
+                >
                   Sign in
                 </Link>
               </>
             ) : (
               <>
                 New here?{" "}
-                <Link href="/login?mode=signup" className="text-gold-300 hover:underline">
+                <Link
+                  href={
+                    next
+                      ? `/login?mode=signup&next=${encodeURIComponent(next)}`
+                      : "/login?mode=signup"
+                  }
+                  className="text-gold-300 hover:underline"
+                >
                   Create an account
                 </Link>
               </>
