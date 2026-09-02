@@ -5,13 +5,19 @@ import { useRouter } from "next/navigation";
 import { MeetingEditScreen } from "./MeetingEditScreen";
 
 /**
- * The one action bar at the top of Meetings: start a meeting, or join one by
- * code. This used to be a marketing hero — headline, blurb, capability strip
- * and a decorative graphic — which is the wrong shape for a page a member
- * opens every day. The meetings themselves are the content; this is the
- * toolbar above them.
+ * The one action bar at the top of Meetings: start a meeting, open the
+ * calendar, or join one by code. This used to be a marketing hero — headline,
+ * blurb, capability strip and a decorative graphic — which is the wrong shape
+ * for a page a member opens every day. The meetings themselves are the content;
+ * this is the toolbar above them.
+ *
+ * The calendar sits here as its own button. It was previously reachable only
+ * through "Schedule for later" inside the New meeting menu — two clicks and a
+ * name that describes booking a meeting, not looking at the week. The menu item
+ * stays (it's the right phrasing when you're already there to create something),
+ * but the button is the door people find.
  */
-export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void } = {}) {
+export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void } = {}) {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +67,10 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
 
   function openCalendar() {
     setMenuOpen(false);
-    // On the Meetings page this opens the full calendar overlay — the single
-    // entry point to it, now that the scheduling card no longer duplicates the
-    // door. Falls back to the inline schedule form when used standalone.
-    if (onScheduleLater) onScheduleLater();
+    // On the Meetings page this opens the full calendar overlay. Falls back to
+    // the inline schedule form when the lobby is used standalone, without a
+    // calendar behind it.
+    if (onOpenCalendar) onOpenCalendar();
     else setScheduleOpen(true);
   }
 
@@ -80,40 +86,52 @@ export function MeetingLobby({ onScheduleLater }: { onScheduleLater?: () => void
     <div className="px-4 pt-4 sm:pt-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative" ref={menuRef}>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:flex-none" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                disabled={isPending}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                {isPending ? <SpinnerIcon /> : <VideoIcon />}
+                {isPending ? "Starting…" : "New meeting"}
+                <CaretIcon />
+              </button>
+
+              {menuOpen ? (
+                <div
+                  role="menu"
+                  className="absolute left-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl"
+                >
+                  <MenuItem
+                    icon={<BoltIcon />}
+                    title="Start an instant meeting"
+                    subtitle="Create a room and join now"
+                    onClick={startInstant}
+                  />
+                  <div className="h-px bg-[var(--line)]" />
+                  <MenuItem
+                    icon={<CalendarIcon />}
+                    title="Schedule for later"
+                    subtitle="Open the calendar to pick a time"
+                    onClick={openCalendar}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {/* The calendar, one click from the page a member opens every day. */}
             <button
               type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              disabled={isPending}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              onClick={openCalendar}
+              className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-semibold text-[var(--fg-secondary)] transition-colors hover:border-[var(--gold-400)]/40 hover:bg-[var(--surface-2)] hover:text-[var(--fg-primary)]"
             >
-              {isPending ? <SpinnerIcon /> : <VideoIcon />}
-              {isPending ? "Starting…" : "New meeting"}
-              <CaretIcon />
+              <span className="text-[var(--gold-400)]"><CalendarIcon /></span>
+              Calendar
             </button>
-
-            {menuOpen ? (
-              <div
-                role="menu"
-                className="absolute left-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl"
-              >
-                <MenuItem
-                  icon={<BoltIcon />}
-                  title="Start an instant meeting"
-                  subtitle="Create a room and join now"
-                  onClick={startInstant}
-                />
-                <div className="h-px bg-[var(--line)]" />
-                <MenuItem
-                  icon={<CalendarIcon />}
-                  title="Schedule for later"
-                  subtitle="Open the calendar to pick a time"
-                  onClick={openCalendar}
-                />
-              </div>
-            ) : null}
           </div>
 
           {/* Code entry */}

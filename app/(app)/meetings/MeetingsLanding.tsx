@@ -1,28 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import nextDynamic from "next/dynamic";
+import { usePathname, useSearchParams } from "next/navigation";
 import { MeetingLobby } from "./MeetingLobby";
-import { MeetingsCalendar } from "./MeetingsCalendar";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { SchedulingLinkCard } from "./SchedulingLinkCard";
-import { CalendarManager } from "./CalendarManager";
+import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
 import type { PastMeeting } from "./PastMeetingsList";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 
 /**
- * Meetings landing. The calendar is no longer always on the page — the flow is
- * Meetings → "Schedule for later" → calendar. The landing shows the lobby (new
- * meeting / join) and the Upcoming meetings list; the full calendar opens as a
- * full-screen overlay. The overlay is portaled to <body> so it escapes the app
- * shell's `animate-fade-up` transform (which would otherwise trap/collapse a
+ * Meetings landing. The landing shows the lobby (new meeting / join / calendar)
+ * and the Upcoming meetings list; the full calendar opens as a full-screen
+ * overlay. The overlay is portaled to <body> so it escapes the app shell's
+ * `animate-fade-up` transform (which would otherwise trap/collapse a
  * `fixed inset-0` overlay — the same issue the live-call overlay hit).
  *
- * One overlay, one door. "Schedule for later" in the lobby menu opens the
- * calendar; blocked time and connected calendars sit behind the Settings toggle
- * in its header. The scheduling card used to carry a second "Manage calendar"
- * button onto the same overlay — two names for one room — so it's gone.
+ * The calendar is a destination, so it has an address: `?view=calendar`, with
+ * `?view=settings` for blocked time and connected calendars behind the header
+ * toggle. State is driven off the URL, and the door is a plain "Calendar"
+ * button in the lobby rather than a menu item two clicks deep. "Schedule for
+ * later" in the New meeting menu still opens the same overlay — same room, two
+ * doors, one of which is now visible without opening a menu.
  */
+
+// Both panes are heavy (the calendar grid alone is the largest component on the
+// page) and neither renders until the overlay opens, so they're split out of
+// the landing bundle and fetched on first open. `ssr: false` is fine — this is
+// a client component and the overlay has no server-rendered content.
+const MeetingsCalendar = nextDynamic(
+  () => import("./MeetingsCalendar").then((m) => m.MeetingsCalendar),
+  { ssr: false, loading: () => <PaneLoading label="Loading calendar…" /> },
+);
+const CalendarManager = nextDynamic(
+  () => import("./CalendarManager").then((m) => m.CalendarManager),
+  { ssr: false, loading: () => <PaneLoading label="Loading calendar settings…" /> },
+);
+
 export function MeetingsLanding({
   initialMeetings,
   initialUpcoming,
@@ -36,15 +52,64 @@ export function MeetingsLanding({
   userId: string;
   orgId: string;
 }) {
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [pane, setPane] = useState<"calendar" | "settings">("calendar");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const view = parseCalendarView(searchParams.get(CALENDAR_VIEW_PARAM));
+  const calendarOpen = view !== null;
+  const pane: CalendarView = view ?? "calendar";
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  function openCalendar(which: "calendar" | "settings" = "calendar") {
-    setPane(which);
-    setCalendarOpen(true);
-  }
+  // Whether *this* session pushed the overlay onto the history stack. Closing
+  // then means stepping back, which leaves the stack clean; a member who
+  // deep-linked straight into `?view=calendar` has nothing to step back to, so
+  // closing rewrites the URL in place instead of throwing them off the site.
+  const pushedRef = useRef(false);
+  useEffect(() => {
+    if (!calendarOpen) pushedRef.current = false;
+  }, [calendarOpen]);
+
+  // The settings pane is mounted lazily but never unmounted afterwards: swapping
+  // back and forth would otherwise reset the calendar's view, anchor date and
+  // layer toggles — the calendar would forget where you were every time you
+  // blocked an hour.
+  const [settingsSeen, setSettingsSeen] = useState(false);
+  useEffect(() => {
+    if (pane === "settings") setSettingsSeen(true);
+  }, [pane]);
+
+  // Shallow history updates — `window.history` rather than `router.push` so
+  // opening the calendar doesn't re-run the page's server query for a state
+  // change the client already has in hand.
+  const setView = useCallback(
+    (next: CalendarView | null, mode: "push" | "replace") => {
+      const url = calendarViewUrl(pathname, searchParams.toString(), next);
+      if (mode === "push") window.history.pushState(null, "", url);
+      else window.history.replaceState(null, "", url);
+    },
+    [pathname, searchParams],
+  );
+
+  const openCalendar = useCallback(
+    (which: CalendarView = "calendar") => {
+      pushedRef.current = true;
+      setView(which, "push");
+    },
+    [setView],
+  );
+
+  const closeCalendar = useCallback(() => {
+    if (pushedRef.current) window.history.back();
+    else setView(null, "replace");
+  }, [setView]);
+
+  // Settings is a panel inside the calendar, not a separate destination:
+  // entering it pushes (so Back returns to the grid), leaving it replaces (so
+  // Back from the grid still closes the overlay rather than re-opening
+  // settings).
+  const showSettings = useCallback(() => setView("settings", "push"), [setView]);
+  const hideSettings = useCallback(() => setView("calendar", "replace"), [setView]);
 
   // Escape backs out of settings first, then closes the overlay — so it never
   // throws away the whole calendar when the member only meant to leave a panel.
@@ -52,16 +117,16 @@ export function MeetingsLanding({
     if (!calendarOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (pane === "settings") setPane("calendar");
-      else setCalendarOpen(false);
+      if (pane === "settings") hideSettings();
+      else closeCalendar();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [calendarOpen, pane]);
+  }, [calendarOpen, pane, hideSettings, closeCalendar]);
 
   return (
     <div className="flex flex-col gap-5">
-      <MeetingLobby onScheduleLater={() => openCalendar("calendar")} />
+      <MeetingLobby onOpenCalendar={() => openCalendar("calendar")} />
       {/* Booking link sits between "start a meeting" and "meetings you have":
           it's how meetings arrive when someone else picks the time. Collapsed to
           a single row — it no longer competes with the meetings themselves. */}
@@ -81,7 +146,7 @@ export function MeetingsLanding({
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPane(pane === "settings" ? "calendar" : "settings")}
+                    onClick={() => (pane === "settings" ? hideSettings() : showSettings())}
                     aria-pressed={pane === "settings"}
                     className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                       pane === "settings"
@@ -94,7 +159,7 @@ export function MeetingsLanding({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCalendarOpen(false)}
+                    onClick={closeCalendar}
                     className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
                   >
                     <CloseIcon /> <span className="hidden sm:inline">Close</span>
@@ -102,10 +167,6 @@ export function MeetingsLanding({
                 </div>
               </header>
               <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-                {/* Both panes stay mounted. Swapping to settings and back would
-                    otherwise reset the view, the anchor date and the layer
-                    toggles — the calendar would forget where you were every
-                    time you blocked an hour. */}
                 <div className={pane === "calendar" ? "" : "hidden"}>
                   <MeetingsCalendar
                     initialMeetings={initialMeetings}
@@ -115,14 +176,27 @@ export function MeetingsLanding({
                     orgId={orgId}
                   />
                 </div>
-                <div className={pane === "settings" ? "mx-auto w-full max-w-2xl" : "hidden"}>
-                  <CalendarManager />
-                </div>
+                {settingsSeen ? (
+                  <div className={pane === "settings" ? "mx-auto w-full max-w-2xl" : "hidden"}>
+                    <CalendarManager />
+                  </div>
+                ) : null}
               </div>
             </div>,
             document.body,
           )
         : null}
+    </div>
+  );
+}
+
+function PaneLoading({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--fg-muted)]">
+      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      </svg>
+      {label}
     </div>
   );
 }
