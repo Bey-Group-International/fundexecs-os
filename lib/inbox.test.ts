@@ -13,11 +13,20 @@ import {
   riskToInboxItem,
   buildInbox,
   isPrematureFollowupPack,
+  selectInboxWorkingSet,
   EMPTY_INBOX,
 } from "@/lib/inbox";
 import type { InboxMeeting } from "@/lib/inbox";
+import { ACTIVE_STAGES, rollupRunConviction } from "@/lib/run-conviction";
 import type { DealConviction } from "@/lib/run-conviction";
-import type { Deal, DiligenceItem, Task } from "@/lib/supabase/database.types";
+import type {
+  Deal,
+  DealStage,
+  DiligenceItem,
+  Task,
+  TrackRecord,
+  Underwriting,
+} from "@/lib/supabase/database.types";
 
 const TODAY = "2026-06-20";
 
@@ -353,5 +362,131 @@ describe("isPrematureFollowupPack", () => {
   it("keeps a follow-up that matches no meeting", () => {
     expect(isPrematureFollowupPack(followup, [meeting({ title: "Unrelated Deal" })], NOW)).toBe(false);
     expect(isPrematureFollowupPack(followup, [], NOW)).toBe(false);
+  });
+});
+
+// --- The narrowed working-set read ------------------------------------------
+//
+// `getInbox` no longer goes through the full Run roll-up. It reads only the
+// deals in an active evaluation stage, scopes underwriting + diligence to those
+// deals, skips `track_records` entirely, and then scores them with
+// `selectInboxWorkingSet`. These tests pin that narrowing against
+// `rollupRunConviction` itself, so the cheaper read can never silently produce a
+// different inbox from the one the roll-up would have built.
+
+function wsDeal(over: Partial<Deal> & { id: string; stage: DealStage }): Deal {
+  return {
+    organization_id: "org",
+    name: `Deal ${over.id}`,
+    asset_class: null,
+    geography: null,
+    target_amount: null,
+    fund_id: null,
+    source: null,
+    lead_principal: null,
+    thesis_fit: null,
+    expected_close: null,
+    notes: null,
+    session_id: null,
+    created_at: "",
+    updated_at: "",
+    ...over,
+  } as unknown as Deal;
+}
+
+function wsUw(over: Partial<Underwriting> & { id: string; deal_id: string }): Underwriting {
+  return {
+    organization_id: "org",
+    name: "Base Case",
+    scenario: "base",
+    model: {},
+    projected_irr: 0.22,
+    projected_moic: 2.1,
+    equity_required: null,
+    created_by: null,
+    created_at: "",
+    updated_at: "",
+    ...over,
+  } as unknown as Underwriting;
+}
+
+// A mixed pipeline: two deals under active evaluation with different conviction,
+// plus deals in stages the roll-up has always discarded — each carrying an
+// overdue item and an open critical risk, so a leak would be visible.
+const WS_DEALS: Deal[] = [
+  // Deliberately listed weakest-first, so the score-descending sort has to do
+  // real work — a missing sort reorders every lane and fails these tests.
+  wsDeal({ id: "d-active-weak", stage: "screening" }),
+  wsDeal({ id: "d-active-strong", stage: "ic_review", thesis_fit: 0.9 }),
+  wsDeal({ id: "d-sourced", stage: "sourced" }),
+  wsDeal({ id: "d-owned", stage: "owned" }),
+  wsDeal({ id: "d-passed", stage: "passed" }),
+];
+const WS_UW: Underwriting[] = [
+  wsUw({ id: "uw-1", deal_id: "d-active-strong" }),
+  wsUw({ id: "uw-2", deal_id: "d-active-strong", scenario: "downside", name: "Downside" }),
+  wsUw({ id: "uw-3", deal_id: "d-sourced" }),
+];
+const WS_DIL: DiligenceItem[] = [
+  dilItem({ id: "dil-1", deal_id: "d-active-strong", status: "cleared" }),
+  dilItem({ id: "dil-2", deal_id: "d-active-weak", due_date: "2026-06-01", status: "open" }),
+  dilItem({
+    id: "dil-3",
+    deal_id: "d-active-weak",
+    status: "open",
+    risk_severity: "critical",
+    finding: "Title defect",
+  }),
+  // Same shape, on deals the inbox must never surface.
+  dilItem({ id: "dil-4", deal_id: "d-sourced", due_date: "2026-06-01", status: "open" }),
+  dilItem({ id: "dil-5", deal_id: "d-owned", status: "open", risk_severity: "high" }),
+  dilItem({ id: "dil-6", deal_id: "d-passed", due_date: "2026-06-01", status: "open" }),
+];
+const WS_TRACK: TrackRecord[] = [
+  { id: "tr-1", organization_id: "org", gross_irr: 0.31, is_realized: true } as unknown as TrackRecord,
+];
+
+const wsActive = () => WS_DEALS.filter((d) => ACTIVE_STAGES.has(d.stage));
+
+describe("selectInboxWorkingSet", () => {
+  it("matches the deals the Run roll-up would have produced, in the same order", () => {
+    expect(selectInboxWorkingSet(wsActive(), WS_UW, WS_DIL, null)).toEqual(
+      rollupRunConviction(WS_DEALS, WS_UW, WS_DIL, WS_TRACK, null).deals,
+    );
+  });
+
+  it("builds an identical inbox to the roll-up's working set", () => {
+    const narrow = buildInbox(selectInboxWorkingSet(wsActive(), WS_UW, WS_DIL, null), [], TODAY);
+    const broad = buildInbox(
+      rollupRunConviction(WS_DEALS, WS_UW, WS_DIL, WS_TRACK, null).deals,
+      [],
+      TODAY,
+    );
+    expect(narrow).toEqual(broad);
+  });
+
+  it("surfaces only active-stage deals, so the stage filter can move into SQL", () => {
+    const inbox = buildInbox(selectInboxWorkingSet(wsActive(), WS_UW, WS_DIL, null), [], TODAY);
+    const ids = [...inbox.overdueDiligence, ...inbox.openRisks, ...inbox.icReady].map((i) => i.id);
+    expect(ids).toContain("overdue:dil-2");
+    expect(ids).toContain("risk:dil-3");
+    // Nothing from a sourced / owned / passed deal, despite identical rows.
+    expect(ids).not.toContain("overdue:dil-4");
+    expect(ids).not.toContain("risk:dil-5");
+    expect(ids).not.toContain("overdue:dil-6");
+  });
+
+  it("is unaffected by track records, so the inbox can skip that read entirely", () => {
+    const withTrack = buildInbox(
+      rollupRunConviction(WS_DEALS, WS_UW, WS_DIL, WS_TRACK, null).deals,
+      [],
+      TODAY,
+    );
+    const withoutTrack = buildInbox(
+      rollupRunConviction(WS_DEALS, WS_UW, WS_DIL, [], null).deals,
+      [],
+      TODAY,
+    );
+    expect(withTrack).toEqual(withoutTrack);
   });
 });

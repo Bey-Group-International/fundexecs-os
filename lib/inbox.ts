@@ -17,10 +17,18 @@
 // `isInboxOverdue`, …) so they unit-test without a DB or server-only imports.
 import * as React from "react";
 import { createServerClient } from "@/lib/supabase/server";
-import { getRunConviction } from "@/lib/run-conviction";
+import { ACTIVE_STAGES, scoreDeal } from "@/lib/run-conviction";
+import { getMandate, type Mandate } from "@/lib/build-readiness";
 import { isOverdue } from "@/lib/diligence-templates";
 import type { DealConviction } from "@/lib/run-conviction";
-import type { Deal, DiligenceItem, Hub, Json, Task } from "@/lib/supabase/database.types";
+import type {
+  Deal,
+  DiligenceItem,
+  Hub,
+  Json,
+  Task,
+  Underwriting,
+} from "@/lib/supabase/database.types";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import { HUB_BY_KEY } from "@/lib/hubs";
 
@@ -452,10 +460,87 @@ async function fetchUnfinishedMeetings(orgId: string): Promise<InboxMeeting[]> {
   return (data ?? []) as InboxMeeting[];
 }
 
+// Above this many active deals, scoping the underwriting / diligence reads by
+// deal id would push a very long `in(...)` list into the PostgREST query string.
+// Past the cap we fall back to the org-wide read (still column-identical, just
+// unfiltered) and let `scoreDeal` do the deal matching in memory, as it always has.
+const DEAL_ID_FILTER_CAP = 100;
+
 /**
- * Build the operator's inbox for an org. Pulls the run-conviction working set
- * (deals, diligence, open risks, IC-ready stage) and the awaiting-approval
- * workflow queue in parallel, then hands off to the pure roll-up.
+ * The deal working set the inbox needs, and nothing more.
+ *
+ * `buildInbox` reads exactly four things off each scored deal: its name, its
+ * diligence items (for the overdue lane), its open high/critical findings, and
+ * whether it reached the `ic_ready` stage. `getRunConviction` computes all of
+ * that — but to do so it reads every deal, underwriting, diligence item *and*
+ * track record in the org with `select("*")` and no bounds, then also rolls up a
+ * portfolio benchmark and a next-best action the inbox never looks at.
+ *
+ * So the inbox reads its own, narrower working set:
+ *   - only deals in an active evaluation stage (`ACTIVE_STAGES` is what
+ *     `rollupRunConviction` filters to anyway, so this drops rows the roll-up
+ *     was already discarding in memory — sourced, owned, exited, passed, dead);
+ *   - underwriting + diligence scoped to those deals rather than the whole org;
+ *   - no `track_records` read at all — it feeds only the benchmark's historical
+ *     IRR, which the inbox has no lane for.
+ *
+ * Scoring stays in `scoreDeal`, so the `ic_ready` rule (and the open-risk veto
+ * on it) has exactly one definition and cannot drift from the Run hub. The
+ * score-descending sort matches `rollupRunConviction`, keeping the ordering of
+ * every inbox lane identical to before.
+ */
+async function fetchInboxWorkingSet(orgId: string): Promise<DealConviction[]> {
+  const supabase = await createServerClient();
+  const { data: dealRows } = await supabase
+    .from("deals")
+    .select("*")
+    .eq("organization_id", orgId)
+    .in("stage", [...ACTIVE_STAGES]);
+  const deals = (dealRows ?? []) as Deal[];
+  // No deal is being evaluated — every lane but approvals is empty, so the
+  // underwriting / diligence / mandate reads have nothing to say.
+  if (deals.length === 0) return [];
+
+  const dealIds = deals.map((d) => d.id);
+  const scopeToDeals = dealIds.length <= DEAL_ID_FILTER_CAP;
+  const uw = supabase.from("underwritings").select("*").eq("organization_id", orgId);
+  const dil = supabase.from("diligence_items").select("*").eq("organization_id", orgId);
+  const [uwRes, dilRes, mandate] = await Promise.all([
+    scopeToDeals ? uw.in("deal_id", dealIds) : uw,
+    scopeToDeals ? dil.in("deal_id", dealIds) : dil,
+    getMandate(orgId),
+  ]);
+
+  return selectInboxWorkingSet(
+    deals,
+    (uwRes.data ?? []) as Underwriting[],
+    (dilRes.data ?? []) as DiligenceItem[],
+    mandate,
+  );
+}
+
+/**
+ * Pure half of the working-set read: score the already-active deals and order
+ * them exactly as `rollupRunConviction` does (score descending), so every inbox
+ * lane built from this list keeps the ordering it had when the inbox went
+ * through the full Run roll-up. Unit-tested against that roll-up directly, which
+ * is what keeps the narrowed read honest.
+ */
+export function selectInboxWorkingSet(
+  activeDeals: Deal[],
+  underwritings: Underwriting[],
+  diligence: DiligenceItem[],
+  mandate: Mandate | null,
+): DealConviction[] {
+  return activeDeals
+    .map((d) => scoreDeal(d, underwritings, diligence, mandate))
+    .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Build the operator's inbox for an org. Pulls the deal working set (deals,
+ * diligence, open risks, IC-ready stage) and the awaiting-approval workflow
+ * queue in parallel, then hands off to the pure roll-up.
  *
  * Best-effort: any failure degrades to an empty inbox rather than breaking the
  * page. Memoized per request so the page body and a top-bar badge share queries.
@@ -464,13 +549,13 @@ export const getInbox = cache(async function getInbox(orgId: string): Promise<In
   try {
     const nowIso = new Date().toISOString();
     const todayIso = nowIso.slice(0, 10);
-    const [conviction, awaitingApproval, meetings] = await Promise.all([
-      getRunConviction(orgId),
+    const [deals, awaitingApproval, meetings] = await Promise.all([
+      fetchInboxWorkingSet(orgId),
       fetchAwaitingApproval(orgId),
       fetchUnfinishedMeetings(orgId),
     ]);
     return buildInbox(
-      conviction.deals,
+      deals,
       await attachPendingApprovals(orgId, awaitingApproval),
       todayIso,
       meetings,
