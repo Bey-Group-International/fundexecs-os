@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
@@ -245,12 +246,20 @@ export default async function WalletPage(
       <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
         Add credits
       </h2>
-      <CreditPacks live={live} publishableKey={publishableKey} />
+      <CreditPacks
+        live={live}
+        publishableKey={publishableKey}
+        recommendedKey={topUpPack?.key ?? null}
+      />
       <div className="mt-3">
         <CouponRedemption />
       </div>
 
-      <CreditHistory />
+      <Suspense fallback={<CreditHistorySkeleton />}>
+        {/* The 50-row ledger read is the page's slowest query and its least
+            urgent content, so it streams in after the balance has painted. */}
+        <CreditHistory />
+      </Suspense>
 
       {live && currentPlan && (
         <div className="mt-8 flex justify-center">
@@ -264,5 +273,22 @@ export default async function WalletPage(
           : "Billing is being configured for this organization. Contact support to activate plans and credit purchases."}
       </p>
     </div>
+  );
+}
+
+// Placeholder for the streamed credit history — same heading, and a row the
+// height of CreditHistory's collapsed summary, so the swap doesn't shift the
+// page.
+function CreditHistorySkeleton() {
+  return (
+    <section className="mt-10">
+      <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
+        Credit history
+      </h2>
+      <div className="rounded-2xl border border-line/60 bg-surface-1/30 px-4 py-3.5">
+        <div className="h-5 w-40 animate-pulse rounded bg-surface-2/60" aria-hidden />
+        <span className="sr-only">Loading credit history…</span>
+      </div>
+    </section>
   );
 }

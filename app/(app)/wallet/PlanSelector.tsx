@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import {
   formatCredits,
   formatUsd,
@@ -8,9 +9,18 @@ import {
   type PlanInterval,
   type PurchaseSummary,
 } from "@/lib/billing";
-import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
-import { NativeCheckoutModal } from "./NativeCheckoutModal";
 import { selectPlanAction } from "./actions";
+// Checkout UI is only ever needed after a click, so it loads on demand — this
+// keeps Stripe.js and @stripe/react-stripe-js out of the Wallet route's initial
+// JS for the (common) visit that never opens checkout.
+const StripeCheckoutModal = dynamic(
+  () => import("@/components/StripeCheckoutModal").then((m) => m.StripeCheckoutModal),
+  { ssr: false },
+);
+const NativeCheckoutModal = dynamic(
+  () => import("./NativeCheckoutModal").then((m) => m.NativeCheckoutModal),
+  { ssr: false },
+);
 
 export interface PlanView extends Plan {
   annualSavingsUsd: number;
