@@ -18,6 +18,7 @@ const cache: <T extends (...args: never[]) => unknown>(fn: T) => T =
 import { getMandate, type Mandate } from "@/lib/build-readiness";
 import type {
   Deal,
+  DealStage,
   Underwriting,
   DiligenceItem,
   TrackRecord,
@@ -27,7 +28,12 @@ import type {
 // The working set Run acts on: deals actively being evaluated (post-sourcing,
 // pre-close). Sourced deals haven't entered evaluation; owned/exited/passed/
 // dead have left it.
-const ACTIVE_STAGES = new Set(["screening", "diligence", "underwriting", "ic_review"]);
+export const ACTIVE_STAGES = new Set<DealStage>([
+  "screening",
+  "diligence",
+  "underwriting",
+  "ic_review",
+]);
 
 const DILIGENCE_RESOLVED = new Set(["cleared", "waived"]);
 const SEVERE = new Set(["high", "critical"]);
