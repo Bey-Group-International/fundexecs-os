@@ -1,10 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { CREDIT_PACKS, formatCredits, formatUsd, type PurchaseSummary } from "@/lib/billing";
-import { StripeCheckoutModal } from "@/components/StripeCheckoutModal";
-import { NativeCheckoutModal } from "./NativeCheckoutModal";
 import { purchasePackAction } from "./actions";
+// Checkout UI is only ever needed after a click, so it loads on demand — this
+// keeps Stripe.js and @stripe/react-stripe-js out of the Wallet route's initial
+// JS for the (common) visit that never opens checkout.
+const StripeCheckoutModal = dynamic(
+  () => import("@/components/StripeCheckoutModal").then((m) => m.StripeCheckoutModal),
+  { ssr: false },
+);
+const NativeCheckoutModal = dynamic(
+  () => import("./NativeCheckoutModal").then((m) => m.NativeCheckoutModal),
+  { ssr: false },
+);
 
 // One-off credit packs (no subscription). With Stripe configured, buying opens
 // an in-app embedded Stripe Checkout; otherwise a native in-app checkout grants
@@ -12,9 +22,12 @@ import { purchasePackAction } from "./actions";
 export function CreditPacks({
   live = false,
   publishableKey = "",
+  recommendedKey = null,
 }: {
   live?: boolean;
   publishableKey?: string;
+  /** Pack sized to bridge the balance to ~a month of burn (see wallet-insights). */
+  recommendedKey?: string | null;
 }) {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +68,17 @@ export function CreditPacks({
       <div className="grid gap-3 sm:grid-cols-3">
         {CREDIT_PACKS.map((pack) => {
           const busy = pending && pendingKey === pack.key;
+          const isRecommended = recommendedKey === pack.key;
           return (
-            <div key={pack.key} className="fx-neural-card group flex items-center justify-between gap-3 p-4">
+            <div
+              key={pack.key}
+              data-active={isRecommended ? "true" : undefined}
+              className={`fx-neural-card group flex items-center justify-between gap-3 p-4 ${
+                isRecommended
+                  ? "border-neural-400/60 shadow-[0_18px_60px_-34px_rgb(var(--fx-accent-rgb)/0.378)]"
+                  : ""
+              }`}
+            >
               <div className="relative z-10">
                 <p className="font-display text-lg font-semibold text-fg-primary">
                   {formatCredits(pack.credits)}
@@ -64,6 +86,13 @@ export function CreditPacks({
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
                   burst credits
                 </p>
+                {/* In-flow rather than an absolute badge: fx-neural-card is
+                    overflow-hidden, which would clip a pill hung off the top. */}
+                {isRecommended && (
+                  <span className="mt-1.5 inline-block rounded-full border border-neural-400/50 bg-neural-400/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.16em] text-neural-300">
+                    Recommended
+                  </span>
+                )}
               </div>
               <button
                 type="button"

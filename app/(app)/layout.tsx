@@ -17,7 +17,7 @@ import {
   setSessionPinned,
   setSessionUnread,
 } from "@/app/(app)/sessions/actions";
-import { getWalletBalance } from "@/lib/wallet";
+import { getWallet } from "@/lib/wallet";
 import { getApprovalsCount } from "@/lib/inbox";
 import { getBuildReadiness, type ModuleStatus } from "@/lib/build-readiness";
 import { createServerClient } from "@/lib/supabase/server";
@@ -46,12 +46,10 @@ export default async function AppLayout({
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
 
-  const balance = await getWalletBalance(ctx.orgId);
-
   const supabase = await createServerClient();
   const [
     { data: principal },
-    { data: wallet },
+    wallet,
     { data: recentSessions },
     { data: groupRows },
     { count: messagesUnread },
@@ -62,7 +60,10 @@ export default async function AppLayout({
     { data: orgRow },
   ] = await Promise.all([
       supabase.from("principals").select("full_name").eq("id", ctx.userId).maybeSingle(),
-      supabase.from("wallets").select("plan").eq("organization_id", ctx.orgId).maybeSingle(),
+      // One cached read serves the top-bar balance, the sidebar plan name,
+      // and the Wallet page (see lib/wallet) — previously three separate
+      // queries of the same row, one of which blocked this whole batch.
+      getWallet(ctx.orgId),
       supabase
         .from("sessions")
         .select("id, name, color, group_id, pinned_at, unread")
@@ -126,6 +127,7 @@ export default async function AppLayout({
       }
     : null;
   const name = principal?.full_name?.trim() || ctx.email.split("@")[0] || "Account";
+  const balance = wallet?.credits ?? 0;
   const planKey = wallet?.plan as PlanKey | null;
   const planName = planKey ? PLAN_BY_KEY[planKey]?.name ?? "Free" : "Free";
 

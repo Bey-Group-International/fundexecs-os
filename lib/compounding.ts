@@ -10,6 +10,7 @@
 // The pure math lives here (trivially unit-testable); `compoundingProfile()`
 // gathers the signals from Supabase and defers to it.
 import { createServerClient } from "@/lib/supabase/server";
+import { getWallet } from "@/lib/wallet";
 import { loyaltyBonus, LOYALTY_CAP } from "@/lib/billing";
 
 export type ReputationTier = "unranked" | "verified" | "established" | "principal";
@@ -162,11 +163,13 @@ export async function compoundingProfile(orgId: string): Promise<CompoundingProf
 
   const [stored, wallet] = await Promise.all([
     supabase.from("reputation_scores").select("score").eq("organization_id", orgId).maybeSingle(),
-    supabase.from("wallets").select("plan_started_at, plan").eq("organization_id", orgId).maybeSingle(),
+    // Shares the per-request wallet read with the layout and the Wallet page
+    // rather than issuing its own query for the same row.
+    getWallet(orgId),
   ]);
 
   // Tenure accrues from the original plan-start date, not the last credit top-up.
-  const since = wallet.data?.plan ? wallet.data?.plan_started_at : null;
+  const since = wallet?.plan ? wallet.plan_started_at : null;
   const tenure = monthsSince(since);
 
   // Authoritative stored score wins; else compute the proxy.
