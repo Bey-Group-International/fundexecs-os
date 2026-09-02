@@ -563,3 +563,83 @@ field still equals its token, that the manifest's launch colors equal the page's
 real background, and that the layout hasn't re-hardcoded its `themeColor` — the
 check the hand-maintained mirror never had. `tsc`/`eslint`/`jest`/`build` clean;
 desktop/web untouched.
+
+## 20. Google sign-in from the installed app
+
+Sign-in built its OAuth callback from the raw `Origin` header:
+
+```ts
+const origin = (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+options: { redirectTo: `${origin}/auth/callback` }
+```
+
+`Origin` is whatever host the browser is on, and an **installed PWA carries the
+host it was installed from for the life of the install**. Installed from a
+preview domain, a `www.` alias, or any host other than the canonical one, the
+flow minted a `redirectTo` that the provider's allow-list had never seen and the
+sign-in died at the provider rather than coming back. The fallback chain ended
+at `http://localhost:3000` — the production incident
+`lib/integrations/adapters/app-url.ts` was written to prevent, and which every
+*other* OAuth route in the app already routes around via the allow-listed
+`getAppUrlFromRequest`. Sign-in was the one that never got the fix.
+
+`getAppUrlFromHeaders` is that same resolver for callers holding a `Headers`
+bag rather than a `Request` — which is every Server Action, since Server Actions
+never see a `Request`. Its absence is what pushed this code onto `Origin` in the
+first place. `getAppUrlFromRequest` now delegates to it, so both paths resolve
+identically.
+
+**`?next=` is honored end to end.** `app/admin/layout.tsx` was already
+redirecting to `/login?next=/admin`, but the login page didn't read `next`, the
+sign-in action didn't forward it, and `/auth/callback`'s `sanitizeNextPath` —
+security comment and all — was unreachable code. A gated deep link always
+dumped the operator on `/workspace`. That matters most on the installed app,
+whose long-press shortcuts point straight at `/earn`, `/deals/feed`, and
+`/approvals`: opening one while signed out lost the destination. The parameter
+now flows login page → both sign-in actions → callback, through one shared
+sanitizer in `lib/safe-next-path.ts`. The login page only carries the value; it
+is re-validated server-side against the resolved origin, because `next` is
+attacker-supplied and an unchecked one turns sign-in into an open redirect.
+
+`lib/safe-next-path.test.ts` covers the redirect refusals (absolute,
+protocol-relative, backslash-smuggled, scheme-only, suffix-host) and the
+shortcut targets; `app-url.test.ts` covers the header-based resolution,
+including a spoofed `Host` and the delegation agreeing with the request path.
+`tsc`/`eslint`/`jest`/`build` clean.
+
+**Not covered here:** the ~40 `redirect("/login")` call sites in `app/(app)/`
+still drop the destination — they never passed `next` to begin with, and
+threading it through each is a separate, much wider change.
+
+## 21. OAuth connect outcomes are visible
+
+Every route under `app/api/oauth/*` already diagnosed its failure precisely and
+reported it on the query string — `/settings?google=exchange_failed`,
+`/meetings?google_calendar=denied`, `?carta=pkce_missing`. **Nothing read any of
+it.** `app/(app)/settings/page.tsx` accepted no `searchParams` at all and
+`/meetings` never looked at `google_calendar`, so 15 distinct codes across 55
+emit sites in 8 route files were discarded. Declined consent, a missing vault
+key, a refused token exchange and outright success all rendered as the same
+unchanged page: the operator bounced out to the provider, came back, and had no
+way to tell whether anything had happened.
+
+`lib/oauth-outcome.ts` translates the routes' vocabulary once — title, tone, and
+what to actually do about it — and `readOAuthOutcome` picks whichever provider
+reported. An unrecognized code still surfaces, quoting the raw string, because
+reporting a code with no copy beats swallowing it, which is the whole bug.
+`components/OAuthOutcomeBanner.tsx` renders it on both destination pages; it is
+a server component, so the result is in the first paint rather than after
+hydration, and dismissal is a link back to the clean URL.
+
+Its colors come from the `--status-*` custom properties rather than Tailwind's
+`status.*` scale. That scale still holds the dark theme's pastels, which
+`globals.css` itself notes "wash out to nothing on white"; the custom properties
+are the re-saturated light-page tones. A banner carrying failure text has to be
+readable, so it takes the readable pair. (The stale Tailwind `status.*` scale is
+a separate inconsistency, untouched here.)
+
+`lib/oauth-outcome.test.ts` reads the route files, extracts every code they hand
+their redirect helper, and asserts each one has real copy — so a new failure
+path added to a route fails the suite instead of silently regressing to a blank
+page. Verified the guard bites by deleting one entry (`pkce_missing`) and
+watching `carta/callback` fail. `tsc`/`eslint`/`jest`/`build` clean.

@@ -6,6 +6,8 @@ import { MeetingsLanding } from "./MeetingsLanding";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 import type { PastMeeting } from "./PastMeetingsList";
+import { readOAuthOutcome } from "@/lib/oauth-outcome";
+import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
 
 export const metadata: Metadata = {
   title: "Meetings — FundExecs OS",
@@ -102,7 +104,13 @@ async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]
   return all.slice(0, 50);
 }
 
-export default async function MeetingsPage() {
+export default async function MeetingsPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Google Calendar's connect routes report back here as `?google_calendar=…`.
+  // Nothing read it, so connecting a calendar looked identical whether it
+  // succeeded, was declined, or died on a missing vault key.
+  const oauthOutcome = readOAuthOutcome(await props.searchParams);
   const ctx = await getSessionContext();
   if (!ctx) redirect("/login");
   if (!ctx.orgId) redirect("/onboarding");
@@ -126,12 +134,17 @@ export default async function MeetingsPage() {
     // Landing shows the lobby + Upcoming meetings; the full calendar opens behind
     // the lobby's "Schedule for later" action (Meetings → Schedule for later →
     // calendar) rather than sitting on the page permanently.
-    <MeetingsLanding
-      initialMeetings={meetings as unknown as CalendarMeeting[]}
-      initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
-      initialPast={past as unknown as PastMeeting[]}
-      userId={userId}
-      orgId={ctx.orgId}
-    />
+    <>
+      {oauthOutcome && (
+        <OAuthOutcomeBanner outcome={oauthOutcome} dismissHref="/meetings" />
+      )}
+      <MeetingsLanding
+        initialMeetings={meetings as unknown as CalendarMeeting[]}
+        initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
+        initialPast={past as unknown as PastMeeting[]}
+        userId={userId}
+        orgId={ctx.orgId}
+      />
+    </>
   );
 }
