@@ -3,6 +3,7 @@ const from = jest.fn();
 const saveScheduledMeetingMock = jest.fn();
 const sendMeetingInvitesMock = jest.fn();
 const loadBlockConflictsMock = jest.fn();
+const mailboxForMock = jest.fn();
 
 jest.mock("@/lib/auth", () => ({
   requireOrgContext: () => authMock(),
@@ -29,7 +30,7 @@ jest.mock("@/lib/meetings/blocks.server", () => ({
 }));
 
 jest.mock("@/lib/meetings/mailbox.server", () => ({
-  hostCredentials: async () => ({ gmailAccessToken: "tok" }),
+  mailboxFor: (...args: unknown[]) => mailboxForMock(...args),
 }));
 
 import { NextRequest } from "next/server";
@@ -84,6 +85,7 @@ beforeEach(() => {
   });
   from.mockImplementation(withTeam([]));
   loadBlockConflictsMock.mockResolvedValue([]);
+  mailboxForMock.mockResolvedValue({ ok: true, token: "tok", email: "host@fund.test", source: "member" });
   sendMeetingInvitesMock.mockResolvedValue({ sent: 0, total: 0 });
   saveScheduledMeetingMock.mockResolvedValue({
     id: "m1",
@@ -169,6 +171,28 @@ describe("POST /api/meetings/schedule", () => {
 
     expect(res.status).toBe(200);
     expect(sendMeetingInvitesMock).not.toHaveBeenCalled();
+  });
+
+  it("says so when the organization has no mailbox to send from", async () => {
+    // Without this the host sees a saved meeting and "invited 0", which reads
+    // as "nobody had an address" rather than "nothing can be sent at all".
+    mailboxForMock.mockResolvedValue({ ok: false, problem: "not_connected" });
+
+    const res = await POST(req({ ...VALID, attendees: [{ name: "Ada", email: "ada@lp.test", type: "external" }] }));
+
+    const body = await res.json();
+    expect(body.mailboxConnected).toBe(false);
+    expect(body.mailboxProblem).toContain("Settings");
+    // The send is still attempted — a deploy-level credential can still carry
+    // it — but it goes out with no per-member credentials.
+    expect(sendMeetingInvitesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ credentials: undefined }),
+    );
+  });
+
+  it("reports a connected mailbox on the happy path", async () => {
+    const res = await POST(req({ ...VALID, attendees: [] }));
+    expect(await res.json()).toMatchObject({ mailboxConnected: true, mailboxProblem: null });
   });
 
   it("does not go looking for a directory when every attendee has an address", async () => {

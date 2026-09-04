@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import { hostCredentials } from "@/lib/meetings/mailbox.server";
+import { mailboxFor } from "@/lib/meetings/mailbox.server";
+import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
@@ -193,16 +194,24 @@ export async function POST(req: NextRequest) {
     // so this runs even with no guests, because the host's own confirmation is
     // what puts the meeting in their calendar.
     let invited = 0;
+    // Whether anything CAN be emailed, resolved once. Without a mailbox the
+    // send degrades silently to nothing, and a host who is told "invited 0"
+    // reads that as "nobody had an address" rather than "your org cannot send".
+    let mailboxConnected = true;
+    let mailboxProblem: string | null = null;
     if (!saved.isDraft) {
       const emails = guestEmails(attendees);
       {
         try {
           const { data: userData } = await supabase.auth.getUser();
+          // The scheduling member's own mailbox. Non-blocking: the meeting is
+          // already created by this point and must not be lost to a missing
+          // connection.
+          const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+          mailboxConnected = mailbox.ok;
+          mailboxProblem = mailbox.ok ? null : mailboxProblemMessage(mailbox.problem);
           const result = await sendMeetingInvites({
-            // The scheduling member's own mailbox. Non-blocking: the meeting is
-            // already created by this point and must not be lost to a missing
-            // connection.
-            credentials: await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId),
+            credentials: mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined,
             orgId: auth.ctx.orgId,
             // Canonical app URL so the emailed link is correct regardless of
             // which host/proxy served this request.
@@ -241,6 +250,8 @@ export async function POST(req: NextRequest) {
       externalSyncError,
       invited,
       uninvited,
+      mailboxConnected,
+      mailboxProblem,
       conflicts,
       roomUrl: buildMeetingRoomUrl(SITE_URL, saved.roomCode),
       inviteUrl: buildMeetingInviteUrl(SITE_URL, saved.roomCode),

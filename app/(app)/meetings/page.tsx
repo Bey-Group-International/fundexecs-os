@@ -8,6 +8,8 @@ import type { UpcomingMeeting } from "./UpcomingMeetingsList";
 import type { PastMeeting } from "./PastMeetingsList";
 import { readOAuthOutcome } from "@/lib/oauth-outcome";
 import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
+import { mailboxConfigured } from "@/lib/meetings/mailbox.server";
+import { MailboxWarning } from "./MailboxWarning";
 
 export const metadata: Metadata = {
   title: "Meetings — FundExecs OS",
@@ -116,7 +118,13 @@ export default async function MeetingsPage(props: {
   if (!ctx.orgId) redirect("/onboarding");
 
   const userId = ctx.userId;
-  const meetings = await getMeetings(ctx.orgId, userId);
+  // Whether anything this page schedules can actually be emailed. Cheap by
+  // design — a credential-existence check, not a token mint — because it runs
+  // on every visit.
+  const [meetings, canSendEmail] = await Promise.all([
+    getMeetings(ctx.orgId, userId),
+    mailboxConfigured(await createServerClient(), userId, ctx.orgId),
+  ]);
   const now = Date.now();
   // "Upcoming" keys off the meeting's END, not its start — a meeting that's
   // currently in progress (start passed, room not ended) belongs in Upcoming
@@ -138,6 +146,7 @@ export default async function MeetingsPage(props: {
       {oauthOutcome && (
         <OAuthOutcomeBanner outcome={oauthOutcome} dismissHref="/meetings" />
       )}
+      {!canSendEmail && <MailboxWarning />}
       <MeetingsLanding
         initialMeetings={meetings as unknown as CalendarMeeting[]}
         initialUpcoming={upcoming as unknown as UpcomingMeeting[]}

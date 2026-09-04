@@ -16,6 +16,15 @@ import {
 
 export interface MeetingEditInitial {
   meetingId?: string;
+  /**
+   * Whether this meeting is still a draft.
+   *
+   * A draft is edited like any other meeting but SAVED differently: only the
+   * schedule endpoint un-drafts and locks it, and it is that transition which
+   * emails the attendees. Patching a draft leaves it a draft forever, so
+   * nobody on it is ever told it exists.
+   */
+  isDraft?: boolean;
   title?: string;
   meetingType?: string;
   scheduledAt?: string | null;
@@ -266,7 +275,13 @@ export function MeetingEditScreen({
       const payload = buildPayload(draft);
       // Edits to an already-saved meeting go through the deliberate PATCH path
       // so prep state is preserved and the external mirror is re-synced.
-      const isExistingEdit = mode === "edit" && initial?.meetingId;
+      //
+      // A draft is the exception in both directions: publishing one has to go
+      // through the schedule endpoint, which is the only path that clears
+      // is_draft, stamps locked_at and invites the attendees. Saving it as a
+      // draft again goes there too, since PATCH cannot express draft state at
+      // all.
+      const isExistingEdit = mode === "edit" && !!initial?.meetingId && !initial?.isDraft;
       const res = await fetch(isExistingEdit ? `/api/meetings/${initial!.meetingId}` : "/api/meetings/schedule", {
         method: isExistingEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -327,6 +342,8 @@ export function MeetingEditScreen({
         invited?: number;
         uninvited?: number;
         notified?: number;
+        mailboxConnected?: boolean;
+        mailboxProblem?: string | null;
       };
       const result: MeetingSaveResult = {
         id: json.id ?? initial?.meetingId ?? "",
@@ -356,6 +373,16 @@ export function MeetingEditScreen({
           `${json.uninvited} attendee${json.uninvited === 1 ? " has" : "s have"} no email address and ${
             json.uninvited === 1 ? "was" : "were"
           } not notified`,
+        );
+      }
+      // No mailbox means nothing was sent to anyone, which otherwise looks
+      // exactly like "there was nobody to send to". Say it first: it is the
+      // reason the other counts are zero.
+      if (json.mailboxConnected === false) {
+        messages.unshift(
+          json.mailboxProblem
+            ? `no email was sent — ${json.mailboxProblem.charAt(0).toLowerCase()}${json.mailboxProblem.slice(1)}`
+            : "no email was sent — no mailbox is connected",
         );
       }
       if (json.externalSyncError) {

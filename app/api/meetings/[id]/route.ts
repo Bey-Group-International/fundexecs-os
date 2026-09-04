@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { hostCredentials } from "@/lib/meetings/mailbox.server";
+import { mailboxFor } from "@/lib/meetings/mailbox.server";
+import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
-import { diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
+import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
 import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
@@ -59,7 +60,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   // to everyone who was already on the meeting.
   const { data: prior } = await supabase
     .from("live_meetings")
-    .select("attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence")
+    .select(
+      "attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence, location, meeting_url",
+    )
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
@@ -92,6 +95,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const timing = diffMeetingTiming(
     { startIso: priorStart, durationMinutes: priorDuration },
     { startIso: nextStart, durationMinutes: nextDuration },
+  );
+
+  // Where the meeting happens, on either side of this edit. A moved room or a
+  // swapped join link is the other change an attendee has to act on — their
+  // calendar entry now points somewhere wrong — so it earns an email of its own
+  // when the time itself did not move.
+  const priorLocation = (prior?.location as string | null) ?? null;
+  const priorMeetingUrl = (prior?.meeting_url as string | null) ?? null;
+  const nextLocation = body.location !== undefined ? (cleanString(body.location) ?? null) : priorLocation;
+  const nextMeetingUrl = body.meetingUrl !== undefined ? (cleanString(body.meetingUrl) ?? null) : priorMeetingUrl;
+  const place = diffMeetingPlace(
+    { location: priorLocation, meetingUrl: priorMeetingUrl },
+    { location: nextLocation, meetingUrl: nextMeetingUrl },
   );
 
   // Conflict detection on reschedule — mirrors the create path. Runs only when a
@@ -200,7 +216,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     // Non-blocking on purpose: email here is a side effect of saving the
     // meeting, and losing the save over an unconnected mailbox would cost more
     // than falling back to the org's.
-    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const senderMailbox = mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined;
+    // Reported back so "notified 0" can be told apart from "your org cannot
+    // send email at all", which otherwise looks identical to the host.
+    const mailboxConnected = mailbox.ok;
+    const mailboxProblem = mailbox.ok ? null : mailboxProblemMessage(mailbox.problem);
     const notifiable = !isDraft && !!roomCode;
 
     // The link invitee is already a guest on the meeting, but their booking
@@ -273,6 +294,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         startIso: nextStart,
         previousStartIso: priorStart,
         durationMinutes: nextDuration,
+        location: nextLocation,
+        meetingUrl: nextMeetingUrl,
+      });
+      notified += res.sent;
+    }
+
+    // Only when the time did NOT move: a reschedule already carries the new
+    // joining details, and two emails for one save is how a change gets read as
+    // two changes.
+    if (notifiable && !timing.changed && place.changed && retainedEmails.length > 0) {
+      const res = await sendMeetingUpdates("relocated", {
+        credentials: senderMailbox,
+        meetingId: id,
+        hostEmail: auth.ctx.email ?? null,
+        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        orgId: auth.ctx.orgId,
+        origin: SITE_URL,
+        roomCode,
+        title,
+        senderName,
+        emails: retainedEmails,
+        timezone,
+        startIso: nextStart,
+        durationMinutes: nextDuration,
+        location: nextLocation,
+        previousLocation: priorLocation,
+        meetingUrl: nextMeetingUrl,
+        previousMeetingUrl: priorMeetingUrl,
       });
       notified += res.sent;
     }
@@ -323,7 +372,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       notified += res.sent;
     }
 
-    return NextResponse.json({ ...result, invited, uninvited, notified });
+    return NextResponse.json({ ...result, invited, uninvited, notified, mailboxConnected, mailboxProblem });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update meeting" }, { status: 500 });
   }
@@ -366,7 +415,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
     // Same as the PATCH handler: the host's own mailbox, non-blocking, because
     // a cancellation must not fail over an unconnected mailbox.
-    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const deleteMailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const senderMailbox = deleteMailbox.ok ? { gmailAccessToken: deleteMailbox.token } : undefined;
 
     const bookingInviteeEmail = cancelled?.booking.invitee_email?.trim().toLowerCase() ?? null;
     const emails = guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []).filter(

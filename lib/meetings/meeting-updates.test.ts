@@ -6,12 +6,7 @@ jest.mock("@/lib/email", () => ({
   escapeHtml: (v: string) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
 }));
 
-import {
-  buildMeetingUpdateEmail,
-  diffMeetingTiming,
-  sendMeetingUpdates,
-  updateInviteMethod,
-} from "./meeting-updates";
+import { buildMeetingUpdateEmail, diffMeetingTiming, sendMeetingUpdates, updateInviteMethod, diffMeetingPlace } from "./meeting-updates";
 
 const CTX = {
   origin: "https://app.test",
@@ -198,5 +193,54 @@ describe("sendMeetingUpdates — the calendar entry", () => {
     await sendMeetingUpdates("rescheduled", { ...CAL, meetingId: null });
     expect(sendEmailMock).toHaveBeenCalled();
     expect(invite()).toBeUndefined();
+  });
+});
+
+describe("diffMeetingPlace", () => {
+  it("sees a moved room and a swapped link", () => {
+    expect(
+      diffMeetingPlace({ location: "Room 3", meetingUrl: null }, { location: "Room 9", meetingUrl: null }),
+    ).toEqual({ locationChanged: true, meetingUrlChanged: false, changed: true });
+    expect(
+      diffMeetingPlace(
+        { location: null, meetingUrl: "https://a.test" },
+        { location: null, meetingUrl: "https://b.test" },
+      ),
+    ).toEqual({ locationChanged: false, meetingUrlChanged: true, changed: true });
+  });
+
+  it("treats blank, whitespace and null as the same absence", () => {
+    expect(
+      diffMeetingPlace({ location: null, meetingUrl: "" }, { location: "   ", meetingUrl: null }).changed,
+    ).toBe(false);
+    expect(
+      diffMeetingPlace({ location: "Room 3", meetingUrl: null }, { location: " Room 3 ", meetingUrl: null }).changed,
+    ).toBe(false);
+  });
+});
+
+describe("a relocated meeting", () => {
+  it("rewrites the calendar entry in place rather than cancelling it", () => {
+    // Same UID, same time, higher sequence: the attendee's existing entry has
+    // to be corrected, not removed and re-added.
+    expect(updateInviteMethod("relocated")).toBe("REQUEST");
+  });
+
+  it("names the new place, the old one, and leaves the time alone", () => {
+    const { subject, html } = buildMeetingUpdateEmail("relocated", {
+      origin: "https://app.test",
+      roomCode: "abc-def",
+      title: "Quarterly review",
+      senderName: "rae@fund.test",
+      emails: ["ada@lp.test"],
+      timezone: "UTC",
+      startIso: "2026-09-10T15:00:00.000Z",
+      location: "Room 9",
+      previousLocation: "Room 3",
+    });
+    expect(subject).toContain("new joining details");
+    expect(html).toContain("Room 9");
+    expect(html).toContain("Room 3");
+    expect(html).toContain("time is the same");
   });
 });

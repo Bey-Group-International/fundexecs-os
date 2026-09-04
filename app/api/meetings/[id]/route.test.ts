@@ -101,6 +101,8 @@ function withDirectory(prior: unknown, team: Array<{ full_name: string | null; e
 const PRIOR_ROW = {
   attendees: [],
   room_code: "abc",
+  location: "Room 3",
+  meeting_url: null,
   is_draft: false,
   host_id: "u1",
   scheduled_at: "2026-07-10T10:00:00.000Z",
@@ -329,6 +331,71 @@ describe("/api/meetings/[id]", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ invited: 0, uninvited: 1 });
     expect(sendMeetingInvitesMock).not.toHaveBeenCalled();
+  });
+
+  it("tells attendees when the meeting moves rooms, without moving the time", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    sendMeetingUpdatesMock.mockResolvedValue({ sent: 2, total: 2 });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    const res = await PATCH(req({ location: "Room 9" }), params);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ notified: 2 });
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "relocated",
+      expect.objectContaining({
+        emails: ["ada@lp.test", "ben@lp.test"],
+        location: "Room 9",
+        previousLocation: "Room 3",
+      }),
+    );
+  });
+
+  it("tells attendees when the join link is swapped", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    await PATCH(req({ meetingUrl: "https://meet.test/new" }), params);
+
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "relocated",
+      expect.objectContaining({ meetingUrl: "https://meet.test/new" }),
+    );
+  });
+
+  it("sends one email, not two, when the meeting moves in time and place at once", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    await PATCH(req({ scheduledAt: "2026-07-11T15:00:00.000Z", location: "Room 9" }), params);
+
+    // The reschedule notice already carries the new place.
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledTimes(1);
+    expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
+      "rescheduled",
+      expect.objectContaining({ location: "Room 9" }),
+    );
+  });
+
+  it("does not mail anyone when only the agenda changes", async () => {
+    // Wording changes are read when the attendee opens the meeting. Mailing
+    // them is how people learn to ignore these emails.
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    await PATCH(req({ agenda: "1. Numbers 2. Everything else" }), params);
+
+    expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
+  });
+
+  it("does not treat re-saving the same place as a move", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));
+
+    await PATCH(req({ location: "  Room 3  ", meetingUrl: "" }), params);
+
+    expect(sendMeetingUpdatesMock).not.toHaveBeenCalled();
   });
 
   it("tells a dropped guest they are off the meeting", async () => {

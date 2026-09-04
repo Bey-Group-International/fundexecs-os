@@ -1153,6 +1153,45 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, Jest +16 new (4402 total green, no
              |  regressions). Two lib modules, two routes, one component; no migration, no
              |  new deps.
+2026-09-04  |  Meeting notifications, end to end  |  Four gaps in one path:
+             |  the reminder that never fired, the change nobody heard about, the
+             |  mailbox nobody knew was missing, and the draft that could not be
+             |  published.
+             |  Decision: reminder_minutes is now honoured by the hourly cron, not only
+             |  by Google for meetings that happened to be synced there. The sweep fires
+             |  a reminder up to one sweep EARLY rather than not at all — on an hourly
+             |  cadence a "15 minutes before" reminder has no exact moment to be sent
+             |  at, and one that lands within the hour before is useful where one sent
+             |  after the meeting began is not. It claims the row (UPDATE … WHERE
+             |  last_reminder_sent_at IS NULL) before sending, so a crash costs one
+             |  reminder rather than mailing a guest list twice.
+             |  Decision: an edit notifies attendees when the TIME, the LOCATION or the
+             |  JOIN LINK changes — the three an attendee has to act on — and stays
+             |  silent on agenda and objective, which they read when they open the
+             |  meeting. A save that moves both time and place sends one email, not two.
+             |  Decision: with no mailbox connected, sendEmail degrades to channel
+             |  "in-app" and the save reports "invited 0", which reads as "nobody had an
+             |  address". Both write paths now resolve the mailbox up front and return
+             |  mailboxConnected + a reason; /meetings carries a dismissible warning,
+             |  backed by a credential-EXISTENCE check (mailboxConfigured) rather than a
+             |  token mint, because it runs on every visit.
+             |  Context: a draft could be opened from the calendar and edited, but
+             |  updateMeeting never clears is_draft — only the schedule endpoint does —
+             |  so "Save meeting" on a draft left it a draft and its attendees were
+             |  never told the meeting existed. The edit screen now routes a draft
+             |  save through that endpoint.
+             |  Built: lib/meetings/reminder.ts gained the sweep's due-rules (pure) and
+             |  reminder-sweep.server.ts the read/claim/send, wired into /api/cron as a
+             |  best-effort block with its own cron-health counters;
+             |  meeting-updates.ts gained a "relocated" kind (REQUEST at the same time,
+             |  bumped SEQUENCE) and diffMeetingPlace, and its .ics now carries the
+             |  meeting's own place instead of always the room link; mailbox.server.ts
+             |  gained mailboxConfigured; MailboxWarning.tsx on /meetings.
+             |  Rejected: making the reminder sweep strict about its nominal time. It is
+             |  correct and it never fires, which is the bug being fixed.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +25 new
+             |  (4427 total green, no regressions). Two new modules, one new component,
+             |  no migration, no new deps.
 ```
 
 ---

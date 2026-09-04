@@ -2,9 +2,10 @@
 // The manual "Send reminder" nudge: who receives it, when it may be sent, and
 // what it says.
 //
-// `reminder_minutes` on a meeting has always been stored and never acted on —
-// nothing in the codebase sent a reminder. This is the host-triggered version:
-// a button rather than a scheduler, which is the honest thing to ship first.
+// `reminder_minutes` on a meeting was stored for a long time and never acted
+// on — nothing in the codebase sent a reminder. Two things send one now: the
+// host-triggered button (/api/meetings/[id]/remind), and the hourly sweep,
+// whose due-rules live at the bottom of this file.
 //
 // Pure: no email, no Supabase. The rules about refusing to send live here so
 // the awkward ones — a meeting that already happened, a guest list of nothing
@@ -233,4 +234,81 @@ export function buildReminderEmail(input: ReminderEmailInput): { subject: string
 </body>
 </html>`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The scheduled sweep
+//
+// `reminder_minutes` is a promise the app makes on the schedule screen, and
+// until now only Google ever kept it — a meeting that was never synced got no
+// reminder at all, and the manual button only fires when a host remembers to
+// press it. These are the rules the hourly sweep runs on.
+// ---------------------------------------------------------------------------
+
+/**
+ * How far ahead of a reminder's nominal time the sweep may fire it.
+ *
+ * The sweep runs hourly, so a "15 minutes before" reminder has no exact moment
+ * to be sent at: by the time the next sweep comes round the meeting has usually
+ * already started. Firing up to one sweep early is the resolution of that — a
+ * reminder that arrives within the hour before the meeting is useful, and one
+ * that arrives after it began is not a reminder at all.
+ *
+ * Tighten this the day the sweep runs more often; the rule below reads it
+ * rather than assuming an hour.
+ */
+export const REMINDER_SWEEP_LOOKAHEAD_MS = 60 * 60_000;
+
+/** A meeting as the sweep sees one, with what it needs to decide and to send. */
+export interface SweepableMeeting extends RemindableMeeting {
+  id: string;
+  organization_id?: string | null;
+  host_id?: string | null;
+  reminder_minutes: number | null;
+  room_code?: string | null;
+  meeting_url?: string | null;
+  timezone?: string | null;
+  duration_minutes?: number | null;
+}
+
+/**
+ * Whether the sweep should remind about this meeting now.
+ *
+ * Every refusal `canSendReminder` makes still applies — a draft, a deleted
+ * meeting, a guest list with no addresses, a meeting already started, the
+ * cooldown after a manual send. On top of those the sweep asks two more
+ * questions: did the host actually ask for a reminder, and has its moment
+ * arrived.
+ */
+export function isReminderDue(
+  meeting: SweepableMeeting,
+  now: Date = new Date(),
+  lookaheadMs: number = REMINDER_SWEEP_LOOKAHEAD_MS,
+): boolean {
+  // No reminder configured is not a reminder at zero minutes — it is the host
+  // choosing "No reminder", which the schedule screen offers explicitly.
+  const minutes = meeting.reminder_minutes;
+  if (minutes === null || minutes === undefined || !Number.isFinite(minutes) || minutes < 0) return false;
+
+  // A reminder already sent for this meeting is not sent again. The cooldown
+  // inside canSendReminder is measured in minutes and exists to absorb a double
+  // click; across a whole meeting the sweep needs "once", so it checks the
+  // stamp outright.
+  if (meeting.last_reminder_sent_at) return false;
+
+  if (!canSendReminder(meeting, now).ok) return false;
+
+  const start = new Date(meeting.scheduled_at!).getTime();
+  return start - now.getTime() <= minutes * 60_000 + lookaheadMs;
+}
+
+/** The meetings this sweep should remind about, soonest first. */
+export function dueReminders(
+  meetings: readonly SweepableMeeting[] | null | undefined,
+  now: Date = new Date(),
+  lookaheadMs: number = REMINDER_SWEEP_LOOKAHEAD_MS,
+): SweepableMeeting[] {
+  return (meetings ?? [])
+    .filter((m) => isReminderDue(m, now, lookaheadMs))
+    .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
 }
