@@ -44,7 +44,7 @@ function req(body: unknown) {
 }
 
 /** A chainable stub: `.limit()` ends the conflict read, `.in()` the directory. */
-function makeBuilder(opts: { limit?: unknown; in?: unknown } = {}) {
+function makeBuilder(opts: { limit?: unknown; in?: unknown; range?: unknown } = {}) {
   const b: Record<string, unknown> = {
     select: () => b,
     eq: () => b,
@@ -53,6 +53,9 @@ function makeBuilder(opts: { limit?: unknown; in?: unknown } = {}) {
     gte: () => b,
     lt: () => b,
     limit: async () => opts.limit ?? { data: [] },
+    // The member-directory reads page with .range(); a second page comes back
+    // empty, which is what ends the loop.
+    range: async (from: number) => (from === 0 ? (opts.range ?? { data: [] }) : { data: [] }),
     in: async () => opts.in ?? { data: [] },
   };
   return b;
@@ -61,7 +64,7 @@ function makeBuilder(opts: { limit?: unknown; in?: unknown } = {}) {
 function withTeam(team: Array<{ full_name: string | null; email: string }>) {
   return (table: string) => {
     if (table === "organization_members") {
-      return makeBuilder({ limit: { data: team.map((_, i) => ({ principal_id: `p${i}` })) } });
+      return makeBuilder({ range: { data: team.map((_, i) => ({ principal_id: `p${i}` })) } });
     }
     if (table === "principals") return makeBuilder({ in: { data: team } });
     return makeBuilder();

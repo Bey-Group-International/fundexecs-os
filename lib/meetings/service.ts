@@ -83,6 +83,21 @@ export function generateRoomCode(): string {
   return code;
 }
 
+/**
+ * Whether two ISO strings name the same instant, however they are spelled.
+ *
+ * Local to this module rather than shared with meeting-updates.ts: that module
+ * pulls in the mailer, and the service layer has no business importing an email
+ * sender to answer a question about two dates.
+ */
+function sameInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return (a ?? null) === (b ?? null);
+  const ta = new Date(a).getTime();
+  const tb = new Date(b).getTime();
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a === b;
+  return ta === tb;
+}
+
 function cleanDuration(value: number | null | undefined): number {
   if (!Number.isFinite(value ?? NaN)) return 60;
   return Math.min(480, Math.max(15, Math.trunc(value!)));
@@ -380,7 +395,7 @@ export async function updateMeeting(
   actor: { orgId: string; userId: string },
   meetingId: string,
   input: UpdateMeetingInput,
-): Promise<{ ok: true }> {
+): Promise<{ ok: true; calendarSequence: number | null }> {
   const before = await supabase
     .from("live_meetings")
     .select("*")
@@ -440,11 +455,28 @@ export async function updateMeeting(
     });
   }
 
-  const { error } = await supabase
+  // A reminder already sent describes a meeting at its OLD time. Move the
+  // meeting, or change what reminder it wants, and that stamp is no longer a
+  // record of anything useful — it is only stopping the sweep from reminding
+  // anybody about the new time. Cleared on a real change of instant or
+  // setting, never on an attendee edit: adding one guest must not re-mail a
+  // reminder to everybody already on the meeting.
+  const startMoved =
+    input.scheduledAt !== undefined && !sameInstant(before2.scheduled_at, input.scheduledAt);
+  const reminderChanged =
+    input.reminderMinutes !== undefined && (before2.reminder_minutes ?? null) !== (input.reminderMinutes ?? null);
+  if (startMoved || reminderChanged) update.last_reminder_sent_at = null;
+
+  // `select` so the row comes back with the sequence the trigger just bumped.
+  // Sending the pre-update value is how a reschedule reaches a calendar client
+  // as a revision it already holds — and is therefore discarded.
+  const { data: saved, error } = await supabase
     .from("live_meetings")
     .update(update as never)
     .eq("id", meetingId)
-    .eq("organization_id", actor.orgId);
+    .eq("organization_id", actor.orgId)
+    .select("calendar_sequence")
+    .maybeSingle();
   if (error) throw new Error(error.message);
 
   await writeDashboardAudit({
@@ -457,14 +489,14 @@ export async function updateMeeting(
     afterState: update as Json,
   });
 
-  return { ok: true };
+  return { ok: true, calendarSequence: (saved as { calendar_sequence: number | null } | null)?.calendar_sequence ?? null };
 }
 
 export async function deleteMeetingLocal(
   supabase: ServerClient,
   actor: { orgId: string; userId: string },
   meetingId: string,
-): Promise<{ ok: true }> {
+): Promise<{ ok: true; calendarSequence: number | null }> {
   const before = await supabase
     .from("live_meetings")
     .select("*")
@@ -475,11 +507,16 @@ export async function deleteMeetingLocal(
   if (!before.data) throw new Error("Meeting not found");
 
   const update = { deleted_at: new Date().toISOString(), sync_status: "deleted_local" };
-  const { error } = await supabase
+  // A soft delete is an UPDATE, so the trigger bumps the sequence here too and
+  // the cancellation has to carry the bumped value — a CANCEL at a sequence the
+  // client already holds leaves the meeting sitting in their calendar.
+  const { data: saved, error } = await supabase
     .from("live_meetings")
     .update(update as never)
     .eq("id", meetingId)
-    .eq("organization_id", actor.orgId);
+    .eq("organization_id", actor.orgId)
+    .select("calendar_sequence")
+    .maybeSingle();
   if (error) throw new Error(error.message);
 
   await writeDashboardAudit({
@@ -492,7 +529,7 @@ export async function deleteMeetingLocal(
     afterState: update as Json,
   });
 
-  return { ok: true };
+  return { ok: true, calendarSequence: (saved as { calendar_sequence: number | null } | null)?.calendar_sequence ?? null };
 }
 
 export async function clearUpcomingMeetingsLocal(

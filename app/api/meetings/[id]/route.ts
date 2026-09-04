@@ -209,6 +209,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       },
     );
 
+    // The sequence the trigger just bumped, not the one the row carried before
+    // the save. A revision at a sequence the client already holds is discarded,
+    // which is precisely how a reschedule fails to move anybody's calendar.
+    const sequence = result.calendarSequence ?? ((prior?.calendar_sequence as number | null) ?? null);
     const title = body.title ? String(body.title) : ((prior?.title as string | null) ?? "Meeting");
     const timezone = (cleanString(body.timezone) ?? (prior?.timezone as string | null)) || "UTC";
     const senderName = auth.ctx.email ?? "Someone";
@@ -261,7 +265,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
           durationMinutes: nextDuration,
           // The trigger bumps the sequence on every save, so this invitation
           // carries the same calendar entry the others already hold.
-          sequence: (prior?.calendar_sequence as number | null) ?? null,
+          sequence,
           whenLabel: nextStart ? formatSlotFull(nextStart, timezone) : null,
           // The host is the ORGANIZER on that invitation, not an audience for
           // it: they are the one adding the guest, and already hold the meeting.
@@ -283,7 +287,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         // has since bumped — so this moves or clears it rather than adding one.
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -308,7 +312,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         credentials: senderMailbox,
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -333,7 +337,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         // has since bumped — so this moves or clears it rather than adding one.
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -429,11 +433,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     if (notifiable && emails.length > 0) {
       const res = await sendMeetingUpdates("cancelled", {
         credentials: senderMailbox,
-        // Same calendar entry as the invitation, at the sequence the trigger
-        // has since bumped — so this moves or clears it rather than adding one.
+        // Same calendar entry as the invitation, at the sequence the soft
+        // delete just bumped — a CANCEL at a sequence the client already holds
+        // leaves the meeting sitting in their calendar.
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence: result.calendarSequence ?? ((prior?.calendar_sequence as number | null) ?? null),
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode: (prior?.room_code as string | null) ?? "",

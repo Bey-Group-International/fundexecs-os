@@ -1250,6 +1250,38 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
              |  (4457 total green). One new route, one dead helper removed, no migration,
              |  no new deps.
+2026-09-04  |  Five review findings, all real  |  Qodo read the notification work
+             |  and found five correctness bugs. Every one reproduced.
+             |  Decision: notifications now carry the sequence the SAVE produced, not the
+             |  one the row held before it. live_meetings_bump_sequence fires on every
+             |  UPDATE, so sending prior.calendar_sequence sent a revision the client
+             |  already held — and a client discards those. That is the exact failure
+             |  migration 20260827030000 was written to prevent, arriving through the
+             |  front door. updateMeeting and deleteMeetingLocal now SELECT the bumped
+             |  value back (a soft delete is an UPDATE, so the cancellation was stale
+             |  too) and return it.
+             |  Decision: an edit that moves a meeting or changes its reminder setting
+             |  clears last_reminder_sent_at. The sweep excludes any stamped row forever,
+             |  so a meeting rescheduled after its reminder went out could never be
+             |  reminded about again. Deliberately NOT cleared on an attendee edit —
+             |  adding one guest must not re-mail a reminder to everybody.
+             |  Decision: the sweep pages instead of capping. It reads in start-time
+             |  order but due-ness depends on each meeting's own lead, so one capped page
+             |  let a wall of sooner-but-not-yet-due meetings hide a later one whose long
+             |  reminder had come round. Bounded by pages, not by a single limit.
+             |  Decision: one horizon. The sweep queried 8 days while canSendReminder
+             |  accepts 14, so any setting between them sat permanently outside the query
+             |  meant to find it. Both read REMINDER_MAX_LEAD_MS now.
+             |  Decision: loadOrgDirectory pages, and FAILS CLOSED. It read 500
+             |  memberships unordered and matched against whatever came back. Against a
+             |  partial directory the unique-or-nothing rule is worthless — a name that
+             |  is ambiguous in the organization can look unique in the half that loaded,
+             |  and the invitation goes to the wrong colleague. A directory that cannot
+             |  be read in full now returns nothing: the attendees are reported
+             |  unreachable and the host is told, which is the outcome the matcher was
+             |  always supposed to guarantee.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +15 new
+             |  (4472 total green). No migration, no new deps.
 ```
 
 ---

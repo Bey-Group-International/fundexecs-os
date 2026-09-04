@@ -1,9 +1,15 @@
+const writeDashboardAuditMock = jest.fn();
+jest.mock("@/lib/dashboard/audit", () => ({
+  writeDashboardAudit: (...args: unknown[]) => writeDashboardAuditMock(...args),
+}));
+
 import {
   buildMeetingInviteUrl,
   buildMeetingRoomUrl,
   createMeeting,
   generateRoomCode,
   persistInstitutionalMeetingRecord,
+  updateMeeting,
 } from "./service";
 
 describe("meeting service", () => {
@@ -112,5 +118,79 @@ describe("meeting service", () => {
         }),
       },
     ]);
+  });
+});
+
+describe("updateMeeting — the calendar sequence and the reminder stamp", () => {
+  const PRIOR = {
+    id: "m1",
+    scheduled_at: "2026-09-10T15:00:00.000Z",
+    reminder_minutes: 15,
+    locked_at: "2026-09-01T00:00:00.000Z",
+    external_calendar_sync_enabled: false,
+    external_calendar_provider: null,
+    external_calendar_sync_status: "not_connected",
+    calendar_sequence: 7,
+  };
+
+  /** Captures the update payload and hands back the post-write row. */
+  function client(saved: { calendar_sequence: number | null } | null = { calendar_sequence: 8 }) {
+    const update = jest.fn();
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      eq: () => builder,
+      maybeSingle: async () => ({ data: PRIOR, error: null }),
+      update: (values: unknown) => {
+        update(values);
+        return {
+          eq: () => ({
+            eq: () => ({ select: () => ({ maybeSingle: async () => ({ data: saved, error: null }) }) }),
+          }),
+        };
+      },
+    };
+    return { supabase: { from: () => builder } as never, update };
+  }
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns the sequence the trigger bumped, not the one it read", async () => {
+    const { supabase } = client({ calendar_sequence: 8 });
+    const result = await updateMeeting(supabase, { orgId: "org1", userId: "u1" }, "m1", { title: "New" });
+    expect(result).toEqual({ ok: true, calendarSequence: 8 });
+  });
+
+  it("clears the reminder stamp when the meeting moves", async () => {
+    // A reminder already sent describes the OLD time; leaving the stamp is what
+    // stops the sweep ever reminding anybody about the new one.
+    const { supabase, update } = client();
+    await updateMeeting(supabase, { orgId: "org1", userId: "u1" }, "m1", {
+      scheduledAt: "2026-09-11T15:00:00.000Z",
+    });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ last_reminder_sent_at: null }));
+  });
+
+  it("clears it when the reminder setting itself changes", async () => {
+    const { supabase, update } = client();
+    await updateMeeting(supabase, { orgId: "org1", userId: "u1" }, "m1", { reminderMinutes: 60 });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ last_reminder_sent_at: null }));
+  });
+
+  it("leaves it alone when nothing about the timing actually changed", async () => {
+    // Re-saving the same instant, spelled differently, is not a move — and an
+    // attendee edit is not one either. Resetting on those would re-mail a
+    // reminder to everybody because one guest was added.
+    for (const input of [
+      { scheduledAt: "2026-09-10T15:00:00.000Z" },
+      { title: "Renamed" },
+      { attendees: [{ name: "Ada", email: "ada@lp.test" }] },
+      { reminderMinutes: 15 },
+    ]) {
+      const { supabase, update } = client();
+      await updateMeeting(supabase, { orgId: "org1", userId: "u1" }, "m1", input);
+      expect(update).toHaveBeenCalledWith(
+        expect.not.objectContaining({ last_reminder_sent_at: null }),
+      );
+    }
   });
 });

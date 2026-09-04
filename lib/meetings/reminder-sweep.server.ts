@@ -22,6 +22,7 @@ import {
   describeTimeUntil,
   dueReminders,
   reminderRecipients,
+  REMINDER_MAX_LEAD_MS,
   REMINDER_SWEEP_LOOKAHEAD_MS,
   type SweepableMeeting,
 } from "@/lib/meetings/reminder";
@@ -43,12 +44,16 @@ const SELECT =
   "id, organization_id, host_id, title, status, scheduled_at, duration_minutes, timezone, is_draft, deleted_at, attendees, room_code, meeting_url, reminder_minutes, last_reminder_sent_at";
 
 /**
- * The widest reminder the sweep will look ahead for.
+ * How many candidate rows to read at a time, and how many pages to walk.
  *
- * The schedule screen offers minutes-to-a-day; this is deliberately roomier so
- * a hand-set value is not silently ignored, while still bounding the read.
+ * The read is ordered by start time, but due-ness depends on each meeting's own
+ * `reminder_minutes` — so the earliest rows are not the due ones, and a single
+ * capped page lets a wall of sooner-but-not-yet-due meetings hide a later one
+ * whose long lead has already come round. Paging until enough due meetings are
+ * found removes that starvation while keeping the work per sweep bounded.
  */
-const MAX_LEAD_MS = 8 * 24 * 3600_000;
+const PAGE_SIZE = 200;
+const MAX_PAGES = 10;
 
 /**
  * Send every reminder that has come due.
@@ -66,25 +71,35 @@ export async function runMeetingReminders(
   const limit = opts.limit ?? 50;
   const stats: ReminderSweepStats = { due: 0, reminded: 0, sent: 0, failed: 0 };
 
-  const { data, error } = await supabase
-    .from("live_meetings")
-    .select(SELECT)
-    .eq("is_draft", false)
-    .is("deleted_at", null)
-    .is("last_reminder_sent_at", null)
-    .neq("status", "ended")
-    .not("reminder_minutes", "is", null)
-    .gt("scheduled_at", now.toISOString())
-    .lte("scheduled_at", new Date(now.getTime() + MAX_LEAD_MS).toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(limit * 4);
-  if (error) return stats;
+  // The same horizon canSendReminder enforces. A shorter one here would leave a
+  // legal reminder setting — anything out to two weeks — permanently outside
+  // the query that is supposed to find it.
+  const horizon = new Date(now.getTime() + REMINDER_MAX_LEAD_MS).toISOString();
+  const lookaheadMs = opts.lookaheadMs ?? REMINDER_SWEEP_LOOKAHEAD_MS;
 
-  const due = dueReminders(
-    (data ?? []) as unknown as SweepableMeeting[],
-    now,
-    opts.lookaheadMs ?? REMINDER_SWEEP_LOOKAHEAD_MS,
-  ).slice(0, limit);
+  const due: SweepableMeeting[] = [];
+  for (let page = 0; page < MAX_PAGES && due.length < limit; page += 1) {
+    const { data, error } = await supabase
+      .from("live_meetings")
+      .select(SELECT)
+      .eq("is_draft", false)
+      .is("deleted_at", null)
+      .is("last_reminder_sent_at", null)
+      .neq("status", "ended")
+      .not("reminder_minutes", "is", null)
+      .gt("scheduled_at", now.toISOString())
+      .lte("scheduled_at", horizon)
+      .order("scheduled_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) break;
+
+    const rows = (data ?? []) as unknown as SweepableMeeting[];
+    due.push(...dueReminders(rows, now, lookaheadMs));
+    // A short page is the last page.
+    if (rows.length < PAGE_SIZE) break;
+  }
+
+  due.length = Math.min(due.length, limit);
   stats.due = due.length;
 
   for (const meeting of due) {

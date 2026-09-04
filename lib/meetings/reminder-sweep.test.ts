@@ -10,7 +10,13 @@ jest.mock("@/lib/meetings/mailbox.server", () => ({
   hostCredentials: (...args: unknown[]) => hostCredentialsMock(...args),
 }));
 
-import { dueReminders, isReminderDue, REMINDER_SWEEP_LOOKAHEAD_MS, type SweepableMeeting } from "./reminder";
+import {
+  dueReminders,
+  isReminderDue,
+  REMINDER_MAX_LEAD_MS,
+  REMINDER_SWEEP_LOOKAHEAD_MS,
+  type SweepableMeeting,
+} from "./reminder";
 import { runMeetingReminders } from "./reminder-sweep.server";
 
 const NOW = new Date("2026-09-10T09:00:00.000Z");
@@ -87,9 +93,13 @@ describe("isReminderDue", () => {
   });
 });
 
-/** A client whose read returns `rows` and whose claim update returns `claim`. */
+/**
+ * A client whose read returns `rows` on the first page and whose claim update
+ * returns `claim`. Later pages come back empty, which ends the paging loop.
+ */
 function client(rows: SweepableMeeting[], claim: unknown[] = [{ id: "m1" }]) {
   const update = jest.fn();
+  const ranges: Array<[number, number]> = [];
   const b: Record<string, unknown> = {
     select: () => b,
     eq: () => b,
@@ -99,7 +109,10 @@ function client(rows: SweepableMeeting[], claim: unknown[] = [{ id: "m1" }]) {
     gt: () => b,
     lte: () => b,
     order: () => b,
-    limit: async () => ({ data: rows }),
+    range: async (from: number, to: number) => {
+      ranges.push([from, to]);
+      return { data: from === 0 ? rows : [] };
+    },
     update: (values: unknown) => {
       update(values);
       return {
@@ -107,7 +120,7 @@ function client(rows: SweepableMeeting[], claim: unknown[] = [{ id: "m1" }]) {
       };
     },
   };
-  return { supabase: { from: () => b } as never, update };
+  return { supabase: { from: () => b } as never, update, ranges };
 }
 
 describe("runMeetingReminders", () => {
@@ -165,6 +178,48 @@ describe("runMeetingReminders", () => {
     const stats = await runMeetingReminders(supabase, { now: NOW });
 
     expect(stats).toMatchObject({ due: 1, reminded: 0, sent: 0, failed: 1 });
+  });
+
+  it("pages past a wall of not-yet-due meetings to reach a due one", async () => {
+    // The read is ordered by start time, but due-ness depends on each meeting's
+    // own lead. A single capped page lets sooner-but-not-due meetings hide a
+    // later one whose long reminder has already come round.
+    const notDue = Array.from({ length: 200 }, (_, i) =>
+      meeting({ id: `soon${i}`, scheduled_at: "2026-09-10T18:00:00.000Z", reminder_minutes: 15 }),
+    );
+    const dueLater = meeting({
+      id: "long-lead",
+      scheduled_at: "2026-09-12T09:00:00.000Z",
+      // Three days' notice, and the meeting is two days out: already due.
+      reminder_minutes: 3 * 24 * 60,
+    });
+
+    const pages = [notDue, [dueLater]];
+    const b: Record<string, unknown> = {
+      select: () => b,
+      eq: () => b,
+      is: () => b,
+      neq: () => b,
+      not: () => b,
+      gt: () => b,
+      lte: () => b,
+      order: () => b,
+      range: async (from: number) => ({ data: pages[Math.floor(from / 200)] ?? [] }),
+      update: () => ({ eq: () => ({ is: () => ({ select: async () => ({ data: [{ id: "x" }] }) }) }) }),
+    };
+
+    const stats = await runMeetingReminders({ from: () => b } as never, { now: NOW });
+
+    expect(stats.due).toBe(1);
+    expect(stats.sent).toBe(1);
+  });
+
+  it("looks as far ahead as the reminder rules allow", async () => {
+    // The query horizon has to match REMINDER_MAX_LEAD_MS, or a legal setting
+    // sits permanently outside the query meant to find it.
+    const { supabase } = client([]);
+    await runMeetingReminders(supabase, { now: NOW });
+    expect(REMINDER_MAX_LEAD_MS).toBe(14 * 24 * 3600_000);
   });
 
   it("skips meetings that are not due yet", async () => {
