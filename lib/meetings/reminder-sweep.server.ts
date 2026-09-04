@@ -14,6 +14,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { sendEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/site";
 import { buildMeetingInviteUrl } from "@/lib/meetings/service";
+import { buildMeetingCalendarUrl } from "@/lib/meetings/scheduled-invite";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { hostCredentials } from "@/lib/meetings/mailbox.server";
 import {
@@ -146,6 +147,7 @@ async function remind(supabase: ServiceClient, meeting: SweepableMeeting, now: D
     whenLabel: formatSlotFull(meeting.scheduled_at!, meeting.timezone || "UTC"),
     timeUntil: describeTimeUntil(meeting.scheduled_at!, now),
     joinUrl,
+    calendarUrl: meeting.room_code ? buildMeetingCalendarUrl(SITE_URL, meeting.room_code) : null,
   });
 
   const results = await Promise.allSettled(

@@ -192,6 +192,8 @@ export interface ReminderEmailInput {
   whenLabel: string;
   timeUntil: string;
   joinUrl?: string | null;
+  /** A one-tap "Save to calendar" .ics, for a recipient who never saved it. */
+  calendarUrl?: string | null;
   note?: string | null;
 }
 
@@ -209,6 +211,11 @@ export function buildReminderEmail(input: ReminderEmailInput): { subject: string
   // `https://x.test/" onmouseover="…` through as markup.
   const url =
     input.joinUrl && /^https?:\/\//i.test(input.joinUrl) ? escapeHtml(input.joinUrl) : null;
+  // A reminder is the last chance to notice the meeting is not in your
+  // calendar, which is often exactly why a reminder is the first anyone hears
+  // of it. Same two hazards as the join link, handled the same way.
+  const calendar =
+    input.calendarUrl && /^https?:\/\//i.test(input.calendarUrl) ? escapeHtml(input.calendarUrl) : null;
 
   return {
     subject: `Reminder: ${title} — ${input.timeUntil}`,
@@ -229,6 +236,11 @@ export function buildReminderEmail(input: ReminderEmailInput): { subject: string
      style="display:inline-block;background:#b8a36a;color:#0d0d10;font-weight:600;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
     Join meeting →
   </a>`
+      : ""
+  }
+  ${
+    calendar
+      ? `<p style="margin:16px 0 0"><a href="${calendar}" style="color:#b8a36a;font-size:13px;text-decoration:none">Save to calendar</a></p>`
       : ""
   }
 </body>

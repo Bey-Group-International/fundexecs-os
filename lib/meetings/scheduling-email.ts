@@ -79,8 +79,13 @@ function toGCalDate(d: Date): string {
 }
 
 /**
- * "Add to Google Calendar" link. Kept as a link rather than an .ics attachment
- * because the shared sender (lib/email) sends HTML bodies only.
+ * "Add to Google Calendar" link, used by the booking emails.
+ *
+ * A link rather than a reference to the attached .ics because these predate
+ * both the multipart sender and the per-meeting .ics endpoint. Meeting emails
+ * use buildMeetingCalendarUrl instead, which works in every calendar rather
+ * than only Google; these could follow once a booking carries its room code
+ * this far.
  */
 export function googleCalendarLink(ctx: {
   title: string;

@@ -12,7 +12,7 @@
 //      an unconnected mailbox must never surface as a failed save.
 import { sendEmail, type SendEmailCredentials } from "@/lib/email";
 import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
-import { canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
+import { buildMeetingCalendarUrl, canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 
@@ -158,6 +158,12 @@ export function buildMeetingUpdateEmail(
   const joinUrl = `${(ctx.origin || "").replace(/\/$/, "")}/meeting-invite/${ctx.roomCode}`;
   const now = whenIn(ctx.startIso, ctx.timezone, ctx.durationMinutes);
   const previous = whenIn(ctx.previousStartIso, ctx.timezone);
+  // A one-tap correction for the entry the recipient already holds. Offered on
+  // the two updates that leave a meeting in the calendar; a cancellation and a
+  // removal are told by their .ics to take it out, and a "save" button beside
+  // that would be asking for the opposite of what the email says.
+  const calendarUrl =
+    ctx.startIso ? { label: "Save the new time to your calendar", url: buildMeetingCalendarUrl(ctx.origin, ctx.roomCode) } : null;
 
   if (kind === "cancelled") {
     return {
@@ -208,6 +214,7 @@ export function buildMeetingUpdateEmail(
           ["Previously", wasWhere],
         ],
         cta: { label: "Join meeting", url: link && /^https?:\/\//i.test(link) ? link : joinUrl },
+        secondary: calendarUrl ? { ...calendarUrl, label: "Save the new details to your calendar" } : null,
         footnote: "The time has not moved — replace the joining details on the entry you already have.",
       }),
     };
@@ -224,6 +231,7 @@ export function buildMeetingUpdateEmail(
         ["Previously", previous],
       ],
       cta: { label: "Join meeting", url: joinUrl },
+      secondary: calendarUrl,
       footnote: "Use the same link as before — only the time changed.",
     }),
   };

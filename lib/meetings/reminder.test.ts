@@ -272,3 +272,28 @@ describe("buildReminderEmail", () => {
     expect(html).toContain("Your host");
   });
 });
+
+describe("a reminder's save-to-calendar link", () => {
+  const BASE = {
+    title: "Quarterly review",
+    hostName: "rae@fund.test",
+    whenLabel: "Thursday, September 10, 2026 at 3:00 PM UTC",
+    timeUntil: "in about an hour",
+  };
+
+  it("is offered, because a reminder is often the first anyone hears of it", () => {
+    const { html } = buildReminderEmail({
+      ...BASE,
+      calendarUrl: "https://app.test/api/meetings/public/abc-def/calendar.ics",
+    });
+    expect(html).toContain("Save to calendar");
+    expect(html).toContain("/api/meetings/public/abc-def/calendar.ics");
+  });
+
+  it("is omitted when there is none, and never carries a hostile scheme", () => {
+    expect(buildReminderEmail(BASE).html).not.toContain("Save to calendar");
+    const hostile = buildReminderEmail({ ...BASE, calendarUrl: "javascript:alert(1)" }).html;
+    expect(hostile).not.toContain("javascript:alert(1)");
+    expect(hostile).not.toContain("Save to calendar");
+  });
+});

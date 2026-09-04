@@ -1192,6 +1192,35 @@ Deployed, monitoring               →  live, observability active
              |  Confidence: typecheck/eslint clean, production build passes, Jest +25 new
              |  (4427 total green, no regressions). Two new modules, one new component,
              |  no migration, no new deps.
+2026-09-04  |  Save to calendar, in every meeting email  |  A link that works
+             |  in every calendar, not a paperclip only two mail clients read.
+             |  Decision: a hosted one-event .ics at
+             |  /api/meetings/public/<roomCode>/calendar.ics, linked from the
+             |  invitation, the reschedule, the relocation and the reminder. The
+             |  attachment stays — it is what makes Gmail and Apple Mail draw an
+             |  Accept/Decline card — but for every other client it is a file under a
+             |  paperclip that has to be noticed, downloaded and opened, which on a
+             |  phone is most of a minute. A link is one tap and behaves the same
+             |  everywhere.
+             |  Decision: it PUBLISHes rather than invites. Anyone holding the link can
+             |  fetch it, and an iTIP REQUEST would have to carry an ORGANIZER address
+             |  and the attendee list — exactly what the public lookup beside it
+             |  deliberately withholds. Same UID as the emailed invitation, so saving
+             |  corrects the entry somebody already holds instead of giving them the
+             |  meeting twice.
+             |  Decision: the room code is the capability, as it already is for
+             |  /meeting-invite/<code>, so no new token. A draft or an untimed meeting
+             |  404s, as does an internal failure — no code may behave observably
+             |  differently from any other.
+             |  Context: booking emails have carried an "Add to Google Calendar" link
+             |  since they were written; meeting emails carried nothing but the
+             |  attachment. Not offered beside a cancellation or a removal, whose .ics
+             |  tells the client to REMOVE the entry — a save button there asks for the
+             |  opposite of what the email says.
+             |  Rejected: a Google Calendar TEMPLATE link, which is what the booking
+             |  emails use. It is free, and it works for one calendar out of three.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +17 new
+             |  (4444 total green). One new route, no migration, no new deps.
 ```
 
 ---

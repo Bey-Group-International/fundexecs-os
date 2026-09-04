@@ -244,3 +244,36 @@ describe("a relocated meeting", () => {
     expect(html).toContain("time is the same");
   });
 });
+
+describe("save-to-calendar on an update", () => {
+  const BASE = {
+    origin: "https://app.test",
+    roomCode: "abc-def",
+    title: "Quarterly review",
+    senderName: "rae@fund.test",
+    emails: ["ada@lp.test"],
+    timezone: "UTC",
+    startIso: "2026-09-10T15:00:00.000Z",
+  };
+
+  it("is offered on the updates that leave a meeting in the calendar", () => {
+    for (const kind of ["rescheduled", "relocated"] as const) {
+      const { html } = buildMeetingUpdateEmail(kind, BASE);
+      expect(html).toContain("/api/meetings/public/abc-def/calendar.ics");
+    }
+  });
+
+  it("is never offered beside a cancellation", () => {
+    // The .ics on these tells the client to REMOVE the entry. A save button
+    // next to it would be asking for the opposite of what the email says.
+    for (const kind of ["cancelled", "removed"] as const) {
+      const { html } = buildMeetingUpdateEmail(kind, BASE);
+      expect(html).not.toContain("calendar.ics");
+    }
+  });
+
+  it("is omitted for a meeting with no time to save", () => {
+    const { html } = buildMeetingUpdateEmail("relocated", { ...BASE, startIso: null });
+    expect(html).not.toContain("calendar.ics");
+  });
+});

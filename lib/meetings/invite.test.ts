@@ -38,6 +38,37 @@ describe("buildMeetingInviteHtml", () => {
     expect(html).not.toContain("<LP>");
   });
 
+  it("offers a save-to-calendar link when the meeting has one", () => {
+    const html = buildMeetingInviteHtml({
+      inviteUrl: "https://app.test/meeting-invite/abc-def",
+      title: "Q3 review",
+      senderName: "rae@fund.test",
+      calendarUrl: "https://app.test/api/meetings/public/abc-def/calendar.ics",
+    });
+    expect(html).toContain("Save to calendar");
+    expect(html).toContain("/api/meetings/public/abc-def/calendar.ics");
+  });
+
+  it("omits the calendar link rather than pointing it nowhere", () => {
+    const html = buildMeetingInviteHtml({
+      inviteUrl: "https://app.test/meeting-invite/abc-def",
+      title: "Q3 review",
+      senderName: "rae@fund.test",
+    });
+    expect(html).not.toContain("Save to calendar");
+  });
+
+  it("neutralizes a non-http calendar URL", () => {
+    const html = buildMeetingInviteHtml({
+      inviteUrl: "https://app.test/meeting-invite/abc-def",
+      title: "x",
+      senderName: "y",
+      calendarUrl: "javascript:alert(1)",
+    });
+    expect(html).not.toContain("javascript:alert(1)");
+    expect(html).not.toContain("Save to calendar");
+  });
+
   it("neutralizes a non-http invite URL", () => {
     const html = buildMeetingInviteHtml({ inviteUrl: "javascript:alert(1)", title: "x", senderName: "y" });
     expect(html).toContain('href="#"');
@@ -127,6 +158,18 @@ describe("sendMeetingInvites — the host and the calendar", () => {
     // the other.
     await sendMeetingInvites(BASE);
     expect(invites()[0].content).toContain("UID:meeting-m1@app.test");
+  });
+
+  it("puts a save-to-calendar button in every invitation", async () => {
+    // The .ics is attached too, but only Gmail and Apple Mail turn that into a
+    // card. Everyone else gets a file under a paperclip, and on a phone that is
+    // most of a minute of fiddling.
+    await sendMeetingInvites(BASE);
+    for (const [args] of sendEmailMock.mock.calls) {
+      expect((args as { htmlBody: string }).htmlBody).toContain(
+        "https://app.test/api/meetings/public/abc-def/calendar.ics",
+      );
+    }
   });
 
   it("still emails when the meeting has no time yet", async () => {

@@ -13,6 +13,7 @@ import {
   REMINDER_COOLDOWN_MS,
   type RemindableMeeting,
 } from "@/lib/meetings/reminder";
+import { buildMeetingCalendarUrl } from "@/lib/meetings/scheduled-invite";
 import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { mailboxFor } from "@/lib/meetings/mailbox.server";
 
@@ -119,6 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       whenLabel: formatSlotFull(meeting.scheduled_at!, meeting.timezone || "UTC"),
       timeUntil: describeTimeUntil(meeting.scheduled_at!),
       joinUrl,
+      calendarUrl: meeting.room_code ? buildMeetingCalendarUrl(SITE_URL, meeting.room_code) : null,
       note: typeof body.note === "string" ? body.note.slice(0, 500) : null,
     });
 
