@@ -325,6 +325,7 @@ export function MeetingEditScreen({
       const json = (await res.json().catch(() => ({}))) as MeetingSaveResult & {
         externalSyncError?: string;
         invited?: number;
+        uninvited?: number;
         notified?: number;
       };
       const result: MeetingSaveResult = {
@@ -346,6 +347,16 @@ export function MeetingEditScreen({
       // knows an edit reached their guests and isn't surprised by replies.
       if (json.notified && json.notified > 0) {
         messages.push(`emailed ${json.notified} attendee${json.notified === 1 ? "" : "s"} about the change`);
+      }
+      // Somebody was listed by a name that matches no teammate and carries no
+      // address. Say so: silently skipping them is how a host ends up believing
+      // an attendee was invited when nothing was ever sent to them.
+      if (json.uninvited && json.uninvited > 0) {
+        messages.push(
+          `${json.uninvited} attendee${json.uninvited === 1 ? " has" : "s have"} no email address and ${
+            json.uninvited === 1 ? "was" : "were"
+          } not notified`,
+        );
       }
       if (json.externalSyncError) {
         messages.push(`external calendar sync failed: ${json.externalSyncError}`);

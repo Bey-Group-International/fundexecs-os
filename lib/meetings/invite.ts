@@ -89,10 +89,23 @@ export async function sendMeetingInvites(args: {
   sequence?: number | null;
   /** The time as the recipients should read it. */
   whenLabel?: string | null;
+  /**
+   * Whether the host is emailed as well as named.
+   *
+   * On by default: scheduling a meeting confirms it to the person who did it,
+   * and that confirmation is what puts it in their calendar. Turn it off when
+   * the host is only being named as ORGANIZER — inviting one late guest to a
+   * meeting the host already holds should not mail the host about their own
+   * meeting again.
+   */
+  notifyHost?: boolean;
 }): Promise<{ sent: number; total: number }> {
   const guests = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  // Everyone on the meeting — the organizer and the attendee list the calendar
+  // entry carries — which is not always everyone this send writes to.
   const recipients = scheduledRecipients(args.hostEmail, args.senderName, guests);
-  if (recipients.length === 0) return { sent: 0, total: 0 };
+  const mailTo = args.notifyHost === false ? recipients.filter((r) => r.role !== "host") : recipients;
+  if (mailTo.length === 0) return { sent: 0, total: 0 };
 
   const origin = (args.origin || "").replace(/\/$/, "");
   const inviteUrl = `${origin}/meeting-invite/${args.roomCode}`;
@@ -103,7 +116,7 @@ export async function sendMeetingInvites(args: {
   const invite = buildScheduledInvite({ ...args, origin, inviteUrl, recipients });
 
   const results = await Promise.allSettled(
-    recipients.map((r) =>
+    mailTo.map((r) =>
       sendEmail({
         orgId: args.orgId,
         credentials: args.credentials,
@@ -125,7 +138,7 @@ export async function sendMeetingInvites(args: {
   );
 
   const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
-  return { sent, total: recipients.length };
+  return { sent, total: mailTo.length };
 }
 
 /** The .ics for a newly scheduled meeting, or undefined when it has no time. */

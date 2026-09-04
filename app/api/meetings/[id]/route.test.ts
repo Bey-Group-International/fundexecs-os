@@ -65,7 +65,7 @@ function req(body: unknown = {}) {
 
 // A chainable query stub. `maybeSingle` serves the prior-row load; `limit`
 // serves the conflict-candidate query — so one builder covers both reads.
-function makeBuilder(opts: { maybeSingle?: unknown; limit?: unknown } = {}) {
+function makeBuilder(opts: { maybeSingle?: unknown; limit?: unknown; in?: unknown } = {}) {
   const b: Record<string, unknown> = {
     select: () => b,
     eq: () => b,
@@ -76,8 +76,26 @@ function makeBuilder(opts: { maybeSingle?: unknown; limit?: unknown } = {}) {
     order: () => b,
     maybeSingle: async () => opts.maybeSingle ?? { data: null },
     limit: async () => opts.limit ?? { data: [] },
+    // The member-directory lookup ends on .in(); every other read ends on
+    // .maybeSingle() or .limit().
+    in: async () => opts.in ?? { data: [] },
   };
   return b;
+}
+
+/**
+ * A client whose live_meetings reads serve `prior` and whose member-directory
+ * reads serve `team`, so a test can put real teammates behind the name a host
+ * typed into the attendee box.
+ */
+function withDirectory(prior: unknown, team: Array<{ full_name: string | null; email: string }>) {
+  return (table: string) => {
+    if (table === "organization_members") {
+      return makeBuilder({ limit: { data: team.map((_, i) => ({ principal_id: `p${i}` })) } });
+    }
+    if (table === "principals") return makeBuilder({ in: { data: team } });
+    return makeBuilder({ maybeSingle: { data: prior } });
+  };
 }
 
 const PRIOR_ROW = {
@@ -257,11 +275,60 @@ describe("/api/meetings/[id]", () => {
 
     expect(res.status).toBe(200);
     // Ben is new: one invite carrying the new time, not an "it moved" notice.
-    expect(sendMeetingInvitesMock).toHaveBeenCalledWith(expect.objectContaining({ emails: ["ben@lp.test"] }));
+    // The invitation has to say when — and reach his calendar — or he is left
+    // with a join link and no idea what to do with it.
+    expect(sendMeetingInvitesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emails: ["ben@lp.test"],
+        meetingId: "m1",
+        startIso: "2026-07-11T15:00:00.000Z",
+        durationMinutes: 60,
+        hostEmail: "u@test",
+        whenLabel: expect.stringContaining("2026"),
+        // The host is the organizer here, not an audience for their own meeting.
+        notifyHost: false,
+      }),
+    );
     expect(sendMeetingUpdatesMock).toHaveBeenCalledWith(
       "rescheduled",
       expect.objectContaining({ emails: ["ada@lp.test"] }),
     );
+  });
+
+  it("emails a teammate added by name alone", async () => {
+    // The internal-attendee box asks for people, not addresses. Before the
+    // directory lookup a name with no "@" in it reached nobody.
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    sendMeetingInvitesMock.mockResolvedValue({ sent: 1, total: 1 });
+    from.mockImplementation(
+      withDirectory({ ...PRIOR_ROW, attendees: [] }, [{ full_name: "Mike Ross", email: "mike.ross@fund.test" }]),
+    );
+
+    const res = await PATCH(req({ attendees: [{ name: "Mike Ross", type: "internal" }] }), params);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ invited: 1, uninvited: 0 });
+    expect(sendMeetingInvitesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ emails: ["mike.ross@fund.test"] }),
+    );
+    // The address is stored too, so a later reschedule reaches them as well.
+    expect(updateMeetingMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "m1",
+      expect.objectContaining({ attendees: [{ name: "Mike Ross", type: "internal", email: "mike.ross@fund.test" }] }),
+    );
+  });
+
+  it("reports an attendee it could not place instead of dropping them silently", async () => {
+    updateMeetingMock.mockResolvedValue({ ok: true });
+    from.mockImplementation(withDirectory({ ...PRIOR_ROW, attendees: [] }, []));
+
+    const res = await PATCH(req({ attendees: [{ name: "Someone Outside", type: "external" }] }), params);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ invited: 0, uninvited: 1 });
+    expect(sendMeetingInvitesMock).not.toHaveBeenCalled();
   });
 
   it("tells a dropped guest they are off the meeting", async () => {

@@ -105,6 +105,23 @@ describe("sendMeetingInvites — the host and the calendar", () => {
     expect(content).toContain("MAILTO:rae@fund.test");
   });
 
+  it("can name the host as organizer without emailing them again", async () => {
+    // Adding one late guest to a meeting the host already holds. They belong on
+    // the invitation as ORGANIZER — that is what makes it their meeting — but
+    // they should not get a second "your meeting is scheduled" for it.
+    const res = await sendMeetingInvites({ ...BASE, notifyHost: false });
+    expect(to()).toEqual(["ada@example.com"]);
+    expect(res).toEqual({ sent: 1, total: 1 });
+    const content = invites()[0].content.replace(/\r\n /g, "");
+    expect(content).toContain("ORGANIZER;CN=\"rae@fund.test\":MAILTO:rae@fund.test");
+  });
+
+  it("sends nothing when the host is the only recipient and is opted out", async () => {
+    const res = await sendMeetingInvites({ ...BASE, emails: [], notifyHost: false });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(res).toEqual({ sent: 0, total: 0 });
+  });
+
   it("uses a meeting UID that cannot collide with a booking's", async () => {
     // Both live in the same calendars. A shared UID would make one overwrite
     // the other.

@@ -8,6 +8,8 @@ import { diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-up
 import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
+import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { SITE_URL } from "@/lib/site";
 import {
   SlotUnavailableError,
@@ -17,7 +19,7 @@ import {
   type BookingContext,
 } from "@/lib/meetings/scheduling-service";
 import { sendBookingEmails } from "@/lib/meetings/scheduling-email";
-import { buildBookingManageUrl, buildBookingPageUrl } from "@/lib/meetings/scheduling";
+import { buildBookingManageUrl, buildBookingPageUrl, formatSlotFull } from "@/lib/meetings/scheduling";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +64,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
 
-  const nextAttendees = Array.isArray(body.attendees) ? (body.attendees as MeetingAttendeeInput[]) : undefined;
+  // Same directory lookup the create path runs: an attendee typed as a bare
+  // name is matched to the teammate it names, so adding somebody to an existing
+  // meeting emails them instead of silently doing nothing.
+  let nextAttendees = Array.isArray(body.attendees) ? (body.attendees as MeetingAttendeeInput[]) : undefined;
+  let uninvited = 0;
+  if (nextAttendees && needsDirectory(nextAttendees)) {
+    const resolution = resolveAttendeeDirectory(nextAttendees, await loadOrgDirectory(supabase, auth.ctx.orgId));
+    nextAttendees = resolution.attendees;
+    uninvited = resolution.unreachable.length;
+  }
   const priorEmails = guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []);
   const priorGuestEmails = new Set(priorEmails);
   const roomCode = (prior?.room_code as string | null) ?? "";
@@ -162,7 +173,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         meetingType: cleanString(body.meetingType),
         priority: body.priority,
         tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
-        attendees: Array.isArray(body.attendees) ? body.attendees : undefined,
+        attendees: nextAttendees,
         relatedContactId: cleanString(body.relatedContactId),
         relatedCompanyId: cleanString(body.relatedCompanyId),
         relatedDealId: cleanString(body.relatedDealId),
@@ -220,6 +231,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
           title,
           senderName,
           emails: newEmails,
+          // The same invitation the create path sends. Without these a guest
+          // added later got a "join" link and no idea when to use it — no time
+          // in the email, and nothing that reached their calendar.
+          hostEmail: auth.ctx.email ?? null,
+          meetingId: id,
+          startIso: nextStart,
+          durationMinutes: nextDuration,
+          // The trigger bumps the sequence on every save, so this invitation
+          // carries the same calendar entry the others already hold.
+          sequence: (prior?.calendar_sequence as number | null) ?? null,
+          whenLabel: nextStart ? formatSlotFull(nextStart, timezone) : null,
+          // The host is the ORGANIZER on that invitation, not an audience for
+          // it: they are the one adding the guest, and already hold the meeting.
+          notifyHost: false,
         });
         invited = sendResult.sent;
       } catch (err) {
@@ -298,7 +323,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       notified += res.sent;
     }
 
-    return NextResponse.json({ ...result, invited, notified });
+    return NextResponse.json({ ...result, invited, uninvited, notified });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update meeting" }, { status: 500 });
   }

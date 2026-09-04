@@ -5,6 +5,8 @@ import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
 import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
+import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { conflictMessage } from "@/lib/meetings/schedule";
@@ -81,13 +83,29 @@ export async function POST(req: NextRequest) {
     const durationMinutes = Math.min(480, Math.max(15, durationMinutesFromTimes(startTime, endTime) || 60));
     const endIso = new Date(new Date(scheduledAt).getTime() + durationMinutes * 60_000).toISOString();
 
-    const attendees = Array.isArray(body.attendees)
+    const typedAttendees = Array.isArray(body.attendees)
       ? body.attendees
       : typeof body.attendees === "string"
         ? parseAttendeeInput(body.attendees)
         : [];
 
     const supabase = await createServerClient();
+
+    // An attendee entered by name alone carries no address, and an attendee
+    // with no address is one nobody emails. Look the name up in the
+    // organization's own member directory first, so scheduling a meeting with
+    // a teammate actually reaches them. Whoever is left is counted back to the
+    // host rather than quietly dropped.
+    let attendees = typedAttendees;
+    let uninvited = 0;
+    if (needsDirectory(typedAttendees)) {
+      const resolution = resolveAttendeeDirectory(
+        typedAttendees,
+        await loadOrgDirectory(supabase, auth.ctx.orgId),
+      );
+      attendees = resolution.attendees;
+      uninvited = resolution.unreachable.length;
+    }
 
     // Conflict detection against the internal calendar. Warn (409) unless the
     // user explicitly chose to save anyway. Drafts never block on conflicts. The
@@ -222,6 +240,7 @@ export async function POST(req: NextRequest) {
       externalCalendarSyncStatus: saved.externalCalendarSyncStatus,
       externalSyncError,
       invited,
+      uninvited,
       conflicts,
       roomUrl: buildMeetingRoomUrl(SITE_URL, saved.roomCode),
       inviteUrl: buildMeetingInviteUrl(SITE_URL, saved.roomCode),

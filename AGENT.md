@@ -1123,6 +1123,36 @@ Deployed, monitoring               →  live, observability active
              |  would simply refill between backfill and index.
              |  Confidence: typecheck/eslint clean, production build passes, Jest +6 new
              |  (4328 total green). One migration, one new lib module, no new deps.
+2026-09-04  |  Meeting attendees are emailed, by name  |  Scheduling a meeting
+             |  notifies everyone on it, and says who it could not reach.
+             |  Decision: an attendee entered as a bare name is looked up in the
+             |  organization's own member directory and emailed at the address found
+             |  there. The match must be unique — a name two members answer to resolves
+             |  to neither of them, because emailing a meeting to the wrong colleague is
+             |  worse than emailing nobody and saying so. A first name alone matches only
+             |  in the internal-attendee field, where "Mike" means the Mike on the team.
+             |  Context: the attendee boxes are free text and say "Add people", so people
+             |  put names in them. guestEmails only ever collected attendees typed with an
+             |  "@", so a teammate on the meeting heard nothing and the host was never
+             |  told — the save reported the guests it did reach and stayed silent about
+             |  the rest. Separately, a guest ADDED to an existing meeting got an invite
+             |  built without the meeting's time or its calendar entry: a join link and no
+             |  idea when to use it.
+             |  Built: lib/meetings/directory.ts (pure matching, unique-or-nothing) +
+             |  directory.server.ts (the member read, on the caller's client — the
+             |  principals_select policy already lets a member see their own org, so no
+             |  service role); both write paths (/api/meetings/schedule POST,
+             |  /api/meetings/[id] PATCH) resolve before saving, so the stored attendee
+             |  carries the address and every later reschedule or cancellation reaches
+             |  them too; the PATCH invite now carries startIso, duration, sequence and a
+             |  whenLabel; sendMeetingInvites gained notifyHost so the host can be the
+             |  ORGANIZER on that invitation without being mailed about their own meeting
+             |  again; both routes return `uninvited` and the edit screen says it out loud.
+             |  Rejected: fuzzy or first-hit name matching. It resolves the ambiguous case
+             |  by picking somebody, which is the one outcome worse than not sending.
+             |  Confidence: typecheck/eslint clean, Jest +16 new (4402 total green, no
+             |  regressions). Two lib modules, two routes, one component; no migration, no
+             |  new deps.
 ```
 
 ---
