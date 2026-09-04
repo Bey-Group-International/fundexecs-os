@@ -89,3 +89,22 @@ export function inviteEndIso(startIso: string, durationMinutes: number | null | 
   const minutes = durationMinutes && durationMinutes > 0 ? durationMinutes : 60;
   return new Date(start + minutes * 60_000).toISOString();
 }
+
+/**
+ * The "Save to calendar" URL for a meeting: a one-event .ics, served publicly
+ * off the room code.
+ *
+ * Every meeting email already carries an .ics as an attachment, and for Gmail
+ * and Apple Mail that is enough — they render an Accept/Decline card from it.
+ * For everybody else it is a file sitting under a paperclip that has to be
+ * noticed, downloaded and opened, and on a phone that is most of a minute of
+ * fiddling. A link is one tap, works the same in every client, and reaches the
+ * people whose mail app showed them no card at all.
+ *
+ * Deliberately the room code and not a new token: the code is already the
+ * capability that lets an invitee open the meeting, so a link built from it
+ * grants nothing they were not already holding.
+ */
+export function buildMeetingCalendarUrl(origin: string, roomCode: string): string {
+  return `${(origin || "").replace(/\/$/, "")}/api/meetings/public/${roomCode}/calendar.ics`;
+}

@@ -9,6 +9,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { accessTokenFor, type ConnectionRow } from "@/lib/calendar/google.server";
 import { resolveGmailToken } from "@/lib/email";
+import { GOOGLE_REFRESH_TOKEN_KEY, googleOAuthConfigured } from "@/lib/google-oauth";
+import { getOrgSecretBounded } from "@/lib/org-secrets";
 import {
   grantCanSend,
   problemFromTokenError,
@@ -110,4 +112,48 @@ export async function hostCredentials(
   if (!userId) return undefined;
   const mailbox = await mailboxFor(client, userId, orgId);
   return mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined;
+}
+
+/**
+ * Whether ANY mailbox exists that could send for this member — without minting
+ * a token to find out.
+ *
+ * `mailboxFor` is the authority, but it talks to Google, and a page render is
+ * the wrong place for a network round-trip. This asks the cheaper question the
+ * standing "you cannot send email" warning actually needs: is a credential on
+ * file at all. It can say yes to a grant that turns out to be revoked — the
+ * send path reports that when it happens — but it never says no to a member
+ * who has connected something, which is the failure that would matter, because
+ * a false warning is worse than none.
+ *
+ * Never throws.
+ */
+export async function mailboxConfigured(
+  client: ServiceClient,
+  userId: string | null | undefined,
+  orgId?: string,
+): Promise<boolean> {
+  try {
+    if (userId) {
+      const { data } = await client
+        .from("google_calendar_connections")
+        .select("granted_scope")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const scope = (data as { granted_scope: string | null } | null)?.granted_scope;
+      if (grantCanSend(scope)) return true;
+    }
+
+    if (orgId) {
+      if (googleOAuthConfigured() && (await getOrgSecretBounded(orgId, GOOGLE_REFRESH_TOKEN_KEY))) return true;
+      if (await getOrgSecretBounded(orgId, "GMAIL_ACCESS_TOKEN")) return true;
+    }
+
+    // A development convenience, and the last thing a real deployment relies on.
+    return !!process.env.GMAIL_ACCESS_TOKEN;
+  } catch {
+    // An unreadable vault is not proof that nobody connected a mailbox, and
+    // warning on it would nag every member of a healthy org.
+    return true;
+  }
 }

@@ -1123,6 +1123,188 @@ Deployed, monitoring               →  live, observability active
              |  would simply refill between backfill and index.
              |  Confidence: typecheck/eslint clean, production build passes, Jest +6 new
              |  (4328 total green). One migration, one new lib module, no new deps.
+2026-09-04  |  Meeting attendees are emailed, by name  |  Scheduling a meeting
+             |  notifies everyone on it, and says who it could not reach.
+             |  Decision: an attendee entered as a bare name is looked up in the
+             |  organization's own member directory and emailed at the address found
+             |  there. The match must be unique — a name two members answer to resolves
+             |  to neither of them, because emailing a meeting to the wrong colleague is
+             |  worse than emailing nobody and saying so. A first name alone matches only
+             |  in the internal-attendee field, where "Mike" means the Mike on the team.
+             |  Context: the attendee boxes are free text and say "Add people", so people
+             |  put names in them. guestEmails only ever collected attendees typed with an
+             |  "@", so a teammate on the meeting heard nothing and the host was never
+             |  told — the save reported the guests it did reach and stayed silent about
+             |  the rest. Separately, a guest ADDED to an existing meeting got an invite
+             |  built without the meeting's time or its calendar entry: a join link and no
+             |  idea when to use it.
+             |  Built: lib/meetings/directory.ts (pure matching, unique-or-nothing) +
+             |  directory.server.ts (the member read, on the caller's client — the
+             |  principals_select policy already lets a member see their own org, so no
+             |  service role); both write paths (/api/meetings/schedule POST,
+             |  /api/meetings/[id] PATCH) resolve before saving, so the stored attendee
+             |  carries the address and every later reschedule or cancellation reaches
+             |  them too; the PATCH invite now carries startIso, duration, sequence and a
+             |  whenLabel; sendMeetingInvites gained notifyHost so the host can be the
+             |  ORGANIZER on that invitation without being mailed about their own meeting
+             |  again; both routes return `uninvited` and the edit screen says it out loud.
+             |  Rejected: fuzzy or first-hit name matching. It resolves the ambiguous case
+             |  by picking somebody, which is the one outcome worse than not sending.
+             |  Confidence: typecheck/eslint clean, Jest +16 new (4402 total green, no
+             |  regressions). Two lib modules, two routes, one component; no migration, no
+             |  new deps.
+2026-09-04  |  Meeting notifications, end to end  |  Four gaps in one path:
+             |  the reminder that never fired, the change nobody heard about, the
+             |  mailbox nobody knew was missing, and the draft that could not be
+             |  published.
+             |  Decision: reminder_minutes is now honoured by the hourly cron, not only
+             |  by Google for meetings that happened to be synced there. The sweep fires
+             |  a reminder up to one sweep EARLY rather than not at all — on an hourly
+             |  cadence a "15 minutes before" reminder has no exact moment to be sent
+             |  at, and one that lands within the hour before is useful where one sent
+             |  after the meeting began is not. It claims the row (UPDATE … WHERE
+             |  last_reminder_sent_at IS NULL) before sending, so a crash costs one
+             |  reminder rather than mailing a guest list twice.
+             |  Decision: an edit notifies attendees when the TIME, the LOCATION or the
+             |  JOIN LINK changes — the three an attendee has to act on — and stays
+             |  silent on agenda and objective, which they read when they open the
+             |  meeting. A save that moves both time and place sends one email, not two.
+             |  Decision: with no mailbox connected, sendEmail degrades to channel
+             |  "in-app" and the save reports "invited 0", which reads as "nobody had an
+             |  address". Both write paths now resolve the mailbox up front and return
+             |  mailboxConnected + a reason; /meetings carries a dismissible warning,
+             |  backed by a credential-EXISTENCE check (mailboxConfigured) rather than a
+             |  token mint, because it runs on every visit.
+             |  Context: a draft could be opened from the calendar and edited, but
+             |  updateMeeting never clears is_draft — only the schedule endpoint does —
+             |  so "Save meeting" on a draft left it a draft and its attendees were
+             |  never told the meeting existed. The edit screen now routes a draft
+             |  save through that endpoint.
+             |  Built: lib/meetings/reminder.ts gained the sweep's due-rules (pure) and
+             |  reminder-sweep.server.ts the read/claim/send, wired into /api/cron as a
+             |  best-effort block with its own cron-health counters;
+             |  meeting-updates.ts gained a "relocated" kind (REQUEST at the same time,
+             |  bumped SEQUENCE) and diffMeetingPlace, and its .ics now carries the
+             |  meeting's own place instead of always the room link; mailbox.server.ts
+             |  gained mailboxConfigured; MailboxWarning.tsx on /meetings.
+             |  Rejected: making the reminder sweep strict about its nominal time. It is
+             |  correct and it never fires, which is the bug being fixed.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +25 new
+             |  (4427 total green, no regressions). Two new modules, one new component,
+             |  no migration, no new deps.
+2026-09-04  |  Save to calendar, in every meeting email  |  A link that works
+             |  in every calendar, not a paperclip only two mail clients read.
+             |  Decision: a hosted one-event .ics at
+             |  /api/meetings/public/<roomCode>/calendar.ics, linked from the
+             |  invitation, the reschedule, the relocation and the reminder. The
+             |  attachment stays — it is what makes Gmail and Apple Mail draw an
+             |  Accept/Decline card — but for every other client it is a file under a
+             |  paperclip that has to be noticed, downloaded and opened, which on a
+             |  phone is most of a minute. A link is one tap and behaves the same
+             |  everywhere.
+             |  Decision: it PUBLISHes rather than invites. Anyone holding the link can
+             |  fetch it, and an iTIP REQUEST would have to carry an ORGANIZER address
+             |  and the attendee list — exactly what the public lookup beside it
+             |  deliberately withholds. Same UID as the emailed invitation, so saving
+             |  corrects the entry somebody already holds instead of giving them the
+             |  meeting twice.
+             |  Decision: the room code is the capability, as it already is for
+             |  /meeting-invite/<code>, so no new token. A draft or an untimed meeting
+             |  404s, as does an internal failure — no code may behave observably
+             |  differently from any other.
+             |  Context: booking emails have carried an "Add to Google Calendar" link
+             |  since they were written; meeting emails carried nothing but the
+             |  attachment. Not offered beside a cancellation or a removal, whose .ics
+             |  tells the client to REMOVE the entry — a save button there asks for the
+             |  opposite of what the email says.
+             |  Rejected: a Google Calendar TEMPLATE link, which is what the booking
+             |  emails use. It is free, and it works for one calendar out of three.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +17 new
+             |  (4444 total green). One new route, no migration, no new deps.
+2026-09-04  |  One save-to-calendar, everywhere  |  Booking emails and the invite
+             |  screen join the meeting emails.
+             |  Decision: booking emails drop the "Add to Google Calendar" TEMPLATE link
+             |  for a hosted .ics at /api/scheduling/booking/<manageToken>/calendar.ics.
+             |  The template link worked in one calendar out of three, and the invitee
+             |  does not get to choose which one they own. googleCalendarLink and its
+             |  date helper are deleted rather than left as a second way to do this.
+             |  Decision: keyed on the manage token, not the booking id. The id is
+             |  unguessable in practice but it is a database key nobody was handed; the
+             |  manage token is what this product already treats as the whole capability
+             |  for one booking, and it is already in every booking email.
+             |  Decision: the UID is the BOOKING's (inviteUid), not the linked meeting's.
+             |  A meeting-scoped UID would have put the same meeting in the invitee's
+             |  calendar a second time, beside the entry the confirmation's own .ics
+             |  created. Same rule the meeting endpoint follows for its own UID.
+             |  Decision: offered on exactly the transitions inviteMethodFor sends a
+             |  REQUEST for — confirmed, rescheduled, rescheduled_by_host, host copies
+             |  included. A pending request is a hold the host may yet decline, and the
+             |  endpoint refuses any booking that is not confirmed, so the button and
+             |  the .ics policy cannot drift apart. (The pending email never carried the
+             |  Google link either; the policy was already consistent.)
+             |  Built: the public meeting lookup now returns scheduledAt / durationMinutes
+             |  / timezone (null for a draft), so /meeting-invite/<code> can finally show
+             |  WHEN the meeting is — in the reader's own zone, always named, because the
+             |  invitee is the one person who may be nowhere near the organizer — and can
+             |  gate its own save link on there being a time to save.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
+             |  (4457 total green). One new route, one dead helper removed, no migration,
+             |  no new deps.
+2026-09-04  |  Five review findings, all real  |  Qodo read the notification work
+             |  and found five correctness bugs. Every one reproduced.
+             |  Decision: notifications now carry the sequence the SAVE produced, not the
+             |  one the row held before it. live_meetings_bump_sequence fires on every
+             |  UPDATE, so sending prior.calendar_sequence sent a revision the client
+             |  already held — and a client discards those. That is the exact failure
+             |  migration 20260827030000 was written to prevent, arriving through the
+             |  front door. updateMeeting and deleteMeetingLocal now SELECT the bumped
+             |  value back (a soft delete is an UPDATE, so the cancellation was stale
+             |  too) and return it.
+             |  Decision: an edit that moves a meeting or changes its reminder setting
+             |  clears last_reminder_sent_at. The sweep excludes any stamped row forever,
+             |  so a meeting rescheduled after its reminder went out could never be
+             |  reminded about again. Deliberately NOT cleared on an attendee edit —
+             |  adding one guest must not re-mail a reminder to everybody.
+             |  Decision: the sweep pages instead of capping. It reads in start-time
+             |  order but due-ness depends on each meeting's own lead, so one capped page
+             |  let a wall of sooner-but-not-yet-due meetings hide a later one whose long
+             |  reminder had come round. Bounded by pages, not by a single limit.
+             |  Decision: one horizon. The sweep queried 8 days while canSendReminder
+             |  accepts 14, so any setting between them sat permanently outside the query
+             |  meant to find it. Both read REMINDER_MAX_LEAD_MS now.
+             |  Decision: loadOrgDirectory pages, and FAILS CLOSED. It read 500
+             |  memberships unordered and matched against whatever came back. Against a
+             |  partial directory the unique-or-nothing rule is worthless — a name that
+             |  is ambiguous in the organization can look unique in the half that loaded,
+             |  and the invitation goes to the wrong colleague. A directory that cannot
+             |  be read in full now returns nothing: the attendees are reported
+             |  unreachable and the host is told, which is the outcome the matcher was
+             |  always supposed to guarantee.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +15 new
+             |  (4472 total green). No migration, no new deps.
+2026-09-04  |  CodeRabbit: a token leak of my own making  |  Three findings beyond
+             |  the five Qodo raised; the first is the worst thing in this branch.
+             |  Decision: the booking "Save to calendar" link is INVITEE ONLY. It is built
+             |  from the manage token, which is the invitee's credential for that booking
+             |  — it cancels and reschedules it. Adding it to the host copies "for parity"
+             |  handed one party the other's bearer token. The host needs no link: the
+             |  meeting is already on their FundExecs calendar and their email carries the
+             |  same .ics as an attachment.
+             |  Decision: a sweep claim comes back when the send reached nobody. The claim
+             |  is stamped before sending so a crash cannot mail a guest list twice, but
+             |  an unconnected mailbox is not a crash — it is a known failure, and keeping
+             |  the stamp excluded that meeting from every future sweep, turning a delay
+             |  into a cancellation. Release is conditioned on the exact timestamp this
+             |  sweep wrote, so it can only ever clear its own claim.
+             |  Decision: an untrusted `attendees` array is validated, not cast.
+             |  `{"attendees":[null]}` reached code that reads .email off each element and
+             |  answered 500 to what is a malformed request; normalizeAttendees refuses
+             |  the shape and both write paths return 422.
+             |  Rejected: CodeRabbit's own suggested sequence fix (prior + 1), which its
+             |  prose also warns against — an intervening save makes it stale. The
+             |  persisted value is the only correct one.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
+             |  (4485 total green). No migration, no new deps.
 ```
 
 ---

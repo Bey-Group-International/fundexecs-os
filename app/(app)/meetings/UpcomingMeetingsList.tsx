@@ -99,6 +99,7 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
   const external = (m.attendees ?? []).filter((a) => a.type !== "internal");
   return {
     meetingId: m.id,
+    isDraft: m.is_draft ?? false,
     title: m.title,
     meetingType: m.meeting_type ?? "internal_strategy",
     scheduledAt: m.scheduled_at,

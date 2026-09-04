@@ -12,22 +12,24 @@
 //      an unconnected mailbox must never surface as a failed save.
 import { sendEmail, type SendEmailCredentials } from "@/lib/email";
 import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
-import { canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
+import { buildMeetingCalendarUrl, canInviteToCalendar, inviteEndIso } from "@/lib/meetings/scheduled-invite";
 import { buildSchedulingEmailHtml } from "@/lib/meetings/scheduling-email";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 
-export type MeetingUpdateKind = "rescheduled" | "cancelled" | "removed";
+export type MeetingUpdateKind = "rescheduled" | "relocated" | "cancelled" | "removed";
 
 /**
  * What the calendar should be told, as opposed to what the email says.
  *
  * A reschedule REQUESTs the same UID at a new time, so the entry moves rather
- * than doubling. Cancelled and removed both CANCEL it — from the calendar's
- * point of view "the meeting is off" and "you are no longer on it" are the same
+ * than doubling. A relocation does the same at the SAME time — the entry has to
+ * be rewritten in place or the attendee's calendar keeps pointing at the old
+ * room. Cancelled and removed both CANCEL it — from the calendar's point of
+ * view "the meeting is off" and "you are no longer on it" are the same
  * instruction, and leaving a stale entry behind is the worse failure either way.
  */
 export function updateInviteMethod(kind: MeetingUpdateKind): "REQUEST" | "CANCEL" {
-  return kind === "rescheduled" ? "REQUEST" : "CANCEL";
+  return kind === "rescheduled" || kind === "relocated" ? "REQUEST" : "CANCEL";
 }
 
 export interface MeetingTiming {
@@ -66,6 +68,39 @@ export function diffMeetingTiming(before: MeetingTiming, after: MeetingTiming): 
   return { startChanged, durationChanged, changed: startChanged || durationChanged };
 }
 
+/** Where a meeting happens: a place, and a link to join it by. */
+export interface MeetingPlace {
+  location: string | null;
+  meetingUrl: string | null;
+}
+
+export interface MeetingPlaceChange {
+  locationChanged: boolean;
+  meetingUrlChanged: boolean;
+  /** Either of the above — the condition that earns an attendee an email. */
+  changed: boolean;
+}
+
+/** Blank, whitespace and null are the same absence of a value. */
+function samePlaceField(a: string | null | undefined, b: string | null | undefined): boolean {
+  return ((a ?? "").trim() || null) === ((b ?? "").trim() || null);
+}
+
+/**
+ * Compare where a meeting happens across an edit.
+ *
+ * These two fields are singled out from everything else a host can edit because
+ * they are the ones an attendee has to ACT on: a moved room or a swapped join
+ * link means the calendar entry they hold now sends them to the wrong place.
+ * A rewritten agenda does not — they read that when they open the meeting, and
+ * mailing every wording change is how people learn to ignore these emails.
+ */
+export function diffMeetingPlace(before: MeetingPlace, after: MeetingPlace): MeetingPlaceChange {
+  const locationChanged = !samePlaceField(before.location, after.location);
+  const meetingUrlChanged = !samePlaceField(before.meetingUrl, after.meetingUrl);
+  return { locationChanged, meetingUrlChanged, changed: locationChanged || meetingUrlChanged };
+}
+
 export interface MeetingUpdateContext {
   /** Canonical app origin, so the emailed link is stable across hosts/proxies. */
   origin: string;
@@ -82,6 +117,11 @@ export interface MeetingUpdateContext {
   /** Where the meeting used to be. Shown on a reschedule so the move is legible. */
   previousStartIso?: string | null;
   durationMinutes?: number | null;
+  /** Where the meeting happens now, and where it happened before it moved. */
+  location?: string | null;
+  previousLocation?: string | null;
+  meetingUrl?: string | null;
+  previousMeetingUrl?: string | null;
   reason?: string | null;
   /**
    * The host's own mailbox, resolved by the caller. A reschedule or a
@@ -118,6 +158,12 @@ export function buildMeetingUpdateEmail(
   const joinUrl = `${(ctx.origin || "").replace(/\/$/, "")}/meeting-invite/${ctx.roomCode}`;
   const now = whenIn(ctx.startIso, ctx.timezone, ctx.durationMinutes);
   const previous = whenIn(ctx.previousStartIso, ctx.timezone);
+  // A one-tap correction for the entry the recipient already holds. Offered on
+  // the two updates that leave a meeting in the calendar; a cancellation and a
+  // removal are told by their .ics to take it out, and a "save" button beside
+  // that would be asking for the opposite of what the email says.
+  const calendarUrl =
+    ctx.startIso ? { label: "Save the new time to your calendar", url: buildMeetingCalendarUrl(ctx.origin, ctx.roomCode) } : null;
 
   if (kind === "cancelled") {
     return {
@@ -150,6 +196,30 @@ export function buildMeetingUpdateEmail(
     };
   }
 
+  if (kind === "relocated") {
+    const where = (ctx.location ?? "").trim();
+    const link = (ctx.meetingUrl ?? "").trim();
+    const wasWhere = (ctx.previousLocation ?? "").trim();
+    return {
+      subject: `Updated: ${ctx.title} — new joining details`,
+      html: buildSchedulingEmailHtml({
+        heading: "Where this meeting happens has changed",
+        intro: `${ctx.senderName} changed how to join this meeting. The time is the same — only where you go is different.`,
+        rows: [
+          ["Meeting", ctx.title],
+          ["When", now],
+          ["Where", where || link || joinUrl],
+          // Naming the old place is what lets an attendee recognise that this
+          // is the meeting they already hold, rather than a second one.
+          ["Previously", wasWhere],
+        ],
+        cta: { label: "Join meeting", url: link && /^https?:\/\//i.test(link) ? link : joinUrl },
+        secondary: calendarUrl ? { ...calendarUrl, label: "Save the new details to your calendar" } : null,
+        footnote: "The time has not moved — replace the joining details on the entry you already have.",
+      }),
+    };
+  }
+
   return {
     subject: `Updated: ${ctx.title} moved to a new time`,
     html: buildSchedulingEmailHtml({
@@ -161,6 +231,7 @@ export function buildMeetingUpdateEmail(
         ["Previously", previous],
       ],
       cta: { label: "Join meeting", url: joinUrl },
+      secondary: calendarUrl,
       footnote: "Use the same link as before — only the time changed.",
     }),
   };
@@ -221,6 +292,12 @@ function buildUpdateInvite(
 
   const origin = (ctx.origin || "").replace(/\/$/, "");
   const joinUrl = `${origin}/meeting-invite/${ctx.roomCode}`;
+  // What the calendar entry should say about where to go. The room link is the
+  // fallback, not the answer: a meeting with its own place or its own joining
+  // link has to carry that, or a relocation rewrites the entry with the very
+  // detail that just went stale.
+  const place = (ctx.location ?? "").trim() || (ctx.meetingUrl ?? "").trim() || joinUrl;
+  const description = place === joinUrl ? `Join: ${joinUrl}` : `${place}\n\nMeeting room: ${joinUrl}`;
 
   try {
     return {
@@ -230,8 +307,8 @@ function buildUpdateInvite(
         title: ctx.title || "Meeting",
         startIso: startIso!,
         endIso: inviteEndIso(startIso!, ctx.durationMinutes),
-        description: `Join: ${joinUrl}`,
-        location: joinUrl,
+        description,
+        location: place,
         url: joinUrl,
         organizer: { name: ctx.senderName, email: ctx.hostEmail! },
         attendees: emails.map((email) => ({ name: email.split("@")[0] ?? email, email })),

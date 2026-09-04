@@ -441,3 +441,16 @@ export function buildBookingPageUrl(origin: string, slug: string, eventSlug?: st
 export function buildBookingManageUrl(origin: string, token: string): string {
   return `${origin.replace(/\/$/, "")}/booking/${token}`;
 }
+
+/**
+ * The "Save to calendar" URL for a booking: a one-event .ics, served off the
+ * same manage token the invitee was already emailed.
+ *
+ * The token, not the booking id: the id is unguessable in practice but it is a
+ * database key, not a credential anybody was handed, and the manage token is
+ * what this product already treats as the whole capability for one booking.
+ * Reusing it grants the holder nothing they did not already have.
+ */
+export function buildBookingCalendarUrl(origin: string, token: string): string {
+  return `${origin.replace(/\/$/, "")}/api/scheduling/booking/${token}/calendar.ics`;
+}

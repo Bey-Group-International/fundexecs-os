@@ -38,6 +38,37 @@ describe("buildMeetingInviteHtml", () => {
     expect(html).not.toContain("<LP>");
   });
 
+  it("offers a save-to-calendar link when the meeting has one", () => {
+    const html = buildMeetingInviteHtml({
+      inviteUrl: "https://app.test/meeting-invite/abc-def",
+      title: "Q3 review",
+      senderName: "rae@fund.test",
+      calendarUrl: "https://app.test/api/meetings/public/abc-def/calendar.ics",
+    });
+    expect(html).toContain("Save to calendar");
+    expect(html).toContain("/api/meetings/public/abc-def/calendar.ics");
+  });
+
+  it("omits the calendar link rather than pointing it nowhere", () => {
+    const html = buildMeetingInviteHtml({
+      inviteUrl: "https://app.test/meeting-invite/abc-def",
+      title: "Q3 review",
+      senderName: "rae@fund.test",
+    });
+    expect(html).not.toContain("Save to calendar");
+  });
+
+  it("neutralizes a non-http calendar URL", () => {
+    const html = buildMeetingInviteHtml({
+      inviteUrl: "https://app.test/meeting-invite/abc-def",
+      title: "x",
+      senderName: "y",
+      calendarUrl: "javascript:alert(1)",
+    });
+    expect(html).not.toContain("javascript:alert(1)");
+    expect(html).not.toContain("Save to calendar");
+  });
+
   it("neutralizes a non-http invite URL", () => {
     const html = buildMeetingInviteHtml({ inviteUrl: "javascript:alert(1)", title: "x", senderName: "y" });
     expect(html).toContain('href="#"');
@@ -105,11 +136,40 @@ describe("sendMeetingInvites — the host and the calendar", () => {
     expect(content).toContain("MAILTO:rae@fund.test");
   });
 
+  it("can name the host as organizer without emailing them again", async () => {
+    // Adding one late guest to a meeting the host already holds. They belong on
+    // the invitation as ORGANIZER — that is what makes it their meeting — but
+    // they should not get a second "your meeting is scheduled" for it.
+    const res = await sendMeetingInvites({ ...BASE, notifyHost: false });
+    expect(to()).toEqual(["ada@example.com"]);
+    expect(res).toEqual({ sent: 1, total: 1 });
+    const content = invites()[0].content.replace(/\r\n /g, "");
+    expect(content).toContain("ORGANIZER;CN=\"rae@fund.test\":MAILTO:rae@fund.test");
+  });
+
+  it("sends nothing when the host is the only recipient and is opted out", async () => {
+    const res = await sendMeetingInvites({ ...BASE, emails: [], notifyHost: false });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(res).toEqual({ sent: 0, total: 0 });
+  });
+
   it("uses a meeting UID that cannot collide with a booking's", async () => {
     // Both live in the same calendars. A shared UID would make one overwrite
     // the other.
     await sendMeetingInvites(BASE);
     expect(invites()[0].content).toContain("UID:meeting-m1@app.test");
+  });
+
+  it("puts a save-to-calendar button in every invitation", async () => {
+    // The .ics is attached too, but only Gmail and Apple Mail turn that into a
+    // card. Everyone else gets a file under a paperclip, and on a phone that is
+    // most of a minute of fiddling.
+    await sendMeetingInvites(BASE);
+    for (const [args] of sendEmailMock.mock.calls) {
+      expect((args as { htmlBody: string }).htmlBody).toContain(
+        "https://app.test/api/meetings/public/abc-def/calendar.ics",
+      );
+    }
   });
 
   it("still emails when the meeting has no time yet", async () => {

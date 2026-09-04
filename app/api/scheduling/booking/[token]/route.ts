@@ -128,6 +128,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       notes: next.booking.invitee_notes,
       joinUrl: next.roomCode ? buildMeetingInviteUrl(SITE_URL, next.roomCode) : null,
       manageUrl: buildBookingManageUrl(SITE_URL, next.booking.manage_token),
+      manageToken: next.booking.manage_token,
       reason: body.reason ?? null,
       bookingId: next.booking.id,
       bookingCreatedAt: next.booking.created_at,

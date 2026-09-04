@@ -9,6 +9,7 @@ import { runProactiveSweepAllOrgs } from "@/lib/proactive/orchestrate";
 import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
+import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -207,6 +208,19 @@ export async function GET(request: Request) {
     console.error("google_calendar_sync failed", e);
   }
 
+  // Meeting reminders: `reminder_minutes` is set on the schedule screen and,
+  // until this ran, was only ever honoured by Google for meetings that happened
+  // to be synced there. This is what makes the setting mean something for the
+  // app's own meetings. Fires once per meeting (the sweep claims the row before
+  // sending), and never after the meeting has started. Best-effort like every
+  // block above — one org's unconnected mailbox never aborts the sweep.
+  let reminders: ReminderSweepStats = { due: 0, reminded: 0, sent: 0, failed: 0 };
+  try {
+    reminders = await runMeetingReminders(supabase, { now });
+  } catch (e) {
+    console.error("meeting_reminders failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -228,6 +242,8 @@ export async function GET(request: Request) {
         intelligenceAssessed: intelligence.assessed,
         calendarFeedsRefreshed: calendarFeeds.refreshed,
         calendarFeedsFailed: calendarFeeds.failed,
+        meetingRemindersSent: reminders.sent,
+        meetingRemindersFailed: reminders.failed,
       },
       startedAt: now,
     });
@@ -235,5 +251,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders });
 }

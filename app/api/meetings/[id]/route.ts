@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { hostCredentials } from "@/lib/meetings/mailbox.server";
+import { mailboxFor } from "@/lib/meetings/mailbox.server";
+import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { deleteMeetingLocal, updateMeeting, buildMeetingInviteUrl } from "@/lib/meetings/service";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
-import { diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
+import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
 import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
-import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { normalizeAttendees, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
+import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { SITE_URL } from "@/lib/site";
 import {
   SlotUnavailableError,
@@ -17,7 +20,7 @@ import {
   type BookingContext,
 } from "@/lib/meetings/scheduling-service";
 import { sendBookingEmails } from "@/lib/meetings/scheduling-email";
-import { buildBookingManageUrl, buildBookingPageUrl } from "@/lib/meetings/scheduling";
+import { buildBookingManageUrl, buildBookingPageUrl, formatSlotFull } from "@/lib/meetings/scheduling";
 
 export const dynamic = "force-dynamic";
 
@@ -57,12 +60,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   // to everyone who was already on the meeting.
   const { data: prior } = await supabase
     .from("live_meetings")
-    .select("attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence")
+    .select(
+      "attendees, room_code, is_draft, host_id, scheduled_at, duration_minutes, title, timezone, calendar_sequence, location, meeting_url",
+    )
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
 
-  const nextAttendees = Array.isArray(body.attendees) ? (body.attendees as MeetingAttendeeInput[]) : undefined;
+  // Same directory lookup the create path runs: an attendee typed as a bare
+  // name is matched to the teammate it names, so adding somebody to an existing
+  // meeting emails them instead of silently doing nothing.
+  // Same untrusted-body reasoning as the create path: a malformed element is a
+  // 422, not a crash in the directory step.
+  let nextAttendees = Array.isArray(body.attendees) ? normalizeAttendees(body.attendees) : undefined;
+  if (nextAttendees === null) {
+    return NextResponse.json(
+      { error: "Check the attendee list.", fieldErrors: { attendees: "Each attendee needs a name or an email address." } },
+      { status: 422 },
+    );
+  }
+  let uninvited = 0;
+  if (nextAttendees && needsDirectory(nextAttendees)) {
+    const resolution = resolveAttendeeDirectory(nextAttendees, await loadOrgDirectory(supabase, auth.ctx.orgId));
+    nextAttendees = resolution.attendees;
+    uninvited = resolution.unreachable.length;
+  }
   const priorEmails = guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []);
   const priorGuestEmails = new Set(priorEmails);
   const roomCode = (prior?.room_code as string | null) ?? "";
@@ -81,6 +103,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   const timing = diffMeetingTiming(
     { startIso: priorStart, durationMinutes: priorDuration },
     { startIso: nextStart, durationMinutes: nextDuration },
+  );
+
+  // Where the meeting happens, on either side of this edit. A moved room or a
+  // swapped join link is the other change an attendee has to act on — their
+  // calendar entry now points somewhere wrong — so it earns an email of its own
+  // when the time itself did not move.
+  const priorLocation = (prior?.location as string | null) ?? null;
+  const priorMeetingUrl = (prior?.meeting_url as string | null) ?? null;
+  const nextLocation = body.location !== undefined ? (cleanString(body.location) ?? null) : priorLocation;
+  const nextMeetingUrl = body.meetingUrl !== undefined ? (cleanString(body.meetingUrl) ?? null) : priorMeetingUrl;
+  const place = diffMeetingPlace(
+    { location: priorLocation, meetingUrl: priorMeetingUrl },
+    { location: nextLocation, meetingUrl: nextMeetingUrl },
   );
 
   // Conflict detection on reschedule — mirrors the create path. Runs only when a
@@ -162,7 +197,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         meetingType: cleanString(body.meetingType),
         priority: body.priority,
         tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
-        attendees: Array.isArray(body.attendees) ? body.attendees : undefined,
+        attendees: nextAttendees,
         relatedContactId: cleanString(body.relatedContactId),
         relatedCompanyId: cleanString(body.relatedCompanyId),
         relatedDealId: cleanString(body.relatedDealId),
@@ -182,6 +217,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       },
     );
 
+    // The sequence the trigger just bumped, not the one the row carried before
+    // the save. A revision at a sequence the client already holds is discarded,
+    // which is precisely how a reschedule fails to move anybody's calendar.
+    const sequence = result.calendarSequence ?? ((prior?.calendar_sequence as number | null) ?? null);
     const title = body.title ? String(body.title) : ((prior?.title as string | null) ?? "Meeting");
     const timezone = (cleanString(body.timezone) ?? (prior?.timezone as string | null)) || "UTC";
     const senderName = auth.ctx.email ?? "Someone";
@@ -189,7 +228,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
     // Non-blocking on purpose: email here is a side effect of saving the
     // meeting, and losing the save over an unconnected mailbox would cost more
     // than falling back to the org's.
-    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const senderMailbox = mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined;
+    // Reported back so "notified 0" can be told apart from "your org cannot
+    // send email at all", which otherwise looks identical to the host.
+    const mailboxConnected = mailbox.ok;
+    const mailboxProblem = mailbox.ok ? null : mailboxProblemMessage(mailbox.problem);
     const notifiable = !isDraft && !!roomCode;
 
     // The link invitee is already a guest on the meeting, but their booking
@@ -220,6 +264,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
           title,
           senderName,
           emails: newEmails,
+          // The same invitation the create path sends. Without these a guest
+          // added later got a "join" link and no idea when to use it — no time
+          // in the email, and nothing that reached their calendar.
+          hostEmail: auth.ctx.email ?? null,
+          meetingId: id,
+          startIso: nextStart,
+          durationMinutes: nextDuration,
+          // The trigger bumps the sequence on every save, so this invitation
+          // carries the same calendar entry the others already hold.
+          sequence,
+          whenLabel: nextStart ? formatSlotFull(nextStart, timezone) : null,
+          // The host is the ORGANIZER on that invitation, not an audience for
+          // it: they are the one adding the guest, and already hold the meeting.
+          notifyHost: false,
         });
         invited = sendResult.sent;
       } catch (err) {
@@ -237,7 +295,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         // has since bumped — so this moves or clears it rather than adding one.
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -248,6 +306,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         startIso: nextStart,
         previousStartIso: priorStart,
         durationMinutes: nextDuration,
+        location: nextLocation,
+        meetingUrl: nextMeetingUrl,
+      });
+      notified += res.sent;
+    }
+
+    // Only when the time did NOT move: a reschedule already carries the new
+    // joining details, and two emails for one save is how a change gets read as
+    // two changes.
+    if (notifiable && !timing.changed && place.changed && retainedEmails.length > 0) {
+      const res = await sendMeetingUpdates("relocated", {
+        credentials: senderMailbox,
+        meetingId: id,
+        hostEmail: auth.ctx.email ?? null,
+        sequence,
+        orgId: auth.ctx.orgId,
+        origin: SITE_URL,
+        roomCode,
+        title,
+        senderName,
+        emails: retainedEmails,
+        timezone,
+        startIso: nextStart,
+        durationMinutes: nextDuration,
+        location: nextLocation,
+        previousLocation: priorLocation,
+        meetingUrl: nextMeetingUrl,
+        previousMeetingUrl: priorMeetingUrl,
       });
       notified += res.sent;
     }
@@ -259,7 +345,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         // has since bumped — so this moves or clears it rather than adding one.
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence,
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode,
@@ -289,6 +375,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         durationMinutes: nextDuration ?? booking.eventType.duration_minutes,
         joinUrl: booking.roomCode ? buildMeetingInviteUrl(SITE_URL, booking.roomCode) : null,
         manageUrl: buildBookingManageUrl(SITE_URL, booking.booking.manage_token),
+        manageToken: booking.booking.manage_token,
         bookingId: booking.booking.id,
         bookingCreatedAt: booking.booking.created_at,
         bookingUpdatedAt: booking.booking.updated_at,
@@ -298,7 +385,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
       notified += res.sent;
     }
 
-    return NextResponse.json({ ...result, invited, notified });
+    return NextResponse.json({ ...result, invited, uninvited, notified, mailboxConnected, mailboxProblem });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update meeting" }, { status: 500 });
   }
@@ -341,7 +428,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
     // Same as the PATCH handler: the host's own mailbox, non-blocking, because
     // a cancellation must not fail over an unconnected mailbox.
-    const senderMailbox = await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const deleteMailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+    const senderMailbox = deleteMailbox.ok ? { gmailAccessToken: deleteMailbox.token } : undefined;
 
     const bookingInviteeEmail = cancelled?.booking.invitee_email?.trim().toLowerCase() ?? null;
     const emails = guestEmails((prior?.attendees as MeetingAttendeeInput[] | null) ?? []).filter(
@@ -353,11 +441,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     if (notifiable && emails.length > 0) {
       const res = await sendMeetingUpdates("cancelled", {
         credentials: senderMailbox,
-        // Same calendar entry as the invitation, at the sequence the trigger
-        // has since bumped — so this moves or clears it rather than adding one.
+        // Same calendar entry as the invitation, at the sequence the soft
+        // delete just bumped — a CANCEL at a sequence the client already holds
+        // leaves the meeting sitting in their calendar.
         meetingId: id,
         hostEmail: auth.ctx.email ?? null,
-        sequence: (prior?.calendar_sequence as number | null) ?? null,
+        sequence: result.calendarSequence ?? ((prior?.calendar_sequence as number | null) ?? null),
         orgId: auth.ctx.orgId,
         origin: SITE_URL,
         roomCode: (prior?.room_code as string | null) ?? "",

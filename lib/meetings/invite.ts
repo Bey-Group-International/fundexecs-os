@@ -6,6 +6,7 @@ import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
 import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { buildInviteIcs, meetingInviteUid } from "@/lib/calendar/invite";
 import {
+  buildMeetingCalendarUrl,
   canInviteToCalendar,
   inviteEndIso,
   scheduledRecipients,
@@ -17,6 +18,7 @@ export function buildMeetingInviteHtml({
   title,
   senderName,
   whenLabel,
+  calendarUrl,
   role = "guest",
 }: {
   inviteUrl: string;
@@ -24,12 +26,22 @@ export function buildMeetingInviteHtml({
   senderName: string;
   /** The meeting's time as the recipient should read it, when it has one. */
   whenLabel?: string | null;
+  /**
+   * A one-tap "Save to calendar" .ics. Omitted for a meeting with no time,
+   * which cannot be a calendar entry.
+   */
+  calendarUrl?: string | null;
   role?: ScheduledRecipient["role"];
 }): string {
   const safeTitle = escapeHtml(title);
   const safeSender = escapeHtml(senderName);
   const safeWhen = whenLabel ? escapeHtml(whenLabel) : "";
   const safeUrl = inviteUrl.startsWith("https://") || inviteUrl.startsWith("http://") ? inviteUrl : "#";
+  // Same scheme check as the join link: a calendar URL is built by this app,
+  // but it reaches here as a string and one bad value would put a javascript:
+  // href in front of every recipient.
+  const safeCalendarUrl =
+    calendarUrl && /^https?:\/\//i.test(calendarUrl) ? escapeHtml(calendarUrl) : null;
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" /></head>
@@ -46,6 +58,11 @@ export function buildMeetingInviteHtml({
      style="display:inline-block;background:#b8a36a;color:#0d0d10;font-weight:600;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
     Join meeting →
   </a>
+  ${
+    safeCalendarUrl
+      ? `<p style="margin:16px 0 0"><a href="${safeCalendarUrl}" style="color:#b8a36a;font-size:13px;text-decoration:none">Save to calendar</a></p>`
+      : ""
+  }
   <p style="color:#6b7280;font-size:12px;margin:24px 0 0">
     You can join as a guest or sign up for full access with AI transcription and meeting summaries.
   </p>
@@ -89,10 +106,23 @@ export async function sendMeetingInvites(args: {
   sequence?: number | null;
   /** The time as the recipients should read it. */
   whenLabel?: string | null;
+  /**
+   * Whether the host is emailed as well as named.
+   *
+   * On by default: scheduling a meeting confirms it to the person who did it,
+   * and that confirmation is what puts it in their calendar. Turn it off when
+   * the host is only being named as ORGANIZER — inviting one late guest to a
+   * meeting the host already holds should not mail the host about their own
+   * meeting again.
+   */
+  notifyHost?: boolean;
 }): Promise<{ sent: number; total: number }> {
   const guests = [...new Set(args.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  // Everyone on the meeting — the organizer and the attendee list the calendar
+  // entry carries — which is not always everyone this send writes to.
   const recipients = scheduledRecipients(args.hostEmail, args.senderName, guests);
-  if (recipients.length === 0) return { sent: 0, total: 0 };
+  const mailTo = args.notifyHost === false ? recipients.filter((r) => r.role !== "host") : recipients;
+  if (mailTo.length === 0) return { sent: 0, total: 0 };
 
   const origin = (args.origin || "").replace(/\/$/, "");
   const inviteUrl = `${origin}/meeting-invite/${args.roomCode}`;
@@ -103,7 +133,7 @@ export async function sendMeetingInvites(args: {
   const invite = buildScheduledInvite({ ...args, origin, inviteUrl, recipients });
 
   const results = await Promise.allSettled(
-    recipients.map((r) =>
+    mailTo.map((r) =>
       sendEmail({
         orgId: args.orgId,
         credentials: args.credentials,
@@ -117,6 +147,9 @@ export async function sendMeetingInvites(args: {
           title: args.title,
           senderName: args.senderName,
           whenLabel: args.whenLabel,
+          // Only for a meeting that has a time — the endpoint 404s otherwise,
+          // and a button that leads nowhere is worse than no button.
+          calendarUrl: args.startIso ? buildMeetingCalendarUrl(origin, args.roomCode) : null,
           role: r.role,
         }),
         calendarInvite: invite,
@@ -125,7 +158,7 @@ export async function sendMeetingInvites(args: {
   );
 
   const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
-  return { sent, total: recipients.length };
+  return { sent, total: mailTo.length };
 }
 
 /** The .ics for a newly scheduled meeting, or undefined when it has no time. */

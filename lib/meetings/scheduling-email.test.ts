@@ -27,6 +27,7 @@ function ctx(over: Partial<BookingEmailContext> = {}): BookingEmailContext {
     durationMinutes: 30,
     joinUrl: "https://app.test/meeting-invite/abc",
     manageUrl: "https://app.test/b/tok",
+    manageToken: "tok",
     bookingId: "bk-1",
     bookingCreatedAt: "2026-09-01T12:00:00.000Z",
     bookingUpdatedAt: "2026-09-01T12:00:00.000Z",
@@ -213,5 +214,80 @@ describe("sendBookingEmails — host-initiated changes reach the host", () => {
   it("still reaches the invitee when the host has no address", async () => {
     await sendBookingEmails("cancelled_by_host", ctx({ hostEmail: null }));
     expect(recipients()).toEqual(["ada@example.com"]);
+  });
+});
+
+describe("sendBookingEmails — save to calendar", () => {
+  /** Every email body the mailer was handed. */
+  function bodies(): string[] {
+    return sendEmailMock.mock.calls.map(([args]) => (args as { htmlBody: string }).htmlBody);
+  }
+
+  /** The body of the message sent to one address. */
+  function bodyTo(email: string): string {
+    const call = sendEmailMock.mock.calls.find(
+      ([a]) => (a as { to: { email: string } }).to.email === email,
+    );
+    return call ? (call[0] as { htmlBody: string }).htmlBody : "";
+  }
+
+  it("offers it to the invitee on exactly the transitions that carry a REQUEST", async () => {
+    for (const kind of ["confirmed", "rescheduled", "rescheduled_by_host"] as const) {
+      sendEmailMock.mockClear();
+      await sendBookingEmails(kind, ctx({ previousStartIso: "2026-09-09T15:00:00.000Z" }));
+      const invitee = bodyTo("ada@example.com");
+      expect(invitee).toContain("Save to calendar");
+      expect(invitee).toContain("/api/scheduling/booking/tok/calendar.ics");
+    }
+  });
+
+  it("never puts the invitee's manage token in the host's email", async () => {
+    // The URL is built from the manage token, which is the invitee's
+    // credential for this booking — it cancels and reschedules it. Sending it
+    // to the host hands one party the other's bearer token.
+    for (const kind of ["confirmed", "rescheduled", "rescheduled_by_host"] as const) {
+      sendEmailMock.mockClear();
+      await sendBookingEmails(kind, ctx({ previousStartIso: "2026-09-09T15:00:00.000Z" }));
+      const host = bodyTo("rae@fund.test");
+      expect(host).not.toBe("");
+      expect(host).not.toContain("tok");
+      expect(host).not.toContain("Save to calendar");
+    }
+  });
+
+  it("withholds it from a request the host has not accepted", async () => {
+    // Same reasoning that withholds the .ics: a hold the host may yet decline
+    // should not be encouraged into anybody's calendar.
+    await sendBookingEmails("requested", ctx());
+    for (const html of bodies()) expect(html).not.toContain("Save to calendar");
+  });
+
+  it("withholds it from a decline and a cancellation", async () => {
+    for (const kind of ["declined", "cancelled_by_invitee", "cancelled_by_host"] as const) {
+      sendEmailMock.mockClear();
+      await sendBookingEmails(kind, ctx());
+      for (const html of bodies()) expect(html).not.toContain("Save to calendar");
+    }
+  });
+
+  it("has replaced the Google-only link", async () => {
+    // It worked in one calendar out of three, and the invitee does not get to
+    // choose which one they own.
+    await sendBookingEmails("confirmed", ctx());
+    for (const html of bodies()) expect(html).not.toContain("calendar.google.com");
+  });
+
+  it("degrades to no link when the caller passes no token", async () => {
+    await sendBookingEmails("confirmed", ctx({ manageToken: null }));
+    for (const html of bodies()) expect(html).not.toContain("Save to calendar");
+  });
+
+  it("still gives the host their own .ics attachment", async () => {
+    // Losing the link must not leave the host with no way to hold the meeting.
+    await sendBookingEmails("confirmed", ctx());
+    const hostCall = sendEmailMock.mock.calls.find(
+      ([a]) => (a as { to: { email: string } }).to.email === "rae@fund.test",
+    );
+    expect((hostCall?.[0] as { calendarInvite?: unknown }).calendarInvite).toBeDefined();
   });
 });

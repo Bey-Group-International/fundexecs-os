@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import { hostCredentials } from "@/lib/meetings/mailbox.server";
+import { mailboxFor } from "@/lib/meetings/mailbox.server";
+import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
-import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { normalizeAttendees, parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
+import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
 import { conflictMessage } from "@/lib/meetings/schedule";
@@ -81,13 +84,38 @@ export async function POST(req: NextRequest) {
     const durationMinutes = Math.min(480, Math.max(15, durationMinutesFromTimes(startTime, endTime) || 60));
     const endIso = new Date(new Date(scheduledAt).getTime() + durationMinutes * 60_000).toISOString();
 
-    const attendees = Array.isArray(body.attendees)
-      ? body.attendees
+    // The body is untrusted: an array element that is not an attendee reaches
+    // code that reads fields off it, so it is rejected as a bad request rather
+    // than thrown on as a 500.
+    const typedAttendees = Array.isArray(body.attendees)
+      ? normalizeAttendees(body.attendees)
       : typeof body.attendees === "string"
         ? parseAttendeeInput(body.attendees)
         : [];
+    if (typedAttendees === null) {
+      return NextResponse.json(
+        { error: "Check the attendee list.", fieldErrors: { attendees: "Each attendee needs a name or an email address." } },
+        { status: 422 },
+      );
+    }
 
     const supabase = await createServerClient();
+
+    // An attendee entered by name alone carries no address, and an attendee
+    // with no address is one nobody emails. Look the name up in the
+    // organization's own member directory first, so scheduling a meeting with
+    // a teammate actually reaches them. Whoever is left is counted back to the
+    // host rather than quietly dropped.
+    let attendees = typedAttendees;
+    let uninvited = 0;
+    if (needsDirectory(typedAttendees)) {
+      const resolution = resolveAttendeeDirectory(
+        typedAttendees,
+        await loadOrgDirectory(supabase, auth.ctx.orgId),
+      );
+      attendees = resolution.attendees;
+      uninvited = resolution.unreachable.length;
+    }
 
     // Conflict detection against the internal calendar. Warn (409) unless the
     // user explicitly chose to save anyway. Drafts never block on conflicts. The
@@ -175,16 +203,24 @@ export async function POST(req: NextRequest) {
     // so this runs even with no guests, because the host's own confirmation is
     // what puts the meeting in their calendar.
     let invited = 0;
+    // Whether anything CAN be emailed, resolved once. Without a mailbox the
+    // send degrades silently to nothing, and a host who is told "invited 0"
+    // reads that as "nobody had an address" rather than "your org cannot send".
+    let mailboxConnected = true;
+    let mailboxProblem: string | null = null;
     if (!saved.isDraft) {
       const emails = guestEmails(attendees);
       {
         try {
           const { data: userData } = await supabase.auth.getUser();
+          // The scheduling member's own mailbox. Non-blocking: the meeting is
+          // already created by this point and must not be lost to a missing
+          // connection.
+          const mailbox = await mailboxFor(supabase, auth.ctx.userId, auth.ctx.orgId);
+          mailboxConnected = mailbox.ok;
+          mailboxProblem = mailbox.ok ? null : mailboxProblemMessage(mailbox.problem);
           const result = await sendMeetingInvites({
-            // The scheduling member's own mailbox. Non-blocking: the meeting is
-            // already created by this point and must not be lost to a missing
-            // connection.
-            credentials: await hostCredentials(supabase, auth.ctx.userId, auth.ctx.orgId),
+            credentials: mailbox.ok ? { gmailAccessToken: mailbox.token } : undefined,
             orgId: auth.ctx.orgId,
             // Canonical app URL so the emailed link is correct regardless of
             // which host/proxy served this request.
@@ -222,6 +258,9 @@ export async function POST(req: NextRequest) {
       externalCalendarSyncStatus: saved.externalCalendarSyncStatus,
       externalSyncError,
       invited,
+      uninvited,
+      mailboxConnected,
+      mailboxProblem,
       conflicts,
       roomUrl: buildMeetingRoomUrl(SITE_URL, saved.roomCode),
       inviteUrl: buildMeetingInviteUrl(SITE_URL, saved.roomCode),
