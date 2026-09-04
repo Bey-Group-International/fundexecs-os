@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition, useCallback } from "react";
+import { memo, useMemo, useState, useTransition, useCallback } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ActionKind, GateTier } from "@/lib/gates";
@@ -12,29 +13,27 @@ import {
   setThreadStatus,
   deleteThreadAction,
   clearInbox,
-  getThreadMessages,
-  replyToThread,
-  draftThreadReply,
-  suggestSmartReplies,
   assignThread,
   setThreadStar,
   bulkThreadAction,
   snoozeThread,
   type ThreadActionResult,
-  type ThreadMessageView,
   type Teammate,
   type BulkAction,
 } from "./actions";
+import { relativeMeeting } from "./format";
+
+// The conversation transcript + inline composer, loaded only when a thread is
+// actually expanded. Opening a thread already waits on a server round trip for
+// its messages, so the chunk fetch overlaps work the operator was waiting on —
+// while every collapsed card on the board stops paying for that code.
+const ThreadConversation = dynamic(
+  () => import("./ThreadConversation").then((m) => m.ThreadConversation),
+  { loading: () => <p className="mt-2 text-xs text-fg-muted">Loading conversation…</p>, ssr: false },
+);
 
 // Snooze presets, resolved to an absolute wake time when chosen (client-side so
 // it's the operator's local clock). "Tomorrow" is 9am the next day.
-// The only inbox channel whose dispatch adapter actually sends a live external
-// reply once connected (lib/integrations/adapters/gmail.ts). Every other
-// channel's connected branch reports an honest not-delivered result rather
-// than calling out — so the composer hint below must not claim they behave
-// the same as Gmail once "connected".
-const LIVE_CAPABLE_CHANNELS = new Set<InboxChannel>(["gmail"]);
-
 const SNOOZE_PRESETS: { key: string; label: string; until: () => Date }[] = [
   { key: "3h", label: "3 hours", until: () => new Date(Date.now() + 3 * 3_600_000) },
   {
@@ -85,6 +84,9 @@ export interface InboxCardData {
   canShare: boolean;
   shareTier: GateTier;
 }
+
+// How many thread cards mount before the operator asks for more.
+const CARDS_PER_PAGE = 30;
 
 const BUCKETS = [
   { key: "now", label: "Needs you now", tone: "text-status-success" },
@@ -150,6 +152,14 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
   // section until their wake time returns them to open (autoUnsnoozeExpired).
   const active = useMemo(() => visible.filter((c) => c.status !== "snoozed"), [visible]);
   const snoozed = useMemo(() => visible.filter((c) => c.status === "snoozed"), [visible]);
+  // The server hands over as many as 100 threads. Mounting all of them means a
+  // hundred fully-interactive cards — selects, composers, transition hooks —
+  // built before the operator has looked at the first one. Render a screenful
+  // and reveal the rest on request; `active` is already ranked hottest-first,
+  // so the cards that matter are the ones on screen.
+  const [shown, setShown] = useState(CARDS_PER_PAGE);
+  const activeShown = useMemo(() => active.slice(0, shown), [active, shown]);
+  const hiddenCount = active.length - activeShown.length;
   const [showSnoozed, setShowSnoozed] = useState(false);
 
   // Run a bulk triage action over the current selection, then clear it.
@@ -198,6 +208,7 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
   const switchTab = useCallback(
     (next: "focused" | "other") => {
       setTab(next);
+      setShown(CARDS_PER_PAGE);
       clearSelection();
     },
     [clearSelection],
@@ -256,7 +267,10 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
             <button
               key={f.key}
               type="button"
-              onClick={() => setFilter(f.key)}
+              onClick={() => {
+                setFilter(f.key);
+                setShown(CARDS_PER_PAGE);
+              }}
               className={`rounded-full border px-3 py-1 text-xs transition ${
                 active
                   ? "border-gold-500 bg-gold-500/10 text-gold-300"
@@ -342,29 +356,41 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
           )}
         </p>
       ) : (
-        BUCKETS.map((bucket) => {
-          const inBucket = active.filter((c) => c.bucket === bucket.key);
-          if (inBucket.length === 0) return null;
-          return (
-            <section key={bucket.key}>
-              <h2 className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest">
-                <span className={bucket.tone}>{bucket.label}</span>
-                <span className="text-fg-muted">{inBucket.length}</span>
-              </h2>
-              <div className="flex flex-col gap-2">
-                {inBucket.map((c) => (
-                  <ThreadCard
-                    key={c.id}
-                    card={c}
-                    teammates={teammates}
-                    selected={selected.has(c.id)}
-                    onToggleSelect={toggleSelect}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })
+        <>
+          {BUCKETS.map((bucket) => {
+            const inBucket = activeShown.filter((c) => c.bucket === bucket.key);
+            if (inBucket.length === 0) return null;
+            return (
+              <section key={bucket.key}>
+                <h2 className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest">
+                  <span className={bucket.tone}>{bucket.label}</span>
+                  <span className="text-fg-muted">{inBucket.length}</span>
+                </h2>
+                <div className="flex flex-col gap-2">
+                  {inBucket.map((c) => (
+                    <ThreadCard
+                      key={c.id}
+                      card={c}
+                      teammates={teammates}
+                      selected={selected.has(c.id)}
+                      onToggleSelect={toggleSelect}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          {hiddenCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + CARDS_PER_PAGE)}
+              className="self-start rounded-md border border-line px-3 py-1.5 text-xs text-fg-secondary transition hover:border-gold-500 hover:text-fg-primary"
+            >
+              Show {Math.min(hiddenCount, CARDS_PER_PAGE)} more
+              <span className="ml-1.5 font-mono text-[11px] text-fg-muted">{hiddenCount} left</span>
+            </button>
+          ) : null}
+        </>
       )}
 
       {/* Snoozed — collapsed by default; each returns to the board at its wake time. */}
@@ -399,13 +425,17 @@ export function InboxBoard({ cards, teammates }: { cards: InboxCardData[]; teamm
   );
 }
 
-// Compact absolute time, e.g. "Jul 3, 9:00 AM" — used for meeting and snooze-wake labels.
-function relativeMeeting(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function ThreadCard({
+/**
+ * One thread row.
+ *
+ * Memoized: the board holds the selection set, the tab and the pillar filter,
+ * so without this every keystroke of triage — ticking one checkbox, switching
+ * tabs — re-rendered all of the cards on screen rather than the one that
+ * changed. Its props are stable by construction: `card` and `teammates` come
+ * straight from server props, `onToggleSelect` is a `useCallback` with no
+ * dependencies, and `selected` flips only for the card actually toggled.
+ */
+const ThreadCard = memo(function ThreadCard({
   card,
   teammates,
   selected,
@@ -448,77 +478,27 @@ function ThreadCard({
     [card.id, router],
   );
 
-  // Expandable conversation view + inline composer.
+  // Expandable conversation view + inline composer. Only the open/closed flag
+  // lives here now — the transcript, composer state and their five hooks moved
+  // into ThreadConversation, which mounts on expand. A collapsed card (the
+  // overwhelming majority on any board) carries none of it.
   const [expanded, setExpanded] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageView[] | null>(null);
-  const [msgLoading, startMsgTransition] = useTransition();
-  const [replyText, setReplyText] = useState("");
-  const [drafting, startDraftTransition] = useTransition();
-  // AI-personalized reply openers, fetched once when the thread is opened. Null
-  // until they arrive; the template chips (card.quickReplies) show meanwhile, so
-  // the row is never empty and the upgrade is a silent swap.
-  const [aiReplies, setAiReplies] = useState<string[] | null>(null);
-
-  const loadMessages = useCallback(() => {
-    startMsgTransition(async () => {
-      setMessages(await getThreadMessages(card.id));
-    });
-  }, [card.id]);
-
-  // Progressive enhancement: replace the instant category templates with
-  // context-aware openers from the thread. Best-effort — on any failure or the
-  // deterministic fallback, we simply keep showing the templates.
-  const loadSmartReplies = useCallback(() => {
-    suggestSmartReplies(card.id)
-      .then((r) => {
-        if (r.ok && r.live && r.replies?.length) setAiReplies(r.replies);
-      })
-      .catch(() => {});
-  }, [card.id]);
-
-  // Draft a reply with Earn and drop it into the composer for review/edit. This
-  // never sends — the operator still hits Send (the gated move) themselves.
-  const draftWithEarn = useCallback(() => {
-    setResult(null);
-    startDraftTransition(async () => {
-      const r = await draftThreadReply(card.id);
-      if (r.ok && r.draft) {
-        setReplyText(r.draft);
-      } else {
-        setResult({ ok: false, error: r.error ?? "Couldn't draft a reply. Try again." });
-      }
-    });
-  }, [card.id]);
-
+  // Once opened, the panel stays mounted and is merely hidden when collapsed, so
+  // re-expanding a thread does not refetch its transcript and smart replies —
+  // the state the card used to hold for it now lives in the panel. Cards the
+  // operator never opens still mount nothing.
+  const [hasOpened, setHasOpened] = useState(false);
   const toggleThread = useCallback(() => {
-    setExpanded((open) => {
-      const next = !open;
-      if (next && messages === null) loadMessages();
-      // Kick off the AI openers on first open, in parallel with the messages.
-      if (next && aiReplies === null) loadSmartReplies();
-      return next;
-    });
-  }, [messages, loadMessages, aiReplies, loadSmartReplies]);
+    setExpanded((open) => !open);
+    setHasOpened(true);
+  }, []);
 
-  const sendReply = useCallback(() => {
-    const body = replyText.trim();
-    if (!body) return;
-    setResult(null);
-    startTransition(async () => {
-      setActive("reply");
-      const f = new FormData();
-      f.set("thread_id", card.id);
-      f.set("body", body);
-      const r = await replyToThread(f);
-      setResult(r);
-      if (r.ok) {
-        setReplyText("");
-        loadMessages();
-        router.refresh();
-      }
-    });
-    // startTransition / setActive are stable; card.id, replyText, loadMessages, router captured.
-  }, [replyText, card.id, loadMessages, router, startTransition]);
+  // The panel reports its draft/send outcome back up so the card keeps showing
+  // results in the same place, below the action row, as it always has.
+  const onPanelResult = useCallback((r: ThreadActionResult | null, key: string | null) => {
+    setResult(r);
+    setActive(key);
+  }, []);
 
   const handleDelete = useCallback(() => {
     if (!confirm("Delete this thread? This cannot be undone.")) return;
@@ -674,108 +654,9 @@ function ThreadCard({
         {expanded ? "Hide thread" : "View thread"}
       </button>
 
-      {expanded ? (
-        <div className="mt-2 rounded-lg border border-line/70 bg-surface-0/40 p-3">
-          {msgLoading && messages === null ? (
-            <p className="text-xs text-fg-muted">Loading conversation…</p>
-          ) : messages && messages.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                    m.direction === "outbound"
-                      ? "self-end border border-gold-500/30 bg-gold-500/10 text-fg-primary"
-                      : "self-start border border-line/60 bg-surface-1 text-fg-secondary"
-                  }`}
-                >
-                  <div className="mb-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                    {m.author ?? (m.direction === "outbound" ? "You" : card.counterparty)} · {relativeMeeting(m.occurredAt)}
-                  </div>
-                  <div className="whitespace-pre-wrap break-words">{m.body}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-fg-muted">No messages on this thread yet.</p>
-          )}
-
-          {/* Inline composer — routes through the same gate as every outward move. */}
-          <div className="mt-3 border-t border-line/60 pt-3">
-            {/* One-tap smart replies — populate the composer for review; the
-                send is still the operator's gated move. Hidden once they type.
-                Category templates show instantly; context-aware AI openers swap
-                in once suggestSmartReplies returns. */}
-            {(() => {
-              const chips = aiReplies ?? card.quickReplies;
-              if (chips.length === 0 || replyText.trim()) return null;
-              return (
-                <div className="mb-2">
-                  {aiReplies ? (
-                    <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-gold-300/80">
-                      ✦ Suggested for this thread
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-1.5">
-                    {chips.map((qr) => (
-                      <button
-                        key={qr}
-                        type="button"
-                        onClick={() => setReplyText(qr)}
-                        className="rounded-full border border-line bg-surface-1 px-2.5 py-1 text-xs text-fg-secondary transition hover:-translate-y-px hover:border-gold-500 hover:text-fg-primary"
-                      >
-                        {qr}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            <textarea
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              rows={2}
-              placeholder={`Reply to ${card.counterparty}…`}
-              className="w-full resize-none rounded-md border border-line bg-surface-2 px-2.5 py-2 text-sm text-fg-primary outline-none placeholder:text-fg-muted focus:border-gold-500"
-            />
-            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-              {card.connected && LIVE_CAPABLE_CHANNELS.has(card.channel) ? (
-                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                  Routes through connected {card.channelLabel} · approvals if required
-                </span>
-              ) : card.connected ? (
-                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                  {card.channelLabel} sending isn&apos;t live yet — this will be recorded on the thread but not delivered.
-                </span>
-              ) : (
-                <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                  {card.channelLabel} not connected — sends save as drafts.{" "}
-                  <Link href="/settings/integrations" className="text-gold-300 hover:underline">
-                    Connect →
-                  </Link>
-                </span>
-              )}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={drafting || pending}
-                  onClick={draftWithEarn}
-                  title="Draft a reply with Earn — you review and edit before sending"
-                  className="inline-flex items-center gap-1 rounded-md border border-gold-500/40 bg-gold-500/5 px-3 py-1.5 text-sm text-gold-300 transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
-                >
-                  {drafting ? "Drafting…" : "✦ Draft with Earn"}
-                </button>
-                <button
-                  type="button"
-                  disabled={pending || drafting || !replyText.trim()}
-                  onClick={sendReply}
-                  className="rounded-md border border-line bg-surface-0/80 px-3 py-1.5 text-sm text-fg-primary transition hover:-translate-y-px hover:border-gold-500 disabled:opacity-50"
-                >
-                  {pending && active === "reply" ? "Sending…" : "Send reply"}
-                </button>
-              </div>
-            </div>
-          </div>
+      {hasOpened ? (
+        <div hidden={!expanded}>
+          <ThreadConversation card={card} onResult={onPanelResult} />
         </div>
       ) : null}
 
@@ -880,4 +761,4 @@ function ThreadCard({
       ) : null}
     </div>
   );
-}
+});
