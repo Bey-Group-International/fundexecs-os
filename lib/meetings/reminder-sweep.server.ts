@@ -58,10 +58,11 @@ const MAX_PAGES = 10;
 /**
  * Send every reminder that has come due.
  *
- * Ordering note: the row is stamped BEFORE the send. A reminder that goes out
- * twice is worse than one that goes out never — these land in external
- * inboxes — so a crash between the two costs one reminder rather than mailing
- * a guest list again on the next sweep.
+ * Ordering note: the row is stamped BEFORE the send, because a reminder that
+ * goes out twice is worse than one that goes out never — these land in
+ * external inboxes. A send that then reaches nobody gives the claim back, so
+ * an unconnected mailbox delays the reminder rather than cancelling it
+ * forever; only a crash between the stamp and the release costs one.
  */
 export async function runMeetingReminders(
   supabase: ServiceClient,
@@ -103,8 +104,10 @@ export async function runMeetingReminders(
   stats.due = due.length;
 
   for (const meeting of due) {
+    const claimedAt = now.toISOString();
+    let claimed = false;
     try {
-      const claimed = await claim(supabase, meeting.id, now);
+      claimed = await claim(supabase, meeting.id, claimedAt);
       // Another sweep running concurrently got there first. Its send is the
       // one that happens; this one does nothing rather than double up.
       if (!claimed) {
@@ -114,11 +117,20 @@ export async function runMeetingReminders(
 
       const sent = await remind(supabase, meeting, now);
       stats.sent += sent;
-      if (sent > 0) stats.reminded += 1;
-      else stats.failed += 1;
+      if (sent > 0) {
+        stats.reminded += 1;
+      } else {
+        // Nothing reached anybody — an unconnected mailbox, usually. The claim
+        // was taken to stop a double send, not to record a reminder that never
+        // happened; leaving it would exclude this meeting from every future
+        // sweep and the reminder would never be sent at all.
+        stats.failed += 1;
+        await release(supabase, meeting.id, claimedAt);
+      }
     } catch (err) {
       stats.failed += 1;
       console.error("[meetings/reminder-sweep] reminder failed", meeting.id, err);
+      if (claimed) await release(supabase, meeting.id, claimedAt);
     }
   }
 
@@ -132,15 +144,37 @@ export async function runMeetingReminders(
  * claim rather than a write: two overlapping sweeps both selected the row, and
  * only the one whose update matches an unstamped row may send.
  */
-async function claim(supabase: ServiceClient, id: string, now: Date): Promise<boolean> {
+async function claim(supabase: ServiceClient, id: string, claimedAt: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("live_meetings")
-    .update({ last_reminder_sent_at: now.toISOString() })
+    .update({ last_reminder_sent_at: claimedAt })
     .eq("id", id)
     .is("last_reminder_sent_at", null)
     .select("id");
   if (error) throw new Error(error.message);
   return (data ?? []).length > 0;
+}
+
+/**
+ * Give the claim back after a send that reached nobody.
+ *
+ * Conditioned on the exact timestamp this sweep wrote, so it can only ever
+ * clear its OWN claim: if anything else has since stamped the row — a manual
+ * reminder, a later sweep — the update matches nothing and that record stands.
+ *
+ * Never throws: a claim that cannot be released costs one reminder, and
+ * throwing here would cost the rest of the sweep.
+ */
+async function release(supabase: ServiceClient, id: string, claimedAt: string): Promise<void> {
+  try {
+    await supabase
+      .from("live_meetings")
+      .update({ last_reminder_sent_at: null })
+      .eq("id", id)
+      .eq("last_reminder_sent_at", claimedAt);
+  } catch (err) {
+    console.error("[meetings/reminder-sweep] could not release claim", id, err);
+  }
 }
 
 /** Email one meeting's reminder. Returns how many recipients were reached. */

@@ -198,6 +198,12 @@ describe("POST /api/meetings/schedule", () => {
     expect(await res.json()).toMatchObject({ mailboxConnected: true, mailboxProblem: null });
   });
 
+  it("rejects a malformed attendee list instead of crashing on it", async () => {
+    const res = await POST(req({ ...VALID, attendees: [null] }));
+    expect(res.status).toBe(422);
+    expect(saveScheduledMeetingMock).not.toHaveBeenCalled();
+  });
+
   it("does not go looking for a directory when every attendee has an address", async () => {
     await POST(req({ ...VALID, attendees: [{ name: "Ada", email: "ada@lp.test", type: "external" }] }));
     expect(from).not.toHaveBeenCalledWith("organization_members");

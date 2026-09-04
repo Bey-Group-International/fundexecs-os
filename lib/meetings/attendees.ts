@@ -6,6 +6,44 @@ export type MeetingAttendeeInput = {
 
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
+/**
+ * Coerce an untrusted `attendees` array from a request body into real
+ * attendees, or refuse it.
+ *
+ * The routes used to cast the parsed JSON straight to MeetingAttendeeInput[],
+ * which is a promise TypeScript cannot keep: a body of `{"attendees":[null]}`
+ * then reached code that reads `.email` off each element and threw, answering
+ * 500 to what is really a malformed request. Anything that is not an object
+ * with a usable name is rejected here so the caller can say 422 instead.
+ *
+ * Deliberately strict about shape and forgiving about content: an attendee with
+ * no address is normal and stays, because resolving or reporting those is
+ * exactly what the directory step is for.
+ */
+export function normalizeAttendees(value: unknown): MeetingAttendeeInput[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const out: MeetingAttendeeInput[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const entry = raw as Record<string, unknown>;
+
+    const name = typeof entry.name === "string" ? entry.name.trim() : "";
+    const email = typeof entry.email === "string" ? entry.email.trim().toLowerCase() : "";
+    // Something has to identify the person. A row with neither is not an
+    // attendee, it is a stray object.
+    if (!name && !email) return null;
+
+    out.push({
+      name: name || email,
+      ...(email && EMAIL_RE.test(email) ? { email } : {}),
+      type: entry.type === "internal" ? "internal" : "external",
+    });
+  }
+
+  return out.slice(0, 100);
+}
+
 export function formatAttendeeInput(attendees: MeetingAttendeeInput[] | null | undefined): string {
   return (attendees ?? [])
     .map((attendee) => attendee.email ? `${attendee.name} <${attendee.email}>` : attendee.name)

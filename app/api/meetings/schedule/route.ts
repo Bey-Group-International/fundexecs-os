@@ -5,7 +5,7 @@ import { mailboxProblemMessage } from "@/lib/meetings/mailbox";
 import { formatSlotFull } from "@/lib/meetings/scheduling";
 import { requireOrgContext } from "@/lib/auth";
 import { buildMeetingInviteUrl, buildMeetingRoomUrl, saveScheduledMeeting, syncMeetingExternal } from "@/lib/meetings/service";
-import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { normalizeAttendees, parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
@@ -84,11 +84,20 @@ export async function POST(req: NextRequest) {
     const durationMinutes = Math.min(480, Math.max(15, durationMinutesFromTimes(startTime, endTime) || 60));
     const endIso = new Date(new Date(scheduledAt).getTime() + durationMinutes * 60_000).toISOString();
 
+    // The body is untrusted: an array element that is not an attendee reaches
+    // code that reads fields off it, so it is rejected as a bad request rather
+    // than thrown on as a 500.
     const typedAttendees = Array.isArray(body.attendees)
-      ? body.attendees
+      ? normalizeAttendees(body.attendees)
       : typeof body.attendees === "string"
         ? parseAttendeeInput(body.attendees)
         : [];
+    if (typedAttendees === null) {
+      return NextResponse.json(
+        { error: "Check the attendee list.", fieldErrors: { attendees: "Each attendee needs a name or an email address." } },
+        { status: 422 },
+      );
+    }
 
     const supabase = await createServerClient();
 

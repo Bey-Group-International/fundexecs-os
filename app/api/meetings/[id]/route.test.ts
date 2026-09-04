@@ -452,6 +452,13 @@ describe("/api/meetings/[id]", () => {
     );
   });
 
+  it("rejects a malformed attendee list instead of crashing on it", async () => {
+    from.mockReturnValue(makeBuilder({ maybeSingle: { data: PRIOR_ROW } }));
+    const res = await PATCH(req({ attendees: [null] }), params);
+    expect(res.status).toBe(422);
+    expect(updateMeetingMock).not.toHaveBeenCalled();
+  });
+
   it("tells a dropped guest they are off the meeting", async () => {
     updateMeetingMock.mockResolvedValue({ ok: true, calendarSequence: 8 });
     from.mockReturnValue(makeBuilder({ maybeSingle: { data: { ...PRIOR_ROW, attendees: GUESTS } } }));

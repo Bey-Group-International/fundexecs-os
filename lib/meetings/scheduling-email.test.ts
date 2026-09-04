@@ -223,15 +223,35 @@ describe("sendBookingEmails — save to calendar", () => {
     return sendEmailMock.mock.calls.map(([args]) => (args as { htmlBody: string }).htmlBody);
   }
 
-  it("offers it on exactly the transitions that carry a REQUEST", async () => {
+  /** The body of the message sent to one address. */
+  function bodyTo(email: string): string {
+    const call = sendEmailMock.mock.calls.find(
+      ([a]) => (a as { to: { email: string } }).to.email === email,
+    );
+    return call ? (call[0] as { htmlBody: string }).htmlBody : "";
+  }
+
+  it("offers it to the invitee on exactly the transitions that carry a REQUEST", async () => {
     for (const kind of ["confirmed", "rescheduled", "rescheduled_by_host"] as const) {
       sendEmailMock.mockClear();
       await sendBookingEmails(kind, ctx({ previousStartIso: "2026-09-09T15:00:00.000Z" }));
-      expect(bodies().length).toBeGreaterThan(0);
-      for (const html of bodies()) {
-        expect(html).toContain("Save to calendar");
-        expect(html).toContain("/api/scheduling/booking/tok/calendar.ics");
-      }
+      const invitee = bodyTo("ada@example.com");
+      expect(invitee).toContain("Save to calendar");
+      expect(invitee).toContain("/api/scheduling/booking/tok/calendar.ics");
+    }
+  });
+
+  it("never puts the invitee's manage token in the host's email", async () => {
+    // The URL is built from the manage token, which is the invitee's
+    // credential for this booking — it cancels and reschedules it. Sending it
+    // to the host hands one party the other's bearer token.
+    for (const kind of ["confirmed", "rescheduled", "rescheduled_by_host"] as const) {
+      sendEmailMock.mockClear();
+      await sendBookingEmails(kind, ctx({ previousStartIso: "2026-09-09T15:00:00.000Z" }));
+      const host = bodyTo("rae@fund.test");
+      expect(host).not.toBe("");
+      expect(host).not.toContain("tok");
+      expect(host).not.toContain("Save to calendar");
     }
   });
 
@@ -260,5 +280,14 @@ describe("sendBookingEmails — save to calendar", () => {
   it("degrades to no link when the caller passes no token", async () => {
     await sendBookingEmails("confirmed", ctx({ manageToken: null }));
     for (const html of bodies()) expect(html).not.toContain("Save to calendar");
+  });
+
+  it("still gives the host their own .ics attachment", async () => {
+    // Losing the link must not leave the host with no way to hold the meeting.
+    await sendBookingEmails("confirmed", ctx());
+    const hostCall = sendEmailMock.mock.calls.find(
+      ([a]) => (a as { to: { email: string } }).to.email === "rae@fund.test",
+    );
+    expect((hostCall?.[0] as { calendarInvite?: unknown }).calendarInvite).toBeDefined();
   });
 });

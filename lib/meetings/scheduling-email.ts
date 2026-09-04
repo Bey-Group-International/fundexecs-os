@@ -231,7 +231,13 @@ export async function sendBookingEmails(
   // Replaces an "Add to Google Calendar" template link. That worked in one
   // calendar out of three, and the invitee does not get to choose which one
   // they own.
-  const calendarUrl =
+  //
+  // INVITEE ONLY. The URL is built from the manage token, which is the
+  // invitee's credential for this booking — it cancels and reschedules. Putting
+  // it in the host's copy hands one party the other's bearer token, and the
+  // host does not need it: their own calendar already holds the meeting, and
+  // their email carries the same .ics as an attachment.
+  const inviteeCalendarUrl =
     ctx.manageToken && inviteMethodFor(kind) === "REQUEST"
       ? { label: "Save to calendar", url: buildBookingCalendarUrl(ctx.siteUrl ?? "", ctx.manageToken) }
       : null;
@@ -300,7 +306,7 @@ export async function sendBookingEmails(
             ["With", ctx.hostName],
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
-          secondary: calendarUrl,
+          secondary: inviteeCalendarUrl,
           footnote: ctx.manageUrl ? `Need to change it? ${ctx.manageUrl}` : null,
         }),
       });
@@ -318,7 +324,6 @@ export async function sendBookingEmails(
               ["Their note", ctx.notes ?? ""],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
-            secondary: calendarUrl,
           }),
         });
       }
@@ -354,7 +359,7 @@ export async function sendBookingEmails(
             ["With", ctx.hostName],
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
-          secondary: calendarUrl,
+          secondary: inviteeCalendarUrl,
           footnote: ctx.manageUrl ? `Manage this booking: ${ctx.manageUrl}` : null,
         }),
       });
@@ -371,7 +376,6 @@ export async function sendBookingEmails(
               ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
-            secondary: calendarUrl,
           }),
         });
       }
@@ -394,7 +398,7 @@ export async function sendBookingEmails(
             ["With", ctx.hostName],
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
-          secondary: calendarUrl,
+          secondary: inviteeCalendarUrl,
           footnote: ctx.manageUrl
             ? `If the new time doesn't work, cancel or pick another: ${ctx.manageUrl}`
             : null,
@@ -418,7 +422,6 @@ export async function sendBookingEmails(
               ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
-            secondary: calendarUrl,
           }),
         });
       }

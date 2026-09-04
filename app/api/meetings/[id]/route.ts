@@ -8,7 +8,7 @@ import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
 import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
-import type { MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { normalizeAttendees, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { SITE_URL } from "@/lib/site";
@@ -70,7 +70,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
   // Same directory lookup the create path runs: an attendee typed as a bare
   // name is matched to the teammate it names, so adding somebody to an existing
   // meeting emails them instead of silently doing nothing.
-  let nextAttendees = Array.isArray(body.attendees) ? (body.attendees as MeetingAttendeeInput[]) : undefined;
+  // Same untrusted-body reasoning as the create path: a malformed element is a
+  // 422, not a crash in the directory step.
+  let nextAttendees = Array.isArray(body.attendees) ? normalizeAttendees(body.attendees) : undefined;
+  if (nextAttendees === null) {
+    return NextResponse.json(
+      { error: "Check the attendee list.", fieldErrors: { attendees: "Each attendee needs a name or an email address." } },
+      { status: 422 },
+    );
+  }
   let uninvited = 0;
   if (nextAttendees && needsDirectory(nextAttendees)) {
     const resolution = resolveAttendeeDirectory(nextAttendees, await loadOrgDirectory(supabase, auth.ctx.orgId));

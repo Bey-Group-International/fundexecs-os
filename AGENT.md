@@ -1282,6 +1282,29 @@ Deployed, monitoring               →  live, observability active
              |  always supposed to guarantee.
              |  Confidence: typecheck/eslint clean, production build passes, Jest +15 new
              |  (4472 total green). No migration, no new deps.
+2026-09-04  |  CodeRabbit: a token leak of my own making  |  Three findings beyond
+             |  the five Qodo raised; the first is the worst thing in this branch.
+             |  Decision: the booking "Save to calendar" link is INVITEE ONLY. It is built
+             |  from the manage token, which is the invitee's credential for that booking
+             |  — it cancels and reschedules it. Adding it to the host copies "for parity"
+             |  handed one party the other's bearer token. The host needs no link: the
+             |  meeting is already on their FundExecs calendar and their email carries the
+             |  same .ics as an attachment.
+             |  Decision: a sweep claim comes back when the send reached nobody. The claim
+             |  is stamped before sending so a crash cannot mail a guest list twice, but
+             |  an unconnected mailbox is not a crash — it is a known failure, and keeping
+             |  the stamp excluded that meeting from every future sweep, turning a delay
+             |  into a cancellation. Release is conditioned on the exact timestamp this
+             |  sweep wrote, so it can only ever clear its own claim.
+             |  Decision: an untrusted `attendees` array is validated, not cast.
+             |  `{"attendees":[null]}` reached code that reads .email off each element and
+             |  answered 500 to what is a malformed request; normalizeAttendees refuses
+             |  the shape and both write paths return 422.
+             |  Rejected: CodeRabbit's own suggested sequence fix (prior + 1), which its
+             |  prose also warns against — an intervening save makes it stale. The
+             |  persisted value is the only correct one.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
+             |  (4485 total green). No migration, no new deps.
 ```
 
 ---

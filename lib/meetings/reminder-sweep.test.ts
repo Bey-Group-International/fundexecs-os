@@ -116,7 +116,12 @@ function client(rows: SweepableMeeting[], claim: unknown[] = [{ id: "m1" }]) {
     update: (values: unknown) => {
       update(values);
       return {
-        eq: () => ({ is: () => ({ select: async () => ({ data: claim }) }) }),
+        // .eq(id).is(last_reminder_sent_at, null).select() — the claim.
+        // .eq(id).eq(last_reminder_sent_at, claimedAt)     — the release.
+        eq: () => ({
+          is: () => ({ select: async () => ({ data: claim }) }),
+          eq: async () => ({ data: null }),
+        }),
       };
     },
   };
@@ -178,6 +183,38 @@ describe("runMeetingReminders", () => {
     const stats = await runMeetingReminders(supabase, { now: NOW });
 
     expect(stats).toMatchObject({ due: 1, reminded: 0, sent: 0, failed: 1 });
+  });
+
+  it("gives the claim back when the send reached nobody", async () => {
+    // The claim exists to stop a double send, not to record a reminder that
+    // never happened. Keeping it would exclude this meeting from every future
+    // sweep, so an unconnected mailbox would cancel the reminder permanently
+    // rather than delaying it.
+    sendEmailMock.mockResolvedValue({ ok: false, channel: "in-app", detail: "no mailbox" });
+    const { supabase, update } = client([meeting()]);
+
+    await runMeetingReminders(supabase, { now: NOW });
+
+    expect(update).toHaveBeenCalledWith({ last_reminder_sent_at: NOW.toISOString() });
+    expect(update).toHaveBeenCalledWith({ last_reminder_sent_at: null });
+  });
+
+  it("keeps the claim when the send succeeded", async () => {
+    const { supabase, update } = client([meeting()]);
+    await runMeetingReminders(supabase, { now: NOW });
+    expect(update).not.toHaveBeenCalledWith({ last_reminder_sent_at: null });
+  });
+
+  it("gives the claim back when every send rejects", async () => {
+    // allSettled means a rejection lands as "reached nobody" rather than
+    // escaping the sweep — the claim still has to come back.
+    sendEmailMock.mockRejectedValue(new Error("network"));
+    const { supabase, update } = client([meeting()]);
+
+    const stats = await runMeetingReminders(supabase, { now: NOW });
+
+    expect(stats.failed).toBe(1);
+    expect(update).toHaveBeenCalledWith({ last_reminder_sent_at: null });
   });
 
   it("pages past a wall of not-yet-due meetings to reach a due one", async () => {
