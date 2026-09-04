@@ -1221,6 +1221,35 @@ Deployed, monitoring               →  live, observability active
              |  emails use. It is free, and it works for one calendar out of three.
              |  Confidence: typecheck/eslint clean, production build passes, Jest +17 new
              |  (4444 total green). One new route, no migration, no new deps.
+2026-09-04  |  One save-to-calendar, everywhere  |  Booking emails and the invite
+             |  screen join the meeting emails.
+             |  Decision: booking emails drop the "Add to Google Calendar" TEMPLATE link
+             |  for a hosted .ics at /api/scheduling/booking/<manageToken>/calendar.ics.
+             |  The template link worked in one calendar out of three, and the invitee
+             |  does not get to choose which one they own. googleCalendarLink and its
+             |  date helper are deleted rather than left as a second way to do this.
+             |  Decision: keyed on the manage token, not the booking id. The id is
+             |  unguessable in practice but it is a database key nobody was handed; the
+             |  manage token is what this product already treats as the whole capability
+             |  for one booking, and it is already in every booking email.
+             |  Decision: the UID is the BOOKING's (inviteUid), not the linked meeting's.
+             |  A meeting-scoped UID would have put the same meeting in the invitee's
+             |  calendar a second time, beside the entry the confirmation's own .ics
+             |  created. Same rule the meeting endpoint follows for its own UID.
+             |  Decision: offered on exactly the transitions inviteMethodFor sends a
+             |  REQUEST for — confirmed, rescheduled, rescheduled_by_host, host copies
+             |  included. A pending request is a hold the host may yet decline, and the
+             |  endpoint refuses any booking that is not confirmed, so the button and
+             |  the .ics policy cannot drift apart. (The pending email never carried the
+             |  Google link either; the policy was already consistent.)
+             |  Built: the public meeting lookup now returns scheduledAt / durationMinutes
+             |  / timezone (null for a draft), so /meeting-invite/<code> can finally show
+             |  WHEN the meeting is — in the reader's own zone, always named, because the
+             |  invitee is the one person who may be nowhere near the organizer — and can
+             |  gate its own save link on there being a time to save.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
+             |  (4457 total green). One new route, one dead helper removed, no migration,
+             |  no new deps.
 ```
 
 ---

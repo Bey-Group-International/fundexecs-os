@@ -7,7 +7,7 @@
 // Like lib/meetings/invite.ts, nothing here throws: an unconnected mailbox must
 // never fail a booking that was otherwise saved.
 import { sendEmail, escapeHtml, type SendEmailCredentials } from "@/lib/email";
-import { formatSlotFull } from "@/lib/meetings/scheduling";
+import { buildBookingCalendarUrl, formatSlotFull } from "@/lib/meetings/scheduling";
 import { buildInviteIcs, inviteSequence, inviteUid } from "@/lib/calendar/invite";
 
 export interface BookingEmailContext {
@@ -31,6 +31,11 @@ export interface BookingEmailContext {
   joinUrl?: string | null;
   /** The invitee's cancel/reschedule link. */
   manageUrl?: string | null;
+  /**
+   * The booking's manage token, which is also the capability behind its
+   * "Save to calendar" .ics. Absent, the emails simply carry no save link.
+   */
+  manageToken?: string | null;
   /** The host's meetings page. */
   hostMeetingsUrl?: string | null;
   /** Where the booking used to sit — shown on a reschedule so the move reads clearly. */
@@ -59,50 +64,6 @@ export interface BookingEmailContext {
    * the org mailbox is used as before.
    */
   credentials?: SendEmailCredentials;
-}
-
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-/** Google Calendar's "add event" datetime format: YYYYMMDDTHHmmssZ. */
-function toGCalDate(d: Date): string {
-  return (
-    d.getUTCFullYear() +
-    pad2(d.getUTCMonth() + 1) +
-    pad2(d.getUTCDate()) +
-    "T" +
-    pad2(d.getUTCHours()) +
-    pad2(d.getUTCMinutes()) +
-    "00Z"
-  );
-}
-
-/**
- * "Add to Google Calendar" link, used by the booking emails.
- *
- * A link rather than a reference to the attached .ics because these predate
- * both the multipart sender and the per-meeting .ics endpoint. Meeting emails
- * use buildMeetingCalendarUrl instead, which works in every calendar rather
- * than only Google; these could follow once a booking carries its room code
- * this far.
- */
-export function googleCalendarLink(ctx: {
-  title: string;
-  startIso: string;
-  endIso: string;
-  details?: string | null;
-}): string {
-  const start = new Date(ctx.startIso);
-  const end = new Date(ctx.endIso);
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "";
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: ctx.title,
-    dates: `${toGCalDate(start)}/${toGCalDate(end)}`,
-  });
-  if (ctx.details) params.set("details", ctx.details);
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function safeUrl(url: string | null | undefined): string | null {
@@ -261,12 +222,19 @@ export async function sendBookingEmails(
   kind: BookingEmailKind,
   ctx: BookingEmailContext,
 ): Promise<{ sent: number }> {
-  const gcal = googleCalendarLink({
-    title: ctx.eventTitle,
-    startIso: ctx.startIso,
-    endIso: ctx.endIso,
-    details: ctx.joinUrl ? `Join: ${ctx.joinUrl}` : null,
-  });
+  // "Save to calendar", offered on exactly the transitions that put an entry in
+  // somebody's calendar in the first place — the ones inviteMethodFor sends a
+  // REQUEST for. A pending request is a hold the host may still decline, and a
+  // cancellation has nothing left to save; encouraging either into a calendar
+  // is the thing the .ics policy already refuses to do.
+  //
+  // Replaces an "Add to Google Calendar" template link. That worked in one
+  // calendar out of three, and the invitee does not get to choose which one
+  // they own.
+  const calendarUrl =
+    ctx.manageToken && inviteMethodFor(kind) === "REQUEST"
+      ? { label: "Save to calendar", url: buildBookingCalendarUrl(ctx.siteUrl ?? "", ctx.manageToken) }
+      : null;
 
   const inviteeWhen = whenFor(ctx, ctx.inviteeTimezone);
   const hostWhen = whenFor(ctx, ctx.hostTimezone);
@@ -332,7 +300,7 @@ export async function sendBookingEmails(
             ["With", ctx.hostName],
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
-          secondary: gcal ? { label: "Add to Google Calendar", url: gcal } : null,
+          secondary: calendarUrl,
           footnote: ctx.manageUrl ? `Need to change it? ${ctx.manageUrl}` : null,
         }),
       });
@@ -350,7 +318,7 @@ export async function sendBookingEmails(
               ["Their note", ctx.notes ?? ""],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
-            secondary: gcal ? { label: "Add to Google Calendar", url: gcal } : null,
+            secondary: calendarUrl,
           }),
         });
       }
@@ -386,7 +354,7 @@ export async function sendBookingEmails(
             ["With", ctx.hostName],
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
-          secondary: gcal ? { label: "Add to Google Calendar", url: gcal } : null,
+          secondary: calendarUrl,
           footnote: ctx.manageUrl ? `Manage this booking: ${ctx.manageUrl}` : null,
         }),
       });
@@ -403,6 +371,7 @@ export async function sendBookingEmails(
               ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
+            secondary: calendarUrl,
           }),
         });
       }
@@ -425,7 +394,7 @@ export async function sendBookingEmails(
             ["With", ctx.hostName],
           ],
           cta: ctx.joinUrl ? { label: "Join meeting", url: ctx.joinUrl } : null,
-          secondary: gcal ? { label: "Add to Google Calendar", url: gcal } : null,
+          secondary: calendarUrl,
           footnote: ctx.manageUrl
             ? `If the new time doesn't work, cancel or pick another: ${ctx.manageUrl}`
             : null,
@@ -449,6 +418,7 @@ export async function sendBookingEmails(
               ["With", `${ctx.inviteeName} (${ctx.inviteeEmail})`],
             ],
             cta: ctx.joinUrl ? { label: "Open meeting room", url: ctx.joinUrl } : null,
+            secondary: calendarUrl,
           }),
         });
       }

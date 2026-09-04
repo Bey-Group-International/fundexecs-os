@@ -7,6 +7,36 @@ import { Logo } from "@/components/Logo";
 interface MeetingInfo {
   title: string;
   status: "waiting" | "active" | "ended";
+  /** Null for a meeting with no time yet, and for one still in draft. */
+  scheduledAt: string | null;
+  durationMinutes: number | null;
+  timezone: string | null;
+}
+
+/**
+ * The meeting's time, in the reader's own timezone rather than the host's.
+ *
+ * The invitee is the one person here who may be nowhere near the organizer, and
+ * an unlabelled time is the classic way to miss a meeting by several hours — so
+ * the zone is always named. Returns "" when there is nothing to show, which is
+ * also what hides the calendar button below.
+ */
+function formatWhen(info: MeetingInfo | null): string {
+  if (!info?.scheduledAt) return "";
+  const start = new Date(info.scheduledAt);
+  if (Number.isNaN(start.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(start);
+  } catch {
+    return start.toUTCString();
+  }
 }
 
 export default function MeetingInvitePage() {
@@ -25,7 +55,8 @@ export default function MeetingInvitePage() {
   useEffect(() => {
     async function fetchMeeting() {
       // Public lookup by room code so invitees without an account can see the
-      // meeting and choose how to join. Only the title + status are returned.
+      // meeting and choose how to join. Only the title, status and time are
+      // returned — everything else stays RLS-protected.
       try {
         const res = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
         if (!res.ok) setNotFound(true);
@@ -64,6 +95,8 @@ export default function MeetingInvitePage() {
     );
   }
 
+  const when = formatWhen(meeting);
+
   if (notFound) {
     return (
       <div className="fx-blueprint flex min-h-screen flex-col items-center justify-center bg-surface-0 gap-4 px-4">
@@ -95,8 +128,23 @@ export default function MeetingInvitePage() {
             {meeting?.status === "ended" && (
               <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-[var(--fg-muted)]">Meeting has ended</span>
             )}
+            {when && (
+              <p className="mt-2 text-sm text-[var(--fg-secondary)]">{when}</p>
+            )}
           </div>
         </div>
+
+        {/* Only for a meeting that has a time and has not happened: the .ics
+            endpoint 404s otherwise, and a button leading to a dead download is
+            worse than no button. */}
+        {when && meeting?.status !== "ended" && (
+          <a
+            href={`/api/meetings/public/${roomCode}/calendar.ics`}
+            className="self-center text-sm text-[var(--gold-400)] hover:underline"
+          >
+            Save to calendar
+          </a>
+        )}
 
         {meeting?.status !== "ended" && mode === "choose" && (
           <div className="fx-glass rounded-xl p-5 flex flex-col gap-3">

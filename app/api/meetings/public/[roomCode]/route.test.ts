@@ -35,22 +35,64 @@ function makeFromStub(result: { data?: unknown; error?: unknown }) {
 beforeEach(() => jest.clearAllMocks());
 
 describe("GET /api/meetings/public/[roomCode]", () => {
-  it("returns only id, title and status for a found meeting", async () => {
+  it("returns what the invite screen needs and nothing else", async () => {
     from.mockImplementation(
       makeFromStub({
         // The row may carry sensitive columns; the route must not leak them.
-        data: { id: "m1", title: "Q3 LP Review", status: "waiting", objective: "secret", attendees: [{ email: "x@y.z" }] },
+        data: {
+          id: "m1",
+          title: "Q3 LP Review",
+          status: "waiting",
+          scheduled_at: "2026-09-10T15:00:00.000Z",
+          duration_minutes: 30,
+          timezone: "America/New_York",
+          is_draft: false,
+          objective: "secret",
+          attendees: [{ email: "x@y.z" }],
+        },
       }),
     );
 
     const res = await GET(req(), { params: Promise.resolve({ roomCode: "abc-defg-hi" }) });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ id: "m1", title: "Q3 LP Review", status: "waiting" });
+    expect(body).toEqual({
+      id: "m1",
+      title: "Q3 LP Review",
+      status: "waiting",
+      // The time is the one thing an invited person most needs, and it tells
+      // the holder of the link nothing their invitation did not already say.
+      scheduledAt: "2026-09-10T15:00:00.000Z",
+      durationMinutes: 30,
+      timezone: "America/New_York",
+    });
     expect(body).not.toHaveProperty("objective");
     expect(body).not.toHaveProperty("attendees");
     // Only non-sensitive columns are ever selected.
-    expect(selectSpy).toHaveBeenCalledWith("id, title, status");
+    expect(selectSpy).toHaveBeenCalledWith(
+      "id, title, status, scheduled_at, duration_minutes, timezone, is_draft",
+    );
+  });
+
+  it("reports no time for a meeting still in draft", async () => {
+    // A draft is not a commitment, and a date read off one is a date that can
+    // still change without anybody being told.
+    from.mockImplementation(
+      makeFromStub({
+        data: {
+          id: "m1",
+          title: "Q3 LP Review",
+          status: "waiting",
+          scheduled_at: "2026-09-10T15:00:00.000Z",
+          duration_minutes: 30,
+          timezone: "UTC",
+          is_draft: true,
+        },
+      }),
+    );
+
+    const body = await (await GET(req(), { params: Promise.resolve({ roomCode: "abc-defg-hi" }) })).json();
+    expect(body).toMatchObject({ scheduledAt: null, durationMinutes: null, timezone: null });
   });
 
   it("defaults a missing title to 'Meeting'", async () => {

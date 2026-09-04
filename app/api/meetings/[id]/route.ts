@@ -363,6 +363,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         durationMinutes: nextDuration ?? booking.eventType.duration_minutes,
         joinUrl: booking.roomCode ? buildMeetingInviteUrl(SITE_URL, booking.roomCode) : null,
         manageUrl: buildBookingManageUrl(SITE_URL, booking.booking.manage_token),
+        manageToken: booking.booking.manage_token,
         bookingId: booking.booking.id,
         bookingCreatedAt: booking.booking.created_at,
         bookingUpdatedAt: booking.booking.updated_at,

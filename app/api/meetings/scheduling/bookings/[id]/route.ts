@@ -101,6 +101,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         action === "approve"
           ? buildBookingManageUrl(SITE_URL, next.booking.manage_token)
           : buildBookingPageUrl(SITE_URL, next.page.slug),
+      // Same reasoning: only an approval leaves a booking worth saving, and the
+      // endpoint refuses anything that is not confirmed regardless.
+      manageToken: action === "approve" ? next.booking.manage_token : null,
       reason: body.reason ?? null,
       bookingId: next.booking.id,
       bookingCreatedAt: next.booking.created_at,

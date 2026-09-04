@@ -103,6 +103,7 @@ export async function POST(
       notes: booking.invitee_notes,
       joinUrl,
       manageUrl,
+      manageToken: booking.manage_token,
       hostMeetingsUrl: `${SITE_URL}/meetings`,
       bookingId: booking.id,
       bookingCreatedAt: booking.created_at,
