@@ -7,13 +7,46 @@ import { createClient } from "@/lib/supabase/client";
 import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
 import { MeetingCopilotConsole } from "@/app/(app)/meetings/MeetingCopilotConsole";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
-import { constraintsFor } from "@/lib/meetings/devices";
+import { constraintsFor, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
+import {
+  LOCAL_SPEAKER_ID,
+  LOW_CONFIDENCE,
+  SPEAKING_LEVEL,
+  VoiceActivityLog,
+  attributeUtterance,
+  formatTranscriptLine,
+  speakerColorIndex,
+  speakingIds,
+  suppressionReason,
+  type AttributionBasis,
+  type ParticipantAudio,
+} from "@/lib/meetings/speaker-attribution";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
+import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Peer { id: string; displayName: string; stream: MediaStream | null }
-interface TranscriptLine { id: string; speaker: string; text: string; ts: number; final: boolean }
+
+// A transcript line carries who said it, not just what a microphone heard.
+// `speakerId` is the signaling id — stable across a rename and identical on
+// every participant's screen — so the name shown can be resolved live from the
+// roster rather than frozen at the moment the words were spoken. `userId` is
+// the signed-in account behind that id, absent for guests.
+interface TranscriptLine {
+  id: string;
+  speakerId: string;
+  speaker: string;
+  userId: string | null;
+  text: string;
+  ts: number;
+  final: boolean;
+  isLocal: boolean;
+  /** 0-1 attribution confidence; below LOW_CONFIDENCE the line is marked unsure. */
+  confidence: number;
+  /** Someone else was audible at the same time. */
+  overlapped: boolean;
+}
 interface ChatMessage { id: string; from: string; displayName: string; text: string; ts: number }
 // `id` is the live_meeting_admissions row id (the host admits/denies by it);
 // `from` is the guest_key (the joiner's client id).
@@ -26,7 +59,19 @@ type SignalMsg =
   | { type: "offer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string }
   | { type: "answer"; from: string; to: string; sdp: RTCSessionDescriptionInit; displayName?: string }
   | { type: "ice"; from: string; to: string; candidate: RTCIceCandidateInit }
-  | { type: "transcript"; from: string; speaker: string; text: string; ts: number }
+  | {
+      type: "transcript";
+      from: string;
+      speaker: string;
+      userId?: string | null;
+      text: string;
+      ts: number;
+      confidence?: number;
+      overlapped?: boolean;
+    }
+  // Mic state has to be told, not measured: a muted track is simply silent, and
+  // silence is indistinguishable from a listener who hasn't spoken yet.
+  | { type: "mic"; from: string; micOn: boolean; displayName?: string }
   | { type: "chat"; from: string; displayName: string; text: string; ts: number }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
@@ -107,6 +152,18 @@ const FALLBACK_ICE: RTCConfiguration = {
 
 const NOTES_INTERVAL_MS = 15_000;
 const TRANSCRIPT_FLUSH_MS = 60_000;
+// Voice metering: fast enough that a short "yes" leaves samples behind for
+// attribution, slow enough not to compete with rendering for the main thread.
+const VOICE_SAMPLE_MS = 120;
+// Palette for per-speaker colours in the transcript.
+const SPEAKER_COLORS = [
+  "var(--gold-400)",
+  "#7dd3fc",
+  "#c4b5fd",
+  "#86efac",
+  "#fda4af",
+  "#fdba74",
+];
 const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
 
 // Synthesize a short chime using Web Audio API (no audio files needed)
@@ -250,9 +307,14 @@ function FloatingMenu({
 function VideoTile({
   stream, label, muted = false, isLocal = false,
   handRaised = false, reaction = "", large = false,
+  micOn = true, speaking = false,
 }: {
   stream: MediaStream | null; label: string; muted?: boolean; isLocal?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
+  /** That participant's own report of their mic track. */
+  micOn?: boolean;
+  /** Their voice is in the room right now. */
+  speaking?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = stream?.getVideoTracks()[0] ?? null;
@@ -291,8 +353,13 @@ function VideoTile({
   // stays in the DOM underneath either way.
   const hasVideo = !!track && track.enabled && track.readyState !== "ended";
 
+  // Ring the tile of whoever is talking. In a grid of muted faces this is the
+  // fastest answer to "who is that?" — and it is the same judgement the
+  // transcript is using to decide whose name goes on the words.
+  const ring = speaking && micOn ? "border-[var(--gold-400)] shadow-[0_0_0_2px_var(--gold-400)]" : "border-[var(--line)]";
+
   return (
-    <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border border-[var(--line)] flex items-center justify-center ${large ? "w-full h-full" : "aspect-video"}`}>
+    <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border transition-shadow flex items-center justify-center ${ring} ${large ? "w-full h-full" : "aspect-video"}`}>
       <video ref={videoRef} autoPlay playsInline muted={muted}
         onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
         className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
@@ -304,7 +371,10 @@ function VideoTile({
           <span className="text-xs text-[var(--fg-muted)]">Camera off</span>
         </div>
       )}
-      <div className="absolute bottom-2 left-3 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
+      <div className="absolute bottom-2 left-3 flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
+        {micOn
+          ? speaking && <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] animate-pulse" />
+          : <span title="Muted — not being transcribed" aria-label="Muted">🔇</span>}
         {label}{isLocal ? " (You)" : ""}
       </div>
       {handRaised && <div className="absolute top-2 right-3 text-lg">✋</div>}
@@ -707,16 +777,114 @@ function WalkthroughPanel({
   );
 }
 
+// ─── NowSpeaking ──────────────────────────────────────────────────────────────
+
+/**
+ * A live read of whose voice is in the room, above the transcript.
+ *
+ * The transcript is always a second or two behind — the recognizer only speaks
+ * in finished sentences. This closes that gap, so it is obvious in the moment
+ * which name the words landing next belong to.
+ */
+function NowSpeaking({
+  participants, speaking,
+}: {
+  participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
+  speaking: Set<string>;
+}) {
+  const active = participants.filter((p) => speaking.has(p.id));
+  const muted = participants.filter((p) => !p.micOn);
+
+  return (
+    <div className="sticky top-0 z-10 -mt-1 mb-1 flex flex-wrap items-center gap-1.5 bg-[var(--surface-1)] pb-2 pt-1 text-[11px]">
+      {active.length > 0 ? (
+        <>
+          <span className="text-[var(--fg-muted)]">Speaking:</span>
+          {active.map((p) => (
+            <span
+              key={p.id}
+              style={{ color: SPEAKER_COLORS[speakerColorIndex(p.id, SPEAKER_COLORS.length)] }}
+              className="inline-flex items-center gap-1 font-medium"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+              {p.isLocal ? "You" : p.displayName}
+            </span>
+          ))}
+          {active.length > 1 && <span className="text-[var(--fg-muted)]">(overlapping)</span>}
+        </>
+      ) : (
+        <span className="text-[var(--fg-muted)]">
+          {participants.every((p) => !p.micOn)
+            ? "Every mic is muted — nothing is being transcribed"
+            : "Listening…"}
+        </span>
+      )}
+      {active.length > 0 && muted.length > 0 && (
+        <span className="text-[var(--fg-muted)]">· {muted.length} muted</span>
+      )}
+    </div>
+  );
+}
+
+// ─── TranscriptTurn ───────────────────────────────────────────────────────────
+
+function TranscriptTurn({
+  line, startsTurn, displayName, color, speakingNow,
+}: {
+  line: TranscriptLine;
+  startsTurn: boolean;
+  displayName: string;
+  color: string;
+  speakingNow: boolean;
+}) {
+  const unsure = line.final && line.confidence < LOW_CONFIDENCE;
+  return (
+    <div className={startsTurn ? "mt-2 first:mt-0" : ""}>
+      {startsTurn && (
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-xs font-medium" style={{ color }}>
+            {displayName}{line.isLocal ? " (You)" : ""}
+          </span>
+          {speakingNow && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />}
+          {unsure && (
+            <span
+              title={
+                line.overlapped
+                  ? "People were speaking over each other — this attribution may be wrong"
+                  : "This line could not be matched to a voice with confidence"
+              }
+              className="text-[10px] text-[var(--fg-muted)] border border-[var(--line)] rounded px-1"
+            >
+              unsure
+            </span>
+          )}
+        </div>
+      )}
+      <div
+        className={`text-sm pl-2 border-l-2 ${line.final ? "text-[var(--fg-primary)]" : "text-[var(--fg-muted)] italic"}`}
+        style={{ borderColor: color }}
+      >
+        {line.text}
+      </div>
+    </div>
+  );
+}
+
 // ─── CopilotSidebar ───────────────────────────────────────────────────────────
 
 function CopilotSidebar({
   transcript, notes, isUpdating, srStatus, participants, roomCode, meetingTitle,
   chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatOpen,
   walkthroughStepIndex, walkthroughNudge, onWalkthroughStep, onWalkthroughNudgeDismiss,
+  speaking, attributionNotice,
 }: {
   transcript: TranscriptLine[]; notes: LiveNotesResult | null; isUpdating: boolean;
   srStatus: "idle" | "active" | "error" | "unsupported";
-  participants: { id: string; displayName: string }[];
+  participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
+  /** Ids of everyone whose voice is in the room right now. */
+  speaking: Set<string>;
+  /** Why the last thing this mic heard was not added to the transcript. */
+  attributionNotice: { basis: AttributionBasis; text: string } | null;
   roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
   onSendChat: (text: string) => void; isHost: boolean;
   raisedHands: Set<string>; onKick: (id: string) => void;
@@ -738,6 +906,16 @@ function CopilotSidebar({
   useEffect(() => { if (tab === "transcript") txBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [transcript, tab]);
   useEffect(() => { if (tab === "chat") chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, tab]);
   useEffect(() => { if (tab === "chat") onChatOpen(); }, [tab, onChatOpen]);
+
+  // Names are resolved from the live roster rather than read off the line, so a
+  // rename mid-call retitles everything that person already said instead of
+  // leaving the transcript split between two names for one voice.
+  const nameFor = (line: TranscriptLine) =>
+    participants.find((p) => p.id === line.speakerId)?.displayName ?? line.speaker ?? "Unknown speaker";
+
+  // Colour by id, not by position in the list — so a speaker keeps their colour
+  // when someone above them leaves, and holds the same one on every screen.
+  const colorFor = (speakerId: string) => SPEAKER_COLORS[speakerColorIndex(speakerId, SPEAKER_COLORS.length)];
 
   const sendChat = () => {
     const text = chatInput.trim();
@@ -810,13 +988,30 @@ function CopilotSidebar({
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
         {tab === "transcript" && (
           <>
+            <NowSpeaking participants={participants} speaking={speaking} />
             {transcript.length === 0 ? <EmptyCopilot label="Transcription will appear here once you start speaking." /> : (
-              transcript.map((line) => (
-                <div key={line.id} className={`text-sm ${line.final ? "text-[var(--fg-primary)]" : "text-[var(--fg-muted)] italic"}`}>
-                  {line.speaker && <span className="text-xs font-medium text-[var(--gold-400)] mr-1.5">{line.speaker}:</span>}
-                  {line.text}
-                </div>
-              ))
+              transcript.map((line, i) => {
+                // Only label a line when the speaker changes: a name against every
+                // line of one person's paragraph reads as a stutter, and it hides
+                // the handovers, which are the thing worth seeing.
+                const previous = i > 0 ? transcript[i - 1] : null;
+                const startsTurn = !previous || previous.speakerId !== line.speakerId;
+                return (
+                  <TranscriptTurn
+                    key={line.id}
+                    line={line}
+                    startsTurn={startsTurn}
+                    displayName={nameFor(line)}
+                    color={colorFor(line.speakerId)}
+                    speakingNow={speaking.has(line.speakerId)}
+                  />
+                );
+              })
+            )}
+            {attributionNotice && (
+              <div className="mt-1 rounded-lg border border-dashed border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--fg-muted)]">
+                {suppressionReason(attributionNotice.basis, attributionNotice.text || null)}
+              </div>
             )}
             <div ref={txBottomRef} />
           </>
@@ -932,20 +1127,37 @@ function CopilotSidebar({
             {/* Participant list */}
             <div className="flex flex-col gap-1">
               <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide px-1">In this call</p>
-              {participants.map((p) => (
-                <div key={p.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2">
-                  <div className="w-7 h-7 rounded-full bg-[var(--gold-400)]/20 border border-[var(--gold-400)]/30 flex items-center justify-center text-xs font-semibold text-[var(--gold-400)]">
-                    {p.displayName.slice(0, 1).toUpperCase()}
+              {participants.map((p) => {
+                const isSpeaking = speaking.has(p.id);
+                const color = colorFor(p.id);
+                return (
+                  <div key={p.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+                    <div
+                      className={`w-7 h-7 rounded-full bg-[var(--gold-400)]/20 flex items-center justify-center text-xs font-semibold transition-colors ${isSpeaking ? "border-2" : "border border-[var(--gold-400)]/30"}`}
+                      style={isSpeaking ? { borderColor: color, color } : { color: "var(--gold-400)" }}
+                    >
+                      {p.displayName.slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="text-sm text-[var(--fg-primary)] flex-1">{p.displayName}</span>
+                    {/* Muted vs. merely quiet is the difference between "they
+                        chose not to speak" and "nothing they say is reaching the
+                        transcript" — worth stating, not leaving to inference. */}
+                    <span
+                      title={p.micOn ? (isSpeaking ? "Speaking now" : "Mic live") : "Muted — not being transcribed"}
+                      className={`text-xs ${p.micOn ? (isSpeaking ? "" : "text-[var(--fg-muted)]") : "text-[var(--status-danger)]"}`}
+                      style={p.micOn && isSpeaking ? { color } : undefined}
+                    >
+                      {p.micOn ? (isSpeaking ? "◉ speaking" : "mic on") : "muted"}
+                    </span>
+                    {raisedHands.has(p.id) && <span className="text-sm">✋</span>}
+                    {p.isLocal ? (
+                      <span className="text-xs text-[var(--fg-muted)]">You</span>
+                    ) : isHost ? (
+                      <button onClick={() => onKick(p.id)} className="text-xs text-[var(--status-danger)] hover:underline">Remove</button>
+                    ) : null}
                   </div>
-                  <span className="text-sm text-[var(--fg-primary)] flex-1">{p.displayName}</span>
-                  {raisedHands.has(p.id) && <span className="text-sm">✋</span>}
-                  {p.id === "local" ? (
-                    <span className="text-xs text-[var(--fg-muted)]">You</span>
-                  ) : isHost ? (
-                    <button onClick={() => onKick(p.id)} className="text-xs text-[var(--status-danger)] hover:underline">Remove</button>
-                  ) : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1035,6 +1247,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const recognitionRef = useRef<any>(null);
   const interimIdRef = useRef<string>(crypto.randomUUID());
 
+  // Speaker awareness. The recognizer reports words; these report voices — who
+  // has a live mic, who is actually audible, and who was audible while the words
+  // now being finalized were spoken.
+  const [peerMicOn, setPeerMicOn] = useState<Map<string, boolean>>(new Map());
+  const peerMicOnRef = useRef<Map<string, boolean>>(new Map());
+  const [speaking, setSpeaking] = useState<Set<string>>(new Set());
+  const voiceLogRef = useRef(new VoiceActivityLog());
+  const lastAudibleRef = useRef<Map<string, number>>(new Map());
+  const micOnRef = useRef(true);
+  // The signed-in account behind this client, so a transcript line survives a
+  // rename and a report can tie words to a real person. Null for guests.
+  const localUserIdRef = useRef<string | null>(null);
+  // Utterance boundaries. The recognizer hands us a sentence after the fact, so
+  // attribution needs the moment it started, not the moment it arrived.
+  const utteranceStartRef = useRef<number | null>(null);
+  // The last line we heard but did not publish, shown in the transcript so a
+  // muted user understands why their words are missing.
+  const [attributionNotice, setAttributionNotice] = useState<{ basis: AttributionBasis; text: string } | null>(null);
+
   // Notes
   const [notes, setNotes] = useState<LiveNotesResult | null>(null);
   const [isUpdatingNotes, startNotesTransition] = useTransition();
@@ -1118,6 +1349,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { sendSignalRef.current = sendSignal; }, [sendSignal]);
   useEffect(() => { localNameRef.current = localName; }, [localName]);
   useEffect(() => { peersDataRef.current = peers; }, [peers]);
+  useEffect(() => { micOnRef.current = micOn; }, [micOn]);
+  useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
 
   // Teardown on unmount. If the user navigates away via client-side routing
   // (browser back, a nav link, the guest "leave" link) instead of clicking
@@ -1224,6 +1457,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // `ontrack`, which falls back to our raw UUID.
         sendSignalRef.current({ type: "offer", from: myId, to: msg.from, sdp: offer, displayName: localNameRef.current });
       } catch (e) { console.warn("[WebRTC] offer", e); }
+      // Mic state is only ever announced on change, so a newcomer would assume
+      // everyone already in the room is unmuted. Tell them where we actually are.
+      sendSignalRef.current({ type: "mic", from: myId, micOn: micOnRef.current, displayName: localNameRef.current });
     }
 
     if (msg.type === "end") {
@@ -1245,6 +1481,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // Drop the departed peer's transient UI state so a stale ✋ / emoji doesn't linger.
       setRaisedHands((prev) => { if (!prev.has(msg.from)) return prev; const next = new Set(prev); next.delete(msg.from); return next; });
       setReactions((prev) => { if (!(msg.from in prev)) return prev; const n = { ...prev }; delete n[msg.from]; return n; });
+      setPeerMicOn((prev) => { if (!prev.has(msg.from)) return prev; const next = new Map(prev); next.delete(msg.from); return next; });
+      lastAudibleRef.current.delete(msg.from);
     }
 
     if (msg.type === "offer" && msg.to === myId) {
@@ -1285,8 +1523,45 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "transcript" && msg.from !== myId) {
-      const line: TranscriptLine = { id: crypto.randomUUID(), speaker: msg.speaker, text: msg.text, ts: msg.ts, final: true };
-      setTranscript((prev) => { const next = [...prev, line]; transcriptRef.current = next; return next; });
+      const line: TranscriptLine = {
+        id: crypto.randomUUID(),
+        speakerId: msg.from,
+        speaker: msg.speaker,
+        userId: msg.userId ?? null,
+        text: msg.text,
+        ts: msg.ts,
+        final: true,
+        isLocal: false,
+        confidence: msg.confidence ?? 1,
+        overlapped: msg.overlapped ?? false,
+      };
+      // Order by when the words were spoken, not when the packet landed. Two
+      // people talking at once reach us out of order otherwise, and the notes
+      // model then reads a conversation whose turns are shuffled.
+      setTranscript((prev) => {
+        const next = [...prev];
+        // Step past the in-progress interim line, which always trails the
+        // finals, then back through any final spoken after this one.
+        let at = next.length;
+        while (at > 0 && !next[at - 1].final) at--;
+        while (at > 0 && next[at - 1].ts > line.ts) at--;
+        next.splice(at, 0, line);
+        transcriptRef.current = next;
+        return next;
+      });
+    }
+
+    if (msg.type === "mic" && msg.from !== myId) {
+      if (msg.displayName) setPeerName(msg.from, msg.displayName);
+      setPeerMicOn((prev) => {
+        if (prev.get(msg.from) === msg.micOn) return prev;
+        const next = new Map(prev);
+        next.set(msg.from, msg.micOn);
+        return next;
+      });
+      // A mic that just went off is not "still speaking" — release the hold now
+      // rather than letting it decay as if the voice merely paused.
+      if (!msg.micOn) lastAudibleRef.current.delete(msg.from);
     }
 
     if (msg.type === "chat" && msg.from !== myId) {
@@ -1308,6 +1583,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (msg.type === "mute_all" && msg.from !== myId) {
       localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
       setMicOn(false);
+      micOnRef.current = false;
+      sendSignalRef.current({ type: "mic", from: myId, micOn: false, displayName: localNameRef.current });
     }
 
     if (msg.type === "kick" && msg.target === myId) {
@@ -1438,7 +1715,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // muted themselves before joining is still muted a second later.
     const micWanted = choice ? choice.micEnabled : true;
     stream.getAudioTracks().forEach((t) => { t.enabled = micWanted; });
-    setMicOn(micWanted && stream.getAudioTracks().length > 0);
+    const micLive = micWanted && stream.getAudioTracks().length > 0;
+    setMicOn(micLive);
+    // Read synchronously by the join announcement below, which runs before the
+    // effect that mirrors `micOn` into this ref.
+    micOnRef.current = micLive;
     const camLive = wantCam && stream.getVideoTracks().length > 0;
     setCamOn(camLive);
     camOnRef.current = camLive;
@@ -1456,6 +1737,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (status !== "SUBSCRIBED" || announcedRef.current) return;
         announcedRef.current = true;
         sendSignal({ type: "join", from: myIdRef.current, displayName: name });
+        sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
       });
 
     clearWaitingTimers();
@@ -1522,6 +1804,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch { /* proceed */ }
 
     setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
+    try {
+      const { data: { user: me } } = await supabase.auth.getUser();
+      localUserIdRef.current = me?.id ?? null;
+    } catch { localUserIdRef.current = null; }
 
     // The host and org teammates enter immediately; only external guests wait.
     if (hostFlag || isOrgMember) {
@@ -1622,6 +1908,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── Speech recognition ────────────────────────────────────────────────────
 
+  // The recognizer hears the room, not its owner: everyone else arrives through
+  // the laptop speakers, and it keeps listening while the user believes they are
+  // muted (mute disables the outgoing WebRTC track, not the browser's own tap on
+  // the device). So a finalized sentence is not published until the voice
+  // activity recorded over the seconds it was spoken says it was really ours.
   useEffect(() => {
     if (!ready || waitingForAdmit) return;
     const w = window as any;
@@ -1630,6 +1921,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const recognition = new SR();
     recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
     recognition.onstart = () => setSrStatus("active");
+    // Some engines fire speechstart; where they don't, the first interim result
+    // opens the window instead.
+    recognition.onspeechstart = () => { utteranceStartRef.current = Date.now(); };
+
     recognition.onresult = (ev: any) => {
       let interim = ""; let finalText = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -1637,24 +1932,100 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (r.isFinal) finalText += r[0].transcript + " ";
         else interim += r[0].transcript;
       }
+      const now = Date.now();
+      if (utteranceStartRef.current === null && (interim || finalText)) utteranceStartRef.current = now;
+
+      const settled = finalText.trim();
+      let attribution: ReturnType<typeof attributeUtterance> | null = null;
+      if (settled) {
+        const roster: ParticipantAudio[] = [
+          { id: LOCAL_SPEAKER_ID, displayName: localNameRef.current, micOn: micOnRef.current, isLocal: true },
+          ...[...peersDataRef.current.values()].map((p) => ({
+            id: p.id,
+            displayName: p.displayName,
+            micOn: peerMicOnRef.current.get(p.id) ?? true,
+            isLocal: false,
+          })),
+        ];
+        attribution = attributeUtterance(
+          { startedAt: utteranceStartRef.current ?? now - 1500, endedAt: now },
+          voiceLogRef.current,
+          roster,
+          { localMicOn: micOnRef.current },
+        );
+        utteranceStartRef.current = null;
+      }
+
+      // Words we decided were somebody else's are dropped, not relabelled: the
+      // peer who actually said them is transcribing them on their own device
+      // under their own name, and publishing our copy as well would put the same
+      // sentence in the transcript twice.
+      if (attribution && !attribution.publish) {
+        setAttributionNotice({ basis: attribution.basis, text: attribution.displayName ?? "" });
+        setTranscript((prev) => {
+          const next = prev.filter((l) => l.final);
+          transcriptRef.current = next;
+          return next;
+        });
+        return;
+      }
+      if (attribution) setAttributionNotice(null);
+
       setTranscript((prev) => {
         const next = [...prev.filter((l) => l.final)];
-        if (finalText.trim()) {
-          const ts = Date.now();
-          next.push({ id: crypto.randomUUID(), speaker: localName, text: finalText.trim(), ts, final: true });
+        if (settled && attribution) {
+          const ts = now;
+          next.push({
+            id: crypto.randomUUID(),
+            speakerId: LOCAL_SPEAKER_ID,
+            speaker: localNameRef.current,
+            userId: localUserIdRef.current,
+            text: settled,
+            ts,
+            final: true,
+            isLocal: true,
+            confidence: attribution.confidence,
+            overlapped: attribution.overlapped,
+          });
           interimIdRef.current = crypto.randomUUID();
-          sendSignalRef.current({ type: "transcript", from: myIdRef.current, speaker: localName, text: finalText.trim(), ts });
+          sendSignalRef.current({
+            type: "transcript",
+            from: myIdRef.current,
+            speaker: localNameRef.current,
+            userId: localUserIdRef.current,
+            text: settled,
+            ts,
+            confidence: attribution.confidence,
+            overlapped: attribution.overlapped,
+          });
         }
-        if (interim) next.push({ id: interimIdRef.current, speaker: localName, text: interim, ts: Date.now(), final: false });
+        // An interim line under a muted mic would show the user their own name
+        // against words the room said — the exact confusion this is here to fix.
+        if (interim && micOnRef.current) {
+          next.push({
+            id: interimIdRef.current,
+            speakerId: LOCAL_SPEAKER_ID,
+            speaker: localNameRef.current,
+            userId: localUserIdRef.current,
+            text: interim,
+            ts: now,
+            final: false,
+            isLocal: true,
+            confidence: 1,
+            overlapped: false,
+          });
+        }
         transcriptRef.current = next;
         return next;
       });
     };
+
     recognition.onerror = (ev: any) => {
       if (ev.error === "not-allowed" || ev.error === "service-not-allowed") setSrStatus("error");
       else if (ev.error !== "no-speech") console.warn("[SR]", ev.error);
     };
     recognition.onend = () => {
+      utteranceStartRef.current = null;
       setSrStatus((prev) => {
         if (prev === "error" || prev === "unsupported") return prev;
         try { recognition.start(); } catch { /* ignore */ }
@@ -1664,39 +2035,106 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recognition.start();
     recognitionRef.current = recognition;
     return () => { recognition.onend = null; recognition.stop(); };
-  }, [ready, waitingForAdmit, localName]);
+  }, [ready, waitingForAdmit]);
 
-  // ── Active speaker detection ──────────────────────────────────────────────
+  // Clear the "heard while muted" note once the mic comes back — it describes a
+  // state the user has since left.
+  useEffect(() => { if (micOn) setAttributionNotice(null); }, [micOn]);
 
+  // ── Voice activity ────────────────────────────────────────────────────────
+
+  // Meters every audio stream in the call — local and remote — and keeps a short
+  // history of who was audible when. Three things read it: the speaker-view tile
+  // switch, the "who is talking" indicators, and transcript attribution.
+  //
+  // This runs in every layout, unlike the old speaker-view-only meter. It has to:
+  // attribution needs to know whose voice was in the room during an utterance
+  // regardless of which tiles the user happens to be looking at.
   useEffect(() => {
-    if (!ready || layout !== "speaker") return;
+    if (!ready || waitingForAdmit) return;
+
+    type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
+    const Ctor = window.AudioContext ?? (window as WebkitWindow).webkitAudioContext;
+    if (!Ctor) return;
+
+    let ctx: AudioContext;
+    try { ctx = new Ctor(); } catch { return; }
+    // A context created outside a gesture, or one the browser suspended while the
+    // tab was in the background, reads every level as zero — which would look
+    // like a room where nobody is talking. Nudge it back.
+    if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+
     const streams = [
-      ...(localStream ? [{ id: "local", stream: localStream }] : []),
-      ...[...peersDataRef.current.values()].filter((p) => p.stream).map((p) => ({ id: p.id, stream: p.stream! })),
+      ...(localStream ? [{ id: LOCAL_SPEAKER_ID, stream: localStream }] : []),
+      ...[...peers.values()].filter((p) => p.stream).map((p) => ({ id: p.id, stream: p.stream! })),
     ];
-    const ctxs: { id: string; analyser: AnalyserNode; ctx: AudioContext }[] = [];
+
+    const taps: {
+      id: string;
+      analyser: AnalyserNode;
+      source: MediaStreamAudioSourceNode;
+      buffer: Float32Array<ArrayBuffer>;
+      smoothed: number;
+    }[] = [];
     for (const { id, stream } of streams) {
+      const audio = stream.getAudioTracks();
+      if (audio.length === 0) continue;
       try {
-        const ctx = new AudioContext();
-        const source = ctx.createMediaStreamSource(stream);
+        // Tap a copy holding only the audio tracks — feeding a source node a
+        // stream whose video track is later replaced (screen share) can drop the
+        // tap on some browsers.
+        const source = ctx.createMediaStreamSource(new MediaStream(audio));
         const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
+        analyser.fftSize = 1024;
         source.connect(analyser);
-        ctxs.push({ id, analyser, ctx });
-      } catch { /* ignore */ }
+        taps.push({ id, analyser, source, buffer: new Float32Array(analyser.fftSize), smoothed: 0 });
+      } catch { /* a stream can end between render and tap */ }
     }
+    if (taps.length === 0) { void ctx.close().catch(() => {}); return; }
+
     const interval = setInterval(() => {
-      let maxVol = 0; let maxId: string | null = null;
-      for (const { id, analyser } of ctxs) {
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(data);
-        const vol = data.reduce((a, b) => a + b, 0) / data.length;
-        if (vol > maxVol && vol > 5) { maxVol = vol; maxId = id; }
+      const now = Date.now();
+      let loudest = 0;
+      let loudestId: string | null = null;
+
+      for (const tap of taps) {
+        tap.analyser.getFloatTimeDomainData(tap.buffer);
+        tap.smoothed = smoothLevel(tap.smoothed, levelFromSamples(tap.buffer));
+
+        // A muted mic is silent anyway, but recording its level as zero keeps a
+        // stray sample from a half-applied mute out of the attribution history.
+        const micLive = tap.id === LOCAL_SPEAKER_ID ? micOnRef.current : (peerMicOnRef.current.get(tap.id) ?? true);
+        const level = micLive ? tap.smoothed : 0;
+
+        voiceLogRef.current.record(tap.id, level, now);
+        if (level >= SPEAKING_LEVEL) lastAudibleRef.current.set(tap.id, now);
+        if (level > loudest) { loudest = level; loudestId = tap.id; }
       }
-      if (maxId) setActiveSpeakerId(maxId);
-    }, 500);
-    return () => { clearInterval(interval); ctxs.forEach(({ ctx }) => void ctx.close()); };
-  }, [ready, layout, localStream, peers]);
+
+      if (loudestId && loudest >= SPEAKING_LEVEL) setActiveSpeakerId(loudestId);
+
+      setSpeaking((prev) => {
+        const next = speakingIds(lastAudibleRef.current, now);
+        if (next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
+        return next;
+      });
+    }, VOICE_SAMPLE_MS);
+
+    return () => {
+      clearInterval(interval);
+      taps.forEach((t) => { try { t.source.disconnect(); } catch { /* context already gone */ } });
+      void ctx.close().catch(() => {});
+    };
+  }, [ready, waitingForAdmit, localStream, peers]);
+
+  // Someone who leaves stops being "speaking" — otherwise their dot stays lit on
+  // the last frame they were audible in.
+  useEffect(() => {
+    const live = new Set<string>([LOCAL_SPEAKER_ID, ...peers.keys()]);
+    for (const id of lastAudibleRef.current.keys()) {
+      if (!live.has(id)) lastAudibleRef.current.delete(id);
+    }
+  }, [peers]);
 
   // ── Bandwidth adaptation ──────────────────────────────────────────────────
 
@@ -1768,10 +2206,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!finalLines.length) return;
       const newLines = finalLines.slice(lastNotesFlushedIdxRef.current);
       if (!newLines.length) return; // nothing new since last update
-      const fullText = finalLines.map((l) => `${l.speaker}: ${l.text}`).join("\n");
-      const newText = newLines.map((l) => `${l.speaker}: ${l.text}`).join("\n");
+      const fullText = finalLines.map(formatTranscriptLine).join("\n");
+      const newText = newLines.map(formatTranscriptLine).join("\n");
       notesInflightRef.current = true;
-      const participants = [...peersDataRef.current.values()].map((p) => p.displayName);
+      const participants = [localNameRef.current, ...[...peersDataRef.current.values()].map((p) => p.displayName)];
       startNotesTransition(async () => {
         try {
           const res = await fetch("/api/meetings/notes", {
@@ -1815,7 +2253,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!newLines.length) return;
       lastFlushed.idx = finalLines.length;
       void (supabase.from("live_meeting_transcripts") as any).insert(
-        newLines.map((l) => ({ meeting_id: meetingId, speaker: l.speaker, text: l.text, ts: new Date(l.ts).toISOString() })),
+        newLines.map((l) => ({
+          meeting_id: meetingId,
+          speaker: l.speaker,
+          // The name can change mid-call and two people can share one; these
+          // identify the speaker after the fact, when the roster is gone.
+          speaker_id: l.speakerId,
+          speaker_user_id: l.userId,
+          confidence: l.confidence,
+          text: l.text,
+          ts: new Date(l.ts).toISOString(),
+        })),
       );
     }, TRANSCRIPT_FLUSH_MS);
     return () => clearInterval(interval);
@@ -1824,8 +2272,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // ── Controls ──────────────────────────────────────────────────────────────
 
   const toggleMic = useCallback(() => {
-    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
-    setMicOn((v) => !v);
+    // Derived from the ref rather than inside the state updater: the updater has
+    // to stay pure (React calls it twice in StrictMode), and the broadcast and
+    // ref write below are both side effects.
+    const next = !micOnRef.current;
+    micOnRef.current = next;
+    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = next; });
+    setMicOn(next);
+    if (!next) lastAudibleRef.current.delete(LOCAL_SPEAKER_ID);
+    // Everyone else needs this to know whether our silence means "listening" or
+    // "muted" — and to keep their own recognizer from crediting us with words we
+    // could not have said.
+    sendSignalRef.current({ type: "mic", from: myIdRef.current, micOn: next, displayName: localNameRef.current });
   }, []);
 
   const toggleCam = useCallback(() => {
@@ -1981,10 +2439,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     if (meetingId) {
-      const fullText = transcriptRef.current.filter((l) => l.final).map((l) => `${l.speaker}: ${l.text}`).join("\n");
+      const fullText = transcriptRef.current.filter((l) => l.final).map(formatTranscriptLine).join("\n");
       try {
         const res = await fetch("/api/meetings/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meetingId, transcript: fullText, duration }) });
         if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
+        // A failed report used to fall through to the meetings list, which reads
+        // as the meeting simply vanishing — no report, no explanation. Surface it
+        // instead, so the transcript can be submitted again.
+        console.warn("[meeting] report failed", res.status);
+        setEndError(true);
+        return;
       } catch { setEndError(true); return; }
     }
     router.push("/meetings");
@@ -2100,8 +2564,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const gridClass = totalCount === 1 ? "grid-cols-1" : totalCount === 2 ? "grid-cols-2" : totalCount <= 4 ? "grid-cols-2" : "grid-cols-3";
 
   const participantList = [
-    { id: "local", displayName: localName },
-    ...allPeers.map((p) => ({ id: p.id, displayName: p.displayName })),
+    { id: LOCAL_SPEAKER_ID, displayName: localName, micOn, isLocal: true },
+    ...allPeers.map((p) => ({
+      id: p.id,
+      displayName: p.displayName,
+      // A peer who has not announced yet is assumed live: everyone joins
+      // unmuted, and showing a real speaker as muted is the worse error.
+      micOn: peerMicOn.get(p.id) ?? true,
+      isLocal: false,
+    })),
   ];
 
   const getReaction = (id: string) => reactions[id] ?? "";
@@ -2187,9 +2658,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {layout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} />
+              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} />
+                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} />
               ))}
             </div>
           ) : (
@@ -2197,11 +2668,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} large />
+                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
                 ) : speakerPeer ? (
-                  <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} large />
+                  <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} large />
+                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -2209,7 +2680,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} />
+                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} />
                     </div>
                   ))}
                 </div>
@@ -2225,6 +2696,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             fixed inset-0 z-40 flex flex-col overflow-hidden sm:inset-auto sm:z-auto
             bg-[var(--surface-1)] sm:bg-transparent
           ">
+            <CopilotErrorBoundary resetKey={notes}>
             <CopilotSidebar
               transcript={transcript} notes={notes} isUpdating={isUpdatingNotes}
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
@@ -2232,6 +2704,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
               waitingPeers={waitingPeers}
               onChatOpen={() => { chatOpenRef.current = true; setChatUnread(0); }}
+              speaking={speaking} attributionNotice={attributionNotice}
               walkthroughStepIndex={walkthroughStepIndex}
               walkthroughNudge={walkthroughNudge}
               onWalkthroughStep={(idx) => {
@@ -2247,6 +2720,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               }}
               onWalkthroughNudgeDismiss={() => setWalkthroughNudge(false)}
             />
+            </CopilotErrorBoundary>
           </div>
         )}
       </div>

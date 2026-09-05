@@ -2595,6 +2595,12 @@ export type LiveMeetingTranscript = {
   id: string;
   meeting_id: string;
   speaker: string | null;
+  /** Signaling id of the speaker — stable across a rename, unlike `speaker`. */
+  speaker_id: string | null;
+  /** The signed-in account behind that speaker; null for guests. */
+  speaker_user_id: string | null;
+  /** 0-1 attribution confidence; null on rows written before attribution existed. */
+  confidence: number | null;
   text: string;
   ts: string;
 };
