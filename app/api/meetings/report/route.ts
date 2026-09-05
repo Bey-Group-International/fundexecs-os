@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import { createTeamTask } from "@/lib/team-tasks";
 import { persistInstitutionalMeetingRecord } from "@/lib/meetings/service";
+import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 
 export const runtime = "nodejs";
 
@@ -108,7 +109,19 @@ Generate a comprehensive post-meeting report.`,
 
       const toolUse = msg.content.find((b) => b.type === "tool_use");
       if (toolUse && toolUse.type === "tool_use") {
-        analysis = toolUse.input as Record<string, unknown>;
+        const raw = toolUse.input as Record<string, unknown>;
+        // The list fields are rendered on the report page and turned into team
+        // tasks below, both of which assume strings. A model answering a prompt
+        // about "action items with owners" does not always agree — so coerce
+        // here rather than letting `item.slice` throw mid-request and lose the
+        // whole report at the moment the meeting ends.
+        analysis = {
+          ...raw,
+          summary: normalizeNoteText(raw.summary),
+          key_points: normalizeNoteList(raw.key_points),
+          action_items: normalizeNoteList(raw.action_items),
+          decisions: normalizeNoteList(raw.decisions),
+        };
       }
     }
 
@@ -117,7 +130,7 @@ Generate a comprehensive post-meeting report.`,
       .from("live_meeting_reports")
       .insert({
         meeting_id: body.meetingId,
-        summary: analysis.summary as string,
+        summary: normalizeNoteText(analysis.summary),
         key_points: analysis.key_points as import("@/lib/supabase/database.types").Json,
         action_items: analysis.action_items as import("@/lib/supabase/database.types").Json,
         full_transcript: transcript,
@@ -143,7 +156,7 @@ Generate a comprehensive post-meeting report.`,
     });
 
     // Fire-and-forget: create a task for each action item
-    const actionItems = Array.isArray(analysis.action_items) ? analysis.action_items as string[] : [];
+    const actionItems = normalizeNoteList(analysis.action_items);
     if (actionItems.length > 0 && meeting.organization_id) {
       void Promise.allSettled(
         actionItems.map((item) =>
@@ -156,7 +169,7 @@ Generate a comprehensive post-meeting report.`,
             hub: "execute",
             module: "live_meetings",
             priority: "normal",
-            contextSnapshot: (analysis.summary as string) ?? "",
+            contextSnapshot: normalizeNoteText(analysis.summary),
           }),
         ),
       );

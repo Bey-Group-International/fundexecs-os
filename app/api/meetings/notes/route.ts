@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
+import { emptyLiveNotes, normalizeLiveNotes, type LiveNotes } from "@/lib/meetings/live-notes";
 
 export const runtime = "nodejs";
 
@@ -12,15 +13,10 @@ const client = process.env.ANTHROPIC_API_KEY
   ? anthropicClient(process.env.ANTHROPIC_API_KEY, LONG_RUN_TIMEOUT_MS)
   : null;
 
-export interface LiveNotesResult {
-  key_points: string[];
-  action_items: string[];
-  decisions: string[];
-  summary: string;
-}
+export type LiveNotesResult = LiveNotes;
 
 function fallback(): LiveNotesResult {
-  return { key_points: [], action_items: [], decisions: [], summary: "" };
+  return emptyLiveNotes();
 }
 
 export async function POST(req: Request) {
@@ -89,8 +85,12 @@ Extract cumulative key points, action items with owners, decisions, and a brief 
 
     const toolUse = msg.content.find((b) => b.type === "tool_use");
     if (toolUse && toolUse.type === "tool_use") {
-      const result = toolUse.input as LiveNotesResult;
-      return NextResponse.json({ ...fallback(), ...result });
+      // Narrowed rather than asserted. The schema asks for arrays of strings,
+      // but a prompt about "action items with owners" sometimes gets answered
+      // with `{ owner, task }` objects — and an object reaching the Actions tab
+      // throws in React, which in the meeting room means the error boundary
+      // replaces the call. See lib/meetings/live-notes.ts.
+      return NextResponse.json(normalizeLiveNotes(toolUse.input));
     }
 
     return NextResponse.json(fallback());

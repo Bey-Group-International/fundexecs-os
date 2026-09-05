@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { CopyButton } from "./CopyButton";
+import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 
 type Meeting = {
   id: string;
@@ -103,11 +104,14 @@ export default function MeetingReportPage() {
     return <GeneratingState />;
   }
 
-  const keyPoints = (report.key_points as string[] | null) ?? [];
-  const actionItems = (report.action_items as string[] | null) ?? [];
+  // Coerced, not cast. These are stored model output, and reports written before
+  // the report route started normalizing can hold objects where the page expects
+  // strings — which would throw in React and replace the page with an error.
+  const keyPoints = normalizeNoteList(report.key_points);
+  const actionItems = normalizeNoteList(report.action_items);
   const analysis = report.analysis as Record<string, unknown> | null;
-  const decisions = (analysis?.decisions as string[] | null) ?? [];
-  const followUp = analysis?.follow_up_draft as string | null;
+  const decisions = normalizeNoteList(analysis?.decisions);
+  const followUp = normalizeNoteText(analysis?.follow_up_draft) || null;
   const sentiment = analysis?.sentiment as string | null;
   const nextMeeting = analysis?.next_meeting_suggestion as string | null;
 
