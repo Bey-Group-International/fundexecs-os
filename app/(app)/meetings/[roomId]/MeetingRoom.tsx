@@ -23,6 +23,14 @@ import {
 } from "@/lib/meetings/speaker-attribution";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
+import {
+  canExit,
+  exitLabel,
+  isAwaitingReport,
+  isCallRunning,
+  nextPhase,
+  type CallPhase,
+} from "@/lib/meetings/call-phase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -525,7 +533,10 @@ function ControlBar({
   micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
+  leaving,
 }: {
+  /** The call is already being torn down — the exit controls must not re-fire. */
+  leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; duration: number;
   roomCode: string; bwMode: "normal" | "degraded" | "audio-only";
@@ -608,16 +619,17 @@ function ControlBar({
           </span>
         )}
 
-        {/* Leave / End — always visible */}
+        {/* Leave / End — always visible. Disabled once pressed: ending posts a
+            transcript to a model, and a second press would post a second report. */}
         {isHost ? (
-          <button onClick={onEndForAll}
-            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
-            <PhoneOffIcon /> <span className="hidden sm:inline">End for all</span>
+          <button onClick={onEndForAll} disabled={leaving} aria-busy={leaving}
+            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
+            <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", true)}</span>
           </button>
         ) : (
-          <button onClick={onLeave}
-            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
-            <PhoneOffIcon /> <span className="hidden sm:inline">Leave</span>
+          <button onClick={onLeave} disabled={leaving} aria-busy={leaving}
+            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
+            <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", false)}</span>
           </button>
         )}
       </div>
@@ -876,7 +888,7 @@ function CopilotSidebar({
   transcript, notes, isUpdating, srStatus, participants, roomCode, meetingTitle,
   chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatOpen,
   walkthroughStepIndex, walkthroughNudge, onWalkthroughStep, onWalkthroughNudgeDismiss,
-  speaking, attributionNotice,
+  speaking, attributionNotice, onCollapse,
 }: {
   transcript: TranscriptLine[]; notes: LiveNotesResult | null; isUpdating: boolean;
   srStatus: "idle" | "active" | "error" | "unsupported";
@@ -890,6 +902,8 @@ function CopilotSidebar({
   raisedHands: Set<string>; onKick: (id: string) => void;
   onAdmit: (id: string) => void; onDeny: (id: string) => void; onAdmitAll: () => void;
   waitingPeers: WaitingPeer[]; onChatOpen: () => void;
+  /** Collapse the panel. The only way out on mobile, where it covers the screen. */
+  onCollapse: () => void;
   walkthroughStepIndex: number | null;
   walkthroughNudge: boolean;
   onWalkthroughStep: (idx: number | null) => void;
@@ -957,6 +971,14 @@ function CopilotSidebar({
           )}
           {srStatus === "error" && <span className="text-xs text-[var(--status-danger)]">⚠ Mic</span>}
           {srStatus === "unsupported" && <span className="text-xs text-[var(--fg-muted)]">No STT</span>}
+          <button
+            onClick={onCollapse}
+            title="Collapse copilot"
+            aria-label="Collapse copilot"
+            className="ml-0.5 w-7 h-7 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] flex items-center justify-center transition-colors"
+          >
+            <CollapseIcon />
+          </button>
         </div>
       </div>
 
@@ -1284,6 +1306,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Raise hand & reactions
   const [handRaised, setHandRaised] = useState(false);
+  const handRaisedRef = useRef(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
   const [reactions, setReactions] = useState<Record<string, string>>({});
 
@@ -1305,7 +1328,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
-  const [endError, setEndError] = useState(false);
+  // Leaving is a lifecycle, not an instant. Ending posts a transcript to a model
+  // that can take up to two minutes, and the call is already torn down by then —
+  // so without a phase the screen sits on frozen video with a live-looking button
+  // and reads as a hung app. "ending" drives the progress overlay and disables
+  // the controls; "failed" drives the retry dialog; "left" holds the guest upsell.
+  const [callPhase, setCallPhase] = useState<CallPhase>("live");
+  // Read synchronously by the click handlers to reject a second press before any
+  // state update has been committed.
+  const endingRef = useRef(false);
+  // Mirrors `callPhase` for the click handlers, which have to decide before a
+  // state update has been committed.
+  const callPhaseRef = useRef<CallPhase>("live");
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -1341,6 +1375,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
   }, []);
 
+  // The call is joined, admitted, and not being torn down. Every periodic effect
+  // watches this rather than `ready` alone, so leaving or ending stops them all
+  // at once instead of leaving timers running against a dead call.
+  const sessionLive = ready && !waitingForAdmit && isCallRunning(callPhase);
+
   const sendSignal = useCallback((msg: SignalMsg) => {
     channelRef.current?.send({ type: "broadcast", event: "signal", payload: msg });
   }, []);
@@ -1350,6 +1389,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { localNameRef.current = localName; }, [localName]);
   useEffect(() => { peersDataRef.current = peers; }, [peers]);
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
+  useEffect(() => { handRaisedRef.current = handRaised; }, [handRaised]);
+  useEffect(() => { callPhaseRef.current = callPhase; }, [callPhase]);
   useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
 
   // Teardown on unmount. If the user navigates away via client-side routing
@@ -1463,11 +1504,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "end") {
-      clearWaitingTimers();
-      peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
-      channelRef.current?.unsubscribe();
-      if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
-      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      endingRef.current = true;
+      teardownCallRef.current();
+      setCallPhase((prev) => nextPhase(prev, "remote_end"));
       router.push("/meetings");
       return;
     }
@@ -1589,9 +1628,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "kick" && msg.target === myId) {
       sendSignalRef.current({ type: "leave", from: myId });
-      peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
-      channelRef.current?.unsubscribe();
-      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      endingRef.current = true;
+      teardownCallRef.current();
+      setCallPhase((prev) => nextPhase(prev, "remote_end"));
       router.push("/meetings");
       return;
     }
@@ -1606,7 +1645,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // instead of showing a broken "Step 0 of N" with an undefined title.
       setWalkthroughStepIndex(msg.stepIndex < 0 ? null : msg.stepIndex);
     }
-  }, [createPeerConnection, router, clearWaitingTimers, setPeerName, flushPendingIce]);
+  }, [createPeerConnection, router, setPeerName, flushPendingIce]);
 
   // ── Detect host status on mount (pre-join screen label) ──────────────────
 
@@ -1854,7 +1893,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // the org-read RLS policy; a per-meeting Realtime subscription refreshes the
   // list the instant a guest knocks or a decision is written.
   useEffect(() => {
-    if (!isHost || !ready || !meetingId) return;
+    if (!isHost || !sessionLive || !meetingId) return;
     let cancelled = false;
 
     async function loadWaiting() {
@@ -1879,7 +1918,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       )
       .subscribe();
     return () => { cancelled = true; void supabase.removeChannel(channel); };
-  }, [isHost, ready, meetingId, supabase]);
+  }, [isHost, sessionLive, meetingId, supabase]);
 
   // Carry the waiting count into the browser tab title. A host who has tabbed
   // away to pull up a document is exactly the host most likely to leave someone
@@ -1901,10 +1940,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // ── Duration timer ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!ready || waitingForAdmit) return;
+    if (!sessionLive) return;
     const t = setInterval(() => setDuration((d) => d + 1), 1000);
     return () => clearInterval(t);
-  }, [ready, waitingForAdmit]);
+  }, [sessionLive]);
 
   // ── Speech recognition ────────────────────────────────────────────────────
 
@@ -1914,7 +1953,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // the device). So a finalized sentence is not published until the voice
   // activity recorded over the seconds it was spoken says it was really ours.
   useEffect(() => {
-    if (!ready || waitingForAdmit) return;
+    if (!sessionLive) return;
     const w = window as any;
     const SR = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => any) | undefined;
     if (!SR) { setSrStatus("unsupported"); return; }
@@ -2035,7 +2074,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recognition.start();
     recognitionRef.current = recognition;
     return () => { recognition.onend = null; recognition.stop(); };
-  }, [ready, waitingForAdmit]);
+  }, [sessionLive]);
 
   // Clear the "heard while muted" note once the mic comes back — it describes a
   // state the user has since left.
@@ -2051,7 +2090,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // attribution needs to know whose voice was in the room during an utterance
   // regardless of which tiles the user happens to be looking at.
   useEffect(() => {
-    if (!ready || waitingForAdmit) return;
+    if (!sessionLive) return;
 
     type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
     const Ctor = window.AudioContext ?? (window as WebkitWindow).webkitAudioContext;
@@ -2125,7 +2164,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       taps.forEach((t) => { try { t.source.disconnect(); } catch { /* context already gone */ } });
       void ctx.close().catch(() => {});
     };
-  }, [ready, waitingForAdmit, localStream, peers]);
+  }, [sessionLive, localStream, peers]);
 
   // Someone who leaves stops being "speaking" — otherwise their dot stays lit on
   // the last frame they were audible in.
@@ -2139,7 +2178,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // ── Bandwidth adaptation ──────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!ready) return;
+    if (!sessionLive) return;
     const CHECK_INTERVAL = 8000;
     const LOW_BW_KBPS = 80;  // kbps threshold to downgrade
     const OK_BW_KBPS = 200;  // kbps threshold to restore
@@ -2194,12 +2233,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     bwCheckRef.current = setInterval(() => { void check(); }, CHECK_INTERVAL);
     return () => { if (bwCheckRef.current) clearInterval(bwCheckRef.current); };
-  }, [ready]);
+  }, [sessionLive]);
 
   // ── Notes ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!ready || waitingForAdmit) return;
+    if (!sessionLive) return;
     const interval = setInterval(() => {
       if (notesInflightRef.current) return;
       const finalLines = transcriptRef.current.filter((l) => l.final);
@@ -2240,12 +2279,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
     }, NOTES_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [ready, waitingForAdmit, meetingId, meetingTitle]);
+  }, [sessionLive, meetingId, meetingTitle]);
 
   // ── Transcript flush ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!ready || !meetingId || waitingForAdmit) return;
+    if (!sessionLive || !meetingId) return;
     const lastFlushed = { idx: 0 };
     const interval = setInterval(() => {
       const finalLines = transcriptRef.current.filter((l) => l.final);
@@ -2267,7 +2306,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       );
     }, TRANSCRIPT_FLUSH_MS);
     return () => clearInterval(interval);
-  }, [ready, meetingId, waitingForAdmit, supabase]);
+  }, [sessionLive, meetingId, supabase]);
 
   // ── Controls ──────────────────────────────────────────────────────────────
 
@@ -2287,23 +2326,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
 
   const toggleCam = useCallback(() => {
-    localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = !t.enabled; });
-    setCamOn((v) => { camOnRef.current = !v; return !v; });
+    // Derived from the ref, like toggleMic: the ref write is a side effect and
+    // does not belong inside a state updater.
+    const next = !camOnRef.current;
+    camOnRef.current = next;
+    localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
+    setCamOn(next);
+  }, []);
+
+  /** Put the camera back on the wire after a screen share ends. */
+  const restoreCameraTrack = useCallback(() => {
+    const camTrack = cameraTrackRef.current;
+    const stream = localStreamRef.current;
+    if (camTrack && stream) {
+      peersRef.current.forEach((pc) => { const s = pc.getSenders().find((s) => s.track?.kind === "video"); if (s) void s.replaceTrack(camTrack); });
+      stream.getVideoTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
+      stream.addTrack(camTrack);
+      setLocalStream(new MediaStream(stream.getTracks()));
+    }
+    setShareOn(false);
   }, []);
 
   const toggleScreen = useCallback(async () => {
-    if (shareOn) {
-      const camTrack = cameraTrackRef.current;
-      if (camTrack && localStreamRef.current) {
-        peersRef.current.forEach((pc) => { const s = pc.getSenders().find((s) => s.track?.kind === "video"); if (s) void s.replaceTrack(camTrack); });
-        const stream = localStreamRef.current;
-        stream.getVideoTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
-        stream.addTrack(camTrack);
-        setLocalStream(new MediaStream(stream.getTracks()));
-      }
-      setShareOn(false);
-      return;
-    }
+    if (shareOn) { restoreCameraTrack(); return; }
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const screenTrack = screenStream.getVideoTracks()[0];
@@ -2314,9 +2359,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       stream.addTrack(screenTrack);
       setLocalStream(new MediaStream(stream.getTracks()));
       setShareOn(true);
-      screenTrack.onended = () => void toggleScreen();
-    } catch { /* user cancelled */ }
-  }, [shareOn]);
+      // Stopping from the browser's own "Stop sharing" bar used to call back into
+      // this same closure, where `shareOn` was still false — so instead of putting
+      // the camera back it opened the screen picker again. Restore directly.
+      screenTrack.onended = () => restoreCameraTrack();
+    } catch { /* user cancelled the picker */ }
+  }, [shareOn, restoreCameraTrack]);
 
   const switchMic = useCallback(async (deviceId: string) => {
     try {
@@ -2349,11 +2397,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
 
   const toggleRaiseHand = useCallback(() => {
-    setHandRaised((prev) => {
-      const next = !prev;
-      sendSignalRef.current({ type: "raise_hand", from: myIdRef.current, raised: next });
-      return next;
-    });
+    // Same shape as the mic and camera toggles: read the ref, write the ref,
+    // then set state and broadcast — no side effects inside a state updater.
+    const next = !handRaisedRef.current;
+    handRaisedRef.current = next;
+    setHandRaised(next);
+    sendSignalRef.current({ type: "raise_hand", from: myIdRef.current, raised: next });
   }, []);
 
   const sendReaction = useCallback((emoji: string) => {
@@ -2421,42 +2470,109 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     void decideAdmission({ decision: "admit", all: true });
   }, [decideAdmission]);
 
-  const leaveMeeting = useCallback(() => {
+  /**
+   * Release everything the call holds: peers, the signaling channel, the
+   * recognizer, and the camera and microphone.
+   *
+   * One function because there are four ways out of a room — leave, end, the
+   * host ending it for everyone, and navigating away — and each used to repeat
+   * this list slightly differently. It is idempotent, so a second call (a retry,
+   * or unmount right after a leave) is harmless.
+   *
+   * Leaving the "live" phase matters as much as stopping the tracks. Every
+   * interval here is gated on it, and without that they kept running against a
+   * dead call: voice metering eight times a second on stopped tracks, getStats
+   * on closed peer connections, and a notes request every fifteen seconds. On
+   * the guest upsell screen, which never navigates away, they ran forever.
+   */
+  const teardownCall = useCallback(() => {
     clearWaitingTimers();
+    peersRef.current.forEach((pc) => { try { pc.close(); } catch { /* already closed */ } });
+    peersRef.current.clear();
+    pendingIceRef.current.clear();
+    try { channelRef.current?.unsubscribe(); } catch { /* already gone */ }
+    channelRef.current = null;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* already stopped */ }
+      recognitionRef.current = null;
+    }
+    localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
+    previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
+    // Not `setReady(false)`: `ready` also decides whether the pre-join screen is
+    // showing, and clearing it would drop someone into the green room while their
+    // report was still generating. The phase is what the intervals watch.
+    setCallPhase((prev) => (prev === "live" ? "left" : prev));
+
+    setLocalStream(null);
+    setPeers(new Map());
+    setSpeaking(new Set());
+  }, [clearWaitingTimers]);
+
+  const teardownCallRef = useRef(teardownCall);
+  useEffect(() => { teardownCallRef.current = teardownCall; }, [teardownCall]);
+
+  const leaveMeeting = useCallback(() => {
+    // The ref, not the state, is the guard: a second click lands before React has
+    // committed the phase change from the first.
+    if (endingRef.current || !canExit(callPhaseRef.current)) return;
+    endingRef.current = true;
+    callPhaseRef.current = nextPhase(callPhaseRef.current, "leave");
     sendSignal({ type: "leave", from: myIdRef.current });
-    peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
-    channelRef.current?.unsubscribe();
-    if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    teardownCall();
     if (isGuest) { setShowGuestUpsell(true); return; }
     router.push("/meetings");
-  }, [sendSignal, clearWaitingTimers, router, isGuest]);
+  }, [sendSignal, teardownCall, router, isGuest]);
 
   const endMeeting = useCallback(async () => {
+    // A second press while the report is generating would tear down an already
+    // dead call and post a second report — another stored report row, and another
+    // batch of auto-created tasks for the same meeting.
+    if (endingRef.current || !canExit(callPhaseRef.current)) return;
+    endingRef.current = true;
+    callPhaseRef.current = nextPhase(callPhaseRef.current, "end");
+    setCallPhase(callPhaseRef.current);
     sendSignal({ type: "end", from: myIdRef.current });
-    peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear();
-    channelRef.current?.unsubscribe();
-    if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    if (meetingId) {
-      const fullText = transcriptRef.current.filter((l) => l.final).map(formatTranscriptLine).join("\n");
-      try {
-        const res = await fetch("/api/meetings/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meetingId, transcript: fullText, duration }) });
-        if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
-        // A failed report used to fall through to the meetings list, which reads
-        // as the meeting simply vanishing — no report, no explanation. Surface it
-        // instead, so the transcript can be submitted again.
-        console.warn("[meeting] report failed", res.status);
-        setEndError(true);
-        return;
-      } catch { setEndError(true); return; }
-    }
-    router.push("/meetings");
-  }, [sendSignal, meetingId, duration, roomCode, router, setEndError]);
+    teardownCall();
+
+    if (!meetingId) { router.push("/meetings"); return; }
+
+    const fullText = transcriptRef.current.filter((l) => l.final).map(formatTranscriptLine).join("\n");
+    try {
+      const res = await fetch("/api/meetings/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingId, transcript: fullText, duration }),
+      });
+      if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
+      // A failed report used to fall through to the meetings list, which reads as
+      // the meeting simply vanishing — no report, no explanation.
+      console.warn("[meeting] report failed", res.status);
+    } catch (e) { console.warn("[meeting] report error", e); }
+
+    // Back to a state the retry button can act from.
+    endingRef.current = false;
+    callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
+    setCallPhase(callPhaseRef.current);
+  }, [sendSignal, teardownCall, meetingId, duration, roomCode, router]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
   }, [endMeeting]);
+
+  /** Give up on the report and leave. The transcript rows are already saved. */
+  const collapseCopilot = useCallback(() => {
+    chatOpenRef.current = false;
+    setCopilotOpen(false);
+  }, []);
+
+  const expandCopilot = useCallback(() => { setCopilotOpen(true); }, []);
+
+  const abandonReport = useCallback(() => {
+    endingRef.current = true;
+    callPhaseRef.current = nextPhase(callPhaseRef.current, "abandon");
+    setCallPhase(callPhaseRef.current);
+    router.push("/meetings");
+  }, [router]);
 
   // ── Waiting room screen ─────────────────────────────────────────────────
 
@@ -2627,7 +2743,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   return (
     <BodyPortal>
     <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex flex-col">
-      <div className="flex flex-1 overflow-hidden min-h-0">
+      {/* `relative` so the mobile copilot sheet fills the video area rather than
+          the viewport — see the sheet's own note below. */}
+      <div className="relative flex flex-1 overflow-hidden min-h-0">
         {/* Video area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--surface-0)] min-w-0">
           {/* Media permission warning */}
@@ -2689,11 +2807,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
         </div>
 
-        {/* Copilot sidebar — side panel on desktop, overlay sheet on mobile */}
+        {/* Collapsed rail — desktop only. When the panel is closed the copilot
+            used to vanish with no trace on the call screen, leaving a small
+            control-bar button as its only affordance. */}
+        {!copilotOpen && (
+          <button
+            onClick={expandCopilot}
+            title="Show copilot"
+            aria-label="Show copilot"
+            aria-expanded={false}
+            className="hidden sm:flex w-10 shrink-0 flex-col items-center gap-3 py-3 border-l border-[var(--line)] bg-[var(--surface-1)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] transition-colors"
+          >
+            <span className="text-sm">✨</span>
+            <span className="text-[10px] font-medium tracking-wide [writing-mode:vertical-rl]">Copilot</span>
+            {(chatUnread > 0 || (isHost && waitingPeers.length > 0)) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold-400)]" />
+            )}
+          </button>
+        )}
+
+        {/* Copilot sidebar — side panel on desktop, overlay sheet on mobile.
+            The mobile sheet is absolute within the video area, not fixed to the
+            viewport: as a viewport overlay it painted over the control bar, which
+            holds the only button that could dismiss it. Opening the copilot on a
+            phone therefore left no way back to mute, leave or end the call. */}
         {copilotOpen && (
           <div className="
             sm:w-80 sm:shrink-0 sm:relative sm:flex sm:flex-col sm:overflow-hidden
-            fixed inset-0 z-40 flex flex-col overflow-hidden sm:inset-auto sm:z-auto
+            absolute inset-0 z-30 flex flex-col overflow-hidden sm:inset-auto sm:z-auto
             bg-[var(--surface-1)] sm:bg-transparent
           ">
             <CopilotErrorBoundary resetKey={notes}>
@@ -2719,6 +2860,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 });
               }}
               onWalkthroughNudgeDismiss={() => setWalkthroughNudge(false)}
+              onCollapse={collapseCopilot}
             />
             </CopilotErrorBoundary>
           </div>
@@ -2734,6 +2876,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         />
       )}
 
+      {/* Above the mobile copilot sheet: mute, leave and end must never be
+          covered by a panel. */}
+      <div className="relative z-40 shrink-0">
       <ControlBar
         micOn={micOn} camOn={camOn} shareOn={shareOn} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
@@ -2741,16 +2886,40 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         roomCode={roomCode} bwMode={bwMode}
         onToggleMic={toggleMic} onToggleCam={toggleCam}
         onToggleScreen={() => void toggleScreen()}
-        onToggleCopilot={() => { setCopilotOpen((v) => { if (v) chatOpenRef.current = false; return !v; }); }}
+        onToggleCopilot={() => (copilotOpen ? collapseCopilot() : expandCopilot())}
         onLeave={leaveMeeting} onEndForAll={() => void endForAll()}
+        leaving={isAwaitingReport(callPhase)}
         onSwitchMic={switchMic} onSwitchCam={switchCam} onSwitchSpeaker={switchSpeaker}
         onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
         onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
         onFlipCamera={() => void flipCamera()}
       />
+      </div>
+
+      {/* Ending — the call is already down and the report can take a couple of
+          minutes, so say so. Without this the screen is frozen video and a
+          button that still looks live. */}
+      {isAwaitingReport(callPhase) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col items-center gap-3 text-center">
+            <span className="w-6 h-6 rounded-full border-2 border-[var(--gold-400)] border-t-transparent animate-spin" />
+            <p className="text-sm font-semibold text-[var(--fg-primary)]">Ending the meeting…</p>
+            <p className="text-xs text-[var(--fg-muted)]">
+              Writing up the summary, action items and follow-up draft. This can take a minute on a long call.
+            </p>
+            {/* Always an exit. A slow model must never be a locked room. */}
+            <button
+              onClick={abandonReport}
+              className="mt-1 text-xs text-[var(--fg-muted)] underline hover:text-[var(--fg-secondary)] transition-colors"
+            >
+              Leave without waiting
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Report generation error banner */}
-      {endError && (
+      {callPhase === "failed" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
           <div className="rounded-2xl border border-[var(--status-danger)]/40 bg-[var(--surface-1)] shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4">
             <div className="flex items-start gap-3">
@@ -2764,13 +2933,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => { setEndError(false); void endForAll(); }}
+                onClick={() => { void endForAll(); }}
                 className="flex-1 rounded-lg bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-semibold py-2 transition-colors"
               >
                 Retry
               </button>
               <button
-                onClick={() => router.push("/meetings")}
+                onClick={abandonReport}
                 className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--fg-primary)] text-sm font-medium py-2 transition-colors"
               >
                 Exit anyway
@@ -2862,6 +3031,17 @@ function SpeakerIcon() {
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
       <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+}
+
+// Points the way the panel goes: right on desktop (off to the side), and it
+// reads as "dismiss" on the mobile sheet too.
+function CollapseIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 5l7 7-7 7" />
+      <path d="M5 5v14" />
     </svg>
   );
 }
