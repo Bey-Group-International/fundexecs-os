@@ -163,6 +163,9 @@ const TRANSCRIPT_FLUSH_MS = 60_000;
 // Voice metering: fast enough that a short "yes" leaves samples behind for
 // attribution, slow enough not to compete with rendering for the main thread.
 const VOICE_SAMPLE_MS = 120;
+// How long the copilot takes to slide away. Must match the duration-200 below:
+// the panel unmounts on this timer, and unmounting early cuts the animation.
+const COPILOT_SLIDE_MS = 200;
 // Palette for per-speaker colours in the transcript.
 const SPEAKER_COLORS = [
   "var(--gold-400)",
@@ -1326,6 +1329,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
+  const [copilotMounted, setCopilotMounted] = useState(true);
+  const copilotUnmountRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
   // Leaving is a lifecycle, not an instant. Ending posts a transcript to a model
@@ -1405,6 +1410,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // read those live at teardown time.
     const peerConnections = peersRef.current;
     const pendingIce = pendingIceRef.current;
+    const copilotUnmount = copilotUnmountRef;
     return () => {
       try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
       peerConnections.clear();
@@ -1415,6 +1421,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
       localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
+      if (copilotUnmount.current) clearTimeout(copilotUnmount.current);
     };
   }, []);
 
@@ -2560,12 +2567,26 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, [endMeeting]);
 
   /** Give up on the report and leave. The transcript rows are already saved. */
+  // Collapsing animates, so the panel has to outlive the click that closed it —
+  // an unmounted element cannot slide anywhere. `copilotOpen` drives the
+  // transition; `copilotMounted` trails it, staying true for the length of the
+  // exit and then going false so the panel genuinely leaves the tree. Keeping it
+  // mounted-but-hidden would leave the whole transcript re-rendering behind a
+  // panel nobody can see, which is the opposite of collapsing it.
   const collapseCopilot = useCallback(() => {
     chatOpenRef.current = false;
     setCopilotOpen(false);
+    if (copilotUnmountRef.current) clearTimeout(copilotUnmountRef.current);
+    copilotUnmountRef.current = setTimeout(() => setCopilotMounted(false), COPILOT_SLIDE_MS);
   }, []);
 
-  const expandCopilot = useCallback(() => { setCopilotOpen(true); }, []);
+  const expandCopilot = useCallback(() => {
+    if (copilotUnmountRef.current) { clearTimeout(copilotUnmountRef.current); copilotUnmountRef.current = null; }
+    setCopilotMounted(true);
+    // Mount off-screen first, then animate in on the next frame. Setting both in
+    // one commit paints the panel already open and the entry slide never runs.
+    requestAnimationFrame(() => requestAnimationFrame(() => setCopilotOpen(true)));
+  }, []);
 
   const abandonReport = useCallback(() => {
     endingRef.current = true;
@@ -2807,36 +2828,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
         </div>
 
-        {/* Collapsed rail — desktop only. When the panel is closed the copilot
-            used to vanish with no trace on the call screen, leaving a small
-            control-bar button as its only affordance. */}
-        {!copilotOpen && (
-          <button
-            onClick={expandCopilot}
-            title="Show copilot"
-            aria-label="Show copilot"
-            aria-expanded={false}
-            className="hidden sm:flex w-10 shrink-0 flex-col items-center gap-3 py-3 border-l border-[var(--line)] bg-[var(--surface-1)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] transition-colors"
-          >
-            <span className="text-sm">✨</span>
-            <span className="text-[10px] font-medium tracking-wide [writing-mode:vertical-rl]">Copilot</span>
-            {(chatUnread > 0 || (isHost && waitingPeers.length > 0)) && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold-400)]" />
-            )}
-          </button>
-        )}
-
         {/* Copilot sidebar — side panel on desktop, overlay sheet on mobile.
             The mobile sheet is absolute within the video area, not fixed to the
             viewport: as a viewport overlay it painted over the control bar, which
             holds the only button that could dismiss it. Opening the copilot on a
-            phone therefore left no way back to mute, leave or end the call. */}
-        {copilotOpen && (
-          <div className="
-            sm:w-80 sm:shrink-0 sm:relative sm:flex sm:flex-col sm:overflow-hidden
-            absolute inset-0 z-30 flex flex-col overflow-hidden sm:inset-auto sm:z-auto
-            bg-[var(--surface-1)] sm:bg-transparent
-          ">
+            phone therefore left no way back to mute, leave or end the call.
+
+            Collapsing narrows the column to zero on desktop, so the video grows
+            into the space as the panel goes rather than snapping wider after it;
+            on mobile the sheet slides off to the right. Either way it leaves
+            nothing behind — the control-bar Copilot button brings it back. */}
+        {copilotMounted && (
+          <div
+            aria-hidden={!copilotOpen}
+            className={`
+              flex flex-col overflow-hidden bg-[var(--surface-1)]
+              absolute inset-0 z-30 transition-transform duration-200 ease-out
+              motion-reduce:transition-none
+              ${copilotOpen ? "translate-x-0" : "translate-x-full pointer-events-none"}
+              sm:relative sm:inset-auto sm:z-auto sm:bg-transparent sm:translate-x-0
+              sm:shrink-0 sm:transition-[width] sm:duration-200 sm:ease-out
+              ${copilotOpen ? "sm:w-80" : "sm:w-0"}
+            `}
+          >
+            {/* Fixed width inside the animating column: without it the panel's
+                text reflows on every frame of the slide. */}
+            <div className="flex flex-col h-full w-full sm:w-80 overflow-hidden">
             <CopilotErrorBoundary resetKey={notes}>
             <CopilotSidebar
               transcript={transcript} notes={notes} isUpdating={isUpdatingNotes}
@@ -2863,6 +2880,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               onCollapse={collapseCopilot}
             />
             </CopilotErrorBoundary>
+            </div>
           </div>
         )}
       </div>
