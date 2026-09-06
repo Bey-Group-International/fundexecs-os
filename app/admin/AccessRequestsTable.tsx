@@ -78,6 +78,11 @@ export function AccessRequestsTable({ rows }: { rows: AccessRequestRow[] }) {
                     has account
                   </span>
                 ) : null}
+                {row.decidedVia === "email" ? (
+                  <span className="rounded-md border border-line px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
+                    via email
+                  </span>
+                ) : null}
               </div>
               <p className="mt-0.5 truncate font-mono text-[11px] text-fg-muted">
                 {row.email}

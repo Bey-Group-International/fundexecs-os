@@ -93,6 +93,8 @@ export const SITE_SOCIALS: readonly string[] = [];
 export const CRAWLER_DISALLOW: readonly string[] = [
   "/api/",
   "/admin",
+  // Carries a single-use decision token in the query string — never index it.
+  "/access-decision",
   "/onboarding",
   "/settings",
   "/workspace",

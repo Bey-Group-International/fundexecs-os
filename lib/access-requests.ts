@@ -1,20 +1,28 @@
 // Invite-only access control.
 //
 // FundExecs OS has no self-serve sign-up. A prospective operator submits an
-// access request (app/request-access), a platform admin approves it in the
-// admin console, and only then does a sign-in complete. The two halves live
-// here so the auth paths (password sign-in and the OAuth callback) apply the
-// SAME gate and can never drift apart.
+// access request (app/request-access), a platform admin approves it — from the
+// admin console or straight from the alert email — and only then does a sign-in
+// complete. The pieces live here so every entry point applies the SAME rules and
+// they can never drift apart:
+//
+//   submitAccessRequest    the public form writes the queue + alerts the team
+//   enforceAccessGate      both auth paths check approval before a session stands
+//   applyAccessDecision    the one place a decision is recorded, either door
+//   *DecisionToken         the credential behind the email's Approve / Decline
 //
 // Server-only by construction: every read/write goes through the service-role
 // client, which is never present in the browser bundle. The queue table also
 // carries RLS with no policies, so a leaked anon key buys nothing.
+import { createHash, randomBytes } from "crypto";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { sendEmail, escapeHtml } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
+import { accessApprovedEmail, accessRequestEmail } from "@/lib/access-request-emails";
 import { adminAlertRecipients, isPlatformAdminEmail } from "@/lib/platform-admin";
 import { SITE_URL } from "@/lib/site";
 
 export type AccessRequestStatus = "pending" | "approved" | "declined";
+export type AccessDecisionRoute = "admin" | "email";
 
 export interface AccessRequestInput {
   email: string;
@@ -34,6 +42,7 @@ export interface AccessRequestRow {
   status: AccessRequestStatus;
   createdAt: string;
   reviewedAt: string | null;
+  decidedVia: AccessDecisionRoute | null;
   /** True when an auth user already exists for this email. */
   hasAccount: boolean;
 }
@@ -41,6 +50,12 @@ export interface AccessRequestRow {
 /** Longest value we persist per free-text field — a form post is untrusted. */
 const MAX_SHORT = 200;
 const MAX_NOTE = 2000;
+
+/**
+ * How long an emailed Approve / Decline link stays live. Long enough to survive
+ * a holiday, short enough that an old forwarded thread is inert.
+ */
+export const DECISION_TOKEN_TTL_DAYS = 14;
 
 /** Lower/trim an email so it matches the unique constraint on the queue. */
 export function normalizeEmail(raw: string | null | undefined): string {
@@ -92,6 +107,108 @@ export function normalizeAccessRequest(
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Decision tokens — the credential behind the email's Approve / Decline buttons
+// ---------------------------------------------------------------------------
+
+/**
+ * A fresh decision token. Returns the raw value (goes in the emailed link, is
+ * never persisted) alongside the hash and expiry that ARE persisted, so a leak
+ * of the table yields no working links.
+ */
+export function mintDecisionToken(now: Date = new Date()): {
+  token: string;
+  hash: string;
+  expiresAt: string;
+} {
+  const token = randomBytes(32).toString("base64url");
+  return {
+    token,
+    hash: hashDecisionToken(token),
+    expiresAt: new Date(
+      now.getTime() + DECISION_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString(),
+  };
+}
+
+/** The stored form of a decision token. */
+export function hashDecisionToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * The confirmation-page URL for one decision. The page is a landing pad, not the
+ * action: nothing is granted until the reader confirms there, which is what
+ * keeps a mail scanner's prefetch harmless.
+ */
+export function decisionUrl(token: string, decision: "approve" | "decline"): string {
+  const url = new URL("/access-decision", SITE_URL);
+  url.searchParams.set("token", token);
+  url.searchParams.set("decision", decision);
+  return url.toString();
+}
+
+/** The request a decision token points at, or null when the link is spent. */
+export interface TokenLookup {
+  id: string;
+  email: string;
+  fullName: string | null;
+  firm: string | null;
+  role: string | null;
+  note: string | null;
+  status: AccessRequestStatus;
+  createdAt: string;
+}
+
+/**
+ * Resolve a raw token to its request. Returns null for anything not currently
+ * actionable — unknown, expired, or already spent — because the page must not
+ * distinguish those cases to whoever is holding the link.
+ */
+export async function lookupDecisionToken(
+  token: string,
+  now: Date = new Date(),
+): Promise<TokenLookup | null> {
+  if (!token || !hasSupabaseServiceEnv()) return null;
+
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from("access_requests")
+      .select(
+        "id, email, full_name, firm, role, note, status, created_at, decision_token_expires_at",
+      )
+      .eq("decision_token_hash", hashDecisionToken(token))
+      .maybeSingle();
+
+    if (error || !data) return null;
+    if (
+      !data.decision_token_expires_at ||
+      new Date(data.decision_token_expires_at).getTime() <= now.getTime()
+    ) {
+      return null;
+    }
+
+    return {
+      id: data.id,
+      email: data.email,
+      fullName: data.full_name,
+      firm: data.firm,
+      role: data.role,
+      note: data.note,
+      status: data.status as AccessRequestStatus,
+      createdAt: data.created_at,
+    };
+  } catch (err) {
+    console.error("[access-request] lookupDecisionToken failed:", err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The sign-in gate
+// ---------------------------------------------------------------------------
 
 /**
  * What an authenticating principal is allowed to do.
@@ -191,9 +308,11 @@ export async function enforceAccessGate(args: {
   }
 }
 
-export type SubmitResult =
-  | { ok: true }
-  | { ok: false; error: string };
+// ---------------------------------------------------------------------------
+// Submitting a request
+// ---------------------------------------------------------------------------
+
+export type SubmitResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Record a public access request and alert the internal team.
@@ -234,15 +353,24 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Su
  * Email the internal team about a new access request, at most once per
  * requester. Same atomic-claim shape as the signup alert: the UPDATE only
  * matches a row whose alerted_at is still null, so repeat submissions and
- * concurrent calls send exactly one message. Best-effort throughout — an email
- * hiccup must never fail the request the operator just submitted.
+ * concurrent calls send exactly one message. The claim also mints the decision
+ * token in the same statement, so the token that reaches the inbox is the one
+ * this row carries and a losing racer can never overwrite it.
+ *
+ * Best-effort throughout — an email hiccup must never fail the request the
+ * operator just submitted.
  */
 async function notifyAccessRequestOnce(email: string): Promise<void> {
   try {
     const supabase = createServiceClient();
+    const minted = mintDecisionToken();
     const { data: claimed, error } = await supabase
       .from("access_requests")
-      .update({ alerted_at: new Date().toISOString() })
+      .update({
+        alerted_at: new Date().toISOString(),
+        decision_token_hash: minted.hash,
+        decision_token_expires_at: minted.expiresAt,
+      })
       .eq("email", email)
       .is("alerted_at", null)
       .select("email, full_name, firm, role, note, created_at")
@@ -265,8 +393,12 @@ async function notifyAccessRequestOnce(email: string): Promise<void> {
       role: claimed.role,
       note: claimed.note,
       createdAt: claimed.created_at,
+      approveUrl: decisionUrl(minted.token, "approve"),
+      declineUrl: decisionUrl(minted.token, "decline"),
     });
 
+    // Fan out to each recipient independently so one bad address doesn't drop
+    // the rest.
     await Promise.allSettled(
       recipients.map((to) =>
         sendEmail({
@@ -282,108 +414,107 @@ async function notifyAccessRequestOnce(email: string): Promise<void> {
   }
 }
 
-interface AccessRequestEmailInput {
-  email: string;
-  fullName: string | null;
-  firm: string | null;
-  role: string | null;
-  note: string | null;
-  createdAt: string;
+// ---------------------------------------------------------------------------
+// Recording a decision — the one path both doors go through
+// ---------------------------------------------------------------------------
+
+export type DecisionResult =
+  | { ok: true; email: string; fullName: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Approve or decline one request, from either door.
+ *
+ * Approving does two things beyond marking the row: it stamps
+ * principals.access_approved_at when the person already has an auth account
+ * (they signed in once and were bounced), and it emails them the invitation. A
+ * requester who has never signed in gets stamped by the auth gate itself on
+ * first sign-in (enforceAccessGate's "grant" path).
+ *
+ * The decision token is always cleared, whichever door was used — that is what
+ * makes an emailed link single-use, and it also retires the link the moment a
+ * console decision lands.
+ */
+export async function applyAccessDecision(args: {
+  id: string;
+  decision: Extract<AccessRequestStatus, "approved" | "declined">;
+  reviewerId: string | null;
+  via: AccessDecisionRoute;
+}): Promise<DecisionResult> {
+  if (!hasSupabaseServiceEnv()) {
+    return { ok: false, error: "Supabase service-role env is not configured." };
+  }
+
+  const supabase = createServiceClient();
+  const { data: updated, error } = await supabase
+    .from("access_requests")
+    .update({
+      status: args.decision,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: args.reviewerId,
+      decided_via: args.via,
+      decision_token_hash: null,
+      decision_token_expires_at: null,
+    })
+    .eq("id", args.id)
+    .select("email, full_name")
+    .maybeSingle();
+
+  if (error || !updated) {
+    if (error) console.error("[access-requests] decide failed:", error);
+    return { ok: false, error: "Could not record that decision. Try again." };
+  }
+
+  const email = normalizeEmail(updated.email);
+  if (args.decision !== "approved") {
+    return { ok: true, email, fullName: updated.full_name };
+  }
+
+  // Exact match only — never ILIKE, whose `_` wildcard is a legal email
+  // character and would widen an approval to accounts nobody approved. A
+  // principal whose stored email differs in case simply isn't stamped here;
+  // enforceAccessGate's "grant" path stamps them on their next sign-in instead.
+  await supabase
+    .from("principals")
+    .update({ access_approved_at: new Date().toISOString() })
+    .eq("email", email)
+    .is("access_approved_at", null);
+
+  // Best-effort invitation — a mail failure must not undo an approval that is
+  // already recorded.
+  try {
+    const template = accessApprovedEmail({ fullName: updated.full_name, email });
+    await sendEmail({
+      to: { name: updated.full_name || email, email },
+      subject: template.subject,
+      htmlBody: template.html,
+      fromName: "FundExecs OS",
+    });
+  } catch (err) {
+    console.error("[access-requests] approval email failed:", err);
+  }
+
+  return { ok: true, email, fullName: updated.full_name };
 }
 
-/** Internal new-access-request notification (dark, matches lib/email templates). */
-export function accessRequestEmail(input: AccessRequestEmailInput): {
-  subject: string;
-  html: string;
-} {
-  const name = input.fullName?.trim() || input.email;
-  const when = new Date(input.createdAt).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
+/**
+ * Record a decision made from the emailed link. The token is re-resolved here
+ * rather than trusted from the confirmation page's hidden field, so the check
+ * that matters — is this link still live? — runs at the moment of the write.
+ */
+export async function applyAccessDecisionByToken(args: {
+  token: string;
+  decision: Extract<AccessRequestStatus, "approved" | "declined">;
+}): Promise<DecisionResult> {
+  const request = await lookupDecisionToken(args.token);
+  if (!request) {
+    return { ok: false, error: "This link has expired or has already been used." };
+  }
+  return applyAccessDecision({
+    id: request.id,
+    decision: args.decision,
+    // Nobody is signed in on this path; decided_via records the door instead.
+    reviewerId: null,
+    via: "email",
   });
-  const rows: [string, string][] = [
-    ["Name", input.fullName || "—"],
-    ["Email", input.email],
-    ["Firm", input.firm || "—"],
-    ["Role", input.role || "—"],
-    ["Requested", `${when} UTC`],
-  ];
-  const rowsHtml = rows
-    .map(
-      ([k, v]) =>
-        `<tr><td style="padding:6px 12px 6px 0;font-size:13px;color:#888888;white-space:nowrap;">${escapeHtml(
-          k,
-        )}</td><td style="padding:6px 0;font-size:14px;color:#F5F5F5;">${escapeHtml(
-          v,
-        )}</td></tr>`,
-    )
-    .join("");
-
-  const noteHtml = input.note
-    ? `<p style="margin:20px 0 0;padding:12px;border-left:2px solid #F59E0B;background:#161616;font-size:14px;color:#DDDDDD;">${escapeHtml(
-        input.note,
-      )}</p>`
-    : "";
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; margin: 0; padding: 40px 20px;">
-  <div style="max-width: 560px; margin: 0 auto; background: #111111; border: 1px solid #222222; border-radius: 12px; overflow: hidden;">
-    <div style="padding: 6px 24px; background: #F59E0B;">
-      <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #0a0a0a; text-transform: uppercase;">FundExecs OS · Admin</span>
-    </div>
-    <div style="padding: 32px 24px;">
-      <h1 style="margin: 0 0 8px; font-size: 20px; color: #F5F5F5; font-weight: 700;">Access request</h1>
-      <p style="margin: 0 0 20px; font-size: 15px; color: #AAAAAA;"><strong style="color:#F5F5F5;">${escapeHtml(
-        name,
-      )}</strong> is asking for access to FundExecs OS.</p>
-      <table style="width:100%; border-collapse:collapse; border-top:1px solid #222222; padding-top:8px;">
-        ${rowsHtml}
-      </table>
-      ${noteHtml}
-      <p style="margin: 24px 0 0; font-size: 13px; color: #888888;">Approve or decline in the <a href="${SITE_URL}/admin" style="color:#F59E0B;">admin console</a>.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-  return { subject: `Access request: ${name}`, html };
-}
-
-/** Invitation email sent to a requester when a platform admin approves them. */
-export function accessApprovedEmail(input: { fullName: string | null; email: string }): {
-  subject: string;
-  html: string;
-} {
-  const greeting = input.fullName?.trim()?.split(/\s+/)[0] || "there";
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; margin: 0; padding: 40px 20px;">
-  <div style="max-width: 560px; margin: 0 auto; background: #111111; border: 1px solid #222222; border-radius: 12px; overflow: hidden;">
-    <div style="padding: 6px 24px; background: #F59E0B;">
-      <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #0a0a0a; text-transform: uppercase;">FundExecs OS</span>
-    </div>
-    <div style="padding: 32px 24px;">
-      <h1 style="margin: 0 0 8px; font-size: 20px; color: #F5F5F5; font-weight: 700;">You're in, ${escapeHtml(
-        greeting,
-      )}</h1>
-      <p style="margin: 0 0 20px; font-size: 15px; color: #AAAAAA;">Your access to FundExecs OS is approved. Sign in with <strong style="color:#F5F5F5;">${escapeHtml(
-        input.email,
-      )}</strong> and we'll walk you through setting up your firm.</p>
-      <a href="${SITE_URL}/login" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#F59E0B;color:#0a0a0a;font-size:14px;font-weight:700;text-decoration:none;">Sign in</a>
-    </div>
-  </div>
-</body>
-</html>`;
-
-  return { subject: "Your FundExecs OS access is approved", html };
 }

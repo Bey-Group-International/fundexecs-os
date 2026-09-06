@@ -2767,6 +2767,13 @@ export type AccessRequest = {
   reviewed_at: string | null;
   reviewed_by: string | null;
   alerted_at: string | null;
+  // One-click Approve / Decline from the internal alert email (migration
+  // 20260906140000). Only the SHA-256 hash of the token is stored, it expires,
+  // and recording a decision clears it — so an emailed link is single-use.
+  // `decided_via` says which door the decision came through ('admin' | 'email').
+  decision_token_hash: string | null;
+  decision_token_expires_at: string | null;
+  decided_via: string | null;
   created_at: string;
   updated_at: string;
 };

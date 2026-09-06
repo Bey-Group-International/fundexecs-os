@@ -1,15 +1,19 @@
 // Platform-admin side of the invite-only queue: list what's waiting and record
-// an approve/decline. Every read and write goes through the service-role client
-// (the queue table has RLS with no policies), so this module must only ever be
-// reached after requirePlatformAdmin() has passed — the gate lives in the
-// /admin layout and in app/admin/actions.ts, never here.
+// an approve/decline made in the console. Every read goes through the
+// service-role client (the queue table has RLS with no policies), so this module
+// must only ever be reached after requirePlatformAdmin() has passed — the gate
+// lives in the /admin layout and in app/admin/actions.ts, never here.
+//
+// The decision itself lives in lib/access-requests.ts, shared with the emailed
+// Approve / Decline links, so both doors record the same thing the same way.
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/email";
 import {
-  accessApprovedEmail,
+  applyAccessDecision,
   normalizeEmail,
+  type AccessDecisionRoute,
   type AccessRequestRow,
   type AccessRequestStatus,
+  type DecisionResult,
 } from "@/lib/access-requests";
 
 /**
@@ -23,7 +27,9 @@ export async function listAccessRequests(): Promise<AccessRequestRow[]> {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("access_requests")
-    .select("id, email, full_name, firm, role, note, status, created_at, reviewed_at")
+    .select(
+      "id, email, full_name, firm, role, note, status, created_at, reviewed_at, decided_via",
+    )
     .order("created_at", { ascending: false })
     .limit(500);
 
@@ -54,6 +60,7 @@ export async function listAccessRequests(): Promise<AccessRequestRow[]> {
     status: r.status as AccessRequestStatus,
     createdAt: r.created_at,
     reviewedAt: r.reviewed_at,
+    decidedVia: (r.decided_via as AccessDecisionRoute | null) ?? null,
     hasAccount: withAccount.has(normalizeEmail(r.email)),
   }));
 
@@ -65,69 +72,16 @@ export async function listAccessRequests(): Promise<AccessRequestRow[]> {
   );
 }
 
-export type DecisionResult = { ok: true } | { ok: false; error: string };
-
-/**
- * Approve or decline one request.
- *
- * Approving does two things: it marks the queue row, and — when the person
- * already has an auth account (they signed in once and were bounced) — it
- * stamps principals.access_approved_at so their next sign-in goes straight
- * through. A requester who has never signed in gets stamped by the auth gate
- * itself on first sign-in (enforceAccessGate's "grant" path).
- */
+/** Record a console decision, attributed to the admin who made it. */
 export async function decideAccessRequest(args: {
   id: string;
   decision: Extract<AccessRequestStatus, "approved" | "declined">;
   reviewerId: string;
 }): Promise<DecisionResult> {
-  if (!hasSupabaseServiceEnv()) {
-    return { ok: false, error: "Supabase service-role env is not configured." };
-  }
-
-  const supabase = createServiceClient();
-  const { data: updated, error } = await supabase
-    .from("access_requests")
-    .update({
-      status: args.decision,
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: args.reviewerId,
-    })
-    .eq("id", args.id)
-    .select("email, full_name, status")
-    .maybeSingle();
-
-  if (error || !updated) {
-    if (error) console.error("[access-requests] decide failed:", error);
-    return { ok: false, error: "Could not record that decision. Try again." };
-  }
-
-  if (args.decision !== "approved") return { ok: true };
-
-  // Exact match only — never ILIKE, whose `_` wildcard is a legal email
-  // character and would widen an approval to accounts nobody approved. A
-  // principal whose stored email differs in case simply isn't stamped here;
-  // enforceAccessGate's "grant" path stamps them on their next sign-in instead.
-  const email = normalizeEmail(updated.email);
-  await supabase
-    .from("principals")
-    .update({ access_approved_at: new Date().toISOString() })
-    .eq("email", email)
-    .is("access_approved_at", null);
-
-  // Best-effort invitation — a mail failure must not undo an approval that is
-  // already recorded.
-  try {
-    const template = accessApprovedEmail({ fullName: updated.full_name, email });
-    await sendEmail({
-      to: { name: updated.full_name || email, email },
-      subject: template.subject,
-      htmlBody: template.html,
-      fromName: "FundExecs OS",
-    });
-  } catch (err) {
-    console.error("[access-requests] approval email failed:", err);
-  }
-
-  return { ok: true };
+  return applyAccessDecision({
+    id: args.id,
+    decision: args.decision,
+    reviewerId: args.reviewerId,
+    via: "admin",
+  });
 }

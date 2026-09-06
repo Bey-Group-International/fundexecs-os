@@ -1332,13 +1332,35 @@ Deployed, monitoring               →  live, observability active
              |  requirePlatformAdmin inside the server action), approval stamps any
              |  existing principal and emails the requester; internal alert reuses the
              |  exactly-once claim shape of principals.signup_alerted_at.
+             |  Follow-up (same day): the alert email now carries the decision.
+             |  Migration 20260906140000 adds decision_token_hash /
+             |  decision_token_expires_at / decided_via; the internal email gets
+             |  Approve + Decline buttons and /access-decision is their landing pad.
+             |  Decision: the button is authority-by-token, not by session — it has to
+             |  work for someone reading mail on a phone — so the token is treated as a
+             |  credential: SHA-256 at rest, 14-day expiry, cleared by the same UPDATE
+             |  that records the decision (single-use, and a console decision retires
+             |  the emailed link too).
+             |  Decision: the link only ever opens a CONFIRMATION page; the grant is the
+             |  POST behind the button. A GET that approved would hand access to whichever
+             |  mail scanner or link previewer followed the URL first — inbound-mail bots
+             |  follow every link in a message.
+             |  Decision: unknown / expired / spent all render one message, so a stranger
+             |  holding a stale link learns nothing. /access-decision is in
+             |  CRAWLER_DISALLOW (the URL is the credential).
+             |  Refactor: applyAccessDecision is now the single write both doors call;
+             |  lib/admin/access-requests.ts keeps only the listing + the admin-attributed
+             |  wrapper, and the email bodies moved to lib/access-request-emails.ts.
              |  Kept: supabase/config.toml enable_signup stays TRUE — an approved
              |  requester still creates their auth user on first Google sign-in; the gate
              |  is the app's, not the provider's.
-             |  Confidence: typecheck/eslint clean, production build passes, Jest +19 new
-             |  (4575 total green). Live Supabase auth flow not exercised (no local
-             |  Supabase). Next: run the migration before deploy — until it lands,
-             |  access_approved_at is missing and the gate fails open.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +28 new
+             |  (4584 total green). Live Supabase auth flow not exercised (no local
+             |  Supabase); the emailed round trip (mint → click → confirm → grant) is
+             |  covered only at the unit level. Next: run BOTH migrations before deploy —
+             |  until they land, access_approved_at is missing and the gate fails open;
+             |  and set ADMIN_ALERT_EMAIL to the @beygroupintl.com reviewers or no alert
+             |  is sent at all.
 ```
 
 ---
