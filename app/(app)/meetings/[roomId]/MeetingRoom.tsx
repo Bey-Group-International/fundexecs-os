@@ -1,28 +1,37 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useCallback, useTransition } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { LiveNotesResult } from "@/app/api/meetings/notes/route";
-import { MeetingCopilotConsole } from "@/app/(app)/meetings/MeetingCopilotConsole";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
 import { constraintsFor, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
 import {
   LOCAL_SPEAKER_ID,
-  LOW_CONFIDENCE,
   SPEAKING_LEVEL,
   VoiceActivityLog,
   attributeUtterance,
   formatTranscriptLine,
   speakerColorIndex,
   speakingIds,
-  suppressionReason,
-  type AttributionBasis,
   type ParticipantAudio,
 } from "@/lib/meetings/speaker-attribution";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
+import { BackgroundPicker } from "./BackgroundPicker";
+import {
+  BACKGROUND_PREF_KEY,
+  NO_BACKGROUND,
+  decodeEffect,
+  effectLabel,
+  encodeEffect,
+  needsSegmentation,
+  shouldSuspendEffect,
+  suspensionMessage,
+  type BackgroundEffect,
+} from "@/lib/meetings/backgrounds";
+import { BackgroundProcessor } from "@/lib/meetings/background-processor";
+import { getBackground } from "@/lib/meetings/background-store";
 import {
   canExit,
   exitLabel,
@@ -50,7 +59,7 @@ interface TranscriptLine {
   ts: number;
   final: boolean;
   isLocal: boolean;
-  /** 0-1 attribution confidence; below LOW_CONFIDENCE the line is marked unsure. */
+  /** 0-1 attribution confidence, carried into the saved transcript and report. */
   confidence: number;
   /** Someone else was audible at the same time. */
   overlapped: boolean;
@@ -88,66 +97,7 @@ type SignalMsg =
   | { type: "admit_request"; from: string; displayName: string }
   | { type: "admit"; from: string; target: string }
   | { type: "deny"; from: string; target: string }
-  | { type: "walkthrough_step"; from: string; stepIndex: number; stepTitle: string };
-
-// ─── Walkthrough ──────────────────────────────────────────────────────────────
-
-interface WalkthroughStep {
-  title: string;
-  talkingPoints: string[];
-  suggestedQuestions: string[];
-  keywords: string[]; // transcript keywords that signal this topic is covered
-}
-
-const FUNDEXECS_PROGRAM: WalkthroughStep[] = [
-  {
-    title: "Platform Overview",
-    talkingPoints: [
-      "FundExecs OS is an all-in-one operating system for fund managers and investor relations teams.",
-      "It centralizes deal flow, investor communications, data rooms, and meeting intelligence in one place.",
-      "Built specifically for the VC/PE/family office space — not a generic CRM.",
-      "Secure, compliant, and designed for teams that manage complex cap tables and LP relationships.",
-    ],
-    suggestedQuestions: [
-      "How many LPs or deals are you currently managing?",
-      "What tools are you using today for deal tracking and investor comms?",
-      "What's your biggest operational bottleneck right now?",
-    ],
-    keywords: ["overview", "platform", "what is", "fundexecs", "fund manager", "investor relations"],
-  },
-  {
-    title: "Key Modules Demo",
-    talkingPoints: [
-      "Deals hub: track deal flow from sourcing to close with pipeline views, notes, and document attachments.",
-      "Data Room: secure document sharing with granular access controls and view analytics.",
-      "Inbox: unified investor communications with AI-drafted responses and thread management.",
-      "Canvas: collaborative workspace for memos, models, and internal documents.",
-      "Secondaries & Cap Table: manage LP transfers, secondary transactions, and equity schedules.",
-    ],
-    suggestedQuestions: [
-      "Which of these modules would have the biggest immediate impact for your team?",
-      "Do you currently have a data room solution? How is document access managed?",
-      "How do you handle LP updates and capital call communications today?",
-    ],
-    keywords: ["deals", "data room", "inbox", "canvas", "secondaries", "cap table", "module", "feature"],
-  },
-  {
-    title: "AI Copilot Features",
-    talkingPoints: [
-      "Every meeting gets AI transcription, live notes, and action items — automatically.",
-      "The copilot identifies speakers, tracks decisions made, and generates a follow-up email draft.",
-      "Post-meeting reports include sentiment analysis, key points, and next meeting suggestions.",
-      "The Analyze tab lets you paste any transcript for deal sentiment scoring and CRM update suggestions.",
-      "All AI features run on Claude (Anthropic) — the most capable and safest model available.",
-    ],
-    suggestedQuestions: [
-      "How much time does your team spend on meeting follow-ups each week?",
-      "Would auto-generated action items sync well with how you currently track tasks?",
-      "Are there other AI use cases in your workflow where this could help?",
-    ],
-    keywords: ["ai", "copilot", "transcription", "notes", "action items", "report", "claude", "intelligence"],
-  },
-];
+;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -158,7 +108,6 @@ const FALLBACK_ICE: RTCConfiguration = {
   ],
 };
 
-const NOTES_INTERVAL_MS = 15_000;
 const TRANSCRIPT_FLUSH_MS = 60_000;
 // Voice metering: fast enough that a short "yes" leaves samples behind for
 // attribution, slow enough not to compete with rendering for the main thread.
@@ -536,8 +485,12 @@ function ControlBar({
   micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
-  leaving,
+  leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
 }: {
+  onOpenBackgrounds: () => void;
+  /** An effect is applied, so the control reads as on. */
+  backgroundActive: boolean;
+  backgroundBtnRef: React.RefObject<HTMLButtonElement | null>;
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
@@ -569,6 +522,25 @@ function ControlBar({
           <CtrlBtn active={camOn} onClick={onToggleCam} title={camOn ? "Camera off" : "Camera on"} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
           <span className="hidden sm:block"><DeviceChevron kind="videoinput" onSelect={onSwitchCam} /></span>
         </div>
+
+        {/* Backgrounds — next to the camera controls, because that is what it
+            changes. Hidden on mobile: segmentation on a phone costs battery and
+            heat during a call, and the control bar there is already full. */}
+        <span className="hidden sm:block">
+          <button
+            ref={backgroundBtnRef}
+            onClick={onOpenBackgrounds}
+            title="Background effects"
+            aria-label="Background effects"
+            className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
+              backgroundActive
+                ? "border-[var(--gold-400)]/60 bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
+            }`}
+          >
+            <BackgroundIcon />
+          </button>
+        </span>
 
         {/* Camera flip — mobile only */}
         <button onClick={onFlipCamera} title="Flip camera"
@@ -671,235 +643,32 @@ function ControlBar({
   );
 }
 
-// ─── WalkthroughPanel ────────────────────────────────────────────────────────
-
-function WalkthroughPanel({
-  stepIndex, nudge, onNavigate, onDismissNudge,
-}: {
-  stepIndex: number | null;
-  nudge: boolean;
-  onNavigate: (idx: number | null) => void;
-  onDismissNudge: () => void;
-}) {
-  const isActive = stepIndex !== null;
-  const step = isActive ? FUNDEXECS_PROGRAM[stepIndex] : null;
-  const isFirst = stepIndex === 0;
-  const isLast = stepIndex === FUNDEXECS_PROGRAM.length - 1;
-
-  if (!isActive) {
-    return (
-      <div className="flex flex-col gap-4 py-2">
-        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-0)] p-4 flex flex-col gap-3">
-          <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">FundExecs OS Program</p>
-          <p className="text-xs text-[var(--fg-muted)]">Walk prospects through the platform step by step. Participants will see the current step in a banner above the video.</p>
-          <div className="flex flex-col gap-1.5">
-            {FUNDEXECS_PROGRAM.map((s, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-[var(--fg-secondary)]">
-                <span className="w-4 h-4 rounded-full border border-[var(--line)] flex items-center justify-center text-[11px] font-medium shrink-0">{i + 1}</span>
-                {s.title}
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={() => onNavigate(0)}
-            className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-white text-xs font-semibold py-2.5 transition-colors"
-          >
-            Start walkthrough
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3 py-1">
-      {/* AI nudge */}
-      {nudge && (
-        <div className="rounded-lg border border-[var(--gold-400)]/30 bg-[var(--gold-400)]/8 p-3 flex items-start gap-2">
-          <span className="text-[var(--gold-400)] text-sm shrink-0">✨</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-[var(--fg-primary)]">Ready to move on?</p>
-            <p className="text-xs text-[var(--fg-muted)] mt-0.5">This topic looks covered. Advance to the next step when you&apos;re ready.</p>
-          </div>
-          <button onClick={onDismissNudge} className="text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] text-xs shrink-0">✕</button>
-        </div>
-      )}
-
-      {/* Step header */}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-[var(--fg-muted)] uppercase tracking-wide">Step {stepIndex! + 1} of {FUNDEXECS_PROGRAM.length}</span>
-        <button onClick={() => onNavigate(null)} className="text-[11px] text-[var(--fg-muted)] hover:text-[var(--status-danger)] transition-colors">End walkthrough</button>
-      </div>
-
-      {/* Step progress pills */}
-      <div className="flex gap-1.5">
-        {FUNDEXECS_PROGRAM.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => onNavigate(i)}
-            className={`h-1 flex-1 rounded-full transition-colors ${i === stepIndex ? "bg-[var(--gold-400)]" : i < stepIndex! ? "bg-[var(--gold-400)]/40" : "bg-[var(--line)]"}`}
-            title={FUNDEXECS_PROGRAM[i].title}
-          />
-        ))}
-      </div>
-
-      {/* Step title */}
-      <h3 className="text-sm font-semibold text-[var(--fg-primary)]">{step!.title}</h3>
-
-      {/* Talking points */}
-      <div className="flex flex-col gap-2">
-        <p className="text-[11px] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Talking Points</p>
-        {step!.talkingPoints.map((pt, i) => (
-          <div key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-0)] border border-[var(--line)] p-2.5">
-            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] shrink-0" />
-            <span className="text-xs text-[var(--fg-primary)] leading-relaxed">{pt}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Suggested questions */}
-      <div className="flex flex-col gap-2">
-        <p className="text-[11px] font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Ask the Prospect</p>
-        {step!.suggestedQuestions.map((q, i) => (
-          <div key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-0)] border border-[var(--line)] p-2.5">
-            <span className="text-[var(--gold-400)] text-xs shrink-0 mt-0.5">?</span>
-            <span className="text-xs text-[var(--fg-secondary)] italic leading-relaxed">{q}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Navigation */}
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={() => onNavigate(stepIndex! - 1)}
-          disabled={isFirst}
-          className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-secondary)] text-xs font-medium py-2 hover:bg-[var(--surface-2)] disabled:opacity-30 transition-colors"
-        >
-          ← Back
-        </button>
-        <button
-          onClick={() => isLast ? onNavigate(null) : onNavigate(stepIndex! + 1)}
-          className={`flex-1 rounded-lg text-xs font-semibold py-2 transition-colors ${
-            isLast
-              ? "bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/30 hover:bg-[var(--status-success)]/25"
-              : "bg-[var(--gold-400)] hover:bg-[var(--gold-500)] text-white"
-          }`}
-        >
-          {isLast ? "Finish ✓" : "Next →"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── NowSpeaking ──────────────────────────────────────────────────────────────
-
-/**
- * A live read of whose voice is in the room, above the transcript.
- *
- * The transcript is always a second or two behind — the recognizer only speaks
- * in finished sentences. This closes that gap, so it is obvious in the moment
- * which name the words landing next belong to.
- */
-function NowSpeaking({
-  participants, speaking,
-}: {
-  participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
-  speaking: Set<string>;
-}) {
-  const active = participants.filter((p) => speaking.has(p.id));
-  const muted = participants.filter((p) => !p.micOn);
-
-  return (
-    <div className="sticky top-0 z-10 -mt-1 mb-1 flex flex-wrap items-center gap-1.5 bg-[var(--surface-1)] pb-2 pt-1 text-[11px]">
-      {active.length > 0 ? (
-        <>
-          <span className="text-[var(--fg-muted)]">Speaking:</span>
-          {active.map((p) => (
-            <span
-              key={p.id}
-              style={{ color: SPEAKER_COLORS[speakerColorIndex(p.id, SPEAKER_COLORS.length)] }}
-              className="inline-flex items-center gap-1 font-medium"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-              {p.isLocal ? "You" : p.displayName}
-            </span>
-          ))}
-          {active.length > 1 && <span className="text-[var(--fg-muted)]">(overlapping)</span>}
-        </>
-      ) : (
-        <span className="text-[var(--fg-muted)]">
-          {participants.every((p) => !p.micOn)
-            ? "Every mic is muted — nothing is being transcribed"
-            : "Listening…"}
-        </span>
-      )}
-      {active.length > 0 && muted.length > 0 && (
-        <span className="text-[var(--fg-muted)]">· {muted.length} muted</span>
-      )}
-    </div>
-  );
-}
-
-// ─── TranscriptTurn ───────────────────────────────────────────────────────────
-
-function TranscriptTurn({
-  line, startsTurn, displayName, color, speakingNow,
-}: {
-  line: TranscriptLine;
-  startsTurn: boolean;
-  displayName: string;
-  color: string;
-  speakingNow: boolean;
-}) {
-  const unsure = line.final && line.confidence < LOW_CONFIDENCE;
-  return (
-    <div className={startsTurn ? "mt-2 first:mt-0" : ""}>
-      {startsTurn && (
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-xs font-medium" style={{ color }}>
-            {displayName}{line.isLocal ? " (You)" : ""}
-          </span>
-          {speakingNow && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />}
-          {unsure && (
-            <span
-              title={
-                line.overlapped
-                  ? "People were speaking over each other — this attribution may be wrong"
-                  : "This line could not be matched to a voice with confidence"
-              }
-              className="text-[10px] text-[var(--fg-muted)] border border-[var(--line)] rounded px-1"
-            >
-              unsure
-            </span>
-          )}
-        </div>
-      )}
-      <div
-        className={`text-sm pl-2 border-l-2 ${line.final ? "text-[var(--fg-primary)]" : "text-[var(--fg-muted)] italic"}`}
-        style={{ borderColor: color }}
-      >
-        {line.text}
-      </div>
-    </div>
-  );
-}
-
 // ─── CopilotSidebar ───────────────────────────────────────────────────────────
 
+/**
+ * The in-call sidebar: chat and people, and nothing else.
+ *
+ * It used to carry five more tabs — a live transcript, rolling notes, extracted
+ * action items, a host walkthrough script, and a paste-a-transcript analyser.
+ * Every one of them was something to read while another person was talking to
+ * you, and the three that were not free cost a model call every fifteen seconds
+ * to produce a rougher version of what the end-of-meeting report generates
+ * anyway, from the whole conversation rather than a rolling window.
+ *
+ * Transcription did not stop; it lost its tab. It still runs, still attributes
+ * each line to whoever actually spoke, and still saves — the report afterwards
+ * is built from it, and the "Live" lamp in this header is how someone knows it
+ * is working.
+ */
 function CopilotSidebar({
-  transcript, notes, isUpdating, srStatus, participants, roomCode, meetingTitle,
+  srStatus, participants, roomCode, meetingTitle,
   chatMessages, onSendChat, isHost, raisedHands, onKick, onAdmit, onDeny, onAdmitAll, waitingPeers, onChatOpen,
-  walkthroughStepIndex, walkthroughNudge, onWalkthroughStep, onWalkthroughNudgeDismiss,
-  speaking, attributionNotice, onCollapse,
+  speaking, onCollapse,
 }: {
-  transcript: TranscriptLine[]; notes: LiveNotesResult | null; isUpdating: boolean;
   srStatus: "idle" | "active" | "error" | "unsupported";
   participants: { id: string; displayName: string; micOn: boolean; isLocal: boolean }[];
   /** Ids of everyone whose voice is in the room right now. */
   speaking: Set<string>;
-  /** Why the last thing this mic heard was not added to the transcript. */
-  attributionNotice: { basis: AttributionBasis; text: string } | null;
   roomCode: string; meetingTitle: string; chatMessages: ChatMessage[];
   onSendChat: (text: string) => void; isHost: boolean;
   raisedHands: Set<string>; onKick: (id: string) => void;
@@ -907,28 +676,16 @@ function CopilotSidebar({
   waitingPeers: WaitingPeer[]; onChatOpen: () => void;
   /** Collapse the panel. The only way out on mobile, where it covers the screen. */
   onCollapse: () => void;
-  walkthroughStepIndex: number | null;
-  walkthroughNudge: boolean;
-  onWalkthroughStep: (idx: number | null) => void;
-  onWalkthroughNudgeDismiss: () => void;
 }) {
-  const [tab, setTab] = useState<"transcript" | "notes" | "actions" | "chat" | "people" | "walkthrough" | "analyze">("transcript");
+  const [tab, setTab] = useState<"chat" | "people">("chat");
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
-  const txBottomRef = useRef<HTMLDivElement>(null);
   const [emailInput, setEmailInput] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
-  useEffect(() => { if (tab === "transcript") txBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [transcript, tab]);
   useEffect(() => { if (tab === "chat") chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, tab]);
   useEffect(() => { if (tab === "chat") onChatOpen(); }, [tab, onChatOpen]);
-
-  // Names are resolved from the live roster rather than read off the line, so a
-  // rename mid-call retitles everything that person already said instead of
-  // leaving the transcript split between two names for one voice.
-  const nameFor = (line: TranscriptLine) =>
-    participants.find((p) => p.id === line.speakerId)?.displayName ?? line.speaker ?? "Unknown speaker";
 
   // Colour by id, not by position in the list — so a speaker keeps their colour
   // when someone above them leaves, and holds the same one on every screen.
@@ -964,7 +721,6 @@ function CopilotSidebar({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line)] shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--fg-primary)]">✨ Copilot</span>
-          {isUpdating && <span className="text-xs text-[var(--gold-400)] animate-pulse">Updating…</span>}
         </div>
         <div className="flex items-center gap-1.5">
           {srStatus === "active" && (
@@ -987,16 +743,13 @@ function CopilotSidebar({
 
       {/* Tabs */}
       <div className="flex border-b border-[var(--line)] shrink-0 overflow-x-auto">
-        {(["transcript", "notes", "actions", "chat", "people", ...(isHost ? (["walkthrough", "analyze"] as const) : (["analyze"] as const))] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t as typeof tab)}
+        {(["chat", "people"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)}
             className={`relative shrink-0 flex-1 py-2 text-xs font-medium transition-colors capitalize ${
               tab === t ? "text-[var(--fg-primary)] border-b-2 border-[var(--gold-400)] -mb-px"
                         : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
             }`}>
-            {t === "people" ? `People ${participants.length}` : t === "chat" ? "Chat" : t === "actions" ? "Actions" : t === "notes" ? "Notes" : t === "analyze" ? "Analyze" : t === "walkthrough" ? "Guide" : "Live"}
-            {t === "walkthrough" && walkthroughNudge && (
-              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)]" />
-            )}
+            {t === "people" ? `People ${participants.length}` : "Chat"}
             {t === "people" && isHost && waitingPeers.length > 0 && (
               <span
                 title={`${waitingPeers.length} waiting to join`}
@@ -1011,84 +764,6 @@ function CopilotSidebar({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-        {tab === "transcript" && (
-          <>
-            <NowSpeaking participants={participants} speaking={speaking} />
-            {transcript.length === 0 ? <EmptyCopilot label="Transcription will appear here once you start speaking." /> : (
-              transcript.map((line, i) => {
-                // Only label a line when the speaker changes: a name against every
-                // line of one person's paragraph reads as a stutter, and it hides
-                // the handovers, which are the thing worth seeing.
-                const previous = i > 0 ? transcript[i - 1] : null;
-                const startsTurn = !previous || previous.speakerId !== line.speakerId;
-                return (
-                  <TranscriptTurn
-                    key={line.id}
-                    line={line}
-                    startsTurn={startsTurn}
-                    displayName={nameFor(line)}
-                    color={colorFor(line.speakerId)}
-                    speakingNow={speaking.has(line.speakerId)}
-                  />
-                );
-              })
-            )}
-            {attributionNotice && (
-              <div className="mt-1 rounded-lg border border-dashed border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--fg-muted)]">
-                {suppressionReason(attributionNotice.basis, attributionNotice.text || null)}
-              </div>
-            )}
-            <div ref={txBottomRef} />
-          </>
-        )}
-
-        {tab === "notes" && (
-          <>
-            {notes?.summary ? (
-              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-3 text-sm text-[var(--fg-primary)]">{notes.summary}</div>
-            ) : null}
-            {notes?.key_points?.length ? (
-              <div className="flex flex-col gap-1">
-                <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Key Points</p>
-                {notes.key_points.map((pt, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
-                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--gold-400)] shrink-0" />{pt}
-                  </div>
-                ))}
-              </div>
-            ) : (!notes?.summary && <EmptyCopilot label="Key points will appear as your meeting progresses." />)}
-          </>
-        )}
-
-        {tab === "actions" && (
-          (notes?.action_items?.length || notes?.decisions?.length) ? (
-            <div className="flex flex-col gap-3">
-              {notes.action_items?.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Action Items</p>
-                  {notes.action_items.map((item, i) => (
-                    <div key={i} className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-2.5">
-                      <span className="mt-0.5 text-[var(--status-success)] shrink-0">☐</span>
-                      <span className="text-sm text-[var(--fg-primary)]">{item}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {notes.decisions?.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide">Decisions</p>
-                  {notes.decisions.map((d, i) => (
-                    <div key={i} className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-2.5">
-                      <span className="mt-0.5 text-[var(--status-success)] shrink-0">✓</span>
-                      <span className="text-sm text-[var(--fg-primary)]">{d}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : <EmptyCopilot label="Action items and decisions will be extracted as you discuss tasks." />
-        )}
-
         {tab === "chat" && (
           <>
             {chatMessages.length === 0 ? <EmptyCopilot label="Send a message to everyone in the call." /> : (
@@ -1187,16 +862,6 @@ function CopilotSidebar({
           </div>
         )}
 
-        {tab === "analyze" && <MeetingCopilotConsole />}
-
-        {tab === "walkthrough" && isHost && (
-          <WalkthroughPanel
-            stepIndex={walkthroughStepIndex}
-            nudge={walkthroughNudge}
-            onNavigate={onWalkthroughStep}
-            onDismissNudge={onWalkthroughNudgeDismiss}
-          />
-        )}
       </div>
 
       {/* Chat input */}
@@ -1235,7 +900,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Local media
   const localStreamRef = useRef<MediaStream | null>(null);
+  // The track the room should be seeing when nobody is sharing a screen. With a
+  // background effect on this is the composited canvas track, not the camera —
+  // which is what lets the screen-share restore below stay unaware of effects.
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  // The camera device itself, which feeds the processor. Kept apart from the
+  // above because switching cameras has to rebuild the effect on the new device.
+  const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -1287,20 +958,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Utterance boundaries. The recognizer hands us a sentence after the fact, so
   // attribution needs the moment it started, not the moment it arrived.
   const utteranceStartRef = useRef<number | null>(null);
-  // The last line we heard but did not publish, shown in the transcript so a
-  // muted user understands why their words are missing.
-  const [attributionNotice, setAttributionNotice] = useState<{ basis: AttributionBasis; text: string } | null>(null);
 
-  // Notes
-  const [notes, setNotes] = useState<LiveNotesResult | null>(null);
-  const [isUpdatingNotes, startNotesTransition] = useTransition();
+  // Whether speech recognition is capturing. There is no transcript tab any
+  // more, so this lamp in the copilot header is the only sign that the meeting
+  // is being recorded for its report — which makes it worth more, not less.
   const [srStatus, setSrStatus] = useState<"idle" | "active" | "error" | "unsupported">("idle");
-  const notesInflightRef = useRef(false);
-  const lastNotesFlushedIdxRef = useRef(0);
-
-  // Walkthrough
-  const [walkthroughStepIndex, setWalkthroughStepIndex] = useState<number | null>(null);
-  const [walkthroughNudge, setWalkthroughNudge] = useState(false);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -1322,10 +984,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Bandwidth adaptation
   const [bwMode, setBwMode] = useState<"normal" | "degraded" | "audio-only">("normal");
+  // Read from inside the processor's frame callback, which is created once.
+  const bwModeRef = useRef<"normal" | "degraded" | "audio-only">("normal");
   const bwCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Media error (permission denial, no devices, etc.)
   const [mediaError, setMediaError] = useState<string | null>(null);
+
+  // ── Camera backgrounds ────────────────────────────────────────────────────
+  const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
+  const bgEffectRef = useRef<BackgroundEffect>(NO_BACKGROUND);
+  const processorRef = useRef<BackgroundProcessor | null>(null);
+  const [bgPickerOpen, setBgPickerOpen] = useState(false);
+  const [bgUnavailable, setBgUnavailable] = useState(false);
+  const [bgNotice, setBgNotice] = useState<string | null>(null);
+  const bgBtnRef = useRef<HTMLButtonElement>(null);
+  // Sticky once tripped. A background that switched itself off and then back on
+  // as the numbers wobbled would be worse than either state.
+  const bgSuspendedRef = useRef(false);
+  // Guards the async build below: two quick picks would otherwise each start a
+  // processor, and the loser would keep a camera tap and a render loop alive.
+  const processorBuildingRef = useRef(false);
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -1396,6 +1075,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
   useEffect(() => { handRaisedRef.current = handRaised; }, [handRaised]);
   useEffect(() => { callPhaseRef.current = callPhase; }, [callPhase]);
+  useEffect(() => { bwModeRef.current = bwMode; }, [bwMode]);
+  // Nothing is transmitted while the camera is off, so nothing needs compositing.
+  useEffect(() => { processorRef.current?.setPaused(!camOn); }, [camOn]);
+
+  // A call already dropping video to protect audio should not be spending the
+  // remaining budget on scenery. The CPU half of this rule is applied from
+  // inside the processor's frame loop; both defer to shouldSuspendEffect.
+  useEffect(() => {
+    if (bgSuspendedRef.current || !needsSegmentation(bgEffectRef.current)) return;
+    const decision = shouldSuspendEffect({ bwMode, consecutiveSlowFrames: 0 });
+    if (!decision.suspend || !decision.reason) return;
+    bgSuspendedRef.current = true;
+    setBgNotice(suspensionMessage(decision.reason));
+    void applyBackgroundRef.current(NO_BACKGROUND);
+  }, [bwMode]);
   useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
 
   // Teardown on unmount. If the user navigates away via client-side routing
@@ -1411,6 +1105,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const peerConnections = peersRef.current;
     const pendingIce = pendingIceRef.current;
     const copilotUnmount = copilotUnmountRef;
+    const processor = processorRef;
+    const rawCamera = rawCameraTrackRef;
     return () => {
       try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
       peerConnections.clear();
@@ -1422,6 +1118,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       if (copilotUnmount.current) clearTimeout(copilotUnmount.current);
+      processor.current?.destroy();
+      try { rawCamera.current?.stop(); } catch { /* already stopped */ }
     };
   }, []);
 
@@ -1646,12 +1344,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // a waiting guest never joins this signaling channel until admitted, so
     // admit_request / admit / deny no longer travel over the WebRTC channel.
 
-    if (msg.type === "walkthrough_step") {
-      // The host sends -1 to signal "walkthrough ended"; map it back to null so
-      // the participant banner (which renders whenever the index !== null) clears
-      // instead of showing a broken "Step 0 of N" with an undefined title.
-      setWalkthroughStepIndex(msg.stepIndex < 0 ? null : msg.stepIndex);
-    }
   }, [createPeerConnection, router, setPeerName, flushPendingIce]);
 
   // ── Detect host status on mount (pre-join screen label) ──────────────────
@@ -1772,7 +1464,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     localStreamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
+    rawCameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
+
+    // Restore the background chosen on a previous call. Deliberately after the
+    // stream is live and not awaited: the segmenter is a 12MB download and
+    // joining should never wait on scenery.
+    try {
+      const remembered = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY));
+      if (needsSegmentation(remembered)) void applyBackgroundRef.current(remembered);
+    } catch { /* storage disabled — start with no effect */ }
 
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
@@ -2007,7 +1708,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // under their own name, and publishing our copy as well would put the same
       // sentence in the transcript twice.
       if (attribution && !attribution.publish) {
-        setAttributionNotice({ basis: attribution.basis, text: attribution.displayName ?? "" });
         setTranscript((prev) => {
           const next = prev.filter((l) => l.final);
           transcriptRef.current = next;
@@ -2015,7 +1715,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         });
         return;
       }
-      if (attribution) setAttributionNotice(null);
 
       setTranscript((prev) => {
         const next = [...prev.filter((l) => l.final)];
@@ -2083,9 +1782,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => { recognition.onend = null; recognition.stop(); };
   }, [sessionLive]);
 
-  // Clear the "heard while muted" note once the mic comes back — it describes a
-  // state the user has since left.
-  useEffect(() => { if (micOn) setAttributionNotice(null); }, [micOn]);
 
   // ── Voice activity ────────────────────────────────────────────────────────
 
@@ -2242,52 +1938,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => { if (bwCheckRef.current) clearInterval(bwCheckRef.current); };
   }, [sessionLive]);
 
-  // ── Notes ─────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!sessionLive) return;
-    const interval = setInterval(() => {
-      if (notesInflightRef.current) return;
-      const finalLines = transcriptRef.current.filter((l) => l.final);
-      if (!finalLines.length) return;
-      const newLines = finalLines.slice(lastNotesFlushedIdxRef.current);
-      if (!newLines.length) return; // nothing new since last update
-      const fullText = finalLines.map(formatTranscriptLine).join("\n");
-      const newText = newLines.map(formatTranscriptLine).join("\n");
-      notesInflightRef.current = true;
-      const participants = [localNameRef.current, ...[...peersDataRef.current.values()].map((p) => p.displayName)];
-      startNotesTransition(async () => {
-        try {
-          const res = await fetch("/api/meetings/notes", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              transcript: fullText,
-              newTranscript: newText,
-              title: meetingTitle || undefined,
-              participants,
-            }),
-          });
-          if (res.ok) {
-            const result = await res.json() as LiveNotesResult;
-            setNotes(result);
-            lastNotesFlushedIdxRef.current = finalLines.length;
-            // AI nudge: check if current walkthrough step appears covered
-            setWalkthroughStepIndex((idx) => {
-              if (idx === null || idx >= FUNDEXECS_PROGRAM.length - 1) return idx;
-              const step = FUNDEXECS_PROGRAM[idx];
-              const recentText = fullText.slice(-2000).toLowerCase();
-              const covered = step.keywords.filter((kw) => recentText.includes(kw)).length >= 2;
-              if (covered) setWalkthroughNudge(true);
-              return idx;
-            });
-          }
-        } catch { /* ignore */ } finally { notesInflightRef.current = false; }
-      });
-    }, NOTES_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [sessionLive, meetingId, meetingTitle]);
-
   // ── Transcript flush ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -2341,18 +1991,138 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setCamOn(next);
   }, []);
 
+  /**
+   * Put one video track on the wire: every peer sender, the local stream, and
+   * the tile that renders it.
+   *
+   * `stopOutgoing` is the whole reason this is a single function. A screen share
+   * that ends should have its track stopped — it is finished. The camera track
+   * feeding a background effect must not be, because the processor is still
+   * reading from it; stopping it there is a black canvas and no way back
+   * without asking for the camera again.
+   */
+  const swapOutgoingVideo = useCallback((next: MediaStreamTrack | null, stopOutgoing: boolean) => {
+    const stream = localStreamRef.current;
+    if (!next || !stream) return;
+    peersRef.current.forEach((pc) => {
+      const sender = pc.getSenders().find((sn) => sn.track?.kind === "video");
+      if (sender) void sender.replaceTrack(next);
+    });
+    stream.getVideoTracks().forEach((t) => {
+      if (t !== next) { if (stopOutgoing) { try { t.stop(); } catch { /* already stopped */ } } stream.removeTrack(t); }
+    });
+    if (!stream.getVideoTracks().includes(next)) stream.addTrack(next);
+    // The camera may have been toggled off while this track was not on the wire.
+    next.enabled = camOnRef.current;
+    setLocalStream(new MediaStream(stream.getTracks()));
+  }, []);
+
   /** Put the camera back on the wire after a screen share ends. */
   const restoreCameraTrack = useCallback(() => {
-    const camTrack = cameraTrackRef.current;
-    const stream = localStreamRef.current;
-    if (camTrack && stream) {
-      peersRef.current.forEach((pc) => { const s = pc.getSenders().find((s) => s.track?.kind === "video"); if (s) void s.replaceTrack(camTrack); });
-      stream.getVideoTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
-      stream.addTrack(camTrack);
-      setLocalStream(new MediaStream(stream.getTracks()));
-    }
+    swapOutgoingVideo(cameraTrackRef.current, true);
     setShareOn(false);
-  }, []);
+  }, [swapOutgoingVideo]);
+
+  /**
+   * Apply a background choice to the outgoing video.
+   *
+   * "None" tears the processor down rather than leaving it idling: segmentation
+   * is the expensive part of this feature and nobody who turned it off should
+   * still be paying for it. Anything else builds the processor over the raw
+   * camera once and thereafter only changes what it paints, so switching
+   * between backgrounds never touches the peer connections.
+   */
+  const applyBackground = useCallback(async (effect: BackgroundEffect, image?: Blob | null) => {
+    bgEffectRef.current = effect;
+    setBgEffect(effect);
+    try { window.localStorage.setItem(BACKGROUND_PREF_KEY, encodeEffect(effect)); } catch { /* storage disabled */ }
+
+    const raw = rawCameraTrackRef.current;
+
+    if (!needsSegmentation(effect)) {
+      const processor = processorRef.current;
+      processorRef.current = null;
+      cameraTrackRef.current = raw;
+      if (!shareOn) swapOutgoingVideo(raw, false);
+      // Destroyed only after the camera is back on the wire, so there is no
+      // frame where the peers are holding a track nobody is drawing to.
+      processor?.destroy();
+      setBgNotice(null);
+      bgSuspendedRef.current = false;
+      return;
+    }
+
+    if (!raw) return;
+
+    if (!processorRef.current) {
+      if (processorBuildingRef.current) return;
+      processorBuildingRef.current = true;
+      const processor = await BackgroundProcessor.create(raw, {
+        onSlowFrames: (consecutive) => {
+          if (bgSuspendedRef.current) return;
+          const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
+          if (!decision.suspend || !decision.reason) return;
+          bgSuspendedRef.current = true;
+          setBgNotice(suspensionMessage(decision.reason));
+          void applyBackgroundRef.current(NO_BACKGROUND);
+        },
+        onUnavailable: () => {
+          setBgUnavailable(true);
+          void applyBackgroundRef.current(NO_BACKGROUND);
+        },
+      });
+      processorBuildingRef.current = false;
+      if (!processor) { setBgUnavailable(true); return; }
+      // The choice may have moved on during the build — a 12MB download is long
+      // enough for someone to change their mind twice.
+      if (!needsSegmentation(bgEffectRef.current)) { processor.destroy(); return; }
+      processorRef.current = processor;
+    }
+
+    // A custom pick carries its blob; a remembered one has to be looked up.
+    let blob = image ?? null;
+    if (effect.kind === "custom" && !blob) {
+      const stored = await getBackground(effect.id);
+      if (!stored) { void applyBackgroundRef.current(NO_BACKGROUND); return; }
+      blob = stored.blob;
+    }
+
+    processorRef.current.setEffect(effect, blob);
+    cameraTrackRef.current = processorRef.current.track;
+    if (!shareOn) swapOutgoingVideo(processorRef.current.track, false);
+  }, [shareOn, swapOutgoingVideo]);
+
+  // The processor callbacks are created once but need the current handler, and
+  // the handler needs itself to fall back to "none".
+  const applyBackgroundRef = useRef(applyBackground);
+  useEffect(() => { applyBackgroundRef.current = applyBackground; }, [applyBackground]);
+
+  /**
+   * Adopt a newly opened camera device.
+   *
+   * The processor is bound to the track it was created from, so a new device
+   * means a new processor. Rebuilt before the swap and torn down after it, so
+   * the room never sees a gap.
+   */
+  const adoptCameraTrack = useCallback(async (track: MediaStreamTrack) => {
+    const previousRaw = rawCameraTrackRef.current;
+    const previousProcessor = processorRef.current;
+    rawCameraTrackRef.current = track;
+
+    if (needsSegmentation(bgEffectRef.current)) {
+      processorRef.current = null;
+      await applyBackgroundRef.current(bgEffectRef.current);
+      // Only if the rebuild actually took; otherwise applyBackground has already
+      // fallen back to the plain camera and set cameraTrackRef itself.
+      if (!processorRef.current) cameraTrackRef.current = track;
+    } else {
+      cameraTrackRef.current = track;
+      if (!shareOn) swapOutgoingVideo(track, false);
+    }
+
+    previousProcessor?.destroy();
+    if (previousRaw && previousRaw !== track) { try { previousRaw.stop(); } catch { /* already stopped */ } }
+  }, [shareOn, swapOutgoingVideo]);
 
   const toggleScreen = useCallback(async () => {
     if (shareOn) { restoreCameraTrack(); return; }
@@ -2390,13 +2160,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false });
       const t = s.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
-      cameraTrackRef.current = t;
-      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((s) => s.track?.kind === "video"); if (sender) void sender.replaceTrack(t); });
-      localStreamRef.current.getVideoTracks().forEach((t2) => { t2.stop(); localStreamRef.current!.removeTrack(t2); });
-      localStreamRef.current.addTrack(t);
-      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      await adoptCameraTrack(t);
     } catch (e) { console.warn("[switchCam]", e); }
-  }, []);
+  }, [adoptCameraTrack]);
 
   const switchSpeaker = useCallback(async (deviceId: string) => {
     const videos = document.querySelectorAll("video");
@@ -2432,14 +2198,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: false });
       const t = s.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
-      cameraTrackRef.current = t;
-      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((s) => s.track?.kind === "video"); if (sender) void sender.replaceTrack(t); });
-      localStreamRef.current.getVideoTracks().forEach((t2) => { t2.stop(); localStreamRef.current!.removeTrack(t2); });
-      localStreamRef.current.addTrack(t);
-      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      await adoptCameraTrack(t);
       setFacingMode(next);
     } catch (e) { console.warn("[flipCamera]", e); }
-  }, [facingMode]);
+  }, [facingMode, adoptCameraTrack]);
 
   const kickPeer = useCallback((peerId: string) => {
     sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
@@ -2503,6 +2265,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* already stopped */ }
       recognitionRef.current = null;
     }
+    processorRef.current?.destroy();
+    processorRef.current = null;
+    try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
+    rawCameraTrackRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     // Not `setReady(false)`: `ready` also decides whether the pre-join screen is
@@ -2777,16 +2543,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <button onClick={() => setMediaError(null)} className="shrink-0 text-amber-500 hover:text-amber-600 text-xs font-medium underline">Dismiss</button>
             </div>
           )}
-          {/* Walkthrough step indicator — visible to all participants */}
-          {walkthroughStepIndex !== null && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--gold-400)]/8 border-b border-[var(--gold-400)]/20 shrink-0">
-              <span className="text-[var(--gold-400)] text-xs shrink-0">📍</span>
-              <span className="text-xs text-[var(--fg-secondary)] flex-1">
-                <span className="font-medium text-[var(--fg-primary)]">{FUNDEXECS_PROGRAM[walkthroughStepIndex]?.title}</span>
-                <span className="text-[var(--fg-muted)] ml-1.5">· Step {walkthroughStepIndex + 1} of {FUNDEXECS_PROGRAM.length}</span>
-              </span>
-            </div>
-          )}
           {/* Guest upsell banner */}
           {isGuest && (
             <div className="flex items-center gap-3 px-4 py-2 bg-[var(--gold-400)]/8 border-b border-[var(--gold-400)]/20 shrink-0">
@@ -2854,29 +2610,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             {/* Fixed width inside the animating column: without it the panel's
                 text reflows on every frame of the slide. */}
             <div className="flex flex-col h-full w-full sm:w-80 overflow-hidden">
-            <CopilotErrorBoundary resetKey={notes}>
+            {/* Reset on the roster rather than on a notes payload: the panel no
+                longer renders model output, and the roster is the thing whose
+                change is worth giving a failed render another try. */}
+            <CopilotErrorBoundary resetKey={participantList.length}>
             <CopilotSidebar
-              transcript={transcript} notes={notes} isUpdating={isUpdatingNotes}
               srStatus={srStatus} participants={participantList} roomCode={roomCode} meetingTitle={meetingTitle}
               chatMessages={chatMessages} onSendChat={sendChat} isHost={isHost}
               raisedHands={raisedHands} onKick={kickPeer} onAdmit={admitPeer} onDeny={denyPeer} onAdmitAll={admitAll}
               waitingPeers={waitingPeers}
               onChatOpen={() => { chatOpenRef.current = true; setChatUnread(0); }}
-              speaking={speaking} attributionNotice={attributionNotice}
-              walkthroughStepIndex={walkthroughStepIndex}
-              walkthroughNudge={walkthroughNudge}
-              onWalkthroughStep={(idx) => {
-                setWalkthroughStepIndex(idx);
-                setWalkthroughNudge(false);
-                const step = idx !== null ? FUNDEXECS_PROGRAM[idx] : null;
-                sendSignalRef.current({
-                  type: "walkthrough_step",
-                  from: myIdRef.current,
-                  stepIndex: idx ?? -1,
-                  stepTitle: step?.title ?? "",
-                });
-              }}
-              onWalkthroughNudgeDismiss={() => setWalkthroughNudge(false)}
+              speaking={speaking}
               onCollapse={collapseCopilot}
             />
             </CopilotErrorBoundary>
@@ -2907,12 +2651,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onToggleCopilot={() => (copilotOpen ? collapseCopilot() : expandCopilot())}
         onLeave={leaveMeeting} onEndForAll={() => void endForAll()}
         leaving={isAwaitingReport(callPhase)}
+        onOpenBackgrounds={() => setBgPickerOpen((v) => !v)}
+        backgroundActive={bgEffect.kind !== "none"}
+        backgroundBtnRef={bgBtnRef}
         onSwitchMic={switchMic} onSwitchCam={switchCam} onSwitchSpeaker={switchSpeaker}
         onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
         onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
         onFlipCamera={() => void flipCamera()}
       />
       </div>
+
+      {/* Background picker, anchored to its control */}
+      <FloatingMenu open={bgPickerOpen} anchorRef={bgBtnRef} onClose={() => setBgPickerOpen(false)} minWidth={330}>
+        <div className="w-[330px] max-w-[86vw] p-1">
+          <p className="px-1 pb-2 text-xs font-medium text-[var(--fg-secondary)]">Background</p>
+          <BackgroundPicker
+            effect={bgEffect}
+            unavailable={bgUnavailable}
+            notice={bgNotice}
+            onChange={(effect, image) => {
+              // A deliberate choice clears an automatic suspension: the person
+              // has been told why it stopped and is asking for it anyway.
+              bgSuspendedRef.current = false;
+              setBgNotice(null);
+              void applyBackground(effect, image);
+            }}
+          />
+        </div>
+      </FloatingMenu>
 
       {/* Ending — the call is already down and the report can take a couple of
           minutes, so say so. Without this the screen is frozen video and a
@@ -3055,6 +2821,17 @@ function SpeakerIcon() {
 
 // Points the way the panel goes: right on desktop (off to the side), and it
 // reads as "dismiss" on the mobile sheet too.
+// A portrait against a patterned field — the effect it turns on, not a camera.
+function BackgroundIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M6.5 20a5.5 5.5 0 0 1 11 0" />
+    </svg>
+  );
+}
+
 function CollapseIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
