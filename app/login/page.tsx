@@ -2,18 +2,17 @@ import Link from "next/link";
 import { getSessionContext } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { signIn, signUp, signInWithGoogle } from "./actions";
+import { signIn, signInWithGoogle } from "./actions";
 
 export default async function LoginPage(
   props: {
-    searchParams: Promise<{ error?: string; mode?: string; message?: string; next?: string }>;
+    searchParams: Promise<{ error?: string; message?: string; next?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
   const ctx = await getSessionContext();
   if (ctx) redirect(ctx.orgId ? "/workspace" : "/onboarding");
 
-  const isSignup = searchParams.mode === "signup";
   // Where the operator was headed before the auth gate bounced them here, e.g.
   // /login?next=/admin, or an installed-app shortcut into /earn or /approvals.
   // Passed through both sign-in forms and re-validated server-side; this is
@@ -35,7 +34,7 @@ export default async function LoginPage(
             advisory professionals.
           </p>
         </div>
-        <p className="font-mono text-xs text-fg-muted">Early Access</p>
+        <p className="font-mono text-xs text-fg-muted">Invite-only · Early Access</p>
       </div>
 
       {/* Right form panel */}
@@ -44,12 +43,10 @@ export default async function LoginPage(
           <Logo className="mb-8 block lg:hidden" />
 
           <h1 className="text-2xl font-semibold tracking-tight text-fg-primary">
-            {isSignup ? "Create your account" : "Welcome back"}
+            Welcome back
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
-            {isSignup
-              ? "Your firm, your fund, your OS."
-              : "Back to your workspace."}
+            Back to your workspace.
           </p>
 
           {searchParams.error && (
@@ -99,17 +96,6 @@ export default async function LoginPage(
 
           <form className="flex flex-col gap-3">
             {next && <input type="hidden" name="next" value={next} />}
-            {isSignup && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-fg-secondary">Full name</label>
-                <input
-                  name="full_name"
-                  placeholder="Alex Chen"
-                  autoComplete="name"
-                  className="rounded-md border border-line bg-surface-2 px-3 py-2.5 text-sm text-fg-primary placeholder-fg-muted outline-none transition focus:border-gold-500 focus:bg-surface-2"
-                />
-              </div>
-            )}
             <div className="flex flex-col gap-1">
               <label className="text-xs text-fg-secondary">Email</label>
               <input
@@ -129,44 +115,23 @@ export default async function LoginPage(
                 required
                 minLength={6}
                 placeholder="••••••••"
-                autoComplete={isSignup ? "new-password" : "current-password"}
+                autoComplete="current-password"
                 className="rounded-md border border-line bg-surface-2 px-3 py-2.5 text-sm text-fg-primary placeholder-fg-muted outline-none transition focus:border-gold-500 focus:bg-surface-2"
               />
             </div>
             <button
-              formAction={isSignup ? signUp : signIn}
+              formAction={signIn}
               className="mt-2 rounded-md bg-gold-400 py-2.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
-              {isSignup ? "Create account" : "Sign in"}
+              Sign in
             </button>
           </form>
 
           <p className="mt-5 text-center text-sm text-fg-muted">
-            {isSignup ? (
-              <>
-                Already have an account?{" "}
-                <Link
-                  href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
-                  className="text-gold-300 hover:underline"
-                >
-                  Sign in
-                </Link>
-              </>
-            ) : (
-              <>
-                New here?{" "}
-                <Link
-                  href={
-                    next
-                      ? `/login?mode=signup&next=${encodeURIComponent(next)}`
-                      : "/login?mode=signup"
-                  }
-                  className="text-gold-300 hover:underline"
-                >
-                  Create an account
-                </Link>
-              </>
-            )}
+            New here?{" "}
+            <Link href="/request-access" className="text-gold-300 hover:underline">
+              Request access
+            </Link>
           </p>
         </div>
       </div>

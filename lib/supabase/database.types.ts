@@ -151,6 +151,11 @@ export type Principal = {
   // Set once, atomically, the first time the platform-admin new-signup alert is
   // emailed for this principal (migration 20260708120000). Null until alerted.
   signup_alerted_at: string | null;
+  // Invite-only gate (migration 20260906120000). Null until a platform admin
+  // approves the person's access request; the auth paths bounce an unapproved
+  // principal back to /request-access. Every principal that existed when the
+  // migration ran was backfilled as approved.
+  access_approved_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -2748,10 +2753,29 @@ export type Annotation = {
   updated_at: string;
 };
 
+// Invite-only access queue (migration 20260906120000). Written by the public
+// /request-access form and read by the platform-admin console, both through the
+// service-role client — the table has RLS with no policies.
+export type AccessRequest = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  firm: string | null;
+  role: string | null;
+  note: string | null;
+  status: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  alerted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
       principals: TableShape<Principal>;
+      access_requests: TableShape<AccessRequest>;
       organizations: TableShape<Organization>;
       organization_members: TableShape<OrganizationMember>;
       investment_theses: TableShape<InvestmentThesis>;

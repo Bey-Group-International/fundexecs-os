@@ -1305,6 +1305,40 @@ Deployed, monitoring               →  live, observability active
              |  persisted value is the only correct one.
              |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
              |  (4485 total green). No migration, no new deps.
+2026-09-06  |  Invite-only: no self-serve account creation  |  Request access is now
+             |  a real queue, not a label on the sign-up form.
+             |  Built: migration 20260906120000_access_requests — public.access_requests
+             |  (email-unique queue, pending/approved/declined, RLS with NO policies so
+             |  only the service-role client reaches it) + principals.access_approved_at,
+             |  with every EXISTING principal backfilled as approved so the gate cannot
+             |  lock out a current user.
+             |  Removed: app/login/actions.ts signUp() and the /login?mode=signup form
+             |  (full-name field, "Create account" button, the sign-in/sign-up toggle).
+             |  /login is sign-in only; every "Request access" CTA (landing header/CTA/
+             |  footer, meeting invite, in-meeting guest upsell) now points at the new
+             |  public /request-access form, superseding the 2026-07-11 AccessGate note.
+             |  Added: lib/access-requests.ts — one gate both auth paths call.
+             |  enforceAccessGate() runs after signInWithPassword AND inside
+             |  /auth/callback (Google OAuth was the remaining self-serve hole: it mints
+             |  an auth user before anyone asks us). Unapproved ⇒ signOut() + bounce to
+             |  /request-access with pending / declined / required copy. Decision: it
+             |  fails OPEN on missing service-role env or a thrown read, and NEVER gates
+             |  a platform-admin email — a gate that can lock the internal team out of
+             |  the console that approves everyone else is worse than no gate.
+             |  Decision: the public form answers identically whether the email is new,
+             |  queued, approved, or already an account; a request form that discloses
+             |  who is on the platform is an enumeration oracle.
+             |  Added: /admin access-request queue (approve/decline, re-checks
+             |  requirePlatformAdmin inside the server action), approval stamps any
+             |  existing principal and emails the requester; internal alert reuses the
+             |  exactly-once claim shape of principals.signup_alerted_at.
+             |  Kept: supabase/config.toml enable_signup stays TRUE — an approved
+             |  requester still creates their auth user on first Google sign-in; the gate
+             |  is the app's, not the provider's.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +19 new
+             |  (4575 total green). Live Supabase auth flow not exercised (no local
+             |  Supabase). Next: run the migration before deploy — until it lands,
+             |  access_approved_at is missing and the gate fails open.
 ```
 
 ---

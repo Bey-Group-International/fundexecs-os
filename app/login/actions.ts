@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
-import { notifyNewSignupOnce } from "@/lib/admin/signup-alert";
+import { enforceAccessGate } from "@/lib/access-requests";
 import { getAppUrlFromHeaders } from "@/lib/integrations/adapters/app-url";
 import { DEFAULT_POST_AUTH_PATH, safeNextPathOrNull } from "@/lib/safe-next-path";
 
@@ -51,8 +51,9 @@ function asPath(value: FormDataEntryValue | null | undefined): string | null {
   return typeof value === "string" ? value : null;
 }
 
-// Email/password auth for pre-alpha. Local Supabase has email confirmations
-// disabled (see supabase/config.toml), so sign-up yields an immediate session.
+// Email/password sign-in. There is no sign-up counterpart: FundExecs OS is
+// invite-only, so an account exists only once a platform admin has approved an
+// access request (app/request-access) and provisioned the credential.
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
@@ -62,63 +63,24 @@ export async function signIn(formData: FormData) {
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
+
+  // Invite-only: a principal who has not been approved gets no session, even
+  // with valid credentials. The same gate runs on the OAuth callback.
+  const blocked = data.user
+    ? await enforceAccessGate({ userId: data.user.id, email: data.user.email })
+    : null;
+  if (blocked) {
+    await supabase.auth.signOut();
+    redirect(blocked);
+  }
+
   // Same deep-link courtesy as the Google path: honor where they were headed.
   const base = getAppUrlFromHeaders(await headers());
   redirect(safeNextPathOrNull(asPath(formData.get("next")), base) ?? DEFAULT_POST_AUTH_PATH);
-}
-
-export async function signUp(formData: FormData) {
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const fullName = String(formData.get("full_name") ?? "");
-
-  if (!hasSupabaseServerEnv()) {
-    redirect(`/login?mode=signup&error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
-  }
-
-  const supabase = await createServerClient();
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { full_name: fullName } },
-  });
-  if (error) {
-    // Keep the user on the sign-up form so they can correct and retry.
-    redirect(`/login?mode=signup&error=${encodeURIComponent(error.message)}`);
-  }
-
-  // Alert the internal team about the new signup. Fire-and-forget with an
-  // await'd best-effort call (it never throws) so it runs before the redirect
-  // unwinds the request; the DB claim in the helper makes it exactly-once even
-  // if the OAuth path also fires.
-  if (data.user?.id) {
-    await notifyNewSignupOnce(data.user.id);
-  }
-
-  // When email confirmation is required, signUp returns no session. Attempt an
-  // immediate sign-in (this succeeds when confirmations are disabled — see
-  // supabase/config.toml). Only if that fails do we ask the user to confirm,
-  // rather than silently bouncing them back through onboarding → login.
-  if (!data.session) {
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (signInError) {
-      redirect(
-        `/login?message=${encodeURIComponent(
-          "Account created. Check your email to confirm, then sign in.",
-        )}`,
-      );
-    }
-  }
-
-  // New principals have no org yet — onboarding handles creation.
-  redirect("/onboarding");
 }
 
 export async function signOut() {

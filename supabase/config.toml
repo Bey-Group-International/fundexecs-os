@@ -29,6 +29,11 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000"]
 jwt_expiry = 3600
+# Left ON deliberately. The product is invite-only, but the gate lives in the
+# APP (lib/access-requests.ts → enforceAccessGate), not here: an approved
+# requester still has to create their auth user on first Google sign-in, and
+# turning this off would block that too. An unapproved user gets an auth row and
+# is immediately signed back out with no session and no org.
 enable_signup = true
 
 [auth.email]

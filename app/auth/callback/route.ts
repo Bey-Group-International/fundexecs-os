@@ -6,6 +6,7 @@ import {
 } from "@/lib/supabase/server";
 import { grantTrialCreditsIfEligible } from "@/lib/trial";
 import { notifyNewSignupOnce } from "@/lib/admin/signup-alert";
+import { enforceAccessGate } from "@/lib/access-requests";
 import { sanitizeNextPath } from "@/lib/safe-next-path";
 
 // OAuth callback (Google) and email OTP verification callback.
@@ -31,6 +32,11 @@ export async function GET(request: Request) {
     // OAuth flow (Google)
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Google sign-in is the one path that can mint a brand-new auth user
+      // without anyone asking us first — so the invite-only gate runs here
+      // BEFORE the session is allowed to stand.
+      const blocked = await enforceAccessOrSignOut(supabase);
+      if (blocked) return NextResponse.redirect(`${origin}${blocked}`);
       await maybeGrantTrial(supabase);
       return NextResponse.redirect(`${origin}${next}`);
     }
@@ -43,6 +49,8 @@ export async function GET(request: Request) {
     // Email OTP / magic-link verification
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
     if (!error) {
+      const blocked = await enforceAccessOrSignOut(supabase);
+      if (blocked) return NextResponse.redirect(`${origin}${blocked}`);
       await maybeGrantTrial(supabase);
       return NextResponse.redirect(`${origin}${next}`);
     }
@@ -54,6 +62,27 @@ export async function GET(request: Request) {
   return NextResponse.redirect(
     `${origin}/login?error=${encodeURIComponent("Invalid callback parameters.")}`,
   );
+}
+
+/**
+ * Run the invite-only gate on the user this exchange just authenticated. Returns
+ * null when the session may stand, or the path to bounce them to — in which case
+ * the session has already been revoked. Uses the SAME client that performed the
+ * exchange, for the reason described on maybeGrantTrial below.
+ */
+async function enforceAccessOrSignOut(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const blocked = await enforceAccessGate({ userId: user.id, email: user.email });
+  if (!blocked) return null;
+
+  await supabase.auth.signOut();
+  return blocked;
 }
 
 // Best-effort trial credit grant after any successful auth exchange.
