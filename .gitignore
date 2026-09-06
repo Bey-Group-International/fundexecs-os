@@ -49,5 +49,11 @@ yarn-error.log*
 # and docs are committed; the external code they pull is not.
 /tools/
 
-# Self-hosted MediaPipe assets (copied from node_modules at build; never committed)
-/public/mediapipe/
+# Self-hosted MediaPipe segmentation runtime for meeting camera backgrounds.
+# The ~12MB .wasm and its loader are pinned in package.json and copied out of
+# node_modules by scripts/copy-mediapipe-assets.mjs on every build, so they are
+# never committed. The model file beside them is: it does not ship inside the
+# package, it is 244KB, and fetching it at build time would mean a network blip
+# during a deploy turned into backgrounds that quietly do not work.
+/public/mediapipe/vision_wasm_internal.js
+/public/mediapipe/vision_wasm_internal.wasm

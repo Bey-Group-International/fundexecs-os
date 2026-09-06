@@ -23,6 +23,20 @@ import {
 } from "@/lib/meetings/speaker-attribution";
 import { MeetingShareLink } from "@/app/(app)/meetings/MeetingShareLink";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
+import { BackgroundPicker } from "./BackgroundPicker";
+import {
+  BACKGROUND_PREF_KEY,
+  NO_BACKGROUND,
+  decodeEffect,
+  effectLabel,
+  encodeEffect,
+  needsSegmentation,
+  shouldSuspendEffect,
+  suspensionMessage,
+  type BackgroundEffect,
+} from "@/lib/meetings/backgrounds";
+import { BackgroundProcessor } from "@/lib/meetings/background-processor";
+import { getBackground } from "@/lib/meetings/background-store";
 import {
   canExit,
   exitLabel,
@@ -536,8 +550,12 @@ function ControlBar({
   micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
-  leaving,
+  leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
 }: {
+  onOpenBackgrounds: () => void;
+  /** An effect is applied, so the control reads as on. */
+  backgroundActive: boolean;
+  backgroundBtnRef: React.RefObject<HTMLButtonElement | null>;
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
@@ -569,6 +587,25 @@ function ControlBar({
           <CtrlBtn active={camOn} onClick={onToggleCam} title={camOn ? "Camera off" : "Camera on"} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
           <span className="hidden sm:block"><DeviceChevron kind="videoinput" onSelect={onSwitchCam} /></span>
         </div>
+
+        {/* Backgrounds — next to the camera controls, because that is what it
+            changes. Hidden on mobile: segmentation on a phone costs battery and
+            heat during a call, and the control bar there is already full. */}
+        <span className="hidden sm:block">
+          <button
+            ref={backgroundBtnRef}
+            onClick={onOpenBackgrounds}
+            title="Background effects"
+            aria-label="Background effects"
+            className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
+              backgroundActive
+                ? "border-[var(--gold-400)]/60 bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
+            }`}
+          >
+            <BackgroundIcon />
+          </button>
+        </span>
 
         {/* Camera flip — mobile only */}
         <button onClick={onFlipCamera} title="Flip camera"
@@ -1235,7 +1272,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Local media
   const localStreamRef = useRef<MediaStream | null>(null);
+  // The track the room should be seeing when nobody is sharing a screen. With a
+  // background effect on this is the composited canvas track, not the camera —
+  // which is what lets the screen-share restore below stay unaware of effects.
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  // The camera device itself, which feeds the processor. Kept apart from the
+  // above because switching cameras has to rebuild the effect on the new device.
+  const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -1322,10 +1365,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Bandwidth adaptation
   const [bwMode, setBwMode] = useState<"normal" | "degraded" | "audio-only">("normal");
+  // Read from inside the processor's frame callback, which is created once.
+  const bwModeRef = useRef<"normal" | "degraded" | "audio-only">("normal");
   const bwCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Media error (permission denial, no devices, etc.)
   const [mediaError, setMediaError] = useState<string | null>(null);
+
+  // ── Camera backgrounds ────────────────────────────────────────────────────
+  const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
+  const bgEffectRef = useRef<BackgroundEffect>(NO_BACKGROUND);
+  const processorRef = useRef<BackgroundProcessor | null>(null);
+  const [bgPickerOpen, setBgPickerOpen] = useState(false);
+  const [bgUnavailable, setBgUnavailable] = useState(false);
+  const [bgNotice, setBgNotice] = useState<string | null>(null);
+  const bgBtnRef = useRef<HTMLButtonElement>(null);
+  // Sticky once tripped. A background that switched itself off and then back on
+  // as the numbers wobbled would be worse than either state.
+  const bgSuspendedRef = useRef(false);
+  // Guards the async build below: two quick picks would otherwise each start a
+  // processor, and the loser would keep a camera tap and a render loop alive.
+  const processorBuildingRef = useRef(false);
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -1396,6 +1456,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
   useEffect(() => { handRaisedRef.current = handRaised; }, [handRaised]);
   useEffect(() => { callPhaseRef.current = callPhase; }, [callPhase]);
+  useEffect(() => { bwModeRef.current = bwMode; }, [bwMode]);
+  // Nothing is transmitted while the camera is off, so nothing needs compositing.
+  useEffect(() => { processorRef.current?.setPaused(!camOn); }, [camOn]);
+
+  // A call already dropping video to protect audio should not be spending the
+  // remaining budget on scenery. The CPU half of this rule is applied from
+  // inside the processor's frame loop; both defer to shouldSuspendEffect.
+  useEffect(() => {
+    if (bgSuspendedRef.current || !needsSegmentation(bgEffectRef.current)) return;
+    const decision = shouldSuspendEffect({ bwMode, consecutiveSlowFrames: 0 });
+    if (!decision.suspend || !decision.reason) return;
+    bgSuspendedRef.current = true;
+    setBgNotice(suspensionMessage(decision.reason));
+    void applyBackgroundRef.current(NO_BACKGROUND);
+  }, [bwMode]);
   useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
 
   // Teardown on unmount. If the user navigates away via client-side routing
@@ -1411,6 +1486,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const peerConnections = peersRef.current;
     const pendingIce = pendingIceRef.current;
     const copilotUnmount = copilotUnmountRef;
+    const processor = processorRef;
+    const rawCamera = rawCameraTrackRef;
     return () => {
       try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
       peerConnections.clear();
@@ -1422,6 +1499,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       if (copilotUnmount.current) clearTimeout(copilotUnmount.current);
+      processor.current?.destroy();
+      try { rawCamera.current?.stop(); } catch { /* already stopped */ }
     };
   }, []);
 
@@ -1772,7 +1851,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     localStreamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
+    rawCameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
+
+    // Restore the background chosen on a previous call. Deliberately after the
+    // stream is live and not awaited: the segmenter is a 12MB download and
+    // joining should never wait on scenery.
+    try {
+      const remembered = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY));
+      if (needsSegmentation(remembered)) void applyBackgroundRef.current(remembered);
+    } catch { /* storage disabled — start with no effect */ }
 
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
@@ -2341,18 +2429,138 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setCamOn(next);
   }, []);
 
+  /**
+   * Put one video track on the wire: every peer sender, the local stream, and
+   * the tile that renders it.
+   *
+   * `stopOutgoing` is the whole reason this is a single function. A screen share
+   * that ends should have its track stopped — it is finished. The camera track
+   * feeding a background effect must not be, because the processor is still
+   * reading from it; stopping it there is a black canvas and no way back
+   * without asking for the camera again.
+   */
+  const swapOutgoingVideo = useCallback((next: MediaStreamTrack | null, stopOutgoing: boolean) => {
+    const stream = localStreamRef.current;
+    if (!next || !stream) return;
+    peersRef.current.forEach((pc) => {
+      const sender = pc.getSenders().find((sn) => sn.track?.kind === "video");
+      if (sender) void sender.replaceTrack(next);
+    });
+    stream.getVideoTracks().forEach((t) => {
+      if (t !== next) { if (stopOutgoing) { try { t.stop(); } catch { /* already stopped */ } } stream.removeTrack(t); }
+    });
+    if (!stream.getVideoTracks().includes(next)) stream.addTrack(next);
+    // The camera may have been toggled off while this track was not on the wire.
+    next.enabled = camOnRef.current;
+    setLocalStream(new MediaStream(stream.getTracks()));
+  }, []);
+
   /** Put the camera back on the wire after a screen share ends. */
   const restoreCameraTrack = useCallback(() => {
-    const camTrack = cameraTrackRef.current;
-    const stream = localStreamRef.current;
-    if (camTrack && stream) {
-      peersRef.current.forEach((pc) => { const s = pc.getSenders().find((s) => s.track?.kind === "video"); if (s) void s.replaceTrack(camTrack); });
-      stream.getVideoTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
-      stream.addTrack(camTrack);
-      setLocalStream(new MediaStream(stream.getTracks()));
-    }
+    swapOutgoingVideo(cameraTrackRef.current, true);
     setShareOn(false);
-  }, []);
+  }, [swapOutgoingVideo]);
+
+  /**
+   * Apply a background choice to the outgoing video.
+   *
+   * "None" tears the processor down rather than leaving it idling: segmentation
+   * is the expensive part of this feature and nobody who turned it off should
+   * still be paying for it. Anything else builds the processor over the raw
+   * camera once and thereafter only changes what it paints, so switching
+   * between backgrounds never touches the peer connections.
+   */
+  const applyBackground = useCallback(async (effect: BackgroundEffect, image?: Blob | null) => {
+    bgEffectRef.current = effect;
+    setBgEffect(effect);
+    try { window.localStorage.setItem(BACKGROUND_PREF_KEY, encodeEffect(effect)); } catch { /* storage disabled */ }
+
+    const raw = rawCameraTrackRef.current;
+
+    if (!needsSegmentation(effect)) {
+      const processor = processorRef.current;
+      processorRef.current = null;
+      cameraTrackRef.current = raw;
+      if (!shareOn) swapOutgoingVideo(raw, false);
+      // Destroyed only after the camera is back on the wire, so there is no
+      // frame where the peers are holding a track nobody is drawing to.
+      processor?.destroy();
+      setBgNotice(null);
+      bgSuspendedRef.current = false;
+      return;
+    }
+
+    if (!raw) return;
+
+    if (!processorRef.current) {
+      if (processorBuildingRef.current) return;
+      processorBuildingRef.current = true;
+      const processor = await BackgroundProcessor.create(raw, {
+        onSlowFrames: (consecutive) => {
+          if (bgSuspendedRef.current) return;
+          const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
+          if (!decision.suspend || !decision.reason) return;
+          bgSuspendedRef.current = true;
+          setBgNotice(suspensionMessage(decision.reason));
+          void applyBackgroundRef.current(NO_BACKGROUND);
+        },
+        onUnavailable: () => {
+          setBgUnavailable(true);
+          void applyBackgroundRef.current(NO_BACKGROUND);
+        },
+      });
+      processorBuildingRef.current = false;
+      if (!processor) { setBgUnavailable(true); return; }
+      // The choice may have moved on during the build — a 12MB download is long
+      // enough for someone to change their mind twice.
+      if (!needsSegmentation(bgEffectRef.current)) { processor.destroy(); return; }
+      processorRef.current = processor;
+    }
+
+    // A custom pick carries its blob; a remembered one has to be looked up.
+    let blob = image ?? null;
+    if (effect.kind === "custom" && !blob) {
+      const stored = await getBackground(effect.id);
+      if (!stored) { void applyBackgroundRef.current(NO_BACKGROUND); return; }
+      blob = stored.blob;
+    }
+
+    processorRef.current.setEffect(effect, blob);
+    cameraTrackRef.current = processorRef.current.track;
+    if (!shareOn) swapOutgoingVideo(processorRef.current.track, false);
+  }, [shareOn, swapOutgoingVideo]);
+
+  // The processor callbacks are created once but need the current handler, and
+  // the handler needs itself to fall back to "none".
+  const applyBackgroundRef = useRef(applyBackground);
+  useEffect(() => { applyBackgroundRef.current = applyBackground; }, [applyBackground]);
+
+  /**
+   * Adopt a newly opened camera device.
+   *
+   * The processor is bound to the track it was created from, so a new device
+   * means a new processor. Rebuilt before the swap and torn down after it, so
+   * the room never sees a gap.
+   */
+  const adoptCameraTrack = useCallback(async (track: MediaStreamTrack) => {
+    const previousRaw = rawCameraTrackRef.current;
+    const previousProcessor = processorRef.current;
+    rawCameraTrackRef.current = track;
+
+    if (needsSegmentation(bgEffectRef.current)) {
+      processorRef.current = null;
+      await applyBackgroundRef.current(bgEffectRef.current);
+      // Only if the rebuild actually took; otherwise applyBackground has already
+      // fallen back to the plain camera and set cameraTrackRef itself.
+      if (!processorRef.current) cameraTrackRef.current = track;
+    } else {
+      cameraTrackRef.current = track;
+      if (!shareOn) swapOutgoingVideo(track, false);
+    }
+
+    previousProcessor?.destroy();
+    if (previousRaw && previousRaw !== track) { try { previousRaw.stop(); } catch { /* already stopped */ } }
+  }, [shareOn, swapOutgoingVideo]);
 
   const toggleScreen = useCallback(async () => {
     if (shareOn) { restoreCameraTrack(); return; }
@@ -2390,13 +2598,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false });
       const t = s.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
-      cameraTrackRef.current = t;
-      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((s) => s.track?.kind === "video"); if (sender) void sender.replaceTrack(t); });
-      localStreamRef.current.getVideoTracks().forEach((t2) => { t2.stop(); localStreamRef.current!.removeTrack(t2); });
-      localStreamRef.current.addTrack(t);
-      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      await adoptCameraTrack(t);
     } catch (e) { console.warn("[switchCam]", e); }
-  }, []);
+  }, [adoptCameraTrack]);
 
   const switchSpeaker = useCallback(async (deviceId: string) => {
     const videos = document.querySelectorAll("video");
@@ -2432,14 +2636,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next }, audio: false });
       const t = s.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
-      cameraTrackRef.current = t;
-      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((s) => s.track?.kind === "video"); if (sender) void sender.replaceTrack(t); });
-      localStreamRef.current.getVideoTracks().forEach((t2) => { t2.stop(); localStreamRef.current!.removeTrack(t2); });
-      localStreamRef.current.addTrack(t);
-      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      await adoptCameraTrack(t);
       setFacingMode(next);
     } catch (e) { console.warn("[flipCamera]", e); }
-  }, [facingMode]);
+  }, [facingMode, adoptCameraTrack]);
 
   const kickPeer = useCallback((peerId: string) => {
     sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
@@ -2503,6 +2703,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* already stopped */ }
       recognitionRef.current = null;
     }
+    processorRef.current?.destroy();
+    processorRef.current = null;
+    try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
+    rawCameraTrackRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     // Not `setReady(false)`: `ready` also decides whether the pre-join screen is
@@ -2907,12 +3111,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onToggleCopilot={() => (copilotOpen ? collapseCopilot() : expandCopilot())}
         onLeave={leaveMeeting} onEndForAll={() => void endForAll()}
         leaving={isAwaitingReport(callPhase)}
+        onOpenBackgrounds={() => setBgPickerOpen((v) => !v)}
+        backgroundActive={bgEffect.kind !== "none"}
+        backgroundBtnRef={bgBtnRef}
         onSwitchMic={switchMic} onSwitchCam={switchCam} onSwitchSpeaker={switchSpeaker}
         onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
         onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
         onFlipCamera={() => void flipCamera()}
       />
       </div>
+
+      {/* Background picker, anchored to its control */}
+      <FloatingMenu open={bgPickerOpen} anchorRef={bgBtnRef} onClose={() => setBgPickerOpen(false)} minWidth={330}>
+        <div className="w-[330px] max-w-[86vw] p-1">
+          <p className="px-1 pb-2 text-xs font-medium text-[var(--fg-secondary)]">Background</p>
+          <BackgroundPicker
+            effect={bgEffect}
+            unavailable={bgUnavailable}
+            notice={bgNotice}
+            onChange={(effect, image) => {
+              // A deliberate choice clears an automatic suspension: the person
+              // has been told why it stopped and is asking for it anyway.
+              bgSuspendedRef.current = false;
+              setBgNotice(null);
+              void applyBackground(effect, image);
+            }}
+          />
+        </div>
+      </FloatingMenu>
 
       {/* Ending — the call is already down and the report can take a couple of
           minutes, so say so. Without this the screen is frozen video and a
@@ -3055,6 +3281,17 @@ function SpeakerIcon() {
 
 // Points the way the panel goes: right on desktop (off to the side), and it
 // reads as "dismiss" on the mobile sheet too.
+// A portrait against a patterned field — the effect it turns on, not a camera.
+function BackgroundIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M6.5 20a5.5 5.5 0 0 1 11 0" />
+    </svg>
+  );
+}
+
 function CollapseIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
