@@ -41,7 +41,7 @@ import {
   type CallPhase,
 } from "@/lib/meetings/call-phase";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
-import { nextPollDelay, shouldPollNow } from "@/lib/meetings/admission-poll";
+import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
 import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 import {
   GuestThanksScreen,
@@ -1005,27 +1005,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // being asked to sign in are not the same message, and only one of them is
   // true.
   const [deniedByHost, setDeniedByHost] = useState(false);
-  const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const waitingPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The poll is a timeout chain, so cancelling the pending timer is not enough:
-  // a request already in flight would schedule the next one on the way out. This
-  // flips the flag the chain checks.
-  const waitingPollStopRef = useRef<(() => void) | null>(null);
-  const waitingVisibilityCleanupRef = useRef<(() => void) | null>(null);
+  // Owns the knock/poll sequence for as long as this guest is outside. Stopping
+  // it cancels its timers, drops its visibility listener, and prevents a request
+  // already in flight from following through.
+  const admissionSessionRef = useRef<AdmissionSession | null>(null);
 
   const clearWaitingTimers = useCallback(() => {
-    if (waitingTimerRef.current !== null) {
-      clearTimeout(waitingTimerRef.current);
-      waitingTimerRef.current = null;
-    }
-    if (waitingPollRef.current !== null) {
-      clearTimeout(waitingPollRef.current);
-      waitingPollRef.current = null;
-    }
-    waitingPollStopRef.current?.();
-    waitingPollStopRef.current = null;
-    waitingVisibilityCleanupRef.current?.();
-    waitingVisibilityCleanupRef.current = null;
+    admissionSessionRef.current?.stop();
+    admissionSessionRef.current = null;
   }, []);
 
   /**
@@ -1582,74 +1569,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     // Non-host: knock (DB-backed) and wait. Camera/mic + signaling stay untouched
     // until we're admitted, so an un-admitted guest never appears in the room.
+    //
+    // The sequence itself — knock, read the verdict, poll for one that has not
+    // come, re-knock when the server has no record of us, and stop the moment it
+    // does — lives in createAdmissionSession, where it can be driven by a test
+    // rather than by a WebRTC stack. This function only says what each outcome
+    // means for the screen.
     const guestKey = guestKeyRef.current as string;
-    const knock = async () => {
-      const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guestKey, displayName: name }),
-      });
-      if (!res.ok) return null;
-      return ((await res.json()) as { status?: string }).status ?? "waiting";
-    };
 
-    let status: string | null = null;
-    try { status = await knock(); } catch { /* fall through to waiting */ }
-
-    if (status === "ended") { leaveEndedMeeting(); return; }
-    if (status === "denied") { showDenied(); return; }
-    if (status === "admitted") { await enterRoom(mId, name); return; }
-
-    // Still waiting — show the wait screen (keeps the local preview) and poll for
-    // the host's decision. Guests can't use Realtime, so we poll the knock route.
-    setWaitingForAdmit(true);
-    setJoining(false);
     // A second join without an intervening teardown would otherwise leave the
-    // first chain running and its visibility listener attached, both invisible.
+    // first session running and its visibility listener attached, both invisible.
     clearWaitingTimers();
-    waitingTimerRef.current = setTimeout(() => setWaitingTimedOut(true), 120_000);
-    // A self-rescheduling chain rather than setInterval, for three reasons: the
-    // gap widens with the wait (see ADMISSION_POLL_SCHEDULE), a hidden tab skips
-    // the request entirely, and the next poll is scheduled only once the last one
-    // has come back — an interval fires on the clock regardless, so a slow network
-    // stacks requests on a guest who is already having a bad time.
-    const startedAt = Date.now();
-    let stopped = false;
-    waitingPollStopRef.current = () => { stopped = true; };
 
-    const pollOnce = async () => {
-      if (stopped) return;
-      if (!shouldPollNow(typeof document === "undefined" ? undefined : document.visibilityState)) return;
-      try {
+    const session = createAdmissionSession({
+      knock: async () => {
+        const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guestKey, displayName: name }),
+        });
+        if (!res.ok) return null;
+        return ((await res.json()) as { status?: string }).status ?? "waiting";
+      },
+      poll: async () => {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(guestKey)}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const row = (await res.json()) as { status: string };
-        if (stopped) return;
-        if (row.status === "admitted") { clearWaitingTimers(); await enterRoomRef.current(mId, name); }
-        else if (row.status === "denied") { clearWaitingTimers(); showDenied(); }
-        else if (row.status === "ended") { leaveEndedMeeting(); }
-        // "unknown" means the server has no knock for this key — the POST above
-        // lost its race with the network, or the row was cleared. Waiting on a
-        // knock that was never recorded is waiting on a host who cannot see you,
-        // so re-knock rather than sitting here until the timeout.
-        else if (row.status === "unknown") { await knock(); }
-      } catch { /* ignore */ }
-    };
-
-    const scheduleNext = () => {
-      if (stopped) return;
-      waitingPollRef.current = setTimeout(async () => {
-        await pollOnce();
-        scheduleNext();
-      }, nextPollDelay(Date.now() - startedAt));
-    };
-    scheduleNext();
-
-    // Coming back to the tab asks straight away, so a decision made while the
-    // guest was elsewhere is on screen as they focus rather than a tick later.
-    const onVisible = () => { if (document.visibilityState === "visible") void pollOnce(); };
-    document.addEventListener("visibilitychange", onVisible);
-    waitingVisibilityCleanupRef.current = () => document.removeEventListener("visibilitychange", onVisible);
+        if (!res.ok) return null;
+        return ((await res.json()) as { status?: string }).status ?? null;
+      },
+      onAdmitted: async () => { await enterRoomRef.current(mId, name); },
+      onDenied: showDenied,
+      onEnded: leaveEndedMeeting,
+      // Only reached when the host has not already decided — so this is where
+      // the waiting screen goes up, and the local preview with it.
+      onWaiting: () => { setWaitingForAdmit(true); setJoining(false); },
+      onTimedOut: () => setWaitingTimedOut(true),
+    });
+    admissionSessionRef.current = session;
+    await session.start();
   }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers, showDenied, leaveEndedMeeting]);
 
   // ── Host: waiting-room admissions (DB-backed) ─────────────────────────────
