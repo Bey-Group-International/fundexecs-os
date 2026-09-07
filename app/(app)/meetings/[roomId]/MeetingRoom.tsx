@@ -41,6 +41,8 @@ import {
   type CallPhase,
 } from "@/lib/meetings/call-phase";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
+import { nextPollDelay, shouldPollNow } from "@/lib/meetings/admission-poll";
+import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +118,10 @@ const VOICE_SAMPLE_MS = 120;
 // How long the copilot takes to slide away. Must match the duration-200 below:
 // the panel unmounts on this timer, and unmounting early cuts the animation.
 const COPILOT_SLIDE_MS = 200;
+// How long a burst of admission events is allowed to coalesce before the host's
+// waiting list is re-read to confirm it. Long enough that "Admit all" over a
+// roomful is a single query, short enough to be invisible.
+const RECONCILE_MS = 400;
 // Palette for per-speaker colours in the transcript.
 const SPEAKER_COLORS = [
   "var(--gold-400)",
@@ -1073,7 +1079,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // true.
   const [deniedByHost, setDeniedByHost] = useState(false);
   const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const waitingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const waitingPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The poll is a timeout chain, so cancelling the pending timer is not enough:
+  // a request already in flight would schedule the next one on the way out. This
+  // flips the flag the chain checks.
+  const waitingPollStopRef = useRef<(() => void) | null>(null);
+  const waitingVisibilityCleanupRef = useRef<(() => void) | null>(null);
 
   const clearWaitingTimers = useCallback(() => {
     if (waitingTimerRef.current !== null) {
@@ -1081,9 +1092,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       waitingTimerRef.current = null;
     }
     if (waitingPollRef.current !== null) {
-      clearInterval(waitingPollRef.current);
+      clearTimeout(waitingPollRef.current);
       waitingPollRef.current = null;
     }
+    waitingPollStopRef.current?.();
+    waitingPollStopRef.current = null;
+    waitingVisibilityCleanupRef.current?.();
+    waitingVisibilityCleanupRef.current = null;
   }, []);
 
   /**
@@ -1662,12 +1677,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // the host's decision. Guests can't use Realtime, so we poll the knock route.
     setWaitingForAdmit(true);
     setJoining(false);
+    // A second join without an intervening teardown would otherwise leave the
+    // first chain running and its visibility listener attached, both invisible.
+    clearWaitingTimers();
     waitingTimerRef.current = setTimeout(() => setWaitingTimedOut(true), 120_000);
-    waitingPollRef.current = setInterval(async () => {
+    // A self-rescheduling chain rather than setInterval, for three reasons: the
+    // gap widens with the wait (see ADMISSION_POLL_SCHEDULE), a hidden tab skips
+    // the request entirely, and the next poll is scheduled only once the last one
+    // has come back — an interval fires on the clock regardless, so a slow network
+    // stacks requests on a guest who is already having a bad time.
+    const startedAt = Date.now();
+    let stopped = false;
+    waitingPollStopRef.current = () => { stopped = true; };
+
+    const pollOnce = async () => {
+      if (stopped) return;
+      if (!shouldPollNow(typeof document === "undefined" ? undefined : document.visibilityState)) return;
       try {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(guestKey)}`, { cache: "no-store" });
         if (!res.ok) return;
         const row = (await res.json()) as { status: string };
+        if (stopped) return;
         if (row.status === "admitted") { clearWaitingTimers(); await enterRoomRef.current(mId, name); }
         else if (row.status === "denied") { clearWaitingTimers(); showDenied(); }
         else if (row.status === "ended") { leaveEndedMeeting(); }
@@ -1677,7 +1707,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // so re-knock rather than sitting here until the timeout.
         else if (row.status === "unknown") { await knock(); }
       } catch { /* ignore */ }
-    }, 3000);
+    };
+
+    const scheduleNext = () => {
+      if (stopped) return;
+      waitingPollRef.current = setTimeout(async () => {
+        await pollOnce();
+        scheduleNext();
+      }, nextPollDelay(Date.now() - startedAt));
+    };
+    scheduleNext();
+
+    // Coming back to the tab asks straight away, so a decision made while the
+    // guest was elsewhere is on screen as they focus rather than a tick later.
+    const onVisible = () => { if (document.visibilityState === "visible") void pollOnce(); };
+    document.addEventListener("visibilitychange", onVisible);
+    waitingVisibilityCleanupRef.current = () => document.removeEventListener("visibilitychange", onVisible);
   }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers, showDenied, leaveEndedMeeting]);
 
   // ── Host: waiting-room admissions (DB-backed) ─────────────────────────────
@@ -1699,15 +1744,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!isHost || !sessionLive || !meetingId) return;
     void loadWaiting();
+
+    // Each event is applied to the list immediately — it carries the row, so the
+    // panel redraws without waiting on a query — and schedules one reconciling
+    // re-read for the whole burst. A room filling up, or an "Admit all" over
+    // eight people, is now one SELECT instead of eight.
+    let reconcile: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReconcile = () => {
+      if (reconcile !== null) return;
+      reconcile = setTimeout(() => { reconcile = null; void loadWaiting(); }, RECONCILE_MS);
+    };
+
     const channel = supabase
       .channel(`admissions:${meetingId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meeting_admissions", filter: `meeting_id=eq.${meetingId}` },
-        () => { void loadWaiting(); },
+        (payload: unknown) => {
+          setWaitingPeers((prev) => applyAdmissionChange(prev, payload as AdmissionChange));
+          scheduleReconcile();
+        },
       )
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      if (reconcile !== null) clearTimeout(reconcile);
+      void supabase.removeChannel(channel);
+    };
   }, [isHost, sessionLive, meetingId, supabase, loadWaiting]);
 
   // Carry the waiting count into the browser tab title. A host who has tabbed
