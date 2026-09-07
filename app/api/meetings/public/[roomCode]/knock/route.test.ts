@@ -109,6 +109,38 @@ describe("POST knock", () => {
     expect(await res.json()).toEqual({ admissionId: "a1", status: "admitted" });
   });
 
+  // Guests are keyed by a persisted guest_key now, so a re-knock lands on the
+  // same row. The host decides on a name, so a pending row should carry the one
+  // the guest is currently offering.
+  it("refreshes the display name on a still-pending re-knock", async () => {
+    wire(meeting, { existing: { id: "a1", status: "waiting", display_name: "Guest" } });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada Lovelace" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "waiting" });
+    expect(updateCapture.patch).toEqual({ display_name: "Ada Lovelace" });
+  });
+
+  it("leaves the name alone when it hasn't changed", async () => {
+    wire(meeting, { existing: { id: "a1", status: "waiting", display_name: "Ada" } });
+    await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(updateCapture.patch).toBeUndefined();
+  });
+
+  // A decision was made about a specific name; a later knock must not quietly
+  // relabel a row the host has already ruled on.
+  it("does not rewrite the name on an already-decided row", async () => {
+    wire(meeting, { existing: { id: "a1", status: "denied", display_name: "Ada" } });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Someone Else" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "denied" });
+    expect(updateCapture.patch).toBeUndefined();
+  });
+
+  // The whole point of a persisted guest key: a refresh must not undo a deny.
+  it("keeps denying a guest who knocks again under the same key", async () => {
+    wire(meeting, { existing: { id: "a1", status: "denied", display_name: "Ada" } });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "denied" });
+  });
+
   it("400s without a guestKey", async () => {
     wire(meeting);
     const res = await POST(postReq({ displayName: "Ada" }), params());

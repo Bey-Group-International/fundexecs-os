@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // them) so the host never has to admit their own team.
   const { data: existing } = await (supabase as any)
     .from("live_meeting_admissions")
-    .select("id, status")
+    .select("id, status, display_name")
     .eq("meeting_id", meeting.id)
     .eq("guest_key", guestKey)
     .maybeSingle();
@@ -79,6 +79,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
         .update({ status: "admitted", decided_at: new Date().toISOString() })
         .eq("id", existing.id);
       return NextResponse.json({ admissionId: existing.id as string, status: "admitted" });
+    }
+    // A guest whose knock is still pending may re-knock under a name they have
+    // since corrected — they are keyed by guest_key now, not by a per-load id, so
+    // the second knock lands on the same row. The host is deciding on a name, so
+    // it should be the one the guest is currently offering. A decided row is left
+    // exactly as it was: the decision was made about that name.
+    if (existing.status === "waiting" && displayName !== existing.display_name) {
+      await (supabase as any)
+        .from("live_meeting_admissions")
+        .update({ display_name: displayName })
+        .eq("id", existing.id);
     }
     return NextResponse.json({ admissionId: existing.id as string, status: existing.status as string });
   }
