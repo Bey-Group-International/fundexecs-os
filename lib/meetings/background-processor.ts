@@ -236,12 +236,23 @@ export class BackgroundProcessor {
     if (this.running) return;
     this.running = true;
     this.slowFrames = 0;
+
+    // Draw from this moment, not from whenever the segmenter finishes loading.
+    // The canvas is captured as a track the instant an effect is chosen, and on
+    // first use the segmenter is a 12MB download behind it — so a loop that
+    // waited would hand everyone a black rectangle for the length of that
+    // download. In the call that is black video to every peer; in the green room
+    // it is someone checking their camera and finding it dead.
+    //
+    // Until the segmenter arrives the loop paints the plain camera, which is
+    // both honest and the thing they were already looking at.
+    this.raf = requestAnimationFrame(this.tick);
+
     void (async () => {
-      if (!this.segmenter) {
-        this.segmenter = await loadSegmenter();
-        if (!this.segmenter) { this.running = false; this.callbacks.onUnavailable(); return; }
-      }
-      if (this.running) this.raf = requestAnimationFrame(this.tick);
+      if (this.segmenter) return;
+      const segmenter = await loadSegmenter();
+      if (!segmenter) { this.stop(); this.callbacks.onUnavailable(); return; }
+      if (this.running) this.segmenter = segmenter;
     })();
   }
 
@@ -281,7 +292,7 @@ export class BackgroundProcessor {
 
   private drawFrame(now: number): void {
     const { video, canvas, ctx } = this;
-    if (video.readyState < 2 || !this.segmenter) return;
+    if (video.readyState < 2) return;
 
     // The camera can change shape underneath us — a device switch, or a phone
     // being rotated. Following it keeps the composite from stretching.
@@ -296,6 +307,14 @@ export class BackgroundProcessor {
       // Both are sized to the old frame; they are rebuilt on the next composite.
       this.maskImage = null;
       this.maskHistory = null;
+    }
+
+    // Still waiting on the segmenter. Show the real camera rather than nothing —
+    // the effect takes over the moment it can, and an unprocessed frame is a far
+    // better thing to be sending than a black one.
+    if (!this.segmenter) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return;
     }
 
     // MediaPipe rejects a timestamp that does not advance, which happens when

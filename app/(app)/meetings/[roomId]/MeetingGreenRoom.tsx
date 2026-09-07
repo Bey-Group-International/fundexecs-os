@@ -259,6 +259,13 @@ export function MeetingGreenRoom({
 
   const streamRef = useRef<MediaStream | null>(null);
   const micPeakRef = useRef(0);
+  // Set the moment someone picks a background here, so the restoration below
+  // knows it has been overtaken. Reading a custom image out of IndexedDB is an
+  // await, and it is entirely possible to choose something else during it —
+  // without this the remembered background lands on top of the newer choice and
+  // then travels into the call, which is the one place it must not.
+  const bgChosenRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -270,16 +277,17 @@ export function MeetingGreenRoom({
         // The id is remembered per browser but the image may have been deleted;
         // fall back rather than previewing a background that no longer exists.
         const stored = await getBackground(remembered.id);
-        if (cancelled) return;
+        if (cancelled || bgChosenRef.current) return;
         if (!stored) return;
         setBgImage(stored.blob);
       }
-      if (!cancelled) setBgEffect(remembered);
+      if (!cancelled && !bgChosenRef.current) setBgEffect(remembered);
     })();
     return () => { cancelled = true; };
   }, []);
 
   const chooseBackground = useCallback((effect: BackgroundEffect, image?: Blob | null) => {
+    bgChosenRef.current = true;
     setBgEffect(effect);
     setBgImage(image ?? null);
     try { window.localStorage.setItem(BACKGROUND_PREF_KEY, encodeEffect(effect)); } catch { /* storage disabled */ }
