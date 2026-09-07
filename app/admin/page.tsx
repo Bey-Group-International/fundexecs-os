@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getAdminReport } from "@/lib/admin/reports";
+import { listAccessRequests } from "@/lib/admin/access-requests";
 import { StatTile } from "@/components/dashboard/StatTile";
 import { SignupsTable } from "./SignupsTable";
+import { AccessRequestsTable } from "./AccessRequestsTable";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +15,12 @@ export const metadata: Metadata = {
 // The gate runs in app/admin/layout.tsx, so by the time this renders the caller
 // is a verified platform admin. This page only shapes the report for display.
 export default async function AdminPage() {
-  const report = await getAdminReport();
+  const [report, accessRequests] = await Promise.all([
+    getAdminReport(),
+    listAccessRequests(),
+  ]);
   const { metrics, funnel, signups } = report;
+  const pendingRequests = accessRequests.filter((r) => r.status === "pending").length;
 
   const generated = new Date(report.generatedAt).toLocaleString("en-US", {
     dateStyle: "medium",
@@ -49,6 +55,15 @@ export default async function AdminPage() {
           Cross-org reporting is unavailable until it is set.
         </div>
       ) : null}
+
+      {/* Access requests — the invite-only queue. Nobody gets an account until a
+          request here is approved, so it leads the page. */}
+      <section>
+        <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+          Access requests ({pendingRequests} pending / {accessRequests.length} total)
+        </h2>
+        <AccessRequestsTable rows={accessRequests} />
+      </section>
 
       {/* Traction metrics */}
       <section>

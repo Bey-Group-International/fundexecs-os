@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import OnboardingWizard from "./wizard";
+import { onboardingPrefillFor } from "@/lib/access-requests";
 import { DownloadOSFloat } from "@/components/DownloadOSFloat";
 
 export default async function OnboardingPage(
@@ -16,11 +17,12 @@ export default async function OnboardingPage(
   // Fetch principal record to pre-fill the user profile step.
   const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = await createServerClient();
-  const { data: principal } = await supabase
-    .from("principals")
-    .select("full_name")
-    .eq("id", ctx.userId)
-    .single();
+  const [{ data: principal }, prefill] = await Promise.all([
+    supabase.from("principals").select("full_name").eq("id", ctx.userId).single(),
+    // What they told us when they requested access, if anything. Null for an
+    // internal admin or a pre-gate account, and the wizard starts empty.
+    onboardingPrefillFor(ctx.email),
+  ]);
 
   return (
     <div className="fx-blueprint flex min-h-screen bg-surface-0">
@@ -58,6 +60,7 @@ export default async function OnboardingPage(
           error={searchParams.error}
           initialFullName={principal?.full_name ?? undefined}
           userEmail={ctx.email}
+          prefill={prefill}
         />
       </div>
 

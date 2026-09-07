@@ -69,8 +69,8 @@ export default function MeetingInvitePage() {
     if (roomCode) void fetchMeeting();
   }, [roomCode]);
 
-  function handleSignUp() {
-    router.push(`/login?mode=signup&redirect=/meetings/${roomCode}`);
+  function handleRequestAccess() {
+    router.push("/request-access");
   }
 
   function handleSignIn() {
@@ -151,10 +151,10 @@ export default function MeetingInvitePage() {
             <p className="text-sm text-[var(--fg-secondary)] text-center">How would you like to join?</p>
 
             <button
-              onClick={handleSignUp}
+              onClick={handleRequestAccess}
               className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
             >
-              Sign up for full access
+              Request access for the full workspace
             </button>
 
             <button
@@ -178,7 +178,7 @@ export default function MeetingInvitePage() {
             </button>
 
             <p className="text-[11px] text-[var(--fg-muted)] text-center leading-relaxed">
-              Guests can join this meeting without an account. Sign up for AI transcription, notes, and action items.
+              Guests can join this meeting without an account. Request access for AI transcription, notes, and action items.
             </p>
           </div>
         )}
@@ -213,8 +213,8 @@ export default function MeetingInvitePage() {
         {meeting?.status === "ended" && (
           <div className="fx-glass rounded-xl p-5 flex flex-col gap-3 items-center text-center">
             <p className="text-sm text-[var(--fg-muted)]">This meeting has already ended.</p>
-            <button onClick={handleSignUp} className="text-[var(--gold-400)] text-sm hover:underline">
-              Create a FundExecs OS account →
+            <button onClick={handleRequestAccess} className="text-[var(--gold-400)] text-sm hover:underline">
+              Request FundExecs OS access →
             </button>
           </div>
         )}

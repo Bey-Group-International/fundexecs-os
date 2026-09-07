@@ -93,7 +93,7 @@ export default async function LandingPage(
               Sign in
             </Link>
             <Link
-              href="/login?mode=signup"
+              href="/request-access"
               className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
               Request access
@@ -280,7 +280,7 @@ export default async function LandingPage(
             Sign in
           </Link>
           <Link
-            href="/login?mode=signup"
+            href="/request-access"
             className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-on-gold transition hover:opacity-90"
           >
             Request access
@@ -304,7 +304,7 @@ export default async function LandingPage(
               Sign in
             </Link>
             <Link
-              href="/login?mode=signup"
+              href="/request-access"
               className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
               Request access

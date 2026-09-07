@@ -151,6 +151,11 @@ export type Principal = {
   // Set once, atomically, the first time the platform-admin new-signup alert is
   // emailed for this principal (migration 20260708120000). Null until alerted.
   signup_alerted_at: string | null;
+  // Invite-only gate (migration 20260906120000). Null until a platform admin
+  // approves the person's access request; the auth paths bounce an unapproved
+  // principal back to /request-access. Every principal that existed when the
+  // migration ran was backfilled as approved.
+  access_approved_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -2748,10 +2753,48 @@ export type Annotation = {
   updated_at: string;
 };
 
+// Invite-only access queue (migration 20260906120000). Written by the public
+// /request-access form and read by the platform-admin console, both through the
+// service-role client — the table has RLS with no policies.
+export type AccessRequest = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  // Sign-up profile (migration 20260907120000). `applicant_type` drives which
+  // questions the form asks; the typed columns below mirror what onboarding
+  // asks so an approved request prefills the wizard, and `details` holds the
+  // reviewer-only answers that differ per type.
+  applicant_type: string | null;
+  organization_name: string | null;
+  role: string | null;
+  hq_location: string | null;
+  website: string | null;
+  phone: string | null;
+  aum_range: string | null;
+  fund_count: number | null;
+  primary_strategy: string | null;
+  details: Json;
+  note: string | null;
+  status: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  alerted_at: string | null;
+  // One-click Approve / Decline from the internal alert email (migration
+  // 20260906140000). Only the SHA-256 hash of the token is stored, it expires,
+  // and recording a decision clears it — so an emailed link is single-use.
+  // `decided_via` says which door the decision came through ('admin' | 'email').
+  decision_token_hash: string | null;
+  decision_token_expires_at: string | null;
+  decided_via: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
       principals: TableShape<Principal>;
+      access_requests: TableShape<AccessRequest>;
       organizations: TableShape<Organization>;
       organization_members: TableShape<OrganizationMember>;
       investment_theses: TableShape<InvestmentThesis>;
