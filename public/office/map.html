@@ -288,6 +288,22 @@ input[type=range].rng{width:100%;height:22px;accent-color:var(--gold);background
 .fpmode.fptouch #fpjoy{display:block;position:absolute;left:24px;bottom:26px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(24,36,58,.42),rgba(11,18,32,.62));border:1px solid var(--line2);z-index:7;touch-action:none;box-shadow:0 12px 32px -16px #000,inset 0 0 22px -8px rgba(0,0,0,.6)}
 .fpmode.fptouch #fphud{bottom:26px;left:auto;right:24px;transform:none}
 #fpjoy .nub{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;background:radial-gradient(circle at 40% 34%,rgba(245,215,115,.96),rgba(212,168,42,.82));border:1px solid rgba(255,235,170,.7);box-shadow:0 5px 14px -5px #000;will-change:transform}
+/* ---- top-down walking affordances (only once the member has an avatar on the floor) ----
+   The office is primarily navigated by clicking the floor, so the click has to feel
+   like a first-class control: a pointer cursor over the floor, a ping where the click
+   landed, a one-line hint, and — on touch — the same thumb-stick the first-person view
+   uses. All of it is scoped to body.youhere so build mode is untouched. */
+body.viewmode.youhere .canvas>svg{cursor:pointer}
+body.viewmode #stage{touch-action:none}   /* claim touches for walk/pan instead of browser scroll/zoom */
+#moveping{display:none;position:absolute;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:2px solid var(--gold2);box-shadow:0 0 14px -3px rgba(245,215,115,.85);pointer-events:none;z-index:8}
+#moveping.on{display:block;animation:mping .6s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes mping{0%{transform:scale(.3);opacity:.95}100%{transform:scale(1.25);opacity:0}}
+#tdhud{display:none}
+body.viewmode.youhere #tdhud{display:block;position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:rgba(11,18,32,.85);border:1px solid var(--line2);border-radius:9px;padding:8px 15px;font-size:11px;color:var(--dim);letter-spacing:.03em;pointer-events:none;z-index:8;white-space:nowrap;transition:opacity .5s}
+body.viewmode.youhere #tdhud b{color:var(--gold2)}
+body.viewmode.youhere #tdhud.fade{opacity:0}
+body.viewmode.youhere.tdtouch #fpjoy{display:block;position:absolute;left:24px;bottom:26px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(24,36,58,.42),rgba(11,18,32,.62));border:1px solid var(--line2);z-index:9;touch-action:none;box-shadow:0 12px 32px -16px #000,inset 0 0 22px -8px rgba(0,0,0,.6)}
+body.viewmode.youhere.tdtouch #tdhud{bottom:26px;left:auto;right:24px;transform:none}
 .reclabel .rec{color:#f5d773;font-size:1em;font-weight:800;display:inline-flex;align-items:center;gap:.5em;white-space:nowrap}
 .reclabel .bar{width:.9em;height:.9em;position:static;transform:none;background:linear-gradient(0deg,#d4a82a 0 40%,transparent 0) 0 100%/4px 100% no-repeat,linear-gradient(0deg,#d4a82a 0 70%,transparent 0) 5px 100%/4px 100% no-repeat,linear-gradient(0deg,#d4a82a 0 100%,transparent 0) 10px 100%/4px 100% no-repeat}
 .welcomelabel span{color:#f5d773;font-size:10px;font-weight:800;letter-spacing:.3em;background:#141c2ecc;border:1px solid #d4a82a;border-radius:4px;padding:3px 9px}
@@ -447,6 +463,8 @@ body.office:not(.viewmode) .zoom{right:290px}
     <div id="fpcross"></div>
     <div id="fpjoy" aria-hidden="true"><div class="nub" id="fpnub"></div></div>
     <div id="fphud"><b>WASD</b> walk · <b>drag</b> look · <b>click</b> move to · <b>scroll</b> step · <b>←/→</b> turn</div>
+    <div id="moveping" aria-hidden="true"></div>
+    <div id="tdhud"><b>Click</b> anywhere to walk · <b>hold</b> to follow the cursor · <b>WASD</b> · <b>Shift</b> run</div>
     <div class="brk tl"></div><div class="brk tr"></div><div class="brk bl"></div><div class="brk br"></div>
     <div class="vig"></div>
     <div class="coord" id="coord">x <b>—</b> · y <b>—</b></div>
@@ -1326,6 +1344,7 @@ let model=validate(load())||JSON.parse(JSON.stringify(DEFAULT));
 if(model&&Array.isArray(model.props))model.props=model.props.filter(p=>!(p&&p.t==='text'&&/FundExecs OS/i.test((p.args&&p.args[3])||'')));
 let sel=null, selSet=[], snap=true, uid=100, zoom=1;
 let armed=null, lastDown=null; // armed = the object unlocked for movement via double-click; single-click only selects
+let suppressClick=false;        // set on mouseup when the gesture was a drag/hold, so the trailing click isn't read as a walk order
 let soloId=null, collapsed={}, renaming=null, dragRow=null, walkMode=false, clipboard=null, guides=[], suppressMenu=false;
 let buildMode=false, buildTool='wall', buildHover=null, matBrush=null;
 let panX=0, panY=0, panelCollapsed=false, gridOn=true;
@@ -1489,7 +1508,11 @@ function recallAvatar(idOrRole){const key=String(idOrRole).toLowerCase();const p
 // clear strip just in front of the exec desk, facing the south door; from there
 // the member can click anywhere to walk out onto the floor.
 const YOU_SPAWN=[6.5,5];
-const YOU={active:false,x:YOU_SPAWN[0],y:YOU_SPAWN[1],dir:0,fi:1,dist:0,atlas:'',smooth:false,name:'You',status:'#34d399',path:null,pi:0,cur:0};
+// One pace for every way of moving — keys, click-to-walk and the touch stick all
+// use these, so switching between them never feels like changing gear.
+const YOU_WALK=3.4, YOU_RUN=5.6;
+const YOU={active:false,x:YOU_SPAWN[0],y:YOU_SPAWN[1],dir:0,fi:1,dist:0,atlas:'',smooth:false,name:'You',status:'#34d399',path:null,pi:0,cur:0,run:false};
+let youJoy=null;   // analog {fwd,str} from the top-down touch stick, magnitude <= 1
 function youSpawn(){YOU.x=YOU_SPAWN[0];YOU.y=YOU_SPAWN[1];YOU.dir=0;YOU.path=null;YOU.pi=0;YOU.cur=0;}
 // ---- keyboard / arrow-key control for the member's own avatar (top-down) ----
 // Held WASD/arrow keys drive continuous, wall-aware movement in stepYou. This
@@ -1500,11 +1523,44 @@ function youKick(){if(!peopleRAF){peopleLast=performance.now();peopleRAF=request
 function youKeyDown(k){if(!youKeys.has(k)){youKeys.add(k);YOU.path=null;YOU.cur=0;youKick();}}
 function youKeyUp(k){youKeys.delete(k);}
 function lineClear(x0,y0,x1,y1){const n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/0.5));for(let i=0;i<=n;i++){const t=i/n;if(!tileInRoom(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;}
-function walkYouTo(wx,wy){
-  if(!YOU.active||!pfInRoom(wx,wy))return false;
+// A click near the floor should still walk you there. Aiming is imprecise — people
+// click a desk, a wall, the strip just outside a room — so instead of rejecting
+// anything that isn't a walkable point we pull the target to the nearest one
+// (pfSnap searches outward through the nav grid) and only give up when the click
+// landed genuinely far from any floor.
+const YOU_SNAP_R=4.5;
+function youTarget(wx,wy){
+  if(pfNav(wx,wy))return [wx,wy];
+  buildFPWalls();                                   // pfNav/pfSnap read CAMWALLS — keep them current
+  const sp=pfSnap(wx,wy);   // returns the input unchanged when it finds nothing — so re-test it
+  return pfNav(sp[0],sp[1])&&Math.hypot(sp[0]-wx,sp[1]-wy)<=YOU_SNAP_R?sp:null;
+}
+// `run` = the member asked to sprint there (Shift-click / Shift held).
+function walkYouTo(wx,wy,run){
+  if(!YOU.active)return false;
+  const tgt=youTarget(wx,wy);if(!tgt)return false;
   userTookControl=true;   // member is driving now — stop auto-framing
-  const path=pathfind(YOU.x,YOU.y,wx,wy);if(!path)return false;   // wall-aware: routes through doorways, never across walls
-  YOU.path=path;YOU.pi=1;YOU.cur=Math.max(YOU.cur,0.35);startPeople();return true;}
+  const path=pathfind(YOU.x,YOU.y,tgt[0],tgt[1]);if(!path)return false;   // wall-aware: routes through doorways, never across walls
+  YOU.path=path;YOU.pi=1;YOU.run=!!run;YOU.cur=Math.max(YOU.cur,0.9);startPeople();pingAt(tgt[0],tgt[1]);hideHint();return true;}
+// Visible confirmation that the click landed — without it a click that routes
+// around a wall (so the avatar first walks *away* from the cursor) reads as a
+// dropped click and the member clicks again.
+let pingUntil=0,pingXY=null;
+function pingAt(wx,wy){
+  const el=document.getElementById('moveping');if(!el)return;
+  pingXY=[wx,wy];pingUntil=performance.now()+600;placePing();
+  el.classList.remove('on');void el.offsetWidth;el.classList.add('on');   // restart the animation
+}
+function placePing(){
+  const el=document.getElementById('moveping');if(!el||!pingXY)return;
+  if(performance.now()>pingUntil){el.classList.remove('on');pingXY=null;return;}
+  const sp=worldToStage(pingXY[0],pingXY[1]);el.style.left=sp[0].toFixed(1)+'px';el.style.top=sp[1].toFixed(1)+'px';
+}
+// The control hint is for the first walk only; it fades out once the member moves.
+let hintT=null;
+function hideHint(){const h=document.getElementById('tdhud');if(!h||h.classList.contains('fade'))return;
+  clearTimeout(hintT);hintT=null;
+  hintT=setTimeout(()=>{hintT=null;h.classList.add('fade');},1400);}
 function stepYou(dt,t){
   if(!YOU.active)return;
   let moving=false,yoff=0;
@@ -1515,10 +1571,14 @@ function stepYou(dt,t){
   if(youKeys.has('arrowdown')||youKeys.has('s'))ky+=1;
   if(youKeys.has('arrowleft')||youKeys.has('a'))kx-=1;
   if(youKeys.has('arrowright')||youKeys.has('d'))kx+=1;
-  if(kx||ky){
+  // Touch: the same thumb-stick the first-person view uses, as an analog vector,
+  // so a partial push walks slowly and a full push walks at the keyboard speed.
+  if(!kx&&!ky&&youJoy){kx=youJoy.str;ky=-youJoy.fwd;}
+  const mag=Math.min(1,Math.hypot(kx,ky));
+  if(mag>0.06){
     if(!CAMWALLS.length)buildFPWalls();
-    const m=Math.hypot(kx,ky);kx/=m;ky/=m;
-    const spd=youKeys.has('shift')?5.6:3.2;   // hold Shift to sprint
+    kx/=Math.hypot(kx,ky);ky/=Math.hypot(kx,ky);
+    const spd=(youKeys.has('shift')?YOU_RUN:YOU_WALK)*mag;   // hold Shift to sprint
     const dist=spd*dt, px=YOU.x, py=YOU.y;
     let [rx,ry]=resolveMove(YOU.x,YOU.y,YOU.x+kx*dist,YOU.y+ky*dist);   // slide along walls
     if(!pfWalkable(rx,ry)){                                             // keep on the floor
@@ -1526,16 +1586,20 @@ function stepYou(dt,t){
     }
     YOU.x=rx;YOU.y=ry;YOU.dir=dir4(kx,ky);
     moving=(Math.abs(rx-px)+Math.abs(ry-py))>1e-4;
-    if(moving){YOU.dist+=Math.hypot(rx-px,ry-py);followYou(0.2);}   // eased follow-cam so you never walk off-screen
+    if(moving){YOU.dist+=Math.hypot(rx-px,ry-py);keepYouInView();}
   } else if(YOU.path&&YOU.pi<YOU.path.length){
     const tgt=YOU.path[YOU.pi],dx=tgt[0]-YOU.x,dy=tgt[1]-YOU.y,d=Math.hypot(dx,dy),isLast=YOU.pi>=YOU.path.length-1;
-    let sp=2.0;if(isLast)sp=Math.min(sp,0.55+d*1.7);
-    YOU.cur=Math.min(sp,(YOU.cur||0.35)+dt*2.8);
+    // Click-walking used to top out at 2.0 while the keys ran at 3.2, which made
+    // clicking feel like the slow way to get anywhere. Both now share one pace.
+    let sp=YOU.run?YOU_RUN:YOU_WALK;if(isLast)sp=Math.min(sp,0.7+d*2.6);   // ease into the final step instead of stopping dead
+    YOU.cur=Math.min(sp,(YOU.cur||0.9)+dt*7);                              // and get up to speed quickly, so short hops aren't a crawl
     const step=Math.min(YOU.cur*dt,d);
     if(d>1e-3){YOU.x+=dx/d*step;YOU.y+=dy/d*step;YOU.dist+=step;YOU.dir=dir4(dx,dy);}
     moving=YOU.cur>0.15;
-    if(d<0.1){if(isLast){YOU.path=null;YOU.cur=0;}else YOU.pi++;}
+    keepYouInView();
+    if(d<0.1){if(isLast){YOU.path=null;YOU.cur=0;YOU.run=false;}else YOU.pi++;}
   }
+  if(pingXY)placePing();
   if(moving){YOU.fi=WALKSEQ[Math.floor(YOU.dist/STRIDE)%WALKSEQ.length];yoff=-Math.abs(Math.sin((YOU.dist/STRIDE)*Math.PI))*1.25;}
   else{YOU.fi=1;yoff=REDUCED?0:Math.sin(t/1000)*0.4;}
   // Depth-correct occlusion without per-frame full renders (which cause jank):
@@ -1564,15 +1628,34 @@ function setYou(d){
   YOU.smooth=!!d.smooth;
   YOU.name=String(d.name||'You').slice(0,40);
   YOU.status=/^#[0-9a-f]{6}$/i.test(String(d.status||''))?d.status:'#34d399';
-  if(!YOU.active){YOU.active=true;youSpawn();}
+  if(!YOU.active){YOU.active=true;youSpawn();
+    // Unlocks the walking affordances in CSS: floor cursor, the one-line hint, and
+    // (on touch) the thumb-stick — none of which make sense before there's a "you".
+    document.body.classList.add('youhere');
+    if(TOUCH)document.body.classList.add('tdtouch');
+  }
   if(document.body.classList.contains('office')&&MODE!=='fp'){
     render();drawSel();startPeople();
     // On first appearance, frame the CEO office (the member's starting point) so
     // the user sees their character there instead of the trading floor.
-    if(firstSpawn){requestAnimationFrame(frameYou);setTimeout(frameYou,120);setTimeout(frameYou,400);setTimeout(frameYou,800);}
+    if(firstSpawn){requestAnimationFrame(frameYou);setTimeout(frameYou,120);setTimeout(frameYou,400);setTimeout(frameYou,800);
+      setTimeout(hideHint,14000);}   // read it or not, the hint doesn't linger
   }
 }
-window.addEventListener('message',e=>{if(e.origin!==location.origin)return;const d=e.data;if(d&&d.type==='fx-you')setYou(d);});
+// The map lives in an iframe, so WASD only reached it once the member had clicked
+// inside it — pressing a key straight after the office loaded appeared to do
+// nothing. The host page forwards movement keys it receives instead (see
+// OfficeFrame), and they're applied here exactly as a local keypress would be.
+function extKey(down,key){
+  const k=String(key||'').toLowerCase();
+  if(MODE==='fp'){if(k==='shift'){fpShift=down;return;}if(down)fpKeyDown(k);else fpKeyUp(k);return;}
+  if(!YOU.active||!document.body.classList.contains('viewmode'))return;
+  if(k==='shift'){if(down)youKeys.add('shift');else youKeys.delete('shift');return;}
+  if(down){userTookControl=true;youKeyDown(k);hideHint();}else youKeyUp(k);
+}
+window.addEventListener('message',e=>{if(e.origin!==location.origin)return;const d=e.data;
+  if(d&&d.type==='fx-you')setYou(d);
+  else if(d&&d.type==='fx-key')extKey(!!d.down,d.key);});
 let intentHover=null,intentPin=null;
 function intentFor(pp){
   if(pp._say)return pp._say;                       // Claude-enriched (set on click), else local template
@@ -1623,11 +1706,17 @@ function paintIntent(){
   canvas.addEventListener('mouseover',e=>{if(!on())return;const id=gid(e.target);if(id){intentHover=id;paintIntent();}});
   canvas.addEventListener('mouseout',e=>{const id=gid(e.target);if(id&&intentHover===id){intentHover=null;paintIntent();}});
   canvas.addEventListener('click',e=>{if(!on())return;const id=gid(e.target);
+    const walked=suppressClick;suppressClick=false;
     if(!id){if(intentPin){intentPin=null;paintIntent();}
-      // a genuine click on the floor (not a pan-drag) walks YOU to that spot
-      if(!dragMoved&&YOU.active){const [sx,sy]=screenToSvg(e.clientX,e.clientY);const [wx,wy]=worldFrom(sx,sy);walkYouTo(wx,wy);}
+      // a genuine click on the floor (not the tail of a pan or a press-and-hold) walks YOU there
+      if(!walked&&YOU.active){const [sx,sy]=screenToSvg(e.clientX,e.clientY);const [wx,wy]=worldFrom(sx,sy);walkYouTo(wx,wy,e.shiftKey);}
       return;}
     const pp=PBID[id];if(!pp)return;
+    // Clicking a teammate reads as "go see them", not just "tell me what they're up
+    // to" — so pin their intent *and* walk over. youTarget puts you on the nearest
+    // free floor beside them rather than refusing because they're standing there.
+    if(!walked&&YOU.active&&id!=='you'){const dx=pp.x-YOU.x,dy=pp.y-YOU.y,d=Math.hypot(dx,dy);
+      if(d>1.2)walkYouTo(pp.x-dx/d*0.9,pp.y-dy/d*0.9,e.shiftKey);}   // pull up beside them, not through them
     if(intentPin===id){intentPin=null;pp._say=null;}else{intentPin=id;pp._say=null;enrichIntent(pp);}
     paintIntent();});
 })();
@@ -1790,9 +1879,20 @@ function drawMinimap(){const cv=document.getElementById('minimap');if(!cv)return
   else if(sv){const st=stageDom.getBoundingClientRect();const cs=[[st.left,st.top],[st.right,st.top],[st.right,st.bottom],[st.left,st.bottom]].map(([px,py])=>{const q=screenToSvg(px,py);return worldFrom(q[0],q[1]);});const vx0=Math.min(...cs.map(c=>c[0])),vx1=Math.max(...cs.map(c=>c[0])),vy0=Math.min(...cs.map(c=>c[1])),vy1=Math.max(...cs.map(c=>c[1]));ctx.strokeStyle='rgba(245,215,115,.9)';ctx.lineWidth=1.4;ctx.strokeRect(X(vx0),Y(vy0),(vx1-vx0)*sc,(vy1-vy0)*sc);ctx.fillStyle='rgba(245,215,115,.08)';ctx.fillRect(X(vx0),Y(vy0),(vx1-vx0)*sc,(vy1-vy0)*sc);}
 }
 function panToWorld(wx,wy){const sp=worldToStage(wx,wy);const st=stageDom.getBoundingClientRect();panX+=(st.width/2-sp[0]);panY+=(st.height/2-sp[1]);applyView();drawSel();}
-// Eased follow: pan a fraction k toward centering (wx,wy) each frame, so the
-// camera trails the avatar smoothly instead of snapping rigidly to it.
-function followYou(k){const sp=worldToStage(YOU.x,YOU.y);const st=stageDom.getBoundingClientRect();if(st.width<4)return;panX+=(st.width/2-sp[0])*k;panY+=(st.height/2-sp[1])*k;applyView();drawSel();}
+// Keep the avatar on screen without dragging the whole office along under it.
+// Hard-centering every frame makes the floor slide constantly (and fights the
+// member's own panning); instead the camera only moves once the avatar leaves a
+// generous centre box, and then only enough to nudge it back to that edge.
+function keepYouInView(){
+  const st=stageDom.getBoundingClientRect();if(st.width<4||st.height<4)return;
+  const sp=worldToStage(YOU.x,YOU.y);
+  const mx=Math.max(90,st.width*0.3), my=Math.max(80,st.height*0.28);
+  let dx=0,dy=0;
+  if(sp[0]<mx)dx=mx-sp[0];else if(sp[0]>st.width-mx)dx=st.width-mx-sp[0];
+  if(sp[1]<my)dy=my-sp[1];else if(sp[1]>st.height-my)dy=st.height-my-sp[1];
+  if(!dx&&!dy)return;
+  panX+=dx*0.22;panY+=dy*0.22;applyView();drawSel();
+}
 // Center the top-down view on the member's avatar. Bails (to retry later) until
 // the stage has a real size, so it survives the iframe's initial 0-size layout;
 // re-runs on resize until the member takes control. Resets pan first so the
@@ -1900,8 +2000,19 @@ function nearRotate(mx,my){ // stage-screen distance to selected prop's rotate h
 }
 stageDom.addEventListener('mousedown',e=>{
   if(MODE==='fp'){e.preventDefault();dragMoved=false;drag={mode:'look',sx0:e.clientX,sy0:e.clientY,yaw0:CAM.yaw,pitch0:CAM.pitch};stageDom.style.cursor='grabbing';return;}
-  if(document.body.classList.contains('viewmode')&&e.button===0){e.preventDefault();dragMoved=false;userTookControl=true;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
-  if(e.button===1){e.preventDefault();dragMoved=false;userTookControl=true;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
+  if(document.body.classList.contains('viewmode')&&e.button===0){e.preventDefault();dragMoved=false;
+    // A left press in the view is ambiguous: it could be a click to walk somewhere
+    // or the start of a pan. Deciding immediately (as this did) meant a single pixel
+    // of hand tremor turned a walk into a pan and the click was silently dropped —
+    // the main reason clicking to move felt unreliable. So stay undecided: pan only
+    // once the pointer really travels (PAN_TH), and if the button is instead *held*
+    // still, hand it to the avatar and walk toward the cursor for as long as it's down.
+    drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY,cx:e.clientX,cy:e.clientY,live:false,run:e.shiftKey};
+    const sv=svgEl();if(sv)sv.style.transition='none';
+    clearTimeout(holdT);holdT=null;
+    if(YOU.active)holdT=setTimeout(()=>{holdT=null;if(drag&&drag.mode==='pan'&&!drag.live)startWalkHold();},HOLD_MS);
+    return;}
+  if(e.button===1){e.preventDefault();dragMoved=false;userTookControl=true;drag={mode:'pan',px0:panX,py0:panY,sx0:e.clientX,sy0:e.clientY,live:true};const sv=svgEl();if(sv)sv.style.transition='none';stageDom.style.cursor='grabbing';return;}
   if(e.button===2&&!walkMode&&!buildMode){
     dragMoved=false;drag={mode:'orbit',sx0:e.clientX,sy0:e.clientY,yaw0:YAW,tilt0:TILT};stageDom.style.cursor='grabbing';return; // right-drag orbits (↔) + tilts (↕); plain right-click → context menu
   }
@@ -1944,11 +2055,48 @@ stageDom.addEventListener('mousedown',e=>{
     drag={mode:'marquee'};marquee={x0:mx,y0:my,x1:mx,y1:my};buildPanel();drawSel();
   }
 });
-window.addEventListener('mousemove',e=>{ if(!drag)return; lastE=e; if(!rafQ){rafQ=true;requestAnimationFrame(applyDrag);} });
+// Press and hold anywhere on the floor and the avatar keeps walking to wherever
+// the pointer is — the whole office becomes reachable with one gesture instead of
+// a click per step. Re-routing is throttled (pathfinding is not free) and only
+// re-issued once the cursor has actually moved somewhere else.
+const PAN_TH=5, HOLD_MS=240, RETARGET_MS=130, RETARGET_D=0.55;
+let holdT=null,holdRAF=0,holdLast=null;
+function startWalkHold(){
+  if(!drag||!YOU.active)return;
+  drag={mode:'walkhold',cx:drag.cx,cy:drag.cy,run:drag.run};
+  dragMoved=true;   // the trailing click must not fire a second, stale walk order
+  stageDom.style.cursor='pointer';holdLast=null;
+  const sv=svgEl();if(sv)sv.style.transition='';
+  if(!holdRAF)holdRAF=requestAnimationFrame(walkHoldLoop);
+}
+function walkHoldLoop(){
+  if(!drag||drag.mode!=='walkhold'){holdRAF=0;return;}
+  const now=performance.now();
+  if(!holdLast||now-holdLast.t>=RETARGET_MS){
+    const [sx,sy]=screenToSvg(drag.cx,drag.cy),[wx,wy]=worldFrom(sx,sy);
+    if(!holdLast||Math.hypot(wx-holdLast.x,wy-holdLast.y)>RETARGET_D){
+      if(walkYouTo(wx,wy,drag.run||youKeys.has('shift')))holdLast={x:wx,y:wy,t:now};
+      else holdLast={x:wx,y:wy,t:now};   // unreachable spot: wait for the cursor to move rather than re-pathing every frame
+    }else holdLast.t=now;
+  }
+  holdRAF=requestAnimationFrame(walkHoldLoop);
+}
+function stopWalkHold(){clearTimeout(holdT);holdT=null;cancelAnimationFrame(holdRAF);holdRAF=0;holdLast=null;stageDom.style.cursor='';}
+window.addEventListener('mousemove',e=>{ if(!drag)return; lastE=e;
+  if(drag.mode==='pan'){drag.cx=e.clientX;drag.cy=e.clientY;
+    if(!drag.live&&Math.hypot(e.clientX-drag.sx0,e.clientY-drag.sy0)>=PAN_TH){   // past the click tolerance → it's a pan
+      // mark it moved here, not in the rAF-deferred applyDrag: a flick whose move and
+      // release land in the same frame would otherwise finish looking like a click and
+      // send the avatar walking to wherever the drag ended.
+      drag.live=true;dragMoved=true;clearTimeout(holdT);holdT=null;userTookControl=true;stageDom.style.cursor='grabbing';}}
+  if(!rafQ){rafQ=true;requestAnimationFrame(applyDrag);} });
 function applyDrag(){
   rafQ=false;if(!drag||!lastE)return;
   if(drag.mode==='tap')return; // selected-but-not-armed: ignore drag (movement is locked until double-click)
-  if(drag.mode==='pan'){panX=drag.px0+(lastE.clientX-drag.sx0);panY=drag.py0+(lastE.clientY-drag.sy0);dragMoved=true;applyView();drawSel();return;}
+  if(drag.mode==='pan'){
+    if(!drag.live)return;   // still inside the click tolerance — not a pan yet
+    panX=drag.px0+(lastE.clientX-drag.sx0);panY=drag.py0+(lastE.clientY-drag.sy0);dragMoved=true;applyView();drawSel();return;}
+  if(drag.mode==='walkhold'){drag.cx=lastE.clientX;drag.cy=lastE.clientY;return;}   // steering, not dragging — the hold loop consumes this
   if(drag.mode==='look'){CAM.yaw=drag.yaw0-(lastE.clientX-drag.sx0)*0.005;CAM.pitch=clampPitch(drag.pitch0+(lastE.clientY-drag.sy0)*1.1);if(Math.abs(lastE.clientX-drag.sx0)+Math.abs(lastE.clientY-drag.sy0)>4)dragMoved=true;renderMoving();return;}
   if(drag.mode==='orbit'){YAW=drag.yaw0+(lastE.clientX-drag.sx0)*0.006;YAW=((YAW%(2*Math.PI))+2*Math.PI)%(2*Math.PI);TILT=Math.max(TILT_MIN,Math.min(TILT_MAX,drag.tilt0+(lastE.clientY-drag.sy0)*0.03));if(Math.abs(lastE.clientX-drag.sx0)>3||Math.abs(lastE.clientY-drag.sy0)>3){dragMoved=true;suppressMenu=true;}renderMoving();drawSel();return;}
   const [sx,sy]=screenToSvg(lastE.clientX,lastE.clientY);const [wx,wy]=worldFrom(sx,sy);
@@ -1968,6 +2116,12 @@ function applyDrag(){
   dragMoved=true;render();
 }
 window.addEventListener('mouseup',e=>{
+  clearTimeout(holdT);holdT=null;
+  // `click` fires after `mouseup`, which already resets dragMoved — so the floor
+  // click handler could never tell a click from the end of a pan, and panning the
+  // view sent the avatar walking. Latch the answer here instead.
+  suppressClick=dragMoved||!!(drag&&drag.mode==='walkhold');
+  if(drag&&drag.mode==='walkhold'){stopWalkHold();drag=null;dragMoved=false;return;}
   if(drag&&drag.mode==='look'){stageDom.style.cursor='';if(!dragMoved&&e){const [sx,sy]=screenToSvg(e.clientX,e.clientY);const [wx,wy]=worldFrom(sx,sy);camGlideTo(wx,wy);}drag=null;dragMoved=false;return;}
   if(drag&&drag.mode==='pan'){const sv=svgEl();if(sv)sv.style.transition='';stageDom.style.cursor='';}
   else if(drag&&drag.mode==='orbit'){const moved=dragMoved||(e&&(Math.abs(e.clientX-drag.sx0)>3||Math.abs(e.clientY-drag.sy0)>3));stageDom.style.cursor='';if(!moved&&e)openMenu(e.clientX,e.clientY);}
@@ -2043,7 +2197,7 @@ function fpKeyDown(k){cancelAnimationFrame(camAnim);if(!fpKeys.has(k)){fpKeys.ad
 function fpKeyUp(k){fpKeys.delete(k);}
 function fpStop(){fpKeys.clear();fpShift=false;fpJoy=null;fpBob=0;CAM.z=EYE;if(typeof setNub==='function')setNub(0,0);cancelAnimationFrame(fpRAF);fpRAF=0;}
 window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='shift')fpShift=false;fpKeyUp(k);youKeyUp(k);});
-window.addEventListener('blur',()=>{fpStop();youKeys.clear();});
+window.addEventListener('blur',()=>{fpStop();youKeys.clear();youJoy=null;setNub(0,0);if(typeof stopWalkHold==='function')stopWalkHold();tdPanId=null;tdPan=null;tdPinch=null;tdJoyId=null;});
 // ---------- first-person touch controls (mobile) ----------
 // Left-thumb virtual joystick walks; a drag anywhere else looks (yaw + pitch); a tap moves-to.
 // Multi-touch aware: joystick and look tracked by separate touch identifiers so both work at once.
@@ -2071,10 +2225,93 @@ function fpTouchEnd(e){if(MODE!=='fp')return;
     else if(t.identifier===lookId){if(!lookMoved){const [sx,sy]=screenToSvg(t.clientX,t.clientY);const [wx,wy]=worldFrom(sx,sy);camGlideTo(wx,wy);}lookId=null;}
   }
 }
-stageDom.addEventListener('touchstart',fpTouchStart,{passive:false});
-stageDom.addEventListener('touchmove',fpTouchMove,{passive:false});
-stageDom.addEventListener('touchend',fpTouchEnd,{passive:false});
-stageDom.addEventListener('touchcancel',fpTouchEnd,{passive:false});
+// ---------- top-down touch controls (mobile) ----------
+// The top-down view had no touch handling at all: a finger only ever produced the
+// browser's synthesized mouse events, so dragging the office around did nothing and
+// walking meant repeatedly tapping. It now mirrors the first-person scheme —
+// thumb-stick walks, one finger drags the view, a tap walks you to that spot, a
+// press-and-hold walks you toward the finger, two fingers pinch to zoom.
+const TD_TAP_MS=380;
+let tdJoyId=null,tdJoyCx=0,tdJoyCy=0,tdPanId=null,tdPan=null,tdPinch=null,tdHoldT=null;
+const tdOn=()=>MODE!=='fp'&&document.body.classList.contains('viewmode');
+function tdTouchStart(e){
+  if(!tdOn())return;
+  for(const t of e.changedTouches){
+    const je=document.getElementById('fpjoy'),jr=je&&je.getBoundingClientRect();
+    const inJoy=YOU.active&&document.body.classList.contains('tdtouch')&&jr&&jr.width&&
+      t.clientX>=jr.left-24&&t.clientX<=jr.right+24&&t.clientY>=jr.top-24&&t.clientY<=jr.bottom+24;
+    if(inJoy&&tdJoyId===null){e.preventDefault();tdJoyId=t.identifier;tdJoyCx=jr.left+jr.width/2;tdJoyCy=jr.top+jr.height/2;youJoy={fwd:0,str:0};YOU.path=null;YOU.cur=0;userTookControl=true;youKick();hideHint();continue;}
+    if(tdPanId===null){e.preventDefault();
+      tdPanId=t.identifier;
+      tdPan={sx:t.clientX,sy:t.clientY,cx:t.clientX,cy:t.clientY,px0:panX,py0:panY,live:false,hold:false,t0:performance.now()};
+      clearTimeout(tdHoldT);tdHoldT=null;
+      if(YOU.active)tdHoldT=setTimeout(()=>{tdHoldT=null;if(tdPan&&!tdPan.live){tdPan.hold=true;tdWalkToFinger(true);}},HOLD_MS);
+    }else if(tdPinch===null&&tdPan){                       // second finger → pinch-zoom, and the pan/hold is off
+      clearTimeout(tdHoldT);tdHoldT=null;tdPan.hold=false;tdPan.live=true;
+      tdPinch={id:t.identifier,x:t.clientX,y:t.clientY,d0:Math.hypot(t.clientX-tdPan.cx,t.clientY-tdPan.cy),z0:zoom};
+    }
+  }
+}
+function tdWalkToFinger(force){
+  if(!tdPan||!YOU.active)return;
+  const now=performance.now();
+  if(!force&&tdPan.lastT&&now-tdPan.lastT<RETARGET_MS)return;
+  const [sx,sy]=screenToSvg(tdPan.cx,tdPan.cy),[wx,wy]=worldFrom(sx,sy);
+  if(!force&&tdPan.lastW&&Math.hypot(wx-tdPan.lastW[0],wy-tdPan.lastW[1])<=RETARGET_D){tdPan.lastT=now;return;}
+  walkYouTo(wx,wy);tdPan.lastT=now;tdPan.lastW=[wx,wy];
+}
+function tdTouchMove(e){
+  if(!tdOn())return;
+  for(const t of e.changedTouches){
+    if(t.identifier===tdJoyId){e.preventDefault();
+      let dx=t.clientX-tdJoyCx,dy=t.clientY-tdJoyCy;const m=Math.hypot(dx,dy);
+      if(m>JOYR){dx=dx/m*JOYR;dy=dy/m*JOYR;}
+      setNub(dx,dy);youJoy={str:dx/JOYR,fwd:-dy/JOYR};youKick();continue;}
+    if(tdPinch&&t.identifier===tdPinch.id){e.preventDefault();tdPinch.x=t.clientX;tdPinch.y=t.clientY;tdApplyPinch();continue;}
+    if(t.identifier===tdPanId){e.preventDefault();
+      tdPan.cx=t.clientX;tdPan.cy=t.clientY;
+      if(tdPinch){tdApplyPinch();continue;}
+      if(tdPan.hold){tdWalkToFinger(false);continue;}
+      const dx=t.clientX-tdPan.sx,dy=t.clientY-tdPan.sy;
+      if(!tdPan.live){if(Math.hypot(dx,dy)<PAN_TH)continue;tdPan.live=true;clearTimeout(tdHoldT);tdHoldT=null;userTookControl=true;}
+      panX=tdPan.px0+dx;panY=tdPan.py0+dy;applyView();drawSel();
+    }
+  }
+}
+function tdApplyPinch(){
+  if(!tdPinch||!tdPan||!tdPinch.d0)return;
+  const d=Math.hypot(tdPinch.x-tdPan.cx,tdPinch.y-tdPan.cy);
+  zoomAt((tdPinch.x+tdPan.cx)/2,(tdPinch.y+tdPan.cy)/2,tdPinch.z0*(d/tdPinch.d0));
+}
+// `cancelled` = the platform took the touch away (an incoming call, a system edge
+// gesture, palm rejection). That is not the member letting go, so it must not
+// complete a tap — only a real touchend can.
+function tdTouchEnd(e,cancelled){
+  if(!tdOn()){tdJoyId=null;tdPanId=null;tdPan=null;tdPinch=null;youJoy=null;return;}
+  for(const t of e.changedTouches){
+    if(t.identifier===tdJoyId){tdJoyId=null;youJoy=null;setNub(0,0);}
+    else if(tdPinch&&t.identifier===tdPinch.id){
+      tdPinch=null;
+      // Hand the view back to the remaining finger from where things actually
+      // stand: pinch-zooming moved panX/panY, so the pre-pinch baseline captured
+      // at touchstart is stale and re-applying its displacement would snap the
+      // office sideways on the next move.
+      if(tdPan){tdPan.live=true;tdPan.sx=tdPan.cx;tdPan.sy=tdPan.cy;tdPan.px0=panX;tdPan.py0=panY;}
+    }
+    else if(t.identifier===tdPanId){
+      clearTimeout(tdHoldT);tdHoldT=null;
+      // a quick, still touch is a tap → walk there
+      if(!cancelled&&tdPan&&!tdPan.live&&!tdPan.hold&&performance.now()-tdPan.t0<TD_TAP_MS&&YOU.active){
+        const [sx,sy]=screenToSvg(t.clientX,t.clientY),[wx,wy]=worldFrom(sx,sy);walkYouTo(wx,wy);
+      }
+      tdPanId=null;tdPan=null;tdPinch=null;
+    }
+  }
+}
+stageDom.addEventListener('touchstart',e=>{fpTouchStart(e);tdTouchStart(e);},{passive:false});
+stageDom.addEventListener('touchmove',e=>{fpTouchMove(e);tdTouchMove(e);},{passive:false});
+stageDom.addEventListener('touchend',e=>{fpTouchEnd(e);tdTouchEnd(e);},{passive:false});
+stageDom.addEventListener('touchcancel',e=>{fpTouchEnd(e);tdTouchEnd(e,true);},{passive:false});
 function enterFP(){cancelAnimationFrame(camAnim);buildFPWalls();CAM.z=EYE;CAM.pitch=0;fpBob=0;
   // Unified view: stand exactly where the top-down "you" avatar is, facing the same way, so toggling
   // views never moves you. Cancel any in-progress top-down walk so we don't keep sliding after entry.
@@ -2127,7 +2364,7 @@ window.addEventListener('keydown',e=>{
   if(MODE!=='fp'&&YOU.active&&document.body.classList.contains('viewmode')&&!typing){
     const k=e.key.toLowerCase();
     if(k==='shift'){youKeys.add('shift');return;}   // hold to sprint
-    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){e.preventDefault();userTookControl=true;youKeyDown(k);return;}}
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){e.preventDefault();userTookControl=true;youKeyDown(k);hideHint();return;}}
   const meta=e.metaKey||e.ctrlKey;
   if(meta&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return;}
   if(meta&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return;}
