@@ -5,12 +5,27 @@
 // templates follow the dark house style used by lib/email and lib/admin/signup-alert.
 import { escapeHtml } from "@/lib/email";
 import { SITE_URL } from "@/lib/site";
+import {
+  APPLICANT_TYPE_LABEL,
+  AUM_OPTIONS,
+  STRATEGY_OPTIONS,
+  labelForDetail,
+  labelForDetailKey,
+  type ApplicantType,
+} from "@/lib/access-request-fields";
 
 export interface AccessRequestEmailInput {
   email: string;
   fullName: string | null;
-  firm: string | null;
+  applicantType: ApplicantType | null;
+  organizationName: string | null;
   role: string | null;
+  hqLocation: string | null;
+  aumRange: string | null;
+  fundCount: number | null;
+  primaryStrategy: string | null;
+  /** Type-specific answers, keyed by field name. */
+  details: Record<string, string>;
   note: string | null;
   createdAt: string;
   /** One-click decision links. Omitted when a token could not be minted. */
@@ -36,13 +51,29 @@ export function accessRequestEmail(input: AccessRequestEmailInput): {
     timeStyle: "short",
     timeZone: "UTC",
   });
+  const optionLabel = (options: { value: string; label: string }[], value: string | null) =>
+    value ? (options.find((o) => o.value === value)?.label ?? value) : null;
+
+  // Built in review order: who, then their firm, then the answers their type
+  // was actually asked for. A field they were never asked is omitted rather
+  // than shown as a dash — an empty row reads like a gap in their answer.
   const rows: [string, string][] = [
     ["Name", input.fullName || "—"],
     ["Email", input.email],
-    ["Firm", input.firm || "—"],
-    ["Role", input.role || "—"],
-    ["Requested", `${when} UTC`],
+    ["Type", input.applicantType ? APPLICANT_TYPE_LABEL[input.applicantType] : "—"],
+    ["Firm", input.organizationName || "—"],
+    ["Title", input.role || "—"],
   ];
+  if (input.hqLocation) rows.push(["Location", input.hqLocation]);
+  const aum = optionLabel(AUM_OPTIONS, input.aumRange);
+  if (aum) rows.push(["AUM", aum]);
+  if (input.fundCount != null) rows.push(["Funds raised", String(input.fundCount)]);
+  const strategy = optionLabel(STRATEGY_OPTIONS, input.primaryStrategy);
+  if (strategy) rows.push(["Strategy", strategy]);
+  for (const [key, value] of Object.entries(input.details)) {
+    rows.push([labelForDetailKey(key), labelForDetail(key, value)]);
+  }
+  rows.push(["Requested", `${when} UTC`]);
   const rowsHtml = rows
     .map(
       ([k, v]) =>

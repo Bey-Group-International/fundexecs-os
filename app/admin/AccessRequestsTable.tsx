@@ -2,6 +2,13 @@
 
 import { useState, useTransition } from "react";
 import type { AccessRequestRow } from "@/lib/access-requests";
+import {
+  APPLICANT_TYPE_LABEL,
+  AUM_OPTIONS,
+  STRATEGY_OPTIONS,
+  labelForDetail,
+  labelForDetailKey,
+} from "@/lib/access-request-fields";
 import { approveAccessRequest, declineAccessRequest } from "./actions";
 
 function fmtDate(iso: string | null): string {
@@ -11,6 +18,36 @@ function fmtDate(iso: string | null): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** Label a stored option value, falling back to the raw value. */
+function optionLabel(
+  options: { value: string; label: string }[],
+  value: string | null,
+): string | null {
+  if (!value) return null;
+  return options.find((o) => o.value === value)?.label ?? value;
+}
+
+/**
+ * The applicant's answers as [label, value] pairs, in review order. Only
+ * answers they actually gave — a field their type never asked for is absent,
+ * not blank.
+ */
+function profileChips(row: AccessRequestRow): [string, string][] {
+  const chips: [string, string][] = [];
+  if (row.hqLocation) chips.push(["Location", row.hqLocation]);
+  const aum = optionLabel(AUM_OPTIONS, row.aumRange);
+  if (aum) chips.push(["AUM", aum]);
+  if (row.fundCount != null) chips.push(["Funds", String(row.fundCount)]);
+  const strategy = optionLabel(STRATEGY_OPTIONS, row.primaryStrategy);
+  if (strategy) chips.push(["Strategy", strategy]);
+  for (const [key, value] of Object.entries(row.details)) {
+    chips.push([labelForDetailKey(key), labelForDetail(key, value)]);
+  }
+  if (row.website) chips.push(["Web", row.website]);
+  if (row.phone) chips.push(["Phone", row.phone]);
+  return chips;
 }
 
 const STATUS_STYLE: Record<AccessRequestRow["status"], string> = {
@@ -73,6 +110,11 @@ export function AccessRequestsTable({ rows }: { rows: AccessRequestRow[] }) {
                 >
                   {row.status}
                 </span>
+                {row.applicantType ? (
+                  <span className="rounded-md border border-line px-1.5 py-0.5 font-mono text-[11px] text-fg-secondary">
+                    {APPLICANT_TYPE_LABEL[row.applicantType]}
+                  </span>
+                ) : null}
                 {row.hasAccount ? (
                   <span className="rounded-md border border-line px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                     has account
@@ -86,9 +128,24 @@ export function AccessRequestsTable({ rows }: { rows: AccessRequestRow[] }) {
               </div>
               <p className="mt-0.5 truncate font-mono text-[11px] text-fg-muted">
                 {row.email}
-                {row.firm ? ` · ${row.firm}` : ""}
+                {row.organizationName ? ` · ${row.organizationName}` : ""}
                 {row.role ? ` · ${row.role}` : ""}
               </p>
+              {/* Everything their type was asked for. Rendered as chips rather
+                  than a fixed column set: which answers exist depends on who
+                  they are, and an empty column reads like a missing answer. */}
+              {profileChips(row).length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {profileChips(row).map(([label, value]) => (
+                    <span
+                      key={label}
+                      className="rounded border border-line/70 px-1.5 py-0.5 font-mono text-[10px] text-fg-secondary"
+                    >
+                      {label}: {value}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {row.note ? (
                 <p className="mt-2 border-l-2 border-gold-500/40 pl-3 text-sm text-fg-secondary">
                   {row.note}

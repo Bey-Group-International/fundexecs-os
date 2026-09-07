@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
-import { requestAccess } from "./actions";
+import { isApplicantType } from "@/lib/access-request-fields";
+import { RequestAccessForm } from "./RequestAccessForm";
 
 export const metadata: Metadata = {
   title: "Request access",
   description:
     "FundExecs OS is invite-only. Tell us about your firm and we'll open a workspace for you.",
 };
-
-const FIELD =
-  "rounded-md border border-line bg-surface-2 px-3 py-2.5 text-sm text-fg-primary placeholder-fg-muted outline-none transition focus:border-gold-500 focus:bg-surface-2";
 
 // Copy for the three ways an operator lands here from a blocked sign-in
 // (lib/access-requests.ts → blockedRedirectPath). `showForm` is false only when
@@ -39,12 +37,14 @@ export default async function RequestAccessPage(props: {
     error?: string;
     email?: string;
     status?: string;
+    type?: string;
   }>;
 }) {
   const searchParams = await props.searchParams;
   const submitted = searchParams.submitted === "1";
   const gate = searchParams.status ? GATE_NOTICES[searchParams.status] : undefined;
   const email = typeof searchParams.email === "string" ? searchParams.email : "";
+  const type = isApplicantType(searchParams.type) ? searchParams.type : null;
   const showForm = !submitted && (gate?.showForm ?? true);
 
   return (
@@ -67,7 +67,7 @@ export default async function RequestAccessPage(props: {
 
       {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-20 sm:px-6">
-        <div className="fx-glass w-full max-w-sm p-5 sm:p-6">
+        <div className="fx-glass w-full max-w-lg p-5 sm:p-7">
           <Logo className="mb-8 block lg:hidden" />
 
           <h1 className="text-2xl font-semibold tracking-tight text-fg-primary">
@@ -90,79 +90,7 @@ export default async function RequestAccessPage(props: {
             </p>
           )}
 
-          {showForm && (
-            <form action={requestAccess} className="mt-6 flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-fg-secondary" htmlFor="full_name">
-                  Full name
-                </label>
-                <input
-                  id="full_name"
-                  name="full_name"
-                  placeholder="Alex Chen"
-                  autoComplete="name"
-                  className={FIELD}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-fg-secondary" htmlFor="email">
-                  Work email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  defaultValue={email}
-                  placeholder="you@yourfirm.com"
-                  autoComplete="email"
-                  className={FIELD}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-fg-secondary" htmlFor="firm">
-                  Firm
-                </label>
-                <input
-                  id="firm"
-                  name="firm"
-                  placeholder="Meridian Capital Partners"
-                  autoComplete="organization"
-                  className={FIELD}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-fg-secondary" htmlFor="role">
-                  Role
-                </label>
-                <input
-                  id="role"
-                  name="role"
-                  placeholder="Managing Partner"
-                  autoComplete="organization-title"
-                  className={FIELD}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-fg-secondary" htmlFor="note">
-                  What do you want to run in FundExecs?
-                </label>
-                <textarea
-                  id="note"
-                  name="note"
-                  rows={3}
-                  placeholder="Fund II diligence, LP reporting, deal sourcing…"
-                  className={`${FIELD} resize-y`}
-                />
-              </div>
-              <button
-                type="submit"
-                className="mt-2 rounded-md bg-gold-400 py-2.5 text-sm font-medium text-on-gold transition hover:opacity-90"
-              >
-                Request access
-              </button>
-            </form>
-          )}
+          {showForm && <RequestAccessForm defaultEmail={email} defaultType={type} />}
 
           <p className="mt-5 text-center text-sm text-fg-muted">
             Already have an account?{" "}

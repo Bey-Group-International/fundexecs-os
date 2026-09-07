@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { lookupDecisionToken } from "@/lib/access-requests";
+import {
+  APPLICANT_TYPE_LABEL,
+  labelForDetail,
+  labelForDetailKey,
+} from "@/lib/access-request-fields";
 import { confirmAccessDecision } from "./actions";
 
 // Never indexed: the URL carries a credential, and there is nothing here for a
@@ -112,12 +117,21 @@ export default async function AccessDecisionPage(props: {
           [
             ["Name", request.fullName],
             ["Email", request.email],
-            ["Firm", request.firm],
-            ["Role", request.role],
+            [
+              "Type",
+              request.applicantType ? APPLICANT_TYPE_LABEL[request.applicantType] : null,
+            ],
+            ["Firm", request.organizationName],
+            ["Title", request.role],
+            // The answers this applicant type was actually asked for.
+            ...Object.entries(request.details).map(
+              ([key, value]) =>
+                [labelForDetailKey(key), labelForDetail(key, value)] as [string, string],
+            ),
           ] as [string, string | null][]
         ).map(([label, value]) => (
           <div key={label} className="flex gap-3">
-            <dt className="w-16 shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] text-fg-muted">
+            <dt className="w-24 shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] text-fg-muted">
               {label}
             </dt>
             <dd className="min-w-0 break-words text-sm text-fg-primary">

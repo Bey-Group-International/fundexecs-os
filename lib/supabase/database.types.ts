@@ -2760,8 +2760,20 @@ export type AccessRequest = {
   id: string;
   email: string;
   full_name: string | null;
-  firm: string | null;
+  // Sign-up profile (migration 20260907120000). `applicant_type` drives which
+  // questions the form asks; the typed columns below mirror what onboarding
+  // asks so an approved request prefills the wizard, and `details` holds the
+  // reviewer-only answers that differ per type.
+  applicant_type: string | null;
+  organization_name: string | null;
   role: string | null;
+  hq_location: string | null;
+  website: string | null;
+  phone: string | null;
+  aum_range: string | null;
+  fund_count: number | null;
+  primary_strategy: string | null;
+  details: Json;
   note: string | null;
   status: string;
   reviewed_at: string | null;

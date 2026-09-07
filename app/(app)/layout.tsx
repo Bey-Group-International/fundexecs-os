@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
+import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { signOut } from "@/app/login/actions";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import { PLAN_BY_KEY, type PlanKey } from "@/lib/billing";
@@ -47,6 +48,14 @@ export default async function AppLayout({
   if (!ctx.orgId) redirect("/onboarding");
 
   const supabase = await createServerClient();
+  // Computed before the batch so the pending-request count is only queried for
+  // the handful of people who can act on it — it's a cross-org service-role
+  // read, and no ordinary member should trigger it.
+  const isPlatformAdmin = isPlatformAdminEmail(ctx.email);
+  const pendingAccessRequests = isPlatformAdmin
+    ? await countPendingAccessRequests()
+    : 0;
+
   const [
     { data: principal },
     wallet,
@@ -187,7 +196,8 @@ export default async function AppLayout({
         sessions={sessions}
         groups={groups}
         inboxUnread={(messagesUnread ?? 0) + (approvalsCount ?? 0)}
-        isPlatformAdmin={isPlatformAdminEmail(ctx.email)}
+        isPlatformAdmin={isPlatformAdmin}
+        pendingAccessRequests={pendingAccessRequests}
         signOutAction={signOut}
         createGroupAction={createSessionGroup}
         moveSessionAction={moveSessionToGroup}

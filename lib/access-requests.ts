@@ -19,25 +19,45 @@ import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/serve
 import { sendEmail } from "@/lib/email";
 import { accessApprovedEmail, accessRequestEmail } from "@/lib/access-request-emails";
 import { adminAlertRecipients, isPlatformAdminEmail } from "@/lib/platform-admin";
+import {
+  fieldsFor,
+  isApplicantType,
+  operatorRoleForApplicantType,
+  type AccessRequestField,
+  type ApplicantType,
+} from "@/lib/access-request-fields";
 import { SITE_URL } from "@/lib/site";
 
 export type AccessRequestStatus = "pending" | "approved" | "declined";
 export type AccessDecisionRoute = "admin" | "email";
 
+/**
+ * A submitted form. `values` carries every type-specific answer keyed by field
+ * name (see lib/access-request-fields.ts); the request module decides which of
+ * them land in typed columns and which in `details`.
+ */
 export interface AccessRequestInput {
   email: string;
   fullName?: string | null;
-  firm?: string | null;
-  role?: string | null;
-  note?: string | null;
+  applicantType?: string | null;
+  values?: Record<string, string>;
 }
 
 export interface AccessRequestRow {
   id: string;
   email: string;
   fullName: string | null;
-  firm: string | null;
+  applicantType: ApplicantType | null;
+  organizationName: string | null;
   role: string | null;
+  hqLocation: string | null;
+  website: string | null;
+  phone: string | null;
+  aumRange: string | null;
+  fundCount: number | null;
+  primaryStrategy: string | null;
+  /** Type-specific answers, keyed by field name. */
+  details: Record<string, string>;
   note: string | null;
   status: AccessRequestStatus;
   createdAt: string;
@@ -79,14 +99,56 @@ function clamp(value: string | null | undefined, max: number): string | null {
 export type NormalizedAccessRequest = {
   email: string;
   full_name: string | null;
-  firm: string | null;
+  applicant_type: ApplicantType;
+  organization_name: string | null;
   role: string | null;
+  hq_location: string | null;
+  website: string | null;
+  phone: string | null;
+  aum_range: string | null;
+  fund_count: number | null;
+  primary_strategy: string | null;
+  details: Record<string, string>;
   note: string | null;
 };
 
+/** Where each common field lands on the row. */
+const COMMON_COLUMN: Record<string, keyof NormalizedAccessRequest> = {
+  organization_name: "organization_name",
+  role: "role",
+  hq_location: "hq_location",
+  website: "website",
+  phone: "phone",
+};
+
+/** A select's value must be one it actually offers — a form post is untrusted. */
+function isAllowedOption(field: AccessRequestField, value: string): boolean {
+  if (!field.options) return true;
+  return field.options.some((o) => o.value === value);
+}
+
 /**
- * Validate + normalize a submitted request. Pure — no IO — so the rules are
- * unit-testable and identical wherever a request enters.
+ * `details` is jsonb, so it arrives as unknown. Keep only string values — the
+ * form only ever writes strings, and anything else is not ours to render.
+ */
+export function asDetails(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string" && value.trim()) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Validate + normalize a submitted request against the field schema for the
+ * declared applicant type. Pure — no IO — so the rules are unit-testable and
+ * identical wherever a request enters.
+ *
+ * Everything is driven by lib/access-request-fields.ts: a field that type
+ * doesn't ask for is dropped rather than stored, a select value the form never
+ * offered is rejected, and a required answer that's missing names itself in the
+ * error.
  */
 export function normalizeAccessRequest(
   input: AccessRequestInput,
@@ -96,16 +158,75 @@ export function normalizeAccessRequest(
   if (email.length > MAX_SHORT || !isPlausibleEmail(email)) {
     return { ok: false, error: "Enter a valid work email address." };
   }
-  return {
-    ok: true,
-    value: {
-      email,
-      full_name: clamp(input.fullName, MAX_SHORT),
-      firm: clamp(input.firm, MAX_SHORT),
-      role: clamp(input.role, MAX_SHORT),
-      note: clamp(input.note, MAX_NOTE),
-    },
+
+  if (!isApplicantType(input.applicantType)) {
+    return { ok: false, error: "Choose which best describes you." };
+  }
+  const applicantType = input.applicantType;
+
+  const value: NormalizedAccessRequest = {
+    email,
+    full_name: clamp(input.fullName, MAX_SHORT),
+    applicant_type: applicantType,
+    organization_name: null,
+    role: null,
+    hq_location: null,
+    website: null,
+    phone: null,
+    aum_range: null,
+    fund_count: null,
+    primary_strategy: null,
+    details: {},
+    note: null,
   };
+
+  const submitted = input.values ?? {};
+
+  for (const field of fieldsFor(applicantType)) {
+    const raw = clamp(submitted[field.name], field.kind === "textarea" ? MAX_NOTE : MAX_SHORT);
+
+    if (raw === null) {
+      if (field.required) {
+        return { ok: false, error: `${field.label} is required.` };
+      }
+      continue;
+    }
+
+    if (!isAllowedOption(field, raw)) {
+      return { ok: false, error: `Choose a valid ${field.label.toLowerCase()}.` };
+    }
+
+    if (field.name === "note") {
+      value.note = raw;
+      continue;
+    }
+
+    if (field.column === "fund_count") {
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return { ok: false, error: `${field.label} must be a number.` };
+      }
+      value.fund_count = Math.trunc(parsed);
+      continue;
+    }
+
+    if (field.column) {
+      // aum_range / primary_strategy — validated as options above.
+      value[field.column] = raw as never;
+      continue;
+    }
+
+    const common = COMMON_COLUMN[field.name];
+    if (common) {
+      value[common] = raw as never;
+      continue;
+    }
+
+    // Everything else is a reviewer-only answer for this type.
+    value.details[field.name] = raw;
+  }
+
+  return { ok: true, value };
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +275,10 @@ export interface TokenLookup {
   id: string;
   email: string;
   fullName: string | null;
-  firm: string | null;
+  applicantType: ApplicantType | null;
+  organizationName: string | null;
   role: string | null;
+  details: Record<string, string>;
   note: string | null;
   status: AccessRequestStatus;
   createdAt: string;
@@ -177,7 +300,7 @@ export async function lookupDecisionToken(
     const { data, error } = await supabase
       .from("access_requests")
       .select(
-        "id, email, full_name, firm, role, note, status, created_at, decision_token_expires_at",
+        "id, email, full_name, applicant_type, organization_name, role, details, note, status, created_at, decision_token_expires_at",
       )
       .eq("decision_token_hash", hashDecisionToken(token))
       .maybeSingle();
@@ -194,8 +317,10 @@ export async function lookupDecisionToken(
       id: data.id,
       email: data.email,
       fullName: data.full_name,
-      firm: data.firm,
+      applicantType: isApplicantType(data.applicant_type) ? data.applicant_type : null,
+      organizationName: data.organization_name,
       role: data.role,
+      details: asDetails(data.details),
       note: data.note,
       status: data.status as AccessRequestStatus,
       createdAt: data.created_at,
@@ -338,7 +463,9 @@ export async function submitAccessRequest(input: AccessRequestInput): Promise<Su
   const supabase = createServiceClient();
   const { error } = await supabase
     .from("access_requests")
-    .upsert(normalized.value, { onConflict: "email" });
+    // `details` is jsonb on the row and a string map here; the shapes agree at
+    // runtime, and the generated Json type is the only thing in the way.
+    .upsert(normalized.value as never, { onConflict: "email" });
 
   if (error) {
     console.error("[access-request] upsert failed:", error);
@@ -373,7 +500,9 @@ async function notifyAccessRequestOnce(email: string): Promise<void> {
       })
       .eq("email", email)
       .is("alerted_at", null)
-      .select("email, full_name, firm, role, note, created_at")
+      .select(
+        "email, full_name, applicant_type, organization_name, role, hq_location, aum_range, fund_count, primary_strategy, details, note, created_at",
+      )
       .maybeSingle();
 
     if (error || !claimed) return;
@@ -389,8 +518,14 @@ async function notifyAccessRequestOnce(email: string): Promise<void> {
     const template = accessRequestEmail({
       email: claimed.email,
       fullName: claimed.full_name,
-      firm: claimed.firm,
+      applicantType: isApplicantType(claimed.applicant_type) ? claimed.applicant_type : null,
+      organizationName: claimed.organization_name,
       role: claimed.role,
+      hqLocation: claimed.hq_location,
+      aumRange: claimed.aum_range,
+      fundCount: claimed.fund_count,
+      primaryStrategy: claimed.primary_strategy,
+      details: asDetails(claimed.details),
       note: claimed.note,
       createdAt: claimed.created_at,
       approveUrl: decisionUrl(minted.token, "approve"),
@@ -517,4 +652,67 @@ export async function applyAccessDecisionByToken(args: {
     reviewerId: null,
     via: "email",
   });
+}
+
+/**
+ * What an approved request contributes to the onboarding wizard.
+ *
+ * Everything here is a suggestion, not a fact: the wizard shows these prefilled
+ * and editable, because what someone typed while asking for access is often
+ * approximate and they should get a chance to correct it before it becomes the
+ * organization record.
+ */
+export interface OnboardingPrefill {
+  fullName: string | null;
+  title: string | null;
+  phone: string | null;
+  orgName: string | null;
+  hqLocation: string | null;
+  /** Null for applicant types that have no operator_role equivalent (lp, service_provider). */
+  role: string | null;
+  aumRange: string | null;
+  fundCount: string | null;
+  strategy: string | null;
+}
+
+/**
+ * The approved request for `email`, shaped for the onboarding wizard. Returns
+ * null when there isn't one — a principal can reach onboarding without ever
+ * having filed a request (an internal admin, or a pre-gate account), and that
+ * path must still work.
+ */
+export async function onboardingPrefillFor(
+  email: string | null | undefined,
+): Promise<OnboardingPrefill | null> {
+  const normalized = normalizeEmail(email);
+  if (!normalized || !hasSupabaseServiceEnv()) return null;
+
+  try {
+    const { data } = await createServiceClient()
+      .from("access_requests")
+      .select(
+        "full_name, applicant_type, organization_name, role, hq_location, phone, aum_range, fund_count, primary_strategy, status",
+      )
+      .eq("email", normalized)
+      .maybeSingle();
+
+    if (!data || data.status !== "approved") return null;
+
+    return {
+      fullName: data.full_name,
+      title: data.role,
+      phone: data.phone,
+      orgName: data.organization_name,
+      hqLocation: data.hq_location,
+      role: operatorRoleForApplicantType(
+        isApplicantType(data.applicant_type) ? data.applicant_type : null,
+      ),
+      aumRange: data.aum_range,
+      fundCount: data.fund_count == null ? null : String(data.fund_count),
+      strategy: data.primary_strategy,
+    };
+  } catch (err) {
+    console.error("[access-request] onboardingPrefillFor failed:", err);
+    return null;
+  }
 }

@@ -1098,7 +1098,34 @@ Deployed, monitoring               →  live, observability active
              |  every workflow command (writes, capital events, outreach) is recorded as
              |  pending_approval intent awaiting execution wiring + human approval —
              |  nothing fabricated or bound-executed. Capital-binding stays Tier-3 human.
-             |  Confidence: typecheck/eslint clean, production build passes, Jest +28 new
+             |  Follow-up 2 (2026-09-07): /request-access becomes a real sign-up form.
+             |  Migration 20260907120000 adds applicant_type + the onboarding-shaped
+             |  columns (organization_name, hq_location, aum_range, fund_count,
+             |  primary_strategy, website, phone) + details jsonb.
+             |  Six applicant types: gp, family_office, advisory, operator, lp,
+             |  service_provider. Decision: applicant_type is its OWN vocabulary, not
+             |  organizations.operator_role — four map 1:1 and prefill the wizard's role;
+             |  lp/service_provider have no operator_role and would have meant widening
+             |  the ecosystem matcher's lane matrix, so they pick their role in
+             |  onboarding instead. Captured and approved like anyone else.
+             |  Decision: two column shapes. Answers ONBOARDING also asks for get typed
+             |  columns (prefill is then a straight copy, reusing the same aum_range
+             |  buckets and strategy slugs organizations constrains); reviewer-only
+             |  answers that vary per type (service line, ticket size, sector) go in
+             |  details jsonb rather than a wide sparse table that grows a column per
+             |  question.
+             |  lib/access-request-fields.ts is the single schema: the form, its
+             |  validation, the alert email, the admin card and the decision page all
+             |  render from it. A select value the form never offered is refused; a field
+             |  the chosen type wasn't asked is dropped, not stored.
+             |  Prefill: app/onboarding reads the approved request by email and seeds the
+             |  wizard — prefilled and EDITABLE, since a request-time answer is often
+             |  approximate and shouldn't silently become the org record.
+             |  In-app notice: countPendingAccessRequests badges the sidebar's Admin
+             |  console link, computed only for platform admins (it is a cross-org
+             |  service-role read).
+             |  Still no password at request time: an account exists only after approval.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +40 new
              |  (3724 total green, no regressions). Additive UI + two lib modules + one
              |  route; no migration, no engine change, no new deps.
 2026-08-28  |  session_shares scoped uniqueness  |  One share row per session per scope.
@@ -1354,10 +1381,38 @@ Deployed, monitoring               →  live, observability active
              |  Kept: supabase/config.toml enable_signup stays TRUE — an approved
              |  requester still creates their auth user on first Google sign-in; the gate
              |  is the app's, not the provider's.
-             |  Confidence: typecheck/eslint clean, production build passes, Jest +28 new
-             |  (4584 total green). Live Supabase auth flow not exercised (no local
+             |  Follow-up 2 (2026-09-07): /request-access becomes a real sign-up form.
+             |  Migration 20260907120000 adds applicant_type + the onboarding-shaped
+             |  columns (organization_name, hq_location, aum_range, fund_count,
+             |  primary_strategy, website, phone) + details jsonb.
+             |  Six applicant types: gp, family_office, advisory, operator, lp,
+             |  service_provider. Decision: applicant_type is its OWN vocabulary, not
+             |  organizations.operator_role — four map 1:1 and prefill the wizard's role;
+             |  lp/service_provider have no operator_role and would have meant widening
+             |  the ecosystem matcher's lane matrix, so they pick their role in
+             |  onboarding instead. Captured and approved like anyone else.
+             |  Decision: two column shapes. Answers ONBOARDING also asks for get typed
+             |  columns (prefill is then a straight copy, reusing the same aum_range
+             |  buckets and strategy slugs organizations constrains); reviewer-only
+             |  answers that vary per type (service line, ticket size, sector) go in
+             |  details jsonb rather than a wide sparse table that grows a column per
+             |  question.
+             |  lib/access-request-fields.ts is the single schema: the form, its
+             |  validation, the alert email, the admin card and the decision page all
+             |  render from it. A select value the form never offered is refused; a field
+             |  the chosen type wasn't asked is dropped, not stored.
+             |  Prefill: app/onboarding reads the approved request by email and seeds the
+             |  wizard — prefilled and EDITABLE, since a request-time answer is often
+             |  approximate and shouldn't silently become the org record.
+             |  In-app notice: countPendingAccessRequests badges the sidebar's Admin
+             |  console link, computed only for platform admins (it is a cross-org
+             |  service-role read).
+             |  Still no password at request time: an account exists only after approval.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +40 new
+             |  (4596 total green). Live Supabase auth flow not exercised (no local
              |  Supabase); the emailed round trip (mint → click → confirm → grant) is
-             |  covered only at the unit level. Next: run BOTH migrations before deploy —
+             |  covered only at the unit level; so is the prefill read. Next: run ALL
+             |  THREE migrations before deploy —
              |  until they land, access_approved_at is missing and the gate fails open;
              |  and set ADMIN_ALERT_EMAIL to the @beygroupintl.com reviewers or no alert
              |  is sent at all.

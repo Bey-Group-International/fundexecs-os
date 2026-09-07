@@ -311,6 +311,12 @@ interface AppSidebarProps {
   inboxUnread?: number;
   /** True only for internal platform admins — reveals the hidden Admin link. */
   isPlatformAdmin?: boolean;
+  /**
+   * Access requests waiting on a decision. Badged on the Admin link so a
+   * pending request is visible in the app, not only in the alert email. Always
+   * 0 for anyone who isn't a platform admin.
+   */
+  pendingAccessRequests?: number;
   signOutAction: () => void;
   createGroupAction: (formData: FormData) => void;
   moveSessionAction: (formData: FormData) => void;
@@ -343,6 +349,7 @@ function SidebarPanel({
   unreadSessionAction,
   inboxUnread = 0,
   isPlatformAdmin = false,
+  pendingAccessRequests = 0,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const [openHub, setOpenHub] = useState<string | null>(null);
@@ -673,6 +680,14 @@ function SidebarPanel({
                   className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-gold-300 transition duration-100 hover:bg-gold-500/10 hover:text-gold-200"
                 >
                   Admin console
+                  {pendingAccessRequests > 0 ? (
+                    <span
+                      className="ml-auto rounded-full bg-gold-400 px-1.5 py-0.5 font-mono text-[10px] font-bold text-on-gold"
+                      title={`${pendingAccessRequests} access request${pendingAccessRequests === 1 ? "" : "s"} awaiting review`}
+                    >
+                      {pendingAccessRequests}
+                    </span>
+                  ) : null}
                 </Link>
               ) : null}
               {ACCOUNT_ITEMS.map((item) => {

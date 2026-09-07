@@ -7,8 +7,10 @@
 // The decision itself lives in lib/access-requests.ts, shared with the emailed
 // Approve / Decline links, so both doors record the same thing the same way.
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { isApplicantType } from "@/lib/access-request-fields";
 import {
   applyAccessDecision,
+  asDetails,
   normalizeEmail,
   type AccessDecisionRoute,
   type AccessRequestRow,
@@ -28,7 +30,7 @@ export async function listAccessRequests(): Promise<AccessRequestRow[]> {
   const { data, error } = await supabase
     .from("access_requests")
     .select(
-      "id, email, full_name, firm, role, note, status, created_at, reviewed_at, decided_via",
+      "id, email, full_name, applicant_type, organization_name, role, hq_location, website, phone, aum_range, fund_count, primary_strategy, details, note, status, created_at, reviewed_at, decided_via",
     )
     .order("created_at", { ascending: false })
     .limit(500);
@@ -54,8 +56,16 @@ export async function listAccessRequests(): Promise<AccessRequestRow[]> {
     id: r.id,
     email: r.email,
     fullName: r.full_name,
-    firm: r.firm,
+    applicantType: isApplicantType(r.applicant_type) ? r.applicant_type : null,
+    organizationName: r.organization_name,
     role: r.role,
+    hqLocation: r.hq_location,
+    website: r.website,
+    phone: r.phone,
+    aumRange: r.aum_range,
+    fundCount: r.fund_count,
+    primaryStrategy: r.primary_strategy,
+    details: asDetails(r.details),
     note: r.note,
     status: r.status as AccessRequestStatus,
     createdAt: r.created_at,
@@ -84,4 +94,24 @@ export async function decideAccessRequest(args: {
     reviewerId: args.reviewerId,
     via: "admin",
   });
+}
+
+/**
+ * How many requests are waiting on a decision. Powers the badge on the sidebar's
+ * Admin console link, so a pending request is visible without opening mail.
+ * Returns 0 rather than throwing — a count is never worth failing a page render.
+ */
+export async function countPendingAccessRequests(): Promise<number> {
+  if (!hasSupabaseServiceEnv()) return 0;
+
+  try {
+    const { count, error } = await createServiceClient()
+      .from("access_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
 }

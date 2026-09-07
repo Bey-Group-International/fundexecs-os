@@ -90,14 +90,31 @@ interface UserFormData {
   avatar_url: string;
 }
 
+export interface OnboardingPrefillProps {
+  fullName?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  orgName?: string | null;
+  hqLocation?: string | null;
+  role?: string | null;
+  aumRange?: string | null;
+  fundCount?: string | null;
+  strategy?: string | null;
+}
+
 export default function OnboardingWizard({
   error,
   initialFullName,
   userEmail,
+  // What they told us when they asked for access. Prefilled and fully editable
+  // — an approved operator confirms their firm details rather than retyping
+  // them, and can correct anything that was approximate at request time.
+  prefill,
 }: {
   error?: string;
   initialFullName?: string;
   userEmail?: string;
+  prefill?: OnboardingPrefillProps | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -105,19 +122,19 @@ export default function OnboardingWizard({
   const [formError, setFormError] = useState(error ?? "");
   const [formWarning, setFormWarning] = useState("");
   const [userData, setUserData] = useState<UserFormData>({
-    full_name: initialFullName ?? "",
-    title: "",
-    phone: "",
+    full_name: initialFullName ?? prefill?.fullName ?? "",
+    title: prefill?.title ?? "",
+    phone: prefill?.phone ?? "",
     avatar_url: "",
   });
   const [data, setData] = useState<OrgFormData>({
-    org_name: "",
+    org_name: prefill?.orgName ?? "",
     entity_type: "",
-    hq_location: "",
-    role: "",
-    aum_range: "",
-    fund_count: "",
-    strategy: "",
+    hq_location: prefill?.hqLocation ?? "",
+    role: prefill?.role ?? "",
+    aum_range: prefill?.aumRange ?? "",
+    fund_count: prefill?.fundCount ?? "",
+    strategy: prefill?.strategy ?? "",
     first_hub: "",
   });
 
