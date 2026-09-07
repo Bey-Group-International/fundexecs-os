@@ -6,6 +6,7 @@ import nextDynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import { MeetingLobby } from "./MeetingLobby";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
+import { TranscriptAnalysisCard } from "@/app/(app)/meetings/TranscriptAnalysisCard";
 import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
 import type { PastMeeting } from "./PastMeetingsList";
@@ -132,6 +133,9 @@ export function MeetingsLanding({
           a single row — it no longer competes with the meetings themselves. */}
       <SchedulingLinkCard />
       <UpcomingMeetingsList initialMeetings={initialUpcoming} />
+      {/* Between meetings is where a transcript gets analysed — it was a tab in
+          the in-call copilot, which is the one place nobody is pasting one. */}
+      <TranscriptAnalysisCard />
 
       {calendarOpen && mounted
         ? createPortal(

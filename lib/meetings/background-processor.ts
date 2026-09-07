@@ -28,7 +28,9 @@
 import {
   FRAME_BUDGET_MS,
   NO_BACKGROUND,
+  blendMask,
   blurRadiusPx,
+  maskFeatherPx,
   needsSegmentation,
   templateById,
   type BackgroundEffect,
@@ -105,6 +107,12 @@ export class BackgroundProcessor {
    *  24fps is the difference between a warm laptop and a loud one. */
   private readonly scratch: HTMLCanvasElement;
   private readonly scratchCtx: CanvasRenderingContext2D;
+  /** The mask, as a greyscale image the compositor can blur and mask with. */
+  private mask: HTMLCanvasElement;
+  private maskCtx: CanvasRenderingContext2D;
+  private maskImage: ImageData | null = null;
+  /** Coverage carried between frames, so edges settle instead of shimmering. */
+  private maskHistory: Uint8ClampedArray | null = null;
   private readonly outputTrack: MediaStreamTrack;
   private readonly stream: MediaStream;
 
@@ -123,6 +131,8 @@ export class BackgroundProcessor {
     ctx: CanvasRenderingContext2D,
     scratch: HTMLCanvasElement,
     scratchCtx: CanvasRenderingContext2D,
+    mask: HTMLCanvasElement,
+    maskCtx: CanvasRenderingContext2D,
     stream: MediaStream,
     private readonly callbacks: ProcessorCallbacks,
   ) {
@@ -131,6 +141,8 @@ export class BackgroundProcessor {
     this.ctx = ctx;
     this.scratch = scratch;
     this.scratchCtx = scratchCtx;
+    this.mask = mask;
+    this.maskCtx = maskCtx;
     this.stream = stream;
     this.outputTrack = stream.getVideoTracks()[0];
   }
@@ -152,6 +164,13 @@ export class BackgroundProcessor {
     const scratchCtx = scratch.getContext("2d", { alpha: true });
     if (!scratchCtx) return null;
 
+    const mask = document.createElement("canvas");
+    mask.width = width;
+    mask.height = height;
+    // `willReadFrequently` because putImageData runs on this every frame.
+    const maskCtx = mask.getContext("2d", { alpha: true, willReadFrequently: true });
+    if (!maskCtx) return null;
+
     const video = document.createElement("video");
     video.playsInline = true;
     video.muted = true;
@@ -167,7 +186,7 @@ export class BackgroundProcessor {
     const stream = canvas.captureStream(OUTPUT_FPS);
     if (stream.getVideoTracks().length === 0) return null;
 
-    return new BackgroundProcessor(video, canvas, ctx, scratch, scratchCtx, stream, callbacks);
+    return new BackgroundProcessor(video, canvas, ctx, scratch, scratchCtx, mask, maskCtx, stream, callbacks);
   }
 
   /** The track to send to peers in place of the camera. */
@@ -217,17 +236,31 @@ export class BackgroundProcessor {
     if (this.running) return;
     this.running = true;
     this.slowFrames = 0;
+
+    // Draw from this moment, not from whenever the segmenter finishes loading.
+    // The canvas is captured as a track the instant an effect is chosen, and on
+    // first use the segmenter is a 12MB download behind it — so a loop that
+    // waited would hand everyone a black rectangle for the length of that
+    // download. In the call that is black video to every peer; in the green room
+    // it is someone checking their camera and finding it dead.
+    //
+    // Until the segmenter arrives the loop paints the plain camera, which is
+    // both honest and the thing they were already looking at.
+    this.raf = requestAnimationFrame(this.tick);
+
     void (async () => {
-      if (!this.segmenter) {
-        this.segmenter = await loadSegmenter();
-        if (!this.segmenter) { this.running = false; this.callbacks.onUnavailable(); return; }
-      }
-      if (this.running) this.raf = requestAnimationFrame(this.tick);
+      if (this.segmenter) return;
+      const segmenter = await loadSegmenter();
+      if (!segmenter) { this.stop(); this.callbacks.onUnavailable(); return; }
+      if (this.running) this.segmenter = segmenter;
     })();
   }
 
   private stop(): void {
     this.running = false;
+    // Dropped so a resumed effect starts from the live mask rather than blending
+    // out of wherever the person was standing when it paused.
+    this.maskHistory = null;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.slowFrames = 0;
@@ -259,7 +292,7 @@ export class BackgroundProcessor {
 
   private drawFrame(now: number): void {
     const { video, canvas, ctx } = this;
-    if (video.readyState < 2 || !this.segmenter) return;
+    if (video.readyState < 2) return;
 
     // The camera can change shape underneath us — a device switch, or a phone
     // being rotated. Following it keeps the composite from stretching.
@@ -269,6 +302,19 @@ export class BackgroundProcessor {
       canvas.height = video.videoHeight;
       this.scratch.width = video.videoWidth;
       this.scratch.height = video.videoHeight;
+      this.mask.width = video.videoWidth;
+      this.mask.height = video.videoHeight;
+      // Both are sized to the old frame; they are rebuilt on the next composite.
+      this.maskImage = null;
+      this.maskHistory = null;
+    }
+
+    // Still waiting on the segmenter. Show the real camera rather than nothing —
+    // the effect takes over the moment it can, and an unprocessed frame is a far
+    // better thing to be sending than a black one.
+    if (!this.segmenter) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return;
     }
 
     // MediaPipe rejects a timestamp that does not advance, which happens when
@@ -296,9 +342,15 @@ export class BackgroundProcessor {
    * the background first and compositing the person over it keeps the seam
    * inside the person's silhouette, where it reads as softness rather than a
    * cut-out.
+   *
+   * The mask is treated as an image rather than as a loop over pixels. That is
+   * what lets the compositor blur it — a hard mask cuts hair off in a staircase
+   * of whole pixels, and a feathered one lets the edge fall off the way an
+   * out-of-focus background does. It is also faster than reading back and
+   * rewriting every pixel of a 720p frame.
    */
-  private composite(mask: Uint8Array): void {
-    const { ctx, canvas, video, scratch, scratchCtx } = this;
+  private composite(rawMask: Uint8Array): void {
+    const { ctx, canvas, video, scratch, scratchCtx, maskCtx } = this;
     const { width, height } = canvas;
 
     ctx.save();
@@ -306,17 +358,37 @@ export class BackgroundProcessor {
     this.paintBackground(ctx, width, height);
     ctx.restore();
 
-    // The person, alpha-masked, on the scratch canvas.
+    // Carry coverage between frames. Segmentation flickers along the edge, and
+    // an unsmoothed mask makes that flicker crawl visibly around the head.
+    if (!this.maskHistory || this.maskHistory.length !== rawMask.length) {
+      this.maskHistory = new Uint8ClampedArray(rawMask.length);
+      // Seeded from the first mask rather than from zero, so the person does not
+      // fade in over the opening frames.
+      for (let i = 0; i < rawMask.length; i++) this.maskHistory[i] = rawMask[i] === 0 ? 0 : 255;
+    } else {
+      blendMask(this.maskHistory, rawMask);
+    }
+
+    if (!this.maskImage || this.maskImage.width !== width || this.maskImage.height !== height) {
+      this.maskImage = maskCtx.createImageData(width, height);
+    }
+    const maskPixels = this.maskImage.data;
+    const history = this.maskHistory;
+    const covered = Math.min(history.length, width * height);
+    for (let i = 0, p = 3; i < covered; i++, p += 4) maskPixels[p] = history[i];
+    maskCtx.putImageData(this.maskImage, 0, 0);
+
+    // The camera frame, kept only where the mask covers. Drawing the mask
+    // through a blur is what feathers the edge.
+    scratchCtx.save();
+    scratchCtx.globalCompositeOperation = "source-over";
     scratchCtx.clearRect(0, 0, width, height);
     scratchCtx.drawImage(video, 0, 0, width, height);
-    const frame = scratchCtx.getImageData(0, 0, width, height);
-    const pixels = frame.data;
-    // MediaPipe's selfie segmenter labels background 0 and person 1..n. Anything
-    // non-zero is kept.
-    for (let i = 0, p = 3; i < mask.length; i++, p += 4) {
-      if (mask[i] === 0) pixels[p] = 0;
-    }
-    scratchCtx.putImageData(frame, 0, 0);
+    scratchCtx.globalCompositeOperation = "destination-in";
+    scratchCtx.filter = `blur(${maskFeatherPx(width)}px)`;
+    scratchCtx.drawImage(this.mask, 0, 0, width, height);
+    scratchCtx.restore();
+
     ctx.drawImage(scratch, 0, 0, width, height);
   }
 

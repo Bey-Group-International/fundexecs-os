@@ -524,9 +524,11 @@ function ControlBar({
         </div>
 
         {/* Backgrounds — next to the camera controls, because that is what it
-            changes. Hidden on mobile: segmentation on a phone costs battery and
-            heat during a call, and the control bar there is already full. */}
-        <span className="hidden sm:block">
+            changes. On phones too: segmentation there costs battery, but the
+            auto-downgrade already pulls the effect when frames fall behind, and
+            a phone is exactly where someone is most likely to want their room
+            hidden. */}
+        <span>
           <button
             ref={backgroundBtnRef}
             onClick={onOpenBackgrounds}
@@ -1005,6 +1007,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Guards the async build below: two quick picks would otherwise each start a
   // processor, and the loser would keep a camera tap and a render loop alive.
   const processorBuildingRef = useRef(false);
+  // True while a chosen background is still being built and the camera is being
+  // held off the wire for it. See enterRoom.
+  const bgPendingRef = useRef(false);
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -1467,13 +1472,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     rawCameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
 
-    // Restore the background chosen on a previous call. Deliberately after the
-    // stream is live and not awaited: the segmenter is a 12MB download and
-    // joining should never wait on scenery.
-    try {
-      const remembered = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY));
-      if (needsSegmentation(remembered)) void applyBackgroundRef.current(remembered);
-    } catch { /* storage disabled — start with no effect */ }
+    // Carry in the background settled on in the green room, falling back to the
+    // remembered one for the paths that skip it (a re-join, a waiting-room
+    // admission). Deliberately not awaited: the segmenter is a 12MB download
+    // and joining should never wait on scenery.
+    let wanted = choice?.background;
+    if (!wanted) {
+      try { wanted = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY)); }
+      catch { /* storage disabled — start with no effect */ }
+    }
+    if (wanted && needsSegmentation(wanted)) {
+      // Hold the camera off the wire until the effect is live. Building the
+      // processor is asynchronous and this function does not wait for it, but
+      // the channel below announces us immediately — so peers offer, tracks are
+      // added, and the raw camera goes out for however long the build takes. For
+      // someone who chose to hide the room they are sitting in, that is the one
+      // failure this feature exists to prevent. Re-enabled by swapOutgoingVideo
+      // the moment the processed track replaces this one.
+      bgPendingRef.current = true;
+      stream.getVideoTracks().forEach((t) => { t.enabled = false; });
+      void applyBackgroundRef.current(wanted);
+    }
 
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
@@ -2024,6 +2043,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, [swapOutgoingVideo]);
 
   /**
+   * Give up on a background that cannot be delivered, without exposing the room.
+   *
+   * The camera stays off. Somebody who asked to hide where they are sitting has
+   * not consented to the alternative, and quietly sending the real room because
+   * a model failed to load is the single worst thing to do on their behalf. The
+   * camera button is right there when they decide otherwise.
+   *
+   * Distinct from the bandwidth and CPU suspensions, which drop a background
+   * that was already working, in a call the person is watching, with a notice
+   * they can act on immediately.
+   */
+  const abandonBackground = useCallback((message: string) => {
+    bgPendingRef.current = false;
+    bgEffectRef.current = NO_BACKGROUND;
+    setBgEffect(NO_BACKGROUND);
+    // Set before the swap: swapOutgoingVideo takes the camera's intended state
+    // from this ref when it puts a track on the wire.
+    camOnRef.current = false;
+    setCamOn(false);
+    const processor = processorRef.current;
+    processorRef.current = null;
+    cameraTrackRef.current = rawCameraTrackRef.current;
+    if (!shareOn) swapOutgoingVideo(rawCameraTrackRef.current, false);
+    processor?.destroy();
+    setBgNotice(message);
+  }, [shareOn, swapOutgoingVideo]);
+
+  /**
    * Apply a background choice to the outgoing video.
    *
    * "None" tears the processor down rather than leaving it idling: segmentation
@@ -2068,11 +2115,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         },
         onUnavailable: () => {
           setBgUnavailable(true);
-          void applyBackgroundRef.current(NO_BACKGROUND);
+          abandonBackgroundRef.current("Background effects couldn't load — your camera is off so your room stays private. Turn it on when you're ready.");
         },
       });
       processorBuildingRef.current = false;
-      if (!processor) { setBgUnavailable(true); return; }
+      if (!processor) {
+        setBgUnavailable(true);
+        abandonBackground("Background effects aren't available here — your camera is off so your room stays private. Turn it on when you're ready.");
+        return;
+      }
       // The choice may have moved on during the build — a 12MB download is long
       // enough for someone to change their mind twice.
       if (!needsSegmentation(bgEffectRef.current)) { processor.destroy(); return; }
@@ -2083,19 +2134,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     let blob = image ?? null;
     if (effect.kind === "custom" && !blob) {
       const stored = await getBackground(effect.id);
-      if (!stored) { void applyBackgroundRef.current(NO_BACKGROUND); return; }
+      if (!stored) {
+        // Remembered on this account but stored in another browser. Same rule:
+        // a background they cannot have does not become the room they are in.
+        abandonBackground("That background isn't saved on this device — your camera is off so your room stays private.");
+        return;
+      }
       blob = stored.blob;
     }
 
     processorRef.current.setEffect(effect, blob);
     cameraTrackRef.current = processorRef.current.track;
+    // The processed track is what goes out now, so the hold from enterRoom can
+    // be released — swapOutgoingVideo re-enables video as it makes the swap.
+    bgPendingRef.current = false;
     if (!shareOn) swapOutgoingVideo(processorRef.current.track, false);
-  }, [shareOn, swapOutgoingVideo]);
+  }, [shareOn, swapOutgoingVideo, abandonBackground]);
 
   // The processor callbacks are created once but need the current handler, and
   // the handler needs itself to fall back to "none".
   const applyBackgroundRef = useRef(applyBackground);
   useEffect(() => { applyBackgroundRef.current = applyBackground; }, [applyBackground]);
+  const abandonBackgroundRef = useRef(abandonBackground);
+  useEffect(() => { abandonBackgroundRef.current = abandonBackground; }, [abandonBackground]);
 
   /**
    * Adopt a newly opened camera device.

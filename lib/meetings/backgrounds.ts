@@ -41,6 +41,57 @@ export function blurRadiusPx(strength: BlurStrength, frameWidth: number): number
   return Math.max(2, Math.round(width * BLUR_FRACTION[strength]));
 }
 
+// ── Mask quality ─────────────────────────────────────────────────────────────
+
+// Segmentation gives a hard yes/no per pixel, and both of its failure modes are
+// visible on a face. The edge is a staircase where hair meets background, and
+// the classification flickers frame to frame, so that staircase crawls. These
+// two numbers are what turn a cut-out into something that reads as depth of
+// field.
+
+/**
+ * How much of each new mask to believe, against the mask before it.
+ *
+ * Low enough to stop edges shimmering, high enough that turning your head does
+ * not drag a ghost of where you were. At 24fps a value of 0.5 settles within
+ * about three frames — under an eighth of a second, which is below the point
+ * anyone reads as lag.
+ */
+export const MASK_SMOOTHING = 0.5;
+
+/** Feather radius as a fraction of frame width. */
+const FEATHER_FRACTION = 0.004;
+
+/** How far to soften the mask edge, in pixels, at a given frame width. */
+export function maskFeatherPx(frameWidth: number): number {
+  const width = Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : 640;
+  return Math.max(1, Math.round(width * FEATHER_FRACTION));
+}
+
+/**
+ * Blend a new mask into the running one, in place.
+ *
+ * Writes into `previous` and returns it: this runs on every pixel of every
+ * frame, and allocating a second buffer 24 times a second is exactly the kind
+ * of garbage the frame budget cannot absorb.
+ *
+ * `next` is MediaPipe's category mask, where 0 is background and anything else
+ * is the person. `previous` is 0-255 coverage.
+ */
+export function blendMask(
+  previous: Uint8ClampedArray,
+  next: Uint8Array,
+  alpha: number = MASK_SMOOTHING,
+): Uint8ClampedArray {
+  const a = Math.max(0, Math.min(1, alpha));
+  const n = Math.min(previous.length, next.length);
+  for (let i = 0; i < n; i++) {
+    const target = next[i] === 0 ? 0 : 255;
+    previous[i] += (target - previous[i]) * a;
+  }
+  return previous;
+}
+
 // ── Native templates ─────────────────────────────────────────────────────────
 
 export interface GradientStop {
