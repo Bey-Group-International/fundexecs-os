@@ -2347,6 +2347,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
     processorRef.current?.destroy();
     processorRef.current = null;
+    // Its self view went with it. Left set, this would hold a stopped track, and
+    // the tile that reads it would come back showing the last frame it drew —
+    // somebody's face, frozen, on a screen they have already left.
+    setSelfViewStream(null);
     try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
     rawCameraTrackRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
