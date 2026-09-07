@@ -34,6 +34,11 @@ export function GiftForm({
             setClientSecret(res.clientSecret); // open in-app embedded checkout
             return;
           }
+          if (res?.checkoutUrl) {
+            // Hosted Stripe Checkout — no publishable key to mount the in-app form.
+            window.location.href = res.checkoutUrl;
+            return;
+          }
           if (res?.error) setError(res.error);
           else {
             formRef.current?.reset();

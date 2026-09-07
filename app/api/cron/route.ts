@@ -10,6 +10,7 @@ import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
+import { runSubscriptionRenewals, type RenewalStats } from "@/lib/subscriptions.server";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -221,6 +222,21 @@ export async function GET(request: Request) {
     console.error("meeting_reminders failed", e);
   }
 
+  // Subscription renewals. This is what makes a plan actually recur: FundExecs
+  // owns the billing period, so nothing renews unless this sweep runs. Each due
+  // subscription is charged through its rail, granted its plan credits plus the
+  // tenure bonus, and rolled into the next period; a failed charge goes past_due
+  // with a retry scheduled, and a cancelled one is closed and its entitlement
+  // dropped. Best-effort like every block above — a payment processor outage
+  // never aborts the sweep, and the renewal is retried on the next pass because
+  // the period end has not moved.
+  let subscriptions: RenewalStats = { due: 0, renewed: 0, failed: 0, ended: 0, credits: 0 };
+  try {
+    subscriptions = await runSubscriptionRenewals(supabase, now);
+  } catch (e) {
+    console.error("subscription_renewals failed", e);
+  }
+
   // Last-run tracking (append-only, best-effort): record that the hourly sweep
   // ran so the pipeline's liveness is observable. Never throws; never changes the
   // response below.
@@ -244,6 +260,10 @@ export async function GET(request: Request) {
         calendarFeedsFailed: calendarFeeds.failed,
         meetingRemindersSent: reminders.sent,
         meetingRemindersFailed: reminders.failed,
+        subscriptionsDue: subscriptions.due,
+        subscriptionsRenewed: subscriptions.renewed,
+        subscriptionsFailed: subscriptions.failed,
+        subscriptionsEnded: subscriptions.ended,
       },
       startedAt: now,
     });
@@ -251,5 +271,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions });
 }

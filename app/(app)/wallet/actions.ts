@@ -5,6 +5,13 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { stripeConfigured, createCheckout, createPortalSession } from "@/lib/stripe";
 import {
+  getSubscription,
+  changePlan,
+  cancelSubscription,
+  resumeSubscription,
+  startSubscription,
+} from "@/lib/subscriptions.server";
+import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
   planPurchaseSummary,
@@ -16,21 +23,29 @@ import {
 import { completeNativePurchase } from "@/lib/purchase";
 import { redeemCoupon } from "@/lib/coupons";
 
-// A purchase action returns ONE of: a Stripe embedded-checkout client secret
-// (when Stripe is configured), or a `native` summary telling the client to open
-// the in-app confirm flow (when Stripe isn't configured), or an error.
+// A purchase action returns ONE of:
+//   clientSecret — mount Stripe Embedded Checkout in-app
+//   checkoutUrl  — send the browser to hosted Stripe Checkout (no publishable key)
+//   native       — open the in-app confirm step (no processor configured)
+//   ok           — the change was applied server-side (a plan change on an
+//                  existing subscription, paid with the card already on file)
+//   error        — surface it inline
 type ActionResult = {
   error?: string;
   ok?: boolean;
   clientSecret?: string;
+  checkoutUrl?: string;
   native?: PurchaseSummary;
   credits?: number;
 };
 
-// Subscribe to a plan. With Stripe configured this opens an in-app embedded
-// Checkout (subscription) and returns its client_secret; the plan is activated
-// and credits granted on payment return. Without Stripe we fail closed so
-// credits are never granted without payment.
+// Choose a plan.
+//
+// Two distinct cases, and conflating them was the old bug: an org with no
+// subscription is BUYING one, while an org that already has one is CHANGING it.
+// Running checkout for a change opened a second subscription and billed the
+// operator twice, so a change is routed to the native engine instead, which
+// prorates the difference against the card already on file.
 export async function selectPlanAction(formData: FormData): Promise<ActionResult> {
   try {
     const ctx = await getSessionContext();
@@ -42,14 +57,31 @@ export async function selectPlanAction(formData: FormData): Promise<ActionResult
     const plan = PLAN_BY_KEY[planKey];
     if (!plan) return { error: "Unknown plan" };
 
+    // Already subscribed → this is a plan change, whichever rail is configured.
+    const existing = await getSubscription(ctx.orgId);
+    if (existing) {
+      const res = await changePlan({ orgId: ctx.orgId, planKey, interval });
+      if (!res.ok) {
+        // An upgrade we could not charge (no card on file, or a decline) — send
+        // them somewhere they can fix it rather than failing silently.
+        return { error: res.error ?? "Could not change your plan." };
+      }
+      revalidatePath("/wallet");
+      return { ok: true, credits: res.credits };
+    }
+
     if (stripeConfigured()) {
-      return await createCheckout({
-        kind: "plan",
-        orgId: ctx.orgId,
-        createdBy: ctx.userId,
-        planKey,
-        interval,
-      });
+      // Collect the first period. Returns a client secret (in-app form) or a
+      // hosted Checkout URL, depending on how Stripe is configured.
+      return checkoutResult(
+        await createCheckout({
+          kind: "plan",
+          orgId: ctx.orgId,
+          createdBy: ctx.userId,
+          planKey,
+          interval,
+        }),
+      );
     }
 
     // No external processor configured — offer the native in-app checkout. The
@@ -61,6 +93,46 @@ export async function selectPlanAction(formData: FormData): Promise<ActionResult
   } catch (err) {
     console.error("[wallet] selectPlanAction failed:", err);
     return { error: "Something went wrong starting checkout. Please try again." };
+  }
+}
+
+// createCheckout hands back EITHER an in-app client secret or a hosted Checkout
+// URL depending on how Stripe is configured. Renaming `url` here keeps the
+// client's branch explicit — and stops the hosted URL from being quietly dropped
+// on the way through, which would leave a secret-key-only deployment unable to
+// sell at all.
+function checkoutResult(res: { clientSecret?: string; url?: string; error?: string }): ActionResult {
+  return res.error
+    ? { error: res.error }
+    : { clientSecret: res.clientSecret, checkoutUrl: res.url };
+}
+
+// Cancel at period end. Access continues through the period already paid for —
+// see lib/subscriptions.server.
+export async function cancelSubscriptionAction(): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
+    const res = await cancelSubscription(ctx.orgId);
+    if (res.ok) revalidatePath("/wallet");
+    return res.ok ? { ok: true } : { error: res.error };
+  } catch (err) {
+    console.error("[wallet] cancelSubscriptionAction failed:", err);
+    return { error: "Something went wrong. Please try again." };
+  }
+}
+
+// Withdraw a pending cancellation while the period is still running.
+export async function resumeSubscriptionAction(): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
+    const res = await resumeSubscription(ctx.orgId);
+    if (res.ok) revalidatePath("/wallet");
+    return res.ok ? { ok: true } : { error: res.error };
+  } catch (err) {
+    console.error("[wallet] resumeSubscriptionAction failed:", err);
+    return { error: "Something went wrong. Please try again." };
   }
 }
 
@@ -76,7 +148,9 @@ export async function purchasePackAction(formData: FormData): Promise<ActionResu
     if (!pack) return { error: "Unknown credit pack" };
 
     if (stripeConfigured()) {
-      return await createCheckout({ kind: "pack", orgId: ctx.orgId, createdBy: ctx.userId, packKey });
+      return checkoutResult(
+        await createCheckout({ kind: "pack", orgId: ctx.orgId, createdBy: ctx.userId, packKey }),
+      );
     }
 
     // No external processor configured — offer the native in-app checkout.
@@ -108,10 +182,12 @@ export async function confirmNativePurchaseAction(formData: FormData): Promise<A
       const interval: PlanInterval =
         String(formData.get("interval") ?? "monthly") === "annual" ? "annual" : "monthly";
       if (!PLAN_BY_KEY[planKey]) return { error: "Unknown plan" };
-      const res = await completeNativePurchase({
+      // A plan is a subscription, not a one-off grant: start it through the
+      // engine so it has a period, renews, and can be cancelled — the native
+      // rail settles the charge in-app.
+      const res = await startSubscription({
         orgId: ctx.orgId,
         createdBy: ctx.userId,
-        kind: "plan",
         planKey,
         interval,
       });
