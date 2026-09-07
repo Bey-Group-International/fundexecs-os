@@ -4,11 +4,8 @@
 // The shape of it: the raw camera feeds a hidden <video>, a segmenter marks
 // which pixels are the person, and a <canvas> composites them over a blurred
 // copy of the room, a painted template, or an uploaded image. The canvas is
-// captured as a MediaStreamTrack, and that is what the peers receive instead of
-// the camera.
-//
-// There are two such tracks, because a self view is mirrored and a background
-// is not a reflection: see `selfViewTrack`.
+// captured as a MediaStreamTrack, and that is what the peers and the local tile
+// receive instead of the camera.
 //
 // Two decisions shape the rest of this file.
 //
@@ -96,23 +93,6 @@ export async function backgroundsSupported(): Promise<boolean> {
   return (await loadSegmenter()) !== null;
 }
 
-/** Everything create() built, handed to the constructor in one piece. */
-interface ProcessorParts {
-  video: HTMLVideoElement;
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  scratch: HTMLCanvasElement;
-  scratchCtx: CanvasRenderingContext2D;
-  bg: HTMLCanvasElement;
-  bgCtx: CanvasRenderingContext2D;
-  view: HTMLCanvasElement;
-  viewCtx: CanvasRenderingContext2D;
-  mask: HTMLCanvasElement;
-  maskCtx: CanvasRenderingContext2D;
-  stream: MediaStream;
-  selfViewStream: MediaStream;
-}
-
 export interface ProcessorCallbacks {
   /** Sustained slow frames, so the caller can decide to suspend. */
   onSlowFrames: (consecutive: number) => void;
@@ -128,12 +108,6 @@ export class BackgroundProcessor {
    *  24fps is the difference between a warm laptop and a loud one. */
   private readonly scratch: HTMLCanvasElement;
   private readonly scratchCtx: CanvasRenderingContext2D;
-  /** The scenery, painted once per frame and blitted into both composites. */
-  private readonly bg: HTMLCanvasElement;
-  private readonly bgCtx: CanvasRenderingContext2D;
-  /** The self view: the same frame with the person mirrored and the scenery not. */
-  private readonly view: HTMLCanvasElement;
-  private readonly viewCtx: CanvasRenderingContext2D;
   /** The mask, as a greyscale image the compositor can blur and mask with. */
   private mask: HTMLCanvasElement;
   private maskCtx: CanvasRenderingContext2D;
@@ -142,8 +116,6 @@ export class BackgroundProcessor {
   private maskHistory: Uint8ClampedArray | null = null;
   private readonly outputTrack: MediaStreamTrack;
   private readonly stream: MediaStream;
-  private readonly selfViewOutputTrack: MediaStreamTrack;
-  private readonly selfViewStream: MediaStream;
 
   private effect: BackgroundEffect = NO_BACKGROUND;
   private customImage: HTMLImageElement | null = null;
@@ -154,22 +126,26 @@ export class BackgroundProcessor {
   private slowFrames = 0;
   private lastTimestamp = -1;
 
-  private constructor(parts: ProcessorParts, private readonly callbacks: ProcessorCallbacks) {
-    this.video = parts.video;
-    this.canvas = parts.canvas;
-    this.ctx = parts.ctx;
-    this.scratch = parts.scratch;
-    this.scratchCtx = parts.scratchCtx;
-    this.bg = parts.bg;
-    this.bgCtx = parts.bgCtx;
-    this.view = parts.view;
-    this.viewCtx = parts.viewCtx;
-    this.mask = parts.mask;
-    this.maskCtx = parts.maskCtx;
-    this.stream = parts.stream;
-    this.outputTrack = parts.stream.getVideoTracks()[0];
-    this.selfViewStream = parts.selfViewStream;
-    this.selfViewOutputTrack = parts.selfViewStream.getVideoTracks()[0];
+  private constructor(
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D,
+    scratch: HTMLCanvasElement,
+    scratchCtx: CanvasRenderingContext2D,
+    mask: HTMLCanvasElement,
+    maskCtx: CanvasRenderingContext2D,
+    stream: MediaStream,
+    private readonly callbacks: ProcessorCallbacks,
+  ) {
+    this.video = video;
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.scratch = scratch;
+    this.scratchCtx = scratchCtx;
+    this.mask = mask;
+    this.maskCtx = maskCtx;
+    this.stream = stream;
+    this.outputTrack = stream.getVideoTracks()[0];
   }
 
   static async create(source: MediaStreamTrack, callbacks: ProcessorCallbacks): Promise<BackgroundProcessor | null> {
@@ -188,20 +164,6 @@ export class BackgroundProcessor {
     scratch.height = height;
     const scratchCtx = scratch.getContext("2d", { alpha: true });
     if (!scratchCtx) return null;
-
-    // The scenery, painted once and blitted into both composites. Without it the
-    // blur — the one genuinely expensive paint — would run twice a frame.
-    const bg = document.createElement("canvas");
-    bg.width = width;
-    bg.height = height;
-    const bgCtx = bg.getContext("2d", { alpha: false });
-    if (!bgCtx) return null;
-
-    const view = document.createElement("canvas");
-    view.width = width;
-    view.height = height;
-    const viewCtx = view.getContext("2d", { alpha: false });
-    if (!viewCtx) return null;
 
     const mask = document.createElement("canvas");
     mask.width = width;
@@ -225,35 +187,12 @@ export class BackgroundProcessor {
     const stream = canvas.captureStream(OUTPUT_FPS);
     if (stream.getVideoTracks().length === 0) return null;
 
-    const selfViewStream = view.captureStream(OUTPUT_FPS);
-    if (selfViewStream.getVideoTracks().length === 0) return null;
-
-    return new BackgroundProcessor(
-      { video, canvas, ctx, scratch, scratchCtx, bg, bgCtx, view, viewCtx, mask, maskCtx, stream, selfViewStream },
-      callbacks,
-    );
+    return new BackgroundProcessor(video, canvas, ctx, scratch, scratchCtx, mask, maskCtx, stream, callbacks);
   }
 
   /** The track to send to peers in place of the camera. */
   get track(): MediaStreamTrack {
     return this.outputTrack;
-  }
-
-  /**
-   * The track to show the person themselves, which is not the one peers get.
-   *
-   * A self view is mirrored so that moving left moves you left, the way a
-   * mirror behaves — but mirroring the finished frame mirrors the scenery too,
-   * and scenery is not a reflection of anything. An uploaded photo comes out
-   * reversed, and a template's lighting falls on the wrong side, so what
-   * somebody checks before joining is not what the room is about to show.
-   *
-   * So the person is mirrored and the background is left alone. Callers render
-   * this without a CSS flip of their own; the flip already happened, to the
-   * half of the frame it belongs to.
-   */
-  get selfViewTrack(): MediaStreamTrack {
-    return this.selfViewOutputTrack;
   }
 
   /**
@@ -364,10 +303,6 @@ export class BackgroundProcessor {
       canvas.height = video.videoHeight;
       this.scratch.width = video.videoWidth;
       this.scratch.height = video.videoHeight;
-      this.bg.width = video.videoWidth;
-      this.bg.height = video.videoHeight;
-      this.view.width = video.videoWidth;
-      this.view.height = video.videoHeight;
       this.mask.width = video.videoWidth;
       this.mask.height = video.videoHeight;
       // Both are sized to the old frame; they are rebuilt on the next composite.
@@ -380,10 +315,6 @@ export class BackgroundProcessor {
     // better thing to be sending than a black one.
     if (!this.segmenter) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      // Nothing is separated out yet, so the whole frame is the real room and a
-      // plain mirror is the honest self view — the same thing an effectless
-      // camera shows.
-      this.drawMirrored(video, canvas.width, canvas.height);
       return;
     }
 
@@ -423,10 +354,10 @@ export class BackgroundProcessor {
     const { ctx, canvas, video, scratch, scratchCtx, maskCtx } = this;
     const { width, height } = canvas;
 
-    this.bgCtx.save();
-    this.bgCtx.filter = "none";
-    this.paintBackground(this.bgCtx, width, height);
-    this.bgCtx.restore();
+    ctx.save();
+    ctx.filter = "none";
+    this.paintBackground(ctx, width, height);
+    ctx.restore();
 
     // Carry coverage between frames. Segmentation flickers along the edge, and
     // an unsmoothed mask makes that flicker crawl visibly around the head.
@@ -459,21 +390,7 @@ export class BackgroundProcessor {
     scratchCtx.drawImage(this.mask, 0, 0, width, height);
     scratchCtx.restore();
 
-    ctx.drawImage(this.bg, 0, 0, width, height);
     ctx.drawImage(scratch, 0, 0, width, height);
-
-    // The self view: the same scenery, the person flipped into it.
-    this.viewCtx.drawImage(this.bg, 0, 0, width, height);
-    this.drawMirrored(scratch, width, height);
-  }
-
-  /** Draw a source into the self view flipped left-to-right. */
-  private drawMirrored(source: CanvasImageSource, width: number, height: number): void {
-    const ctx = this.viewCtx;
-    ctx.save();
-    ctx.setTransform(-1, 0, 0, 1, width, 0);
-    ctx.drawImage(source, 0, 0, width, height);
-    ctx.restore();
   }
 
   private paintBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -523,9 +440,7 @@ export class BackgroundProcessor {
     this.stop();
     this.releaseCustomImage();
     try { this.outputTrack.stop(); } catch { /* already stopped */ }
-    try { this.selfViewOutputTrack.stop(); } catch { /* already stopped */ }
     this.stream.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
-    this.selfViewStream.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     try { this.video.pause(); } catch { /* already paused */ }
     this.video.srcObject = null;
   }
