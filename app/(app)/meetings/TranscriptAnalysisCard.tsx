@@ -43,11 +43,12 @@ export function TranscriptAnalysisCard() {
         </span>
       </button>
 
-      {open && (
-        <div className="border-t border-[var(--line)] px-4 py-4">
-          <MeetingCopilotConsole />
-        </div>
-      )}
+      {/* Hidden rather than unmounted: the console owns the pasted transcript,
+          the analysis and any error, so collapsing the card would throw away
+          work somebody waited on a model for. */}
+      <div hidden={!open} className="border-t border-[var(--line)] px-4 py-4">
+        <MeetingCopilotConsole />
+      </div>
     </section>
   );
 }
