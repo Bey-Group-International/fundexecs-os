@@ -2,13 +2,16 @@
 
 import { useState, useTransition } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import {
   formatCredits,
   formatUsd,
   type Plan,
   type PlanInterval,
+  type PlanKey,
   type PurchaseSummary,
 } from "@/lib/billing";
+import { changeDirection } from "@/lib/subscriptions";
 import { selectPlanAction } from "./actions";
 // Checkout UI is only ever needed after a click, so it loads on demand — this
 // keeps Stripe.js and @stripe/react-stripe-js out of the Wallet route's initial
@@ -76,23 +79,33 @@ function ComputeLayerGraphic({ featured = false }: { featured?: boolean }) {
 }
 
 // The plans grid with a monthly/annual toggle. Annual surfaces the two-months-
-// free saving; the recommended plan and the current plan are badged. Choosing a
-// plan opens an in-app embedded Stripe Checkout. When Stripe is not configured,
-// the server action returns a configuration error instead of activating credits.
+// free saving; the recommended plan and the current plan are badged.
+//
+// What a click does depends on whether the org is already subscribed. A first
+// purchase opens checkout (in-app Stripe form, hosted Stripe, or the native
+// confirm step, depending on configuration). An existing subscriber is CHANGING
+// plans, which the server applies directly — prorated for an upgrade, scheduled
+// for the next renewal on a downgrade — so the button says which of those it is
+// rather than promising a purchase that would have opened a second subscription.
 export function PlanSelector({
   plans,
   currentPlan,
+  currentInterval = null,
+  hasSubscription = false,
   recommendedKey,
   live = false,
   publishableKey = "",
 }: {
   plans: PlanView[];
   currentPlan: string | null;
+  currentInterval?: PlanInterval | null;
+  hasSubscription?: boolean;
   recommendedKey: string | null;
   live?: boolean;
   publishableKey?: string;
 }) {
-  const [interval, setInterval] = useState<PlanInterval>("annual");
+  const router = useRouter();
+  const [interval, setInterval] = useState<PlanInterval>(currentInterval ?? "annual");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -109,8 +122,15 @@ export function PlanSelector({
       const res = await selectPlanAction(fd);
       if (res?.clientSecret) {
         setClientSecret(res.clientSecret); // open in-app embedded (Stripe) checkout
+      } else if (res?.checkoutUrl) {
+        // Hosted Stripe Checkout — no publishable key, so the form cannot mount
+        // in-app. Leaving for Stripe is far better than a modal that can't load.
+        window.location.href = res.checkoutUrl;
       } else if (res?.native) {
         setNative(res.native); // open native in-app checkout (no Stripe configured)
+      } else if (res?.ok) {
+        // A plan change applied server-side against the existing subscription.
+        router.refresh();
       } else if (res?.error) {
         setError(res.error);
       }
@@ -157,8 +177,18 @@ export function PlanSelector({
       <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
       <div className="grid min-w-[640px] gap-4 sm:min-w-0 sm:grid-cols-3">
         {plans.map((p) => {
-          const isCurrent = currentPlan === p.key;
+          // "Current" means this exact plan AND interval — switching a Pro
+          // subscriber from monthly to annual is a real change, not a no-op.
+          const isCurrent =
+            currentPlan === p.key && (!hasSubscription || currentInterval === interval);
           const isRecommended = recommendedKey === p.key && !isCurrent;
+          const direction =
+            hasSubscription && currentPlan
+              ? changeDirection(
+                  { plan: currentPlan as PlanKey, interval: currentInterval ?? "monthly" },
+                  { plan: p.key as PlanKey, interval },
+                )
+              : null;
           const price = interval === "annual" ? p.annual : p.monthly;
           const credits = interval === "annual" ? p.creditsPerMonth * 12 : p.creditsPerMonth;
           const busy = pending && pendingKey === p.key;
@@ -227,7 +257,15 @@ export function PlanSelector({
                     : "bg-neural-400 text-white shadow-[0_0_22px_rgb(var(--fx-accent-rgb)/0.118)] hover:bg-neural-300"
                 }`}
               >
-                {isCurrent ? "Active" : busy ? "Activating…" : `Choose ${p.name}`}
+                {isCurrent
+                  ? "Active"
+                  : busy
+                    ? "Activating…"
+                    : direction === "upgrade"
+                      ? `Upgrade to ${p.name}`
+                      : direction === "downgrade"
+                        ? `Switch at renewal`
+                        : `Choose ${p.name}`}
                 {busy ? <span className="fx-data-stream" aria-hidden /> : null}
               </button>
             </div>
@@ -238,9 +276,11 @@ export function PlanSelector({
 
       {error ? <p className="mt-3 text-xs text-status-danger">{error}</p> : null}
       <p className="mt-3 text-xs text-fg-muted">
-        {live
-          ? "Secure checkout by Stripe. Your plan activates and credits are granted the moment payment completes. Unused credits roll over while your plan is active."
-          : "Stripe isn’t configured here — no card is charged. Choosing a plan activates it and front-loads its credits so you can see the value flow. Unused credits roll over while your plan is active."}
+        {hasSubscription
+          ? "Upgrades apply immediately — you're charged only the difference for the days left in this period, and granted the matching credits. Downgrades take effect at your next renewal, so nothing you've already paid for is cut short."
+          : live
+            ? "Secure checkout by Stripe. Your plan activates and credits are granted the moment payment completes. It renews automatically, and you can cancel any time from this page."
+            : "No payment processor is configured here — no card is charged. Choosing a plan starts a real subscription with a billing period you can cancel, so the whole flow behaves exactly as it will in production."}
       </p>
     </div>
   );

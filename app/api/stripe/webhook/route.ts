@@ -18,8 +18,15 @@ export const dynamic = "force-dynamic";
 // Optional Stripe webhook. Fulfillment is already handled by the success
 // redirect (app/api/stripe/return), so this route is dormant unless
 // STRIPE_WEBHOOK_SECRET is configured — at which point it provides a second,
-// redirect-independent fulfillment path (and a home for recurring subscription
-// top-ups). Signatures are always verified; we never trust an unsigned body.
+// redirect-independent fulfillment path. Signatures are always verified; we
+// never trust an unsigned body.
+//
+// Renewals are NOT driven from here any more. FundExecs owns the billing period
+// (lib/subscriptions.server + the /api/cron sweep), and a plan checkout now buys
+// one period rather than opening a Stripe subscription. What remains below is
+// the LEGACY path: orgs that subscribed under the old mode=subscription flow
+// still have Stripe billing them on Stripe's schedule, so their renewals and
+// cancellations have to keep landing here until those subscriptions age out.
 export async function POST(req: NextRequest) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) {
@@ -51,9 +58,11 @@ export async function POST(req: NextRequest) {
       await fulfillCheckout(session.id);
     }
 
-    // Grant the plan's monthly credit allotment on each subscription renewal.
-    // The initial period is already granted at checkout; this handles every cycle
-    // after that. We key on invoice.payment_succeeded + billing_reason=subscription_cycle
+    // LEGACY subscriptions only: grant the plan's allotment on each Stripe-driven
+    // renewal. Subscriptions created by the current flow are renewed by the cron
+    // sweep instead — granting here as well would hand out two allotments per
+    // period — so the handler checks that the org's subscription really is
+    // Stripe-managed before granting. Keyed on billing_reason=subscription_cycle
     // to avoid double-granting the first invoice (which fires alongside checkout).
     if (event.type === "invoice.payment_succeeded") {
       const invoice = event.data.object as Stripe.Invoice;
@@ -71,6 +80,24 @@ export async function POST(req: NextRequest) {
             const plan = planKey ? PLAN_BY_KEY[planKey as PlanKey] : null;
             if (orgId && plan) {
               const service = createServiceClient();
+
+              // Guard against double-granting: if this org's live subscription is
+              // native (no processor_subscription_id), the cron sweep already
+              // owns its renewals and this event is a duplicate of that work.
+              const { data: liveSub } = await service
+                .from("subscriptions")
+                .select("id, processor_subscription_id")
+                .eq("organization_id", orgId)
+                .in("status", ["active", "past_due"])
+                .maybeSingle();
+              if (liveSub && !liveSub.processor_subscription_id) {
+                console.warn(
+                  "[stripe] ignoring legacy renewal for natively-managed subscription",
+                  orgId,
+                );
+                return NextResponse.json({ received: true, ignored: "native_subscription" });
+              }
+
               const { data: walletRow } = await service
                 .from("wallets")
                 .select("plan_started_at, plan_interval")
@@ -100,6 +127,50 @@ export async function POST(req: NextRequest) {
             }
           } catch (err) {
             console.error("[stripe] renewal grant failed:", err);
+          }
+        }
+      }
+    }
+    // A legacy Stripe subscription ended (cancelled in the Customer Portal, or
+    // finally given up on after dunning). Without this the org kept its plan —
+    // and its entitlements — forever, because nothing on our side ever heard.
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object as Stripe.Subscription;
+      const orgId = (subscription.metadata as Record<string, string>)?.org_id;
+      if (orgId) {
+        const service = createServiceClient();
+        // Close ONLY the row this Stripe subscription backs.
+        const { data: closed } = await service
+          .from("subscriptions")
+          .update({ status: "canceled", ended_at: new Date().toISOString() })
+          .eq("organization_id", orgId)
+          .eq("processor_subscription_id", subscription.id)
+          .in("status", ["active", "past_due"])
+          .select("id");
+
+        if (closed && closed.length > 0) {
+          await service.from("subscription_events").insert({
+            organization_id: orgId,
+            subscription_id: closed[0].id,
+            kind: "ended",
+            note: "Stripe subscription cancelled",
+          });
+
+          // Drop the entitlement only if nothing else is paying for it. An org
+          // that cancelled its old Stripe subscription and then subscribed again
+          // natively must not lose the plan it is currently paying for — this
+          // event can arrive (or be replayed) long after that.
+          const { data: stillLive } = await service
+            .from("subscriptions")
+            .select("id")
+            .eq("organization_id", orgId)
+            .in("status", ["active", "past_due"])
+            .limit(1);
+          if (!stillLive || stillLive.length === 0) {
+            await service
+              .from("wallets")
+              .update({ plan: null, plan_interval: null, plan_started_at: null })
+              .eq("organization_id", orgId);
           }
         }
       }

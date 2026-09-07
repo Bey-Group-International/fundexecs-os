@@ -1,70 +1,22 @@
 // lib/purchase.ts
-// The EFFECT of a completed purchase — activating a plan or crediting a pack —
-// factored out of Stripe fulfillment (lib/stripe) so the Stripe path and the
-// native in-app checkout (app/(app)/wallet/actions) apply value identically.
-// Verification/idempotency belong to the caller; this is the "grant + record"
-// effect against the service-role client. Everything routes through
-// grantCredits, so the credit_ledger — the Credit History surface — records
-// every purchase regardless of which path completed it.
+// The EFFECT of a completed ONE-OFF purchase — crediting a pack — factored out
+// of Stripe fulfillment (lib/stripe) so the Stripe path and the native in-app
+// checkout (app/(app)/wallet/actions) apply value identically. Verification and
+// idempotency belong to the caller; this is the "grant + record" effect against
+// the service-role client. Everything routes through grantCredits, so the
+// credit_ledger — the Credit History surface — records every purchase
+// regardless of which path completed it.
+//
+// Plans do NOT live here. A plan is a subscription with a billing period, a
+// renewal and a cancellation, so it is started through lib/subscriptions.server
+// instead; a plan granted here would be entitlement with nothing to renew or
+// cancel it, which is precisely the state this codebase used to get stuck in.
 import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantCredits } from "@/lib/credits";
-import { awardReferralOnSubscription } from "@/lib/gift-earn";
-import {
-  PLAN_BY_KEY,
-  CREDIT_PACKS,
-  planGrantCredits,
-  planPurchaseSummary,
-  packPurchaseSummary,
-  type PlanKey,
-  type PlanInterval,
-} from "@/lib/billing";
+import { CREDIT_PACKS, packPurchaseSummary } from "@/lib/billing";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
-
-// Activate a plan for an org: set the wallet's plan fields (preserving the
-// original plan_started_at so tenure accrues from the first activation), grant
-// the interval's credit allotment, and settle any pending referral chain. Used
-// by Stripe fulfillment (with the Stripe customer id) and by the native path.
-export async function activatePlan(
-  service: ServiceClient,
-  orgId: string,
-  planKey: PlanKey,
-  interval: PlanInterval,
-  opts: { stripeCustomerId?: string | null; note?: string } = {},
-): Promise<void> {
-  const plan = PLAN_BY_KEY[planKey];
-  if (!plan) return;
-
-  const { data: existing } = await service
-    .from("wallets")
-    .select("plan_started_at")
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  const planStartedAt = existing?.plan_started_at ?? new Date().toISOString();
-
-  await service.from("wallets").upsert(
-    {
-      organization_id: orgId,
-      plan: plan.key,
-      plan_interval: interval,
-      plan_started_at: planStartedAt,
-      ...(opts.stripeCustomerId ? { stripe_customer_id: opts.stripeCustomerId } : {}),
-    },
-    { onConflict: "organization_id" },
-  );
-
-  await grantCredits(service, orgId, planGrantCredits(plan, interval), "plan_grant", {
-    note: opts.note ?? `${plan.name} plan (${interval})`,
-  });
-
-  // Pay any pending referral chain now that this org has an active plan.
-  try {
-    await awardReferralOnSubscription(orgId, service);
-  } catch (err) {
-    console.error("[referral] awardReferralOnSubscription failed:", err);
-  }
-}
 
 // Credit an org for a one-off pack purchase. Ledger row (via grantCredits) is the
 // transaction record shown in Credit History.
@@ -81,18 +33,16 @@ export async function addPack(
   });
 }
 
-// A native (Stripe-free) purchase to complete in-app: what to grant.
+// A native (Stripe-free) pack purchase to complete in-app: what to grant.
 export interface NativePurchaseInput {
   orgId: string;
   createdBy: string | null;
-  kind: "plan" | "pack";
-  planKey?: PlanKey;
-  interval?: PlanInterval;
+  kind: "pack";
   packKey?: string;
 }
 
-// Complete a purchase natively — no external processor. Applies the same effect
-// the Stripe path does (activatePlan / addPack) and writes a `fulfilled`
+// Complete a pack purchase natively — no external processor. Applies the same
+// effect the Stripe path does (addPack) and writes a `fulfilled`
 // stripe_checkouts audit row (with a `native_…` session id and native=true
 // metadata) so the purchase is auditable alongside Stripe ones. Callers MUST
 // gate this on Stripe NOT being configured, so it can never hand out paid value
@@ -100,14 +50,7 @@ export interface NativePurchaseInput {
 export async function completeNativePurchase(
   input: NativePurchaseInput,
 ): Promise<{ ok: boolean; credits?: number; error?: string }> {
-  const summary =
-    input.kind === "plan"
-      ? input.planKey
-        ? planPurchaseSummary(input.planKey, input.interval ?? "monthly")
-        : null
-      : input.packKey
-        ? packPurchaseSummary(input.packKey)
-        : null;
+  const summary = input.packKey ? packPurchaseSummary(input.packKey) : null;
   if (!summary) return { ok: false, error: "Unknown purchase." };
 
   const service = createServiceClient();
@@ -122,7 +65,6 @@ export async function completeNativePurchase(
       status: "fulfilled",
       metadata: {
         native: "true",
-        ...(input.planKey ? { plan_key: input.planKey, interval: input.interval ?? "monthly" } : {}),
         ...(input.packKey ? { pack_key: input.packKey } : {}),
       },
       created_by: input.createdBy,
@@ -133,11 +75,7 @@ export async function completeNativePurchase(
     console.error("[native-purchase] audit insert failed:", err);
   }
 
-  if (input.kind === "plan" && input.planKey) {
-    await activatePlan(service, input.orgId, input.planKey, input.interval ?? "monthly", {
-      note: `${summary.label} — in-app`,
-    });
-  } else if (input.kind === "pack" && input.packKey) {
+  if (input.packKey) {
     await addPack(service, input.orgId, input.packKey, { note: `${summary.label} — in-app` });
   }
 

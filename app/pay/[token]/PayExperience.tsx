@@ -30,6 +30,8 @@ export function PayExperience({
     startTransition(async () => {
       const res = await startInvoiceCheckout(token);
       if (res?.clientSecret) setClientSecret(res.clientSecret);
+      // Hosted Stripe Checkout — no publishable key to mount the in-app form.
+      else if (res?.checkoutUrl) window.location.href = res.checkoutUrl;
       else setError(res?.error ?? "Could not start checkout. Please try again.");
     });
   }

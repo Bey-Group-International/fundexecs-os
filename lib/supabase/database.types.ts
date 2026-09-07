@@ -581,6 +581,52 @@ export type Wallet = Timestamps & {
   stripe_customer_id: string | null;
   // migration 20260703170001 — idempotency stamp for the email-verify trial grant
   trial_granted_at: string | null;
+  // migration 20260907160000 — saved instrument for off-session renewal charges
+  stripe_payment_method_id: string | null;
+};
+
+// Native subscription lifecycle (migration 20260907160000). FundExecs owns the
+// billing period; a processor is only the rail that settles the charge. See
+// lib/subscriptions (state machine) and lib/subscriptions.server (operations).
+export type SubscriptionRow = {
+  id: string;
+  organization_id: string;
+  plan: string;
+  interval: string;
+  status: string;
+  price_usd: number;
+  current_period_start: string;
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+  canceled_at: string | null;
+  ended_at: string | null;
+  pending_plan: string | null;
+  pending_interval: string | null;
+  failed_attempts: number;
+  last_payment_error: string | null;
+  next_attempt_at: string | null;
+  processor: string;
+  processor_customer_id: string | null;
+  processor_subscription_id: string | null;
+  started_at: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Append-only billing history: every charge, grant, plan change, cancellation.
+export type SubscriptionEventRow = {
+  id: string;
+  organization_id: string;
+  subscription_id: string | null;
+  kind: string;
+  plan: string | null;
+  interval: string | null;
+  amount_usd: number;
+  credits_granted: number;
+  reference: string | null;
+  note: string | null;
+  created_at: string;
 };
 
 // Tokenization layers (migration 0048). Earned standing, credit stakes, and
@@ -2834,6 +2880,8 @@ export type Database = {
       session_groups: TableShape<SessionGroup>;
       sessions: TableShape<Session>;
       wallets: TableShape<Wallet>;
+      subscriptions: TableShape<SubscriptionRow>;
+      subscription_events: TableShape<SubscriptionEventRow>;
       session_shares: TableShape<SessionShare>;
       entities: TableShape<Entity>;
       partners: TableShape<Partner>;

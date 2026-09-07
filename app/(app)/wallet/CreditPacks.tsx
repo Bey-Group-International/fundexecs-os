@@ -44,6 +44,10 @@ export function CreditPacks({
       const res = await purchasePackAction(fd);
       if (res?.clientSecret) {
         setClientSecret(res.clientSecret); // open in-app embedded (Stripe) checkout
+      } else if (res?.checkoutUrl) {
+        // Hosted Stripe Checkout — no publishable key, so the in-app form can't
+        // mount. Redirecting beats dead-ending on a modal that cannot load.
+        window.location.href = res.checkoutUrl;
       } else if (res?.native) {
         setNative(res.native); // open native in-app checkout (no Stripe configured)
       } else if (res?.error) {

@@ -4,13 +4,14 @@ import { getInvoiceByToken } from "@/lib/invoices.server";
 import { invoiceTotalCents, isPayable } from "@/lib/invoices";
 import { stripeConfigured, createCheckout } from "@/lib/stripe";
 
-// Start an in-app Stripe Embedded Checkout for a public invoice link. Everything
-// that determines the charge — amount, currency, title — is re-derived from the
-// stored invoice HERE (server-side, token-gated), so the browser can't tamper
-// with what it pays. Returns the session client_secret for the modal to mount.
+// Start Stripe Checkout for a public invoice link. Everything that determines
+// the charge — amount, currency, title — is re-derived from the stored invoice
+// HERE (server-side, token-gated), so the browser can't tamper with what it pays.
+// Returns a client_secret for the in-app modal, or a hosted Checkout URL to
+// redirect to when no publishable key is configured.
 export async function startInvoiceCheckout(
   token: string,
-): Promise<{ clientSecret?: string; error?: string }> {
+): Promise<{ clientSecret?: string; checkoutUrl?: string; error?: string }> {
   const invoice = await getInvoiceByToken(token);
   if (!invoice) return { error: "This invoice link isn’t available." };
   if (!isPayable(invoice.status)) {
@@ -26,7 +27,7 @@ export async function startInvoiceCheckout(
   }
 
   const amountCents = invoiceTotalCents(invoice.line_items);
-  return createCheckout({
+  const res = await createCheckout({
     kind: "invoice",
     orgId: invoice.organization_id,
     createdBy: invoice.created_by,
@@ -37,4 +38,7 @@ export async function startInvoiceCheckout(
     currency: invoice.currency,
     customerEmail: invoice.customer_email,
   });
+  return res.error
+    ? { error: res.error }
+    : { clientSecret: res.clientSecret, checkoutUrl: res.url };
 }

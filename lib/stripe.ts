@@ -1,23 +1,31 @@
-// Stripe integration. Hosted Checkout only: the server creates a Checkout
-// Session and hands back its URL, the browser is redirected to Stripe, and on
-// return we retrieve the session and fulfill (grant credits / activate the plan
-// / create the paid gift) idempotently.
+// Stripe as a CHARGE RAIL for the native subscription engine.
 //
-// Only STRIPE_SECRET_KEY is required to operate; STRIPE_PUBLISHABLE_KEY is
-// documented for client-side Stripe.js but unused by the redirect flow. When no
-// secret is set, stripeConfigured() is false and paid-credit callers fail closed
-// instead of granting credits without checkout.
+// FundExecs owns the subscription lifecycle (lib/subscriptions +
+// lib/subscriptions.server): when a period ends, what a plan change costs, when
+// to retry a failed charge. Stripe's job here is narrower — collect one payment
+// and save the card so the renewal sweep can charge it off-session. That is why
+// a plan checkout runs in `mode: "payment"` rather than `mode: "subscription"`:
+// two systems each running their own billing schedule would inevitably disagree
+// about when a period ends, and the operator would be the one who found out.
+//
+// Only STRIPE_SECRET_KEY is required. With STRIPE_PUBLISHABLE_KEY also set the
+// payment form renders in-app (Embedded Checkout); without it we fall back to
+// hosted Checkout on Stripe's own domain, which needs no publishable key — so a
+// half-configured deployment can still sell, instead of dead-ending at a modal
+// that cannot load. With no secret at all, stripeConfigured() is false and the
+// native rail settles in-app (lib/billing-rail).
 //
 // Fulfillment is driven by the success redirect (we verify payment_status server
-// side), so no webhook secret is needed. An optional webhook route additionally
-// fulfills — and handles recurring subscription top-ups — when STRIPE_WEBHOOK_SECRET
-// is later configured.
+// side), so no webhook secret is needed. The optional webhook route additionally
+// fulfills — and keeps legacy Stripe-managed subscriptions renewing — when
+// STRIPE_WEBHOOK_SECRET is configured.
 import Stripe from "stripe";
 import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { purchaseGift } from "@/lib/gift-earn";
 import { markInvoicePaid } from "@/lib/invoices.server";
-import { activatePlan, addPack } from "@/lib/purchase";
+import { addPack } from "@/lib/purchase";
+import { startSubscription, savePaymentMethod } from "@/lib/subscriptions.server";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
@@ -40,6 +48,14 @@ export function stripePublishableKeyValue(): string {
 
 export function stripeConfigured(): boolean {
   return secretKey().length > 0;
+}
+
+// Whether the payment form can render INSIDE the app. Embedded Checkout mounts
+// Stripe.js in the browser, which needs the publishable key; without it we use
+// hosted Checkout instead. Callers use this to decide which UI to prepare, never
+// to decide whether payment is possible.
+export function embeddedCheckoutAvailable(): boolean {
+  return stripeConfigured() && stripePublishableKeyValue().length > 0;
 }
 
 let _stripe: Stripe | null = null;
@@ -100,15 +116,20 @@ export type CheckoutIntent =
       customerEmail?: string | null;
     };
 
-// Build an EMBEDDED Checkout Session for an intent and record it pending.
-// Returns the session's client_secret, which the in-app Stripe Embedded Checkout
-// mounts — the payment form renders inside FundExecs (no redirect to Stripe).
-// On completion Stripe sends the browser to return_url (our fulfillment route).
-// Any Stripe/DB failure is caught and returned as a friendly { error } so the
-// caller can surface it inline instead of crashing the page.
+// Build a Checkout Session for an intent and record it pending.
+//
+// Returns EITHER a `clientSecret` (Embedded Checkout — the payment form renders
+// inside FundExecs, no redirect) or a `url` (hosted Checkout on Stripe's domain),
+// depending on whether a publishable key is configured. Callers must handle both:
+// a deployment with only a secret key still needs to be able to take money, and
+// before this fallback existed it dead-ended at a modal that could not load.
+//
+// Either way Stripe sends the browser to our fulfillment route when payment
+// completes. Any Stripe/DB failure is caught and returned as a friendly { error }
+// so the caller can surface it inline instead of crashing the page.
 export async function createCheckout(
   intent: CheckoutIntent,
-): Promise<{ clientSecret?: string; error?: string }> {
+): Promise<{ clientSecret?: string; url?: string; error?: string }> {
   const base = appBaseUrl();
   let stripe: Stripe;
   try {
@@ -135,20 +156,22 @@ export async function createCheckout(
   if (intent.kind === "plan") {
     const plan = PLAN_BY_KEY[intent.planKey];
     if (!plan) return { error: "Unknown plan" };
-    const recurring: Stripe.Checkout.SessionCreateParams.LineItem.PriceData.Recurring = {
-      interval: intent.interval === "annual" ? "year" : "month",
-    };
     amountUsd = intent.interval === "annual" ? plan.annual : plan.monthly;
     metadata.plan_key = plan.key;
     metadata.interval = intent.interval;
     params = {
-      mode: "subscription",
-      // subscription_data.metadata is copied onto the Stripe Subscription object
-      // and is what the webhook reads on renewal (invoice.payment_succeeded +
-      // billing_reason=subscription_cycle). The checkout session metadata is NOT
-      // automatically propagated to the subscription, so we set it here explicitly
-      // to ensure org_id, plan_key, and interval survive past the initial checkout.
-      subscription_data: {
+      // One payment for THIS period — not a Stripe subscription. The renewal is
+      // ours to schedule (lib/subscriptions.server), so what we need from
+      // checkout is the first charge plus a reusable payment method.
+      mode: "payment",
+      // A customer is required to charge off-session later; Checkout will not
+      // create one for a guest payment unless we ask.
+      customer_creation: "always",
+      payment_intent_data: {
+        // Consent to charge this card again without the cardholder present.
+        // Renewals fail closed without it.
+        setup_future_usage: "off_session",
+        description: `FundExecs OS — ${plan.name} plan (${intent.interval})`,
         metadata: {
           org_id: intent.orgId,
           plan_key: plan.key,
@@ -162,8 +185,13 @@ export async function createCheckout(
           price_data: {
             currency: "usd",
             unit_amount: Math.round(amountUsd * 100),
-            recurring,
-            product_data: { name: `FundExecs OS — ${plan.name} plan` },
+            product_data: {
+              name: `FundExecs OS — ${plan.name} plan`,
+              description:
+                intent.interval === "annual"
+                  ? "One year of access, renewing annually"
+                  : "One month of access, renewing monthly",
+            },
           },
         },
       ],
@@ -236,21 +264,34 @@ export async function createCheckout(
     };
   }
 
+  const embedded = embeddedCheckoutAvailable();
+  const returnPath = `${base}/api/stripe/return?session_id={CHECKOUT_SESSION_ID}`;
+
   let session: Stripe.Checkout.Session;
   try {
     session = await stripe.checkout.sessions.create({
       ...params,
-      ui_mode: "embedded",
       client_reference_id: intent.orgId,
       metadata,
-      // Embedded Checkout redirects the top frame here once payment completes.
-      return_url: `${base}/api/stripe/return?session_id={CHECKOUT_SESSION_ID}`,
+      ...(embedded
+        ? // Embedded Checkout redirects the top frame here once payment completes.
+          { ui_mode: "embedded" as const, return_url: returnPath }
+        : // Hosted Checkout takes the browser to Stripe and back. `cancel_url`
+          // must land somewhere sane, since the operator has left our app.
+          {
+            ui_mode: "hosted" as const,
+            success_url: returnPath,
+            cancel_url: `${base}${cancelPathFor(intent)}?checkout=cancelled`,
+          }),
     });
   } catch (err) {
     return { error: friendlyStripeError(err) };
   }
 
-  if (!session.client_secret) {
+  const handoff = embedded
+    ? { clientSecret: session.client_secret ?? undefined }
+    : { url: session.url ?? undefined };
+  if (!handoff.clientSecret && !handoff.url) {
     return { error: "Stripe did not return a checkout session. Please try again." };
   }
 
@@ -271,7 +312,21 @@ export async function createCheckout(
     // return. Don't block the purchase on the audit-row write.
   }
 
-  return { clientSecret: session.client_secret };
+  return handoff;
+}
+
+// Where hosted Checkout returns an operator who backed out. Each purchase starts
+// from a different page, and dumping everyone on /wallet would lose an in-progress
+// gift or an invoice payer's link.
+function cancelPathFor(intent: CheckoutIntent): string {
+  switch (intent.kind) {
+    case "gift":
+      return "/gift";
+    case "invoice":
+      return `/pay/${intent.token}`;
+    default:
+      return "/wallet";
+  }
 }
 
 // Map a Stripe SDK error to a safe, user-facing message — never echoing the key
@@ -318,6 +373,32 @@ export async function createPortalSession(
   } catch (err) {
     console.error("[stripe] portal session creation failed:", err);
     return { error: "Could not open billing portal. Please try again." };
+  }
+}
+
+// The payment method Checkout saved for future off-session charges. Reads it
+// from the session's PaymentIntent; returns null when the session had none (a
+// zero-amount session, or a rail that does not save instruments).
+async function paymentMethodFromSession(
+  session: Stripe.Checkout.Session,
+): Promise<string | null> {
+  const pi = session.payment_intent;
+  if (!pi) return null;
+  if (typeof pi !== "string") {
+    return typeof pi.payment_method === "string"
+      ? pi.payment_method
+      : pi.payment_method?.id ?? null;
+  }
+  try {
+    const intent = await getStripe().paymentIntents.retrieve(pi);
+    return typeof intent.payment_method === "string"
+      ? intent.payment_method
+      : intent.payment_method?.id ?? null;
+  } catch (err) {
+    // A missing instrument only costs us the ability to auto-renew, which the
+    // dunning path already reports to the operator. Never fail the purchase.
+    console.error("[stripe] could not read the saved payment method:", err);
+    return null;
   }
 }
 
@@ -381,10 +462,36 @@ export async function fulfillCheckout(
         typeof session.customer === "string"
           ? session.customer
           : (session.customer as { id?: string } | null)?.id ?? null;
-      await activatePlan(service, orgId, planKey, interval, {
-        stripeCustomerId,
+      // The card the operator just used, saved via setup_future_usage. Without
+      // it the subscription starts but can never renew, so pull it off the
+      // PaymentIntent while we have the session in hand.
+      const paymentMethodId = await paymentMethodFromSession(session);
+
+      // Hand the period to the native engine: it owns the schedule from here.
+      // `alreadyPaid` because checkout just collected this period — charging
+      // the rail again would bill twice.
+      const result = await startSubscription({
+        orgId,
+        planKey,
+        interval,
+        createdBy,
+        processor: "stripe",
+        processorCustomerId: stripeCustomerId,
+        paymentMethodId,
+        reference: session.payment_intent
+          ? typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent.id
+          : session.id,
+        alreadyPaid: true,
         note: `${plan.name} plan (${interval}) — Stripe`,
       });
+      if (!result.ok) {
+        console.error("[stripe] subscription start after checkout failed:", result.error);
+      }
+      // Persist the instrument even when the subscription already existed (a
+      // re-subscribe, or a card update), so renewals use the newest card.
+      await savePaymentMethod(service, orgId, paymentMethodId, stripeCustomerId);
     }
   } else if (kind === "pack") {
     const pack = CREDIT_PACKS.find((p) => p.key === meta.pack_key);

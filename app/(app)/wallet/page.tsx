@@ -15,6 +15,7 @@ import {
   tenureMonths,
 } from "@/lib/billing";
 import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
+import { getSubscription } from "@/lib/subscriptions.server";
 import { compoundingProfile } from "@/lib/compounding";
 import {
   walletRunway,
@@ -23,6 +24,8 @@ import {
   recommendTopUpPack,
 } from "@/lib/wallet-insights";
 import { PlanSelector, type PlanView } from "./PlanSelector";
+import { SubscriptionPanel } from "./SubscriptionPanel";
+import { BillingHistory } from "./BillingHistory";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
 import { CreditHistory } from "./CreditHistory";
@@ -46,14 +49,17 @@ export default async function WalletPage(
   const live = stripeConfigured();
   const publishableKey = stripePublishableKeyValue();
 
-  const [wallet, spend30d, profile] = await Promise.all([
+  const [wallet, spend30d, profile, subscription] = await Promise.all([
     getWallet(ctx.orgId),
     recentSpend(ctx.orgId),
     compoundingProfile(ctx.orgId),
+    getSubscription(ctx.orgId),
   ]);
 
   const balance = wallet?.credits ?? 0;
-  const currentPlan = wallet?.plan ?? null;
+  // The subscription is authoritative for what plan is running; the wallet column
+  // is the denormalized entitlement every other surface reads.
+  const currentPlan = subscription?.plan ?? wallet?.plan ?? null;
 
   // Runway + grounded recommendations, derived from balance and 30-day burn.
   const runway = walletRunway(balance, spend30d, 30, CREDIT_GRACE_BUFFER);
@@ -224,7 +230,7 @@ export default async function WalletPage(
                 sourcing, diligence, reporting, and ops runs.
               </>
             ) : balance === 0 ? (
-              "You're out of credits. Choose a plan or purchase a credit pack below to restore your AI workspace."
+              "You're out of credits. Start a plan or buy a credit pack below to restore your AI workspace."
             ) : (
               "Choose a plan below to unlock monthly credits, rollover, and a growing loyalty accrual."
             )}
@@ -232,12 +238,23 @@ export default async function WalletPage(
         </div>
       </section>
 
+      {subscription && (
+        <>
+          <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
+            Your subscription
+          </h2>
+          <SubscriptionPanel subscription={subscription} canManagePayment={live} />
+        </>
+      )}
+
       <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
-        Choose a plan
+        {subscription ? "Change plan" : "Choose a plan"}
       </h2>
       <PlanSelector
         plans={plans}
         currentPlan={currentPlan}
+        currentInterval={(subscription?.interval as "monthly" | "annual") ?? null}
+        hasSubscription={Boolean(subscription)}
         recommendedKey={recommendedKey}
         live={live}
         publishableKey={publishableKey}
@@ -255,13 +272,17 @@ export default async function WalletPage(
         <CouponRedemption />
       </div>
 
+      {subscription ? <BillingHistory /> : null}
+
       <Suspense fallback={<CreditHistorySkeleton />}>
         {/* The 50-row ledger read is the page's slowest query and its least
             urgent content, so it streams in after the balance has painted. */}
         <CreditHistory />
       </Suspense>
 
-      {live && currentPlan && (
+      {/* Cancelling and switching plans happen in-app now (SubscriptionPanel);
+          the processor's portal remains for card and receipt management. */}
+      {live && subscription?.processor_customer_id && (
         <div className="mt-8 flex justify-center">
           <BillingPortalButton />
         </div>
@@ -269,8 +290,8 @@ export default async function WalletPage(
 
       <p className="mt-6 text-center text-xs text-fg-muted">
         {live
-          ? "Payments are processed securely by Stripe. Plans renew automatically; cancel anytime."
-          : "Billing is being configured for this organization. Contact support to activate plans and credit purchases."}
+          ? "Card payments are processed securely by Stripe — FundExecs never sees your card. Plans renew automatically; cancel anytime from this page."
+          : "No card processor is connected, so nothing is charged. Plans still run as real subscriptions here — they hold a billing period, renew on schedule, and can be cancelled — so the flow behaves exactly as it will once payments are live."}
       </p>
     </div>
   );
