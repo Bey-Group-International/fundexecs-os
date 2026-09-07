@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { CopyButton } from "./CopyButton";
+import { ExportMenu } from "./ExportMenu";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 
 type Meeting = {
@@ -139,9 +140,10 @@ export default function MeetingReportPage() {
             {duration ? ` · ${duration} min` : ""}
           </p>
         </div>
-        {sentiment && (
-          <SentimentBadge value={sentiment} />
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {sentiment && <SentimentBadge value={sentiment} />}
+          <ExportMenu roomId={roomId} />
+        </div>
       </div>
 
       {/* Summary */}
