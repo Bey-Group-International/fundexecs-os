@@ -12,9 +12,29 @@
 // the first and quietly widen who can download somebody's meeting.
 
 import type { createServerClient } from "@/lib/supabase/server";
-import type { ReportExportInput } from "@/lib/meetings/report-export";
+import type { ReportExportInput, ReportExportOptions } from "@/lib/meetings/report-export";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
+
+// The two shapes this reads, spelled out rather than assembled: supabase-js
+// parses the select string at the type level to check the columns exist, and a
+// string it cannot read as a literal takes those checks with it.
+//
+// full_transcript is the whole meeting as text — tens of kilobytes for an hour,
+// dwarfing every other column put together. Summary-only exports are the common
+// case and the email path never wants it either, so reading it unconditionally
+// meant fetching all of that and discarding it on almost every call.
+//
+// The only difference between these two is that column, which a test pins.
+const SELECT_SUMMARY = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
+
+const SELECT_WITH_TRANSCRIPT = "id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees, live_meeting_reports(summary, key_points, action_items, analysis, created_at, full_transcript)";
+
+/** Exposed so a test can hold the two in the same place they are written. */
+export const REPORT_SELECTS = {
+  summary: SELECT_SUMMARY,
+  withTranscript: SELECT_WITH_TRANSCRIPT,
+} as const;
 
 export interface LoadedReport extends ReportExportInput {
   /** The meeting row id, for callers that need to reach its attendees. */
@@ -36,22 +56,28 @@ export interface LoadedReport extends ReportExportInput {
 export async function loadReportForExport(
   supabase: SupabaseClient,
   roomCode: string,
+  options: ReportExportOptions = {},
 ): Promise<LoadedReport | null> {
+  const includeTranscript = options.includeTranscript === true;
+
+  // One round trip, not two. live_meeting_reports.meeting_id is a foreign key
+  // to live_meetings.id, so the latest report embeds in the meeting's own
+  // query — and the second request only ever existed because the first had to
+  // return the meeting id before it could be made.
   const { data: meeting } = await supabase
     .from("live_meetings")
-    .select("id, room_code, title, created_at, started_at, ended_at, organization_id, host_id, attendees")
+    .select(includeTranscript ? SELECT_WITH_TRANSCRIPT : SELECT_SUMMARY)
     .eq("room_code", roomCode)
+    .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
+    .limit(1, { referencedTable: "live_meeting_reports" })
     .maybeSingle();
 
   if (!meeting) return null;
 
-  const { data: report } = await supabase
-    .from("live_meeting_reports")
-    .select("summary, key_points, action_items, analysis, full_transcript")
-    .eq("meeting_id", meeting.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const embedded = (meeting as { live_meeting_reports?: unknown }).live_meeting_reports;
+  const report = (Array.isArray(embedded) ? embedded[0] : embedded) as
+    | { summary?: unknown; key_points?: unknown; action_items?: unknown; analysis?: unknown; full_transcript?: unknown }
+    | undefined;
 
   return {
     meetingId: meeting.id as string,

@@ -38,7 +38,7 @@ export async function POST(
   }
 
   const supabase = await createServerClient();
-  const loaded = await loadReportForExport(supabase, roomCode);
+  const loaded = await loadReportForExport(supabase, roomCode, { includeTranscript });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   if (!hasExportableReport(loaded)) {
     return NextResponse.json({ error: "Report not ready" }, { status: 409 });
