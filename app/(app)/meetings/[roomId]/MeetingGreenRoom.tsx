@@ -15,6 +15,17 @@ import {
   type DeviceKind,
 } from "@/lib/meetings/devices";
 import { MeetingShareLink } from "../MeetingShareLink";
+import {
+  BACKGROUND_PREF_KEY,
+  NO_BACKGROUND,
+  decodeEffect,
+  encodeEffect,
+  needsSegmentation,
+  type BackgroundEffect,
+} from "@/lib/meetings/backgrounds";
+import { BackgroundProcessor } from "@/lib/meetings/background-processor";
+import { getBackground } from "@/lib/meetings/background-store";
+import { BackgroundPicker } from "./BackgroundPicker";
 
 /** What the member settled on before pressing Join. */
 export interface GreenRoomChoice {
@@ -23,6 +34,8 @@ export interface GreenRoomChoice {
   speakerId: string;
   cameraEnabled: boolean;
   micEnabled: boolean;
+  /** The background settled on here, so the call opens already wearing it. */
+  background: BackgroundEffect;
 }
 
 export interface MeetingGreenRoomProps {
@@ -113,6 +126,69 @@ function PreviewVideo({ stream }: { stream: MediaStream }) {
   );
 }
 
+/**
+ * The pre-join preview, with the chosen background applied.
+ *
+ * This is where people check how they look, so a background chosen here has to
+ * be visible here — showing the raw room and applying the effect only after
+ * joining would mean the first person to see it is somebody else.
+ *
+ * The processor is torn down and rebuilt when the effect changes rather than
+ * kept warm: the green room is a screen someone spends seconds on, and holding
+ * a segmentation loop open while they read the join button is not worth it.
+ */
+function BackgroundPreview({
+  stream, effect, image, onUnavailable,
+}: {
+  stream: MediaStream;
+  effect: BackgroundEffect;
+  image: Blob | null;
+  onUnavailable: () => void;
+}) {
+  const [processed, setProcessed] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    const track = stream.getVideoTracks()[0];
+    if (!track || !needsSegmentation(effect)) { setProcessed(null); return; }
+
+    let processor: BackgroundProcessor | null = null;
+    let cancelled = false;
+
+    void (async () => {
+      const built = await BackgroundProcessor.create(track, {
+        onSlowFrames: () => { /* the call itself decides to give up, not the lobby */ },
+        onUnavailable,
+      });
+      if (!built) { onUnavailable(); return; }
+      if (cancelled) { built.destroy(); return; }
+      processor = built;
+      built.setEffect(effect, image);
+      setProcessed(new MediaStream([built.track]));
+    })();
+
+    return () => {
+      cancelled = true;
+      processor?.destroy();
+      setProcessed(null);
+    };
+  }, [stream, effect, image, onUnavailable]);
+
+  // Mirrored either way, which is what the in-call local tile does with the
+  // same processed track — a self-view that flips when you pick a background
+  // would read as the effect having moved you.
+  return <PreviewVideo stream={processed ?? stream} />;
+}
+
+function BackgroundGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M6.5 20a5.5 5.5 0 0 1 11 0" />
+    </svg>
+  );
+}
+
 function MicGlyph({ off = false }: { off?: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -174,8 +250,46 @@ export function MeetingGreenRoom({
   const [level, setLevel] = useState(0);
   const [micSettled, setMicSettled] = useState(false);
 
+  // Background, chosen here and carried into the call. Restored from the last
+  // call so someone who always blurs does not have to say so every time.
+  const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
+  const [bgImage, setBgImage] = useState<Blob | null>(null);
+  const [bgOpen, setBgOpen] = useState(false);
+  const [bgUnavailable, setBgUnavailable] = useState(false);
+
   const streamRef = useRef<MediaStream | null>(null);
   const micPeakRef = useRef(0);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      let remembered: BackgroundEffect;
+      try { remembered = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY)); }
+      catch { return; }
+      if (!needsSegmentation(remembered)) return;
+      if (remembered.kind === "custom") {
+        // The id is remembered per browser but the image may have been deleted;
+        // fall back rather than previewing a background that no longer exists.
+        const stored = await getBackground(remembered.id);
+        if (cancelled) return;
+        if (!stored) return;
+        setBgImage(stored.blob);
+      }
+      if (!cancelled) setBgEffect(remembered);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const chooseBackground = useCallback((effect: BackgroundEffect, image?: Blob | null) => {
+    setBgEffect(effect);
+    setBgImage(image ?? null);
+    try { window.localStorage.setItem(BACKGROUND_PREF_KEY, encodeEffect(effect)); } catch { /* storage disabled */ }
+  }, []);
+
+  const onBackgroundUnavailable = useCallback(() => {
+    setBgUnavailable(true);
+    setBgEffect(NO_BACKGROUND);
+  }, []);
+
   const onPreviewStreamRef = useRef(onPreviewStream);
   useEffect(() => { onPreviewStreamRef.current = onPreviewStream; }, [onPreviewStream]);
 
@@ -361,7 +475,7 @@ export function MeetingGreenRoom({
     if (camId) remember("videoinput", camId);
     if (micId) remember("audioinput", micId);
     if (speakerId) remember("audiooutput", speakerId);
-    onJoin({ cameraId: camId, micId, speakerId, cameraEnabled, micEnabled });
+    onJoin({ cameraId: camId, micId, speakerId, cameraEnabled, micEnabled, background: bgEffect });
   };
 
   const joinLabel = joining
@@ -375,7 +489,12 @@ export function MeetingGreenRoom({
         {/* Preview */}
         <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
           {stream && cameraEnabled && stream.getVideoTracks().length > 0 ? (
-            <PreviewVideo stream={stream} />
+            <BackgroundPreview
+              stream={stream}
+              effect={bgEffect}
+              image={bgImage}
+              onUnavailable={onBackgroundUnavailable}
+            />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-1.5">
               <span className="text-[var(--fg-muted)]"><CamGlyph off /></span>
@@ -411,6 +530,21 @@ export function MeetingGreenRoom({
             >
               <CamGlyph off={!cameraEnabled} />
             </button>
+            {/* Backgrounds, beside the camera toggle they belong to. Disabled
+                with the camera: there is nothing to put a background behind. */}
+            <button
+              type="button"
+              onClick={() => setBgOpen((v) => !v)}
+              disabled={!cameraEnabled || cameraDenied || bgUnavailable}
+              title="Background effects"
+              aria-label="Background effects"
+              aria-expanded={bgOpen}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${
+                bgEffect.kind !== "none" ? "bg-[var(--gold-400)] text-white" : "bg-white/15 text-white hover:bg-white/25"
+              }`}
+            >
+              <BackgroundGlyph />
+            </button>
           </div>
 
           {/* Live level, so "is my mic working" is answered before the call */}
@@ -419,6 +553,26 @@ export function MeetingGreenRoom({
             <MicMeter level={level} active={micEnabled && !micDenied} />
           </div>
         </div>
+
+        {bgOpen && (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-medium text-[var(--fg-secondary)]">Background</p>
+              <button
+                type="button"
+                onClick={() => setBgOpen(false)}
+                className="text-xs text-[var(--fg-muted)] transition-colors hover:text-[var(--fg-primary)]"
+              >
+                Done
+              </button>
+            </div>
+            <BackgroundPicker
+              effect={bgEffect}
+              unavailable={bgUnavailable}
+              onChange={chooseBackground}
+            />
+          </div>
+        )}
 
         {/* Join card */}
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] overflow-hidden">

@@ -5,7 +5,10 @@ import {
   NO_BACKGROUND,
   SLOW_FRAME_RUN,
   UPLOAD_MAX_BYTES,
+  MASK_SMOOTHING,
+  blendMask,
   blurRadiusPx,
+  maskFeatherPx,
   decodeEffect,
   effectLabel,
   encodeEffect,
@@ -34,6 +37,84 @@ describe("blurRadiusPx", () => {
     expect(blurRadiusPx("light", Number.NaN)).toBe(blurRadiusPx("light", 640));
     expect(blurRadiusPx("light", 0)).toBe(blurRadiusPx("light", 640));
     expect(blurRadiusPx("light", -100)).toBe(blurRadiusPx("light", 640));
+  });
+});
+
+describe("maskFeatherPx", () => {
+  it("softens more on a bigger frame, so the edge looks the same on any camera", () => {
+    expect(maskFeatherPx(1280)).toBeGreaterThan(maskFeatherPx(640));
+  });
+
+  it("never rounds away to a hard edge on a small frame", () => {
+    expect(maskFeatherPx(100)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("falls back to a sane width for a garbage one", () => {
+    expect(maskFeatherPx(Number.NaN)).toBe(maskFeatherPx(640));
+    expect(maskFeatherPx(0)).toBe(maskFeatherPx(640));
+  });
+});
+
+describe("blendMask", () => {
+  const person = (n: number) => new Uint8Array(n).fill(1);
+  const background = (n: number) => new Uint8Array(n).fill(0);
+
+  it("moves toward the new mask without jumping to it", () => {
+    const previous = new Uint8ClampedArray([0, 0, 0]);
+    blendMask(previous, person(3), 0.5);
+    expect([...previous]).toEqual([128, 128, 128]);
+  });
+
+  it("converges on the person after a few frames", () => {
+    const previous = new Uint8ClampedArray([0]);
+    for (let i = 0; i < 6; i++) blendMask(previous, person(1), MASK_SMOOTHING);
+    expect(previous[0]).toBeGreaterThan(250);
+  });
+
+  it("converges on the background just as readily", () => {
+    const previous = new Uint8ClampedArray([255]);
+    for (let i = 0; i < 6; i++) blendMask(previous, background(1), MASK_SMOOTHING);
+    expect(previous[0]).toBeLessThan(5);
+  });
+
+  it("treats every non-zero label as person, not just 1", () => {
+    const previous = new Uint8ClampedArray([0, 0]);
+    blendMask(previous, new Uint8Array([3, 255]), 1);
+    expect([...previous]).toEqual([255, 255]);
+  });
+
+  it("writes in place rather than allocating a buffer per frame", () => {
+    const previous = new Uint8ClampedArray([0]);
+    expect(blendMask(previous, person(1), 1)).toBe(previous);
+  });
+
+  it("takes the new mask outright at alpha 1, and ignores it at 0", () => {
+    const hot = new Uint8ClampedArray([0]);
+    blendMask(hot, person(1), 1);
+    expect(hot[0]).toBe(255);
+
+    const frozen = new Uint8ClampedArray([0]);
+    blendMask(frozen, person(1), 0);
+    expect(frozen[0]).toBe(0);
+  });
+
+  it("clamps a nonsense alpha rather than overshooting the mask", () => {
+    const over = new Uint8ClampedArray([0]);
+    blendMask(over, person(1), 5);
+    expect(over[0]).toBe(255);
+  });
+
+  it("stops at the shorter buffer when the frame size changes mid-call", () => {
+    const previous = new Uint8ClampedArray([0, 0]);
+    expect(() => blendMask(previous, person(8), 1)).not.toThrow();
+    expect([...previous]).toEqual([255, 255]);
+  });
+
+  it("smooths by default without being told an alpha", () => {
+    const previous = new Uint8ClampedArray([0]);
+    blendMask(previous, person(1));
+    expect(previous[0]).toBeGreaterThan(0);
+    expect(previous[0]).toBeLessThan(255);
   });
 });
 

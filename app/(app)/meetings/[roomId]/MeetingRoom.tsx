@@ -524,9 +524,11 @@ function ControlBar({
         </div>
 
         {/* Backgrounds — next to the camera controls, because that is what it
-            changes. Hidden on mobile: segmentation on a phone costs battery and
-            heat during a call, and the control bar there is already full. */}
-        <span className="hidden sm:block">
+            changes. On phones too: segmentation there costs battery, but the
+            auto-downgrade already pulls the effect when frames fall behind, and
+            a phone is exactly where someone is most likely to want their room
+            hidden. */}
+        <span>
           <button
             ref={backgroundBtnRef}
             onClick={onOpenBackgrounds}
@@ -1467,13 +1469,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     rawCameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     setLocalStream(stream);
 
-    // Restore the background chosen on a previous call. Deliberately after the
-    // stream is live and not awaited: the segmenter is a 12MB download and
-    // joining should never wait on scenery.
-    try {
-      const remembered = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY));
-      if (needsSegmentation(remembered)) void applyBackgroundRef.current(remembered);
-    } catch { /* storage disabled — start with no effect */ }
+    // Carry in the background settled on in the green room, falling back to the
+    // remembered one for the paths that skip it (a re-join, a waiting-room
+    // admission). Deliberately not awaited: the segmenter is a 12MB download
+    // and joining should never wait on scenery.
+    let wanted = choice?.background;
+    if (!wanted) {
+      try { wanted = decodeEffect(window.localStorage.getItem(BACKGROUND_PREF_KEY)); }
+      catch { /* storage disabled — start with no effect */ }
+    }
+    if (wanted && needsSegmentation(wanted)) void applyBackgroundRef.current(wanted);
 
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
