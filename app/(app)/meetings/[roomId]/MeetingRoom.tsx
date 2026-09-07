@@ -267,7 +267,7 @@ function FloatingMenu({
 function VideoTile({
   stream, label, muted = false, isLocal = false,
   handRaised = false, reaction = "", large = false,
-  micOn = true, speaking = false,
+  micOn = true, speaking = false, selfView = null,
 }: {
   stream: MediaStream | null; label: string; muted?: boolean; isLocal?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
@@ -275,9 +275,23 @@ function VideoTile({
   micOn?: boolean;
   /** Their voice is in the room right now. */
   speaking?: boolean;
+  /**
+   * What to show instead of `stream`, when the two differ.
+   *
+   * A background effect makes them differ: peers get the composite, and the
+   * person themselves gets one with the mirroring applied to them and not to
+   * the scenery behind them. `stream` stays the source of truth for whether
+   * there is a camera at all — a canvas capture goes on producing frames after
+   * the camera is switched off, and a frozen last frame is the one thing a
+   * camera-off tile must never show.
+   */
+  selfView?: MediaStream | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = stream?.getVideoTracks()[0] ?? null;
+  const shown = selfView ?? stream;
+  // Already mirrored in the canvas, and only the half of the frame that should be.
+  const mirror = isLocal && !selfView;
   // Re-render when the track's lifecycle changes (ends / mutes / unmutes) so the
   // placeholder appears/disappears in step with the real camera state.
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -290,9 +304,9 @@ function VideoTile({
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (el.srcObject !== (stream ?? null)) el.srcObject = stream ?? null;
-    if (stream) void el.play().catch(() => { /* autoplay race — retried on canplay */ });
-  }, [stream]);
+    if (el.srcObject !== (shown ?? null)) el.srcObject = shown ?? null;
+    if (shown) void el.play().catch(() => { /* autoplay race — retried on canplay */ });
+  }, [shown]);
 
   useEffect(() => {
     if (!track) return;
@@ -322,7 +336,7 @@ function VideoTile({
     <div className={`relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border transition-shadow flex items-center justify-center ${ring} ${large ? "w-full h-full" : "aspect-video"}`}>
       <video ref={videoRef} autoPlay playsInline muted={muted}
         onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-        className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
+        className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""} ${hasVideo ? "" : "opacity-0"}`} />
       {!hasVideo && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
           <div className="w-12 h-12 rounded-full bg-[var(--surface-3)] flex items-center justify-center text-lg font-semibold text-[var(--fg-primary)]">
@@ -997,6 +1011,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [bgEffect, setBgEffect] = useState<BackgroundEffect>(NO_BACKGROUND);
   const bgEffectRef = useRef<BackgroundEffect>(NO_BACKGROUND);
   const processorRef = useRef<BackgroundProcessor | null>(null);
+  /** The processor's self view, when one is running. Never sent to anybody. */
+  const [selfViewStream, setSelfViewStream] = useState<MediaStream | null>(null);
   const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const [bgUnavailable, setBgUnavailable] = useState(false);
   const [bgNotice, setBgNotice] = useState<string | null>(null);
@@ -2064,6 +2080,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setCamOn(false);
     const processor = processorRef.current;
     processorRef.current = null;
+    setSelfViewStream(null);
     cameraTrackRef.current = rawCameraTrackRef.current;
     if (!shareOn) swapOutgoingVideo(rawCameraTrackRef.current, false);
     processor?.destroy();
@@ -2089,6 +2106,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!needsSegmentation(effect)) {
       const processor = processorRef.current;
       processorRef.current = null;
+      setSelfViewStream(null);
       cameraTrackRef.current = raw;
       if (!shareOn) swapOutgoingVideo(raw, false);
       // Destroyed only after the camera is back on the wire, so there is no
@@ -2145,6 +2163,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     processorRef.current.setEffect(effect, blob);
     cameraTrackRef.current = processorRef.current.track;
+    setSelfViewStream(new MediaStream([processorRef.current.selfViewTrack]));
     // The processed track is what goes out now, so the hold from enterRoom can
     // be released — swapOutgoingVideo re-enables video as it makes the swap.
     bgPendingRef.current = false;
@@ -2328,6 +2347,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
     processorRef.current?.destroy();
     processorRef.current = null;
+    // Its self view went with it. Left set, this would hold a stopped track, and
+    // the tile that reads it would come back showing the last frame it drew —
+    // somebody's face, frozen, on a screen they have already left.
+    setSelfViewStream(null);
     try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
     rawCameraTrackRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
@@ -2543,6 +2566,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const isHandRaised = (id: string) => id === "local" ? handRaised : raisedHands.has(id);
 
   // Speaker view helpers
+  // Only while the camera is the thing being sent: a screen share puts the
+  // shared surface on the local tile, and that is not a self view to mirror.
+  const localSelfView = shareOn ? null : selfViewStream;
+
   const speakerTileId = activeSpeakerId ?? "local";
   const speakerIsLocal = speakerTileId === "local";
   const speakerPeer = speakerIsLocal ? null : allPeers.find((p) => p.id === speakerTileId);
@@ -2614,7 +2641,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {layout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} />
+              <VideoTile stream={localStream} selfView={localSelfView} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} />
               {allPeers.map((peer: Peer) => (
                 <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} />
               ))}
@@ -2624,11 +2651,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
+                  <VideoTile stream={localStream} selfView={localSelfView} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
                 ) : speakerPeer ? (
                   <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
+                  <VideoTile stream={localStream} selfView={localSelfView} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -2636,7 +2663,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} />
+                      <VideoTile stream={item.stream} selfView={item.isLocal ? localSelfView : null} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} />
                     </div>
                   ))}
                 </div>
