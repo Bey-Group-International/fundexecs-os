@@ -36,14 +36,17 @@ export async function GET(
   const ctx = await getSessionContext();
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const format = new URL(request.url).searchParams.get("format") ?? "pdf";
+  const query = new URL(request.url).searchParams;
+  const format = query.get("format") ?? "pdf";
   if (!isExportFormat(format)) {
     return NextResponse.json({ error: "Unsupported format" }, { status: 400 });
   }
-  const includeTranscript = new URL(request.url).searchParams.get("transcript") === "1";
+  const includeTranscript = query.get("transcript") === "1";
 
   const supabase = await createServerClient();
-  const loaded = await loadReportForExport(supabase, roomCode);
+  // Told up front, so a summary-only export never reads the transcript it is
+  // about to discard — on an hour-long meeting that is tens of kilobytes.
+  const loaded = await loadReportForExport(supabase, roomCode, { includeTranscript });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
 
   // Still generating. 409 rather than 404: the meeting is real and the answer
