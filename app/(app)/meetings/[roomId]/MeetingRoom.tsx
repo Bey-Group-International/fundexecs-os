@@ -40,6 +40,9 @@ import {
   nextPhase,
   type CallPhase,
 } from "@/lib/meetings/call-phase";
+import { resolveGuestKey } from "@/lib/meetings/guest-key";
+import { nextPollDelay, shouldPollNow } from "@/lib/meetings/admission-poll";
+import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,6 +118,10 @@ const VOICE_SAMPLE_MS = 120;
 // How long the copilot takes to slide away. Must match the duration-200 below:
 // the panel unmounts on this timer, and unmounting early cuts the animation.
 const COPILOT_SLIDE_MS = 200;
+// How long a burst of admission events is allowed to coalesce before the host's
+// waiting list is re-read to confirm it. Long enough that "Admit all" over a
+// roomful is a single query, short enough to be invisible.
+const RECONCILE_MS = 400;
 // Palette for per-speaker colours in the transcript.
 const SPEAKER_COLORS = [
   "var(--gold-400)",
@@ -943,6 +950,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [peers, setPeers] = useState<Map<string, Peer>>(new Map());
   const peersDataRef = useRef<Map<string, Peer>>(new Map());
   const myIdRef = useRef<string>(crypto.randomUUID());
+  // Separate from `myIdRef`: the peer id identifies this tab's WebRTC connection
+  // and must not be reused, while the admission key identifies the *person* and
+  // must be, so the host's decision survives a reload. Lazily initialised — the
+  // ref argument is evaluated on every render, and this one touches storage.
+  const guestKeyRef = useRef<string | null>(null);
+  if (guestKeyRef.current === null) {
+    guestKeyRef.current = resolveGuestKey(
+      roomCode,
+      crypto.randomUUID(),
+      typeof window === "undefined" ? null : window.localStorage,
+    );
+  }
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   // ICE candidates can arrive before the matching remote description is applied;
   // buffer them per-peer and flush once setRemoteDescription resolves so early
@@ -1051,6 +1070,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [joining, setJoining] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [showGuestUpsell, setShowGuestUpsell] = useState(false);
+  // Read from the signaling handlers, which must not be re-created (and the
+  // channel re-subscribed) just because this flipped.
+  const isGuestRef = useRef(false);
   const [meetingTitle, setMeetingTitle] = useState("Meeting");
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
@@ -1066,8 +1088,19 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Waiting room state
   const [waitingForAdmit, setWaitingForAdmit] = useState(false);
   const [waitingTimedOut, setWaitingTimedOut] = useState(false);
+  // The host said no. Its own screen, because the old answer to a deny was to
+  // push the joiner at /meetings — which lives behind the app's auth wall, so an
+  // invite-link guest was answered with a login page. Being turned away and
+  // being asked to sign in are not the same message, and only one of them is
+  // true.
+  const [deniedByHost, setDeniedByHost] = useState(false);
   const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const waitingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const waitingPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The poll is a timeout chain, so cancelling the pending timer is not enough:
+  // a request already in flight would schedule the next one on the way out. This
+  // flips the flag the chain checks.
+  const waitingPollStopRef = useRef<(() => void) | null>(null);
+  const waitingVisibilityCleanupRef = useRef<(() => void) | null>(null);
 
   const clearWaitingTimers = useCallback(() => {
     if (waitingTimerRef.current !== null) {
@@ -1075,10 +1108,38 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       waitingTimerRef.current = null;
     }
     if (waitingPollRef.current !== null) {
-      clearInterval(waitingPollRef.current);
+      clearTimeout(waitingPollRef.current);
       waitingPollRef.current = null;
     }
+    waitingPollStopRef.current?.();
+    waitingPollStopRef.current = null;
+    waitingVisibilityCleanupRef.current?.();
+    waitingVisibilityCleanupRef.current = null;
   }, []);
+
+  /**
+   * The meeting is over. Signed-in people get the report; a guest cannot read it
+   * (it is inside the signed-in app) so they get the thank-you rather than the
+   * login page that a push at the report URL would actually produce.
+   */
+  const leaveEndedMeeting = useCallback(() => {
+    clearWaitingTimers();
+    previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
+    setWaitingForAdmit(false);
+    setJoining(false);
+    if (isGuestRef.current) { setShowGuestUpsell(true); return; }
+    router.push(`/meetings/${roomCode}/report`);
+  }, [clearWaitingTimers, router, roomCode]);
+
+  /** Leave the waiting room because the host declined. */
+  const showDenied = useCallback(() => {
+    clearWaitingTimers();
+    previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
+    setWaitingForAdmit(false);
+    setWaitingTimedOut(false);
+    setJoining(false);
+    setDeniedByHost(true);
+  }, [clearWaitingTimers]);
 
   // The call is joined, admitted, and not being torn down. Every periodic effect
   // watches this rather than `ready` alone, so leaving or ending stops them all
@@ -1233,6 +1294,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       endingRef.current = true;
       teardownCallRef.current();
       setCallPhase((prev) => nextPhase(prev, "remote_end"));
+      if (isGuestRef.current) { setShowGuestUpsell(true); return; }
       router.push("/meetings");
       return;
     }
@@ -1357,6 +1419,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       endingRef.current = true;
       teardownCallRef.current();
       setCallPhase((prev) => nextPhase(prev, "remote_end"));
+      // A guest has no /meetings to go back to — it is inside the signed-in app,
+      // so pushing them there answers "the host removed you" with a login form.
+      if (isGuestRef.current) { setShowGuestUpsell(true); return; }
       router.push("/meetings");
       return;
     }
@@ -1397,6 +1462,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const nameParam = searchParams.get("name");
     if (guestParam !== "1") return;
     setIsGuest(true);
+    isGuestRef.current = true;
     // Recover name from URL param or sessionStorage fallback
     const storedName = typeof sessionStorage !== "undefined"
       ? sessionStorage.getItem(`guest_name_${roomCode}`) ?? ""
@@ -1557,23 +1623,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: existing } = await supabase
         .from("live_meetings")
-        .select("id, status, host_id, title")
+        .select("id, status, host_id, title, organization_id")
         .eq("room_code", roomCode)
         .maybeSingle();
-      const ex = existing as { id: string; status: string; host_id: string; title: string | null } | null;
+      const ex = existing as { id: string; status: string; host_id: string; title: string | null; organization_id: string | null } | null;
       if (ex) {
         mId = ex.id;
         if (ex.title) setMeetingTitle(ex.title);
         if (ex.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
         hostFlag = !!user && user.id === ex.host_id;
-        isOrgMember = !!user;
+        // This read went through RLS, and `live_meetings_select` passes a row on
+        // EITHER org membership OR `organization_id IS NULL`. So a returned row
+        // only proves membership when the meeting actually has an org — reading
+        // it as `!!user` let any signed-in stranger walk into an org-less meeting
+        // without knocking at all. When it proves nothing, knock and let the
+        // server decide; it checks real membership and auto-admits teammates.
+        isOrgMember = !!user && !!ex.organization_id;
       } else {
         const pub = await fetch(`/api/meetings/public/${roomCode}`, { cache: "no-store" });
         if (pub.ok) {
           const d = await pub.json() as { id: string; title: string | null; status: string };
           mId = d.id;
           if (d.title) setMeetingTitle(d.title);
-          if (d.status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
+          if (d.status === "ended") { leaveEndedMeeting(); return; }
         } else if (user) {
           const res = await fetch("/api/meetings/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Meeting", roomCode }) });
           if (res.ok) {
@@ -1599,69 +1671,122 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     // Non-host: knock (DB-backed) and wait. Camera/mic + signaling stay untouched
     // until we're admitted, so an un-admitted guest never appears in the room.
-    const guestKey = myIdRef.current;
-    let status = "waiting";
-    try {
+    const guestKey = guestKeyRef.current as string;
+    const knock = async () => {
       const res = await fetch(`/api/meetings/public/${roomCode}/knock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ guestKey, displayName: name }),
       });
-      if (res.ok) status = ((await res.json()) as { status?: string }).status ?? "waiting";
-    } catch { /* fall through to waiting */ }
+      if (!res.ok) return null;
+      return ((await res.json()) as { status?: string }).status ?? "waiting";
+    };
 
-    if (status === "ended") { router.push(`/meetings/${roomCode}/report`); return; }
-    if (status === "denied") { router.push("/meetings"); return; }
+    let status: string | null = null;
+    try { status = await knock(); } catch { /* fall through to waiting */ }
+
+    if (status === "ended") { leaveEndedMeeting(); return; }
+    if (status === "denied") { showDenied(); return; }
     if (status === "admitted") { await enterRoom(mId, name); return; }
 
     // Still waiting — show the wait screen (keeps the local preview) and poll for
     // the host's decision. Guests can't use Realtime, so we poll the knock route.
     setWaitingForAdmit(true);
     setJoining(false);
+    // A second join without an intervening teardown would otherwise leave the
+    // first chain running and its visibility listener attached, both invisible.
+    clearWaitingTimers();
     waitingTimerRef.current = setTimeout(() => setWaitingTimedOut(true), 120_000);
-    waitingPollRef.current = setInterval(async () => {
+    // A self-rescheduling chain rather than setInterval, for three reasons: the
+    // gap widens with the wait (see ADMISSION_POLL_SCHEDULE), a hidden tab skips
+    // the request entirely, and the next poll is scheduled only once the last one
+    // has come back — an interval fires on the clock regardless, so a slow network
+    // stacks requests on a guest who is already having a bad time.
+    const startedAt = Date.now();
+    let stopped = false;
+    waitingPollStopRef.current = () => { stopped = true; };
+
+    const pollOnce = async () => {
+      if (stopped) return;
+      if (!shouldPollNow(typeof document === "undefined" ? undefined : document.visibilityState)) return;
       try {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(guestKey)}`, { cache: "no-store" });
         if (!res.ok) return;
         const row = (await res.json()) as { status: string };
+        if (stopped) return;
         if (row.status === "admitted") { clearWaitingTimers(); await enterRoomRef.current(mId, name); }
-        else if (row.status === "denied") { clearWaitingTimers(); router.push("/meetings"); }
-        else if (row.status === "ended") { clearWaitingTimers(); router.push(`/meetings/${roomCode}/report`); }
+        else if (row.status === "denied") { clearWaitingTimers(); showDenied(); }
+        else if (row.status === "ended") { leaveEndedMeeting(); }
+        // "unknown" means the server has no knock for this key — the POST above
+        // lost its race with the network, or the row was cleared. Waiting on a
+        // knock that was never recorded is waiting on a host who cannot see you,
+        // so re-knock rather than sitting here until the timeout.
+        else if (row.status === "unknown") { await knock(); }
       } catch { /* ignore */ }
-    }, 3000);
-  }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers]);
+    };
+
+    const scheduleNext = () => {
+      if (stopped) return;
+      waitingPollRef.current = setTimeout(async () => {
+        await pollOnce();
+        scheduleNext();
+      }, nextPollDelay(Date.now() - startedAt));
+    };
+    scheduleNext();
+
+    // Coming back to the tab asks straight away, so a decision made while the
+    // guest was elsewhere is on screen as they focus rather than a tick later.
+    const onVisible = () => { if (document.visibilityState === "visible") void pollOnce(); };
+    document.addEventListener("visibilitychange", onVisible);
+    waitingVisibilityCleanupRef.current = () => document.removeEventListener("visibilitychange", onVisible);
+  }, [displayName, roomCode, supabase, router, enterRoom, clearWaitingTimers, showDenied, leaveEndedMeeting]);
 
   // ── Host: waiting-room admissions (DB-backed) ─────────────────────────────
   // Load the pending knocks for this meeting and keep them live. Reads go under
   // the org-read RLS policy; a per-meeting Realtime subscription refreshes the
   // list the instant a guest knocks or a decision is written.
+  const loadWaiting = useCallback(async () => {
+    if (!meetingId) return;
+    const { data } = await (supabase as any)
+      .from("live_meeting_admissions")
+      .select("id, guest_key, display_name, status")
+      .eq("meeting_id", meetingId)
+      .eq("status", "waiting")
+      .order("created_at", { ascending: true });
+    const rows = (data ?? []) as Array<{ id: string; guest_key: string; display_name: string }>;
+    setWaitingPeers(rows.map((r) => ({ id: r.id, from: r.guest_key, displayName: r.display_name })));
+  }, [meetingId, supabase]);
+
   useEffect(() => {
     if (!isHost || !sessionLive || !meetingId) return;
-    let cancelled = false;
-
-    async function loadWaiting() {
-      const { data } = await (supabase as any)
-        .from("live_meeting_admissions")
-        .select("id, guest_key, display_name, status")
-        .eq("meeting_id", meetingId)
-        .eq("status", "waiting")
-        .order("created_at", { ascending: true });
-      if (cancelled) return;
-      const rows = (data ?? []) as Array<{ id: string; guest_key: string; display_name: string }>;
-      setWaitingPeers(rows.map((r) => ({ id: r.id, from: r.guest_key, displayName: r.display_name })));
-    }
-
     void loadWaiting();
+
+    // Each event is applied to the list immediately — it carries the row, so the
+    // panel redraws without waiting on a query — and schedules one reconciling
+    // re-read for the whole burst. A room filling up, or an "Admit all" over
+    // eight people, is now one SELECT instead of eight.
+    let reconcile: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReconcile = () => {
+      if (reconcile !== null) return;
+      reconcile = setTimeout(() => { reconcile = null; void loadWaiting(); }, RECONCILE_MS);
+    };
+
     const channel = supabase
       .channel(`admissions:${meetingId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "live_meeting_admissions", filter: `meeting_id=eq.${meetingId}` },
-        () => { void loadWaiting(); },
+        (payload: unknown) => {
+          setWaitingPeers((prev) => applyAdmissionChange(prev, payload as AdmissionChange));
+          scheduleReconcile();
+        },
       )
       .subscribe();
-    return () => { cancelled = true; void supabase.removeChannel(channel); };
-  }, [isHost, sessionLive, meetingId, supabase]);
+    return () => {
+      if (reconcile !== null) clearTimeout(reconcile);
+      void supabase.removeChannel(channel);
+    };
+  }, [isHost, sessionLive, meetingId, supabase, loadWaiting]);
 
   // Carry the waiting count into the browser tab title. A host who has tabbed
   // away to pull up a document is exactly the host most likely to leave someone
@@ -2291,18 +2416,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Admit / deny write the decision through the host-only admissions route
   // (service-role). The waiting guest's poll then picks up the new status and
-  // enters (or leaves). We optimistically drop the row locally; the realtime
-  // subscription reconciles the authoritative list.
+  // enters (or leaves). We optimistically drop the row locally so the press feels
+  // immediate.
+  //
+  // The optimism needs an undo. Realtime was left to "reconcile the authoritative
+  // list", but it only fires when a row actually changes — and the case worth
+  // reconciling is the one where nothing changed, because the write failed. The
+  // guest then vanished from the host's panel while still standing outside, and
+  // the host had every reason to think they had let them in. So a failed decision
+  // re-reads the list and puts them back, where they can be admitted again.
   const decideAdmission = useCallback(async (body: Record<string, unknown>) => {
     if (!meetingId) return;
+    let ok = false;
     try {
-      await fetch(`/api/meetings/${meetingId}/admissions`, {
+      const res = await fetch(`/api/meetings/${meetingId}/admissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-    } catch { /* realtime will re-sync */ }
-  }, [meetingId]);
+      ok = res.ok;
+      if (!ok) console.warn("[meeting] admission decision rejected", res.status);
+    } catch (e) { console.warn("[meeting] admission decision failed", e); }
+    if (!ok) await loadWaiting();
+  }, [meetingId, loadWaiting]);
 
   const admitPeer = useCallback((admissionId: string) => {
     setWaitingPeers((prev) => prev.filter((w) => w.id !== admissionId));
@@ -2336,6 +2472,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    */
   const teardownCall = useCallback(() => {
     clearWaitingTimers();
+    // Clearing the timers stopped the poll but left `waitingForAdmit` set, and
+    // the waiting screen is rendered ahead of every exit screen below — so a
+    // guest who pressed Cancel got the timers torn down and then went on staring
+    // at "Waiting for host to admit you…" over a dead camera, with a Cancel
+    // button that had already fired once and was now guarded shut. Leaving the
+    // waiting room is part of tearing the call down.
+    setWaitingForAdmit(false);
+    setWaitingTimedOut(false);
     peersRef.current.forEach((pc) => { try { pc.close(); } catch { /* already closed */ } });
     peersRef.current.clear();
     pendingIceRef.current.clear();
@@ -2445,6 +2589,84 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     router.push("/meetings");
   }, [router]);
 
+  // ── Exit screens ────────────────────────────────────────────────────────
+  //
+  // These come first deliberately. Both used to sit below the waiting-room and
+  // pre-join branches, which return unconditionally on the same state — so a
+  // guest who cancelled kept seeing the waiting screen, and one who left after
+  // being in the room was dropped back into the green room instead of the
+  // thank-you. An exit outranks whatever screen was showing when it happened.
+
+  if (deniedByHost) {
+    return (
+      <BodyPortal>
+      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
+        <div className="w-full max-w-sm flex flex-col items-center gap-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-2xl">🚪</div>
+          <div className="flex flex-col gap-2">
+            <h2 className="text-xl font-semibold text-[var(--fg-primary)]">You weren&apos;t admitted</h2>
+            <p className="text-sm text-[var(--fg-secondary)]">
+              The host didn&apos;t let you into {meetingTitle}. If this was a mistake, ask them to send you back in.
+            </p>
+          </div>
+          <div className="w-full flex flex-col gap-3">
+            <a
+              href={`/meeting-invite/${roomCode}`}
+              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 text-center hover:bg-[var(--surface-2)] transition-colors"
+            >
+              Back to the invitation
+            </a>
+            <button
+              onClick={() => router.push("/")}
+              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      </div>
+      </BodyPortal>
+    );
+  }
+
+  if (showGuestUpsell) {
+    return (
+      <BodyPortal>
+      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
+        <div className="w-full max-w-sm flex flex-col gap-6 text-center">
+          <div className="flex flex-col gap-2">
+            <span className="text-3xl">✦</span>
+            <h2 className="text-xl font-semibold text-[var(--fg-primary)]">Thanks for joining!</h2>
+            <p className="text-sm text-[var(--fg-secondary)]">
+              Request access to get AI-generated meeting notes, transcripts, and action items — automatically.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <a
+              href="/request-access"
+              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
+            >
+              Request access →
+            </a>
+            <a
+              href="/login"
+              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 text-center hover:bg-[var(--surface-2)] transition-colors"
+            >
+              I already have an account
+            </a>
+            <button
+              onClick={() => router.push("/")}
+              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
+            >
+              No thanks, leave
+            </button>
+          </div>
+        </div>
+      </div>
+      </BodyPortal>
+    );
+  }
+
   // ── Waiting room screen ─────────────────────────────────────────────────
 
   if (waitingForAdmit) {
@@ -2529,21 +2751,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     );
   }
 
-  // ── Waiting for host to admit ─────────────────────────────────────────────
-
-  if (waitingForAdmit) {
-    return (
-      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 text-center max-w-xs">
-          <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-3xl animate-pulse">🕐</div>
-          <p className="text-base font-medium text-[var(--fg-primary)]">Waiting for the host to admit you</p>
-          <p className="text-sm text-[var(--fg-muted)]">The host will let you in soon</p>
-          <button onClick={leaveMeeting} className="text-xs text-[var(--status-danger)] hover:underline mt-2">Cancel</button>
-        </div>
-      </div>
-    );
-  }
-
   // ── Active meeting ────────────────────────────────────────────────────────
 
   const allPeers = [...peers.values()] as Peer[];
@@ -2576,44 +2783,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const stripItems: { id: string; displayName: string; stream: MediaStream | null; isLocal: boolean }[] = speakerIsLocal
     ? allPeers.map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))
     : [{ id: "local", displayName: localName, stream: localStream, isLocal: true }, ...allPeers.filter((p) => p.id !== speakerTileId).map((p) => ({ id: p.id, displayName: p.displayName, stream: p.stream, isLocal: false }))];
-
-  if (showGuestUpsell) {
-    return (
-      <BodyPortal>
-      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
-        <div className="w-full max-w-sm flex flex-col gap-6 text-center">
-          <div className="flex flex-col gap-2">
-            <span className="text-3xl">✦</span>
-            <h2 className="text-xl font-semibold text-[var(--fg-primary)]">Thanks for joining!</h2>
-            <p className="text-sm text-[var(--fg-secondary)]">
-              Request access to get AI-generated meeting notes, transcripts, and action items — automatically.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a
-              href="/request-access"
-              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
-            >
-              Request access →
-            </a>
-            <a
-              href="/login"
-              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 text-center hover:bg-[var(--surface-2)] transition-colors"
-            >
-              I already have an account
-            </a>
-            <button
-              onClick={() => router.push("/")}
-              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
-            >
-              No thanks, leave
-            </button>
-          </div>
-        </div>
-      </div>
-      </BodyPortal>
-    );
-  }
 
   return (
     <BodyPortal>

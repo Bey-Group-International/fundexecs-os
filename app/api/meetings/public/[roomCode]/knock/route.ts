@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // them) so the host never has to admit their own team.
   const { data: existing } = await (supabase as any)
     .from("live_meeting_admissions")
-    .select("id, status")
+    .select("id, status, display_name")
     .eq("meeting_id", meeting.id)
     .eq("guest_key", guestKey)
     .maybeSingle();
@@ -79,6 +79,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
         .update({ status: "admitted", decided_at: new Date().toISOString() })
         .eq("id", existing.id);
       return NextResponse.json({ admissionId: existing.id as string, status: "admitted" });
+    }
+    // A guest whose knock is still pending may re-knock under a name they have
+    // since corrected — they are keyed by guest_key now, not by a per-load id, so
+    // the second knock lands on the same row. The host is deciding on a name, so
+    // it should be the one the guest is currently offering. A decided row is left
+    // exactly as it was: the decision was made about that name.
+    if (existing.status === "waiting" && displayName !== existing.display_name) {
+      await (supabase as any)
+        .from("live_meeting_admissions")
+        .update({ display_name: displayName })
+        .eq("id", existing.id);
     }
     return NextResponse.json({ admissionId: existing.id as string, status: existing.status as string });
   }
@@ -101,21 +112,48 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
 
 // GET ?key=<guestKey> — poll the decision. Guests can't use RLS/Realtime, so they
 // poll this while on the waiting screen.
+//
+// This is the hottest endpoint in the meeting stack: every waiting guest hits it
+// on a timer for as long as they wait, so its cost is paid per guest per tick.
+// It used to resolve the meeting and then read the admission — two sequential
+// round trips to Postgres, the second waiting on the first for nothing but an id.
+//
+// One query answers both. The admission row is fetched with its meeting joined
+// (`!inner`, so a soft-deleted or mismatched meeting yields no row at all), which
+// covers every poll where the guest actually has a knock on file — that is, all
+// of them but the first tick and the rare repair case. Only when that comes back
+// empty do we spend a second query, and then only to tell "no such meeting" (404,
+// stop) apart from "no knock recorded" ("unknown", re-knock) — a distinction the
+// client acts on, so it has to be exact.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
   const { roomCode } = await params;
   const code = roomCode?.trim();
   const guestKey = req.nextUrl.searchParams.get("key")?.trim() ?? "";
   if (!code || !guestKey) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
-  const { supabase, meeting } = await resolveMeeting(code);
+  const supabase = client() ?? (await createServerClient());
+
+  const { data: joined } = await (supabase as any)
+    .from("live_meeting_admissions")
+    .select("status, live_meetings!inner(status, room_code, deleted_at)")
+    .eq("guest_key", guestKey)
+    .eq("live_meetings.room_code", code)
+    .is("live_meetings.deleted_at", null)
+    .maybeSingle();
+
+  if (joined) {
+    // A to-one embed comes back as an object, but normalise anyway: if this ever
+    // arrived as a one-element array the `ended` check would silently never fire,
+    // and a guest would poll a finished meeting until the timeout.
+    const embed = (joined as { live_meetings?: unknown }).live_meetings;
+    const meeting = (Array.isArray(embed) ? embed[0] : embed) as { status?: string } | undefined;
+    if (meeting?.status === "ended") return NextResponse.json({ status: "ended" });
+    return NextResponse.json({ status: (joined as { status: string }).status });
+  }
+
+  // No knock on file for this key. Say which kind of nothing it is.
+  const { meeting } = await resolveMeeting(code);
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (meeting.status === "ended") return NextResponse.json({ status: "ended" });
-
-  const { data } = await (supabase as any)
-    .from("live_meeting_admissions")
-    .select("status")
-    .eq("meeting_id", meeting.id)
-    .eq("guest_key", guestKey)
-    .maybeSingle();
-  return NextResponse.json({ status: (data?.status as string | undefined) ?? "unknown" });
+  return NextResponse.json({ status: "unknown" });
 }
