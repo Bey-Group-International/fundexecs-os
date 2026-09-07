@@ -43,6 +43,14 @@ import {
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { nextPollDelay, shouldPollNow } from "@/lib/meetings/admission-poll";
 import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
+import {
+  GuestThanksScreen,
+  NotAdmittedScreen,
+  PreviewVideo,
+  WaitingRoomBar,
+  WaitingRoomScreen,
+  type WaitingPeer,
+} from "./WaitingScreens";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,9 +76,6 @@ interface TranscriptLine {
   overlapped: boolean;
 }
 interface ChatMessage { id: string; from: string; displayName: string; text: string; ts: number }
-// `id` is the live_meeting_admissions row id (the host admits/denies by it);
-// `from` is the guest_key (the joiner's client id).
-interface WaitingPeer { id: string; from: string; displayName: string }
 
 type SignalMsg =
   | { type: "join"; from: string; displayName: string }
@@ -407,84 +412,6 @@ function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon }: {
 }
 
 // ─── WaitingRoomBar ──────────────────────────────────────────────────────────
-
-/**
- * The host's waiting room, where the host can actually see it.
- *
- * Admissions used to live only in the Copilot sidebar's People tab. That tab is
- * not the default one, and the sidebar closes entirely — so a host could sit in
- * a meeting with no indication at all that someone was knocking, and the guest
- * waited until they gave up. A waiting room nobody notices is the same as no
- * waiting room, except the guest is stuck outside.
- *
- * So this sits above the control bar, in the main column, for as long as
- * anybody is waiting: visible whatever tab is open and whether or not the
- * sidebar is. Admit and Deny are here rather than behind a "review" link,
- * because letting someone in is one decision and should cost one click.
- */
-function WaitingRoomBar({
-  waitingPeers, onAdmit, onDeny, onAdmitAll,
-}: {
-  waitingPeers: WaitingPeer[];
-  onAdmit: (id: string) => void;
-  onDeny: (id: string) => void;
-  onAdmitAll: () => void;
-}) {
-  const count = waitingPeers.length;
-  if (count === 0) return null;
-
-  return (
-    <div
-      role="region"
-      aria-label={`${count} ${count === 1 ? "person" : "people"} waiting to join`}
-      className="shrink-0 border-t border-[var(--gold-400)]/40 bg-[var(--gold-400)]/10 px-3 sm:px-6 py-2"
-    >
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="flex items-center gap-2 text-xs font-semibold text-[var(--gold-400)] uppercase tracking-wide">
-          <span className="w-2 h-2 rounded-full bg-[var(--gold-400)] animate-pulse" />
-          {count === 1 ? "Waiting to join" : `${count} waiting to join`}
-        </span>
-
-        {/* Each waiting person, admittable without opening anything. The list
-            scrolls rather than growing the bar, so a rush of guests can never
-            push the meeting controls off screen. */}
-        <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
-          {waitingPeers.map((wp) => (
-            <div
-              key={wp.id}
-              className="flex items-center gap-1.5 shrink-0 rounded-full border border-[var(--line)] bg-[var(--surface-1)] pl-3 pr-1.5 py-1"
-            >
-              <span className="text-sm text-[var(--fg-primary)] truncate max-w-[10rem]">{wp.displayName}</span>
-              <button
-                onClick={() => onAdmit(wp.id)}
-                className="rounded-full bg-[var(--status-success)] px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-              >
-                Admit
-              </button>
-              <button
-                onClick={() => onDeny(wp.id)}
-                title={`Deny ${wp.displayName}`}
-                aria-label={`Deny ${wp.displayName}`}
-                className="rounded-full border border-[var(--line)] px-2 py-1 text-xs font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--status-danger)]"
-              >
-                Deny
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {count > 1 && (
-          <button
-            onClick={onAdmitAll}
-            className="shrink-0 rounded-full bg-[var(--status-success)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            Admit all
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
@@ -2577,31 +2504,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   if (deniedByHost) {
     return (
       <BodyPortal>
-      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
-        <div className="w-full max-w-sm flex flex-col items-center gap-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-2xl">🚪</div>
-          <div className="flex flex-col gap-2">
-            <h2 className="text-xl font-semibold text-[var(--fg-primary)]">You weren&apos;t admitted</h2>
-            <p className="text-sm text-[var(--fg-secondary)]">
-              The host didn&apos;t let you into {meetingTitle}. If this was a mistake, ask them to send you back in.
-            </p>
-          </div>
-          <div className="w-full flex flex-col gap-3">
-            <a
-              href={`/meeting-invite/${roomCode}`}
-              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 text-center hover:bg-[var(--surface-2)] transition-colors"
-            >
-              Back to the invitation
-            </a>
-            <button
-              onClick={() => router.push("/")}
-              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
-            >
-              Leave
-            </button>
-          </div>
-        </div>
-      </div>
+        <NotAdmittedScreen
+          meetingTitle={meetingTitle}
+          roomCode={roomCode}
+          onLeave={() => router.push("/")}
+        />
       </BodyPortal>
     );
   }
@@ -2609,37 +2516,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   if (showGuestUpsell) {
     return (
       <BodyPortal>
-      <div className="fixed inset-0 z-50 bg-[var(--surface-0)] flex items-center justify-center px-4">
-        <div className="w-full max-w-sm flex flex-col gap-6 text-center">
-          <div className="flex flex-col gap-2">
-            <span className="text-3xl">✦</span>
-            <h2 className="text-xl font-semibold text-[var(--fg-primary)]">Thanks for joining!</h2>
-            <p className="text-sm text-[var(--fg-secondary)]">
-              Request access to get AI-generated meeting notes, transcripts, and action items — automatically.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a
-              href="/request-access"
-              className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
-            >
-              Request access →
-            </a>
-            <a
-              href="/login"
-              className="w-full rounded-lg border border-[var(--line)] text-[var(--fg-secondary)] text-sm py-2.5 text-center hover:bg-[var(--surface-2)] transition-colors"
-            >
-              I already have an account
-            </a>
-            <button
-              onClick={() => router.push("/")}
-              className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
-            >
-              No thanks, leave
-            </button>
-          </div>
-        </div>
-      </div>
+        <GuestThanksScreen onLeave={() => router.push("/")} />
       </BodyPortal>
     );
   }
@@ -2648,66 +2525,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   if (waitingForAdmit) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4 text-center">
-        <div className="w-full max-w-sm flex flex-col items-center gap-5">
-          {/* Meeting title + local camera preview while the guest waits. The
-              preview is the same local-only stream from the pre-join screen; no
-              media is sent to the room until the host admits them. */}
-          <div className="flex flex-col items-center gap-0.5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Waiting room</p>
-            <h2 className="text-lg font-semibold text-[var(--fg-primary)]">{meetingTitle}</h2>
-          </div>
-          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-[var(--line)] shadow-sm">
-            {previewStream ? <PreviewVideo stream={previewStream} /> : (
-              <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--fg-muted)]">Camera off</div>
-            )}
-            <div className="absolute bottom-2 left-3 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
-              {(localName || displayName || "You")} (You)
-            </div>
-          </div>
-          {waitingTimedOut ? (
-            <>
-              <div className="w-14 h-14 rounded-full bg-[var(--status-warning)]/15 flex items-center justify-center text-2xl">
-                ⏱
-              </div>
-              <div className="flex flex-col gap-1">
-                <p className="text-base font-semibold text-[var(--fg-primary)]">
-                  The host hasn&apos;t responded.
-                </p>
-                <p className="text-sm text-[var(--fg-muted)]">
-                  You can try again or leave the meeting.
-                </p>
-              </div>
-              <button
-                onClick={leaveMeeting}
-                className="rounded-lg bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-semibold px-6 py-2.5 transition-colors"
-              >
-                Leave
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="w-14 h-14 rounded-full bg-[var(--gold-400)]/15 flex items-center justify-center">
-                <span className="animate-pulse text-2xl">🔔</span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <p className="text-base font-semibold text-[var(--fg-primary)]">
-                  Waiting for host to admit you…
-                </p>
-                <p className="text-sm text-[var(--fg-muted)]">
-                  The host will let you in shortly.
-                </p>
-              </div>
-              <button
-                onClick={leaveMeeting}
-                className="rounded-lg border border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] text-sm px-5 py-2 transition-colors"
-              >
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      <WaitingRoomScreen
+        meetingTitle={meetingTitle}
+        displayName={localName || displayName}
+        previewStream={previewStream}
+        timedOut={waitingTimedOut}
+        onLeave={leaveMeeting}
+      />
     );
   }
 
@@ -2965,19 +2789,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     </div>
     </BodyPortal>
   );
-}
-
-function PreviewVideo({ stream }: { stream: MediaStream }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.srcObject = stream;
-    void el.play().catch(() => { /* autoplay race — retried on canplay */ });
-  }, [stream]);
-  return <video ref={ref} autoPlay playsInline muted
-    onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-    className="w-full h-full object-cover scale-x-[-1]" />;
 }
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
