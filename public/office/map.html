@@ -2283,15 +2283,25 @@ function tdApplyPinch(){
   const d=Math.hypot(tdPinch.x-tdPan.cx,tdPinch.y-tdPan.cy);
   zoomAt((tdPinch.x+tdPan.cx)/2,(tdPinch.y+tdPan.cy)/2,tdPinch.z0*(d/tdPinch.d0));
 }
-function tdTouchEnd(e){
+// `cancelled` = the platform took the touch away (an incoming call, a system edge
+// gesture, palm rejection). That is not the member letting go, so it must not
+// complete a tap — only a real touchend can.
+function tdTouchEnd(e,cancelled){
   if(!tdOn()){tdJoyId=null;tdPanId=null;tdPan=null;tdPinch=null;youJoy=null;return;}
   for(const t of e.changedTouches){
     if(t.identifier===tdJoyId){tdJoyId=null;youJoy=null;setNub(0,0);}
-    else if(tdPinch&&t.identifier===tdPinch.id){tdPinch=null;if(tdPan)tdPan.live=true;}   // don't let the leftover finger jump the view
+    else if(tdPinch&&t.identifier===tdPinch.id){
+      tdPinch=null;
+      // Hand the view back to the remaining finger from where things actually
+      // stand: pinch-zooming moved panX/panY, so the pre-pinch baseline captured
+      // at touchstart is stale and re-applying its displacement would snap the
+      // office sideways on the next move.
+      if(tdPan){tdPan.live=true;tdPan.sx=tdPan.cx;tdPan.sy=tdPan.cy;tdPan.px0=panX;tdPan.py0=panY;}
+    }
     else if(t.identifier===tdPanId){
       clearTimeout(tdHoldT);tdHoldT=null;
       // a quick, still touch is a tap → walk there
-      if(tdPan&&!tdPan.live&&!tdPan.hold&&performance.now()-tdPan.t0<TD_TAP_MS&&YOU.active){
+      if(!cancelled&&tdPan&&!tdPan.live&&!tdPan.hold&&performance.now()-tdPan.t0<TD_TAP_MS&&YOU.active){
         const [sx,sy]=screenToSvg(t.clientX,t.clientY),[wx,wy]=worldFrom(sx,sy);walkYouTo(wx,wy);
       }
       tdPanId=null;tdPan=null;tdPinch=null;
@@ -2301,7 +2311,7 @@ function tdTouchEnd(e){
 stageDom.addEventListener('touchstart',e=>{fpTouchStart(e);tdTouchStart(e);},{passive:false});
 stageDom.addEventListener('touchmove',e=>{fpTouchMove(e);tdTouchMove(e);},{passive:false});
 stageDom.addEventListener('touchend',e=>{fpTouchEnd(e);tdTouchEnd(e);},{passive:false});
-stageDom.addEventListener('touchcancel',e=>{fpTouchEnd(e);tdTouchEnd(e);},{passive:false});
+stageDom.addEventListener('touchcancel',e=>{fpTouchEnd(e);tdTouchEnd(e,true);},{passive:false});
 function enterFP(){cancelAnimationFrame(camAnim);buildFPWalls();CAM.z=EYE;CAM.pitch=0;fpBob=0;
   // Unified view: stand exactly where the top-down "you" avatar is, facing the same way, so toggling
   // views never moves you. Cancel any in-progress top-down walk so we don't keep sliding after entry.
