@@ -32,6 +32,7 @@ import {
   blurRadiusPx,
   maskFeatherPx,
   needsSegmentation,
+  personCoverage,
   templateById,
   type BackgroundEffect,
   type BackgroundTemplate,
@@ -364,7 +365,7 @@ export class BackgroundProcessor {
       this.maskHistory = new Uint8ClampedArray(rawMask.length);
       // Seeded from the first mask rather than from zero, so the person does not
       // fade in over the opening frames.
-      for (let i = 0; i < rawMask.length; i++) this.maskHistory[i] = rawMask[i] === 0 ? 0 : 255;
+      for (let i = 0; i < rawMask.length; i++) this.maskHistory[i] = personCoverage(rawMask[i]);
     } else {
       blendMask(this.maskHistory, rawMask);
     }

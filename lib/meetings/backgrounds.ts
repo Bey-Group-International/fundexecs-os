@@ -69,14 +69,37 @@ export function maskFeatherPx(frameWidth: number): number {
 }
 
 /**
+ * The value MediaPipe's category mask uses for the person.
+ *
+ * Not the 0-is-background layout a multi-class segmenter uses, and reading it
+ * that way inverts the whole effect — the blur lands on the face and the room
+ * behind it stays sharp.
+ *
+ * The reason is in the model: selfie_segmenter.tflite carries exactly one
+ * label, "selfie". There is no background class to be index 0, so the person is
+ * index 0 and everything else gets 255, MediaPipe's filler for "no category".
+ *
+ * Verified against the shipped model rather than inferred from the docs, which
+ * describe the multi-class layout: a frame with nobody in it comes back 100%
+ * 255, and on a frame with a figure the pixels scored up to 0.99 on the one
+ * confidence mask come back 0.
+ */
+export const PERSON_LABEL = 0;
+
+/** Coverage for one category-mask value: opaque over the person, clear elsewhere. */
+export function personCoverage(label: number): number {
+  return label === PERSON_LABEL ? 255 : 0;
+}
+
+/**
  * Blend a new mask into the running one, in place.
  *
  * Writes into `previous` and returns it: this runs on every pixel of every
  * frame, and allocating a second buffer 24 times a second is exactly the kind
  * of garbage the frame budget cannot absorb.
  *
- * `next` is MediaPipe's category mask, where 0 is background and anything else
- * is the person. `previous` is 0-255 coverage.
+ * `next` is MediaPipe's category mask; `previous` is 0-255 coverage of the
+ * person. See PERSON_LABEL for which way round the category values run.
  */
 export function blendMask(
   previous: Uint8ClampedArray,
@@ -86,7 +109,7 @@ export function blendMask(
   const a = Math.max(0, Math.min(1, alpha));
   const n = Math.min(previous.length, next.length);
   for (let i = 0; i < n; i++) {
-    const target = next[i] === 0 ? 0 : 255;
+    const target = personCoverage(next[i]);
     previous[i] += (target - previous[i]) * a;
   }
   return previous;

@@ -7,6 +7,7 @@ import {
   UPLOAD_MAX_BYTES,
   MASK_SMOOTHING,
   blendMask,
+  personCoverage,
   blurRadiusPx,
   maskFeatherPx,
   decodeEffect,
@@ -55,9 +56,24 @@ describe("maskFeatherPx", () => {
   });
 });
 
+describe("personCoverage", () => {
+  // The selfie segmenter labels only the person, so 0 is the person and 255 is
+  // MediaPipe's "no category" filler. Getting this backwards blurs the face and
+  // leaves the room sharp, so it is pinned here rather than left to a comment.
+  it("covers the person, who is category 0", () => {
+    expect(personCoverage(0)).toBe(255);
+  });
+
+  it("leaves the background clear, whatever value it arrives as", () => {
+    expect(personCoverage(255)).toBe(0);
+    expect(personCoverage(1)).toBe(0);
+    expect(personCoverage(7)).toBe(0);
+  });
+});
+
 describe("blendMask", () => {
-  const person = (n: number) => new Uint8Array(n).fill(1);
-  const background = (n: number) => new Uint8Array(n).fill(0);
+  const person = (n: number) => new Uint8Array(n).fill(0);
+  const background = (n: number) => new Uint8Array(n).fill(255);
 
   it("moves toward the new mask without jumping to it", () => {
     const previous = new Uint8ClampedArray([0, 0, 0]);
@@ -77,10 +93,10 @@ describe("blendMask", () => {
     expect(previous[0]).toBeLessThan(5);
   });
 
-  it("treats every non-zero label as person, not just 1", () => {
-    const previous = new Uint8ClampedArray([0, 0]);
+  it("treats every label but the person's as background, not just 255", () => {
+    const previous = new Uint8ClampedArray([255, 255]);
     blendMask(previous, new Uint8Array([3, 255]), 1);
-    expect([...previous]).toEqual([255, 255]);
+    expect([...previous]).toEqual([0, 0]);
   });
 
   it("writes in place rather than allocating a buffer per frame", () => {
