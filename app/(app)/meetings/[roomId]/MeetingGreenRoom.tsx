@@ -106,7 +106,7 @@ function MicMeter({ level, active, bars = 12 }: { level: number; active: boolean
   );
 }
 
-function PreviewVideo({ stream, mirror = true }: { stream: MediaStream; mirror?: boolean }) {
+function PreviewVideo({ stream }: { stream: MediaStream }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -121,7 +121,7 @@ function PreviewVideo({ stream, mirror = true }: { stream: MediaStream; mirror?:
       playsInline
       muted
       onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-      className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`}
+      className="w-full h-full object-cover scale-x-[-1]"
     />
   );
 }
@@ -163,9 +163,7 @@ function BackgroundPreview({
       if (cancelled) { built.destroy(); return; }
       processor = built;
       built.setEffect(effect, image);
-      // The self view, not the outgoing composite: this preview exists to show
-      // somebody how they will look, and a mirrored background is not that.
-      setProcessed(new MediaStream([built.selfViewTrack]));
+      setProcessed(new MediaStream([built.track]));
     })();
 
     return () => {
@@ -175,14 +173,10 @@ function BackgroundPreview({
     };
   }, [stream, effect, image, onUnavailable]);
 
-  // The person is mirrored either way, which is what the in-call local tile also
-  // does — a self view that stopped flipping when you picked a background would
-  // read as the effect having moved you. The difference is where the flip
-  // happens: the raw camera is flipped by CSS, and a processed frame has it
-  // applied in the canvas, to the person alone.
-  return processed
-    ? <PreviewVideo stream={processed} mirror={false} />
-    : <PreviewVideo stream={stream} />;
+  // Mirrored either way, which is what the in-call local tile does with the
+  // same processed track — a self-view that flips when you pick a background
+  // would read as the effect having moved you.
+  return <PreviewVideo stream={processed ?? stream} />;
 }
 
 function BackgroundGlyph() {
