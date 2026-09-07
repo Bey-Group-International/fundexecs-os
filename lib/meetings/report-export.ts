@@ -32,6 +32,30 @@ export interface ReportExportInput {
 export interface ReportExportOptions {
   /** Append the verbatim transcript. Off unless the person asked for it. */
   includeTranscript?: boolean;
+  /**
+   * Open with the meeting's name as a heading.
+   *
+   * On by default, and off for the formats whose renderer draws the title
+   * itself — see rendererDrawsTitle. Left on for those, the exported file
+   * carries the name twice, one line under the other.
+   */
+  titleHeading?: boolean;
+}
+
+/**
+ * Whether an exporter prints the title it is handed, rather than only filing
+ * it as document metadata.
+ *
+ * RTF, DOCX and PDF draw it at the top of the first page. HTML puts it in
+ * <head> and draws nothing, and markdown ignores the argument entirely — so
+ * those two need the heading to come from the document itself.
+ *
+ * Stated here, next to the builder it governs, because the alternative is a
+ * caller remembering it: this was originally missed, and the duplicate title
+ * only showed up when somebody read a generated PDF.
+ */
+export function rendererDrawsTitle(format: string): boolean {
+  return format === "rtf" || format === "docx" || format === "pdf";
 }
 
 /** What a meeting with no title is called, in a filename and in a heading. */
@@ -130,7 +154,7 @@ export function buildReportMarkdown(
     sentiment ? `Sentiment: ${sentiment}` : null,
   ].filter(Boolean).join(" · ");
 
-  const lines: string[] = [`# ${title}`, ""];
+  const lines: string[] = options.titleHeading === false ? [] : [`# ${title}`, ""];
   if (meta) lines.push(meta, "");
 
   lines.push(

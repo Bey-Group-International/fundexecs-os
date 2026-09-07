@@ -12,6 +12,7 @@ import { renderArtifactBinary } from "@/lib/artifacts/export-binary";
 import {
   buildReportMarkdown,
   hasExportableReport,
+  rendererDrawsTitle,
   reportExportFilename,
 } from "@/lib/meetings/report-export";
 import { loadReportForExport } from "@/lib/meetings/report-export.server";
@@ -51,7 +52,12 @@ export async function GET(
     return NextResponse.json({ error: "Report not ready" }, { status: 409 });
   }
 
-  const markdown = buildReportMarkdown(loaded, { includeTranscript });
+  // RTF, DOCX and PDF draw the title they are handed; HTML and markdown do
+  // not. Emitting the heading for the first three would print the name twice.
+  const markdown = buildReportMarkdown(loaded, {
+    includeTranscript,
+    titleHeading: !rendererDrawsTitle(format),
+  });
   const title = loaded.title ?? undefined;
   const filename = reportExportFilename(
     loaded.title, loaded.createdAt, exportExtension(format), { includeTranscript },

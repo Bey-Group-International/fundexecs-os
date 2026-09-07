@@ -3,6 +3,7 @@ import {
   buildReportMarkdown,
   hasExportableReport,
   meetingDurationMinutes,
+  rendererDrawsTitle,
   reportExportFilename,
   type ReportExportInput,
 } from "@/lib/meetings/report-export";
@@ -120,6 +121,19 @@ describe("buildReportMarkdown", () => {
     expect(md).toContain("NAV up 4%");
   });
 
+  it("omits the heading when the renderer will draw the title itself", () => {
+    const md = buildReportMarkdown(base, { titleHeading: false });
+    expect(md).not.toContain("# Q3 LP Update");
+    // Everything else still arrives, starting with the meta line.
+    expect(md).toContain("Sentiment: positive");
+    expect(md).toContain("## Summary");
+  });
+
+  it("keeps the heading by default, for the renderers that draw nothing", () => {
+    expect(buildReportMarkdown(base, { titleHeading: true })).toContain("# Q3 LP Update");
+    expect(buildReportMarkdown(base)).toContain("# Q3 LP Update");
+  });
+
   it("names an untitled meeting rather than emitting a bare heading", () => {
     expect(buildReportMarkdown({ ...base, title: null })).toContain(`# ${UNTITLED_MEETING}`);
     expect(buildReportMarkdown({ ...base, title: "   " })).toContain(`# ${UNTITLED_MEETING}`);
@@ -140,6 +154,21 @@ describe("buildReportMarkdown", () => {
   it("ends with exactly one newline", () => {
     expect(buildReportMarkdown(base).endsWith("\n")).toBe(true);
     expect(buildReportMarkdown(base).endsWith("\n\n")).toBe(false);
+  });
+});
+
+describe("rendererDrawsTitle", () => {
+  // Getting this backwards prints the meeting's name twice, one line under the
+  // other — which is exactly what happened until a generated PDF was read.
+  it("is true for the renderers that draw the title on the page", () => {
+    expect(rendererDrawsTitle("rtf")).toBe(true);
+    expect(rendererDrawsTitle("docx")).toBe(true);
+    expect(rendererDrawsTitle("pdf")).toBe(true);
+  });
+
+  it("is false for the ones that do not", () => {
+    expect(rendererDrawsTitle("html")).toBe(false);
+    expect(rendererDrawsTitle("md")).toBe(false);
   });
 });
 
