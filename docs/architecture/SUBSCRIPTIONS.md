@@ -9,12 +9,12 @@ Before this, a "plan" was three columns on `wallets` (`plan`, `plan_interval`,
 `plan_started_at`), written once at checkout and never touched again. That had
 four consequences, all of them visible to paying operators:
 
-| Symptom | Cause |
-| --- | --- |
-| Cancelling in the Stripe portal left the plan active forever | Nothing in the product ever heard about it |
-| Switching plans billed the operator twice | A plan change ran a fresh checkout, opening a *second* Stripe subscription |
-| Renewals silently stopped after the first period | Renewal credits only landed if the optional `STRIPE_WEBHOOK_SECRET` happened to be configured |
-| Checkout dead-ended on a modal that could not load | Embedded Checkout needs `STRIPE_PUBLISHABLE_KEY`; with only a secret key there was no fallback |
+|                           Symptom                            |                                             Cause                                              |
+|--------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| Cancelling in the Stripe portal left the plan active forever | Nothing in the product ever heard about it                                                     |
+| Switching plans billed the operator twice                    | A plan change ran a fresh checkout, opening a *second* Stripe subscription                     |
+| Renewals silently stopped after the first period             | Renewal credits only landed if the optional `STRIPE_WEBHOOK_SECRET` happened to be configured  |
+| Checkout dead-ended on a modal that could not load           | Embedded Checkout needs `STRIPE_PUBLISHABLE_KEY`; with only a secret key there was no fallback |
 
 None of these are processor bugs. They are the shape of a system that let an
 external service hold state the product needed to reason about.
@@ -72,12 +72,12 @@ the cancellation while the period is still running.
 
 ## Configuration
 
-| Env | Effect if unset |
-| --- | --- |
-| `CRON_SECRET` | **The sweep refuses to run and nothing renews.** Required in production. |
-| `STRIPE_SECRET_KEY` | The native rail settles in-app with no charge. The full lifecycle still runs, which is what makes local and demo environments faithful. |
-| `STRIPE_PUBLISHABLE_KEY` | Checkout falls back to hosted Stripe instead of the in-app form. Purchases still work. |
-| `STRIPE_WEBHOOK_SECRET` | No effect on current subscriptions. Only legacy Stripe-managed rows depend on it. |
+|           Env            |                                                             Effect if unset                                                             |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `CRON_SECRET`            | **The sweep refuses to run and nothing renews.** Required in production.                                                                |
+| `STRIPE_SECRET_KEY`      | The native rail settles in-app with no charge. The full lifecycle still runs, which is what makes local and demo environments faithful. |
+| `STRIPE_PUBLISHABLE_KEY` | Checkout falls back to hosted Stripe instead of the in-app form. Purchases still work.                                                  |
+| `STRIPE_WEBHOOK_SECRET`  | No effect on current subscriptions. Only legacy Stripe-managed rows depend on it.                                                       |
 
 ## Legacy Stripe-managed subscriptions
 
