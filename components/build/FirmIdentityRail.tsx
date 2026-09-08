@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useRef, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { answerIdentityQuestion } from "@/app/(app)/build/profile/actions";
 import type {
   IdentityQuestionDTO,
   IdentitySectionKey,
 } from "@/lib/firm-identity";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 type Status = "empty" | "started" | "complete";
 
@@ -219,10 +220,15 @@ function InterviewModal({
   const next = () => setStep((s) => Math.min(total, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fx-scrim-enter absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Firm identity guided interview"

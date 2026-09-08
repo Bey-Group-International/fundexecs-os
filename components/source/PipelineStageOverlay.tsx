@@ -1,6 +1,9 @@
 "use client";
 
+import { useRef } from "react";
+
 import type { PipelineStage } from "@/lib/pipeline-stages-types";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface PipelineStageOverlayProps {
   stage: PipelineStage;
@@ -32,8 +35,16 @@ export default function PipelineStageOverlay({
   const hasRequiredArtifacts = stage.required_artifacts.length > 0;
   const hasAutoActions = stage.auto_actions.length > 0;
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
+      // This overlay stays mounted and hides itself with opacity, so without
+      // `inert` its buttons keep answering Tab while it is invisible.
+      inert={!open}
       aria-modal="true"
       aria-labelledby="overlay-stage-heading"
       role="dialog"

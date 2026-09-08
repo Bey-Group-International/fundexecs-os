@@ -11,6 +11,7 @@ import {
   voidEnvelope,
   resendEnvelope,
 } from "./docusign-actions";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 // Terminal states no longer change — excluded from polling and per-row refresh.
 const TERMINAL_STATUSES = new Set(["completed", "declined", "voided"]);
@@ -102,6 +103,7 @@ function SendModal({ onClose, onSent }: ModalProps) {
   const [contacts, setContacts] = useState<SignerContact[]>([]);
   const [isPending, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
 
   // Fetch templates + known signer contacts on mount
   useEffect(() => {
@@ -212,7 +214,8 @@ function SendModal({ onClose, onSent }: ModalProps) {
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-md rounded-xl bg-white shadow-2xl dark:bg-neutral-900"
+        tabIndex={-1}
+        className="w-full max-w-md rounded-xl bg-white shadow-2xl focus:outline-none dark:bg-neutral-900"
         role="dialog"
         aria-modal="true"
         aria-label="Send Subscription Docs"

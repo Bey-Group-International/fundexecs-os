@@ -72,6 +72,7 @@ import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen"
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { PastMeetingsList, type PastMeeting } from "./PastMeetingsList";
 import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./hooks";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 const CAL_SELECT =
   "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status";
@@ -644,9 +645,14 @@ export function MeetingsCalendar({
 // Reachable by `?`, the way every calendar worth using does it, and by the
 // button in the toolbar for anyone who would never think to press `?`.
 function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 focus:outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
