@@ -1,18 +1,21 @@
 // What the "Calendar connection" panel is allowed to claim.
 //
-// This endpoint exists to keep that panel honest. The app records a Google
-// connection per org (written by the OAuth callback) and carries
-// external_calendar_* columns on every meeting, which together look like
-// working calendar sync. They are not: lib/meetings/service.ts#syncMeetingExternal
-// mints a local mirror id and marks the row synced without contacting any
-// provider, there is no calendar adapter in lib/integrations/adapters, and the
-// Google OAuth scopes cover gmail.send and contacts.readonly only — nothing
-// calendar. So the connected account is an EMAIL identity, and "synced" means
-// "mirrored locally".
+// This endpoint exists to keep that panel honest, and for a long time honesty
+// meant saying that nothing worked: the app carried external_calendar_* columns
+// on every meeting and an org-level Google connection, which together LOOKED
+// like calendar sync while syncMeetingExternal only minted a local mirror id,
+// and the OAuth grant covered gmail.send and contacts.readonly — nothing
+// calendar. Every one of those facts has since changed, and this file went on
+// asserting them long after they stopped being true, which is its own kind of
+// lie: the panel told members a working feature did not exist.
 //
-// Reporting that plainly is the whole job here. A panel that showed a Connect
-// button, or read "Synced" as if events were leaving the app, would be telling
-// the user something untrue about where their meetings live.
+// What is true now: GOOGLE_CALENDAR_SCOPES asks for auth/calendar; a member's
+// grant, their calendar list and their events are synced into
+// google_calendar_connections / google_calendars / external_events; and
+// syncMeetingExternal pushes a real event through pushMeetingToGoogle. So the
+// remaining question is not "does calendar sync exist" but "can THIS member's
+// connection actually take a write" — which is what providerSyncAvailable
+// answers, by resolving the same write target the push path uses.
 import { NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
@@ -22,15 +25,24 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export interface CalendarStatus {
-  /** An org-level Google account is linked (for email — not calendar). */
-  googleAccountConnected: boolean;
-  /** The connected account's handle, for recognition. Never a credential. */
-  googleAccountLabel: string | null;
   /**
-   * Whether a real two-way calendar provider is wired up. Hard-coded false:
-   * True once this member has a Google calendar this app can actually write
-   * to — a connection plus a calendar they own or can write to. Read-only
-   * access would 403 on every push, so it does not count.
+   * The ORGANIZATION's Gmail identity — how meeting email goes out when a
+   * member has not connected their own Google account. Deliberately not the
+   * member's calendar grant, which is `calendarConnected` below; the two are
+   * separate connections and conflating them is what made this panel wrong
+   * before.
+   */
+  googleAccountConnected: boolean;
+  /** That account's handle, for recognition. Never a credential. */
+  googleAccountLabel: string | null;
+  /** Whether THIS member has connected their own Google Calendar. */
+  calendarConnected: boolean;
+  /**
+   * Whether meetings can actually be pushed to a provider — a connection plus
+   * a calendar this member owns or can write to. Read access is not enough: it
+   * would 403 on every push, so it does not count. Resolved through the same
+   * helper the push path uses, so the panel cannot claim a capability the
+   * writer does not have.
    */
   providerSyncAvailable: boolean;
   /** Meetings currently flagged to mirror externally, for context. */
@@ -43,12 +55,20 @@ export async function GET() {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const supabase = await createServerClient();
-    const [connection, synced, writeTarget] = await Promise.all([
+    const [connection, calendarConnection, synced, writeTarget] = await Promise.all([
       supabase
         .from("integration_connections")
         .select("account_label, status")
         .eq("organization_id", auth.ctx.orgId)
         .eq("channel", "gmail")
+        .maybeSingle(),
+      // The member's own calendar grant. Separate from the mailbox above, and
+      // the difference the panel's copy turns on: "you have not connected a
+      // calendar" and "your calendar is read-only" need different answers.
+      supabase
+        .from("google_calendar_connections")
+        .select("id")
+        .eq("user_id", auth.ctx.userId)
         .maybeSingle(),
       supabase
         .from("live_meetings")
@@ -67,6 +87,7 @@ export async function GET() {
     const status: CalendarStatus = {
       googleAccountConnected: connected,
       googleAccountLabel: connected ? row?.account_label ?? null : null,
+      calendarConnected: Boolean(calendarConnection.data),
       providerSyncAvailable: Boolean(writeTarget),
       meetingsWithSyncEnabled: synced.count ?? 0,
     };
