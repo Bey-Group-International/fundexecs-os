@@ -23,11 +23,11 @@ external service hold state the product needed to reason about.
 
 An invoice is collected on the best rail the org has, preferred in this order:
 
-| Rail | When | Cost |
-| --- | --- | --- |
-| `ach_debit` | The org has an active linked bank account (`linked_accounts`) | Cents, and it collects itself |
-| `transfer` | Remittance details configured; the operator pushes a wire | Free, but needs a human at both ends |
-| `card` | Fallback — overdue invoices, or an operator who wants access today | Card rates |
+|    Rail     |                                When                                |                 Cost                 |
+|-------------|--------------------------------------------------------------------|--------------------------------------|
+| `ach_debit` | The org has an active linked bank account (`linked_accounts`)      | Cents, and it collects itself        |
+| `transfer`  | Remittance details configured; the operator pushes a wire          | Free, but needs a human at both ends |
+| `card`      | Fallback — overdue invoices, or an operator who wants access today | Card rates                           |
 
 **ACH is the whole design constraint.** A debit is submitted, and clears — or
 bounces with a return code — days later. So there is a state between issued and
