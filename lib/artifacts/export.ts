@@ -158,7 +158,51 @@ export function parseBlocks(markdown: string): Block[] {
 // spans. Single-pass character scan — no regex backtracking, and any unmatched
 // marker is treated as literal text so unbalanced `**` never throws or hangs.
 
-export type Span = { text: string; bold?: boolean; italic?: boolean; code?: boolean };
+export type Span = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  code?: boolean;
+  /**
+   * The destination of a `[label](url)` link, when the span is one.
+   *
+   * Renderers that can link (HTML) make an anchor; the ones that cannot (RTF,
+   * DOCX, PDF) print the URL after the label. What none of them may do is drop
+   * it: the report email appends "View the full report" as a markdown link, and
+   * before this existed that arrived in the inbox as the literal characters
+   * `[View the full report](https://…)`, which is a call to action nobody can
+   * follow.
+   */
+  href?: string;
+};
+
+/**
+ * Schemes a link may use.
+ *
+ * Report bodies are model output, and a model can be talked into emitting
+ * `[click here](javascript:…)`. Escaping the URL is not enough — the browser
+ * would still run it — so anything outside this list stays literal text.
+ */
+const SAFE_LINK_SCHEME = /^(https?:|mailto:)/i;
+
+/** The `[label](url)` starting at `i`, or null when it is not a well-formed link. */
+function linkAt(s: string, i: number): { label: string; href: string; end: number } | null {
+  if (s[i] !== "[") return null;
+  const close = s.indexOf("]", i + 1);
+  if (close === -1 || s[close + 1] !== "(") return null;
+  const paren = s.indexOf(")", close + 2);
+  if (paren === -1) return null;
+
+  const label = s.slice(i + 1, close);
+  const href = s.slice(close + 2, paren).trim();
+  // A label is required: "[](url)" is not a link anyone can click, and an empty
+  // anchor renders as nothing at all.
+  if (!label || !href || !SAFE_LINK_SCHEME.test(href)) return null;
+  // Whitespace in a URL means this was prose with brackets in it, not a link.
+  if (/\s/.test(href)) return null;
+
+  return { label, href, end: paren + 1 };
+}
 
 export function parseInline(text: string): Span[] {
   const spans: Span[] = [];
@@ -184,6 +228,27 @@ export function parseInline(text: string): Span[] {
 
   while (i < n) {
     const c = s[i];
+
+    // Links [label](url) — before emphasis, so a label may not be mistaken for
+    // an unmatched bracket and the URL never reaches the reader as raw markdown.
+    if (c === "[") {
+      const link = linkAt(s, i);
+      if (link) {
+        push();
+        spans.push({
+          text: link.label,
+          href: link.href,
+          bold: bold || undefined,
+          italic: italic || undefined,
+        });
+        i = link.end;
+        continue;
+      }
+      // Not a link: a literal bracket, which prose uses freely.
+      buf += c;
+      i += 1;
+      continue;
+    }
 
     // Inline code `...` — verbatim, wins over emphasis.
     if (c === "`") {
@@ -265,6 +330,10 @@ function inlineToHtml(text: string): string {
       if (sp.code) return `<code>${out}</code>`;
       if (sp.bold) out = `<strong>${out}</strong>`;
       if (sp.italic) out = `<em>${out}</em>`;
+      // The href is escaped like any other attribute value. parseInline has
+      // already refused every scheme but http, https and mailto, so escaping
+      // here is about quoting, not about safety.
+      if (sp.href) out = `<a href="${escapeHtml(sp.href)}">${out}</a>`;
       return out;
     })
     .join("");
@@ -396,7 +465,11 @@ function escapeRtf(s: string): string {
 function inlineToRtf(text: string): string {
   return parseInline(text)
     .map((sp) => {
-      const esc = escapeRtf(sp.text);
+      // RTF can carry a real hyperlink only as a field instruction, which is
+      // more machinery than a report needs. Printing the URL after the label
+      // keeps it reachable — the alternative is a document that says "View the
+      // full report" and gives no way to.
+      const esc = escapeRtf(sp.href ? `${sp.text} (${sp.href})` : sp.text);
       if (sp.code) return `{\\f1 ${esc}}`;
       let group = esc;
       if (sp.bold && sp.italic) return `{\\b\\i ${group}}`;
