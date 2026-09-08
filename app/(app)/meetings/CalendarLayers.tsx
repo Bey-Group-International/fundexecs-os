@@ -188,7 +188,8 @@ function LayerRow({
           </label>
           {layer.source === "ics" ? (
             <p className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
-              Subscribed feed — read-only, and always counts as busy while it is shown.
+              Subscribed feed — read-only. Its events count as busy while it is shown,
+              unless the feed itself marks one free.
             </p>
           ) : !layer.canWrite ? (
             <p className="text-[11px] leading-relaxed text-[var(--fg-muted)]">

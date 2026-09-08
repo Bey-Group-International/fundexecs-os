@@ -4,12 +4,14 @@
 // indistinguishable from a free calendar, and that is how double-bookings get
 // booked.
 import {
+  applyFeedEvents,
   cachedBusyOf,
   externalBusyForUser,
   fetchFeed,
   recordFeedResult,
   refreshStaleFeeds,
 } from "./feeds.server";
+import type { IcsEvent } from "./ics";
 
 const fetchMock = jest.fn();
 const NOW = new Date("2026-09-01T12:00:00.000Z");
@@ -144,7 +146,24 @@ function fakeClient(result: { data?: unknown; error?: unknown } = { data: [], er
           rec.payload = p;
           return builder;
         },
+        upsert: (p: unknown) => {
+          rec.op = "upsert";
+          rec.payload = p;
+          return builder;
+        },
+        delete: () => {
+          rec.op = "delete";
+          return builder;
+        },
         eq: (c: string, v: unknown) => {
+          rec.filters.push([c, v]);
+          return builder;
+        },
+        lt: (c: string, v: unknown) => {
+          rec.filters.push([c, v]);
+          return builder;
+        },
+        in: (c: string, v: unknown) => {
           rec.filters.push([c, v]);
           return builder;
         },
@@ -165,7 +184,8 @@ describe("recordFeedResult", () => {
     await recordFeedResult(
       client as never,
       "feed-1",
-      { ok: true, busy: [{ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" }] },
+      "user-1",
+      { ok: true, busy: [{ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" }], events: [] },
       NOW,
     );
     const patch = client.calls[0].payload as Record<string, unknown>;
@@ -176,7 +196,7 @@ describe("recordFeedResult", () => {
   // Yesterday's busy time is a far better guess than "suddenly free".
   it("leaves the previous cache in place when a fetch fails", async () => {
     const client = fakeClient();
-    await recordFeedResult(client as never, "feed-1", { ok: false, busy: [], error: "boom" }, NOW);
+    await recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW);
     const patch = client.calls[0].payload as Record<string, unknown>;
     expect(patch).not.toHaveProperty("cached_busy");
     expect(patch).toMatchObject({ last_error: "boom" });
@@ -184,7 +204,7 @@ describe("recordFeedResult", () => {
 
   it("counts a failure through the RPC so concurrent sweeps don't lose increments", async () => {
     const client = fakeClient();
-    await recordFeedResult(client as never, "feed-1", { ok: false, busy: [], error: "boom" }, NOW);
+    await recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW);
     expect(client.rpc).toHaveBeenCalledWith("increment_calendar_feed_failures", { feed_id: "feed-1" });
   });
 
@@ -193,7 +213,7 @@ describe("recordFeedResult", () => {
     const client = fakeClient();
     client.rpc.mockRejectedValue(new Error("rpc down"));
     await expect(
-      recordFeedResult(client as never, "feed-1", { ok: false, busy: [], error: "boom" }, NOW),
+      recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW),
     ).resolves.toBeUndefined();
     spy.mockRestore();
   });
@@ -287,5 +307,140 @@ describe("refreshStaleFeeds", () => {
       skipped: 0,
     });
     spy.mockRestore();
+  });
+});
+
+// The display half of a feed fetch. Before this existed, a subscribed calendar
+// could make a member unavailable while drawing nothing on the grid — the
+// events were parsed in full and then discarded into anonymous intervals.
+describe("applyFeedEvents", () => {
+  const event = (over: Partial<IcsEvent> = {}): IcsEvent => ({
+    uid: "evt-1",
+    summary: "Board meeting",
+    startIso: "2026-09-02T09:00:00.000Z",
+    endIso: "2026-09-02T10:00:00.000Z",
+    allDay: false,
+    transparent: false,
+    status: "CONFIRMED",
+    location: "London",
+    description: "Private notes nobody here needs",
+    ...over,
+  });
+
+  it("stores each event with the detail a grid draws", async () => {
+    const client = fakeClient();
+    const summary = await applyFeedEvents(client as never, "feed-1", "user-1", [event()], NOW);
+
+    expect(summary.upserted).toBe(1);
+    const upsert = client.calls.find((c) => c.op === "upsert")!;
+    expect(upsert.table).toBe("calendar_feed_events");
+    expect((upsert.payload as Array<Record<string, unknown>>)[0]).toMatchObject({
+      feed_id: "feed-1",
+      user_id: "user-1",
+      uid: "evt-1",
+      summary: "Board meeting",
+      location: "London",
+      transparent: false,
+      updated_at: NOW.toISOString(),
+    });
+  });
+
+  // The one field worth NOT keeping a copy of: the grid never draws it, and it
+  // is where someone's private notes live.
+  it("does not store the description", async () => {
+    const client = fakeClient();
+    await applyFeedEvents(client as never, "feed-1", "user-1", [event()], NOW);
+    const row = (client.calls.find((c) => c.op === "upsert")!.payload as Array<Record<string, unknown>>)[0];
+    expect(row).not.toHaveProperty("description");
+  });
+
+  // Every instance of a recurring series carries its parent's UID, so the UID
+  // alone cannot be the key — collapsing them would leave one event a week.
+  it("keeps recurring instances apart by start time", async () => {
+    const client = fakeClient();
+    const summary = await applyFeedEvents(
+      client as never,
+      "feed-1",
+      "user-1",
+      [
+        event({ startIso: "2026-09-02T09:00:00.000Z" }),
+        event({ startIso: "2026-09-09T09:00:00.000Z" }),
+        event({ startIso: "2026-09-16T09:00:00.000Z" }),
+      ],
+      NOW,
+    );
+    expect(summary.upserted).toBe(3);
+  });
+
+  // A malformed feed repeating the same uid+start would make Postgres reject
+  // the whole batch for touching one row twice, losing every other event.
+  it("drops a duplicate uid+start rather than failing the batch", async () => {
+    const client = fakeClient();
+    const summary = await applyFeedEvents(client as never, "feed-1", "user-1", [event(), event()], NOW);
+    expect(summary.upserted).toBe(1);
+  });
+
+  // Upsert-then-prune, not delete-then-insert: a feed refreshes every half hour
+  // and must never blink empty for whoever is looking at the calendar.
+  it("prunes only rows this run did not touch", async () => {
+    const client = fakeClient();
+    await applyFeedEvents(client as never, "feed-1", "user-1", [event()], NOW);
+
+    const ops = client.calls.filter((c) => c.op === "upsert" || c.op === "delete").map((c) => c.op);
+    expect(ops).toEqual(["upsert", "delete"]);
+
+    const prune = client.calls.find((c) => c.op === "delete")!;
+    expect(prune.filters).toContainEqual(["feed_id", "feed-1"]);
+    expect(prune.filters).toContainEqual(["updated_at", NOW.toISOString()]);
+  });
+
+  // If the write failed, nothing carries this run's stamp — pruning would then
+  // delete a perfectly good previous fetch and leave the member with nothing.
+  it("does not prune when the upsert failed", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const client = fakeClient({ error: { message: "upsert boom" } });
+    const summary = await applyFeedEvents(client as never, "feed-1", "user-1", [event()], NOW);
+
+    expect(summary.upserted).toBe(0);
+    expect(client.calls.some((c) => c.op === "delete")).toBe(false);
+    spy.mockRestore();
+  });
+});
+
+// A failed fetch must not empty the calendar, for the same reason it does not
+// clear cached_busy: a bad minute at the feed's host is not "you are free".
+describe("recordFeedResult — events", () => {
+  it("writes events on success", async () => {
+    const client = fakeClient();
+    await recordFeedResult(
+      client as never,
+      "feed-1",
+      "user-1",
+      {
+        ok: true,
+        busy: [],
+        events: [
+          {
+            uid: "e1",
+            summary: "Standup",
+            startIso: "2026-09-02T09:00:00.000Z",
+            endIso: "2026-09-02T09:15:00.000Z",
+            allDay: false,
+            transparent: false,
+            status: null,
+            location: null,
+            description: null,
+          },
+        ],
+      },
+      NOW,
+    );
+    expect(client.calls.some((c) => c.table === "calendar_feed_events" && c.op === "upsert")).toBe(true);
+  });
+
+  it("leaves stored events alone when the fetch failed", async () => {
+    const client = fakeClient();
+    await recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW);
+    expect(client.calls.some((c) => c.table === "calendar_feed_events")).toBe(false);
   });
 });

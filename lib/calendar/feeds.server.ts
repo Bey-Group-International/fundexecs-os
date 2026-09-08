@@ -8,10 +8,11 @@
 // the answer.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { busyEventsOnly, parseIcs } from "@/lib/calendar/ics";
+import { busyEventsOnly, parseIcs, type IcsEvent } from "@/lib/calendar/ics";
 import {
   FEED_FETCH_TIMEOUT_MS,
   FEED_MAX_BYTES,
+  FEED_PAST_DAYS,
   FEED_WINDOW_DAYS,
   type BusyInterval,
   cacheIsStale,
@@ -38,6 +39,15 @@ export interface FeedRow {
 export interface FetchFeedResult {
   ok: boolean;
   busy: BusyInterval[];
+  /**
+   * Every event read, including the transparent ones `busy` excludes.
+   *
+   * This used to be discarded the moment the intervals were merged, which is
+   * why a subscribed calendar could block a booking slot and still draw nothing
+   * on the grid. The grid wants each event, with its title; availability wants
+   * the merged opaque ones. Both come out of the same parse.
+   */
+  events: IcsEvent[];
   error?: string;
   eventCount?: number;
 }
@@ -51,7 +61,7 @@ export interface FetchFeedResult {
  */
 export async function fetchFeed(url: string, now: Date = new Date()): Promise<FetchFeedResult> {
   const valid = validateFeedUrl(url);
-  if (!valid.ok) return { ok: false, busy: [], error: valid.error };
+  if (!valid.ok) return { ok: false, busy: [], events: [], error: valid.error };
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FEED_FETCH_TIMEOUT_MS);
@@ -68,19 +78,19 @@ export async function fetchFeed(url: string, now: Date = new Date()): Promise<Fe
     });
 
     if (!res.ok) {
-      return { ok: false, busy: [], error: `The calendar service returned ${res.status}.` };
+      return { ok: false, busy: [], events: [], error: `The calendar service returned ${res.status}.` };
     }
 
     // Guard on the declared length first, then on what actually arrives — a
     // server can lie about or omit Content-Length.
     const declared = Number(res.headers.get("content-length") ?? 0);
     if (declared > FEED_MAX_BYTES) {
-      return { ok: false, busy: [], error: "That calendar is too large to import." };
+      return { ok: false, busy: [], events: [], error: "That calendar is too large to import." };
     }
 
     const text = await readCapped(res, FEED_MAX_BYTES);
     if (text === null) {
-      return { ok: false, busy: [], error: "That calendar is too large to import." };
+      return { ok: false, busy: [], events: [], error: "That calendar is too large to import." };
     }
 
     // A URL that needs a login returns a sign-in page with status 200. Saying
@@ -90,21 +100,26 @@ export async function fetchFeed(url: string, now: Date = new Date()): Promise<Fe
       return {
         ok: false,
         busy: [],
+        events: [],
         error: "That address didn't return a calendar. Check it's the secret ICS link, not the web page.",
       };
     }
 
-    const windowStart = new Date(now.getTime() - 86_400_000);
+    const windowStart = new Date(now.getTime() - FEED_PAST_DAYS * 86_400_000);
     const windowEnd = new Date(now.getTime() + FEED_WINDOW_DAYS * 86_400_000);
-    const events = busyEventsOnly(parseIcs(text, { windowStart, windowEnd }));
-    const busy = mergeIntervals(events.map((e) => ({ start: e.startIso, end: e.endIso })));
+    const events = parseIcs(text, { windowStart, windowEnd });
+    const busyEvents = busyEventsOnly(events);
+    const busy = mergeIntervals(busyEvents.map((e) => ({ start: e.startIso, end: e.endIso })));
 
-    return { ok: true, busy, eventCount: events.length };
+    // eventCount stays the count of events that consume availability — it is
+    // what the failure copy and the health panel have always meant by it.
+    return { ok: true, busy, events, eventCount: busyEvents.length };
   } catch (err) {
     const aborted = err instanceof Error && err.name === "AbortError";
     return {
       ok: false,
       busy: [],
+      events: [],
       error: aborted
         ? "The calendar service didn't respond in time."
         : "Couldn't reach that calendar address.",
@@ -150,6 +165,7 @@ async function readCapped(res: Response, maxBytes: number): Promise<string | nul
 export async function recordFeedResult(
   client: Client,
   feedId: string,
+  userId: string,
   result: FetchFeedResult,
   now: Date = new Date(),
 ): Promise<void> {
@@ -176,6 +192,12 @@ export async function recordFeedResult(
   const { error } = await client.from("calendar_feeds").update(patch as never).eq("id", feedId);
   if (error) console.error("[calendar-feeds] failed to record fetch result", error);
 
+  // The display half. Only on success, and for the same reason the patch above
+  // leaves cached_busy alone on failure: yesterday's events are a far better
+  // answer than a calendar that empties itself because its host had a bad
+  // minute.
+  if (result.ok) await applyFeedEvents(client, feedId, userId, result.events, now);
+
   if (!result.ok) {
     // Incremented separately: doing it in the patch above would need a read
     // first and race with a concurrent sweep.
@@ -186,6 +208,82 @@ export async function recordFeedResult(
       console.error("[calendar-feeds] failure count not incremented", err);
     }
   }
+}
+
+/**
+ * Replace a feed's stored events with what this fetch read.
+ *
+ * Upsert-then-prune rather than delete-then-insert: a feed refreshes every half
+ * hour, and deleting first would leave a window — small, but real, and hit by
+ * whoever is looking at the calendar right then — where the member's own
+ * subscribed calendar reads as empty. Instead every event read is written with
+ * this run's stamp, and only rows the run did not touch are removed.
+ *
+ * Best-effort. A feed whose events fail to store still has its busy time
+ * cached, so the booking path is unaffected and the next sweep tries again.
+ */
+export async function applyFeedEvents(
+  client: Client,
+  feedId: string,
+  userId: string,
+  events: IcsEvent[],
+  now: Date = new Date(),
+): Promise<{ upserted: number; deleted: number }> {
+  const stamp = now.toISOString();
+  const summary = { upserted: 0, deleted: 0 };
+
+  // Instances of one recurring series share a UID and differ only by start, so
+  // that pair is the identity. A feed that repeats the same pair twice (rare,
+  // but malformed feeds exist) would otherwise make Postgres reject the whole
+  // batch for touching a row twice.
+  const seen = new Set<string>();
+  const rows = [];
+  for (const e of events) {
+    const key = `${e.uid}@${e.startIso}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      feed_id: feedId,
+      user_id: userId,
+      uid: e.uid,
+      // Description is deliberately not stored. The grid never draws it, and
+      // it is the field most likely to carry someone's private notes — there
+      // is no reason to hold a copy of that here.
+      summary: e.summary,
+      location: e.location,
+      starts_at: e.startIso,
+      ends_at: e.endIso,
+      is_all_day: e.allDay,
+      transparent: e.transparent,
+      status: e.status,
+      updated_at: stamp,
+    });
+  }
+
+  if (rows.length) {
+    const { error } = await client
+      .from("calendar_feed_events")
+      .upsert(rows as never, { onConflict: "feed_id,uid,starts_at" });
+    if (error) {
+      console.error("[calendar-feeds] event upsert failed", error);
+      // Nothing was written, so pruning now would delete a good previous fetch
+      // and leave the member with nothing at all.
+      return summary;
+    }
+    summary.upserted = rows.length;
+  }
+
+  // Whatever this run did not write is gone from the feed: an event deleted at
+  // the source, or one that has fallen out of the read window.
+  const { error: pruneError, count } = await client
+    .from("calendar_feed_events")
+    .delete({ count: "exact" })
+    .eq("feed_id", feedId)
+    .lt("updated_at", stamp);
+  if (pruneError) console.error("[calendar-feeds] event prune failed", pruneError);
+  else summary.deleted = count ?? 0;
+
+  return summary;
 }
 
 /** Busy intervals a row already holds, defensively parsed. */
@@ -246,7 +344,9 @@ export async function refreshStaleFeeds(
 
   let query = client
     .from("calendar_feeds")
-    .select("id, url, cached_at")
+    // user_id comes along so the stored events can carry their owner, which is
+    // what RLS on calendar_feed_events keys off.
+    .select("id, user_id, url, cached_at")
     .eq("is_active", true)
     .order("cached_at", { ascending: true, nullsFirst: true })
     .limit(opts.limit ?? 25);
@@ -258,13 +358,13 @@ export async function refreshStaleFeeds(
     return summary;
   }
 
-  for (const row of (data ?? []) as Array<{ id: string; url: string; cached_at: string | null }>) {
+  for (const row of (data ?? []) as Array<{ id: string; user_id: string; url: string; cached_at: string | null }>) {
     if (!opts.force && !cacheIsStale(row.cached_at, now)) {
       summary.skipped++;
       continue;
     }
     const result = await fetchFeed(row.url, now);
-    await recordFeedResult(client, row.id, result, now);
+    await recordFeedResult(client, row.id, row.user_id, result, now);
     if (result.ok) summary.refreshed++;
     else summary.failed++;
   }

@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
     if (body.action === "refresh") {
       const result = await fetchFeed((feed as { url: string }).url);
-      await recordFeedResult(supabase, id, result);
+      await recordFeedResult(supabase, id, auth.ctx.userId, result);
       return NextResponse.json(
         result.ok
           ? { ok: true, eventCount: result.eventCount ?? 0 }
