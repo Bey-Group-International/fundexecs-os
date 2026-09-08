@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { presenceByMeeting, type ParticipantRow, type RoomPresence } from "@/lib/meetings/attendance";
 
 // Monotonic counter for realtime channel names. Every useLivePresence
 // subscription gets a distinct channel so multiple consumers on the same page
@@ -38,10 +39,7 @@ export function useNow(intervalMs = 1000): number {
   return now;
 }
 
-export interface RoomPresence {
-  count: number;
-  names: string[];
-}
+export type { RoomPresence } from "@/lib/meetings/attendance";
 
 export interface RecentJoin {
   name: string;
@@ -83,17 +81,15 @@ export function useLivePresence(meetingIds: string[]): {
       }
       const { data } = await supabase
         .from("live_meeting_participants")
-        .select("meeting_id, display_name, left_at")
+        .select("meeting_id, display_name, joined_at, left_at")
         .in("meeting_id", ids)
         .is("left_at", null);
       if (cancelled) return;
-      const map: Record<string, RoomPresence> = {};
-      for (const row of (data ?? []) as Array<{ meeting_id: string; display_name: string }>) {
-        const p = map[row.meeting_id] ?? (map[row.meeting_id] = { count: 0, names: [] });
-        p.count += 1;
-        if (p.names.length < 8) p.names.push(row.display_name);
-      }
-      setPresence(map);
+      // `left_at is null` is necessary but not sufficient: departure is a write,
+      // and a killed tab never makes it. presenceByMeeting applies the
+      // staleness ceiling that keeps a crashed browser from being counted as
+      // sitting in the room indefinitely.
+      setPresence(presenceByMeeting((data ?? []) as ParticipantRow[]));
     }
 
     function scheduleRefresh() {

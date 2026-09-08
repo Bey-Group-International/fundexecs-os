@@ -38,8 +38,21 @@ export async function POST(
   }
 
   const supabase = await createServerClient();
-  const loaded = await loadReportForExport(supabase, roomCode, { includeTranscript });
+  const loaded = await loadReportForExport(supabase, roomCode, {
+    includeTranscript,
+    userId: auth.ctx.userId,
+  });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+  // Sending is a stronger act than downloading, and the same rule governs it:
+  // somebody who was not in the meeting does not get to mail its summary to
+  // its attendees. Checked ahead of "not ready" for the same reason as the
+  // export route — to a non-attendee the two are indistinguishable.
+  if (!loaded.attended) {
+    return NextResponse.json(
+      { error: "This report is limited to the people who were in the meeting" },
+      { status: 403 },
+    );
+  }
   if (!hasExportableReport(loaded)) {
     return NextResponse.json({ error: "Report not ready" }, { status: 409 });
   }

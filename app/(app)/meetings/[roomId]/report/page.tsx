@@ -8,9 +8,11 @@ import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { reportViewState, shouldPollReport, type ReportViewState } from "@/lib/meetings/attendance";
 
 type Meeting = {
   id: string;
+  host_id: string | null;
   title: string | null;
   created_at: string;
   started_at: string | null;
@@ -25,7 +27,7 @@ type Report = {
   full_transcript: string | null;
 };
 
-type Data = { meeting: Meeting; report: Report | null } | null;
+type Data = { meeting: Meeting; report: Report | null; attended: boolean; viewerId: string | null } | null;
 
 const POLL_INTERVAL = 5000;
 
@@ -37,11 +39,14 @@ export default function MeetingReportPage() {
   async function fetchReport() {
     const supabase = createClient();
 
-    const { data: meeting } = await supabase
-      .from("live_meetings")
-      .select("id, title, created_at, started_at, ended_at")
-      .eq("room_code", roomId)
-      .single();
+    const [{ data: { user } }, { data: meeting }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from("live_meetings")
+        .select("id, host_id, title, created_at, started_at, ended_at")
+        .eq("room_code", roomId)
+        .maybeSingle(),
+    ]);
 
     if (!meeting) {
       setData(null);
@@ -49,20 +54,38 @@ export default function MeetingReportPage() {
       return;
     }
 
-    const { data: report } = await supabase
-      .from("live_meeting_reports")
-      .select("summary, key_points, action_items, analysis, full_transcript")
-      .eq("meeting_id", meeting.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Reports are attendees-only, and RLS enforces that in Postgres. Read the
+    // attendance row too so the page can tell "no report yet" from "not yours
+    // to read" — under RLS those are the same empty answer, which is why a
+    // member who was not in the meeting used to sit on "Generating your
+    // report…" for a report that was never going to arrive.
+    const [{ data: report }, { data: attendance }] = await Promise.all([
+      supabase
+        .from("live_meeting_reports")
+        .select("summary, key_points, action_items, analysis, full_transcript")
+        .eq("meeting_id", meeting.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      user
+        ? supabase
+            .from("live_meeting_participants")
+            .select("meeting_id")
+            .eq("meeting_id", meeting.id)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
-    setData({ meeting, report: (report as Report | null) ?? null });
+    const next: Data = {
+      meeting: meeting as Meeting,
+      report: (report as Report | null) ?? null,
+      attended: Boolean(attendance),
+      viewerId: user?.id ?? null,
+    };
+    setData(next);
 
-    // Stop polling once the summary is populated (report generation complete)
-    if (report?.summary !== null && report?.summary !== undefined) {
-      stopPolling();
-    }
+    if (!shouldPollReport(viewStateOf(next))) stopPolling();
   }
 
   function stopPolling() {
@@ -82,13 +105,10 @@ export default function MeetingReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // Initial load
-  if (data === undefined) {
-    return <GeneratingState />;
-  }
+  const state = viewStateOf(data);
 
-  // Meeting not found
-  if (data === null) {
+  if (state === "loading" || state === "generating") return <GeneratingState />;
+  if (state === "missing") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
         <p className="text-[var(--fg-muted)]">Meeting not found.</p>
@@ -98,13 +118,11 @@ export default function MeetingReportPage() {
       </div>
     );
   }
+  if (state === "forbidden") return <NotAnAttendeeState title={data?.meeting.title ?? null} />;
 
-  const { meeting, report } = data;
-
-  // Report row doesn't exist yet or summary not populated yet
-  if (!report || report.summary === null) {
-    return <GeneratingState />;
-  }
+  // Narrowed by the states above: "ready" means both of these are present.
+  const { meeting, report } = data!;
+  if (!report) return <GeneratingState />;
 
   // Coerced, not cast. These are stored model output, and reports written before
   // the report route started normalizing can hold objects where the page expects
@@ -217,6 +235,55 @@ export default function MeetingReportPage() {
           block it is stored as. */}
       {report.full_transcript && <TranscriptPanel transcript={report.full_transcript} />}
 
+    </div>
+  );
+}
+
+/**
+ * What the page should be showing, from what it has loaded.
+ *
+ * Kept next to the fetch because both the poll and the render ask it — the
+ * poll has to stop for exactly the states the render treats as final,
+ * and the two drifting apart is what a spinner over a forbidden report is.
+ */
+function viewStateOf(data: Data | undefined): ReportViewState {
+  return reportViewState({
+    loaded: data !== undefined,
+    meetingExists: data !== null && data !== undefined,
+    hostId: data?.meeting.host_id ?? null,
+    viewerId: data?.viewerId ?? null,
+    attended: data?.attended ?? false,
+    hasSummary: Boolean(data?.report?.summary),
+  });
+}
+
+/**
+ * The honest answer for someone who was not in the meeting.
+ *
+ * Meetings are visible across the organisation; their reports are not. Saying
+ * so is the point — the alternative this replaces was a spinner that never
+ * resolved, which reads as the product being broken rather than as a rule
+ * being applied.
+ */
+function NotAnAttendeeState({ title }: { title: string | null }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 px-4 text-center">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-1)] text-[var(--fg-muted)]">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="4" y="10.5" width="16" height="10" rx="2" />
+          <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+        </svg>
+      </div>
+      <p className="text-sm font-medium text-[var(--fg-primary)]">
+        This report is limited to the people who were in the meeting.
+      </p>
+      <p className="max-w-sm text-xs text-[var(--fg-muted)]">
+        {title ? `You weren\u2019t in \u201c${title}\u201d.` : "You weren\u2019t in this meeting."}{" "}
+        Ask the host to share the summary if you need it.
+      </p>
+      <Link href="/meetings" className="mt-1 text-sm text-[var(--gold-400)] hover:underline">
+        Back to meetings
+      </Link>
     </div>
   );
 }

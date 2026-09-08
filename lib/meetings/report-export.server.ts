@@ -43,6 +43,17 @@ export interface LoadedReport extends ReportExportInput {
   hostId: string | null;
   roomCode: string;
   attendees: unknown;
+  /**
+   * Whether the caller was in this meeting — hosted it, or has an attendance
+   * row for it.
+   *
+   * Meetings are readable across the organisation and reports are not, so a
+   * co-member who never joined gets the meeting with every report field empty:
+   * byte for byte what a report still being generated looks like. Without this
+   * the export route answered them 409 "Report not ready" and invited them to
+   * keep retrying something they will never be allowed to download.
+   */
+  attended: boolean;
 }
 
 /**
@@ -56,7 +67,7 @@ export interface LoadedReport extends ReportExportInput {
 export async function loadReportForExport(
   supabase: SupabaseClient,
   roomCode: string,
-  options: ReportExportOptions = {},
+  options: ReportExportOptions & { userId?: string | null } = {},
 ): Promise<LoadedReport | null> {
   const includeTranscript = options.includeTranscript === true;
 
@@ -74,6 +85,22 @@ export async function loadReportForExport(
 
   if (!meeting) return null;
 
+  const userId = options.userId ?? null;
+  const hostId = (meeting.host_id as string | null) ?? null;
+  let attended = Boolean(userId) && hostId === userId;
+  if (userId && !attended) {
+    // Only asked when the host check has not already settled it, and only for
+    // the one meeting — this is a primary-key-shaped lookup on the unique
+    // (meeting_id, user_id) index, not a scan.
+    const { data: row } = await supabase
+      .from("live_meeting_participants")
+      .select("meeting_id")
+      .eq("meeting_id", meeting.id as string)
+      .eq("user_id", userId)
+      .maybeSingle();
+    attended = Boolean(row);
+  }
+
   const embedded = (meeting as { live_meeting_reports?: unknown }).live_meeting_reports;
   const report = (Array.isArray(embedded) ? embedded[0] : embedded) as
     | { summary?: unknown; key_points?: unknown; action_items?: unknown; analysis?: unknown; full_transcript?: unknown }
@@ -83,7 +110,8 @@ export async function loadReportForExport(
     meetingId: meeting.id as string,
     roomCode: meeting.room_code as string,
     organizationId: (meeting.organization_id as string | null) ?? null,
-    hostId: (meeting.host_id as string | null) ?? null,
+    hostId,
+    attended,
     attendees: meeting.attendees,
     title: (meeting.title as string | null) ?? null,
     createdAt: (meeting.created_at as string | null) ?? null,

@@ -27,11 +27,18 @@ export const MEETING_LOG_LIMIT = 200;
 // Written out rather than assembled: supabase-js parses the select string at
 // the type level to check the columns exist, and a string it cannot read as a
 // literal takes those checks with it.
-const LOG_SELECT = "id, room_code, title, created_at, started_at, ended_at, scheduled_at, duration_minutes, status, attendees, is_draft, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
+const LOG_SELECT = "id, room_code, title, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, status, attendees, is_draft, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
 
 export interface MeetingLogRow {
   meeting: MeetingLogSource & { is_draft: boolean | null };
   report: MeetingLogReport | null;
+  /**
+   * Whether the caller was in this meeting — hosted it, or has an attendance
+   * row for it. This is the same rule the live_meeting_reports RLS policy
+   * applies, mirrored here so the log can say "attendees only" rather than
+   * present a report it cannot read as one that does not exist.
+   */
+  attended: boolean;
 }
 
 /**
@@ -44,17 +51,31 @@ export interface MeetingLogRow {
 export async function loadMeetingLog(
   supabase: SupabaseClient,
   orgId: string,
+  userId: string,
   limit: number = MEETING_LOG_LIMIT,
 ): Promise<MeetingLogRow[]> {
-  const { data } = await supabase
-    .from("live_meetings")
-    .select(LOG_SELECT)
-    .eq("organization_id", orgId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
-    .limit(1, { referencedTable: "live_meeting_reports" })
-    .limit(limit);
+  // Two independent reads, so both go out at once. The attendance read is
+  // narrow — one column, already indexed on user_id — and it is what turns an
+  // unreadable report into an explained one.
+  const [{ data }, { data: attendance }] = await Promise.all([
+    supabase
+      .from("live_meetings")
+      .select(LOG_SELECT)
+      .eq("organization_id", orgId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false, referencedTable: "live_meeting_reports" })
+      .limit(1, { referencedTable: "live_meeting_reports" })
+      .limit(limit),
+    supabase
+      .from("live_meeting_participants")
+      .select("meeting_id")
+      .eq("user_id", userId),
+  ]);
+
+  const attendedIds = new Set(
+    (attendance ?? []).map((row: { meeting_id: string }) => row.meeting_id),
+  );
 
   return (data ?? []).map((row) => {
     const embedded = (row as { live_meeting_reports?: unknown }).live_meeting_reports;
@@ -76,6 +97,7 @@ export async function loadMeetingLog(
         attendees: row.attendees,
         is_draft: (row.is_draft as boolean | null) ?? null,
       },
+      attended: attendedIds.has(row.id as string) || (row.host_id as string | null) === userId,
       report: report
         ? {
             summary: (report.summary as string | null) ?? null,

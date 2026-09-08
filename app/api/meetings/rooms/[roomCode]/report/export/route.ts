@@ -46,8 +46,21 @@ export async function GET(
   const supabase = await createServerClient();
   // Told up front, so a summary-only export never reads the transcript it is
   // about to discard — on an hour-long meeting that is tens of kilobytes.
-  const loaded = await loadReportForExport(supabase, roomCode, { includeTranscript });
+  const loaded = await loadReportForExport(supabase, roomCode, {
+    includeTranscript,
+    userId: ctx.userId,
+  });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+
+  // Checked before "not ready", because to a non-attendee they look identical:
+  // RLS empties the report fields, and 409 would tell somebody who will never
+  // be allowed to download this to come back and try again.
+  if (!loaded.attended) {
+    return NextResponse.json(
+      { error: "This report is limited to the people who were in the meeting" },
+      { status: 403 },
+    );
+  }
 
   // Still generating. 409 rather than 404: the meeting is real and the answer
   // will change on its own, which is a different thing to tell a caller.

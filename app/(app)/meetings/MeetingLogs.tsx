@@ -147,25 +147,34 @@ function LogRow({
                 </Detail>
               )}
             </div>
-          ) : (
+          ) : entry.attended ? (
             <p className="text-sm text-[var(--fg-muted)]">
               This meeting has no report. One is generated when a meeting is ended from inside the room.
+            </p>
+          ) : (
+            // Not the same sentence as "no report", and the difference matters:
+            // the record exists, it is simply not this member's to read. Saying
+            // "no report" here would be the log misreporting its own contents.
+            <p className="text-sm text-[var(--fg-muted)]">
+              You weren&rsquo;t in this meeting, so its report isn&rsquo;t shown here. Ask the host if you need it.
             </p>
           )}
 
           {/* The report page is where the transcript and the export live. The
               log deliberately does not load a transcript to draw a list. */}
-          <div className="mt-4 flex items-center gap-3 border-t border-[var(--line)] pt-3">
-            <Link
-              href={`/meetings/${entry.roomCode}/report`}
-              className="text-xs font-medium text-[var(--gold-400)] transition-colors hover:text-[var(--gold-500)]"
-            >
-              Open full report →
-            </Link>
-            <span className="text-xs text-[var(--fg-muted)]">
-              Transcript and export are on the report
-            </span>
-          </div>
+          {entry.attended && (
+            <div className="mt-4 flex items-center gap-3 border-t border-[var(--line)] pt-3">
+              <Link
+                href={`/meetings/${entry.roomCode}/report`}
+                className="text-xs font-medium text-[var(--gold-400)] transition-colors hover:text-[var(--gold-500)]"
+              >
+                Open full report →
+              </Link>
+              <span className="text-xs text-[var(--fg-muted)]">
+                Transcript and export are on the report
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
