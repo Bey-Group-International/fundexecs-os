@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
+import { TranscriptPanel } from "./TranscriptPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 
 type Meeting = {
@@ -212,17 +213,9 @@ export default function MeetingReportPage() {
         </Section>
       )}
 
-      {/* Full transcript */}
-      {report.full_transcript && (
-        <details className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)]">
-          <summary className="px-4 py-3 text-xs font-medium text-[var(--fg-secondary)] uppercase tracking-wide cursor-pointer select-none">
-            Full Transcript
-          </summary>
-          <pre className="px-4 pb-4 text-xs text-[var(--fg-muted)] whitespace-pre-wrap font-mono leading-relaxed">
-            {report.full_transcript}
-          </pre>
-        </details>
-      )}
+      {/* Full transcript, read back into turns rather than shown as the raw
+          block it is stored as. */}
+      {report.full_transcript && <TranscriptPanel transcript={report.full_transcript} />}
 
     </div>
   );
