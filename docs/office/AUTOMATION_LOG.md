@@ -6,6 +6,22 @@ are not numbered runs). Run numbers persist across PR cycles.
 
 ---
 
+## Maintenance — 2026-09-08 — Hourly schedule disabled (never ran)
+
+- Removed the `schedule:` cron from `.github/workflows/office-hourly.yml`.
+  `workflow_dispatch` is untouched, so it can still be run by hand.
+- Reason: it never worked. Every one of the 167 scheduled runs failed — #1 on
+  2026-07-31 through #167 on 2026-09-08 — at the same validation step, because
+  the `ANTHROPIC_API_KEY` secret the entry below asked for was never added.
+  Not one automated improvement reached this log, and no numbered run exists.
+- Nothing gates a merge on this workflow, so it stayed red and unnoticed for
+  five weeks while burning ~10 runs a weekday.
+- To re-enable: add the secret, confirm a manual run from the Actions tab gets
+  past the Claude step, then restore `- cron: "7 14-23 * * 1-5"`. The workflow
+  header carries the same instructions.
+
+---
+
 ## Maintenance — 2026-07-30 — Durable scheduler (GitHub Actions)
 
 - Replaced the session-based in-memory scheduler (which kept getting wiped when
