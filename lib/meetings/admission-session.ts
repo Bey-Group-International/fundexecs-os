@@ -80,6 +80,15 @@ export interface AdmissionSession {
   stop: () => void;
 }
 
+/**
+ * A guest's attempt to be let in, from the first knock to the verdict.
+ *
+ * Nothing happens until `start()`. After it, exactly one of `onAdmitted`,
+ * `onDenied` or `onEnded` will fire — once — unless `stop()` gets there first;
+ * `onWaiting` and `onTimedOut` are progress, not outcomes, and either may fire
+ * before it. The session cleans itself up on a verdict, so a caller only has to
+ * `stop()` when abandoning a wait that has not resolved.
+ */
 export function createAdmissionSession(opts: AdmissionSessionOptions): AdmissionSession {
   const timeoutMs = opts.timeoutMs ?? ADMISSION_TIMEOUT_MS;
 

@@ -8,10 +8,19 @@ export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
 
-// Host admit/deny for the waiting room. The host reads the pending knocks over
-// Realtime (org-read RLS), but the DECISION is written here through the service
-// role after verifying the caller actually hosts this meeting in their org —
-// there is no client-writable policy on live_meeting_admissions.
+/**
+ * Host admit/deny for the waiting room.
+ *
+ * The host reads the pending knocks over Realtime (org-read RLS), but the
+ * DECISION is written here through the service role after verifying the caller
+ * actually hosts this meeting in their org — there is no client-writable policy
+ * on live_meeting_admissions.
+ *
+ * Answers `{ ok, decided }` with the number of rows the decision actually
+ * matched, and nudges each of those guests so they hear about it now rather
+ * than on their next poll. A nudge that fails to send does not fail the
+ * request: the decision is stored either way.
+ */
 export async function POST(req: NextRequest, { params }: { params: Params }) {
   const auth = await requireOrgContext();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });

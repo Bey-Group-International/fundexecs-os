@@ -126,6 +126,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+/** Render the room and press Join, as an invite-link guest would. */
 async function joinAsGuest() {
   const view = render(<MeetingRoom roomCode={ROOM} />);
   await userEvent.click(await screen.findByRole("button", { name: /join now/i }));

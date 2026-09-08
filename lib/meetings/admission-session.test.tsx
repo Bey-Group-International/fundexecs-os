@@ -10,6 +10,7 @@
  */
 import { ADMISSION_TIMEOUT_MS, createAdmissionSession } from "./admission-session";
 
+/** Put the tab in a visibility state and fire the event the browser would. */
 function setVisibility(state: "visible" | "hidden") {
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
   document.dispatchEvent(new Event("visibilitychange"));
