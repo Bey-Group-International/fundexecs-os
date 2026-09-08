@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface ClarificationDialogProps {
   /** Questions surfaced by generateClarifyingQuestions(). */
@@ -47,6 +48,9 @@ export function ClarificationDialog({
     };
   }, [onSkip]);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   if (questions.length === 0) return null;
 
   function handleConfirm() {
@@ -59,6 +63,8 @@ export function ClarificationDialog({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label="Clarification needed"

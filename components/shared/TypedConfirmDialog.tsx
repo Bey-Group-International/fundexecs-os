@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 // A confirmation harder to blow past than window.confirm()'s single dismissible
 // dialog — for actions whose blast radius goes well beyond what the button
@@ -43,12 +44,17 @@ export function TypedConfirmDialog({
     };
   }, [open, onCancel]);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
   if (!open) return null;
 
   const matches = value === phrase;
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={title}

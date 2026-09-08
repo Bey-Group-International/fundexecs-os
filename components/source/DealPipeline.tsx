@@ -14,6 +14,7 @@ import PipelineStageOverlay from "@/components/source/PipelineStageOverlay";
 import type { FitAnalysis } from "@/lib/source-hub-types";
 import type { PipelineStage } from "@/lib/pipeline-stages-types";
 import type { DealStage } from "@/lib/supabase/database.types";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -251,6 +252,11 @@ function DealSlideOver({
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // Above the early return: hooks must run in the same order every render, and
+  // the panel only exists when a deal is selected, so that is what arms it.
+  const slideRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(slideRef, Boolean(deal));
+
   if (!deal) return null;
 
   const fit = deal.aiThesisFit;
@@ -273,7 +279,14 @@ function DealSlideOver({
         className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div role="dialog" aria-modal="true" aria-labelledby="deal-slide-title" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl">
+      <div
+        ref={slideRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="deal-slide-title"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-line bg-surface-1 shadow-2xl focus:outline-none"
+      >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
@@ -530,10 +543,15 @@ function AddDealModal({ onClose }: { onClose: () => void }) {
     "w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-gold-500/40 focus:outline-none";
   const labelClass = "block font-mono text-[11px] uppercase tracking-widest text-fg-muted mb-1";
 
+  const addDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(addDialogRef, true);
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={addDialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-deal-title"

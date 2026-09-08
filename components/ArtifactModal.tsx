@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Markdown } from "@/components/Markdown";
 import { AnnotationLayer } from "@/components/shared/AnnotationLayer";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 // Full-screen overlay for an artifact's deliverable. Reuses the same Markdown
 // rendering as the rest of Earn's output so the expanded read matches the inline
@@ -40,8 +41,13 @@ export function ArtifactModal({
     };
   }, [onClose]);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={title}

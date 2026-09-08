@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { CloseIcon } from "./icons";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 // Bottom slide-up sheet used across the app shell for quick actions, the More
 // menu, and confirmations. Handles scrim, Escape, body scroll-lock, focus
@@ -23,6 +24,9 @@ export function MobileSheet({
   labelledBy?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Supersedes the one-shot focus this used to do by hand: that moved focus in
+  // but let Tab walk straight back out to the page underneath.
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -32,8 +36,6 @@ export function MobileSheet({
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    // Move focus into the sheet for screen-reader / keyboard users.
-    panelRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
@@ -43,7 +45,14 @@ export function MobileSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+    <div
+      ref={panelRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-[70] md:hidden focus:outline-none"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={labelledBy}
+    >
       <button
         type="button"
         aria-label="Close"

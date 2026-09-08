@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 export interface Command {
   id: string;
@@ -31,48 +32,23 @@ export function CommandPalette({
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  // The element that held focus before the palette opened, so it can be
-  // restored when the dialog closes (focus must not get stranded on <body>).
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (open) {
-      restoreFocusRef.current = document.activeElement as HTMLElement | null;
-      setQ("");
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    } else {
-      // Restore focus to whatever was focused before opening.
-      restoreFocusRef.current?.focus?.();
-      restoreFocusRef.current = null;
-    }
+    if (!open) return;
+    setQ("");
+    setActive(0);
+    // The search field, not the dialog: a command palette exists to be typed
+    // into, so landing anywhere else costs a keystroke. This runs after the
+    // trap's own focus call and wins, which is the intent.
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
-  // Trap Tab focus within the dialog while it's open so keyboard users can't
-  // tab out to the page behind the modal.
-  const onTrapKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const root = dialogRef.current;
-    if (!root) return;
-    const focusable = Array.from(
-      root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ).filter((el) => el.offsetParent !== null || el === document.activeElement);
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const activeEl = document.activeElement as HTMLElement | null;
-    if (e.shiftKey) {
-      if (activeEl === first || !root.contains(activeEl)) {
-        e.preventDefault();
-        last.focus();
-      }
-    } else if (activeEl === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  // Focus containment now comes from the shared hook rather than a handler on
+  // the panel. Two things that fixes: this only ran on keydown INSIDE the
+  // panel, so once focus escaped there was nothing to pull it back; and its
+  // `offsetParent` visibility check reports every element hidden wherever
+  // there is no layout engine.
+  useFocusTrap(dialogRef, open);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -124,7 +100,7 @@ export function CommandPalette({
     >
       <div
         ref={dialogRef}
-        onKeyDown={onTrapKeyDown}
+        tabIndex={-1}
         className="w-full max-w-lg overflow-hidden rounded-2xl border border-line/85 bg-surface-1/98 shadow-[0_30px_80px_-30px_rgb(15_23_42/0.18)] backdrop-blur-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >

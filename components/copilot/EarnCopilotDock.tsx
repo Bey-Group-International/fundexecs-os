@@ -696,6 +696,15 @@ export function EarnCopilotDock({ name }: { name: string }) {
       <div
         role="dialog"
         aria-label="Earn copilot"
+        // No focus trap here on purpose: this is a dock, not a modal — it
+        // carries no aria-modal, the page behind it stays usable, and tabbing
+        // out of it is something a member may well mean to do.
+        //
+        // `inert` is a different matter. The dock stays mounted when closed and
+        // hides itself by sliding off-screen, so pointer-events-none stops the
+        // mouse but leaves every control in it answering Tab: a keyboard user
+        // tabbing across the page fell into a panel they could not see.
+        inert={!open}
         className={`fixed inset-y-0 right-0 z-50 flex w-[400px] max-w-[92vw] flex-col overflow-hidden border-l border-neural-400/30 bg-surface-1 shadow-[-24px_0_60px_-30px_rgb(15_23_42/0.28)] transition-transform duration-200 print:hidden ${
           open ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}

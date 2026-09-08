@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useRef, useEffect, type ReactNode } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface SlidePanelProps {
   open: boolean;
@@ -41,10 +42,15 @@ export function SlidePanel({
     };
   }, [open, onClose]);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
   if (!open) return null;
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={title}

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { useMobileNav } from "@/components/nav/mobile-nav";
 import { navHrefActive } from "@/lib/nav-active";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 // Client-side side rail, Claude Code style. Minimal top level (Logo · New
 // Session · Workflows · More), the operational hubs whose modules expand on
@@ -738,6 +739,8 @@ function SidebarPanel({
 export function AppSidebar(props: AppSidebarProps) {
   const { open, setOpen } = useMobileNav();
   const pathname = usePathname();
+  const navDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(navDialogRef, open);
 
   // Close on navigation — covers link clicks, back/forward, and programmatic
   // redirects alike without wiring an onClick through every nav Link.
@@ -767,7 +770,14 @@ export function AppSidebar(props: AppSidebarProps) {
       </aside>
 
       {open ? (
-            <div role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-50 md:hidden">
+            <div
+          ref={navDialogRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation"
+          className="fixed inset-0 z-50 focus:outline-none md:hidden"
+        >
           <div
             aria-hidden
             onClick={() => setOpen(false)}
