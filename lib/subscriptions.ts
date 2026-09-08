@@ -203,10 +203,12 @@ export function renewalCredits(
 // Dunning
 // ---------------------------------------------------------------------------
 
-// A failed renewal charge is retried on this schedule (days after the failure),
-// then the subscription is closed. Mirrors the industry-standard "three tries
-// over a week" — long enough for an expiring card to be replaced, short enough
-// that unpaid access does not run indefinitely.
+// A failed renewal charge is retried on this schedule (days after the failure).
+// Mirrors the industry-standard "three tries over a week" — long enough for an
+// expiring card to be replaced, short enough that unpaid access does not run
+// indefinitely. Every one of these dates is a real charge attempt: the last of
+// them decides whether the subscription survives, so a card added at any point
+// in the window can still save it.
 export const RETRY_SCHEDULE_DAYS = [1, 3, 5];
 export const PAST_DUE_MAX_ATTEMPTS = RETRY_SCHEDULE_DAYS.length;
 
@@ -220,8 +222,16 @@ export function nextAttemptAt(attempts: number, from: Date): Date | null {
   return new Date(from.getTime() + days * 86_400_000);
 }
 
-/** Whether a past_due subscription has run out of retries. */
-export function isExhausted(sub: Pick<Subscription, "failed_attempts">): boolean {
+/**
+ * Whether the NEXT scheduled charge is this subscription's last: the retry
+ * budget is down to its final entry, so a failure then closes the plan.
+ *
+ * Note this is a warning state, not a death sentence — the attempt still
+ * happens, and a payment method added before it goes through. (This replaced
+ * `isExhausted`, which named the old behaviour where the subscription was
+ * closed WITHOUT that final attempt ever being made.)
+ */
+export function isFinalAttempt(sub: Pick<Subscription, "failed_attempts">): boolean {
   return sub.failed_attempts >= PAST_DUE_MAX_ATTEMPTS;
 }
 
@@ -250,18 +260,17 @@ export function nextBillingSummary(sub: Subscription | null, now: Date = new Dat
   if (!sub || sub.status === "canceled") return "No active subscription.";
   const when = formatBillingDate(sub.current_period_end);
   if (sub.status === "past_due") {
-    // Once the retries are spent, the sweep CLOSES the subscription rather than
-    // charging again — runSubscriptionRenewals checks isExhausted before it
-    // attempts a renewal. The date on an exhausted row is therefore the day the
-    // plan ends, and calling it a retry told operators the opposite of what was
-    // about to happen to them.
-    if (isExhausted(sub)) {
-      return sub.next_attempt_at
-        ? `Payment failed ${sub.failed_attempts} times. This plan ends on ${formatBillingDate(sub.next_attempt_at)}.`
-        : "Payment failed too many times. This plan is ending.";
+    // Every retry date is a real attempt, so "we'll retry" is honest — but the
+    // last one decides the plan, and saying so is the difference between an
+    // operator acting in time and finding out afterwards.
+    const attemptOn = sub.next_attempt_at ? formatBillingDate(sub.next_attempt_at) : null;
+    if (isFinalAttempt(sub)) {
+      return attemptOn
+        ? `Payment failed ${sub.failed_attempts} times. We'll make one final attempt on ${attemptOn} — update your payment method before then to keep this plan.`
+        : "Payment failed. The next attempt is the last — update your payment method to keep this plan.";
     }
-    return sub.next_attempt_at
-      ? `Payment failed. We'll retry on ${formatBillingDate(sub.next_attempt_at)}.`
+    return attemptOn
+      ? `Payment failed. We'll retry on ${attemptOn}.`
       : "Payment failed. Update your payment method to keep this plan.";
   }
   if (sub.cancel_at_period_end) {

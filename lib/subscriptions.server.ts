@@ -27,7 +27,6 @@ import {
 import {
   advancePeriod,
   changeDirection,
-  isExhausted,
   nextAttemptAt,
   periodEnd,
   prorateUpgrade,
@@ -47,6 +46,8 @@ export interface LifecycleResult {
   credits?: number;
   /** Set when the operator must come back and pay interactively. */
   requiresPayment?: boolean;
+  /** The operation closed the subscription (its last charge attempt failed). */
+  ended?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -591,13 +592,13 @@ export async function runSubscriptionRenewals(
         continue;
       }
 
-      if (sub.cancel_at_period_end || isExhausted(sub)) {
-        await endSubscription(
-          service,
-          sub,
-          sub.cancel_at_period_end ? "Cancelled by the operator" : "Payment could not be collected",
-          now,
-        );
+      // A cancellation is the operator's own instruction, so it closes without
+      // a charge. A past_due row is NOT closed here: it gets the attempt its
+      // retry date promised. Short-circuiting that attempt made the whole
+      // dunning window unwinnable — a card added during it was never tried, so
+      // the operator lost the plan having done exactly what we asked.
+      if (sub.cancel_at_period_end) {
+        await endSubscription(service, sub, "Cancelled by the operator", now);
         stats.ended += 1;
         continue;
       }
@@ -606,6 +607,9 @@ export async function runSubscriptionRenewals(
       if (result.ok) {
         stats.renewed += 1;
         stats.credits += result.credits ?? 0;
+      } else if (result.ended) {
+        // The final attempt failed and closed the subscription.
+        stats.ended += 1;
       } else {
         stats.failed += 1;
       }
@@ -648,15 +652,6 @@ async function renewOne(
   if (!charge.ok) {
     const attempts = sub.failed_attempts + 1;
     const retry = nextAttemptAt(attempts, now);
-    await service
-      .from("subscriptions")
-      .update({
-        status: "past_due",
-        failed_attempts: attempts,
-        last_payment_error: charge.error ?? "Payment failed",
-        next_attempt_at: retry?.toISOString() ?? null,
-      })
-      .eq("id", sub.id);
     await recordEvent(service, {
       orgId: sub.organization_id,
       subscriptionId: sub.id,
@@ -666,6 +661,28 @@ async function renewOne(
       amountUsd: price,
       note: charge.error ?? "Payment failed",
     });
+
+    // The retry budget is spent: this failure WAS the last chance, so close now
+    // rather than leaving the row past_due with a retry date nothing will honor.
+    if (!retry) {
+      await endSubscription(
+        service,
+        { ...sub, failed_attempts: attempts },
+        "Payment could not be collected",
+        now,
+      );
+      return { ok: false, error: charge.error, ended: true };
+    }
+
+    await service
+      .from("subscriptions")
+      .update({
+        status: "past_due",
+        failed_attempts: attempts,
+        last_payment_error: charge.error ?? "Payment failed",
+        next_attempt_at: retry.toISOString(),
+      })
+      .eq("id", sub.id);
     return { ok: false, error: charge.error };
   }
 

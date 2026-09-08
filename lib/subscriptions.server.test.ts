@@ -413,7 +413,26 @@ describe("runSubscriptionRenewals", () => {
     expect(chargeSubscription).not.toHaveBeenCalled();
   });
 
-  it("closes a subscription that has exhausted its retries", async () => {
+  it("gives the last retry a real attempt, and a card added in time saves the plan", async () => {
+    // The point of the dunning window: an operator who fixes their card during
+    // it must actually keep the subscription. Closing the row without trying
+    // made the window unwinnable and the "update your payment method" advice a
+    // lie, so the final attempt has to reach the rail.
+    const tables: Record<string, Row[]> = {
+      subscriptions: [liveSub({ status: "past_due", failed_attempts: 3 })],
+      subscription_events: [],
+      wallets: [{ organization_id: ORG, plan: "pro", plan_started_at: "2026-06-01T00:00:00.000Z" }],
+    };
+    const stats = await runSubscriptionRenewals(makeClient(tables), AFTER);
+
+    expect(chargeSubscription).toHaveBeenCalledTimes(1);
+    expect(stats).toMatchObject({ renewed: 1, ended: 0 });
+    expect(tables.subscriptions[0]).toMatchObject({ status: "active", failed_attempts: 0 });
+    expect(tables.wallets[0]).toMatchObject({ plan: "pro" });
+  });
+
+  it("closes the subscription only when that last attempt also fails", async () => {
+    chargeSubscription.mockResolvedValue({ ok: false, error: "Your card was declined." });
     const tables: Record<string, Row[]> = {
       subscriptions: [liveSub({ status: "past_due", failed_attempts: 3 })],
       subscription_events: [],
@@ -421,8 +440,25 @@ describe("runSubscriptionRenewals", () => {
     };
     const stats = await runSubscriptionRenewals(makeClient(tables), AFTER);
 
-    expect(stats).toMatchObject({ ended: 1 });
+    expect(chargeSubscription).toHaveBeenCalledTimes(1);
+    expect(stats).toMatchObject({ ended: 1, renewed: 0, failed: 0 });
     expect(tables.subscriptions[0]).toMatchObject({ status: "canceled" });
     expect(tables.wallets[0]).toMatchObject({ plan: null });
+    // The failure is on the record before the closure, so the history shows why.
+    const kinds = tables.subscription_events.map((e) => e.kind);
+    expect(kinds).toContain("payment_failed");
+    expect(kinds).toContain("ended");
+  });
+
+  it("does not leave a row past_due with a retry date nothing will honour", async () => {
+    chargeSubscription.mockResolvedValue({ ok: false, error: "Your card was declined." });
+    const tables: Record<string, Row[]> = {
+      subscriptions: [liveSub({ status: "past_due", failed_attempts: 3 })],
+      subscription_events: [],
+      wallets: [{ organization_id: ORG, plan: "pro" }],
+    };
+    await runSubscriptionRenewals(makeClient(tables), AFTER);
+    expect(tables.subscriptions[0].status).not.toBe("past_due");
+    expect(tables.subscriptions[0].ended_at).toBeTruthy();
   });
 });
