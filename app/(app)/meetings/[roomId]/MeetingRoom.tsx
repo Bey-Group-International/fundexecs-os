@@ -44,6 +44,28 @@ import {
   PARTICIPANT_CONFLICT_TARGET,
   attendanceRecord,
 } from "@/lib/meetings/attendance";
+import {
+  DISCONNECT_GRACE_MS,
+  connectionStateFromIce,
+  INITIAL_LINK,
+  INITIAL_RECOVERY,
+  contentHintFor,
+  isPolite,
+  linkNotice,
+  nextRecovery,
+  offerCollision,
+  peerLinkStatus,
+  peerStatusLabel,
+  recordAttempt,
+  screenSendCap,
+  stepLink,
+  videoSendCap,
+  withOpusResilience,
+  type BandwidthMode,
+  type LinkState,
+  type PeerLinkStatus,
+  type RecoveryState,
+} from "@/lib/meetings/connection";
 import { rememberDevice } from "@/lib/meetings/device-prefs";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
@@ -102,6 +124,11 @@ type SignalMsg =
   // Mic state has to be told, not measured: a muted track is simply silent, and
   // silence is indistinguishable from a listener who hasn't spoken yet.
   | { type: "mic"; from: string; micOn: boolean; displayName?: string }
+  // The same argument for video, which used to be inferred from the pixels: a
+  // camera turned off sends black frames rather than nothing, and a stream the
+  // network has paused freezes on its last frame. Both look like a bug and
+  // neither is, so each participant says which one it is.
+  | { type: "video"; from: string; camOn: boolean; paused: boolean }
   | { type: "chat"; from: string; displayName: string; text: string; ts: number }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
@@ -290,7 +317,8 @@ function FloatingMenu({
 function VideoTile({
   stream, label, muted = false, isLocal = false,
   handRaised = false, reaction = "", large = false,
-  micOn = true, speaking = false,
+  micOn = true, speaking = false, camOn = true, videoPaused = false,
+  status = "live",
 }: {
   stream: MediaStream | null; label: string; muted?: boolean; isLocal?: boolean;
   handRaised?: boolean; reaction?: string; large?: boolean;
@@ -298,6 +326,12 @@ function VideoTile({
   micOn?: boolean;
   /** Their voice is in the room right now. */
   speaking?: boolean;
+  /** That participant's own report of their camera, which pixels cannot give us. */
+  camOn?: boolean;
+  /** Their video is off because the line could not carry it, not because they chose to. */
+  videoPaused?: boolean;
+  /** Where their connection is, so a frozen tile is never left unexplained. */
+  status?: PeerLinkStatus;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = stream?.getVideoTracks()[0] ?? null;
@@ -334,7 +368,23 @@ function VideoTile({
   // frames flow (that previously hid a working camera). The placeholder is only
   // shown when there's genuinely no live video to display, and the <video>
   // stays in the DOM underneath either way.
-  const hasVideo = !!track && track.enabled && track.readyState !== "ended";
+  //
+  // `camOn` / `videoPaused` are what the far end says about itself, and they
+  // decide the remote case on their own. A camera switched off keeps sending
+  // black frames and a stream the network paused freezes on its last one, so
+  // the pixels alone cannot tell "off" from "broken" — which is why a peer who
+  // turned their camera off used to leave a black rectangle where a name and an
+  // initial belong.
+  const hasVideo = !!track && track.enabled && track.readyState !== "ended"
+    && (isLocal || (camOn && !videoPaused));
+
+  // "Reconnecting" outranks the rest: it is the only one that says the picture
+  // is not coming back by itself.
+  const notice = status === "reconnecting" ? "Reconnecting…"
+    : status === "lost" ? "Connection lost"
+    : status === "connecting" ? "Connecting…"
+    : videoPaused ? "Video paused — weak connection"
+    : "Camera off";
 
   // Ring the tile of whoever is talking. In a grid of muted faces this is the
   // fastest answer to "who is that?" — and it is the same judgement the
@@ -351,7 +401,7 @@ function VideoTile({
           <div className="w-12 h-12 rounded-full bg-[var(--surface-3)] flex items-center justify-center text-lg font-semibold text-[var(--fg-primary)]">
             {label.slice(0, 1).toUpperCase()}
           </div>
-          <span className="text-xs text-[var(--fg-muted)]">Camera off</span>
+          <span className="text-xs text-[var(--fg-muted)]">{notice}</span>
         </div>
       )}
       <div className="absolute bottom-2 left-3 flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
@@ -360,6 +410,11 @@ function VideoTile({
           : <span title="Muted — not being transcribed" aria-label="Muted">🔇</span>}
         {label}{isLocal ? " (You)" : ""}
       </div>
+      {hasVideo && (peerStatusLabel(status) ?? (videoPaused ? "Video paused" : null)) && (
+        <div className="absolute top-2 left-3 rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5 text-[11px] text-white">
+          {peerStatusLabel(status) ?? "Video paused"}
+        </div>
+      )}
       {handRaised && <div className="absolute top-2 right-3 text-lg">✋</div>}
       {reaction && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl animate-bounce pointer-events-none select-none">
@@ -440,7 +495,7 @@ function ControlBar({
   leaving: boolean;
   micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; duration: number;
-  roomCode: string; bwMode: "normal" | "degraded" | "audio-only";
+  roomCode: string; bwMode: BandwidthMode;
   onToggleMic: () => void; onToggleCam: () => void; onToggleScreen: () => void;
   onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
   onSwitchMic: (id: string) => void; onSwitchCam: (id: string) => void; onSwitchSpeaker: (id: string) => void;
@@ -558,9 +613,9 @@ function ControlBar({
 
       {/* Right side: BW indicator + copy link + copilot toggle */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {bwMode === "audio-only" && (
-          <span title="Low bandwidth — video paused to maintain audio" className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-[var(--status-warning)]/30 rounded-full px-2 py-1">
-            📶 <span className="hidden sm:inline">Low BW</span>
+        {linkNotice(bwMode) && (
+          <span title={linkNotice(bwMode)!} className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-[var(--status-warning)]/30 rounded-full px-2 py-1">
+            📶 <span className="hidden sm:inline">{bwMode === "audio-only" ? "Video paused" : "Reduced quality"}</span>
           </span>
         )}
         <span className="hidden sm:flex"><MeetingShareLink roomCode={roomCode} compact /></span>
@@ -929,6 +984,42 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // would otherwise re-announce us and spawn duplicate offers.
   const announcedRef = useRef(false);
 
+  // ── Per-peer negotiation bookkeeping ──────────────────────────────────────
+  //
+  // The senders are held rather than looked up. Every path that changes what
+  // goes out used to search `pc.getSenders()` for one whose track was already
+  // video — which finds nothing for someone who joined with their camera off,
+  // so their screen share and their camera reached nobody, silently, with the
+  // button lit and the local preview correct.
+  const videoSenderRef = useRef<Map<string, RTCRtpSender>>(new Map());
+  const audioSenderRef = useRef<Map<string, RTCRtpSender>>(new Map());
+  // Perfect negotiation: true between createOffer and setLocalDescription, when
+  // an incoming offer would collide with ours but the signaling state does not
+  // show it yet.
+  const makingOfferRef = useRef<Map<string, boolean>>(new Map());
+  // Renegotiation is only wired up once a peer has completed its first exchange;
+  // the initial offer is issued explicitly so a browser that fires
+  // `negotiationneeded` late (or not at all) still connects.
+  const negotiationArmedRef = useRef<Map<string, boolean>>(new Map());
+  const recoveryRef = useRef<Map<string, RecoveryState>>(new Map());
+  // When each peer's connection state last moved, so a momentary drop can be
+  // held back from the screen for the grace period before it is called one.
+  const connChangedAtRef = useRef<Map<string, number>>(new Map());
+  const recoveryTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const gaveUpRef = useRef<Set<string>>(new Set());
+  const [peerStatus, setPeerStatus] = useState<Map<string, PeerLinkStatus>>(new Map());
+  // Remote tracks arrive one at a time on their own transceivers. Keeping the
+  // stream ourselves means the tile is handed one object for the life of the
+  // peer, so a camera that arrives after the microphone doesn't re-attach the
+  // <video> element (which flashes) and a missing msid can't leave a peer with
+  // no stream at all.
+  const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+
+  // What each peer says about their own video, which pixels cannot tell us.
+  const [peerVideo, setPeerVideo] = useState<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
+  // Read from the stats timer, which is created once.
+  const peerVideoRef = useRef<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
+
   // Transcript
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const transcriptRef = useRef<TranscriptLine[]>([]);
@@ -975,10 +1066,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
 
   // Bandwidth adaptation
-  const [bwMode, setBwMode] = useState<"normal" | "degraded" | "audio-only">("normal");
+  const [bwMode, setBwMode] = useState<BandwidthMode>("normal");
   // Read from inside the processor's frame callback, which is created once.
-  const bwModeRef = useRef<"normal" | "degraded" | "audio-only">("normal");
+  const bwModeRef = useRef<BandwidthMode>("normal");
   const bwCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The streak of good/bad samples behind the mode. Held apart from it because
+  // a single measurement is not evidence — see stepLink.
+  const linkRef = useRef<LinkState>(INITIAL_LINK);
+  // Mirrors `shareOn` for the send-cap logic, which runs from timers and event
+  // handlers created once.
+  const shareOnRef = useRef(false);
 
   // Media error (permission denial, no devices, etc.)
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -1141,6 +1238,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     void applyBackgroundRef.current(NO_BACKGROUND);
   }, [bwMode]);
   useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
+  useEffect(() => { peerVideoRef.current = peerVideo; }, [peerVideo]);
 
   // Teardown on unmount. If the user navigates away via client-side routing
   // (browser back, a nav link, the guest "leave" link) instead of clicking
@@ -1154,6 +1252,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // read those live at teardown time.
     const peerConnections = peersRef.current;
     const pendingIce = pendingIceRef.current;
+    const recoveryTimers = recoveryTimerRef.current;
     const copilotUnmount = copilotUnmountRef;
     const processor = processorRef;
     const rawCamera = rawCameraTrackRef;
@@ -1161,6 +1260,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try { peerConnections.forEach((pc) => pc.close()); } catch { /* ignore */ }
       peerConnections.clear();
       pendingIce.clear();
+      recoveryTimers.forEach((t) => clearTimeout(t));
+      recoveryTimers.clear();
       try { channelRef.current?.unsubscribe(); } catch { /* ignore */ }
       if (recognitionRef.current) {
         try { recognitionRef.current.onend = null; recognitionRef.current.stop(); } catch { /* ignore */ }
@@ -1175,24 +1276,220 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── createPeerConnection ─────────────────────────────────────────────────
 
+  /** Forget everything held about one peer, without touching the connection. */
+  const forgetPeerState = useCallback((peerId: string) => {
+    pendingIceRef.current.delete(peerId);
+    videoSenderRef.current.delete(peerId);
+    audioSenderRef.current.delete(peerId);
+    makingOfferRef.current.delete(peerId);
+    negotiationArmedRef.current.delete(peerId);
+    recoveryRef.current.delete(peerId);
+    remoteStreamsRef.current.delete(peerId);
+    gaveUpRef.current.delete(peerId);
+    const timer = recoveryTimerRef.current.get(peerId);
+    if (timer) { clearTimeout(timer); recoveryTimerRef.current.delete(peerId); }
+  }, []);
+
+  /**
+   * Push the current send budget onto every video sender.
+   *
+   * This is the whole answer to a mesh call that sounds like it is underwater.
+   * Without a cap each participant hands the encoder 720p30 and lets it spend
+   * whatever it likes, once per peer — four people is four uploads from one
+   * laptop — and the first thing that gives way when the uplink is oversold is
+   * not the picture but the audio sharing the path with it.
+   *
+   * `active: false` rather than disabling the track: it stops the RTP stream at
+   * the sender while leaving the camera, the local preview and the camera
+   * button exactly as the member left them.
+   */
+  const applySendCaps = useCallback(() => {
+    const sharing = shareOnRef.current;
+    const wanted = sharing || camOnRef.current;
+    const cap = wanted
+      ? (sharing ? screenSendCap(peersRef.current.size, bwModeRef.current) : videoSendCap(peersRef.current.size, bwModeRef.current))
+      : null;
+
+    videoSenderRef.current.forEach((sender) => {
+      let params: RTCRtpSendParameters;
+      try { params = sender.getParameters(); } catch { return; }
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      const enc = params.encodings[0];
+      if (cap) {
+        enc.active = true;
+        enc.maxBitrate = cap.maxBitrate;
+        enc.scaleResolutionDownBy = cap.scaleResolutionDownBy;
+        enc.maxFramerate = cap.maxFramerate;
+      } else {
+        enc.active = false;
+      }
+      // A shared screen should lose frames before it loses legibility; a face
+      // is the other way round.
+      params.degradationPreference = sharing ? "maintain-resolution" : "balanced";
+      void sender.setParameters(params).catch(() => { /* older engines reject some fields */ });
+    });
+  }, []);
+  const applySendCapsRef = useRef(applySendCaps);
+  useEffect(() => { applySendCapsRef.current = applySendCaps; }, [applySendCaps]);
+
+  /** Tell the room what our video is doing, so nobody has to guess from pixels. */
+  const announceVideoState = useCallback(() => {
+    sendSignalRef.current({
+      type: "video",
+      from: myIdRef.current,
+      camOn: camOnRef.current || shareOnRef.current,
+      paused: bwModeRef.current === "audio-only",
+    });
+  }, []);
+  const announceVideoStateRef = useRef(announceVideoState);
+  useEffect(() => { announceVideoStateRef.current = announceVideoState; }, [announceVideoState]);
+
+  /** Recompute one peer's badge from its live connection state. */
+  const refreshPeerStatus = useCallback((peerId: string) => {
+    const pc = peersRef.current.get(peerId);
+    const status: PeerLinkStatus = pc
+      ? peerLinkStatus(
+          // Not every engine reports `connectionState`; the ICE state is always
+          // there and says the same thing about whether media can flow.
+          pc.connectionState ?? connectionStateFromIce(pc.iceConnectionState),
+          Date.now() - (connChangedAtRef.current.get(peerId) ?? 0),
+          gaveUpRef.current.has(peerId),
+        )
+      : "lost";
+    setPeerStatus((prev) => {
+      if (prev.get(peerId) === status) return prev;
+      const next = new Map(prev);
+      next.set(peerId, status);
+      return next;
+    });
+  }, []);
+  const refreshPeerStatusRef = useRef(refreshPeerStatus);
+  useEffect(() => { refreshPeerStatusRef.current = refreshPeerStatus; }, [refreshPeerStatus]);
+
+  /**
+   * Try to bring a stalled connection back.
+   *
+   * `restartIce()` on its own does nothing: it marks the connection as wanting
+   * fresh candidates and then waits for someone to renegotiate. There was no
+   * `negotiationneeded` handler here, so nothing ever did — every call that lost
+   * its path stayed frozen until somebody reloaded, which is the failure this
+   * whole section exists to prevent.
+   */
+  const recoverPeer = useCallback((peerId: string) => {
+    const pc = peersRef.current.get(peerId);
+    if (!pc || pc.connectionState === "connected" || pc.connectionState === "closed") return;
+
+    const state = recoveryRef.current.get(peerId) ?? INITIAL_RECOVERY;
+    const now = Date.now();
+    const action = nextRecovery(state, now);
+
+    if (action === "give_up") {
+      gaveUpRef.current.add(peerId);
+      refreshPeerStatusRef.current(peerId);
+      return;
+    }
+    if (action === "wait") {
+      const existing = recoveryTimerRef.current.get(peerId);
+      if (existing) clearTimeout(existing);
+      recoveryTimerRef.current.set(peerId, setTimeout(() => {
+        recoveryTimerRef.current.delete(peerId);
+        recoverPeerRef.current(peerId);
+      }, 1500));
+      return;
+    }
+
+    recoveryRef.current.set(peerId, recordAttempt(state, now));
+    try { pc.restartIce(); } catch { /* not supported — the renegotiation below still helps */ }
+    // Both ends can reach here at once; the collision handling in the offer
+    // path is what keeps that from deadlocking.
+    void renegotiateRef.current(peerId, { iceRestart: true });
+  }, []);
+  const recoverPeerRef = useRef(recoverPeer);
+  useEffect(() => { recoverPeerRef.current = recoverPeer; }, [recoverPeer]);
+
+  /** Make an offer for a peer, with Opus asked to protect itself on the way out. */
+  const renegotiate = useCallback(async (peerId: string, options?: RTCOfferOptions) => {
+    const pc = peersRef.current.get(peerId);
+    if (!pc || pc.signalingState === "closed") return;
+    try {
+      makingOfferRef.current.set(peerId, true);
+      const offer = await pc.createOffer(options);
+      offer.sdp = withOpusResilience(offer.sdp ?? "");
+      // The state can have moved under us while createOffer was in flight.
+      if (pc.signalingState !== "stable") return;
+      await pc.setLocalDescription(offer);
+      sendSignalRef.current({ type: "offer", from: myIdRef.current, to: peerId, sdp: offer, displayName: localNameRef.current });
+      negotiationArmedRef.current.set(peerId, true);
+    } catch (e) {
+      console.warn("[WebRTC] offer", e);
+    } finally {
+      makingOfferRef.current.set(peerId, false);
+    }
+  }, []);
+  const renegotiateRef = useRef(renegotiate);
+  useEffect(() => { renegotiateRef.current = renegotiate; }, [renegotiate]);
+
   const createPeerConnection = useCallback((peerId: string): RTCPeerConnection => {
     // Close any prior connection for this peer first — a duplicate `join`
     // (reconnect / re-admit) would otherwise orphan the old RTCPeerConnection
     // (a leak) and start a competing offer/answer cycle.
     const prior = peersRef.current.get(peerId);
-    if (prior) { try { prior.close(); } catch { /* ignore */ } }
-    pendingIceRef.current.delete(peerId);
+    if (prior) {
+      try { prior.close(); } catch { /* ignore */ }
+      // Only a connection being REPLACED carries stale senders, flags and
+      // candidates. A first connection may already be holding candidates that
+      // were trickled ahead of the offer, and those are the whole reason the
+      // buffer exists — clearing them here would leave `flushPendingIce` with
+      // nothing to apply and the connection checking against no remote
+      // candidates at all.
+      forgetPeerState(peerId);
+    }
 
     const pc = new RTCPeerConnection(iceConfigRef.current);
+    const local = localStreamRef.current;
 
-    localStreamRef.current?.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
+    // Transceivers up front, in a fixed order, rather than whatever `addTrack`
+    // happens to produce. Someone who joined with their camera off had no video
+    // track to add and therefore no video sender either — so turning the camera
+    // on, picking a background or sharing a screen replaced a track that did not
+    // exist, and reached nobody. Declaring both directions here means the shape
+    // of the connection never depends on what the hardware was doing at join.
+    //
+    // On the answering side these are adopted by the incoming offer's matching
+    // m-sections, so this costs no extra round trip.
+    const audioTrack = local?.getAudioTracks()[0] ?? null;
+    const videoTrack = local?.getVideoTracks()[0] ?? null;
+    const streams = local ? [local] : [];
+    if (audioTrack) audioTrack.contentHint = contentHintFor("microphone");
+    if (videoTrack) videoTrack.contentHint = contentHintFor(shareOnRef.current ? "screen" : "camera");
+
+    const audioTx = pc.addTransceiver(audioTrack ?? "audio", { direction: "sendrecv", streams });
+    const videoTx = pc.addTransceiver(videoTrack ?? "video", { direction: "sendrecv", streams });
+    audioSenderRef.current.set(peerId, audioTx.sender);
+    videoSenderRef.current.set(peerId, videoTx.sender);
 
     pc.ontrack = (ev) => {
-      const stream: MediaStream | null = ev.streams[0] ?? null;
+      // Prefer the stream the far end named, so both sides agree on identity,
+      // but never depend on it: a renegotiated or msid-less answer arrives with
+      // an empty `streams`, which used to leave that peer with a null stream and
+      // a permanently blank tile.
+      let ms = remoteStreamsRef.current.get(peerId) ?? ev.streams[0] ?? null;
+      if (!ms) ms = new MediaStream();
+      remoteStreamsRef.current.set(peerId, ms);
+      // A replaced track arrives as a new one on the same transceiver; drop the
+      // old track of that kind rather than accumulating dead ones.
+      ms.getTracks().forEach((t) => { if (t !== ev.track && t.kind === ev.track.kind) ms!.removeTrack(t); });
+      if (!ms.getTracks().includes(ev.track)) ms.addTrack(ev.track);
+
+      // Always a new Map, even when the stream object is unchanged: tracks
+      // arrive one per transceiver, and the tile decides whether it has video by
+      // reading the stream during render. Skipping the re-render on the second
+      // track would leave a peer's camera hidden behind the "Camera off"
+      // placeholder for the rest of the call.
       setPeers((prev) => {
+        const existing = prev.get(peerId);
         const next = new Map<string, Peer>(prev);
-        const existing = next.get(peerId);
-        next.set(peerId, { id: peerId, displayName: existing?.displayName ?? peerId, stream });
+        next.set(peerId, { id: peerId, displayName: existing?.displayName ?? peerId, stream: ms });
         return next;
       });
     };
@@ -1201,16 +1498,64 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (ev.candidate) sendSignalRef.current({ type: "ice", from: myIdRef.current, to: peerId, candidate: ev.candidate.toJSON() });
     };
 
-    // Auto-restart ICE on failure
+    // Renegotiation, which is what actually carries an ICE restart or a newly
+    // added track. Armed only after the first exchange: the initial offer is
+    // issued explicitly, and letting this fire for the transceivers above would
+    // race it with a duplicate.
+    pc.onnegotiationneeded = () => {
+      if (!negotiationArmedRef.current.get(peerId)) return;
+      if (pc.signalingState !== "stable") return;
+      void renegotiateRef.current(peerId);
+    };
+
+    // The same signal one level down, for engines where `connectionState` is
+    // absent or lags. Both handlers funnel into the same idempotent work.
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "failed") {
-        try { pc.restartIce(); } catch { /* ignore */ }
+      if (pc.connectionState !== undefined) return;
+      connChangedAtRef.current.set(peerId, Date.now());
+      refreshPeerStatusRef.current(peerId);
+      if (pc.iceConnectionState === "failed") recoverPeerRef.current(peerId);
+    };
+
+    pc.onconnectionstatechange = () => {
+      connChangedAtRef.current.set(peerId, Date.now());
+      refreshPeerStatusRef.current(peerId);
+
+      if (pc.connectionState === "connected") {
+        // A connection that came back has spent none of its retries.
+        recoveryRef.current.delete(peerId);
+        gaveUpRef.current.delete(peerId);
+        const timer = recoveryTimerRef.current.get(peerId);
+        if (timer) { clearTimeout(timer); recoveryTimerRef.current.delete(peerId); }
+        // Encoder parameters do not survive a renegotiation on every engine.
+        applySendCapsRef.current();
+        announceVideoStateRef.current();
+        return;
+      }
+
+      if (pc.connectionState === "failed") { recoverPeerRef.current(peerId); return; }
+
+      if (pc.connectionState === "disconnected") {
+        // Most of these repair themselves within a second or two — a Wi-Fi roam,
+        // a phone changing cell. Look again after the grace period rather than
+        // tearing down a connection that was about to come back, and rather than
+        // flashing a badge nobody needed to see.
+        const existing = recoveryTimerRef.current.get(peerId);
+        if (existing) clearTimeout(existing);
+        recoveryTimerRef.current.set(peerId, setTimeout(() => {
+          recoveryTimerRef.current.delete(peerId);
+          refreshPeerStatusRef.current(peerId);
+          if (peersRef.current.get(peerId)?.connectionState === "disconnected") recoverPeerRef.current(peerId);
+        }, DISCONNECT_GRACE_MS));
       }
     };
 
     peersRef.current.set(peerId, pc);
+    connChangedAtRef.current.set(peerId, Date.now());
+    // A newcomer changes what everyone else can afford to send.
+    applySendCapsRef.current();
     return pc;
-  }, []);
+  }, [forgetPeerState]);
 
   // ── handleSignal ─────────────────────────────────────────────────────────
 
@@ -1244,18 +1589,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         next.set(msg.from, { id: msg.from, displayName: msg.displayName, stream: existing?.stream ?? null });
         return next;
       });
-      const pc = createPeerConnection(msg.from);
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        // Carry our name on the offer so the newcomer labels our tile correctly.
-        // Without it, a guest who joins after us only learns our identity via
-        // `ontrack`, which falls back to our raw UUID.
-        sendSignalRef.current({ type: "offer", from: myId, to: msg.from, sdp: offer, displayName: localNameRef.current });
-      } catch (e) { console.warn("[WebRTC] offer", e); }
-      // Mic state is only ever announced on change, so a newcomer would assume
-      // everyone already in the room is unmuted. Tell them where we actually are.
+      createPeerConnection(msg.from);
+      // The offer carries our name, so the newcomer labels our tile correctly.
+      // Without it, a guest who joins after us only learns our identity via
+      // `ontrack`, which falls back to our raw UUID.
+      await renegotiateRef.current(msg.from);
+      // Mic and camera state are only ever announced on change, so a newcomer
+      // would assume everyone already in the room is unmuted and on camera.
+      // Tell them where we actually are.
       sendSignalRef.current({ type: "mic", from: myId, micOn: micOnRef.current, displayName: localNameRef.current });
+      announceVideoStateRef.current();
     }
 
     if (msg.type === "end") {
@@ -1271,7 +1614,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       playChime("leave");
       peersRef.current.get(msg.from)?.close();
       peersRef.current.delete(msg.from);
-      pendingIceRef.current.delete(msg.from);
+      forgetPeerState(msg.from);
+      setPeerStatus((prev) => { if (!prev.has(msg.from)) return prev; const next = new Map(prev); next.delete(msg.from); return next; });
+      setPeerVideo((prev) => { if (!prev.has(msg.from)) return prev; const next = new Map(prev); next.delete(msg.from); return next; });
+      // One fewer upload to pay for.
+      applySendCapsRef.current();
       setPeers((prev) => { const next = new Map<string, Peer>(prev); next.delete(msg.from); return next; });
       // Drop the departed peer's transient UI state so a stale ✋ / emoji doesn't linger.
       setRaisedHands((prev) => { if (!prev.has(msg.from)) return prev; const next = new Set(prev); next.delete(msg.from); return next; });
@@ -1285,12 +1632,39 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!pc) pc = createPeerConnection(msg.from);
       // Record the offerer's name (e.g. the host) so guests don't see a UUID.
       if (msg.displayName) setPeerName(msg.from, msg.displayName);
+
+      // Two ends can offer at the same moment — an ICE restart after a link
+      // failed in both directions is the ordinary way it happens — and a
+      // connection handed a remote offer while its own is outstanding throws.
+      // Exactly one side backs down, decided from the peer ids so neither has to
+      // ask.
+      const action = offerCollision({
+        signalingState: pc.signalingState,
+        makingOffer: makingOfferRef.current.get(msg.from) === true,
+        polite: isPolite(myId, msg.from),
+      });
+      if (action === "ignore") return;
+
       try {
+        if (action === "rollback_then_accept" && pc.signalingState === "have-local-offer") {
+          // Discard our own offer; theirs is the one that survives. Only when
+          // there is one to discard: a collision detected while createOffer is
+          // still in flight leaves the state stable, where a rollback throws.
+          // Our own offer is abandoned instead by the stable check in
+          // `renegotiate`, which will no longer hold once this offer is applied.
+          await pc.setLocalDescription({ type: "rollback" });
+        }
+        makingOfferRef.current.set(msg.from, false);
         await pc.setRemoteDescription(msg.sdp);
         await flushPendingIce(msg.from, pc);
         const answer = await pc.createAnswer();
+        answer.sdp = withOpusResilience(answer.sdp ?? "");
         await pc.setLocalDescription(answer);
         sendSignalRef.current({ type: "answer", from: myId, to: msg.from, sdp: answer, displayName: localNameRef.current });
+        // From here a `negotiationneeded` is a real renegotiation rather than
+        // the echo of the transceivers we set up above.
+        negotiationArmedRef.current.set(msg.from, true);
+        applySendCapsRef.current();
       } catch (e) { console.warn("[WebRTC] answer", e); }
     }
 
@@ -1301,6 +1675,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         try {
           await pc.setRemoteDescription(msg.sdp);
           await flushPendingIce(msg.from, pc);
+          applySendCapsRef.current();
         } catch (e) { console.warn("[WebRTC] setRemote", e); }
       }
     }
@@ -1359,6 +1734,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!msg.micOn) lastAudibleRef.current.delete(msg.from);
     }
 
+    if (msg.type === "video" && msg.from !== myId) {
+      setPeerVideo((prev) => {
+        const ex = prev.get(msg.from);
+        if (ex && ex.camOn === msg.camOn && ex.paused === msg.paused) return prev;
+        const next = new Map(prev);
+        next.set(msg.from, { camOn: msg.camOn, paused: msg.paused });
+        return next;
+      });
+    }
+
     if (msg.type === "chat" && msg.from !== myId) {
       const chatMsg: ChatMessage = { id: crypto.randomUUID(), from: msg.from, displayName: msg.displayName, text: msg.text, ts: msg.ts };
       setChatMessages((prev) => [...prev, chatMsg]);
@@ -1398,7 +1783,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // a waiting guest never joins this signaling channel until admitted, so
     // admit_request / admit / deny no longer travel over the WebRTC channel.
 
-  }, [createPeerConnection, router, setPeerName, flushPendingIce]);
+  }, [createPeerConnection, router, setPeerName, flushPendingIce, forgetPeerState]);
 
   // ── Detect host status on mount (pre-join screen label) ──────────────────
 
@@ -1567,6 +1952,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         announcedRef.current = true;
         sendSignal({ type: "join", from: myIdRef.current, displayName: name });
         sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
+        announceVideoStateRef.current();
       });
 
     clearWaitingTimers();
@@ -2041,56 +2427,79 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   useEffect(() => {
     if (!sessionLive) return;
-    const CHECK_INTERVAL = 8000;
-    const LOW_BW_KBPS = 80;  // kbps threshold to downgrade
-    const OK_BW_KBPS = 200;  // kbps threshold to restore
+    const CHECK_INTERVAL = 4000;
 
-    let prevBytes: Record<string, number> = {};
+    // Per stat id, so a stream that comes and goes doesn't read as a cliff.
+    let prev: Record<string, { bytes: number; received: number; lost: number }> = {};
     let prevTs = Date.now();
 
     const check = async () => {
       const pcs = [...peersRef.current.values()];
       if (!pcs.length) return;
 
-      let totalBps = 0;
       const now = Date.now();
       const elapsed = (now - prevTs) / 1000;
       prevTs = now;
+      if (elapsed <= 0) return;
+
+      let bits = 0;
+      let received = 0;
+      let lost = 0;
+      const seen: typeof prev = {};
 
       for (const pc of pcs) {
         try {
           const stats = await pc.getStats();
-          stats.forEach((s) => {
-            if (s.type === "inbound-rtp" && "bytesReceived" in s) {
-              const id = s.id as string;
-              const bytes = s.bytesReceived as number;
-              if (prevBytes[id] !== undefined) totalBps += (bytes - prevBytes[id]) / elapsed;
-              prevBytes[id] = bytes;
-            }
+          stats.forEach((st) => {
+            if (st.type !== "inbound-rtp") return;
+            const s2 = st as RTCInboundRtpStreamStats;
+            const id = s2.id;
+            const bytes = s2.bytesReceived ?? 0;
+            const packets = s2.packetsReceived ?? 0;
+            // packetsLost is signed and can go backwards after a correction.
+            const packetsLost = Math.max(0, s2.packetsLost ?? 0);
+            seen[id] = { bytes, received: packets, lost: packetsLost };
+            const was = prev[id];
+            if (!was) return;
+            bits += Math.max(0, bytes - was.bytes) * 8;
+            received += Math.max(0, packets - was.received);
+            lost += Math.max(0, packetsLost - was.lost);
           });
-        } catch { /* ignore */ }
+        } catch { /* a connection closing mid-poll */ }
       }
+      prev = seen;
 
-      const kbps = (totalBps * 8) / 1000;
-      setBwMode((prev) => {
-        if (kbps > 0 && kbps < LOW_BW_KBPS) {
-          // Disable outgoing video to save bandwidth
-          if (prev === "normal") {
-            localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = false; });
-            return "audio-only";
-          }
-          return prev;
-        }
-        if (kbps >= OK_BW_KBPS && prev !== "normal") {
-          // Only restore video the user actually wants on — don't silently
-          // re-enable a camera they deliberately turned off.
-          if (camOnRef.current) {
-            localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = true; });
-          }
-          return "normal";
-        }
-        return prev;
-      });
+      const delivered = received + lost;
+      // Per peer, not in total: an aggregate hides one starved stream behind
+      // three healthy ones, which is exactly the case worth catching in a room
+      // big enough to be causing it.
+      const sample = {
+        kbps: bits / 1000 / elapsed / pcs.length,
+        lossPct: delivered > 0 ? (lost / delivered) * 100 : 0,
+        // Whether a low rate means anything. A room with every camera off
+        // delivers about as little as a starved one, and only the participants
+        // can say which it is. Unknown counts as yes: the announcement lands a
+        // moment after a peer appears, and assuming video is the cautious half.
+        videoExpected: [...peersRef.current.keys()].some((id) => {
+          const v = peerVideoRef.current.get(id);
+          return v ? v.camOn && !v.paused : true;
+        }),
+      };
+
+      const before = linkRef.current.mode;
+      linkRef.current = stepLink(linkRef.current, sample);
+      const after = linkRef.current.mode;
+      if (after === before) return;
+
+      // The mode is the *budget*, applied at the sender. The camera, the local
+      // preview and the camera button are left exactly as the member set them:
+      // the version this replaced disabled the local video track outright, so a
+      // bad ten seconds turned someone's own picture off and left the button
+      // claiming it was on.
+      bwModeRef.current = after;
+      setBwMode(after);
+      applySendCapsRef.current();
+      announceVideoStateRef.current();
     };
 
     bwCheckRef.current = setInterval(() => { void check(); }, CHECK_INTERVAL);
@@ -2148,6 +2557,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     camOnRef.current = next;
     localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
     setCamOn(next);
+    // A disabled track still sends black frames at a cost, and those black
+    // frames are all the far end had to go on — so stop the stream at the
+    // sender and say why, rather than paying to transmit a black rectangle.
+    applySendCapsRef.current();
+    announceVideoStateRef.current();
   }, []);
 
   /**
@@ -2163,10 +2577,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const swapOutgoingVideo = useCallback((next: MediaStreamTrack | null, stopOutgoing: boolean) => {
     const stream = localStreamRef.current;
     if (!next || !stream) return;
-    peersRef.current.forEach((pc) => {
-      const sender = pc.getSenders().find((sn) => sn.track?.kind === "video");
-      if (sender) void sender.replaceTrack(next);
-    });
+    next.contentHint = contentHintFor(shareOnRef.current ? "screen" : "camera");
+    // The sender held from the transceiver, not one found by looking for a track
+    // that is already video: someone who joined with their camera off has a
+    // video sender carrying nothing, and searching by track kind skipped it —
+    // so their camera, their background and their screen never went anywhere.
+    videoSenderRef.current.forEach((sender) => { void sender.replaceTrack(next).catch(() => { /* peer closed */ }); });
     stream.getVideoTracks().forEach((t) => {
       if (t !== next) { if (stopOutgoing) { try { t.stop(); } catch { /* already stopped */ } } stream.removeTrack(t); }
     });
@@ -2174,12 +2590,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // The camera may have been toggled off while this track was not on the wire.
     next.enabled = camOnRef.current;
     setLocalStream(new MediaStream(stream.getTracks()));
+    applySendCapsRef.current();
   }, []);
 
   /** Put the camera back on the wire after a screen share ends. */
   const restoreCameraTrack = useCallback(() => {
+    shareOnRef.current = false;
     swapOutgoingVideo(cameraTrackRef.current, true);
     setShareOn(false);
+    announceVideoStateRef.current();
   }, [swapOutgoingVideo]);
 
   /**
@@ -2207,6 +2626,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     cameraTrackRef.current = rawCameraTrackRef.current;
     if (!shareOn) swapOutgoingVideo(rawCameraTrackRef.current, false);
     processor?.destroy();
+    announceVideoStateRef.current();
     setBgNotice(message);
   }, [shareOn, swapOutgoingVideo]);
 
@@ -2331,12 +2751,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const screenTrack = screenStream.getVideoTracks()[0];
       if (!screenTrack || !localStreamRef.current) return;
-      peersRef.current.forEach((pc) => { const s = pc.getSenders().find((s) => s.track?.kind === "video"); if (s) void s.replaceTrack(screenTrack); });
+      screenTrack.contentHint = contentHintFor("screen");
+      // Set before the caps are applied: sharing has its own budget, and a
+      // member sharing with their camera off is still sending video.
+      shareOnRef.current = true;
+      videoSenderRef.current.forEach((sender) => { void sender.replaceTrack(screenTrack).catch(() => { /* peer closed */ }); });
       const stream = localStreamRef.current;
       stream.getVideoTracks().forEach((t) => { stream.removeTrack(t); });
       stream.addTrack(screenTrack);
       setLocalStream(new MediaStream(stream.getTracks()));
       setShareOn(true);
+      applySendCapsRef.current();
+      announceVideoStateRef.current();
       // Stopping from the browser's own "Stop sharing" bar used to call back into
       // this same closure, where `shareOn` was still false — so instead of putting
       // the camera back it opened the screen picker again. Restore directly.
@@ -2371,7 +2797,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const t = s.getAudioTracks()[0];
       if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
       t.enabled = micOnRef.current;
-      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((sn) => sn.track?.kind === "audio"); if (sender) void sender.replaceTrack(t); });
+      t.contentHint = contentHintFor("microphone");
+      audioSenderRef.current.forEach((sender) => { void sender.replaceTrack(t).catch(() => { /* peer closed */ }); });
       localStreamRef.current.getAudioTracks().forEach((t2) => { try { t2.stop(); } catch { /* already stopped */ } localStreamRef.current!.removeTrack(t2); });
       localStreamRef.current.addTrack(t);
       setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
@@ -2566,8 +2993,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setWaitingForAdmit(false);
     setWaitingTimedOut(false);
     peersRef.current.forEach((pc) => { try { pc.close(); } catch { /* already closed */ } });
+    peersRef.current.forEach((_pc, id) => forgetPeerState(id));
     peersRef.current.clear();
     pendingIceRef.current.clear();
+    recoveryTimerRef.current.forEach((t) => clearTimeout(t));
+    recoveryTimerRef.current.clear();
     try { channelRef.current?.unsubscribe(); } catch { /* already gone */ }
     channelRef.current = null;
     if (recognitionRef.current) {
@@ -2587,8 +3017,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     setLocalStream(null);
     setPeers(new Map());
+    setPeerStatus(new Map());
+    setPeerVideo(new Map());
     setSpeaking(new Set());
-  }, [clearWaitingTimers, recordDeparture]);
+  }, [clearWaitingTimers, recordDeparture, forgetPeerState]);
 
   const teardownCallRef = useRef(teardownCall);
   useEffect(() => { teardownCallRef.current = teardownCall; }, [teardownCall]);
@@ -2754,6 +3186,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   ];
 
   const getReaction = (id: string) => reactions[id] ?? "";
+  // Assume a peer's camera is on until they say otherwise: the announcement
+  // lands a moment after they appear, and a tile that starts on "Camera off" and
+  // corrects itself reads worse than one that starts blank.
+  const videoOf = (id: string) => peerVideo.get(id) ?? { camOn: true, paused: false };
+  const statusOf = (id: string) => peerStatus.get(id) ?? "connecting";
   const isHandRaised = (id: string) => id === "local" ? handRaised : raisedHands.has(id);
 
   // Speaker view helpers
@@ -2790,9 +3227,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {layout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
-              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} />
+              <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
-                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} />
+                <VideoTile key={peer.id} stream={peer.stream} label={peer.displayName} handRaised={raisedHands.has(peer.id)} reaction={reactions[peer.id] ?? ""} micOn={peerMicOn.get(peer.id) ?? true} speaking={speaking.has(peer.id)} camOn={videoOf(peer.id).camOn} videoPaused={videoOf(peer.id).paused} status={statusOf(peer.id)} />
               ))}
             </div>
           ) : (
@@ -2800,11 +3237,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               {/* Main speaker tile */}
               <div className="flex-1 min-h-0">
                 {speakerIsLocal ? (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
+                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 ) : speakerPeer ? (
-                  <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} large />
+                  <VideoTile stream={speakerPeer.stream} label={speakerPeer.displayName} handRaised={isHandRaised(speakerPeer.id)} reaction={getReaction(speakerPeer.id)} micOn={peerMicOn.get(speakerPeer.id) ?? true} speaking={speaking.has(speakerPeer.id)} camOn={videoOf(speakerPeer.id).camOn} videoPaused={videoOf(speakerPeer.id).paused} status={statusOf(speakerPeer.id)} large />
                 ) : (
-                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} large />
+                  <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} large />
                 )}
               </div>
               {/* Thumbnail strip */}
@@ -2812,7 +3249,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
                 <div className="flex gap-2 h-24 shrink-0 overflow-x-auto">
                   {stripItems.map((item) => (
                     <div key={item.id} className="h-full aspect-video shrink-0">
-                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} />
+                      <VideoTile stream={item.stream} label={item.displayName} muted={item.isLocal} isLocal={item.isLocal} handRaised={isHandRaised(item.id)} reaction={getReaction(item.id)} micOn={item.isLocal ? micOn : (peerMicOn.get(item.id) ?? true)} speaking={speaking.has(item.id)} camOn={item.isLocal ? camOn : videoOf(item.id).camOn} videoPaused={item.isLocal ? bwMode === "audio-only" : videoOf(item.id).paused} status={item.isLocal ? "live" : statusOf(item.id)} />
                     </div>
                   ))}
                 </div>

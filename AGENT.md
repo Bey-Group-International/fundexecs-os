@@ -1416,6 +1416,55 @@ Deployed, monitoring               →  live, observability active
              |  until they land, access_approved_at is missing and the gate fails open;
              |  and set ADMIN_ALERT_EMAIL to the @beygroupintl.com reviewers or no alert
              |  is sent at all.
+
+2026-09-08  |  Live meetings: a call that repairs itself  |  The mesh had no
+             |  renegotiation, no send budget and no way to say what it was doing.
+             |  Added: lib/meetings/connection.ts — the whole policy, pure and tested.
+             |  Fixed (1): ICE restart never happened. `restartIce()` marks a connection
+             |  as wanting fresh candidates and then waits for a renegotiation; there was
+             |  no `onnegotiationneeded` handler anywhere, so a call that lost its path
+             |  stayed frozen until someone reloaded. There is one now, plus bounded
+             |  restarts with backoff (5 attempts) and a "Reconnecting…" badge held back
+             |  by a 2.5s grace period so a Wi-Fi roam does not flash it.
+             |  Decision: perfect negotiation, with politeness decided by comparing peer
+             |  ids — both ends can restart at once, and one has to yield. Nothing extra
+             |  is signalled to agree on it.
+             |  Fixed (2): everything that changed the outgoing video looked up the
+             |  sender by `getSenders().find(s => s.track?.kind === "video")`. Someone
+             |  who joined with their camera off had no video track, so no video sender,
+             |  so their screen share and their camera reached nobody — silently, with
+             |  the button lit and the local preview correct. Transceivers are now
+             |  declared up front (adopted by the offer's m-sections on the answering
+             |  side, so no extra round trip) and both senders are held per peer.
+             |  Fixed (3): no send budget at all. On a mesh each participant uploads a
+             |  copy of 720p30 to every other, and what gives way first is not the
+             |  picture but the audio sharing the path — the "static". videoSendCap
+             |  divides a 2.4Mbps upstream budget by the room, and takes resolution and
+             |  frame rate down with the bitrate rather than handing an encoder 720p and
+             |  250kbps. A shared screen gets its own shape (full resolution, fewer
+             |  frames) and `maintain-resolution`.
+             |  Fixed (4): adaptation was all-or-nothing on aggregate inbound bytes —
+             |  full video to audio-only on one bad reading, and straight back, so a
+             |  wobbling connection flickered for the length of the call. Now: per-peer
+             |  rate AND packet loss (loss is what static actually is, and was not
+             |  measured at all), one tier at a time, two bad samples down and three good
+             |  ones up. The "degraded" tier was declared in the type and never reachable.
+             |  Decision: audio-only stops the stream at the sender (`encoding.active`),
+             |  not by disabling the local track — a bad ten seconds used to turn off the
+             |  member's own picture while the camera button still claimed it was on.
+             |  Added: `useinbandfec=1` on Opus via an SDP munge on every offer and
+             |  answer (the only way to ask), so a single lost packet is reconstructed
+             |  rather than heard. Safari and some Firefox builds do not offer it, and a
+             |  call is only as good as its worst leg.
+             |  Added: a `video` signal beside `mic`, for the same reason — a camera
+             |  turned off keeps sending black frames and a paused stream freezes on its
+             |  last one, so peers used to get a black rectangle where a name belongs.
+             |  Tiles now say "Camera off" / "Video paused" / "Reconnecting…".
+             |  Confidence: typecheck/eslint clean, Jest +52 new (5039 total green).
+             |  Not exercised: real peer connections. The negotiation, cap and link rules
+             |  are unit-tested; the wiring in MeetingRoom.tsx is not, and wants a
+             |  two-browser pass (join camera-off then share; pull the network) before
+             |  it is trusted. No migration, no new deps.
 ```
 
 ---
