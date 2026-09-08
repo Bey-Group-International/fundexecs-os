@@ -1,11 +1,13 @@
 /**
  * The screens on the outside of a meeting.
  *
- * These are the ones nobody sees fail. A host never watches the waiting screen —
- * they are inside the meeting — so every bug here was reported, if at all, as
- * "the link didn't work". Two of the assertions below are direct regression
- * guards for bugs that shipped: Cancel that did nothing, and a deny answered
- * with a login page.
+ * These are the ones nobody sees fail. A host is inside the meeting, so every
+ * bug here was reported, if at all, as "the link didn't work". The deny-screen
+ * assertions below are a direct regression guard for a bug that shipped: a deny
+ * answered with a login page.
+ *
+ * The waiting screen itself is no longer here — the pre-join screen holds the
+ * wait now, and its tests live in MeetingGreenRoom.admission.test.tsx.
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,91 +15,11 @@ import {
   GuestThanksScreen,
   NotAdmittedScreen,
   WaitingRoomBar,
-  WaitingRoomScreen,
   type WaitingPeer,
 } from "./WaitingScreens";
 
-// jsdom implements no media pipeline: play() rejects with "Not implemented" and
-// noisily. The component already tolerates a failed play (autoplay races are
-// normal in browsers too); this just keeps the log readable.
-beforeAll(() => {
-  Object.defineProperty(HTMLMediaElement.prototype, "play", {
-    configurable: true,
-    value: jest.fn().mockResolvedValue(undefined),
-  });
-});
-
 const peer = (over: Partial<WaitingPeer> = {}): WaitingPeer => ({
   id: "adm-1", from: "guest-key-1", displayName: "Ada", ...over,
-});
-
-describe("WaitingRoomScreen", () => {
-  const props = {
-    meetingTitle: "Series B Diligence",
-    displayName: "Ada",
-    previewStream: null,
-    timedOut: false,
-    onLeave: jest.fn(),
-  };
-
-  it("names the meeting the guest is waiting for", () => {
-    render(<WaitingRoomScreen {...props} />);
-    expect(screen.getByText("Series B Diligence")).toBeInTheDocument();
-    expect(screen.getByText(/waiting for host to admit you/i)).toBeInTheDocument();
-  });
-
-  // The bug: Cancel stopped the poll but left this screen up, so the guest
-  // stared at "Waiting for host to admit you…" over a dead camera forever.
-  it("leaves when Cancel is pressed", async () => {
-    const onLeave = jest.fn();
-    render(<WaitingRoomScreen {...props} onLeave={onLeave} />);
-    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    expect(onLeave).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows the guest their own name", () => {
-    render(<WaitingRoomScreen {...props} displayName="Grace Hopper" />);
-    expect(screen.getByText(/Grace Hopper \(You\)/)).toBeInTheDocument();
-  });
-
-  it("falls back to 'You' when the guest gave no name", () => {
-    render(<WaitingRoomScreen {...props} displayName="" />);
-    expect(screen.getByText(/^You \(You\)$/)).toBeInTheDocument();
-  });
-
-  it("says the camera is off rather than showing a black rectangle", () => {
-    render(<WaitingRoomScreen {...props} previewStream={null} />);
-    expect(screen.getByText(/camera off/i)).toBeInTheDocument();
-    expect(screen.queryByTestId("preview-video")).not.toBeInTheDocument();
-  });
-
-  it("previews the camera when there is a stream", () => {
-    render(<WaitingRoomScreen {...props} previewStream={{} as MediaStream} />);
-    expect(screen.getByTestId("preview-video")).toBeInTheDocument();
-    expect(screen.queryByText(/camera off/i)).not.toBeInTheDocument();
-  });
-
-  describe("once the wait has gone on too long", () => {
-    it("says the host has not responded", () => {
-      render(<WaitingRoomScreen {...props} timedOut />);
-      expect(screen.getByText(/host hasn't responded/i)).toBeInTheDocument();
-      expect(screen.queryByText(/waiting for host to admit you/i)).not.toBeInTheDocument();
-    });
-
-    // The poll keeps running past the timeout, so a late host still gets their
-    // guest in. The copy must not claim the chance is gone.
-    it("does not tell the guest the meeting is closed to them", () => {
-      render(<WaitingRoomScreen {...props} timedOut />);
-      expect(screen.getByText(/you can try again/i)).toBeInTheDocument();
-    });
-
-    it("still offers a way out", async () => {
-      const onLeave = jest.fn();
-      render(<WaitingRoomScreen {...props} timedOut onLeave={onLeave} />);
-      await userEvent.click(screen.getByRole("button", { name: /leave/i }));
-      expect(onLeave).toHaveBeenCalledTimes(1);
-    });
-  });
 });
 
 describe("NotAdmittedScreen", () => {

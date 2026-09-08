@@ -26,6 +26,7 @@ import {
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
 import { BackgroundPicker } from "./BackgroundPicker";
+import { admissionStatusCopy, canPressJoin, type AdmissionUiState } from "@/lib/meetings/admission-ui";
 
 /** What the member settled on before pressing Join. */
 export interface GreenRoomChoice {
@@ -47,6 +48,14 @@ export interface MeetingGreenRoomProps {
   meetingTitle?: string | null;
   scheduledAt?: string | null;
   onJoin: (choice: GreenRoomChoice) => void;
+  /**
+   * Where this joiner is in being let in. The waiting room is this screen —
+   * everything above the button stays live while they wait, because a wait is
+   * the only idle time in a meeting and it is when people fix their camera.
+   */
+  admission?: AdmissionUiState;
+  /** Abandon the wait. Required whenever `admission` can leave "idle". */
+  onCancelAdmission?: () => void;
   /** Hands the live preview stream up so the room can release it before it
    *  opens the real sending stream — some platforms will not grant the same
    *  camera twice. */
@@ -236,6 +245,8 @@ export function MeetingGreenRoom({
   meetingTitle,
   scheduledAt,
   onJoin,
+  admission = "idle",
+  onCancelAdmission,
   onPreviewStream,
 }: MeetingGreenRoomProps) {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -480,12 +491,14 @@ export function MeetingGreenRoom({
   };
 
   const join = () => {
+    if (!canPressJoin(admission)) return;
     if (camId) remember("videoinput", camId);
     if (micId) remember("audioinput", micId);
     if (speakerId) remember("audiooutput", speakerId);
     onJoin({ cameraId: camId, micId, speakerId, cameraEnabled, micEnabled, background: bgEffect });
   };
 
+  const waitCopy = admissionStatusCopy(admission);
   const joinLabel = joining
     ? isHost ? "Starting…" : "Joining…"
     : listenOnly ? "Join to listen"
@@ -663,15 +676,43 @@ export function MeetingGreenRoom({
             <MeetingShareLink roomCode={roomCode} title={meetingTitle} scheduledAt={scheduledAt} />
           </div>
 
+          {/* The button's slot becomes the wait. Nothing above it moves, so the
+              preview does not re-render and every control stays usable. */}
           <div className="px-5 pb-5 pt-3">
-            <button
-              type="button"
-              onClick={join}
-              disabled={joining}
-              className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
-            >
-              {joinLabel}
-            </button>
+            {waitCopy ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex flex-col items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 text-center"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={`w-2 h-2 rounded-full ${admission === "timed-out" ? "bg-[var(--status-warning)]" : "bg-[var(--gold-400)] animate-pulse"}`}
+                  />
+                  <span className="text-sm font-semibold text-[var(--fg-primary)]">{waitCopy.title}</span>
+                </div>
+                <p className="text-xs text-[var(--fg-muted)]">{waitCopy.detail}</p>
+                {waitCopy.cancelLabel && onCancelAdmission && (
+                  <button
+                    type="button"
+                    onClick={onCancelAdmission}
+                    className="text-xs text-[var(--fg-muted)] underline underline-offset-2 hover:text-[var(--status-danger)] transition-colors"
+                  >
+                    {waitCopy.cancelLabel}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={join}
+                disabled={joining}
+                className="w-full rounded-lg bg-[var(--gold-400)] hover:bg-[var(--gold-500)] disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
+              >
+                {joinLabel}
+              </button>
+            )}
           </div>
         </div>
       </div>

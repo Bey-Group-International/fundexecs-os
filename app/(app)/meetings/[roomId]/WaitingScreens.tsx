@@ -1,7 +1,9 @@
 "use client";
 
-// The screens a joiner sees on the outside of a meeting: knocking, turned away,
-// and shown out at the end.
+// The screens a joiner sees when they are not in the meeting: turned away, and
+// shown out at the end. Knocking is no longer among them — the pre-join screen
+// holds the wait itself now (see lib/meetings/admission-ui.ts), so a guest never
+// changes screens between asking and being let in.
 //
 // They live here rather than inline in MeetingRoom for the reason the waiting
 // room keeps earning — this is the part of the product where somebody is stuck
@@ -14,28 +16,11 @@
 // own. Every decision stays in MeetingRoom, which is where the state that drives
 // them lives.
 
-import { useEffect, useRef } from "react";
-
 /** A waiting person as the host's bar shows them. `id` is the admissions row id. */
 export interface WaitingPeer {
   id: string;
   from: string;
   displayName: string;
-}
-
-/** The guest's own camera, local-only — nothing is sent to the room until admitted. */
-export function PreviewVideo({ stream }: { stream: MediaStream }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.srcObject = stream;
-    void el.play().catch(() => { /* autoplay race — retried on canplay */ });
-  }, [stream]);
-  return <video ref={ref} autoPlay playsInline muted
-    data-testid="preview-video"
-    onCanPlay={(e) => void (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-    className="w-full h-full object-cover scale-x-[-1]" />;
 }
 
 /**
@@ -112,91 +97,6 @@ export function WaitingRoomBar({
           >
             Admit all
           </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * The guest, knocking.
- *
- * `onLeave` must genuinely leave. It did not, once: the screen was rendered
- * ahead of every exit screen in MeetingRoom, so pressing Cancel stopped the
- * poll and then left the guest staring at this same screen over a dead camera,
- * behind a button that had already fired and was now guarded shut.
- *
- * `timedOut` only changes what this says. The poll behind it keeps running, so
- * a host who answers late still gets their guest in — the copy is careful not to
- * promise otherwise ("hasn't responded", not "gave up").
- */
-export function WaitingRoomScreen({
-  meetingTitle, displayName, previewStream, timedOut, onLeave,
-}: {
-  meetingTitle: string;
-  displayName: string;
-  previewStream: MediaStream | null;
-  timedOut: boolean;
-  onLeave: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 px-4 text-center">
-      <div className="w-full max-w-sm flex flex-col items-center gap-5">
-        {/* Meeting title + local camera preview while the guest waits. The
-            preview is the same local-only stream from the pre-join screen; no
-            media is sent to the room until the host admits them. */}
-        <div className="flex flex-col items-center gap-0.5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]">Waiting room</p>
-          <h2 className="text-lg font-semibold text-[var(--fg-primary)]">{meetingTitle}</h2>
-        </div>
-        <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-[var(--line)] shadow-sm">
-          {previewStream ? <PreviewVideo stream={previewStream} /> : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--fg-muted)]">Camera off</div>
-          )}
-          <div className="absolute bottom-2 left-3 rounded-full bg-black/50 backdrop-blur-sm px-2 py-0.5 text-xs text-white">
-            {(displayName || "You")} (You)
-          </div>
-        </div>
-        {timedOut ? (
-          <>
-            <div className="w-14 h-14 rounded-full bg-[var(--status-warning)]/15 flex items-center justify-center text-2xl">
-              ⏱
-            </div>
-            <div className="flex flex-col gap-1">
-              <p className="text-base font-semibold text-[var(--fg-primary)]">
-                The host hasn&apos;t responded.
-              </p>
-              <p className="text-sm text-[var(--fg-muted)]">
-                You can try again or leave the meeting.
-              </p>
-            </div>
-            <button
-              onClick={onLeave}
-              className="rounded-lg bg-[var(--status-danger)] hover:bg-red-600 text-white text-sm font-semibold px-6 py-2.5 transition-colors"
-            >
-              Leave
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="w-14 h-14 rounded-full bg-[var(--gold-400)]/15 flex items-center justify-center">
-              <span className="animate-pulse text-2xl">🔔</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <p className="text-base font-semibold text-[var(--fg-primary)]">
-                Waiting for host to admit you…
-              </p>
-              <p className="text-sm text-[var(--fg-muted)]">
-                The host will let you in shortly.
-              </p>
-            </div>
-            <button
-              onClick={onLeave}
-              className="rounded-lg border border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] text-sm px-5 py-2 transition-colors"
-            >
-              Cancel
-            </button>
-          </>
         )}
       </div>
     </div>
