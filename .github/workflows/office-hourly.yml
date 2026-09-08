@@ -1,16 +1,31 @@
 name: Office hourly enhancement
 
-# Durable replacement for the session-based scheduler. Every hour during
-# business hours it makes ONE small, verified improvement to the virtual office
-# (/office) and folds it into a rolling draft PR, following
-# docs/office/AUTOMATION.md. Nothing merges automatically.
+# SCHEDULE DISABLED — 2026-09-08. Manual runs still work.
 #
-# Cadence: cron is UTC. 14–23 UTC = 9am–6pm US Central during CDT (UTC−5).
-# In US Central winter (CST, UTC−6) the window shifts to ~8am–5pm local.
+# The hourly cron is removed because this workflow has never once succeeded.
+# All 167 scheduled runs, from #1 on 2026-07-31 to #167 on 2026-09-08, failed
+# in the same place:
 #
-# Setup (one-time): add repo secret ANTHROPIC_API_KEY
-#   (Settings → Secrets and variables → Actions → New repository secret).
-# You can also run it on demand from the Actions tab (workflow_dispatch).
+#   Action failed with error: Environment variable validation failed:
+#     - Either ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or workload identity
+#       federation ... is required when using direct Anthropic API.
+#
+# The one-time setup step this file has asked for since 2026-07-30 — add the
+# repo secret ANTHROPIC_API_KEY — was never done, so every run installed Claude
+# Code, failed validation, and exited. Nothing gates a merge on it, so five
+# weeks of ~10 red runs a weekday went unnoticed.
+#
+# TO RE-ENABLE: add the secret (Settings → Secrets and variables → Actions),
+# confirm a manual run from the Actions tab actually gets through, then restore
+#   schedule:
+#     - cron: "7 14-23 * * 1-5"
+# under `on:` below. Cron is UTC: 14–23 UTC = 9am–6pm US Central during CDT
+# (UTC−5); in CST (UTC−6) the window shifts to ~8am–5pm local.
+#
+# What it does when it works: every hour during business hours it makes ONE
+# small, verified improvement to the virtual office (/office) and folds it into
+# a rolling draft PR, following docs/office/AUTOMATION.md. Nothing merges
+# automatically.
 #
 # Note on CI triggering: this uses the default GITHUB_TOKEN. External review
 # apps (Vercel, CodeRabbit, Spotless) still run on the PR it opens because they
@@ -19,8 +34,8 @@ name: Office hourly enhancement
 # actions/create-github-app-token@v2 and pass it as `github_token`.
 
 on:
-  schedule:
-    - cron: "7 14-23 * * 1-5"
+  # schedule: intentionally absent — see the header. Restore the cron only
+  # after ANTHROPIC_API_KEY exists and a manual run has been seen to pass.
   workflow_dispatch: {}
 
 permissions:
