@@ -427,6 +427,41 @@ export function MeetingsCalendar({
     [loadCalendars],
   );
 
+  // "Sync now". Between hourly cron sweeps there was no way to ask for a
+  // refresh, so a meeting accepted in Google minutes ago simply was not here
+  // and the only remedy was to wait for the top of the hour.
+  const [syncing, setSyncing] = useState(false);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+
+  const syncNow = useCallback(async () => {
+    setSyncing(true);
+    setSyncNote(null);
+    try {
+      const res = await fetch("/api/meetings/calendars/sync", { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        connections?: number;
+        failed?: number;
+        incomplete?: boolean;
+      };
+      if (!res.ok) throw new Error(body.error ?? "Couldn't sync your calendars.");
+
+      // Each outcome needs its own words. "Synced" over an unchanged grid,
+      // when the grant is actually broken, is the failure this whole feature
+      // exists to stop.
+      if (body.failed) setSyncNote("Some calendars didn't sync. Try reconnecting Google.");
+      else if (body.incomplete) setSyncNote("Still catching up — this can take a moment.");
+      else if (!body.connections) setSyncNote("Nothing connected to sync yet.");
+      else setSyncNote("Up to date.");
+
+      await loadCalendars();
+    } catch (err) {
+      setSyncNote(err instanceof Error ? err.message : "Couldn't sync your calendars.");
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadCalendars]);
+
   const toggleLayerAvailability = useCallback(
     async (layer: CalendarLayer, blocksAvailability: boolean) => {
       setLayers((prev) => prev.map((l) => (l.id === layer.id ? { ...l, blocksAvailability } : l)));
@@ -507,6 +542,9 @@ export function MeetingsCalendar({
             googleConfigured={googleConfigured}
             onToggle={toggleLayer}
             onToggleAvailability={toggleLayerAvailability}
+            onSync={syncNow}
+            syncing={syncing}
+            syncNote={syncNote}
           />
           <Legend meetings={meetings} />
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">

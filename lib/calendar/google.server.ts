@@ -395,6 +395,12 @@ export interface ConnectionSyncSummary {
   deleted: number;
   skipped: number;
   failed: number;
+  /**
+   * True when a time budget stopped the sync before every calendar was read.
+   * The caller has a real connection with real events, just not all of them —
+   * which is a different thing to report than either success or failure.
+   */
+  incomplete: boolean;
 }
 
 /**
@@ -403,13 +409,22 @@ export interface ConnectionSyncSummary {
  *
  * A single calendar failing does not abandon the rest — one shared calendar the
  * member lost access to should not stop their own from syncing.
+ *
+ * `budgetMs` bounds the whole run. The cron sweep leaves it unset and takes as
+ * long as it needs; a sync running inside a request a member is waiting on sets
+ * one, because a member with thirty shared calendars must not be held at a
+ * blank screen while every one of them is read. The budget is checked between
+ * calendars rather than interrupting one, so a calendar is always either fully
+ * applied or not started — never half-written.
  */
 export async function syncConnection(
   client: Client,
   conn: ConnectionRow,
   now: Date = new Date(),
+  opts: { budgetMs?: number } = {},
 ): Promise<ConnectionSyncSummary> {
-  const summary: ConnectionSyncSummary = { calendars: 0, upserted: 0, deleted: 0, skipped: 0, failed: 0 };
+  const summary: ConnectionSyncSummary = { calendars: 0, upserted: 0, deleted: 0, skipped: 0, failed: 0, incomplete: false };
+  const deadline = opts.budgetMs ? Date.now() + opts.budgetMs : null;
 
   const token = await accessTokenFor(conn);
   if (!token.ok || !token.data) {
@@ -438,6 +453,14 @@ export async function syncConnection(
   }
 
   for (const cal of (calendars ?? []) as Array<{ id: string; google_calendar_id: string; sync_token: string | null }>) {
+    // Out of time. The calendars already applied keep their events and their
+    // sync tokens; the rest keep a null token, so the next sweep picks them up
+    // with a full read rather than a delta against something it never saw.
+    if (deadline !== null && Date.now() > deadline) {
+      summary.incomplete = true;
+      break;
+    }
+
     let page = await listEvents(accessToken, cal.google_calendar_id, cal.sync_token, now);
 
     // A 410 is routine: the cursor aged out and Google can no longer express
@@ -469,8 +492,13 @@ export async function syncConnection(
   }
 
   // Any calendar failing counts the connection as failed, so a member whose
-  // grant is half-broken sees it rather than a reassuring green tick.
-  await recordConnectionResult(client, conn.id, summary.failed === 0, null, now);
+  // grant is half-broken sees it rather than a reassuring green tick. A run cut
+  // short by its budget is neither: nothing is wrong, so no error is recorded,
+  // but last_sync_at stays where it was so the next sweep — which orders by it,
+  // stalest first — comes back to finish rather than treating this as done.
+  if (!summary.incomplete) {
+    await recordConnectionResult(client, conn.id, summary.failed === 0, null, now);
+  }
   return summary;
 }
 
@@ -545,6 +573,8 @@ export interface SweepSummary {
   upserted: number;
   deleted: number;
   failed: number;
+  /** True when any connection's sync was cut short by its time budget. */
+  incomplete: boolean;
 }
 
 /**
@@ -557,10 +587,10 @@ export interface SweepSummary {
  */
 export async function syncStaleGoogleConnections(
   client: Client,
-  opts: { userId?: string; limit?: number; now?: Date } = {},
+  opts: { userId?: string; limit?: number; now?: Date; budgetMs?: number } = {},
 ): Promise<SweepSummary> {
   const now = opts.now ?? new Date();
-  const summary: SweepSummary = { connections: 0, upserted: 0, deleted: 0, failed: 0 };
+  const summary: SweepSummary = { connections: 0, upserted: 0, deleted: 0, failed: 0, incomplete: false };
 
   let query = client
     .from("google_calendar_connections")
@@ -578,11 +608,12 @@ export async function syncStaleGoogleConnections(
   }
 
   for (const conn of (data ?? []) as ConnectionRow[]) {
-    const result = await syncConnection(client, conn, now);
+    const result = await syncConnection(client, conn, now, { budgetMs: opts.budgetMs });
     summary.connections++;
     summary.upserted += result.upserted;
     summary.deleted += result.deleted;
     summary.failed += result.failed;
+    summary.incomplete = summary.incomplete || result.incomplete;
   }
 
   return summary;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import nextDynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useBodyScrollLock, useFocusTrap } from "@/hooks/useFocusTrap";
 import { MeetingLobby } from "./MeetingLobby";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
 import { TranscriptAnalysisCard } from "@/app/(app)/meetings/TranscriptAnalysisCard";
@@ -65,6 +66,14 @@ export function MeetingsLanding({
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // The overlay covers the page but does not remove it from the tab order, so
+  // without a trap Tab walks out of the calendar and into the sidebar and
+  // meeting rows behind it — invisible, still clickable, and impossible to
+  // navigate back out of. The lock stops the page underneath scrolling with it.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(overlayRef, calendarOpen && mounted);
+  useBodyScrollLock(calendarOpen && mounted);
 
   // Upcoming is what you act on; Logs is what you look up. Local state rather
   // than a URL param: the calendar owns ?view=, and a second address for a
@@ -168,7 +177,17 @@ export function MeetingsLanding({
 
       {calendarOpen && mounted
         ? createPortal(
-            <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface-0)]">
+            <div
+              ref={overlayRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={pane === "settings" ? "Calendar settings" : "Calendar"}
+              // Focusable so the trap has somewhere to put focus on open that
+              // isn't a control — a screen reader then announces the dialog
+              // and its label rather than "Close, button".
+              tabIndex={-1}
+              className="fixed inset-0 z-50 flex flex-col bg-[var(--surface-0)] focus:outline-none"
+            >
               <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="text-[var(--gold-400)]"><CalendarIcon /></span>

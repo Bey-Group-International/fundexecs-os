@@ -20,6 +20,10 @@ interface Props {
   googleConfigured: boolean;
   onToggle: (layer: CalendarLayer, isVisible: boolean) => void;
   onToggleAvailability: (layer: CalendarLayer, blocks: boolean) => void;
+  onSync: () => void;
+  syncing: boolean;
+  /** The outcome of the last manual sync, in the member's words. */
+  syncNote: string | null;
 }
 
 export default function CalendarLayers({
@@ -28,6 +32,9 @@ export default function CalendarLayers({
   googleConfigured,
   onToggle,
   onToggleAvailability,
+  onSync,
+  syncing,
+  syncNote,
 }: Props) {
   const groups = useMemo(() => groupLayers(layers), [layers]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -60,6 +67,29 @@ export default function CalendarLayers({
           app offering times you are already busy, and lets meeting email go out
           from your own address.
         </p>
+      ) : null}
+
+      {/* Connected calendars refresh on an hourly sweep, so between sweeps this
+          is the only way to pull in something that just changed. Shown whenever
+          there is anything to sync — a member staring at a calendar that looks
+          out of date should not have to guess whether waiting will fix it. */}
+      {layers.length > 0 || connectedAs ? (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={syncing}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-[var(--gold-400)]/50 hover:text-[var(--gold-400)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshIcon spinning={syncing} />
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+          {syncNote ? (
+            <p aria-live="polite" className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
+              {syncNote}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {googleConfigured ? (
@@ -175,5 +205,25 @@ function LayerRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      className={spinning ? "animate-spin" : undefined}
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <polyline points="21 3 21 9 15 9" />
+    </svg>
   );
 }

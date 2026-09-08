@@ -82,6 +82,19 @@ describe("readOAuthOutcome", () => {
     expect(readOAuthOutcome({ carta: "connected" })!.title).toBe("Carta connected");
   });
 
+  // A connection whose first sync did not finish is not a failure: the grant is
+  // saved and the sweep will finish the job. Reporting it as an error would
+  // send a member back through consent to fix something that is not broken.
+  it("treats a still-syncing calendar as connected, not failed", () => {
+    const outcome = readOAuthOutcome({ google_calendar: "connected_syncing" })!;
+    expect(outcome.tone).toBe("success");
+    expect(outcome.title).toBe("Google Calendar connected");
+    expect(outcome.detail).toMatch(/still loading/i);
+    // It must not fall through to the unknown-code branch, which would tell the
+    // member to quote a support code for a normal outcome.
+    expect(outcome.detail).not.toMatch(/unrecognized/i);
+  });
+
   it("marks only success as success", () => {
     expect(readOAuthOutcome({ google: "connected" })!.tone).toBe("success");
     for (const code of ["denied", "exchange_failed", "vault_not_configured", "forbidden"]) {
