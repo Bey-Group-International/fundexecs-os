@@ -16,6 +16,26 @@ import { grantCredits } from "@/lib/credits";
 import { awardReferralOnSubscription } from "@/lib/gift-earn";
 import { chargeSubscription, activeRail } from "@/lib/billing-rail";
 import {
+  issueInvoice,
+  applyPaidInvoice,
+  markInvoiceSettled,
+  writeOffInvoice,
+  unappliedSettledInvoices,
+  linkInvoiceToSubscription,
+} from "@/lib/subscription-invoices.server";
+import {
+  isOverdue,
+  remittanceConfigured,
+  type SubscriptionInvoice,
+} from "@/lib/subscription-invoices";
+import {
+  debitInvoice,
+  pollSettlement,
+  inFlightDebits,
+  settlementCapability,
+} from "@/lib/native-payments.server";
+import { preferredRoute, overdueRoute } from "@/lib/native-payments";
+import {
   PLAN_BY_KEY,
   planPrice,
   planGrantCredits,
@@ -48,6 +68,10 @@ export interface LifecycleResult {
   requiresPayment?: boolean;
   /** The operation closed the subscription (its last charge attempt failed). */
   ended?: boolean;
+  /** The period was billed by invoice and is awaiting settlement. */
+  invoiced?: boolean;
+  /** The invoice the period is waiting on, when one was issued or found. */
+  invoice?: SubscriptionInvoice;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +217,11 @@ export interface StartSubscriptionInput {
   note?: string;
   /** Present the first period as already settled (checkout collected it). */
   alreadyPaid?: boolean;
+  /**
+   * Don't grant the first period's credits — the caller has already handed them
+   * over (a settled invoice claims and grants its own period).
+   */
+  skipInitialGrant?: boolean;
 }
 
 /**
@@ -222,6 +251,47 @@ export async function startSubscription(
 
   const now = new Date();
   const price = planPrice(plan, input.interval);
+
+  // Native first purchase: bill the period and wait for the transfer. No
+  // subscription is created yet — a plan that exists before anyone has paid for
+  // it is precisely the giveaway this rail used to be. The invoice carries the
+  // period, and settling it is what starts the subscription (see
+  // applySettledInvoices).
+  if (!input.alreadyPaid && remittanceConfigured()) {
+    const issued = await issueInvoice(
+      {
+        orgId: input.orgId,
+        // No subscription to attach to yet; payment creates it.
+        subscriptionId: null,
+        planKey: input.planKey,
+        interval: input.interval,
+        periodStart: now,
+        periodEnd: periodEnd(now, input.interval),
+        amountUsd: price,
+        credits: planGrantCredits(plan, input.interval),
+        note: `${plan.name} plan — first period`,
+      },
+      service,
+    );
+    if (!issued.ok || !issued.invoice) {
+      return { ok: false, error: issued.error ?? "Could not issue an invoice." };
+    }
+    // Re-finding the bill a second click already raised is not a new issuance.
+    if (issued.existing) {
+      return { ok: false, invoiced: true, invoice: issued.invoice };
+    }
+    await recordEvent(service, {
+      orgId: input.orgId,
+      subscriptionId: null,
+      kind: "invoice_issued",
+      plan: input.planKey,
+      interval: input.interval,
+      amountUsd: price,
+      reference: issued.invoice.number,
+      note: `${issued.invoice.number} issued — plan starts when payment clears`,
+    });
+    return { ok: false, invoiced: true, invoice: issued.invoice };
+  }
 
   // Checkout collected the first period; the rail only runs when it didn't
   // (the native in-app path, or a plan started server-side).
@@ -271,9 +341,11 @@ export async function startSubscription(
 
   const sub = data as Subscription;
   const credits = planGrantCredits(plan, input.interval);
-  await grantCredits(service, input.orgId, credits, "plan_grant", {
-    note: input.note ?? `${plan.name} plan (${input.interval})`,
-  });
+  if (!input.skipInitialGrant) {
+    await grantCredits(service, input.orgId, credits, "plan_grant", {
+      note: input.note ?? `${plan.name} plan (${input.interval})`,
+    });
+  }
   await syncWalletPlan(service, input.orgId, {
     plan: input.planKey,
     interval: input.interval,
@@ -535,12 +607,135 @@ export async function savePaymentMethod(
 // Renewal sweep
 // ---------------------------------------------------------------------------
 
+/**
+ * Hand over every settled invoice whose period has not been applied yet.
+ *
+ * This is the one place a payment becomes value. An invoice with no
+ * subscription is a first purchase — settling it starts the plan; one attached
+ * to a subscription is a renewal the sweep will advance. `applyPaidInvoice`
+ * claims each invoice before granting, so running this twice grants nothing
+ * twice.
+ */
+export async function applySettledInvoices(
+  service: ServiceClient,
+  now: Date = new Date(),
+): Promise<{ applied: number; started: number; credits: number }> {
+  const stats = { applied: 0, started: 0, credits: 0 };
+  for (const invoice of await unappliedSettledInvoices(service)) {
+    try {
+      if (invoice.subscription_id) {
+        // A renewal. The period is advanced by the sweep (so the advance and the
+        // grant stay in lockstep), but the subscription is asleep until the
+        // invoice's due date — that is when it was told to look again. Clear the
+        // wake-up so the very next sweep sees it: an operator who pays early
+        // must not wait until the day the bill was due to get what they bought.
+        await service
+          .from("subscriptions")
+          .update({ next_attempt_at: null })
+          .eq("id", invoice.subscription_id);
+        continue;
+      }
+
+      // A first purchase. Claim the invoice first: if the claim is lost, another
+      // worker is already starting this subscription.
+      const claim = await applyPaidInvoice(invoice, service);
+      if (!claim.applied) continue;
+
+      const started = await startSubscription(
+        {
+          orgId: invoice.organization_id,
+          planKey: invoice.plan as PlanKey,
+          interval: invoice.interval as PlanInterval,
+          // The invoice is the payment, and its credits were just granted by the
+          // claim above — so the subscription must not charge or grant again.
+          alreadyPaid: true,
+          skipInitialGrant: true,
+          reference: invoice.payment_reference ?? invoice.number,
+          note: `${invoice.plan} plan — started by ${invoice.number}`,
+        },
+        service,
+      );
+      if (started.ok && started.subscription) {
+        await linkInvoiceToSubscription(invoice.id, started.subscription.id, service);
+        stats.started += 1;
+      }
+      stats.applied += 1;
+      stats.credits += claim.credits ?? 0;
+    } catch (err) {
+      console.error("[subscriptions] applying a settled invoice failed", invoice.id, err);
+    }
+  }
+  void now;
+  return stats;
+}
+
+// Give an in-flight debit the time ACH actually takes before looking again.
+function expectedClearing(now: Date): string {
+  return new Date(now.getTime() + 5 * 86_400_000).toISOString();
+}
+
+/**
+ * Resolve every bank debit that is in flight.
+ *
+ * Runs before the renewal sweep: a debit that cleared since the last pass should
+ * settle its invoice in the same run, so the operator gets the period they paid
+ * for now rather than an hour later. A bounce puts the invoice back to open and
+ * wakes the subscription, so the overdue path can reach for the card.
+ */
+export async function collectNativePayments(
+  service: ServiceClient,
+  now: Date = new Date(),
+): Promise<{ polled: number; settled: number; bounced: number }> {
+  const stats = { polled: 0, settled: 0, bounced: 0 };
+  for (const invoice of await inFlightDebits(service)) {
+    try {
+      stats.polled += 1;
+      const result = await pollSettlement(invoice, service);
+      if (result.settled) {
+        stats.settled += 1;
+        if (invoice.subscription_id) {
+          // Wake it so the renewal sweep hands the period over on this pass.
+          await service
+            .from("subscriptions")
+            .update({ next_attempt_at: null })
+            .eq("id", invoice.subscription_id);
+        }
+      } else if (result.failed) {
+        stats.bounced += 1;
+        await recordEvent(service, {
+          orgId: invoice.organization_id,
+          subscriptionId: invoice.subscription_id,
+          kind: "debit_returned",
+          plan: invoice.plan,
+          interval: invoice.interval,
+          amountUsd: Number(invoice.amount_usd),
+          note: invoice.settlement_failure ?? "The bank returned the payment",
+        });
+        if (invoice.subscription_id) {
+          await service
+            .from("subscriptions")
+            .update({ next_attempt_at: null })
+            .eq("id", invoice.subscription_id);
+        }
+      }
+    } catch (err) {
+      console.error("[subscriptions] polling a debit failed", invoice.id, err);
+    }
+  }
+  void now;
+  return stats;
+}
+
 export interface RenewalStats {
   due: number;
   renewed: number;
   failed: number;
   ended: number;
   credits: number;
+  /** Periods billed by invoice this sweep, now awaiting settlement. */
+  invoiced: number;
+  /** Subscriptions waiting on an invoice that is issued but not yet due. */
+  awaiting: number;
 }
 
 /**
@@ -558,7 +753,9 @@ export async function runSubscriptionRenewals(
   now: Date = new Date(),
   opts: { limit?: number } = {},
 ): Promise<RenewalStats> {
-  const stats: RenewalStats = { due: 0, renewed: 0, failed: 0, ended: 0, credits: 0 };
+  const stats: RenewalStats = {
+    due: 0, renewed: 0, failed: 0, ended: 0, credits: 0, invoiced: 0, awaiting: 0,
+  };
 
   const { data, error } = await service
     .from("subscriptions")
@@ -581,14 +778,13 @@ export async function runSubscriptionRenewals(
 
   for (const sub of due) {
     try {
-      // A past_due row waits for its scheduled retry rather than being hammered
-      // once an hour.
-      if (
-        sub.status === "past_due" &&
-        sub.next_attempt_at &&
-        new Date(sub.next_attempt_at).getTime() > now.getTime()
-      ) {
+      // A subscription with a date in the future is waiting on something — a
+      // scheduled dunning retry, or an invoice inside its payment terms — and
+      // is left alone until that date arrives rather than being reprocessed
+      // every hour.
+      if (sub.next_attempt_at && new Date(sub.next_attempt_at).getTime() > now.getTime()) {
         stats.due -= 1;
+        stats.awaiting += 1;
         continue;
       }
 
@@ -607,6 +803,10 @@ export async function runSubscriptionRenewals(
       if (result.ok) {
         stats.renewed += 1;
         stats.credits += result.credits ?? 0;
+      } else if (result.invoiced) {
+        // Billed and waiting on the transfer — neither renewed nor failed.
+        stats.invoiced += 1;
+        stats.awaiting += 1;
       } else if (result.ended) {
         // The final attempt failed and closed the subscription.
         stats.ended += 1;
@@ -623,6 +823,9 @@ export async function runSubscriptionRenewals(
 }
 
 // Renew a single subscription: charge, grant, advance.
+// Renew a single subscription. Which path settles the period is decided here:
+// an invoice when this deployment can be paid by transfer, a card charge when it
+// cannot — and a card charge as the fallback when an invoice goes unpaid.
 async function renewOne(
   service: ServiceClient,
   sub: Subscription,
@@ -638,9 +841,166 @@ async function renewOne(
   }
 
   const price = planPrice(plan, target.interval);
+  // Anchored on the ORIGINAL start date so the billing day of month survives a
+  // short February, and so a delayed sweep advances to the current period in one
+  // step instead of billing every missed cycle.
+  const period = advancePeriod(new Date(sub.started_at), target.interval, now);
+
+  // Native settlement: bill the period and wait for the money, rather than
+  // reaching for a card. Only a deployment with no remittance details — nowhere
+  // for an operator to send a transfer — goes straight to the processor.
+  if (remittanceConfigured()) {
+    return settleByInvoice(service, sub, { target, plan, price, period }, now);
+  }
+  return chargeAndApply(service, sub, { target, plan, price, period }, now, null);
+}
+
+interface PeriodTerms {
+  target: { plan: PlanKey; interval: PlanInterval };
+  plan: (typeof PLAN_BY_KEY)[PlanKey];
+  price: number;
+  period: { start: Date; end: Date };
+}
+
+/**
+ * The native path: bill the period, then wait.
+ *
+ * Access continues while the invoice is inside its terms — the operator has been
+ * billed, not cut off, and a wire takes days. Only once it is overdue does the
+ * card fallback run, and only if that fails does dunning start.
+ */
+async function settleByInvoice(
+  service: ServiceClient,
+  sub: Subscription,
+  terms: PeriodTerms,
+  now: Date,
+): Promise<LifecycleResult> {
+  const { target, plan, price, period } = terms;
+
+  const issued = await issueInvoice(
+    {
+      orgId: sub.organization_id,
+      subscriptionId: sub.id,
+      planKey: target.plan,
+      interval: target.interval,
+      periodStart: period.start,
+      periodEnd: period.end,
+      amountUsd: price,
+      credits: planGrantCredits(plan, target.interval),
+      note: `${plan.name} plan — ${target.interval} period`,
+    },
+    service,
+  );
+  if (!issued.ok || !issued.invoice) {
+    // Could not bill at all. Leave the period where it is so the next sweep
+    // retries; never grant a period nobody has been asked to pay for.
+    return { ok: false, error: issued.error ?? "Could not issue an invoice." };
+  }
+  const invoice = issued.invoice;
+
+  // Settled since the last sweep — hand over the period the operator paid for.
+  if (invoice.status === "paid") {
+    const applied = await applyPaidInvoice(invoice, service);
+    return advanceAfterSettlement(service, sub, terms, now, {
+      credits: applied.credits ?? invoice.credits,
+      grantCreditsHere: false,
+      reference: invoice.payment_reference ?? invoice.number,
+      note: `${plan.name} plan — settled by ${invoice.paid_via ?? "transfer"} (${invoice.number})`,
+    });
+  }
+
+  // A debit already in flight: the money is coming, so wait for it. The poll
+  // that resolves it runs before this sweep (see collectNativePayments).
+  if (invoice.status === "processing") {
+    return { ok: false, invoiced: true, invoice };
+  }
+
+  // Still within terms. Collect it rather than only printing instructions: an
+  // org with a linked account gets debited, which is the whole point of the
+  // native rail — nobody has to remember to send anything.
+  if (!isOverdue(invoice, now)) {
+    const cap = await settlementCapability(service, sub.organization_id);
+    if (preferredRoute(cap) === "ach_debit" && !invoice.settlement_intent) {
+      const debit = await debitInvoice(invoice, service);
+      if (debit.ok && debit.processing) {
+        await recordEvent(service, {
+          orgId: sub.organization_id,
+          subscriptionId: sub.id,
+          kind: "debit_submitted",
+          plan: target.plan,
+          interval: target.interval,
+          amountUsd: price,
+          reference: debit.intent ?? null,
+          note: `${invoice.number} — collecting from the linked account`,
+        });
+        // Look again once it should have cleared, not every hour until then.
+        await service
+          .from("subscriptions")
+          .update({ next_attempt_at: invoice.due_at })
+          .eq("id", sub.id);
+        return { ok: false, invoiced: true, invoice };
+      }
+      // Could not submit — fall through to the wire instructions below, which is
+      // still a native way to pay.
+    }
+
+    if (!issued.existing) {
+      await recordEvent(service, {
+        orgId: sub.organization_id,
+        subscriptionId: sub.id,
+        kind: "invoice_issued",
+        plan: target.plan,
+        interval: target.interval,
+        amountUsd: price,
+        reference: invoice.number,
+        note: `${invoice.number} issued — due ${invoice.due_at.slice(0, 10)}`,
+      });
+    }
+    // Come back when it falls due, not every hour until then.
+    await service
+      .from("subscriptions")
+      .update({ next_attempt_at: invoice.due_at })
+      .eq("id", sub.id);
+    return { ok: false, invoiced: true, invoice };
+  }
+
+  // Overdue. Which rail is left depends on what the org has and on whether a
+  // debit has already bounced — asking a bank twice for money it refused just
+  // earns another return fee.
+  const cap = await settlementCapability(service, sub.organization_id);
+  const route = overdueRoute(cap, invoice);
+  if (route === "ach_debit" && !invoice.settlement_intent) {
+    const debit = await debitInvoice(invoice, service);
+    if (debit.ok && debit.processing) {
+      await service
+        .from("subscriptions")
+        .update({ next_attempt_at: expectedClearing(now) })
+        .eq("id", sub.id);
+      return { ok: false, invoiced: true, invoice };
+    }
+  }
+  // This is where the processor earns its keep.
+  return chargeAndApply(service, sub, terms, now, invoice);
+}
+
+/**
+ * Charge a card for the period and, if it lands, hand the period over.
+ *
+ * `invoice` is set when this is the fallback for an unpaid transfer: settling it
+ * by card closes the bill out honestly rather than leaving it open forever.
+ */
+async function chargeAndApply(
+  service: ServiceClient,
+  sub: Subscription,
+  terms: PeriodTerms,
+  now: Date,
+  invoice: SubscriptionInvoice | null,
+): Promise<LifecycleResult> {
+  const { target, plan, price } = terms;
+
   const charge = await chargeSubscription({
     orgId: sub.organization_id,
-    amountUsd: price,
+    amountUsd: invoice ? invoice.amount_usd : price,
     description: `FundExecs OS — ${plan.name} plan renewal (${target.interval})`,
     customerId: sub.processor_customer_id,
     paymentMethodId: await paymentMethodFor(service, sub.organization_id),
@@ -650,50 +1010,111 @@ async function renewOne(
   });
 
   if (!charge.ok) {
-    const attempts = sub.failed_attempts + 1;
-    const retry = nextAttemptAt(attempts, now);
-    await recordEvent(service, {
-      orgId: sub.organization_id,
-      subscriptionId: sub.id,
-      kind: "payment_failed",
-      plan: target.plan,
-      interval: target.interval,
-      amountUsd: price,
-      note: charge.error ?? "Payment failed",
-    });
-
-    // The retry budget is spent: this failure WAS the last chance, so close now
-    // rather than leaving the row past_due with a retry date nothing will honor.
-    if (!retry) {
-      await endSubscription(
-        service,
-        { ...sub, failed_attempts: attempts },
-        "Payment could not be collected",
-        now,
-      );
-      return { ok: false, error: charge.error, ended: true };
-    }
-
-    await service
-      .from("subscriptions")
-      .update({
-        status: "past_due",
-        failed_attempts: attempts,
-        last_payment_error: charge.error ?? "Payment failed",
-        next_attempt_at: retry.toISOString(),
-      })
-      .eq("id", sub.id);
-    return { ok: false, error: charge.error };
+    return dun(service, sub, terms, now, charge.error, invoice);
   }
 
-  // Anchored on the ORIGINAL start date so the billing day of month survives a
-  // short February, and so a delayed sweep advances to the current period in one
-  // step instead of billing every missed cycle.
-  const period = advancePeriod(new Date(sub.started_at), target.interval, now);
+  if (invoice) {
+    await markInvoiceSettled(
+      invoice.id,
+      { via: "card", reference: charge.reference, note: "Settled by card after the transfer went unpaid" },
+      service,
+    );
+    // Recording the payment does not hand the period over — applying the invoice
+    // does, and it claims `applied_at` first so the period can only ever be
+    // granted once however it was paid for.
+    const claimed = await applyPaidInvoice(
+      { ...invoice, status: "paid", applied_at: null },
+      service,
+    );
+    return advanceAfterSettlement(service, sub, terms, now, {
+      credits: claimed.credits ?? invoice.credits,
+      // applyPaidInvoice granted them; granting again here would double the period.
+      grantCreditsHere: false,
+      reference: charge.reference ?? null,
+      note: `${plan.name} plan — ${invoice.number} settled by card`,
+    });
+  }
 
-  // Book the renewal BEFORE granting credits: the unique index on
-  // (subscription_id, reference) for kind='renewed' is what makes a concurrent
-  // second sweep fail here instead of granting a second month of credits.
+  return advanceAfterSettlement(service, sub, terms, now, {
+    credits: planGrantCredits(plan, target.interval),
+    grantCreditsHere: true,
+    reference: charge.reference ?? null,
+    note: `${plan.name} plan renewed (${target.interval})`,
+  });
+}
+
+/** A failed charge: record it, schedule the retry, or close when they run out. */
+async function dun(
+  service: ServiceClient,
+  sub: Subscription,
+  terms: PeriodTerms,
+  now: Date,
+  error: string | undefined,
+  invoice: SubscriptionInvoice | null,
+): Promise<LifecycleResult> {
+  const { target, price } = terms;
+  const attempts = sub.failed_attempts + 1;
+  const retry = nextAttemptAt(attempts, now);
+
+  await recordEvent(service, {
+    orgId: sub.organization_id,
+    subscriptionId: sub.id,
+    kind: "payment_failed",
+    plan: target.plan,
+    interval: target.interval,
+    amountUsd: price,
+    note: error ?? "Payment failed",
+  });
+
+  // The retry budget is spent: this failure WAS the last chance, so close now
+  // rather than leaving the row past_due with a retry date nothing will honor.
+  if (!retry) {
+    if (invoice) {
+      await writeOffInvoice(invoice.id, "Subscription closed with this period unpaid", service);
+    }
+    await endSubscription(
+      service,
+      { ...sub, failed_attempts: attempts },
+      "Payment could not be collected",
+      now,
+    );
+    return { ok: false, error, ended: true };
+  }
+
+  await service
+    .from("subscriptions")
+    .update({
+      status: "past_due",
+      failed_attempts: attempts,
+      last_payment_error: error ?? "Payment failed",
+      next_attempt_at: retry.toISOString(),
+    })
+    .eq("id", sub.id);
+  return { ok: false, error };
+}
+
+/**
+ * The period has been paid for: book it, advance the subscription, and grant.
+ *
+ * The renewal event is recorded BEFORE the grant because the unique index on
+ * (subscription_id, reference) for kind='renewed' is what makes a concurrent
+ * second sweep fail here instead of handing out a second period of credits.
+ */
+async function advanceAfterSettlement(
+  service: ServiceClient,
+  sub: Subscription,
+  terms: PeriodTerms,
+  now: Date,
+  settlement: {
+    credits: number;
+    /** False when the credits were already granted by applying an invoice. */
+    grantCreditsHere: boolean;
+    reference: string | null;
+    note: string;
+  },
+): Promise<LifecycleResult> {
+  const { target, plan, price, period } = terms;
+
   await recordEvent(service, {
     orgId: sub.organization_id,
     subscriptionId: sub.id,
@@ -701,10 +1122,10 @@ async function renewOne(
     plan: target.plan,
     interval: target.interval,
     amountUsd: price,
-    credits: planGrantCredits(plan, target.interval),
+    credits: settlement.credits,
     // The period just paid for — stable across retries of the same renewal.
     reference: `period:${sub.current_period_end}`,
-    note: `${plan.name} plan renewed (${target.interval})`,
+    note: settlement.note,
   });
 
   const { error: advanceError } = await service
@@ -728,10 +1149,11 @@ async function renewOne(
     .eq("current_period_end", sub.current_period_end);
   if (advanceError) throw new Error(advanceError.message);
 
-  const credits = planGrantCredits(plan, target.interval);
-  await grantCredits(service, sub.organization_id, credits, "plan_grant", {
-    note: `${plan.name} plan — renewal (${target.interval})`,
-  });
+  if (settlement.grantCreditsHere && settlement.credits > 0) {
+    await grantCredits(service, sub.organization_id, settlement.credits, "plan_grant", {
+      note: settlement.note,
+    });
+  }
 
   // Tenure credit accrues on the same cadence the Wallet page advertises it.
   await grantTenureBonus(service, sub.organization_id, plan.name);
@@ -752,7 +1174,7 @@ async function renewOne(
     interval: target.interval,
   });
 
-  return { ok: true, credits };
+  return { ok: true, credits: settlement.credits };
 }
 
 // Grant the tenure ("loyalty") bonus earned by continuous subscription. Kept

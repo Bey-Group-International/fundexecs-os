@@ -16,6 +16,8 @@ import {
 } from "@/lib/billing";
 import { stripeConfigured, stripePublishableKeyValue } from "@/lib/stripe";
 import { getSubscription } from "@/lib/subscriptions.server";
+import { outstandingInvoice } from "@/lib/subscription-invoices.server";
+import { remittanceDetails } from "@/lib/subscription-invoices";
 import { compoundingProfile } from "@/lib/compounding";
 import {
   walletRunway,
@@ -25,6 +27,7 @@ import {
 } from "@/lib/wallet-insights";
 import { PlanSelector, type PlanView } from "./PlanSelector";
 import { SubscriptionPanel } from "./SubscriptionPanel";
+import { InvoicePanel } from "./InvoicePanel";
 import { BillingHistory } from "./BillingHistory";
 import { CreditPacks } from "./CreditPacks";
 import { CheckoutBanner } from "./CheckoutBanner";
@@ -49,12 +52,16 @@ export default async function WalletPage(
   const live = stripeConfigured();
   const publishableKey = stripePublishableKeyValue();
 
-  const [wallet, spend30d, profile, subscription] = await Promise.all([
+  const [wallet, spend30d, profile, subscription, invoice] = await Promise.all([
     getWallet(ctx.orgId),
     recentSpend(ctx.orgId),
     compoundingProfile(ctx.orgId),
     getSubscription(ctx.orgId),
+    outstandingInvoice(ctx.orgId),
   ]);
+  // Remittance details are read server-side and passed down; they are
+  // deployment configuration, not something the browser should fetch.
+  const remittance = remittanceDetails();
 
   const balance = wallet?.credits ?? 0;
   // The subscription is authoritative for what plan is running; the wallet column
@@ -237,6 +244,22 @@ export default async function WalletPage(
           </p>
         </div>
       </section>
+
+      {/* An outstanding bill comes first — it is the thing the operator has to
+          act on, and it gates the credits they are waiting for. */}
+      {invoice && (
+        <>
+          <h2 className="mb-3 mt-10 font-mono text-xs uppercase tracking-[0.16em] text-gold-300/70">
+            Amount due
+          </h2>
+          <InvoicePanel
+            invoice={invoice}
+            remittance={remittance}
+            cardAvailable={live}
+            publishableKey={publishableKey}
+          />
+        </>
+      )}
 
       {subscription && (
         <>

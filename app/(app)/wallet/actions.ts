@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth";
 import { stripeConfigured, createCheckout, createPortalSession } from "@/lib/stripe";
+import { outstandingInvoice } from "@/lib/subscription-invoices.server";
 import {
   getSubscription,
   changePlan,
@@ -251,5 +252,52 @@ export async function redeemCouponAction(
   } catch (err) {
     console.error("[wallet] redeemCouponAction failed:", err);
     return { error: "Something went wrong. Please try again." };
+  }
+}
+
+
+/**
+ * Pay an outstanding subscription invoice by card — the fallback for anyone who
+ * needs the period to start today rather than waiting on a transfer.
+ *
+ * The amount is re-derived from the stored invoice here, server-side, and the
+ * invoice is re-checked against the caller's own organization: a browser can
+ * name an invoice id, so it must never be trusted to name a price or to reach
+ * another org's bill.
+ */
+export async function payInvoiceByCardAction(invoiceId: string): Promise<ActionResult> {
+  try {
+    const ctx = await getSessionContext();
+    if (!ctx?.orgId) return { error: "Not authenticated" };
+    if (!stripeConfigured()) {
+      return { error: "Card payment isn't available here. Please pay by transfer." };
+    }
+
+    const invoice = await outstandingInvoice(ctx.orgId);
+    if (!invoice || invoice.id !== invoiceId) {
+      return { error: "That invoice is no longer outstanding." };
+    }
+    if (invoice.status === "processing") {
+      // A bank debit is already collecting this. Paying again by card would take
+      // the money twice, and the debit cannot be recalled once submitted.
+      return {
+        error:
+          "We're already collecting this from your linked account. It'll clear shortly — no need to pay again.",
+      };
+    }
+
+    return checkoutResult(
+      await createCheckout({
+        kind: "subscription_invoice",
+        orgId: ctx.orgId,
+        createdBy: ctx.userId,
+        invoiceId: invoice.id,
+        number: invoice.number,
+        amountUsd: invoice.amount_usd,
+      }),
+    );
+  } catch (err) {
+    console.error("[wallet] payInvoiceByCardAction failed:", err);
+    return { error: "Something went wrong starting checkout. Please try again." };
   }
 }

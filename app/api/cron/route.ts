@@ -10,7 +10,12 @@ import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
-import { runSubscriptionRenewals, type RenewalStats } from "@/lib/subscriptions.server";
+import {
+  runSubscriptionRenewals,
+  applySettledInvoices,
+  collectNativePayments,
+  type RenewalStats,
+} from "@/lib/subscriptions.server";
 import { recordCronRun } from "@/lib/cron-health";
 import type { Automation } from "@/lib/supabase/database.types";
 
@@ -224,13 +229,35 @@ export async function GET(request: Request) {
 
   // Subscription renewals. This is what makes a plan actually recur: FundExecs
   // owns the billing period, so nothing renews unless this sweep runs. Each due
-  // subscription is charged through its rail, granted its plan credits plus the
-  // tenure bonus, and rolled into the next period; a failed charge goes past_due
-  // with a retry scheduled, and a cancelled one is closed and its entitlement
-  // dropped. Best-effort like every block above — a payment processor outage
+  // subscription is billed — an invoice to settle by transfer where remittance
+  // details are configured, a card charge where they are not — and the period's
+  // credits are granted once that settles. An overdue invoice falls back to the
+  // card on file; a failed charge goes past_due with a retry scheduled; a
+  // cancelled one is closed and its entitlement dropped. Best-effort like every block above — a payment processor outage
   // never aborts the sweep, and the renewal is retried on the next pass because
   // the period end has not moved.
-  let subscriptions: RenewalStats = { due: 0, renewed: 0, failed: 0, ended: 0, credits: 0 };
+  let subscriptions: RenewalStats = {
+    due: 0, renewed: 0, failed: 0, ended: 0, credits: 0, invoiced: 0, awaiting: 0,
+  };
+  // Bank debits first: ACH clears days after it is submitted, so this is where
+  // an invoice actually becomes paid. Doing it before the two blocks below means
+  // a payment that landed overnight starts its plan (or renews it) on this pass.
+  let nativeCollections = { polled: 0, settled: 0, bounced: 0 };
+  try {
+    nativeCollections = await collectNativePayments(supabase, now);
+  } catch (e) {
+    console.error("native_payment_collection failed", e);
+  }
+
+  let settledInvoices = { applied: 0, started: 0, credits: 0 };
+  try {
+    // Settled invoices first: a transfer confirmed since the last sweep should
+    // start its plan (or be ready for the renewal below) in the same pass,
+    // rather than making the operator wait another hour for what they paid for.
+    settledInvoices = await applySettledInvoices(supabase, now);
+  } catch (e) {
+    console.error("subscription_invoice_apply failed", e);
+  }
   try {
     subscriptions = await runSubscriptionRenewals(supabase, now);
   } catch (e) {
@@ -264,6 +291,13 @@ export async function GET(request: Request) {
         subscriptionsRenewed: subscriptions.renewed,
         subscriptionsFailed: subscriptions.failed,
         subscriptionsEnded: subscriptions.ended,
+        subscriptionsInvoiced: subscriptions.invoiced,
+        subscriptionsAwaitingPayment: subscriptions.awaiting,
+        subscriptionInvoicesApplied: settledInvoices.applied,
+        subscriptionsStartedByPayment: settledInvoices.started,
+        bankDebitsPolled: nativeCollections.polled,
+        bankDebitsSettled: nativeCollections.settled,
+        bankDebitsReturned: nativeCollections.bounced,
       },
       startedAt: now,
     });
@@ -271,5 +305,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions, settledInvoices, nativeCollections });
 }

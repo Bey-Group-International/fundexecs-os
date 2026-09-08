@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import { getAdminReport } from "@/lib/admin/reports";
 import { listAccessRequests } from "@/lib/admin/access-requests";
+import {
+  listOpenSubscriptionInvoices,
+  listRecentlySettledInvoices,
+} from "@/lib/admin/subscription-invoices";
 import { StatTile } from "@/components/dashboard/StatTile";
 import { SignupsTable } from "./SignupsTable";
 import { AccessRequestsTable } from "./AccessRequestsTable";
+import { SubscriptionInvoicesTable } from "./SubscriptionInvoicesTable";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +20,11 @@ export const metadata: Metadata = {
 // The gate runs in app/admin/layout.tsx, so by the time this renders the caller
 // is a verified platform admin. This page only shapes the report for display.
 export default async function AdminPage() {
-  const [report, accessRequests] = await Promise.all([
+  const [report, accessRequests, openInvoices, settledInvoices] = await Promise.all([
     getAdminReport(),
     listAccessRequests(),
+    listOpenSubscriptionInvoices(),
+    listRecentlySettledInvoices(),
   ]);
   const { metrics, funnel, signups } = report;
   const pendingRequests = accessRequests.filter((r) => r.status === "pending").length;
@@ -64,6 +71,10 @@ export default async function AdminPage() {
         </h2>
         <AccessRequestsTable rows={accessRequests} />
       </section>
+
+      {/* Subscription billing — outstanding invoices are money not yet collected,
+          and confirming one here is what releases the period's credits. */}
+      <SubscriptionInvoicesTable open={openInvoices} settled={settledInvoices} />
 
       {/* Traction metrics */}
       <section>

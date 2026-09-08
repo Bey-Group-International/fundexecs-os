@@ -614,6 +614,37 @@ export type SubscriptionRow = {
   updated_at: string;
 };
 
+// Subscription invoices (migration 20260908160000) — FundExecs billing an org
+// for a period. Native settlement is a bank transfer against one of these; a
+// card is the fallback once one goes overdue. See lib/subscription-invoices.
+export type SubscriptionInvoiceRow = {
+  id: string;
+  organization_id: string;
+  subscription_id: string | null;
+  number: string;
+  plan: string;
+  interval: string;
+  period_start: string;
+  period_end: string;
+  amount_usd: number;
+  credits: number;
+  status: string;
+  issued_at: string;
+  due_at: string;
+  paid_at: string | null;
+  paid_via: string | null;
+  payment_reference: string | null;
+  applied_at: string | null;
+  // migration 20260908180000 — in-flight bank debit
+  settlement_intent: string | null;
+  settlement_started_at: string | null;
+  settlement_failure: string | null;
+  settlement_attempts: number;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 // Append-only billing history: every charge, grant, plan change, cancellation.
 export type SubscriptionEventRow = {
   id: string;
@@ -1806,7 +1837,7 @@ export type StripeCheckout = {
   id: string;
   organization_id: string;
   session_id: string;
-  kind: "plan" | "pack" | "gift" | "invoice";
+  kind: "plan" | "pack" | "gift" | "invoice" | "subscription_invoice";
   status: "pending" | "fulfilled" | "cancelled";
   amount_usd: number | null;
   metadata: Json;
@@ -2882,6 +2913,7 @@ export type Database = {
       wallets: TableShape<Wallet>;
       subscriptions: TableShape<SubscriptionRow>;
       subscription_events: TableShape<SubscriptionEventRow>;
+      subscription_invoices: TableShape<SubscriptionInvoiceRow>;
       session_shares: TableShape<SessionShare>;
       entities: TableShape<Entity>;
       partners: TableShape<Partner>;
@@ -3010,6 +3042,13 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      // Allocate the next human-facing subscription invoice number
+      // (migration 20260908160000). Sequence-backed, so two concurrent
+      // issuances can never be handed the same number.
+      next_subscription_invoice_number: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
       // Atomically post a balanced journal entry: bump the ledger sequence,
       // insert the entry + lines in one transaction (migration 20260702220000).
       fin_post_journal_entry: {
