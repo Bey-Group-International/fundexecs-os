@@ -496,7 +496,15 @@ export async function syncConnection(
   // short by its budget is neither: nothing is wrong, so no error is recorded,
   // but last_sync_at stays where it was so the next sweep — which orders by it,
   // stalest first — comes back to finish rather than treating this as done.
-  if (!summary.incomplete) {
+  //
+  // A calendar can fail and a LATER one exhaust the budget, making both true at
+  // once. Skipping the record there would leave last_error clear and the
+  // failure count unincremented on a connection that has a broken calendar —
+  // the rail would show a healthy tick over a calendar that is not syncing. So
+  // only a clean incomplete run stays silent; a failure is always recorded, and
+  // recording one does not stamp last_sync_at, which is what keeps the partial
+  // run at the front of the sweep's queue.
+  if (!summary.incomplete || summary.failed > 0) {
     await recordConnectionResult(client, conn.id, summary.failed === 0, null, now);
   }
   return summary;

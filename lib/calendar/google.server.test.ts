@@ -465,6 +465,35 @@ describe("syncConnection — time budget", () => {
     expect(updates.some((u) => u.table === "google_calendar_connections" && u.patch.last_sync_at)).toBe(true);
   });
 
+  // A calendar can fail and a LATER one exhaust the budget. Suppressing the
+  // record there left last_error clear and the failure count unincremented on a
+  // connection that has a calendar which is not syncing — a healthy tick over a
+  // broken calendar.
+  it("still records a failure when the run also ran out of time", async () => {
+    let clock = Date.now();
+    jest.spyOn(Date, "now").mockImplementation(() => clock);
+    let call = 0;
+    fetchMock.mockImplementation(async () => {
+      clock += 400;
+      call++;
+      // The calendar list, then a failing first calendar, then successes.
+      if (call === 2) return { ok: false, status: 500, text: async () => "boom", json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ items: [], nextSyncToken: "tok" }) };
+    });
+
+    const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    const summary = await syncConnection(budgetClient(updates), CONN as never, NOW, { budgetMs: 1000 });
+
+    expect(summary.failed).toBeGreaterThan(0);
+    expect(summary.incomplete).toBe(true);
+    const conn = updates.filter((u) => u.table === "google_calendar_connections");
+    expect(conn).toHaveLength(1);
+    // Recorded as a failure — and a failure patch carries no last_sync_at, so
+    // the partial run still stays at the front of the sweep's queue.
+    expect(conn[0].patch).toHaveProperty("last_error");
+    expect(conn[0].patch).not.toHaveProperty("last_sync_at");
+  });
+
   // The cron sweep passes no budget and must keep its old behaviour: take as
   // long as the calendars need.
   it("is unbounded when no budget is given", async () => {

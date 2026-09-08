@@ -24,6 +24,8 @@ interface Props {
   syncing: boolean;
   /** The outcome of the last manual sync, in the member's words. */
   syncNote: string | null;
+  /** Sources the server could not read on the last load. */
+  unavailable: Array<"google" | "ics">;
 }
 
 export default function CalendarLayers({
@@ -35,6 +37,7 @@ export default function CalendarLayers({
   onSync,
   syncing,
   syncNote,
+  unavailable,
 }: Props) {
   const groups = useMemo(() => groupLayers(layers), [layers]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -60,6 +63,22 @@ export default function CalendarLayers({
           </ul>
         </div>
       ))}
+
+      {/* A read that failed leaves the grid empty, and an empty grid in a
+          scheduling product reads as a free day. Say which calendar could not
+          be reached rather than letting silence answer for it. */}
+      {unavailable.length > 0 ? (
+        <p
+          role="status"
+          className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-2.5 py-2 text-[11px] leading-relaxed text-[var(--status-danger)]"
+        >
+          {unavailable.includes("google") && unavailable.includes("ics")
+            ? "Your calendars couldn't be read, so this view is incomplete. Events may be missing."
+            : unavailable.includes("google")
+              ? "Your Google events couldn't be read, so this view is incomplete."
+              : "Your subscribed calendars couldn't be read, so this view is incomplete."}
+        </p>
+      ) : null}
 
       {layers.length === 0 ? (
         <p className="text-xs leading-relaxed text-[var(--fg-muted)]">

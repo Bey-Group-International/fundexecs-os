@@ -163,6 +163,9 @@ export function MeetingsCalendar({
   // to look at one week.
   const [layers, setLayers] = useState<CalendarLayer[]>([]);
   const [externalEvents, setExternalEvents] = useState<ExternalEvent[]>([]);
+  // Sources the server could not read. An empty grid must never be allowed to
+  // read as an empty schedule.
+  const [unavailable, setUnavailable] = useState<Array<"google" | "ics">>([]);
   const [connectedAs, setConnectedAs] = useState<string | null>(null);
   const [googleConfigured, setGoogleConfigured] = useState(false);
   // What a click on empty calendar space offers: schedule, or block the time.
@@ -393,11 +396,13 @@ export function MeetingsCalendar({
         events?: ExternalEvent[];
         connectedAs?: string | null;
         googleConfigured?: boolean;
+        unavailable?: Array<"google" | "ics">;
       };
       setLayers(body.layers ?? []);
       setExternalEvents(body.events ?? []);
       setConnectedAs(body.connectedAs ?? null);
       setGoogleConfigured(Boolean(body.googleConfigured));
+      setUnavailable(body.unavailable ?? []);
     } catch {
       // A calendar rail that fails to load must not take the grid down with
       // it: the member's own meetings are the part that matters.
@@ -443,15 +448,21 @@ export function MeetingsCalendar({
         connections?: number;
         failed?: number;
         incomplete?: boolean;
+        feedsRefreshed?: number;
+        feedsFailed?: number;
       };
       if (!res.ok) throw new Error(body.error ?? "Couldn't sync your calendars.");
 
       // Each outcome needs its own words. "Synced" over an unchanged grid,
       // when the grant is actually broken, is the failure this whole feature
-      // exists to stop.
+      // exists to stop — and so is telling a member with subscribed feeds that
+      // they have nothing connected, which is what reading only the Google
+      // half of this response used to do.
+      const touched = (body.connections ?? 0) + (body.feedsRefreshed ?? 0) + (body.feedsFailed ?? 0);
       if (body.failed) setSyncNote("Some calendars didn't sync. Try reconnecting Google.");
+      else if (body.feedsFailed) setSyncNote("A subscribed calendar didn't answer. Check its address in Calendar settings.");
       else if (body.incomplete) setSyncNote("Still catching up — this can take a moment.");
-      else if (!body.connections) setSyncNote("Nothing connected to sync yet.");
+      else if (!touched) setSyncNote("Nothing connected to sync yet.");
       else setSyncNote("Up to date.");
 
       await loadCalendars();
@@ -545,6 +556,7 @@ export function MeetingsCalendar({
             onSync={syncNow}
             syncing={syncing}
             syncNote={syncNote}
+            unavailable={unavailable}
           />
           <Legend meetings={meetings} />
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-4">

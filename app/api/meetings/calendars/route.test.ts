@@ -147,8 +147,11 @@ describe("GET /api/meetings/calendars", () => {
     expect(json.layers).toHaveLength(2);
     expect(json.events).toHaveLength(1);
     expect(json.events[0].title).toBe("Board meeting");
-    // And it says so, rather than rendering an empty calendar in silence.
+    // And it says so, rather than rendering an empty calendar in silence —
+    // both in the logs and to the member, who is the one at risk of reading an
+    // empty grid as a free day.
     expect(spy).toHaveBeenCalledWith(expect.stringContaining("ics events unavailable"), expect.any(String));
+    expect(json.unavailable).toEqual(["ics"]);
     spy.mockRestore();
   });
 
@@ -165,6 +168,7 @@ describe("GET /api/meetings/calendars", () => {
     const json = await (await GET(req())).json();
     expect(json.events).toHaveLength(1);
     expect(json.events[0].title).toBe("School run");
+    expect(json.unavailable).toEqual(["google"]);
     spy.mockRestore();
   });
 
@@ -183,6 +187,8 @@ describe("GET /api/meetings/calendars", () => {
     expect(json.events).toEqual([]);
     expect(calls).not.toContain("external_events");
     expect(calls).not.toContain("calendar_feed_events");
+    // Nothing failed — a hidden calendar is a choice, not an outage.
+    expect(json.unavailable).toEqual([]);
   });
 
   it("drops a cancelled feed event, whatever case the feed spells it in", async () => {

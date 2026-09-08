@@ -188,12 +188,15 @@ export async function GET(req: NextRequest) {
     // deploy, so for a few seconds the code is live and calendar_feed_events is
     // not there yet. Feeds should be missing from that calendar. The member's
     // Google events and their layer list should not.
+    const unavailable: Array<"google" | "ics"> = [];
     for (const [source, result] of [
       ["google", googleEvents],
       ["ics", feedEvents],
     ] as const) {
       const error = (result as { error?: { message?: string } }).error;
-      if (error) console.error(`[/api/meetings/calendars] ${source} events unavailable`, error.message);
+      if (!error) continue;
+      console.error(`[/api/meetings/calendars] ${source} events unavailable`, error.message);
+      unavailable.push(source);
     }
 
     const events: ClientEvent[] = [];
@@ -245,6 +248,15 @@ export async function GET(req: NextRequest) {
       googleConfigured: googleOAuthConfigured(),
       layers,
       events,
+      // Which sources could not be read, so the rail can say so.
+      //
+      // Deliberately not a 500. Failing the whole request would take down the
+      // layer list and the source that DID work, leaving a member who lost
+      // their feed events with no calendars at all — a worse answer, and one
+      // that still tells them nothing. What actually matters is that an empty
+      // grid never reads as an empty schedule, and that is a thing to say, not
+      // a status code.
+      unavailable,
     });
   } catch (err) {
     console.error("[/api/meetings/calendars] GET", err);

@@ -11,6 +11,7 @@ import {
   recordFeedResult,
   refreshStaleFeeds,
 } from "./feeds.server";
+import type { FetchFeedResult } from "./feeds.server";
 import type { IcsEvent } from "./ics";
 
 const fetchMock = jest.fn();
@@ -188,7 +189,8 @@ describe("recordFeedResult", () => {
       { ok: true, busy: [{ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" }], events: [] },
       NOW,
     );
-    const patch = client.calls[0].payload as Record<string, unknown>;
+    const patch = client.calls.find((c) => c.table === "calendar_feeds" && c.op === "update")!
+      .payload as Record<string, unknown>;
     expect(patch).toMatchObject({ last_error: null, consecutive_failures: 0, cached_at: NOW.toISOString() });
     expect(client.rpc).not.toHaveBeenCalled();
   });
@@ -197,7 +199,8 @@ describe("recordFeedResult", () => {
   it("leaves the previous cache in place when a fetch fails", async () => {
     const client = fakeClient();
     await recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW);
-    const patch = client.calls[0].payload as Record<string, unknown>;
+    const patch = client.calls.find((c) => c.table === "calendar_feeds" && c.op === "update")!
+      .payload as Record<string, unknown>;
     expect(patch).not.toHaveProperty("cached_busy");
     expect(patch).toMatchObject({ last_error: "boom" });
   });
@@ -214,7 +217,7 @@ describe("recordFeedResult", () => {
     client.rpc.mockRejectedValue(new Error("rpc down"));
     await expect(
       recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
     spy.mockRestore();
   });
 });
@@ -331,6 +334,7 @@ describe("applyFeedEvents", () => {
     const client = fakeClient();
     const summary = await applyFeedEvents(client as never, "feed-1", "user-1", [event()], NOW);
 
+    expect(summary.ok).toBe(true);
     expect(summary.upserted).toBe(1);
     const upsert = client.calls.find((c) => c.op === "upsert")!;
     expect(upsert.table).toBe("calendar_feed_events");
@@ -401,6 +405,7 @@ describe("applyFeedEvents", () => {
     const client = fakeClient({ error: { message: "upsert boom" } });
     const summary = await applyFeedEvents(client as never, "feed-1", "user-1", [event()], NOW);
 
+    expect(summary.ok).toBe(false);
     expect(summary.upserted).toBe(0);
     expect(client.calls.some((c) => c.op === "delete")).toBe(false);
     spy.mockRestore();
@@ -441,6 +446,81 @@ describe("recordFeedResult — events", () => {
   it("leaves stored events alone when the fetch failed", async () => {
     const client = fakeClient();
     await recordFeedResult(client as never, "feed-1", "user-1", { ok: false, busy: [], events: [], error: "boom" }, NOW);
+    expect(client.calls.some((c) => c.table === "calendar_feed_events")).toBe(false);
+  });
+});
+
+
+// The order these two writes happen in is load-bearing. Writing the success
+// fields first left a feed stamped fresh — cached_at set, last_error cleared —
+// when its events had not stored, so the sweep skipped the retry for half an
+// hour while the grid drew the previous fetch and everything reported healthy.
+describe("recordFeedResult — a store that fails is not a success", () => {
+  const fetched = (over: Partial<FetchFeedResult> = {}): FetchFeedResult => ({
+    ok: true,
+    busy: [{ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" }],
+    events: [
+      {
+        uid: "e1",
+        summary: "Standup",
+        startIso: "2026-09-02T09:00:00.000Z",
+        endIso: "2026-09-02T09:15:00.000Z",
+        allDay: false,
+        transparent: false,
+        status: null,
+        location: null,
+        description: null,
+      },
+    ],
+    ...over,
+  });
+
+  it("stores the events before it records the outcome", async () => {
+    const client = fakeClient();
+    await recordFeedResult(client as never, "feed-1", "user-1", fetched(), NOW);
+    const events = client.calls.findIndex((c) => c.table === "calendar_feed_events");
+    const feed = client.calls.findIndex((c) => c.table === "calendar_feeds" && c.op === "update");
+    expect(events).toBeLessThan(feed);
+  });
+
+  it("does not stamp the cache when the events could not be stored", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const client = fakeClient({ error: { message: "upsert boom" } });
+    const ok = await recordFeedResult(client as never, "feed-1", "user-1", fetched(), NOW);
+
+    expect(ok).toBe(false);
+    const patch = client.calls.find((c) => c.table === "calendar_feeds" && c.op === "update")!
+      .payload as Record<string, unknown>;
+    // No cached_at means cacheIsStale stays true and the next sweep retries,
+    // and no cached_busy means availability keeps the last good answer.
+    expect(patch).not.toHaveProperty("cached_at");
+    expect(patch).not.toHaveProperty("cached_busy");
+    expect(patch).not.toHaveProperty("last_success_at");
+    // And it says which of the two things went wrong.
+    expect(String(patch.last_error)).toMatch(/could not be stored/i);
+    expect(client.rpc).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("records a real success as before", async () => {
+    const client = fakeClient();
+    const ok = await recordFeedResult(client as never, "feed-1", "user-1", fetched(), NOW);
+    expect(ok).toBe(true);
+    const patch = client.calls.find((c) => c.table === "calendar_feeds" && c.op === "update")!
+      .payload as Record<string, unknown>;
+    expect(patch).toMatchObject({ cached_at: NOW.toISOString(), last_error: null, consecutive_failures: 0 });
+  });
+
+  it("reports a failed fetch as a failure, and never touches the stored events", async () => {
+    const client = fakeClient();
+    const ok = await recordFeedResult(
+      client as never,
+      "feed-1",
+      "user-1",
+      { ok: false, busy: [], events: [], error: "boom" },
+      NOW,
+    );
+    expect(ok).toBe(false);
     expect(client.calls.some((c) => c.table === "calendar_feed_events")).toBe(false);
   });
 });

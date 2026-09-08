@@ -56,7 +56,11 @@ export async function POST() {
       deleted: result.deleted,
       failed: result.failed,
       incomplete: result.incomplete,
+      // Both halves of the answer. Reporting only the Google numbers told a
+      // member with nothing but ICS feeds that there was "nothing connected to
+      // sync", right after it had refreshed their calendars.
       feedsRefreshed: feeds.refreshed,
+      feedsFailed: feeds.failed,
     });
   } catch (err) {
     console.error("[/api/meetings/calendars/sync] POST", err);

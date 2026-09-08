@@ -168,9 +168,21 @@ export async function recordFeedResult(
   userId: string,
   result: FetchFeedResult,
   now: Date = new Date(),
-): Promise<void> {
+): Promise<boolean> {
   const stamp = now.toISOString();
-  const patch = result.ok
+
+  // Events first, then the verdict.
+  //
+  // Writing the success fields before storing the events meant a failed event
+  // write left a feed marked fresh: cached_at stamped, last_error cleared, and
+  // cacheIsStale false for the next half hour, so the sweep skipped the retry
+  // while the grid kept drawing the previous fetch. A calendar that is quietly
+  // half an hour stale and reports itself healthy is the failure this whole
+  // change exists to remove.
+  const stored = result.ok ? await applyFeedEvents(client, feedId, userId, result.events, now) : null;
+  const ok = result.ok && stored!.ok;
+
+  const patch = ok
     ? {
         last_fetched_at: stamp,
         last_success_at: stamp,
@@ -182,23 +194,23 @@ export async function recordFeedResult(
       }
     : {
         last_fetched_at: stamp,
-        last_error: result.error ?? "Unknown error",
+        // A fetch that worked and a store that did not are different problems,
+        // and the member is told which.
+        last_error:
+          result.error ??
+          (result.ok ? "Read the calendar, but its events could not be stored." : "Unknown error"),
         // A failure leaves the previous cached_busy in place on purpose:
         // yesterday's busy time is a far better guess than suddenly declaring
-        // the host free because their calendar host had a bad minute.
+        // the host free because their calendar host had a bad minute. That now
+        // covers a failed event write too: nothing about this refresh is
+        // trustworthy enough to overwrite what the last good one left.
         updated_at: stamp,
       };
 
   const { error } = await client.from("calendar_feeds").update(patch as never).eq("id", feedId);
   if (error) console.error("[calendar-feeds] failed to record fetch result", error);
 
-  // The display half. Only on success, and for the same reason the patch above
-  // leaves cached_busy alone on failure: yesterday's events are a far better
-  // answer than a calendar that empties itself because its host had a bad
-  // minute.
-  if (result.ok) await applyFeedEvents(client, feedId, userId, result.events, now);
-
-  if (!result.ok) {
+  if (!ok) {
     // Incremented separately: doing it in the patch above would need a read
     // first and race with a concurrent sweep.
     try {
@@ -208,6 +220,8 @@ export async function recordFeedResult(
       console.error("[calendar-feeds] failure count not incremented", err);
     }
   }
+
+  return ok;
 }
 
 /**
@@ -219,8 +233,10 @@ export async function recordFeedResult(
  * subscribed calendar reads as empty. Instead every event read is written with
  * this run's stamp, and only rows the run did not touch are removed.
  *
- * Best-effort. A feed whose events fail to store still has its busy time
- * cached, so the booking path is unaffected and the next sweep tries again.
+ * Reports whether the write landed. The caller needs that answer: recording a
+ * feed as successfully refreshed when its events did not store would stamp
+ * cached_at, silence the retry for half an hour, and leave stale rows on the
+ * grid with nothing anywhere saying why.
  */
 export async function applyFeedEvents(
   client: Client,
@@ -228,9 +244,9 @@ export async function applyFeedEvents(
   userId: string,
   events: IcsEvent[],
   now: Date = new Date(),
-): Promise<{ upserted: number; deleted: number }> {
+): Promise<{ ok: boolean; upserted: number; deleted: number }> {
   const stamp = now.toISOString();
-  const summary = { upserted: 0, deleted: 0 };
+  const summary = { ok: true, upserted: 0, deleted: 0 };
 
   // Instances of one recurring series share a UID and differ only by start, so
   // that pair is the identity. A feed that repeats the same pair twice (rare,
@@ -268,6 +284,7 @@ export async function applyFeedEvents(
       console.error("[calendar-feeds] event upsert failed", error);
       // Nothing was written, so pruning now would delete a good previous fetch
       // and leave the member with nothing at all.
+      summary.ok = false;
       return summary;
     }
     summary.upserted = rows.length;
@@ -364,8 +381,9 @@ export async function refreshStaleFeeds(
       continue;
     }
     const result = await fetchFeed(row.url, now);
-    await recordFeedResult(client, row.id, row.user_id, result, now);
-    if (result.ok) summary.refreshed++;
+    // Counted off what was recorded, not off the fetch: a feed whose events
+    // failed to store has not been refreshed, however well the download went.
+    if (await recordFeedResult(client, row.id, row.user_id, result, now)) summary.refreshed++;
     else summary.failed++;
   }
 
