@@ -52,6 +52,15 @@ export interface MeetingLogEntry {
   sentiment: string;
   /** A report exists and has been generated. */
   hasReport: boolean;
+  /**
+   * Whether the viewer was in this meeting.
+   *
+   * Meetings are listed across the organisation; their reports are not — RLS
+   * limits those to the host and the people who joined. Without this flag the
+   * log could only say "No report", which is indistinguishable from "there is
+   * a report and you may not read it", and reads as data having been lost.
+   */
+  attended: boolean;
 }
 
 /** What an untitled meeting is called in the log. */
@@ -109,6 +118,7 @@ export function attendeeNames(attendees: unknown): string[] {
 export function toLogEntry(
   meeting: MeetingLogSource,
   report: MeetingLogReport | null,
+  attended = true,
 ): MeetingLogEntry {
   const analysis = report?.analysis ?? null;
   const summary = normalizeNoteText(report?.summary);
@@ -126,6 +136,7 @@ export function toLogEntry(
     actionItems: normalizeNoteList(report?.action_items),
     sentiment: normalizeNoteText(analysis?.sentiment),
     hasReport: summary.length > 0,
+    attended,
   };
 }
 
@@ -186,6 +197,9 @@ export function groupLogsByMonth(entries: MeetingLogEntry[]): MeetingLogGroup[] 
 
 /** A one-line count of what the meeting produced, for a collapsed row. */
 export function logEntrySubtitle(entry: MeetingLogEntry): string {
+  // Order matters: a non-attendee reads every report as absent, so checking
+  // hasReport first would label a report they simply cannot see "No report".
+  if (!entry.attended) return "Attendees only";
   if (!entry.hasReport) return "No report";
   const parts: string[] = [];
   if (entry.keyPoints.length) parts.push(`${entry.keyPoints.length} key point${entry.keyPoints.length === 1 ? "" : "s"}`);

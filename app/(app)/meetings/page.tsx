@@ -13,6 +13,7 @@ import { MailboxWarning } from "./MailboxWarning";
 import { loadMeetingLog } from "@/lib/meetings/meeting-log.server";
 import { toLogEntry, sortLogEntries, type MeetingLogEntry } from "@/lib/meetings/meeting-log";
 import { isPastMeeting } from "@/lib/meetings/schedule";
+import { attendedButNotHosted } from "@/lib/meetings/attendance";
 
 export const metadata: Metadata = {
   title: "Meetings — FundExecs OS",
@@ -72,36 +73,38 @@ const MEETING_SELECT =
 async function getMeetings(orgId: string, userId: string): Promise<LiveMeeting[]> {
   const supabase = await createServerClient();
 
-  const { data: hosted } = await supabase
-    .from("live_meetings")
-    .select(MEETING_SELECT)
-    .eq("organization_id", orgId)
-    .is("deleted_at", null)
-    .order("scheduled_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(50);
+  // Both reads at once: neither depends on the other, and running them in
+  // series put a whole round trip in front of the meetings page for nothing.
+  const [{ data: hosted }, { data: participantRows }] = await Promise.all([
+    supabase
+      .from("live_meetings")
+      .select(MEETING_SELECT)
+      .eq("organization_id", orgId)
+      .is("deleted_at", null)
+      .order("scheduled_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("live_meeting_participants")
+      .select("meeting_id")
+      .eq("user_id", userId),
+  ]);
 
-  const { data: participantRows } = await supabase
-    .from("live_meeting_participants")
-    .select("meeting_id")
-    .eq("user_id", userId);
-
-  const participantMeetingIds = (participantRows ?? []).map((r: { meeting_id: string }) => r.meeting_id);
+  const nonHostedIds = attendedButNotHosted(
+    (participantRows ?? []).map((r: { meeting_id: string }) => r.meeting_id),
+    (hosted ?? []).map((m: { id: string }) => m.id),
+  );
 
   let participated: LiveMeeting[] = [];
-  if (participantMeetingIds.length > 0) {
-    const hostedIds = (hosted ?? []).map((m: { id: string }) => m.id);
-    const nonHostedIds = participantMeetingIds.filter((id: string) => !hostedIds.includes(id));
-    if (nonHostedIds.length > 0) {
-      const { data } = await supabase
-        .from("live_meetings")
-            .select(MEETING_SELECT)
-        .in("id", nonHostedIds)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      participated = (data ?? []) as LiveMeeting[];
-    }
+  if (nonHostedIds.length > 0) {
+    const { data } = await supabase
+      .from("live_meetings")
+      .select(MEETING_SELECT)
+      .in("id", nonHostedIds)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    participated = (data ?? []) as LiveMeeting[];
   }
 
   const all = [...(hosted ?? []), ...participated] as LiveMeeting[];
@@ -132,7 +135,7 @@ export default async function MeetingsPage(props: {
   const [meetings, canSendEmail, logRows] = await Promise.all([
     getMeetings(ctx.orgId, userId),
     mailboxConfigured(await createServerClient(), userId, ctx.orgId),
-    loadMeetingLog(logClient, ctx.orgId),
+    loadMeetingLog(logClient, ctx.orgId, userId),
   ]);
   const now = Date.now();
   // "Upcoming" keys off the meeting's END, not its start — a meeting that's
@@ -158,7 +161,7 @@ export default async function MeetingsPage(props: {
         duration_minutes: row.meeting.duration_minutes,
         is_draft: row.meeting.is_draft,
       }, now))
-      .map((row) => toLogEntry(row.meeting, row.report)),
+      .map((row) => toLogEntry(row.meeting, row.report, row.attended)),
   );
 
   return (

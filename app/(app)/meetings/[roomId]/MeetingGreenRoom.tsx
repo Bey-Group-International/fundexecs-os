@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { rememberDevice, rememberedDevice } from "@/lib/meetings/device-prefs";
 import {
-  DEVICE_PREF_KEYS,
   canJoin as canJoinWith,
   constraintsFor,
   devicesOfKind,
@@ -60,23 +60,6 @@ export interface MeetingGreenRoomProps {
    *  opens the real sending stream — some platforms will not grant the same
    *  camera twice. */
   onPreviewStream?: (stream: MediaStream | null) => void;
-}
-
-/** The remembered choice for a kind, or null in a browser without storage. */
-function remembered(kind: DeviceKind): string | null {
-  try {
-    return window.localStorage.getItem(DEVICE_PREF_KEYS[kind]);
-  } catch {
-    return null;
-  }
-}
-
-function remember(kind: DeviceKind, deviceId: string): void {
-  try {
-    if (deviceId) window.localStorage.setItem(DEVICE_PREF_KEYS[kind], deviceId);
-  } catch {
-    /* private mode / storage disabled — the picker still works for this call */
-  }
 }
 
 /** MediaDeviceInfo is a live browser object; this is the plain shape we test against. */
@@ -147,18 +130,21 @@ function PreviewVideo({ stream }: { stream: MediaStream }) {
  * a segmentation loop open while they read the join button is not worth it.
  */
 function BackgroundPreview({
-  stream, effect, image, onUnavailable,
+  track, effect, image, onUnavailable,
 }: {
-  stream: MediaStream;
+  track: MediaStreamTrack;
   effect: BackgroundEffect;
   image: Blob | null;
   onUnavailable: () => void;
 }) {
   const [processed, setProcessed] = useState<MediaStream | null>(null);
+  // The raw camera, wrapped for the video element. Memoised on the track so a
+  // microphone change — which no longer touches the camera at all — cannot
+  // hand this component a new object and restart segmentation.
+  const raw = useMemo(() => new MediaStream([track]), [track]);
 
   useEffect(() => {
-    const track = stream.getVideoTracks()[0];
-    if (!track || !needsSegmentation(effect)) { setProcessed(null); return; }
+    if (!needsSegmentation(effect)) { setProcessed(null); return; }
 
     let processor: BackgroundProcessor | null = null;
     let cancelled = false;
@@ -180,12 +166,12 @@ function BackgroundPreview({
       processor?.destroy();
       setProcessed(null);
     };
-  }, [stream, effect, image, onUnavailable]);
+  }, [track, effect, image, onUnavailable]);
 
   // Mirrored either way, which is what the in-call local tile does with the
   // same processed track — a self-view that flips when you pick a background
   // would read as the effect having moved you.
-  return <PreviewVideo stream={processed ?? stream} />;
+  return <PreviewVideo stream={processed ?? raw} />;
 }
 
 function BackgroundGlyph() {
@@ -250,14 +236,26 @@ export function MeetingGreenRoom({
   onPreviewStream,
 }: MeetingGreenRoomProps) {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [camId, setCamId] = useState("");
-  const [micId, setMicId] = useState("");
-  const [speakerId, setSpeakerId] = useState("");
+  // Seeded from the remembered preference rather than left blank. Reading it
+  // after the first open is what made joining open the default camera and then
+  // immediately close it and reopen the remembered one — two permission-era
+  // camera activations, and a light that blinked before anyone had done
+  // anything.
+  const [camId, setCamId] = useState(() => rememberedDevice("videoinput") ?? "");
+  const [micId, setMicId] = useState(() => rememberedDevice("audioinput") ?? "");
+  const [speakerId, setSpeakerId] = useState(() => rememberedDevice("audiooutput") ?? "");
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraDenied, setCameraDenied] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  // Camera and microphone are held as separate tracks, not as one stream.
+  // They used to share a single getUserMedia call that re-ran on every change,
+  // so picking a different microphone closed and reopened the camera: the
+  // preview went black, the camera light blinked, and — because the background
+  // preview is keyed on the video track — a segmentation model was torn down
+  // and reloaded because somebody chose a different mic.
+  const [videoTrack, setVideoTrack] = useState<MediaStreamTrack | null>(null);
+  const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
   const [level, setLevel] = useState(0);
   const [micSettled, setMicSettled] = useState(false);
 
@@ -268,7 +266,16 @@ export function MeetingGreenRoom({
   const [bgOpen, setBgOpen] = useState(false);
   const [bgUnavailable, setBgUnavailable] = useState(false);
 
-  const streamRef = useRef<MediaStream | null>(null);
+  const videoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
+  // The device id each live track was actually opened with, so the maintenance
+  // effects below can tell a real change of device from React re-running them.
+  const openedCamRef = useRef<string | null>(null);
+  const openedMicRef = useRef<string | null>(null);
+  // Set once the first combined open has settled. Until then the per-device
+  // effects stand down, so the two of them cannot race the one that holds the
+  // permission prompt.
+  const primedRef = useRef(false);
   const micPeakRef = useRef(0);
   // Set the moment someone picks a background here, so the restoration below
   // knows it has been overtaken. Reading a custom image out of IndexedDB is an
@@ -312,6 +319,15 @@ export function MeetingGreenRoom({
   const onPreviewStreamRef = useRef(onPreviewStream);
   useEffect(() => { onPreviewStreamRef.current = onPreviewStream; }, [onPreviewStream]);
 
+  // Mirrors of the choices, for the mount-only open and the failure handler:
+  // both need the current value without being re-created when it changes.
+  const camIdRef = useRef(camId);
+  const micIdRef = useRef(micId);
+  const cameraEnabledRef = useRef(cameraEnabled);
+  useEffect(() => { camIdRef.current = camId; }, [camId]);
+  useEffect(() => { micIdRef.current = micId; }, [micId]);
+  useEffect(() => { cameraEnabledRef.current = cameraEnabled; }, [cameraEnabled]);
+
   const cameras = useMemo(() => devicesOfKind(devices, "videoinput"), [devices]);
   const mics = useMemo(() => devicesOfKind(devices, "audioinput"), [devices]);
   const speakers = useMemo(() => devicesOfKind(devices, "audiooutput"), [devices]);
@@ -327,78 +343,205 @@ export function MeetingGreenRoom({
 
   // ── Acquire the preview ──────────────────────────────────────────────────
   //
-  // Re-runs whenever the chosen device changes: a picker that changes the label
-  // but not the stream is a picker that lies, and the meter would then be
-  // metering the wrong microphone.
+  // Camera and microphone are opened together once, then maintained
+  // independently. The single combined re-acquisition this replaces meant
+  // every device change closed BOTH devices and reopened them: choosing a
+  // different microphone blacked out the preview, blinked the camera light,
+  // and rebuilt the background segmenter from scratch.
+
+  /** Adopt a video track, releasing whatever it replaces. */
+  const adoptVideo = useCallback((track: MediaStreamTrack | null) => {
+    const previous = videoTrackRef.current;
+    if (previous && previous !== track) { try { previous.stop(); } catch { /* already stopped */ } }
+    videoTrackRef.current = track;
+    setVideoTrack(track);
+  }, []);
+
+  const adoptAudio = useCallback((track: MediaStreamTrack | null) => {
+    const previous = audioTrackRef.current;
+    if (previous && previous !== track) { try { previous.stop(); } catch { /* already stopped */ } }
+    audioTrackRef.current = track;
+    setAudioTrack(track);
+  }, []);
+
+  /** What a failed open means, translated into the flags the UI reads. */
+  const handleOpenFailure = useCallback((kind: "videoinput" | "audioinput", err: unknown) => {
+    const name = err instanceof Error ? err.name : "";
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      if (kind === "videoinput") setCameraDenied(true); else setMicDenied(true);
+      return;
+    }
+    if (name === "OverconstrainedError" || name === "NotFoundError") {
+      // A remembered device that has since been unplugged. Forget it; the
+      // effect re-runs against the system default rather than leaving the
+      // member staring at a black square.
+      if (kind === "videoinput") { if (camIdRef.current) { setCamId(""); return; } adoptVideo(null); return; }
+      if (micIdRef.current) { setMicId(""); return; }
+      adoptAudio(null);
+      return;
+    }
+    // NotReadableError and friends: the device exists but something else has
+    // it. Nothing to fall back to, so leave the flags alone and show nothing
+    // rather than a wrong diagnosis.
+    if (kind === "videoinput") adoptVideo(null); else adoptAudio(null);
+  }, [adoptVideo, adoptAudio]);
+
+  // First open: one getUserMedia for both, because asking separately puts two
+  // permission dialogs in front of somebody trying to join a meeting.
   useEffect(() => {
     let cancelled = false;
 
-    async function acquire() {
-      streamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
-      streamRef.current = null;
-
-      const wantVideo = cameraEnabled;
-      if (!wantVideo && micDenied) {
-        setStream(null);
-        onPreviewStreamRef.current?.(null);
-        return;
-      }
-
+    async function openBoth() {
+      const wantVideo = cameraEnabledRef.current;
+      const cam = camIdRef.current;
+      const mic = micIdRef.current;
       try {
         const s = await navigator.mediaDevices.getUserMedia({
-          video: wantVideo ? constraintsFor("videoinput", camId || null) : false,
-          audio: micDenied ? false : constraintsFor("audioinput", micId || null),
+          video: wantVideo ? constraintsFor("videoinput", cam || null) : false,
+          audio: constraintsFor("audioinput", mic || null),
         });
-        if (cancelled) {
-          s.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = s;
-        setStream(s);
-        onPreviewStreamRef.current?.(s);
+        if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
+        const v = s.getVideoTracks()[0] ?? null;
+        const a = s.getAudioTracks()[0] ?? null;
+        adoptVideo(v);
+        adoptAudio(a);
+        // The id we asked for wins over the one reported back: a browser that
+        // resolves "default" to a concrete id would otherwise look like a
+        // device change on the next render and reopen the camera in a loop.
+        openedCamRef.current = cam || v?.getSettings().deviceId || null;
+        openedMicRef.current = mic || a?.getSettings().deviceId || null;
         setCameraDenied(false);
-        if (!micDenied) setMicDenied(false);
+        setMicDenied(false);
 
         // Labels only arrive once permission is granted, so the pickers stay
         // anonymous until this point. Re-enumerating here is what fills them in.
         await refreshDevices();
         if (cancelled) return;
-        const settings = s.getVideoTracks()[0]?.getSettings();
-        if (settings?.deviceId && !camId) setCamId(settings.deviceId);
-        const micSettings = s.getAudioTracks()[0]?.getSettings();
-        if (micSettings?.deviceId && !micId) setMicId(micSettings.deviceId);
+        if (!cam && openedCamRef.current) setCamId(openedCamRef.current);
+        if (!mic && openedMicRef.current) setMicId(openedMicRef.current);
+        return;
       } catch (err) {
         if (cancelled) return;
         const name = err instanceof Error ? err.name : "";
         if (name === "NotAllowedError" || name === "PermissionDeniedError") {
           // The browser does not say which of the two was refused, and asking
-          // separately would mean two prompts. Treat a blanket refusal as both,
-          // then let the retry below narrow it.
-          setCameraDenied(cameraEnabled);
+          // separately would mean two prompts. Treat a blanket refusal as both.
+          setCameraDenied(wantVideo);
           setMicDenied(true);
-        } else if (name === "OverconstrainedError" || name === "NotFoundError") {
-          // A remembered device that has since been unplugged. Forget it and
-          // fall back rather than leaving the member staring at a black square.
-          if (camId) { setCamId(""); return; }
-          if (micId) { setMicId(""); return; }
-          setCameraDenied(false);
+          await refreshDevices();
+          return;
         }
-        setStream(null);
-        onPreviewStreamRef.current?.(null);
+        // A combined request fails whole. A laptop with no webcam, or a camera
+        // another application already holds, used to cost the microphone too —
+        // the member arrived in the green room with no preview AND no meter,
+        // and no way to tell which device was the problem. Retry them apart.
+        try {
+          const audioOnly = await navigator.mediaDevices.getUserMedia({
+            audio: constraintsFor("audioinput", mic || null),
+          });
+          if (cancelled) { audioOnly.getTracks().forEach((t) => t.stop()); return; }
+          adoptAudio(audioOnly.getAudioTracks()[0] ?? null);
+          openedMicRef.current = mic || audioOnly.getAudioTracks()[0]?.getSettings().deviceId || null;
+          setMicDenied(false);
+        } catch (audioErr) {
+          if (!cancelled) handleOpenFailure("audioinput", audioErr);
+        }
+        if (cancelled || !wantVideo) { await refreshDevices(); return; }
+        try {
+          const videoOnly = await navigator.mediaDevices.getUserMedia({
+            video: constraintsFor("videoinput", cam || null),
+          });
+          if (cancelled) { videoOnly.getTracks().forEach((t) => t.stop()); return; }
+          adoptVideo(videoOnly.getVideoTracks()[0] ?? null);
+          openedCamRef.current = cam || videoOnly.getVideoTracks()[0]?.getSettings().deviceId || null;
+          setCameraDenied(false);
+        } catch (videoErr) {
+          if (!cancelled) handleOpenFailure("videoinput", videoErr);
+        }
         await refreshDevices();
       }
     }
 
-    void acquire();
+    void openBoth().finally(() => { primedRef.current = true; });
     return () => { cancelled = true; };
-  }, [camId, micId, cameraEnabled, micDenied, refreshDevices]);
+    // Mount only: the effects below maintain each device from here on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The camera, and only the camera.
+  useEffect(() => {
+    if (!primedRef.current) return;
+    if (!cameraEnabled) {
+      // Off means closed, not disabled: the hardware light staying dark is the
+      // whole point of the toggle.
+      adoptVideo(null);
+      openedCamRef.current = null;
+      return;
+    }
+    if (cameraDenied) return;
+    if (videoTrackRef.current && openedCamRef.current === (camId || null)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: constraintsFor("videoinput", camId || null),
+          audio: false,
+        });
+        if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
+        adoptVideo(s.getVideoTracks()[0] ?? null);
+        openedCamRef.current = camId || s.getVideoTracks()[0]?.getSettings().deviceId || null;
+        setCameraDenied(false);
+        await refreshDevices();
+      } catch (err) {
+        if (!cancelled) handleOpenFailure("videoinput", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [camId, cameraEnabled, cameraDenied, adoptVideo, refreshDevices, handleOpenFailure]);
+
+  // The microphone, and only the microphone.
+  useEffect(() => {
+    if (!primedRef.current) return;
+    if (micDenied) { adoptAudio(null); openedMicRef.current = null; return; }
+    if (audioTrackRef.current && openedMicRef.current === (micId || null)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          audio: constraintsFor("audioinput", micId || null),
+          video: false,
+        });
+        if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
+        adoptAudio(s.getAudioTracks()[0] ?? null);
+        openedMicRef.current = micId || s.getAudioTracks()[0]?.getSettings().deviceId || null;
+        setMicDenied(false);
+        await refreshDevices();
+      } catch (err) {
+        if (!cancelled) handleOpenFailure("audioinput", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [micId, micDenied, adoptAudio, refreshDevices, handleOpenFailure]);
+
+  // The stream the room takes over. Rebuilt only when a track actually changes,
+  // so the room is not handed a new object every render.
+  const previewStream = useMemo(() => {
+    const tracks = [videoTrack, audioTrack].filter((t): t is MediaStreamTrack => t !== null);
+    return tracks.length > 0 ? new MediaStream(tracks) : null;
+  }, [videoTrack, audioTrack]);
+
+  useEffect(() => { onPreviewStreamRef.current?.(previewStream); }, [previewStream]);
 
   // Release on unmount. The room stops the same tracks before it opens its own
   // stream, so this is a backstop for leaving the page without joining.
   useEffect(() => {
     return () => {
-      streamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
-      streamRef.current = null;
+      try { videoTrackRef.current?.stop(); } catch { /* already stopped */ }
+      try { audioTrackRef.current?.stop(); } catch { /* already stopped */ }
+      videoTrackRef.current = null;
+      audioTrackRef.current = null;
     };
   }, []);
 
@@ -413,7 +556,7 @@ export function MeetingGreenRoom({
 
   // ── Meter ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const track = stream?.getAudioTracks()[0];
+    const track = audioTrack;
     if (!track || !micEnabled) { setLevel(0); return; }
 
     type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
@@ -452,7 +595,7 @@ export function MeetingGreenRoom({
       try { source.disconnect(); } catch { /* context already torn down */ }
       void ctx.close().catch(() => {});
     };
-  }, [stream, micEnabled]);
+  }, [audioTrack, micEnabled]);
 
   // A fresh microphone deserves a fresh verdict.
   useEffect(() => {
@@ -463,9 +606,9 @@ export function MeetingGreenRoom({
   // ── Remembered choices ───────────────────────────────────────────────────
   useEffect(() => {
     if (devices.length === 0) return;
-    setCamId((current) => current || pickDevice(devices, "videoinput", remembered("videoinput"))?.deviceId || "");
-    setMicId((current) => current || pickDevice(devices, "audioinput", remembered("audioinput"))?.deviceId || "");
-    setSpeakerId((current) => current || pickDevice(devices, "audiooutput", remembered("audiooutput"))?.deviceId || "");
+    setCamId((current) => current || pickDevice(devices, "videoinput", rememberedDevice("videoinput"))?.deviceId || "");
+    setMicId((current) => current || pickDevice(devices, "audioinput", rememberedDevice("audioinput"))?.deviceId || "");
+    setSpeakerId((current) => current || pickDevice(devices, "audiooutput", rememberedDevice("audiooutput"))?.deviceId || "");
   }, [devices]);
 
   const problems = readinessProblems({
@@ -484,7 +627,7 @@ export function MeetingGreenRoom({
   const listenOnly = joinable && micDenied;
 
   const choose = (kind: DeviceKind, deviceId: string) => {
-    remember(kind, deviceId);
+    rememberDevice(kind, deviceId);
     if (kind === "videoinput") setCamId(deviceId);
     else if (kind === "audioinput") setMicId(deviceId);
     else setSpeakerId(deviceId);
@@ -492,9 +635,9 @@ export function MeetingGreenRoom({
 
   const join = () => {
     if (!canPressJoin(admission)) return;
-    if (camId) remember("videoinput", camId);
-    if (micId) remember("audioinput", micId);
-    if (speakerId) remember("audiooutput", speakerId);
+    rememberDevice("videoinput", camId);
+    rememberDevice("audioinput", micId);
+    rememberDevice("audiooutput", speakerId);
     onJoin({ cameraId: camId, micId, speakerId, cameraEnabled, micEnabled, background: bgEffect });
   };
 
@@ -509,9 +652,9 @@ export function MeetingGreenRoom({
       <div className="w-full max-w-sm flex flex-col gap-3">
         {/* Preview */}
         <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-[var(--line)] shadow-sm">
-          {stream && cameraEnabled && stream.getVideoTracks().length > 0 ? (
+          {videoTrack && cameraEnabled ? (
             <BackgroundPreview
-              stream={stream}
+              track={videoTrack}
               effect={bgEffect}
               image={bgImage}
               onUnavailable={onBackgroundUnavailable}

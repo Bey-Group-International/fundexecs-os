@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isPastMeeting } from "@/lib/meetings/schedule";
+import { attendedButNotHosted } from "@/lib/meetings/attendance";
 import { nextChannelName } from "./hooks";
 import { MeetingShareLink } from "./MeetingShareLink";
 
@@ -118,34 +119,36 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
     const supabase = supabaseRef.current;
 
     async function refresh() {
-      const { data: hosted } = await supabase
-        .from("live_meetings")
-        .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
-        .eq("host_id", userId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(50);
+      // Both at once — the participant lookup does not depend on the hosted
+      // list, and this refresh runs on every realtime event the room emits.
+      const [{ data: hosted }, { data: participantRows }] = await Promise.all([
+        supabase
+          .from("live_meetings")
+          .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
+          .eq("host_id", userId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("live_meeting_participants")
+          .select("meeting_id")
+          .eq("user_id", userId),
+      ]);
 
-      const { data: participantRows } = await supabase
-        .from("live_meeting_participants")
-        .select("meeting_id")
-        .eq("user_id", userId);
-
-      const participantIds = (participantRows ?? []).map((r: { meeting_id: string }) => r.meeting_id);
+      const nonHostedIds = attendedButNotHosted(
+        (participantRows ?? []).map((r: { meeting_id: string }) => r.meeting_id),
+        (hosted ?? []).map((m: { id: string }) => m.id),
+      );
       let participated: LiveMeeting[] = [];
-      if (participantIds.length > 0) {
-        const hostedIds = (hosted ?? []).map((m: { id: string }) => m.id);
-        const nonHostedIds = participantIds.filter((id: string) => !hostedIds.includes(id));
-        if (nonHostedIds.length > 0) {
-          const { data } = await supabase
-            .from("live_meetings")
-            .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
-            .in("id", nonHostedIds)
-            .is("deleted_at", null)
-            .order("created_at", { ascending: false })
-            .limit(50);
-          participated = (data ?? []) as LiveMeeting[];
-        }
+      if (nonHostedIds.length > 0) {
+        const { data } = await supabase
+          .from("live_meetings")
+          .select("id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, is_draft")
+          .in("id", nonHostedIds)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        participated = (data ?? []) as LiveMeeting[];
       }
 
       const now = Date.now();

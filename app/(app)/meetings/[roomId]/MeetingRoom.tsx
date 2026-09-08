@@ -40,6 +40,11 @@ import {
   nextPhase,
   type CallPhase,
 } from "@/lib/meetings/call-phase";
+import {
+  PARTICIPANT_CONFLICT_TARGET,
+  attendanceRecord,
+} from "@/lib/meetings/attendance";
+import { rememberDevice } from "@/lib/meetings/device-prefs";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
 import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
@@ -840,6 +845,39 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // dependency without tearing down and recreating on every render.
   const supabase = useMemo(() => createClient(), []);
 
+  // The attendance row this member owns for this meeting, set once the join
+  // upsert lands and cleared when they leave. Null for a guest with no account,
+  // and null if the upsert failed — in both cases there is no row to close.
+  const attendeeRef = useRef<{ meetingId: string; userId: string } | null>(null);
+
+  /**
+   * Close the attendance row: mark when they left.
+   *
+   * Presence on the meetings list is "a row with no left_at", so leaving
+   * without writing this would leave everyone counted as still in the room.
+   *
+   * Best-effort by nature: a request started from pagehide may not survive the
+   * document, and a killed tab writes nothing at all. That is why presence also
+   * carries a staleness ceiling (PRESENCE_STALE_MS) rather than trusting this
+   * to always run.
+   */
+  const recordDeparture = useCallback(() => {
+    const attendee = attendeeRef.current;
+    if (!attendee) return;
+    // Cleared first: leave, then end-for-all, then pagehide can all fire for one
+    // departure, and three writes for one leaving is two too many.
+    attendeeRef.current = null;
+    void supabase
+      .from("live_meeting_participants")
+      .update({ left_at: new Date().toISOString() })
+      .eq("meeting_id", attendee.meetingId)
+      .eq("user_id", attendee.userId)
+      .is("left_at", null)
+      .then(({ error }) => {
+        if (error) console.warn("[meeting] departure not recorded", error.message);
+      });
+  }, [supabase]);
+
   // Local media
   const localStreamRef = useRef<MediaStream | null>(null);
   // The track the room should be seeing when nobody is sharing a screen. With a
@@ -1420,10 +1458,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         .is("started_at", null);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        void supabase.from("live_meeting_participants").upsert(
-          { meeting_id: mId, user_id: user.id, display_name: name, joined_at: new Date().toISOString() },
-          { onConflict: "meeting_id,user_id" },
-        );
+        attendeeRef.current = { meetingId: mId, userId: user.id };
+        // Awaited, and the error read. This upsert spent its whole life as a
+        // fire-and-forget `void` naming a conflict target no unique index
+        // matched, so Postgres refused every one of them with 42P10 and nobody
+        // heard: no attendance was ever recorded, and reports — readable by
+        // "host OR participant" — became host-only in practice.
+        const { error } = await supabase
+          .from("live_meeting_participants")
+          .upsert(attendanceRecord(mId, user.id, name), { onConflict: PARTICIPANT_CONFLICT_TARGET });
+        if (error) {
+          attendeeRef.current = null;
+          // Not fatal to the call: being in the room matters more than being
+          // recorded in it. But it must be visible, because the consequence
+          // (no report for this member afterwards) shows up much later and
+          // nowhere near the cause.
+          console.error("[meeting] attendance not recorded", error.message);
+        }
       }
     }
 
@@ -1726,12 +1777,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     return () => { document.title = original; };
   }, [isHost, waitingPeers.length]);
 
-  // Apply selected speaker on join
+  /**
+   * Route call audio to the chosen output device.
+   *
+   * `setSinkId` is per-element, so this has to be re-run over the current
+   * elements rather than set once. Not every browser has it (Firefox), which is
+   * why the capability is checked per element rather than assumed.
+   */
+  const applySpeakerSink = useCallback(async (deviceId: string) => {
+    if (!deviceId) return;
+    type Sinkable = HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+    const elements = document.querySelectorAll<HTMLMediaElement>("video, audio");
+    for (const el of Array.from(elements) as Sinkable[]) {
+      if (typeof el.setSinkId !== "function") continue;
+      try { await el.setSinkId(deviceId); } catch { /* device gone, or no permission for it */ }
+    }
+  }, []);
+
+  // Apply the chosen speaker — on join, and again whenever the set of people in
+  // the room changes. A sink is set on an element, and a peer who joins later
+  // arrives with a brand new one: without re-running here, the member who
+  // deliberately chose their headset heard everybody after the first through
+  // the laptop speakers instead, with nothing on screen to explain it.
   useEffect(() => {
     if (!ready || !selectedSpeakerId) return;
-    const videos = document.querySelectorAll("video");
-    for (const v of Array.from(videos)) { const el = v as any; if (typeof el.setSinkId === "function") void el.setSinkId(selectedSpeakerId); }
-  }, [ready, selectedSpeakerId]);
+    void applySpeakerSink(selectedSpeakerId);
+  }, [ready, selectedSpeakerId, peers, applySpeakerSink]);
 
   // ── Duration timer ────────────────────────────────────────────────────────
 
@@ -2273,31 +2344,116 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch { /* user cancelled the picker */ }
   }, [shareOn, restoreCameraTrack]);
 
+  /**
+   * Move the call onto another microphone.
+   *
+   * Three things here are not incidental:
+   *
+   * `constraintsFor` rather than a bare deviceId — the raw request dropped echo
+   * cancellation, noise suppression and gain control, which are exactly what
+   * keep a laptop mic in a hard room usable. Switching mics used to introduce
+   * echo to a call that did not have any.
+   *
+   * `enabled = micOnRef.current` — a fresh track arrives live. A muted member
+   * who changed microphones was put back on the wire mid-sentence while the
+   * button still read "muted". `swapOutgoingVideo` has always done this for the
+   * camera; the audio path simply never had a counterpart.
+   *
+   * Remembering the choice — the green room writes the preference and this did
+   * not, so a mid-call switch to a headset was forgotten by the next call.
+   */
   const switchMic = useCallback(async (deviceId: string) => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } }, video: false });
+      const s = await navigator.mediaDevices.getUserMedia({
+        audio: constraintsFor("audioinput", deviceId || null),
+        video: false,
+      });
       const t = s.getAudioTracks()[0];
-      if (!t || !localStreamRef.current) return;
-      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((s) => s.track?.kind === "audio"); if (sender) void sender.replaceTrack(t); });
-      localStreamRef.current.getAudioTracks().forEach((t2) => { t2.stop(); localStreamRef.current!.removeTrack(t2); });
+      if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
+      t.enabled = micOnRef.current;
+      peersRef.current.forEach((pc) => { const sender = pc.getSenders().find((sn) => sn.track?.kind === "audio"); if (sender) void sender.replaceTrack(t); });
+      localStreamRef.current.getAudioTracks().forEach((t2) => { try { t2.stop(); } catch { /* already stopped */ } localStreamRef.current!.removeTrack(t2); });
       localStreamRef.current.addTrack(t);
       setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
-    } catch (e) { console.warn("[switchMic]", e); }
+      rememberDevice("audioinput", deviceId);
+      setMediaError(null);
+    } catch (e) {
+      console.warn("[switchMic]", e);
+      // Silence is the failure mode here, and silence looks exactly like
+      // nobody talking. Say so rather than leaving them on a dead mic.
+      setMediaError("That microphone could not be opened. Your previous one is still live.");
+    }
   }, []);
 
+  /** The same, for the camera. `adoptCameraTrack` re-attaches any background effect. */
   const switchCam = useCallback(async (deviceId: string) => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false });
+      const s = await navigator.mediaDevices.getUserMedia({
+        // Without these the new camera comes up at its own idea of a sensible
+        // resolution — 4K on some webcams — and on a mesh call every
+        // participant uploads a copy of it to every other participant.
+        video: constraintsFor("videoinput", deviceId || null),
+        audio: false,
+      });
       const t = s.getVideoTracks()[0];
-      if (!t || !localStreamRef.current) return;
+      if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
       await adoptCameraTrack(t);
-    } catch (e) { console.warn("[switchCam]", e); }
+      rememberDevice("videoinput", deviceId);
+      setMediaError(null);
+    } catch (e) {
+      console.warn("[switchCam]", e);
+      setMediaError("That camera could not be opened. Your previous one is still live.");
+    }
   }, [adoptCameraTrack]);
 
   const switchSpeaker = useCallback(async (deviceId: string) => {
-    const videos = document.querySelectorAll("video");
-    for (const v of Array.from(videos)) { const el = v as any; if (typeof el.setSinkId === "function") try { await el.setSinkId(deviceId); } catch { /* ignore */ } }
-  }, []);
+    setSelectedSpeakerId(deviceId);
+    rememberDevice("audiooutput", deviceId);
+    await applySpeakerSink(deviceId);
+  }, [applySpeakerSink]);
+
+  /**
+   * Recover from a device that disappeared mid-call.
+   *
+   * Unplugging a headset ends its track. WebRTC keeps the sender attached to
+   * that dead track quite happily, so the call carries on looking normal while
+   * the member is inaudible — and the only clue is other people saying they
+   * cannot hear them. Falling back to the system default is what a native
+   * client does, and it is nearly always the right guess: whatever the laptop
+   * switched to when the headset came out.
+   *
+   * Deliberately not remembering the fallback: the member did not choose it,
+   * and writing it over their real preference would mean plugging the headset
+   * back in no longer restored it next call.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    const stream = localStreamRef.current;
+    if (!stream) return;
+
+    const audio = stream.getAudioTracks()[0];
+    const video = stream.getVideoTracks()[0];
+
+    const onAudioEnded = () => {
+      setMediaError("Your microphone disconnected. Switching to the system default…");
+      void switchMic("");
+    };
+    // Only when the camera track IS the camera. With a background effect on,
+    // the outgoing track is the processor's canvas, and its ending means the
+    // effect stopped, which the background code already handles.
+    const onVideoEnded = () => {
+      if (!camOnRef.current) return;
+      setMediaError("Your camera disconnected. Switching to the system default…");
+      void switchCam("");
+    };
+
+    audio?.addEventListener("ended", onAudioEnded);
+    if (video && video === rawCameraTrackRef.current) video.addEventListener("ended", onVideoEnded);
+    return () => {
+      audio?.removeEventListener("ended", onAudioEnded);
+      video?.removeEventListener("ended", onVideoEnded);
+    };
+  }, [ready, localStream, switchMic, switchCam]);
 
   const toggleRaiseHand = useCallback(() => {
     // Same shape as the mic and camera toggles: read the ref, write the ref,
@@ -2397,6 +2553,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    */
   const teardownCall = useCallback(() => {
     clearWaitingTimers();
+    // Every way out of a call comes through here — the leave button, the host
+    // ending it, being denied — so this is the one place departure has to be
+    // written for presence to ever go back down.
+    recordDeparture();
     // Clearing the timers stopped the poll but left `waitingForAdmit` set, and
     // the waiting screen is rendered ahead of every exit screen below — so a
     // guest who pressed Cancel got the timers torn down and then went on staring
@@ -2428,7 +2588,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setLocalStream(null);
     setPeers(new Map());
     setSpeaking(new Set());
-  }, [clearWaitingTimers]);
+  }, [clearWaitingTimers, recordDeparture]);
 
   const teardownCallRef = useRef(teardownCall);
   useEffect(() => { teardownCallRef.current = teardownCall; }, [teardownCall]);
@@ -2441,6 +2601,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // depending on `teardownCall` would re-run this whenever its identity changed
   // and tear down a live call mid-meeting.
   useEffect(() => () => { teardownCallRef.current(); }, []);
+
+  // Closing the tab is a way of leaving a meeting, and by far the most common
+  // one. `pagehide` rather than `beforeunload`: it fires on mobile Safari's
+  // back-forward cache path too, where beforeunload does not.
+  useEffect(() => {
+    const onHide = () => recordDeparture();
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [recordDeparture]);
 
   const leaveMeeting = useCallback(() => {
     // The ref, not the state, is the guard: a second click lands before React has

@@ -232,3 +232,41 @@ describe("logEntrySubtitle", () => {
       .toContain("1 key point ·");
   });
 });
+
+// ── Attendance ─────────────────────────────────────────────────────────────
+
+describe("log entries for a meeting the viewer was not in", () => {
+  const meeting = {
+    id: "m1",
+    room_code: "abc-def",
+    title: "Board sync",
+    created_at: "2026-09-01T10:00:00.000Z",
+    started_at: "2026-09-01T10:00:00.000Z",
+    ended_at: "2026-09-01T10:45:00.000Z",
+    scheduled_at: null,
+    duration_minutes: null,
+    status: "ended",
+    attendees: null,
+  };
+
+  it("treats a meeting as attended unless told otherwise", () => {
+    expect(toLogEntry(meeting, null).attended).toBe(true);
+  });
+
+  it("carries the flag through", () => {
+    expect(toLogEntry(meeting, null, false).attended).toBe(false);
+  });
+
+  it("says attendees-only rather than 'No report'", () => {
+    // RLS empties the report for a non-attendee, so hasReport is false for a
+    // report that very much exists. Labelling that "No report" would have the
+    // log misreport its own contents.
+    expect(logEntrySubtitle(toLogEntry(meeting, null, false))).toBe("Attendees only");
+    expect(logEntrySubtitle(toLogEntry(meeting, null, true))).toBe("No report");
+  });
+
+  it("still describes a report the viewer did attend", () => {
+    const report = { summary: "Discussed the raise.", key_points: ["a", "b"], action_items: null, analysis: null };
+    expect(logEntrySubtitle(toLogEntry(meeting, report, true))).toBe("2 key points");
+  });
+});
