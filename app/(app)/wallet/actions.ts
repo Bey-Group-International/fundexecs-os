@@ -277,6 +277,14 @@ export async function payInvoiceByCardAction(invoiceId: string): Promise<ActionR
     if (!invoice || invoice.id !== invoiceId) {
       return { error: "That invoice is no longer outstanding." };
     }
+    if (invoice.status === "processing") {
+      // A bank debit is already collecting this. Paying again by card would take
+      // the money twice, and the debit cannot be recalled once submitted.
+      return {
+        error:
+          "We're already collecting this from your linked account. It'll clear shortly — no need to pay again.",
+      };
+    }
 
     return checkoutResult(
       await createCheckout({

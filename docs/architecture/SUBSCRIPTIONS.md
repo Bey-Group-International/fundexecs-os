@@ -19,6 +19,47 @@ four consequences, all of them visible to paying operators:
 None of these are processor bugs. They are the shape of a system that let an
 external service hold state the product needed to reason about.
 
+## Collecting: the invoice pays itself
+
+An invoice is collected on the best rail the org has, preferred in this order:
+
+| Rail | When | Cost |
+| --- | --- | --- |
+| `ach_debit` | The org has an active linked bank account (`linked_accounts`) | Cents, and it collects itself |
+| `transfer` | Remittance details configured; the operator pushes a wire | Free, but needs a human at both ends |
+| `card` | Fallback — overdue invoices, or an operator who wants access today | Card rates |
+
+**ACH is the whole design constraint.** A debit is submitted, and clears — or
+bounces with a return code — days later. So there is a state between issued and
+paid: `processing` means money is in flight and **nothing has been collected
+yet**. A period's credits are released only by `paid`. Treating a submitted
+debit as settled would hand over a period against money that can still come
+back, which is the one mistake this state exists to prevent.
+
+```
+open ──debit submitted──► processing ──cleared──► paid ──► period granted
+                              └──────bounced─────► open (reason recorded)
+```
+
+`collectNativePayments` runs first in the sweep, so a debit that cleared
+overnight settles its invoice and renews the period on the same pass rather than
+an hour later. A bounce puts the invoice back to `open` with an operator-readable
+reason, and the ordinary overdue path takes it from there.
+
+Two rules keep this from costing the operator money:
+
+- **An invoice is never debited twice.** `settlement_intent` is written before
+  the outcome matters, and a unique index enforces one intent per invoice.
+- **A bank that refused is not asked again on the same rail.** `overdueRoute`
+  routes a bounced invoice to the card, not to another debit — a second attempt
+  against an account that just returned one bounces again and earns another
+  return fee. A permanently dead account (closed, unrecognised, debits not
+  authorised) ends the rail outright.
+
+An invoice being collected still counts as **outstanding**: it stays visible in
+the wallet, blocks a second bill for the same period, and refuses a card payment
+that would take the money twice.
+
 ## Settlement: invoice first, card as fallback
 
 A period is paid for by an **invoice the operator settles by bank transfer**.

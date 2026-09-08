@@ -635,6 +635,11 @@ export type SubscriptionInvoiceRow = {
   paid_via: string | null;
   payment_reference: string | null;
   applied_at: string | null;
+  // migration 20260908180000 — in-flight bank debit
+  settlement_intent: string | null;
+  settlement_started_at: string | null;
+  settlement_failure: string | null;
+  settlement_attempts: number;
   note: string | null;
   created_at: string;
   updated_at: string;

@@ -13,6 +13,7 @@ import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/rem
 import {
   runSubscriptionRenewals,
   applySettledInvoices,
+  collectNativePayments,
   type RenewalStats,
 } from "@/lib/subscriptions.server";
 import { recordCronRun } from "@/lib/cron-health";
@@ -238,6 +239,16 @@ export async function GET(request: Request) {
   let subscriptions: RenewalStats = {
     due: 0, renewed: 0, failed: 0, ended: 0, credits: 0, invoiced: 0, awaiting: 0,
   };
+  // Bank debits first: ACH clears days after it is submitted, so this is where
+  // an invoice actually becomes paid. Doing it before the two blocks below means
+  // a payment that landed overnight starts its plan (or renews it) on this pass.
+  let nativeCollections = { polled: 0, settled: 0, bounced: 0 };
+  try {
+    nativeCollections = await collectNativePayments(supabase, now);
+  } catch (e) {
+    console.error("native_payment_collection failed", e);
+  }
+
   let settledInvoices = { applied: 0, started: 0, credits: 0 };
   try {
     // Settled invoices first: a transfer confirmed since the last sweep should
@@ -284,6 +295,9 @@ export async function GET(request: Request) {
         subscriptionsAwaitingPayment: subscriptions.awaiting,
         subscriptionInvoicesApplied: settledInvoices.applied,
         subscriptionsStartedByPayment: settledInvoices.started,
+        bankDebitsPolled: nativeCollections.polled,
+        bankDebitsSettled: nativeCollections.settled,
+        bankDebitsReturned: nativeCollections.bounced,
       },
       startedAt: now,
     });
@@ -291,5 +305,5 @@ export async function GET(request: Request) {
     // best-effort: never let health tracking break the cron response
   }
 
-  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions, settledInvoices });
+  return NextResponse.json({ swept: due.length, results, radar, escalated, webhooks, proactive, reminders, subscriptions, settledInvoices, nativeCollections });
 }

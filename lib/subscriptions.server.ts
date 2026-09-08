@@ -29,6 +29,13 @@ import {
   type SubscriptionInvoice,
 } from "@/lib/subscription-invoices";
 import {
+  debitInvoice,
+  pollSettlement,
+  inFlightDebits,
+  settlementCapability,
+} from "@/lib/native-payments.server";
+import { preferredRoute, overdueRoute } from "@/lib/native-payments";
+import {
   PLAN_BY_KEY,
   planPrice,
   planGrantCredits,
@@ -662,6 +669,63 @@ export async function applySettledInvoices(
   return stats;
 }
 
+// Give an in-flight debit the time ACH actually takes before looking again.
+function expectedClearing(now: Date): string {
+  return new Date(now.getTime() + 5 * 86_400_000).toISOString();
+}
+
+/**
+ * Resolve every bank debit that is in flight.
+ *
+ * Runs before the renewal sweep: a debit that cleared since the last pass should
+ * settle its invoice in the same run, so the operator gets the period they paid
+ * for now rather than an hour later. A bounce puts the invoice back to open and
+ * wakes the subscription, so the overdue path can reach for the card.
+ */
+export async function collectNativePayments(
+  service: ServiceClient,
+  now: Date = new Date(),
+): Promise<{ polled: number; settled: number; bounced: number }> {
+  const stats = { polled: 0, settled: 0, bounced: 0 };
+  for (const invoice of await inFlightDebits(service)) {
+    try {
+      stats.polled += 1;
+      const result = await pollSettlement(invoice, service);
+      if (result.settled) {
+        stats.settled += 1;
+        if (invoice.subscription_id) {
+          // Wake it so the renewal sweep hands the period over on this pass.
+          await service
+            .from("subscriptions")
+            .update({ next_attempt_at: null })
+            .eq("id", invoice.subscription_id);
+        }
+      } else if (result.failed) {
+        stats.bounced += 1;
+        await recordEvent(service, {
+          orgId: invoice.organization_id,
+          subscriptionId: invoice.subscription_id,
+          kind: "debit_returned",
+          plan: invoice.plan,
+          interval: invoice.interval,
+          amountUsd: Number(invoice.amount_usd),
+          note: invoice.settlement_failure ?? "The bank returned the payment",
+        });
+        if (invoice.subscription_id) {
+          await service
+            .from("subscriptions")
+            .update({ next_attempt_at: null })
+            .eq("id", invoice.subscription_id);
+        }
+      }
+    } catch (err) {
+      console.error("[subscriptions] polling a debit failed", invoice.id, err);
+    }
+  }
+  void now;
+  return stats;
+}
+
 export interface RenewalStats {
   due: number;
   renewed: number;
@@ -845,8 +909,41 @@ async function settleByInvoice(
     });
   }
 
-  // Still within terms: wait for the money rather than reaching for a card.
+  // A debit already in flight: the money is coming, so wait for it. The poll
+  // that resolves it runs before this sweep (see collectNativePayments).
+  if (invoice.status === "processing") {
+    return { ok: false, invoiced: true, invoice };
+  }
+
+  // Still within terms. Collect it rather than only printing instructions: an
+  // org with a linked account gets debited, which is the whole point of the
+  // native rail — nobody has to remember to send anything.
   if (!isOverdue(invoice, now)) {
+    const cap = await settlementCapability(service, sub.organization_id);
+    if (preferredRoute(cap) === "ach_debit" && !invoice.settlement_intent) {
+      const debit = await debitInvoice(invoice, service);
+      if (debit.ok && debit.processing) {
+        await recordEvent(service, {
+          orgId: sub.organization_id,
+          subscriptionId: sub.id,
+          kind: "debit_submitted",
+          plan: target.plan,
+          interval: target.interval,
+          amountUsd: price,
+          reference: debit.intent ?? null,
+          note: `${invoice.number} — collecting from the linked account`,
+        });
+        // Look again once it should have cleared, not every hour until then.
+        await service
+          .from("subscriptions")
+          .update({ next_attempt_at: invoice.due_at })
+          .eq("id", sub.id);
+        return { ok: false, invoiced: true, invoice };
+      }
+      // Could not submit — fall through to the wire instructions below, which is
+      // still a native way to pay.
+    }
+
     if (!issued.existing) {
       await recordEvent(service, {
         orgId: sub.organization_id,
@@ -867,7 +964,22 @@ async function settleByInvoice(
     return { ok: false, invoiced: true, invoice };
   }
 
-  // Overdue: this is where the processor earns its keep.
+  // Overdue. Which rail is left depends on what the org has and on whether a
+  // debit has already bounced — asking a bank twice for money it refused just
+  // earns another return fee.
+  const cap = await settlementCapability(service, sub.organization_id);
+  const route = overdueRoute(cap, invoice);
+  if (route === "ach_debit" && !invoice.settlement_intent) {
+    const debit = await debitInvoice(invoice, service);
+    if (debit.ok && debit.processing) {
+      await service
+        .from("subscriptions")
+        .update({ next_attempt_at: expectedClearing(now) })
+        .eq("id", sub.id);
+      return { ok: false, invoiced: true, invoice };
+    }
+  }
+  // This is where the processor earns its keep.
   return chargeAndApply(service, sub, terms, now, invoice);
 }
 

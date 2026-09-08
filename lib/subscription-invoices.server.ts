@@ -113,7 +113,7 @@ export async function issueInvoice(
   return { ok: true, invoice: data as SubscriptionInvoice };
 }
 
-/** The organization's currently-open bill, if it has one. */
+/** The organization's current unsettled bill, if it has one. */
 async function openInvoiceForOrg(
   service: ServiceClient,
   orgId: string,
@@ -122,7 +122,7 @@ async function openInvoiceForOrg(
     .from("subscription_invoices")
     .select("*")
     .eq("organization_id", orgId)
-    .eq("status", "open")
+    .in("status", OUTSTANDING_STATUSES as unknown as string[])
     .order("issued_at", { ascending: true })
     .limit(1);
   return ((data ?? [])[0] as SubscriptionInvoice | undefined) ?? null;
@@ -153,6 +153,12 @@ async function invoiceForPeriod(
   return ((data ?? [])[0] as SubscriptionInvoice | undefined) ?? null;
 }
 
+// An invoice is outstanding while it is unpaid OR while its money is in flight.
+// A debit that has been submitted has collected nothing yet, so treating
+// 'processing' as settled would both hide the bill from the operator and let a
+// second one be issued for the same period.
+const OUTSTANDING_STATUSES = ["open", "processing"] as const;
+
 /** The invoice a subscription is currently waiting on, if any. */
 export async function outstandingInvoice(
   orgId: string,
@@ -163,7 +169,7 @@ export async function outstandingInvoice(
     .from("subscription_invoices")
     .select("*")
     .eq("organization_id", orgId)
-    .eq("status", "open")
+    .in("status", OUTSTANDING_STATUSES as unknown as string[])
     .order("issued_at", { ascending: true })
     .limit(1);
   return ((data ?? [])[0] as SubscriptionInvoice | undefined) ?? null;

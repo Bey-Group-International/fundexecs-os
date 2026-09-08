@@ -12,8 +12,16 @@
 // lib/subscription-invoices.server.
 import { formatUsd, type PlanInterval, type PlanKey } from "@/lib/billing";
 
-export type SubscriptionInvoiceStatus = "open" | "paid" | "void" | "written_off";
-export type SettlementMethod = "bank_transfer" | "card" | "manual" | "credit";
+// 'processing' is money in flight: a bank debit has been submitted but ACH does
+// not clear (or bounce) for days, and an invoice in that state has collected
+// nothing yet.
+export type SubscriptionInvoiceStatus =
+  | "open"
+  | "processing"
+  | "paid"
+  | "void"
+  | "written_off";
+export type SettlementMethod = "bank_transfer" | "ach_debit" | "card" | "manual" | "credit";
 
 export interface SubscriptionInvoice {
   id: string;
@@ -33,6 +41,11 @@ export interface SubscriptionInvoice {
   paid_via: SettlementMethod | null;
   payment_reference: string | null;
   applied_at: string | null;
+  /** The bank debit in flight, and what became of the last one. */
+  settlement_intent: string | null;
+  settlement_started_at: string | null;
+  settlement_failure: string | null;
+  settlement_attempts: number;
   note: string | null;
   created_at: string;
   updated_at: string;
@@ -126,7 +139,13 @@ export function remittanceConfigured(): boolean {
 // Display
 // ---------------------------------------------------------------------------
 
-export type InvoiceHealth = "due" | "due_soon" | "overdue" | "settled" | "closed";
+export type InvoiceHealth =
+  | "due"
+  | "due_soon"
+  | "overdue"
+  | "collecting"
+  | "settled"
+  | "closed";
 
 /** How an invoice should read to the operator looking at their wallet. */
 export function invoiceHealth(
@@ -135,6 +154,8 @@ export function invoiceHealth(
 ): InvoiceHealth {
   if (invoice.status === "paid") return "settled";
   if (invoice.status === "void" || invoice.status === "written_off") return "closed";
+  // Money already on its way is not overdue, however long the bank takes.
+  if (invoice.status === "processing") return "collecting";
   if (isOverdue(invoice, now)) return "overdue";
   return daysUntilDue(invoice, now) <= 3 ? "due_soon" : "due";
 }
@@ -148,6 +169,8 @@ export function invoiceSummary(
   switch (invoiceHealth(invoice, now)) {
     case "settled":
       return `${invoice.number} — ${amount} received. Thank you.`;
+    case "collecting":
+      return `${invoice.number} — ${amount} is being collected from your linked account.`;
     case "closed":
       return `${invoice.number} — ${amount}, no longer payable.`;
     case "overdue": {

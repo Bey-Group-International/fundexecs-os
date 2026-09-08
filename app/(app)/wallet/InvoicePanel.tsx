@@ -10,6 +10,7 @@ import {
   type RemittanceDetails,
   type SubscriptionInvoice,
 } from "@/lib/subscription-invoices";
+import { settlementSummary } from "@/lib/native-payments";
 import { payInvoiceByCardAction } from "./actions";
 
 const StripeCheckoutModal = dynamic(
@@ -36,6 +37,10 @@ export function InvoicePanel({
   const [pending, startTransition] = useTransition();
 
   const health = invoiceHealth(invoice);
+  // A debit already collecting: the operator has nothing to do, and must not be
+  // shown wire instructions or a card button that would take the money twice.
+  const collecting = invoice.status === "processing";
+  const settlement = settlementSummary(invoice);
   const days = daysUntilDue(invoice, new Date());
   const plan = PLAN_BY_KEY[invoice.plan as PlanKey];
   const reference = paymentReferenceFor(invoice);
@@ -75,14 +80,18 @@ export function InvoicePanel({
               </span>
             </p>
             <p className="mt-2 text-sm text-fg-secondary">
-              {health === "overdue" ? (
+              {collecting ? (
+                settlement
+              ) : health === "overdue" ? (
                 <span className="text-status-danger">
                   {Math.abs(days)} day(s) overdue.
                 </span>
               ) : (
                 <>Due in {days} day(s).</>
               )}{" "}
-              {formatCredits(invoice.credits)} credits are released when payment clears.
+              {!collecting && (
+                <>{formatCredits(invoice.credits)} credits are released when payment clears.</>
+              )}
             </p>
           </div>
           <span
@@ -95,11 +104,18 @@ export function InvoicePanel({
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-current" />
-            {health === "overdue" ? "Overdue" : "Awaiting payment"}
+            {collecting ? "Collecting" : health === "overdue" ? "Overdue" : "Awaiting payment"}
           </span>
         </div>
 
-        {remittance ? (
+        {/* A previous debit that bounced: say so plainly, above the ways to fix it. */}
+        {!collecting && invoice.settlement_failure ? (
+          <p className="mt-4 rounded-xl border border-status-danger/40 bg-status-danger/[0.07] px-4 py-3 text-sm text-status-danger">
+            {invoice.settlement_failure}
+          </p>
+        ) : null}
+
+        {collecting ? null : remittance ? (
           <div className="mt-5 rounded-xl border border-line/50 bg-surface-1/40 p-4">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300/70">
               Pay by transfer
@@ -131,7 +147,7 @@ export function InvoicePanel({
           </p>
         )}
 
-        {cardAvailable && (
+        {cardAvailable && !collecting && (
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               type="button"
