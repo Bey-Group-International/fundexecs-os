@@ -19,15 +19,62 @@ four consequences, all of them visible to paying operators:
 None of these are processor bugs. They are the shape of a system that let an
 external service hold state the product needed to reason about.
 
+## Settlement: invoice first, card as fallback
+
+A period is paid for by an **invoice the operator settles by bank transfer**.
+That is the native path: no processor sits in the loop and the money arrives
+directly. A card is the fallback, used in three places — when no remittance
+details are configured (nowhere to send a transfer), when the operator chooses
+to pay a bill by card for immediate access, and when an invoice passes its due
+date unsettled.
+
+```
+purchase ──► invoice issued ──► transfer confirmed in /admin ──► plan starts
+period ends ─► invoice issued ─► settled in terms ──► period + credits granted
+                              └─ overdue ──► card on file ──► settled
+                                          └─ no card / declined ──► dunning ──► closed
+```
+
+Nothing is granted before something is collected. The old native rail settled a
+charge by *doing nothing*, which is fine in a demo and a giveaway in production;
+credits are now released when an invoice is marked paid, and never before.
+
+Access continues while an invoice is open and inside its terms
+(`NET_TERMS_DAYS`, 14) — the operator has been billed, not cut off, and a wire
+takes days.
+
+**Two database invariants carry the safety here**, and both were put there
+because the end-to-end harness broke without them:
+
+- `subscription_invoices_period_once` — one invoice per subscription period.
+- `subscription_invoices_one_open_per_org` — one *open* invoice per org. The
+  first index cannot carry this alone: a first purchase is billed before the
+  subscription exists, so its `subscription_id` is null, and Postgres treats
+  nulls as distinct in a unique index. Two clicks on "choose a plan" therefore
+  produced two bills.
+
+`applied_at` is claimed with a compare-and-set before any credits are granted,
+so a period is handed over exactly once no matter how many times an invoice is
+confirmed or a sweep re-runs.
+
+Confirming a transfer is a **platform-admin action** (`/admin`), gated by
+`requirePlatformAdmin` in the server action itself rather than only by the page:
+an operator must never be able to mark their own bill paid. The reference (wire
+id, transfer note) is required, because it is the audit trail tying a period's
+credits to a specific payment.
+
 ## Shape
 
 ```
-lib/subscriptions.ts          pure state machine — period math, proration, dunning
-lib/subscriptions.server.ts   the lifecycle against the DB
-lib/billing-rail.ts           the seam where a period meets money
-lib/stripe.ts                 the Stripe rail: collect a payment, save the card
-app/api/cron                  the hourly sweep that makes plans actually recur
-app/(app)/wallet              purchase, change, cancel, resume, billing history
+lib/subscriptions.ts              pure state machine — period math, proration, dunning
+lib/subscriptions.server.ts       the lifecycle against the DB
+lib/subscription-invoices.ts      terms, overdue boundary, remittance config (pure)
+lib/subscription-invoices.server  issuing, settling and applying invoices
+lib/billing-rail.ts               the seam where a period meets money
+lib/stripe.ts                     the fallback rail: collect a payment, save the card
+app/api/cron                      the hourly sweep that makes plans actually recur
+app/(app)/wallet                  the bill, how to pay it, and the plan itself
+app/admin                         confirming transfers — staff only
 ```
 
 Two tables (migration `20260907160000`):

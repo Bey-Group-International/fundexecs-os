@@ -164,6 +164,13 @@ beforeEach(() => {
   grantCredits.mockClear();
   chargeSubscription.mockClear();
   chargeSubscription.mockResolvedValue({ ok: true, reference: "ref_1" });
+  // This suite covers the CARD path. Settlement chooses the invoice path when
+  // remittance details exist, so they must be absent here — the invoice path has
+  // its own coverage in lib/subscription-invoices.test.ts and the end-to-end
+  // harness, which need a real database to mean anything.
+  delete process.env.FUNDEXECS_REMITTANCE_BANK_NAME;
+  delete process.env.FUNDEXECS_REMITTANCE_ACCOUNT_NAME;
+  delete process.env.FUNDEXECS_REMITTANCE_ACCOUNT_NUMBER;
 });
 
 describe("startSubscription", () => {

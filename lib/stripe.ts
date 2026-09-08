@@ -25,7 +25,12 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { purchaseGift } from "@/lib/gift-earn";
 import { markInvoicePaid } from "@/lib/invoices.server";
 import { addPack } from "@/lib/purchase";
-import { startSubscription, savePaymentMethod } from "@/lib/subscriptions.server";
+import {
+  startSubscription,
+  savePaymentMethod,
+  applySettledInvoices,
+} from "@/lib/subscriptions.server";
+import { markInvoiceSettled } from "@/lib/subscription-invoices.server";
 import {
   PLAN_BY_KEY,
   CREDIT_PACKS,
@@ -99,6 +104,18 @@ export type CheckoutIntent =
       packKey: string;
       recipientEmail: string;
       message?: string;
+    }
+  // A SUBSCRIPTION invoice — FundExecs billing this org for a period. The card
+  // is the fallback for the native transfer path: paying here settles the
+  // invoice, which is what releases the period's credits. The amount comes from
+  // the stored invoice, never from the browser.
+  | {
+      kind: "subscription_invoice";
+      orgId: string;
+      createdBy: string | null;
+      invoiceId: string;
+      number: string;
+      amountUsd: number;
     }
   // A payment-link invoice. `orgId` is the MERCHANT (whose Stripe account
   // collects); the payer is anyone with the link, so amount/title/currency are
@@ -214,6 +231,35 @@ export async function createCheckout(
         },
       ],
     };
+  } else if (intent.kind === "subscription_invoice") {
+    if (!Number.isFinite(intent.amountUsd) || intent.amountUsd <= 0) {
+      return { error: "This invoice has no payable amount." };
+    }
+    amountUsd = intent.amountUsd;
+    metadata.subscription_invoice_id = intent.invoiceId;
+    metadata.invoice_number = intent.number;
+    params = {
+      mode: "payment",
+      // Save the card while we have it: a subscriber who pays one invoice by
+      // card is exactly who the fallback should be able to charge next time an
+      // invoice goes unpaid.
+      customer_creation: "always",
+      payment_intent_data: {
+        setup_future_usage: "off_session",
+        description: `FundExecs OS — invoice ${intent.number}`,
+        metadata: { org_id: intent.orgId, subscription_invoice_id: intent.invoiceId },
+      },
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: Math.round(intent.amountUsd * 100),
+            product_data: { name: `FundExecs OS — invoice ${intent.number}` },
+          },
+        },
+      ],
+    };
   } else if (intent.kind === "gift") {
     const pack = CREDIT_PACKS.find((p) => p.key === intent.packKey);
     if (!pack) return { error: "Pick a credit pack to gift." };
@@ -324,6 +370,8 @@ function cancelPathFor(intent: CheckoutIntent): string {
       return "/gift";
     case "invoice":
       return `/pay/${intent.token}`;
+    case "subscription_invoice":
+      return "/wallet";
     default:
       return "/wallet";
   }
@@ -507,6 +555,31 @@ export async function fulfillCheckout(
       packKey: meta.pack_key ?? "",
       message: meta.message,
     });
+  } else if (kind === "subscription_invoice") {
+    // Settle the subscription bill this checkout paid, then hand over what it
+    // bought. Both steps are idempotent, so a webhook arriving after the return
+    // redirect (or vice versa) does nothing the first one didn't already do.
+    const invoiceId = meta.subscription_invoice_id;
+    if (invoiceId) {
+      const paymentIntent =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent as { id?: string } | null)?.id ?? null;
+      await markInvoiceSettled(
+        invoiceId,
+        { via: "card", reference: paymentIntent, note: "Paid by card" },
+        service,
+      );
+      await savePaymentMethod(
+        service,
+        orgId,
+        await paymentMethodFromSession(session),
+        typeof session.customer === "string"
+          ? session.customer
+          : (session.customer as { id?: string } | null)?.id ?? null,
+      );
+      await applySettledInvoices(service);
+    }
   } else if (kind === "invoice") {
     // Flip the merchant's invoice to paid (idempotent) and record the linkage.
     if (meta.invoice_id) {
