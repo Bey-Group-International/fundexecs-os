@@ -6,6 +6,15 @@
 export const FEED_CACHE_TTL_MS = 30 * 60_000;
 /** How far ahead an imported feed is read. Matches the booking window ceiling. */
 export const FEED_WINDOW_DAYS = 120;
+/**
+ * How far BACK a feed is read. Was one day, which was plenty while a feed's
+ * events were invisible and only tomorrow's availability mattered. Now that
+ * they draw on the grid, a member paging back a month would find their
+ * subscribed calendar empty and read that as broken. Costs nothing at the
+ * network — the same single fetch is parsed over a wider window — and cannot
+ * affect availability, which never asks about the past.
+ */
+export const FEED_PAST_DAYS = 30;
 /** Cap on bytes read from a third-party URL. */
 export const FEED_MAX_BYTES = 5 * 1024 * 1024;
 /** How long to wait on a third-party server before giving up. */

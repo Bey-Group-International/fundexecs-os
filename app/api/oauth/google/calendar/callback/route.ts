@@ -8,7 +8,7 @@ import {
   googleOAuthConfigured,
   verifyOAuthState,
 } from "@/lib/google-oauth";
-import { sealRefreshToken } from "@/lib/calendar/google.server";
+import { sealRefreshToken, syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 
 // GET /api/oauth/google/calendar/callback — finish a member's Google Calendar
 // connection.
@@ -23,6 +23,17 @@ import { sealRefreshToken } from "@/lib/calendar/google.server";
 // RLS-enforced client under the caller's session, so the row can only land on
 // their own user_id.
 export const dynamic = "force-dynamic";
+// The first sync runs inside this request (see below), so the default request
+// ceiling is too tight for a member with several calendars.
+export const maxDuration = 60;
+
+/**
+ * How long the first sync may take before the member is sent on with whatever
+ * it managed to read. Well inside `maxDuration`, so the redirect always happens
+ * rather than the connection dying at the platform's timeout with the member
+ * looking at an error page for something that actually worked.
+ */
+const FIRST_SYNC_BUDGET_MS = 20_000;
 
 function back(base: string, param: string): NextResponse {
   return NextResponse.redirect(`${base}/meetings?google_calendar=${param}`);
@@ -89,5 +100,34 @@ export async function GET(req: NextRequest) {
     return back(base, "save_failed");
   }
 
-  return back(base, "connected");
+  // Pull the calendars and events now, before redirecting.
+  //
+  // Until this ran, connecting Google produced a success banner and an entirely
+  // empty calendar: `google_calendars` and `external_events` are written only
+  // by the hourly cron sweep, so the rail had no layers and the grid had no
+  // events until the top of the hour — and nothing at all where CRON_SECRET is
+  // unset. A member who has just authorized their calendar and is looking at
+  // none of it has no way to tell a working connection from a broken one.
+  //
+  // Best-effort on purpose: the grant is already saved and valid. A sync that
+  // fails or runs out of budget here is something the sweep will finish, so it
+  // must not turn a successful connection into an error the member has to
+  // redo. Scoped to this member and run under their own session — RLS on all
+  // three tables is owner-based, so the rows can only land on their user_id.
+  let synced = false;
+  try {
+    const supabase = await createServerClient();
+    const result = await syncStaleGoogleConnections(supabase, {
+      userId: ctx.userId,
+      budgetMs: FIRST_SYNC_BUDGET_MS,
+    });
+    synced = result.connections > 0 && result.failed === 0 && !result.incomplete;
+  } catch (err) {
+    console.error("[/api/oauth/google/calendar/callback] first sync", err);
+  }
+
+  // Two outcomes, because they need different words: a calendar that is ready
+  // to look at, and one that is still filling in. Saying "connected" over an
+  // empty grid is the confusion this whole block exists to remove.
+  return back(base, synced ? "connected" : "connected_syncing");
 }

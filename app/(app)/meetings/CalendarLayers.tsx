@@ -20,6 +20,12 @@ interface Props {
   googleConfigured: boolean;
   onToggle: (layer: CalendarLayer, isVisible: boolean) => void;
   onToggleAvailability: (layer: CalendarLayer, blocks: boolean) => void;
+  onSync: () => void;
+  syncing: boolean;
+  /** The outcome of the last manual sync, in the member's words. */
+  syncNote: string | null;
+  /** Sources the server could not read on the last load. */
+  unavailable: Array<"google" | "ics">;
 }
 
 export default function CalendarLayers({
@@ -28,6 +34,10 @@ export default function CalendarLayers({
   googleConfigured,
   onToggle,
   onToggleAvailability,
+  onSync,
+  syncing,
+  syncNote,
+  unavailable,
 }: Props) {
   const groups = useMemo(() => groupLayers(layers), [layers]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -54,12 +64,51 @@ export default function CalendarLayers({
         </div>
       ))}
 
+      {/* A read that failed leaves the grid empty, and an empty grid in a
+          scheduling product reads as a free day. Say which calendar could not
+          be reached rather than letting silence answer for it. */}
+      {unavailable.length > 0 ? (
+        <p
+          role="status"
+          className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-2.5 py-2 text-[11px] leading-relaxed text-[var(--status-danger)]"
+        >
+          {unavailable.includes("google") && unavailable.includes("ics")
+            ? "Your calendars couldn't be read, so this view is incomplete. Events may be missing."
+            : unavailable.includes("google")
+              ? "Your Google events couldn't be read, so this view is incomplete."
+              : "Your subscribed calendars couldn't be read, so this view is incomplete."}
+        </p>
+      ) : null}
+
       {layers.length === 0 ? (
         <p className="text-xs leading-relaxed text-[var(--fg-muted)]">
           No calendars connected yet. Connecting one shows its events here, stops this
           app offering times you are already busy, and lets meeting email go out
           from your own address.
         </p>
+      ) : null}
+
+      {/* Connected calendars refresh on an hourly sweep, so between sweeps this
+          is the only way to pull in something that just changed. Shown whenever
+          there is anything to sync — a member staring at a calendar that looks
+          out of date should not have to guess whether waiting will fix it. */}
+      {layers.length > 0 || connectedAs ? (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={syncing}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-[var(--gold-400)]/50 hover:text-[var(--gold-400)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshIcon spinning={syncing} />
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+          {syncNote ? (
+            <p aria-live="polite" className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
+              {syncNote}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {googleConfigured ? (
@@ -158,7 +207,8 @@ function LayerRow({
           </label>
           {layer.source === "ics" ? (
             <p className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
-              Subscribed feed — read-only, and always counts as busy while it is shown.
+              Subscribed feed — read-only. Its events count as busy while it is shown,
+              unless the feed itself marks one free.
             </p>
           ) : !layer.canWrite ? (
             <p className="text-[11px] leading-relaxed text-[var(--fg-muted)]">
@@ -175,5 +225,25 @@ function LayerRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      className={spinning ? "animate-spin" : undefined}
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <polyline points="21 3 21 9 15 9" />
+    </svg>
   );
 }

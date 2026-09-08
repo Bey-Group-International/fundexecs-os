@@ -51,6 +51,16 @@ const OUTCOMES: Record<string, OutcomeCopy> = {
     title: (p) => `${p} connected`,
     detail: () => "The connection is live and ready to use.",
   },
+  // Google Calendar's callback runs the first sync inside the request and can
+  // run out of budget, or hit a transient failure, with the grant itself
+  // perfectly good. That is neither "connected" (the calendar is still filling
+  // in) nor an error (nothing needs redoing), so it gets its own words.
+  connected_syncing: {
+    tone: "success",
+    title: (p) => `${p} connected`,
+    detail: () =>
+      "The connection is live and your calendar is still loading. Events appear as they arrive — reopen the calendar in a moment, or use Sync now in the calendar rail.",
+  },
   denied: {
     tone: "error",
     title: (p) => `${p} connection cancelled`,

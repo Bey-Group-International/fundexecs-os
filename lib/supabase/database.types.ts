@@ -2625,6 +2625,27 @@ export type CalendarFeed = {
   updated_at: string;
 };
 
+// One event inside a subscribed ICS feed (supabase/migrations
+// 20260908200000). Display only: availability reads the merged intervals in
+// calendar_feeds.cached_busy, which the same fetch writes.
+export type CalendarFeedEvent = {
+  id: string;
+  feed_id: string;
+  user_id: string;
+  /** RFC 5545 UID — shared by every instance of a recurring series. */
+  uid: string;
+  summary: string | null;
+  location: string | null;
+  starts_at: string;
+  ends_at: string;
+  is_all_day: boolean;
+  /** RFC 5545 TRANSP: shown on the grid, but does not read as busy. */
+  transparent: boolean;
+  status: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 // Time a member marked unavailable by hand. Not a meeting: no room, attendees,
 // or lifecycle — it only removes the time from booking slots and warns when
 // something is scheduled over it.
@@ -2988,6 +3009,7 @@ export type Database = {
       scheduling_bookings: TableShape<SchedulingBooking>;
       scheduling_blocks: TableShape<SchedulingBlock>;
       calendar_feeds: TableShape<CalendarFeed>;
+      calendar_feed_events: TableShape<CalendarFeedEvent>;
       google_calendar_connections: TableShape<GoogleCalendarConnection>;
       google_calendars: TableShape<GoogleCalendarRow>;
       external_events: TableShape<ExternalEvent>;

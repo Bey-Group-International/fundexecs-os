@@ -20,6 +20,7 @@ import {
   listEvents,
   openRefreshToken,
   sealRefreshToken,
+  syncConnection,
 } from "./google.server";
 
 const fetchMock = jest.fn();
@@ -373,5 +374,135 @@ describe("applyEvents — echoes of our own writes", () => {
 
     expect(summary.skipped).toBe(0);
     expect(stored(upserts)).toEqual(["ours"]);
+  });
+});
+
+// The first sync now runs inside the OAuth callback, where a member is waiting
+// on the response. These cover the budget that keeps that request bounded —
+// and, just as importantly, what the budget must NOT do to the data.
+describe("syncConnection — time budget", () => {
+  const CALENDARS = [
+    { id: "cal-1", google_calendar_id: "a@group.calendar.google.com", sync_token: null },
+    { id: "cal-2", google_calendar_id: "b@group.calendar.google.com", sync_token: null },
+    { id: "cal-3", google_calendar_id: "c@group.calendar.google.com", sync_token: null },
+  ];
+
+  /** Records every table write so the assertions can read what actually happened. */
+  function budgetClient(updates: Array<{ table: string; patch: Record<string, unknown> }>) {
+    return {
+      from: (table: string) => ({
+        select: () => ({
+          eq: async () => ({ data: table === "google_calendars" ? CALENDARS : [], error: null }),
+          in: async () => ({ data: [], error: null }),
+        }),
+        upsert: async () => ({ error: null }),
+        delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
+        update: (patch: Record<string, unknown>) => ({
+          eq: async () => {
+            updates.push({ table, patch });
+            return { error: null };
+          },
+        }),
+      }),
+      rpc: async () => ({ error: null }),
+    } as never;
+  }
+
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    decryptSecretMock.mockReturnValue("refresh-token");
+    refreshAccessTokenMock.mockResolvedValue({ accessToken: "at", expiresIn: 3600 });
+    global.fetch = fetchMock as never;
+    fetchMock.mockReset();
+  });
+
+  /** Every Google call succeeds, but each one burns `costMs` of the budget. */
+  function respondSlowly(costMs: number) {
+    let clock = Date.now();
+    jest.spyOn(Date, "now").mockImplementation(() => clock);
+    fetchMock.mockImplementation(async () => {
+      clock += costMs;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ items: [], nextSyncToken: "tok" }),
+      };
+    });
+  }
+
+  it("stops between calendars once the budget is spent", async () => {
+    respondSlowly(400);
+    const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    // 1000ms buys the calendar-list call plus roughly one calendar's events.
+    const summary = await syncConnection(budgetClient(updates), CONN as never, NOW, { budgetMs: 1000 });
+
+    expect(summary.incomplete).toBe(true);
+    // It got through at least one calendar and not all three — the point is
+    // that partial progress is kept, not thrown away.
+    const synced = updates.filter((u) => u.table === "google_calendars" && "last_synced_at" in u.patch);
+    expect(synced.length).toBeGreaterThan(0);
+    expect(synced.length).toBeLessThan(CALENDARS.length);
+  });
+
+  // The sweep orders connections by last_sync_at, stalest first. Stamping a
+  // partial run as synced would send it to the back of the queue with calendars
+  // it never read — the member would be stuck at whatever the budget reached.
+  it("leaves last_sync_at alone when it ran out of time", async () => {
+    respondSlowly(400);
+    const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    await syncConnection(budgetClient(updates), CONN as never, NOW, { budgetMs: 1000 });
+
+    const connectionUpdates = updates.filter((u) => u.table === "google_calendar_connections");
+    expect(connectionUpdates).toHaveLength(0);
+  });
+
+  it("records a normal result when the budget is never reached", async () => {
+    respondSlowly(1);
+    const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    const summary = await syncConnection(budgetClient(updates), CONN as never, NOW, { budgetMs: 60_000 });
+
+    expect(summary.incomplete).toBe(false);
+    expect(updates.some((u) => u.table === "google_calendar_connections" && u.patch.last_sync_at)).toBe(true);
+  });
+
+  // A calendar can fail and a LATER one exhaust the budget. Suppressing the
+  // record there left last_error clear and the failure count unincremented on a
+  // connection that has a calendar which is not syncing — a healthy tick over a
+  // broken calendar.
+  it("still records a failure when the run also ran out of time", async () => {
+    let clock = Date.now();
+    jest.spyOn(Date, "now").mockImplementation(() => clock);
+    let call = 0;
+    fetchMock.mockImplementation(async () => {
+      clock += 400;
+      call++;
+      // The calendar list, then a failing first calendar, then successes.
+      if (call === 2) return { ok: false, status: 500, text: async () => "boom", json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ items: [], nextSyncToken: "tok" }) };
+    });
+
+    const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    const summary = await syncConnection(budgetClient(updates), CONN as never, NOW, { budgetMs: 1000 });
+
+    expect(summary.failed).toBeGreaterThan(0);
+    expect(summary.incomplete).toBe(true);
+    const conn = updates.filter((u) => u.table === "google_calendar_connections");
+    expect(conn).toHaveLength(1);
+    // Recorded as a failure — and a failure patch carries no last_sync_at, so
+    // the partial run still stays at the front of the sweep's queue.
+    expect(conn[0].patch).toHaveProperty("last_error");
+    expect(conn[0].patch).not.toHaveProperty("last_sync_at");
+  });
+
+  // The cron sweep passes no budget and must keep its old behaviour: take as
+  // long as the calendars need.
+  it("is unbounded when no budget is given", async () => {
+    respondSlowly(10_000);
+    const updates: Array<{ table: string; patch: Record<string, unknown> }> = [];
+    const summary = await syncConnection(budgetClient(updates), CONN as never, NOW);
+
+    expect(summary.incomplete).toBe(false);
+    const synced = updates.filter((u) => u.table === "google_calendars" && "last_synced_at" in u.patch);
+    expect(synced).toHaveLength(CALENDARS.length);
   });
 });

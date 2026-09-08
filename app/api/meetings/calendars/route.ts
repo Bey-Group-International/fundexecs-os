@@ -16,8 +16,21 @@ export const dynamic = "force-dynamic";
 
 /** A window wider than this is a client bug, not a request worth serving. */
 const MAX_WINDOW_DAYS = 400;
-/** Ceiling on events returned. A month view draws far fewer than this. */
+/** Ceiling on events returned per source. A month view draws far fewer. */
 const MAX_EVENTS = 2000;
+
+/** One event as the grid consumes it, whichever calendar it came from. */
+interface ClientEvent {
+  id: string;
+  calendarId: string;
+  title: string;
+  location: string | null;
+  link: string | null;
+  startsAt: string;
+  endsAt: string;
+  isAllDay: boolean;
+  isBusy: boolean;
+}
 
 export interface CalendarLayer {
   id: string;
@@ -134,21 +147,99 @@ export async function GET(req: NextRequest) {
     // rather than in the client keeps a hidden calendar's contents off the wire
     // entirely — the checkbox hides the data, not just the pixels.
     const visibleGoogle = layers.filter((l) => l.source === "google" && l.isVisible).map((l) => l.id);
+    const visibleFeeds = layers.filter((l) => l.source === "ics" && l.isVisible).map((l) => l.id);
 
-    let events: Array<Record<string, unknown>> = [];
-    if (visibleGoogle.length) {
-      const { data } = await supabase
-        .from("external_events")
-        .select("id, calendar_id, summary, location, html_link, starts_at, ends_at, is_all_day, status, transparency")
-        .eq("user_id", userId)
-        .in("calendar_id", visibleGoogle)
-        .lt("starts_at", window.to)
-        .gt("ends_at", window.from)
-        .order("starts_at", { ascending: true })
-        .limit(MAX_EVENTS);
+    // The two sources are stored apart — one is Google's shape, one iCalendar's
+    // — but the grid has no reason to care which a conflict came from, so they
+    // are normalized to one list here. Each keeps its own layer's id as
+    // `calendarId`, which is how the client colours it and how the layer
+    // checkbox hides it.
+    const [googleEvents, feedEvents] = await Promise.all([
+      visibleGoogle.length
+        ? supabase
+            .from("external_events")
+            .select("id, calendar_id, summary, location, html_link, starts_at, ends_at, is_all_day, status, transparency")
+            .eq("user_id", userId)
+            .in("calendar_id", visibleGoogle)
+            .lt("starts_at", window.to)
+            .gt("ends_at", window.from)
+            .order("starts_at", { ascending: true })
+            .limit(MAX_EVENTS)
+        : Promise.resolve({ data: [] }),
+      visibleFeeds.length
+        ? supabase
+            .from("calendar_feed_events")
+            .select("id, feed_id, summary, location, starts_at, ends_at, is_all_day, status, transparent")
+            .eq("user_id", userId)
+            .in("feed_id", visibleFeeds)
+            .lt("starts_at", window.to)
+            .gt("ends_at", window.from)
+            .order("starts_at", { ascending: true })
+            .limit(MAX_EVENTS)
+        : Promise.resolve({ data: [] }),
+    ]);
 
-      events = ((data ?? []) as Array<Record<string, unknown>>).filter((e) => e.status !== "cancelled");
+    // Neither source may take the other down, and neither may fail in silence.
+    //
+    // A query error here resolves rather than throws, so without this the rail
+    // would render an empty calendar and say nothing — which is the exact
+    // failure this whole change exists to remove, reintroduced one level up.
+    // The concrete case: migrations apply on push to main in parallel with the
+    // deploy, so for a few seconds the code is live and calendar_feed_events is
+    // not there yet. Feeds should be missing from that calendar. The member's
+    // Google events and their layer list should not.
+    const unavailable: Array<"google" | "ics"> = [];
+    for (const [source, result] of [
+      ["google", googleEvents],
+      ["ics", feedEvents],
+    ] as const) {
+      const error = (result as { error?: { message?: string } }).error;
+      if (!error) continue;
+      console.error(`[/api/meetings/calendars] ${source} events unavailable`, error.message);
+      unavailable.push(source);
     }
+
+    const events: ClientEvent[] = [];
+
+    for (const e of (googleEvents.data ?? []) as Array<Record<string, unknown>>) {
+      if (e.status === "cancelled") continue;
+      events.push({
+        id: String(e.id),
+        calendarId: String(e.calendar_id),
+        title: (e.summary as string) ?? "(no title)",
+        location: (e.location as string) ?? null,
+        link: (e.html_link as string) ?? null,
+        startsAt: String(e.starts_at),
+        endsAt: String(e.ends_at),
+        isAllDay: Boolean(e.is_all_day),
+        // The grid dims an event that does not actually occupy its owner.
+        isBusy: e.transparency !== "transparent",
+      });
+    }
+
+    for (const e of (feedEvents.data ?? []) as Array<Record<string, unknown>>) {
+      // A feed can carry its own tombstones; a cancelled event is not on the
+      // calendar any more than a cancelled Google one is.
+      if (typeof e.status === "string" && e.status.toUpperCase() === "CANCELLED") continue;
+      events.push({
+        id: String(e.id),
+        calendarId: String(e.feed_id),
+        title: (e.summary as string) ?? "(no title)",
+        location: (e.location as string) ?? null,
+        // A subscribed feed is a read-only copy; there is nowhere to send
+        // someone to open the original.
+        link: null,
+        startsAt: String(e.starts_at),
+        endsAt: String(e.ends_at),
+        isAllDay: Boolean(e.is_all_day),
+        // RFC 5545 TRANSP, the iCalendar spelling of Google's transparency.
+        isBusy: !e.transparent,
+      });
+    }
+
+    // One ordering across both sources, so the grid lays out lanes the same way
+    // whichever calendar an event came from.
+    events.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
     return NextResponse.json({
       connectedAs: conn?.google_email ?? null,
@@ -156,18 +247,16 @@ export async function GET(req: NextRequest) {
       // is nothing to connect to, and offering the button would dead-end.
       googleConfigured: googleOAuthConfigured(),
       layers,
-      events: events.map((e) => ({
-        id: e.id,
-        calendarId: e.calendar_id,
-        title: e.summary ?? "(no title)",
-        location: e.location ?? null,
-        link: e.html_link ?? null,
-        startsAt: e.starts_at,
-        endsAt: e.ends_at,
-        isAllDay: e.is_all_day,
-        // The grid dims an event that does not actually occupy its owner.
-        isBusy: e.transparency !== "transparent",
-      })),
+      events,
+      // Which sources could not be read, so the rail can say so.
+      //
+      // Deliberately not a 500. Failing the whole request would take down the
+      // layer list and the source that DID work, leaving a member who lost
+      // their feed events with no calendars at all — a worse answer, and one
+      // that still tells them nothing. What actually matters is that an empty
+      // grid never reads as an empty schedule, and that is a thing to say, not
+      // a status code.
+      unavailable,
     });
   } catch (err) {
     console.error("[/api/meetings/calendars] GET", err);

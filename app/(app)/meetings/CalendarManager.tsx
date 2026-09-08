@@ -7,11 +7,13 @@
 //   be made and cleared by clicking around the calendar grid, but there was
 //   nowhere to see what you had blocked without hunting week by week.
 //
-//   Connected calendars — two-way iCalendar interchange. Subscribe to an
-//   external ICS URL and its events become busy time here; publish this
+//   Connected calendars — two-way interchange. Subscribe to an external ICS
+//   URL and its events show on the grid and count as busy time; publish this
 //   member's own feed and their Google/Outlook/Apple calendar subscribes back.
-//   Provider APIs (real-time Google sync) are still unbuilt, and the panel
-//   continues to say so rather than implying more than ICS delivers.
+//   Google is no longer ICS-only: a member who connects their account gets
+//   their calendars synced through the API, and meetings push back to it. What
+//   the panel must not do is claim that for a connection that cannot take a
+//   write — see providerSyncAvailable in /api/meetings/calendar-status.
 //
 // Availability and meeting types deliberately stay under "Manage availability"
 // on the same card: those shape the public booking link, where this shapes the
@@ -24,6 +26,9 @@ type Tab = "blocked" | "calendars";
 interface CalendarStatus {
   googleAccountConnected: boolean;
   googleAccountLabel: string | null;
+  /** Whether this member has connected their own Google Calendar. */
+  calendarConnected: boolean;
+  /** Whether meetings can actually be pushed — a calendar they can write to. */
   providerSyncAvailable: boolean;
   meetingsWithSyncEnabled: number;
 }
@@ -656,9 +661,23 @@ function ConnectedCalendarsPanel({ status }: { status: CalendarStatus | null }) 
       <section className="border-t border-[var(--line)] pt-5">
         <p className="text-xs text-[var(--fg-muted)]">
           Subscriptions refresh on a schedule — usually within the hour, and on the other calendar&rsquo;s own
-          timetable when it reads yours. That is near-real-time, not instant.
+          timetable when it reads yours. That is near-real-time, not instant;{" "}
+          <span className="font-medium text-[var(--fg-secondary)]">Sync now</span> in the calendar rail pulls
+          straight away.
+          {/* Three different situations, and the old copy called all of them
+              "isn't connected yet" — including for a member who had connected
+              Google and whose calendars simply happened to be read-only. It
+              also offered Outlook, which has no direct sync to connect at all. */}
           {status && !status.providerSyncAvailable ? (
-            <> Direct Google and Outlook sync, which would be instant, isn&rsquo;t connected yet.</>
+            status.calendarConnected ? (
+              <>
+                {" "}
+                Meetings can&rsquo;t be pushed back to Google, because none of your connected calendars give
+                you write access.
+              </>
+            ) : (
+              <> Connect Google in the calendar rail to sync both ways, rather than by subscription alone.</>
+            )
           ) : null}{" "}
           Your working hours and bookable meeting types live under{" "}
           <span className="font-medium text-[var(--fg-secondary)]">Manage availability</span>.
