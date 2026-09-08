@@ -6,6 +6,7 @@ import { formatCredits, formatUsd, PLAN_BY_KEY, type PlanKey } from "@/lib/billi
 import {
   daysRemaining,
   formatBillingDate,
+  isFinalAttempt,
   nextBillingSummary,
   renewalCredits,
   renewalPrice,
@@ -94,9 +95,16 @@ export function SubscriptionPanel({
           <p className="mt-4 rounded-xl border border-status-danger/40 bg-status-danger/[0.07] px-4 py-3 text-sm text-status-danger">
             {subscription.last_payment_error ?? "We couldn't collect your last payment."}{" "}
             <span className="text-fg-secondary">
-              {canManagePayment
-                ? "Update your payment method to keep this plan — we'll retry automatically."
-                : "We'll retry automatically."}
+              {/* Every retry date is a real charge attempt, so a card added
+                  now still saves the plan — the last attempt is the one worth
+                  saying out loud, because after it there is no other. */}
+              {isFinalAttempt(subscription)
+                ? canManagePayment
+                  ? "This is the last attempt before the plan ends — update your payment method now and the retry will go through."
+                  : "This is the last attempt before the plan ends."
+                : canManagePayment
+                  ? "Update your payment method to keep this plan — we'll retry automatically."
+                  : "We'll retry automatically."}
             </span>
           </p>
         )}

@@ -5,7 +5,7 @@ import {
   daysRemaining,
   formatBillingDate,
   isDue,
-  isExhausted,
+  isFinalAttempt,
   nextAttemptAt,
   nextBillingSummary,
   periodEnd,
@@ -203,9 +203,19 @@ describe("dunning", () => {
     expect(nextAttemptAt(PAST_DUE_MAX_ATTEMPTS + 1, from)).toBeNull();
   });
 
-  it("is exhausted only after the last retry", () => {
-    expect(isExhausted(sub({ failed_attempts: PAST_DUE_MAX_ATTEMPTS - 1 }))).toBe(false);
-    expect(isExhausted(sub({ failed_attempts: PAST_DUE_MAX_ATTEMPTS }))).toBe(true);
+  it("flags the final attempt only once the retry budget is down to its last", () => {
+    expect(isFinalAttempt(sub({ failed_attempts: PAST_DUE_MAX_ATTEMPTS - 1 }))).toBe(false);
+    expect(isFinalAttempt(sub({ failed_attempts: PAST_DUE_MAX_ATTEMPTS }))).toBe(true);
+  });
+
+  it("gives every scheduled retry a real attempt before giving up", () => {
+    // A date is handed out for each failure in the budget; only past the end of
+    // it does nextAttemptAt return null, which is what closes the subscription.
+    const from = new Date("2026-07-01T00:00:00Z");
+    for (let attempt = 1; attempt <= PAST_DUE_MAX_ATTEMPTS; attempt += 1) {
+      expect(nextAttemptAt(attempt, from)).not.toBeNull();
+    }
+    expect(nextAttemptAt(PAST_DUE_MAX_ATTEMPTS + 1, from)).toBeNull();
   });
 });
 
@@ -221,9 +231,35 @@ describe("display", () => {
   it("says what happens next", () => {
     expect(nextBillingSummary(sub(), new Date("2026-06-15T00:00:00Z"))).toMatch(/^Renews on/);
     expect(nextBillingSummary(sub({ cancel_at_period_end: true }), new Date("2026-06-29T00:00:00Z"))).toMatch(/Cancels on/);
-    expect(nextBillingSummary(sub({ status: "past_due", next_attempt_at: "2026-07-03T00:00:00Z" }))).toMatch(/retry/);
+    expect(nextBillingSummary(sub({ status: "past_due", failed_attempts: 1, next_attempt_at: "2026-07-03T00:00:00Z" }))).toMatch(/retry/);
     expect(nextBillingSummary(sub({ pending_plan: "starter" }))).toMatch(/Switches to Starter/);
     expect(nextBillingSummary(null)).toBe("No active subscription.");
+  });
+
+  it("warns that the last attempt is the last, and says how to save it", () => {
+    // The attempt is real, so promising it is honest — but the operator has to
+    // know this one decides the plan, and that acting before it still works.
+    const line = nextBillingSummary(
+      sub({ status: "past_due", failed_attempts: PAST_DUE_MAX_ATTEMPTS, next_attempt_at: "2026-07-06T00:00:00Z" }),
+    );
+    expect(line).toMatch(/final attempt/i);
+    expect(line).toMatch(/July 6, 2026/);
+    expect(line).toMatch(/update your payment method/i);
+  });
+
+  it("still promises a retry while retries remain", () => {
+    const line = nextBillingSummary(
+      sub({ status: "past_due", failed_attempts: PAST_DUE_MAX_ATTEMPTS - 1, next_attempt_at: "2026-07-04T00:00:00Z" }),
+    );
+    expect(line).toMatch(/We'll retry on/);
+  });
+
+  it("degrades honestly when a final-attempt row has no date", () => {
+    const line = nextBillingSummary(
+      sub({ status: "past_due", failed_attempts: PAST_DUE_MAX_ATTEMPTS, next_attempt_at: null }),
+    );
+    expect(line).toMatch(/next attempt is the last/i);
+    expect(line).toMatch(/update your payment method/i);
   });
 
   it("formats a billing date, and tolerates a missing one", () => {
