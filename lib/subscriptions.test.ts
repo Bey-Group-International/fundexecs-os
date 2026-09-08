@@ -221,9 +221,38 @@ describe("display", () => {
   it("says what happens next", () => {
     expect(nextBillingSummary(sub(), new Date("2026-06-15T00:00:00Z"))).toMatch(/^Renews on/);
     expect(nextBillingSummary(sub({ cancel_at_period_end: true }), new Date("2026-06-29T00:00:00Z"))).toMatch(/Cancels on/);
-    expect(nextBillingSummary(sub({ status: "past_due", next_attempt_at: "2026-07-03T00:00:00Z" }))).toMatch(/retry/);
+    expect(nextBillingSummary(sub({ status: "past_due", failed_attempts: 1, next_attempt_at: "2026-07-03T00:00:00Z" }))).toMatch(/retry/);
     expect(nextBillingSummary(sub({ pending_plan: "starter" }))).toMatch(/Switches to Starter/);
     expect(nextBillingSummary(null)).toBe("No active subscription.");
+  });
+
+  it("does not promise a retry that is really a cancellation", () => {
+    // The sweep closes an exhausted subscription instead of charging it again,
+    // so the scheduled date is the day the plan ENDS. Telling the operator
+    // "we'll retry on the 6th" when the 6th is when they lose the plan is the
+    // one thing this line must never do.
+    const spent = sub({
+      status: "past_due",
+      failed_attempts: PAST_DUE_MAX_ATTEMPTS,
+      next_attempt_at: "2026-07-06T00:00:00Z",
+    });
+    const line = nextBillingSummary(spent);
+    expect(line).not.toMatch(/retry/i);
+    expect(line).toMatch(/ends on/i);
+    expect(line).toMatch(/July 6, 2026/);
+  });
+
+  it("still promises a retry while retries remain", () => {
+    const line = nextBillingSummary(
+      sub({ status: "past_due", failed_attempts: PAST_DUE_MAX_ATTEMPTS - 1, next_attempt_at: "2026-07-04T00:00:00Z" }),
+    );
+    expect(line).toMatch(/We'll retry on/);
+  });
+
+  it("degrades honestly when an exhausted row has no date", () => {
+    expect(
+      nextBillingSummary(sub({ status: "past_due", failed_attempts: PAST_DUE_MAX_ATTEMPTS, next_attempt_at: null })),
+    ).toMatch(/ending/i);
   });
 
   it("formats a billing date, and tolerates a missing one", () => {

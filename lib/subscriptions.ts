@@ -250,6 +250,16 @@ export function nextBillingSummary(sub: Subscription | null, now: Date = new Dat
   if (!sub || sub.status === "canceled") return "No active subscription.";
   const when = formatBillingDate(sub.current_period_end);
   if (sub.status === "past_due") {
+    // Once the retries are spent, the sweep CLOSES the subscription rather than
+    // charging again — runSubscriptionRenewals checks isExhausted before it
+    // attempts a renewal. The date on an exhausted row is therefore the day the
+    // plan ends, and calling it a retry told operators the opposite of what was
+    // about to happen to them.
+    if (isExhausted(sub)) {
+      return sub.next_attempt_at
+        ? `Payment failed ${sub.failed_attempts} times. This plan ends on ${formatBillingDate(sub.next_attempt_at)}.`
+        : "Payment failed too many times. This plan is ending.";
+    }
     return sub.next_attempt_at
       ? `Payment failed. We'll retry on ${formatBillingDate(sub.next_attempt_at)}.`
       : "Payment failed. Update your payment method to keep this plan.";

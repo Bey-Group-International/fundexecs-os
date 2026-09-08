@@ -6,6 +6,7 @@ import { formatCredits, formatUsd, PLAN_BY_KEY, type PlanKey } from "@/lib/billi
 import {
   daysRemaining,
   formatBillingDate,
+  isExhausted,
   nextBillingSummary,
   renewalCredits,
   renewalPrice,
@@ -94,9 +95,14 @@ export function SubscriptionPanel({
           <p className="mt-4 rounded-xl border border-status-danger/40 bg-status-danger/[0.07] px-4 py-3 text-sm text-status-danger">
             {subscription.last_payment_error ?? "We couldn't collect your last payment."}{" "}
             <span className="text-fg-secondary">
-              {canManagePayment
-                ? "Update your payment method to keep this plan — we'll retry automatically."
-                : "We'll retry automatically."}
+              {/* An exhausted subscription is closed on the next sweep, not
+                  charged again, so neither the retry promise nor "update your
+                  card to keep this plan" is true any more. */}
+              {isExhausted(subscription)
+                ? "We've stopped retrying, so this plan is ending. Credits already in your balance stay yours, and you can start a new plan below whenever you're ready."
+                : canManagePayment
+                  ? "Update your payment method to keep this plan — we'll retry automatically."
+                  : "We'll retry automatically."}
             </span>
           </p>
         )}
