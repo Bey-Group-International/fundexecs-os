@@ -28,10 +28,20 @@ on:
   # Allow manual trigger for debugging
   workflow_dispatch:
 
-# Cancel older runs when new commits are pushed to the same PR/branch
+# Cancel a superseded PR run; never cancel a run of a merged commit.
+#
+# A pull request groups by its number, so pushing a new commit supersedes the
+# run of the old one — that is the point, and it frees a runner.
+#
+# Everything else groups by commit SHA. It used to fall back to `github.ref`,
+# which is `refs/heads/main` for every push, so merges to main all shared one
+# group and cancelled each other: of the five PRs merged within 80 seconds on
+# 2026-09-07 (#1036-#1040), four had their post-merge Jest run cancelled and
+# only #1040 ever ran. Those runs are the ones that publish coverage, so the
+# artifact went with them. A per-commit group gives every merge its own run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
