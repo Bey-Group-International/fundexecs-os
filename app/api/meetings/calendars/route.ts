@@ -179,6 +179,23 @@ export async function GET(req: NextRequest) {
         : Promise.resolve({ data: [] }),
     ]);
 
+    // Neither source may take the other down, and neither may fail in silence.
+    //
+    // A query error here resolves rather than throws, so without this the rail
+    // would render an empty calendar and say nothing — which is the exact
+    // failure this whole change exists to remove, reintroduced one level up.
+    // The concrete case: migrations apply on push to main in parallel with the
+    // deploy, so for a few seconds the code is live and calendar_feed_events is
+    // not there yet. Feeds should be missing from that calendar. The member's
+    // Google events and their layer list should not.
+    for (const [source, result] of [
+      ["google", googleEvents],
+      ["ics", feedEvents],
+    ] as const) {
+      const error = (result as { error?: { message?: string } }).error;
+      if (error) console.error(`[/api/meetings/calendars] ${source} events unavailable`, error.message);
+    }
+
     const events: ClientEvent[] = [];
 
     for (const e of (googleEvents.data ?? []) as Array<Record<string, unknown>>) {
