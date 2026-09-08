@@ -33,6 +33,24 @@ export const ADMISSION_POLL_SCHEDULE: readonly PollStep[] = [
   { afterMs: 180_000, everyMs: 10_000 },
 ];
 
+/**
+ * The cadence for a guest whose decision will be pushed to them.
+ *
+ * With a live broadcast subscription the poll is no longer how anyone finds out
+ * they have been admitted — it is what catches the case where the push did not
+ * arrive: a dropped socket, a proxy that eats WebSockets, a broadcast published
+ * while the client was reconnecting. That is rare, so the interval is long; but
+ * it is not zero, because a guest whose socket quietly died must still get in.
+ *
+ * A guest on this schedule who never receives a nudge waits at most 15 seconds
+ * beyond the host's decision. One who receives it waits milliseconds.
+ */
+export const WATCHED_POLL_SCHEDULE: readonly PollStep[] = [
+  { afterMs: 0, everyMs: 15_000 },
+  { afterMs: 60_000, everyMs: 30_000 },
+  { afterMs: 300_000, everyMs: 60_000 },
+];
+
 /** How long to wait before the next poll, for a guest who has waited `waitedMs`. */
 export function nextPollDelay(
   waitedMs: number,

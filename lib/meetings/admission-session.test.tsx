@@ -38,6 +38,31 @@ function harness(opts: { knock?: (string | null)[]; poll?: (string | null)[] } =
   return { session, calls, ...cb };
 }
 
+/**
+ * A stand-in for the Realtime subscription, driven by the test.
+ *
+ * `connected` defaults to true because that is the case worth exercising: the
+ * session should then be nearly silent until nudged.
+ */
+function watcher({ connected = true }: { connected?: boolean } = {}) {
+  const state: {
+    nudge: () => void;
+    setConnected: (c: boolean) => void;
+    detached: boolean;
+    subscribes: number;
+  } = { nudge: () => {}, setConnected: () => {}, detached: false, subscribes: 0 };
+
+  const watch = (h: { onNudge: () => void; onConnectionChange: (c: boolean) => void }) => {
+    state.subscribes += 1;
+    state.nudge = h.onNudge;
+    state.setConnected = h.onConnectionChange;
+    if (connected) h.onConnectionChange(true);
+    return () => { state.detached = true; };
+  };
+
+  return { watch, state };
+}
+
 /** Let queued microtasks run — one tick is timer → poll() → knock()? → schedule. */
 async function flush() {
   for (let i = 0; i < 6; i++) await Promise.resolve();
@@ -452,5 +477,175 @@ describe("stopping", () => {
     await h.session.start();
     h.session.stop();
     expect(h.onAdmitted).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a decision pushed over Realtime", () => {
+  /** A session with a watcher attached, sharing the harness's answer queues. */
+  function watched(opts: { knock?: (string | null)[]; poll?: (string | null)[]; connected?: boolean } = {}) {
+    const knockAnswers = [...(opts.knock ?? ["waiting"])];
+    const pollAnswers = [...(opts.poll ?? ["waiting"])];
+    const calls = { knock: 0, poll: 0 };
+    const cb = {
+      onAdmitted: jest.fn(), onDenied: jest.fn(), onEnded: jest.fn(),
+      onWaiting: jest.fn(), onTimedOut: jest.fn(),
+    };
+    const w = watcher({ connected: opts.connected });
+    const session = createAdmissionSession({
+      ...cb,
+      watch: w.watch,
+      knock: async () => { calls.knock += 1; return knockAnswers.length > 1 ? knockAnswers.shift()! : knockAnswers[0] ?? "waiting"; },
+      poll: async () => { calls.poll += 1; return pollAnswers.length > 1 ? pollAnswers.shift()! : pollAnswers[0] ?? "waiting"; },
+    });
+    return { session, calls, watcher: w.state, ...cb };
+  }
+
+  it("subscribes as soon as the guest starts waiting", async () => {
+    const h = watched();
+    expect(h.watcher.subscribes).toBe(0);
+    await h.session.start();
+    expect(h.watcher.subscribes).toBe(1);
+    h.session.stop();
+  });
+
+  it("does not subscribe for a guest the host has already decided about", async () => {
+    const h = watched({ knock: ["admitted"] });
+    await h.session.start();
+    expect(h.watcher.subscribes).toBe(0);
+  });
+
+  // The nudge says "ask", never "you are in": anyone with the room code can
+  // publish on that channel, so a payload that was believed would be worth
+  // forging. The verdict always comes from the server.
+  it("asks the server what happened rather than believing the nudge", async () => {
+    const h = watched({ poll: ["admitted"] });
+    await h.session.start();
+    expect(h.calls.poll).toBe(0);
+
+    h.watcher.nudge();
+    await flush();
+    expect(h.calls.poll).toBe(1);
+    expect(h.onAdmitted).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays quiet when a nudge turns out to mean nothing", async () => {
+    const h = watched({ poll: ["waiting"] });
+    await h.session.start();
+    h.watcher.nudge();
+    await flush();
+    expect(h.onAdmitted).not.toHaveBeenCalled();
+    expect(h.onDenied).not.toHaveBeenCalled();
+    h.session.stop();
+  });
+
+  it("carries a deny as readily as an admit", async () => {
+    const h = watched({ poll: ["denied"] });
+    await h.session.start();
+    h.watcher.nudge();
+    await flush();
+    expect(h.onDenied).toHaveBeenCalledTimes(1);
+  });
+
+  it("unsubscribes when the guest leaves", async () => {
+    const h = watched();
+    await h.session.start();
+    expect(h.watcher.detached).toBe(false);
+    h.session.stop();
+    expect(h.watcher.detached).toBe(true);
+  });
+
+  it("unsubscribes once a verdict arrives", async () => {
+    const h = watched({ poll: ["admitted"] });
+    await h.session.start();
+    h.watcher.nudge();
+    await flush();
+    expect(h.watcher.detached).toBe(true);
+  });
+
+  it("ignores a nudge that arrives after the guest left", async () => {
+    const h = watched({ poll: ["admitted"] });
+    await h.session.start();
+    h.session.stop();
+
+    h.watcher.nudge();
+    await flush();
+    expect(h.calls.poll).toBe(0);
+    expect(h.onAdmitted).not.toHaveBeenCalled();
+  });
+});
+
+describe("the cadence while something is watching", () => {
+  function watched(connected: boolean) {
+    const calls = { poll: 0 };
+    const w = watcher({ connected });
+    const session = createAdmissionSession({
+      onAdmitted: jest.fn(), onDenied: jest.fn(), onEnded: jest.fn(),
+      watch: w.watch,
+      knock: async () => "waiting",
+      poll: async () => { calls.poll += 1; return "waiting"; },
+    });
+    return { session, calls, watcher: w.state };
+  }
+
+  // The point of the push: a connected guest should barely talk to the server.
+  it("all but stops polling once connected", async () => {
+    const h = watched(true);
+    await h.session.start();
+    await advance(20_000);
+    expect(h.calls.poll).toBeLessThanOrEqual(2);
+    h.session.stop();
+  });
+
+  it("polls on the responsive cadence when the subscription never connects", async () => {
+    const h = watched(false);
+    await h.session.start();
+    await advance(20_000);
+    expect(h.calls.poll).toBeGreaterThanOrEqual(12);
+    h.session.stop();
+  });
+
+  // A socket that dies quietly is what this safety net exists for. Waiting out a
+  // timer chosen for the connected cadence would make the guest pay for the
+  // disconnection with the longest wait rather than the shortest.
+  it("goes back to asking often the moment the connection drops", async () => {
+    const h = watched(true);
+    await h.session.start();
+    await advance(5_000);
+    const whileConnected = h.calls.poll;
+
+    h.watcher.setConnected(false);
+    await advance(10_000);
+    expect(h.calls.poll - whileConnected).toBeGreaterThanOrEqual(5);
+    h.session.stop();
+  });
+
+  it("quietens again when the connection comes back", async () => {
+    const h = watched(false);
+    await h.session.start();
+    await advance(10_000);
+    const busy = h.calls.poll;
+
+    h.watcher.setConnected(true);
+    await advance(10_000);
+    expect(h.calls.poll - busy).toBeLessThan(busy);
+    h.session.stop();
+  });
+
+  it("still admits a connected guest whose nudge never arrives", async () => {
+    const calls = { poll: 0 };
+    const w = watcher({ connected: true });
+    const onAdmitted = jest.fn();
+    const session = createAdmissionSession({
+      onAdmitted, onDenied: jest.fn(), onEnded: jest.fn(),
+      watch: w.watch,
+      knock: async () => "waiting",
+      poll: async () => { calls.poll += 1; return calls.poll > 1 ? "admitted" : "waiting"; },
+    });
+    await session.start();
+
+    // No nudge is ever fired: the safety net has to carry this on its own.
+    await advance(45_000);
+    expect(onAdmitted).toHaveBeenCalledTimes(1);
+    session.stop();
   });
 });

@@ -42,6 +42,7 @@ import {
 } from "@/lib/meetings/call-phase";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
+import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
 import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 import {
   GuestThanksScreen,
@@ -1596,6 +1597,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (!res.ok) return null;
         return ((await res.json()) as { status?: string }).status ?? null;
       },
+      // Realtime carries a nudge, never a verdict — see admission-channel.ts.
+      // The session answers it by asking the server, so a forged broadcast buys
+      // nothing but one wasted request. Guests cannot watch the admissions table
+      // itself (unauthenticated, and it is org-read only), but they can hold a
+      // broadcast channel with the anon key — the same way they already hold the
+      // signalling channel once they are in.
+      watch: ({ onNudge, onConnectionChange }) => {
+        const channel = supabase
+          .channel(admissionChannelName(roomCode, guestKey))
+          .on("broadcast", { event: ADMISSION_NUDGE }, () => onNudge())
+          .subscribe((status: string) => {
+            // Anything but SUBSCRIBED means a push would not reach us, so the
+            // session goes back to asking on the responsive cadence.
+            onConnectionChange(status === "SUBSCRIBED");
+          });
+        return () => { void supabase.removeChannel(channel); };
+      },
       onAdmitted: async () => { await enterRoomRef.current(mId, name); },
       onDenied: showDenied,
       onEnded: leaveEndedMeeting,
@@ -2371,6 +2389,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const teardownCallRef = useRef(teardownCall);
   useEffect(() => { teardownCallRef.current = teardownCall; }, [teardownCall]);
+
+  // Leaving the page is leaving the meeting. Nothing tore the call down on
+  // unmount, so a guest who navigated away from the waiting screen — browser
+  // back, a link, anything that is not the Cancel button — left the admission
+  // session running behind them: polling on a timer nobody would ever stop, and
+  // now holding a Realtime subscription too. Empty deps and the ref on purpose:
+  // depending on `teardownCall` would re-run this whenever its identity changed
+  // and tear down a live call mid-meeting.
+  useEffect(() => () => { teardownCallRef.current(); }, []);
 
   const leaveMeeting = useCallback(() => {
     // The ref, not the state, is the guard: a second click lands before React has

@@ -35,6 +35,20 @@ jest.mock("./MeetingGreenRoom", () => ({
   ),
 }));
 
+/**
+ * Records the channels subscribed to and lets a test fire a broadcast on one,
+ * so the guest's Realtime wiring can be driven without a Supabase server.
+ */
+const realtime = {
+  channels: [] as Array<{ name: string; event?: string; handler?: () => void; removed: boolean }>,
+  /** Report SUBSCRIBED to the subscriber; false to simulate a socket that never opens. */
+  connects: true,
+  reset() { this.channels = []; this.connects = true; },
+  nudge(name: string) {
+    for (const c of this.channels) if (c.name === name && !c.removed) c.handler?.();
+  },
+};
+
 const supabaseStub = {
   auth: { getUser: async () => ({ data: { user: null } }) },
   from: () => {
@@ -44,8 +58,23 @@ const supabaseStub = {
     };
     return b;
   },
-  channel: () => ({ on: () => ({ subscribe: () => ({}) }), subscribe: () => ({}) }),
-  removeChannel: () => {},
+  channel: (name: string) => {
+    const entry: { name: string; event?: string; handler?: () => void; removed: boolean } = { name, removed: false };
+    realtime.channels.push(entry);
+    const api = {
+      on: (_type: string, filter: { event?: string }, handler: () => void) => {
+        entry.event = filter?.event;
+        entry.handler = handler;
+        return api;
+      },
+      subscribe: (cb?: (status: string) => void) => {
+        cb?.(realtime.connects ? "SUBSCRIBED" : "CHANNEL_ERROR");
+        return entry;
+      },
+    };
+    return api;
+  },
+  removeChannel: (c: { removed: boolean }) => { if (c) c.removed = true; },
 };
 jest.mock("@/lib/supabase/client", () => ({ createClient: () => supabaseStub }));
 
@@ -77,6 +106,7 @@ function fakeNetwork(statuses: string[]) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  realtime.reset();
   window.localStorage.clear();
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
 });
@@ -86,8 +116,9 @@ afterEach(() => {
 });
 
 async function joinAsGuest() {
-  render(<MeetingRoom roomCode={ROOM} />);
+  const view = render(<MeetingRoom roomCode={ROOM} />);
   await userEvent.click(await screen.findByRole("button", { name: /join now/i }));
+  return view;
 }
 
 describe("a guest knocking", () => {
@@ -122,7 +153,11 @@ describe("a guest knocking", () => {
     expect(await screen.findByText(/waiting for host to admit you/i)).toBeInTheDocument();
   });
 
-  it("polls the knock route with that same key", async () => {
+  // Polling is the floor under the push now, so this is the no-Realtime path:
+  // a guest whose socket never opens still asks, and still asks with the key the
+  // host's decision was written against.
+  it("polls the knock route with that same key when nothing is watching", async () => {
+    realtime.connects = false;
     window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
     const net = fakeNetwork(["waiting"]);
     await joinAsGuest();
@@ -133,6 +168,18 @@ describe("a guest knocking", () => {
       { timeout: 4000 },
     );
   });
+
+  // The headline of moving to Realtime: a guest whose decision will be pushed
+  // should be all but silent while they wait, rather than asking every 1.5s.
+  it("barely talks to the server while a push is expected", async () => {
+    const net = fakeNetwork(["waiting"]);
+    await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+    const afterKnock = net.knocks().length;
+
+    await new Promise((r) => setTimeout(r, 3_000));
+    expect(net.knocks().length).toBe(afterKnock);
+  }, 10_000);
 });
 
 describe("the host's verdict", () => {
@@ -155,6 +202,9 @@ describe("the host's verdict", () => {
   });
 
   it("turns the guest away when the deny arrives on a later poll", async () => {
+    // Explicitly the fallback path: with a live subscription the deny would come
+    // as a nudge instead, which is covered below.
+    realtime.connects = false;
     fakeNetwork(["waiting", "denied"]);
     await joinAsGuest();
     await screen.findByText(/waiting for host to admit you/i);
@@ -186,4 +236,89 @@ describe("a guest who gives up", () => {
     await new Promise((r) => setTimeout(r, 3_500));
     expect(net.knocks().length).toBe(after);
   }, 10_000);
+});
+
+describe("the guest's Realtime subscription", () => {
+  it("listens on the channel the server publishes that guest's nudge to", async () => {
+    window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
+    fakeNetwork(["waiting"]);
+    await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+
+    const sub = realtime.channels.find((c) => c.name === `admission:${ROOM}:sticky-key`);
+    expect(sub).toBeDefined();
+    expect(sub?.event).toBe("admission");
+  });
+
+  // The push says "ask", and the answer still comes from the server. This is the
+  // whole trust model in one test: a forged broadcast can only cause a request.
+  it("asks the server on a nudge, and acts on what it says", async () => {
+    window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
+    const net = fakeNetwork(["waiting", "denied"]);
+    await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+    const before = net.knocks().length;
+
+    realtime.nudge(`admission:${ROOM}:sticky-key`);
+
+    expect(await screen.findByRole("heading", { name: /you weren't admitted/i })).toBeInTheDocument();
+    expect(net.knocks().length).toBeGreaterThan(before);
+  });
+
+  it("drops the subscription when the guest leaves", async () => {
+    window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
+    fakeNetwork(["waiting"]);
+    await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() => {
+      const sub = realtime.channels.find((c) => c.name === `admission:${ROOM}:sticky-key`);
+      expect(sub?.removed).toBe(true);
+    });
+  });
+
+  // A guest whose socket never opens must still get in — the poll is the floor
+  // under the push, not an optimisation on top of it.
+  it("still gets the guest in when the subscription never connects", async () => {
+    realtime.connects = false;
+    const net = fakeNetwork(["waiting", "denied"]);
+    await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+
+    expect(await screen.findByRole("heading", { name: /you weren't admitted/i }, { timeout: 5_000 })).toBeInTheDocument();
+    expect(net.knocks().length).toBeGreaterThan(1);
+  }, 10_000);
+});
+
+// Navigating away is not the Cancel button, and for a long time nothing tore the
+// call down on unmount: the session went on polling behind a page nobody was
+// looking at, and now would hold a Realtime subscription open too. This was
+// found by an unrelated test seeing requests from a previous one.
+describe("a guest who navigates away", () => {
+  it("stops asking the server once the page is gone", async () => {
+    realtime.connects = false;   // the polling path, so there is traffic to stop
+    const net = fakeNetwork(["waiting"]);
+    const view = await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+    await waitFor(() => expect(net.knocks().length).toBeGreaterThan(1), { timeout: 4_000 });
+
+    view.unmount();
+    const after = net.knocks().length;
+    await new Promise((r) => setTimeout(r, 3_000));
+    expect(net.knocks().length).toBe(after);
+  }, 15_000);
+
+  it("drops its Realtime subscription with it", async () => {
+    window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
+    fakeNetwork(["waiting"]);
+    const view = await joinAsGuest();
+    await screen.findByText(/waiting for host to admit you/i);
+    expect(realtime.channels.find((c) => c.name === `admission:${ROOM}:sticky-key`)?.removed).toBe(false);
+
+    view.unmount();
+    await waitFor(() =>
+      expect(realtime.channels.find((c) => c.name === `admission:${ROOM}:sticky-key`)?.removed).toBe(true),
+    );
+  });
 });

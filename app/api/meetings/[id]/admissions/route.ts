@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { nudgeGuests } from "@/lib/meetings/admission-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,11 +25,11 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   const rls = await createServerClient();
   const { data: meeting } = await rls
     .from("live_meetings")
-    .select("id, host_id")
+    .select("id, host_id, room_code")
     .eq("id", id)
     .eq("organization_id", auth.ctx.orgId)
     .maybeSingle();
-  const mt = meeting as { id: string; host_id: string | null } | null;
+  const mt = meeting as { id: string; host_id: string | null; room_code: string } | null;
   if (!mt) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   if (mt.host_id !== auth.ctx.userId) {
     return NextResponse.json({ error: "Only the host can admit or deny" }, { status: 403 });
@@ -47,7 +48,20 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     return NextResponse.json({ error: "admissionId or all required" }, { status: 400 });
   }
 
-  const { error } = await query;
+  // The updated rows come back so the guests they belong to can be told. Without
+  // this the decision would sit in the database until each guest's next poll
+  // happened to ask for it.
+  const { data: decided, error } = await (query as any).select("guest_key");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+
+  const guestKeys = ((decided ?? []) as Array<{ guest_key: string }>).map((r) => r.guest_key);
+  // Best-effort, and deliberately not awaited into the response's success: the
+  // decision is made and stored either way, and every guest polls as a safety
+  // net. A host's admit must not fail because a notification could not be sent.
+  if (guestKeys.length > 0) {
+    const { failed } = await nudgeGuests(write as never, mt.room_code, guestKeys);
+    if (failed > 0) console.warn("[admissions] could not nudge", failed, "of", guestKeys.length);
+  }
+
+  return NextResponse.json({ ok: true, decided: guestKeys.length });
 }
