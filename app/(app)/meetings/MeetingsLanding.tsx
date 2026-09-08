@@ -10,6 +10,8 @@ import { TranscriptAnalysisCard } from "@/app/(app)/meetings/TranscriptAnalysisC
 import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
 import type { PastMeeting } from "./PastMeetingsList";
+import { MeetingLogs } from "./MeetingLogs";
+import type { MeetingLogEntry } from "@/lib/meetings/meeting-log";
 import type { CalendarMeeting } from "@/lib/meetings/calendar";
 
 /**
@@ -44,12 +46,14 @@ export function MeetingsLanding({
   initialMeetings,
   initialUpcoming,
   initialPast,
+  initialLogs,
   userId,
   orgId,
 }: {
   initialMeetings: CalendarMeeting[];
   initialUpcoming: UpcomingMeeting[];
   initialPast: PastMeeting[];
+  initialLogs: MeetingLogEntry[];
   userId: string;
   orgId: string;
 }) {
@@ -61,6 +65,11 @@ export function MeetingsLanding({
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Upcoming is what you act on; Logs is what you look up. Local state rather
+  // than a URL param: the calendar owns ?view=, and a second address for a
+  // switch between two lists on the same page would make Back mean two things.
+  const [tab, setTab] = useState<"upcoming" | "logs">("upcoming");
 
   // Whether *this* session pushed the overlay onto the history stack. Closing
   // then means stepping back, which leaves the stack clean; a member who
@@ -132,7 +141,27 @@ export function MeetingsLanding({
           it's how meetings arrive when someone else picks the time. Collapsed to
           a single row — it no longer competes with the meetings themselves. */}
       <SchedulingLinkCard />
-      <UpcomingMeetingsList initialMeetings={initialUpcoming} />
+
+      <div>
+        <div role="tablist" aria-label="Meetings" className="mb-3 flex items-center gap-1 border-b border-[var(--line)]">
+          <TabButton id="upcoming" active={tab === "upcoming"} onSelect={setTab}>
+            Upcoming
+          </TabButton>
+          <TabButton id="logs" active={tab === "logs"} onSelect={setTab} count={initialLogs.length}>
+            Logs
+          </TabButton>
+        </div>
+
+        {/* Both panes stay mounted: Logs holds a search box and an open row,
+            and switching to Upcoming and back should not throw either away. */}
+        <div id="panel-upcoming" role="tabpanel" aria-labelledby="tab-upcoming" hidden={tab !== "upcoming"}>
+          <UpcomingMeetingsList initialMeetings={initialUpcoming} />
+        </div>
+        <div id="panel-logs" role="tabpanel" aria-labelledby="tab-logs" hidden={tab !== "logs"}>
+          <MeetingLogs entries={initialLogs} />
+        </div>
+      </div>
+
       {/* Between meetings is where a transcript gets analysed — it was a tab in
           the in-call copilot, which is the one place nobody is pasting one. */}
       <TranscriptAnalysisCard />
@@ -191,6 +220,39 @@ export function MeetingsLanding({
           )
         : null}
     </div>
+  );
+}
+
+function TabButton({
+  id, active, onSelect, count, children,
+}: {
+  id: "upcoming" | "logs";
+  active: boolean;
+  onSelect: (id: "upcoming" | "logs") => void;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={`tab-${id}`}
+      aria-selected={active}
+      aria-controls={`panel-${id}`}
+      onClick={() => onSelect(id)}
+      className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+        active
+          ? "border-[var(--gold-400)] text-[var(--fg-primary)]"
+          : "border-transparent text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
+      }`}
+    >
+      {children}
+      {typeof count === "number" && count > 0 && (
+        <span className="rounded-full bg-[var(--surface-3)] px-1.5 py-0.5 text-[11px] font-normal text-[var(--fg-muted)]">
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 

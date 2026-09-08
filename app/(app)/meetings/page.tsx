@@ -10,6 +10,9 @@ import { readOAuthOutcome } from "@/lib/oauth-outcome";
 import { OAuthOutcomeBanner } from "@/components/OAuthOutcomeBanner";
 import { mailboxConfigured } from "@/lib/meetings/mailbox.server";
 import { MailboxWarning } from "./MailboxWarning";
+import { loadMeetingLog } from "@/lib/meetings/meeting-log.server";
+import { toLogEntry, sortLogEntries, type MeetingLogEntry } from "@/lib/meetings/meeting-log";
+import { isPastMeeting } from "@/lib/meetings/schedule";
 
 export const metadata: Metadata = {
   title: "Meetings — FundExecs OS",
@@ -118,12 +121,18 @@ export default async function MeetingsPage(props: {
   if (!ctx.orgId) redirect("/onboarding");
 
   const userId = ctx.userId;
-  // Whether anything this page schedules can actually be emailed. Cheap by
-  // design — a credential-existence check, not a token mint — because it runs
-  // on every visit.
-  const [meetings, canSendEmail] = await Promise.all([
+  // canSendEmail: whether anything this page schedules can actually be emailed.
+  // Cheap by design — a credential-existence check, not a token mint — because
+  // it runs on every visit.
+  //
+  // logRows: the log is its own query rather than a slice of `meetings`. That
+  // one stops at 50 rows and carries no reports, and the whole point of a log
+  // is that a meeting from months ago is still in it, with what it produced.
+  const logClient = await createServerClient();
+  const [meetings, canSendEmail, logRows] = await Promise.all([
     getMeetings(ctx.orgId, userId),
     mailboxConfigured(await createServerClient(), userId, ctx.orgId),
+    loadMeetingLog(logClient, ctx.orgId),
   ]);
   const now = Date.now();
   // "Upcoming" keys off the meeting's END, not its start — a meeting that's
@@ -138,6 +147,20 @@ export default async function MeetingsPage(props: {
     .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime());
   const past = meetings.filter((m) => !m.is_draft && !upcoming.some((u) => u.id === m.id));
 
+  // Only meetings that have actually happened. A meeting scheduled for next
+  // week has no post-meeting detail to hold, and listing it under "Logs" would
+  // promise a record that does not exist yet.
+  const logs: MeetingLogEntry[] = sortLogEntries(
+    logRows
+      .filter((row) => isPastMeeting({
+        status: row.meeting.status as "waiting" | "active" | "ended",
+        scheduled_at: row.meeting.scheduled_at,
+        duration_minutes: row.meeting.duration_minutes,
+        is_draft: row.meeting.is_draft,
+      }, now))
+      .map((row) => toLogEntry(row.meeting, row.report)),
+  );
+
   return (
     // Landing shows the lobby + Upcoming meetings; the full calendar opens behind
     // the lobby's "Schedule for later" action (Meetings → Schedule for later →
@@ -151,6 +174,7 @@ export default async function MeetingsPage(props: {
         initialMeetings={meetings as unknown as CalendarMeeting[]}
         initialUpcoming={upcoming as unknown as UpcomingMeeting[]}
         initialPast={past as unknown as PastMeeting[]}
+        initialLogs={logs}
         userId={userId}
         orgId={ctx.orgId}
       />
