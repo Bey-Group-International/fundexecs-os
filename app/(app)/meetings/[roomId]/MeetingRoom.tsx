@@ -1017,6 +1017,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // What each peer says about their own video, which pixels cannot tell us.
   const [peerVideo, setPeerVideo] = useState<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
+  // Read from the stats timer, which is created once.
+  const peerVideoRef = useRef<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
 
   // Transcript
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
@@ -1236,6 +1238,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     void applyBackgroundRef.current(NO_BACKGROUND);
   }, [bwMode]);
   useEffect(() => { peerMicOnRef.current = peerMicOn; }, [peerMicOn]);
+  useEffect(() => { peerVideoRef.current = peerVideo; }, [peerVideo]);
 
   // Teardown on unmount. If the user navigates away via client-side routing
   // (browser back, a nav link, the guest "leave" link) instead of clicking
@@ -1431,8 +1434,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // (reconnect / re-admit) would otherwise orphan the old RTCPeerConnection
     // (a leak) and start a competing offer/answer cycle.
     const prior = peersRef.current.get(peerId);
-    if (prior) { try { prior.close(); } catch { /* ignore */ } }
-    forgetPeerState(peerId);
+    if (prior) {
+      try { prior.close(); } catch { /* ignore */ }
+      // Only a connection being REPLACED carries stale senders, flags and
+      // candidates. A first connection may already be holding candidates that
+      // were trickled ahead of the offer, and those are the whole reason the
+      // buffer exists — clearing them here would leave `flushPendingIce` with
+      // nothing to apply and the connection checking against no remote
+      // candidates at all.
+      forgetPeerState(peerId);
+    }
 
     const pc = new RTCPeerConnection(iceConfigRef.current);
     const local = localStreamRef.current;
@@ -2465,6 +2476,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const sample = {
         kbps: bits / 1000 / elapsed / pcs.length,
         lossPct: delivered > 0 ? (lost / delivered) * 100 : 0,
+        // Whether a low rate means anything. A room with every camera off
+        // delivers about as little as a starved one, and only the participants
+        // can say which it is. Unknown counts as yes: the announcement lands a
+        // moment after a peer appears, and assuming video is the cautious half.
+        videoExpected: [...peersRef.current.keys()].some((id) => {
+          const v = peerVideoRef.current.get(id);
+          return v ? v.camOn && !v.paused : true;
+        }),
       };
 
       const before = linkRef.current.mode;

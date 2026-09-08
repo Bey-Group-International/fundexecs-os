@@ -132,6 +132,14 @@ export interface LinkSample {
   kbps: number;
   /** Percentage of inbound packets lost since the last sample, 0-100. */
   lossPct: number;
+  /**
+   * Whether anyone in the room is currently trying to send us video.
+   *
+   * Without this a meeting where everyone has their camera off — an ordinary
+   * thing to be in — reads as a starved link, because a voice call really does
+   * cost about as little as a broken one delivers.
+   */
+  videoExpected: boolean;
 }
 
 export interface LinkState {
@@ -155,12 +163,34 @@ const DOWN_AFTER = 2;
 /** Three good ones to step back up: recovering too eagerly is how a call oscillates. */
 const UP_AFTER = 3;
 
-function verdict(sample: LinkSample): "bad" | "good" | "neither" {
+/**
+ * What one measurement says about the line.
+ *
+ * The mode has to be an input, because below "normal" the inbound rate stops
+ * being a measurement of the line and becomes a measurement of our own last
+ * decision. Every participant on a bad link reduces what it sends; that lowers
+ * what everyone receives; and a rule that reads a low rate as "still bad" then
+ * has no way back — the room falls to audio-only on the first bad patch and
+ * stays there for the rest of the call, however completely the network
+ * recovers. Loss is the signal that keeps its meaning at any rate, so below
+ * "normal" it is the only one consulted.
+ *
+ * A rate of zero is not evidence either way: it is what a call looks like
+ * before its first frame lands, and what a dead link looks like after its last.
+ */
+function verdict(sample: LinkSample, mode: BandwidthMode): "bad" | "good" | "neither" {
   if (sample.lossPct >= BAD_LOSS_PCT) return "bad";
-  // A rate of zero means nothing has arrived yet, not that the line is empty.
-  if (sample.kbps > 0 && sample.kbps < BAD_KBPS) return "bad";
-  if (sample.lossPct <= GOOD_LOSS_PCT && sample.kbps >= GOOD_KBPS) return "good";
-  return "neither";
+
+  // Packets arriving, and arriving intact.
+  const clean = sample.kbps > 0 && sample.lossPct <= GOOD_LOSS_PCT;
+
+  if (mode !== "normal") return clean ? "good" : "neither";
+
+  // At full quality a rate this low means the line is starving a stream someone
+  // is actually trying to push through it. With every camera off there is
+  // nothing being starved and the same number is simply what voice costs.
+  if (sample.videoExpected && sample.kbps > 0 && sample.kbps < BAD_KBPS) return "bad";
+  return clean && sample.kbps >= GOOD_KBPS ? "good" : "neither";
 }
 
 const DOWN: Record<BandwidthMode, BandwidthMode> = {
@@ -190,7 +220,7 @@ const UP: Record<BandwidthMode, BandwidthMode> = {
 export function stepLink(state: LinkState, sample: LinkSample | null): LinkState {
   if (!sample) return state;
 
-  const v = verdict(sample);
+  const v = verdict(sample, state.mode);
   if (v === "bad") {
     const bad = state.bad + 1;
     if (bad >= DOWN_AFTER && DOWN[state.mode] !== state.mode) {

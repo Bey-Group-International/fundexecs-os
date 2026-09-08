@@ -106,8 +106,10 @@ describe("screenSendCap", () => {
 });
 
 describe("stepLink", () => {
-  const bad: LinkSample = { kbps: 40, lossPct: 12 };
-  const good: LinkSample = { kbps: 800, lossPct: 0 };
+  const bad: LinkSample = { kbps: 40, lossPct: 12, videoExpected: true };
+  const good: LinkSample = { kbps: 800, lossPct: 0, videoExpected: true };
+  /** What the wire actually carries once video is paused: a little, cleanly. */
+  const quiet: LinkSample = { kbps: 40, lossPct: 0, videoExpected: true };
 
   const run = (start: LinkState, samples: Array<LinkSample | null>) =>
     samples.reduce<LinkState>((s, sample) => stepLink(s, sample), start);
@@ -147,7 +149,10 @@ describe("stepLink", () => {
   it("reads an idle line as no evidence rather than as a dead one", () => {
     // Nothing received yet: zero bytes is what a call looks like before the
     // first frame lands, and must not be mistaken for a starved link.
-    expect(run(INITIAL_LINK, [{ kbps: 0, lossPct: 0 }, { kbps: 0, lossPct: 0 }]).mode).toBe("normal");
+    expect(run(INITIAL_LINK, [
+      { kbps: 0, lossPct: 0, videoExpected: true },
+      { kbps: 0, lossPct: 0, videoExpected: true },
+    ]).mode).toBe("normal");
   });
 
   it("leaves the streaks alone when there was nothing to measure", () => {
@@ -155,10 +160,53 @@ describe("stepLink", () => {
     expect(stepLink(one, null)).toEqual(one);
   });
 
+  it("climbs out of audio-only on the quiet, clean line audio-only actually produces", () => {
+    // The bug this pins: pausing video is what makes the rate low, so reading
+    // that low rate as "still bad" left the room in audio-only for the rest of
+    // the call however well the network recovered. Nothing else here can catch
+    // it — a sample of 800kbps is not something an audio-only room can produce.
+    const off = run(INITIAL_LINK, [bad, bad, bad, bad]);
+    expect(off.mode).toBe("audio-only");
+    expect(run(off, [quiet, quiet, quiet]).mode).toBe("degraded");
+    expect(run(off, [quiet, quiet, quiet, quiet, quiet, quiet]).mode).toBe("normal");
+  });
+
+  it("does not climb back out of a link that has gone silent", () => {
+    // No packets and therefore no loss is not a healthy line, and must not be
+    // read as one just because nothing was dropped.
+    const off = run(INITIAL_LINK, [bad, bad, bad, bad]);
+    const silent: LinkSample = { kbps: 0, lossPct: 0, videoExpected: true };
+    expect(run(off, [silent, silent, silent, silent]).mode).toBe("audio-only");
+  });
+
+  it("keeps degrading a reduced line that is still losing packets", () => {
+    // Loss keeps its meaning at any rate, which is why it is the one signal
+    // still consulted below "normal".
+    const degraded = run(INITIAL_LINK, [bad, bad]);
+    expect(run(degraded, [{ kbps: 200, lossPct: 20, videoExpected: true },
+                          { kbps: 200, lossPct: 20, videoExpected: true }]).mode).toBe("audio-only");
+  });
+
+  it("leaves a room with every camera off at full quality", () => {
+    // A voice call costs about what a starved link delivers, so the rate alone
+    // cannot tell them apart — and degrading an audio-only meeting would put a
+    // "weak connection" notice on a call that has nothing wrong with it.
+    const cameras_off: LinkSample = { kbps: 40, lossPct: 0, videoExpected: false };
+    expect(run(INITIAL_LINK, [cameras_off, cameras_off, cameras_off, cameras_off]).mode).toBe("normal");
+  });
+
+  it("still degrades a starved link when somebody is sending video", () => {
+    const starved: LinkSample = { kbps: 40, lossPct: 0, videoExpected: true };
+    expect(run(INITIAL_LINK, [starved, starved]).mode).toBe("degraded");
+  });
+
   it("degrades on loss alone, even when the bytes are flowing", () => {
     // The case the byte-rate check misses entirely: plenty of throughput and a
     // quarter of the packets arriving broken is exactly what static sounds like.
-    expect(run(INITIAL_LINK, [{ kbps: 900, lossPct: 25 }, { kbps: 900, lossPct: 25 }]).mode).toBe("degraded");
+    expect(run(INITIAL_LINK, [
+      { kbps: 900, lossPct: 25, videoExpected: true },
+      { kbps: 900, lossPct: 25, videoExpected: true },
+    ]).mode).toBe("degraded");
   });
 });
 
