@@ -174,3 +174,77 @@ describe("pathological input does not throw", () => {
     expect(() => renderMarkdownToRtf("```\ncode without close")).not.toThrow();
   });
 });
+
+// ── Links ──────────────────────────────────────────────────────────────────
+//
+// The tokenizer had no link support at all, so `[label](url)` reached the
+// reader as those literal characters. That shipped in the report email, whose
+// closing line is a markdown link to the full report: the one thing the message
+// asks the recipient to do arrived as unclickable punctuation.
+
+describe("markdown links", () => {
+  const REPORT_LINK = "[View the full report](https://fundexecs.com/meetings/2va-cd7-mk/report)";
+
+  it("makes an anchor in HTML", () => {
+    const html = renderMarkdownToHtml(REPORT_LINK, "t");
+    expect(html).toContain(
+      '<a href="https://fundexecs.com/meetings/2va-cd7-mk/report">View the full report</a>',
+    );
+    // The whole point: no raw markdown left behind.
+    expect(html).not.toContain("](https://");
+  });
+
+  it("keeps emphasis around a link", () => {
+    // The anchor wraps the emphasis rather than the other way round; both nest
+    // legally, and this pins which one so a refactor cannot quietly drop one.
+    expect(renderMarkdownToHtml("**[docs](https://example.com)**", "t"))
+      .toContain('<a href="https://example.com"><strong>docs</strong></a>');
+  });
+
+  it("escapes the URL as an attribute value", () => {
+    const html = renderMarkdownToHtml('[x](https://example.com/?a=1&b="2")', "t");
+    expect(html).toContain("&amp;");
+    expect(html).not.toContain('b="2"');
+  });
+
+  it("refuses a scheme a browser would execute", () => {
+    // Report bodies are model output. An anchor is the one place where a
+    // javascript: URL stops being text and starts being code, so these stay
+    // literal rather than becoming links.
+    for (const bad of [
+      "[click](javascript:alert(1))",
+      "[click](data:text/html,<script>alert(1)</script>)",
+      "[click](vbscript:msgbox)",
+    ]) {
+      const html = renderMarkdownToHtml(bad, "t");
+      expect(html).not.toContain("<a ");
+    }
+  });
+
+  it("allows mailto", () => {
+    expect(renderMarkdownToHtml("[write](mailto:a@b.com)", "t"))
+      .toContain('<a href="mailto:a@b.com">write</a>');
+  });
+
+  it("leaves prose brackets alone", () => {
+    for (const prose of [
+      "The figure [3] is wrong.",
+      "See [the appendix] for detail.",
+      "[unclosed(https://example.com",
+      "[](https://example.com)",
+      "[label]()",
+      "[a](https://exa mple.com)",
+    ]) {
+      const html = renderMarkdownToHtml(prose, "t");
+      expect(html).not.toContain("<a ");
+    }
+  });
+
+  it("prints the URL in RTF, which cannot anchor it", () => {
+    const rtf = renderMarkdownToRtf(REPORT_LINK, "t");
+    expect(rtf).toContain("View the full report");
+    expect(rtf).toContain("https://fundexecs.com/meetings/2va-cd7-mk/report");
+    // Never the raw markdown.
+    expect(rtf).not.toContain("](");
+  });
+});
