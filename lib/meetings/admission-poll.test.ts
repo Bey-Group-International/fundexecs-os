@@ -1,4 +1,4 @@
-import { ADMISSION_POLL_SCHEDULE, nextPollDelay, pollCount, shouldPollNow } from "./admission-poll";
+import { ADMISSION_POLL_SCHEDULE, WATCHED_POLL_SCHEDULE, nextPollDelay, pollCount, shouldPollNow } from "./admission-poll";
 
 describe("nextPollDelay", () => {
   it("asks fastest in the first seconds, where the host usually answers", () => {
@@ -62,5 +62,29 @@ describe("shouldPollNow", () => {
   // Non-browser and older environments report nothing; those must still poll.
   it("polls when visibility is unknown", () => {
     expect(shouldPollNow(undefined)).toBe(true);
+  });
+});
+
+describe("WATCHED_POLL_SCHEDULE", () => {
+  // With a nudge arriving on a broadcast, the poll is a safety net for a push
+  // that never came — so it must be much cheaper, without being absent.
+  it("is far slower than the unwatched schedule at every point", () => {
+    for (const t of [0, 10_000, 30_000, 90_000, 400_000]) {
+      expect(nextPollDelay(t, WATCHED_POLL_SCHEDULE)).toBeGreaterThan(nextPollDelay(t));
+    }
+  });
+
+  it("still asks, so a guest whose socket died is not stranded", () => {
+    expect(nextPollDelay(0, WATCHED_POLL_SCHEDULE)).toBeLessThanOrEqual(15_000);
+  });
+
+  it("widens as the wait goes on, like the other one", () => {
+    expect(nextPollDelay(0, WATCHED_POLL_SCHEDULE)).toBe(15_000);
+    expect(nextPollDelay(60_000, WATCHED_POLL_SCHEDULE)).toBe(30_000);
+    expect(nextPollDelay(300_000, WATCHED_POLL_SCHEDULE)).toBe(60_000);
+  });
+
+  it("costs a fraction of the unwatched schedule over a five-minute wait", () => {
+    expect(pollCount(300_000, WATCHED_POLL_SCHEDULE)).toBeLessThan(pollCount(300_000) / 4);
   });
 });

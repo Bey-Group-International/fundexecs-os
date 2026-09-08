@@ -22,22 +22,44 @@
 //   - A hidden tab does not poll, and becoming visible polls at once. Browsers
 //     throttle background timers anyway, so the interval was never what it
 //     claimed to be there.
+//   - A nudge is not a verdict. When the decision is pushed over Realtime the
+//     session asks the server what actually happened; the push only says when
+//     to ask. Anyone with the room code can publish on that channel, so a
+//     payload that was believed would be a payload worth forging.
+//   - Losing the push means going back to asking often. The safety-net cadence
+//     is only safe while something is actually watching.
 //   - Stopping means stopping: no timer, no listener, and no follow-through
 //     from a request that was already in flight.
 //
 // Timers and visibility are read from the environment rather than injected, so
 // tests drive it the way a browser does — fake timers and a real `document`.
 
-import { nextPollDelay, shouldPollNow } from "./admission-poll";
+import { WATCHED_POLL_SCHEDULE, nextPollDelay, shouldPollNow } from "./admission-poll";
 
 /** How long before the screen admits the host has not answered. Polling goes on. */
 export const ADMISSION_TIMEOUT_MS = 120_000;
+
+/** What a live subscription tells the session. Both are advisory. */
+export interface AdmissionWatchHandlers {
+  /** The decision may have changed. Say nothing about what it is. */
+  onNudge: () => void;
+  /** Whether a push would currently reach us, which sets the polling cadence. */
+  onConnectionChange: (connected: boolean) => void;
+}
 
 export interface AdmissionSessionOptions {
   /** POST the knock. Resolves to the server's status, or null if the request failed. */
   knock: () => Promise<string | null>;
   /** GET the current decision. Resolves to the status, or null if the request failed. */
   poll: () => Promise<string | null>;
+  /**
+   * Subscribe to this guest's decision being pushed. Returns an unsubscribe.
+   *
+   * Optional: without it the session polls on the responsive cadence exactly as
+   * it did before, which is also what happens when the subscription never
+   * connects. Realtime makes the answer immediate; it is not load-bearing.
+   */
+  watch?: (handlers: AdmissionWatchHandlers) => () => void;
   /** The host let them in. */
   onAdmitted: () => void | Promise<void>;
   /** The host turned them away. */
@@ -58,15 +80,26 @@ export interface AdmissionSession {
   stop: () => void;
 }
 
+/**
+ * A guest's attempt to be let in, from the first knock to the verdict.
+ *
+ * Nothing happens until `start()`. After it, exactly one of `onAdmitted`,
+ * `onDenied` or `onEnded` will fire — once — unless `stop()` gets there first;
+ * `onWaiting` and `onTimedOut` are progress, not outcomes, and either may fire
+ * before it. The session cleans itself up on a verdict, so a caller only has to
+ * `stop()` when abandoning a wait that has not resolved.
+ */
 export function createAdmissionSession(opts: AdmissionSessionOptions): AdmissionSession {
   const timeoutMs = opts.timeoutMs ?? ADMISSION_TIMEOUT_MS;
 
   let stopped = false;
   let settled = false;
   let startedAt = 0;
+  let watching = false;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
   let detachVisibility: (() => void) | null = null;
+  let detachWatch: (() => void) | null = null;
 
   function stop() {
     stopped = true;
@@ -74,6 +107,8 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
     if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timeoutTimer = null; }
     detachVisibility?.();
     detachVisibility = null;
+    detachWatch?.();
+    detachWatch = null;
   }
 
   /**
@@ -119,9 +154,25 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
 
   function scheduleNext(): void {
     if (stopped || settled) return;
+    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
+    const schedule = watching ? WATCHED_POLL_SCHEDULE : undefined;
     pollTimer = setTimeout(() => {
       void pollOnce().then(() => { scheduleNext(); });
-    }, nextPollDelay(Date.now() - startedAt));
+    }, nextPollDelay(Date.now() - startedAt, schedule));
+  }
+
+  /**
+   * The push connected or dropped.
+   *
+   * Dropping reschedules rather than waiting out the pending timer: that timer
+   * may be half a minute away, chosen on the assumption that something was
+   * watching. Leaving it would make a guest pay for the disconnection with the
+   * longest wait of the two cadences instead of the shortest.
+   */
+  function setWatching(connected: boolean): void {
+    if (stopped || settled || watching === connected) return;
+    watching = connected;
+    if (pollTimer !== null) scheduleNext();
   }
 
   function beginWaiting(): void {
@@ -135,6 +186,15 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
       // who answers late still gets their guest in.
       if (!stopped && !settled) opts.onTimedOut?.();
     }, timeoutMs);
+
+    // Subscribed before the first poll is scheduled, so a decision made while
+    // the guest was still knocking is pushed rather than waited for.
+    if (opts.watch) {
+      detachWatch = opts.watch({
+        onNudge: () => { void pollOnce(); },
+        onConnectionChange: setWatching,
+      });
+    }
 
     scheduleNext();
 

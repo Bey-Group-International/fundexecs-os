@@ -42,13 +42,13 @@ import {
 } from "@/lib/meetings/call-phase";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
+import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
+import type { AdmissionUiState } from "@/lib/meetings/admission-ui";
 import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 import {
   GuestThanksScreen,
   NotAdmittedScreen,
-  PreviewVideo,
   WaitingRoomBar,
-  WaitingRoomScreen,
   type WaitingPeer,
 } from "./WaitingScreens";
 
@@ -139,7 +139,7 @@ const SPEAKER_COLORS = [
 const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
 
 // Synthesize a short chime using Web Audio API (no audio files needed)
-function playChime(type: "join" | "leave") {
+function playChime(type: "join" | "leave" | "knock") {
   try {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
@@ -148,6 +148,12 @@ function playChime(type: "join" | "leave") {
     if (type === "join") {
       osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+    } else if (type === "knock") {
+      // Two soft taps, distinct from the join tone: somebody is at the door, not
+      // in the room. A host looking at a document has only this and the tab
+      // title to tell them anyone is waiting.
+      osc.frequency.setValueAtTime(520, ctx.currentTime);
+      osc.frequency.setValueAtTime(520, ctx.currentTime + 0.12);
     } else {
       osc.frequency.setValueAtTime(660, ctx.currentTime);
       osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
@@ -1029,6 +1035,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     router.push(`/meetings/${roomCode}/report`);
   }, [clearWaitingTimers, router, roomCode]);
 
+  /**
+   * Stop waiting, and go back to the screen they are already looking at.
+   *
+   * Deliberately not `leaveMeeting`: that tears the call down, which stops the
+   * preview stream the green room is still showing — so cancelling a knock
+   * would blank the guest's own camera and cost them their setup. Nothing here
+   * was ever started except the admission session, so nothing else is stopped.
+   * They land back on Join, with their camera, microphone and background exactly
+   * as they left them, and can ask again with one press.
+   */
+  const cancelAdmission = useCallback(() => {
+    clearWaitingTimers();
+    setWaitingForAdmit(false);
+    setWaitingTimedOut(false);
+    setJoining(false);
+  }, [clearWaitingTimers]);
+
   /** Leave the waiting room because the host declined. */
   const showDenied = useCallback(() => {
     clearWaitingTimers();
@@ -1043,6 +1066,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // watches this rather than `ready` alone, so leaving or ending stops them all
   // at once instead of leaving timers running against a dead call.
   const sessionLive = ready && !waitingForAdmit && isCallRunning(callPhase);
+
+  // What the pre-join screen shows in place of its Join button. "asking" is the
+  // knock's round trip — brief, but without it the button would sit there
+  // looking pressable while the request was in the air.
+  const admissionUi: AdmissionUiState =
+    waitingTimedOut ? "timed-out"
+    : waitingForAdmit ? "waiting"
+    : joining && !isHost ? "asking"
+    : "idle";
 
   const sendSignal = useCallback((msg: SignalMsg) => {
     channelRef.current?.send({ type: "broadcast", event: "signal", payload: msg });
@@ -1596,6 +1628,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         if (!res.ok) return null;
         return ((await res.json()) as { status?: string }).status ?? null;
       },
+      // Realtime carries a nudge, never a verdict — see admission-channel.ts.
+      // The session answers it by asking the server, so a forged broadcast buys
+      // nothing but one wasted request. Guests cannot watch the admissions table
+      // itself (unauthenticated, and it is org-read only), but they can hold a
+      // broadcast channel with the anon key — the same way they already hold the
+      // signalling channel once they are in.
+      watch: ({ onNudge, onConnectionChange }) => {
+        const channel = supabase
+          .channel(admissionChannelName(roomCode, guestKey))
+          .on("broadcast", { event: ADMISSION_NUDGE }, () => onNudge())
+          .subscribe((status: string) => {
+            // Anything but SUBSCRIBED means a push would not reach us, so the
+            // session goes back to asking on the responsive cadence.
+            onConnectionChange(status === "SUBSCRIBED");
+          });
+        return () => { void supabase.removeChannel(channel); };
+      },
       onAdmitted: async () => { await enterRoomRef.current(mId, name); },
       onDenied: showDenied,
       onEnded: leaveEndedMeeting,
@@ -1654,6 +1703,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       void supabase.removeChannel(channel);
     };
   }, [isHost, sessionLive, meetingId, supabase, loadWaiting]);
+
+  // A knock makes a sound. The bar below the video is visible whatever tab the
+  // sidebar is on, but a host who has switched to another window sees none of
+  // it — and a guest at the door is the one thing in a meeting that is waiting
+  // on the host personally. Only a rise counts, so admitting four people does
+  // not chime on the way back down.
+  const lastWaitingCountRef = useRef(0);
+  useEffect(() => {
+    const count = waitingPeers.length;
+    if (isHost && count > lastWaitingCountRef.current) playChime("knock");
+    lastWaitingCountRef.current = count;
+  }, [isHost, waitingPeers.length]);
 
   // Carry the waiting count into the browser tab title. A host who has tabbed
   // away to pull up a document is exactly the host most likely to leave someone
@@ -2372,6 +2433,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const teardownCallRef = useRef(teardownCall);
   useEffect(() => { teardownCallRef.current = teardownCall; }, [teardownCall]);
 
+  // Leaving the page is leaving the meeting. Nothing tore the call down on
+  // unmount, so a guest who navigated away from the waiting screen — browser
+  // back, a link, anything that is not the Cancel button — left the admission
+  // session running behind them: polling on a timer nobody would ever stop, and
+  // now holding a Realtime subscription too. Empty deps and the ref on purpose:
+  // depending on `teardownCall` would re-run this whenever its identity changed
+  // and tear down a live call mid-meeting.
+  useEffect(() => () => { teardownCallRef.current(); }, []);
+
   const leaveMeeting = useCallback(() => {
     // The ref, not the state, is the guard: a second click lands before React has
     // committed the phase change from the first.
@@ -2477,20 +2547,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     );
   }
 
-  // ── Waiting room screen ─────────────────────────────────────────────────
-
-  if (waitingForAdmit) {
-    return (
-      <WaitingRoomScreen
-        meetingTitle={meetingTitle}
-        displayName={localName || displayName}
-        previewStream={previewStream}
-        timedOut={waitingTimedOut}
-        onLeave={leaveMeeting}
-      />
-    );
-  }
-
   // ── Pre-join screen ───────────────────────────────────────────────────────
 
   if (!ready) {
@@ -2499,6 +2555,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         roomCode={roomCode}
         isHost={isHost}
         joining={joining}
+        admission={admissionUi}
+        onCancelAdmission={cancelAdmission}
         displayName={displayName}
         onDisplayNameChange={setDisplayName}
         meetingTitle={meetingTitle}
