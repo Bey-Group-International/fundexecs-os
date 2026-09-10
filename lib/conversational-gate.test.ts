@@ -62,6 +62,9 @@ describe("gateConversationalSpend", () => {
     expect(result.status).toBe(402);
     expect(result.error).toContain("Insufficient credits");
     expect(result.error).toContain(String(CONVERSATIONAL_COST.meetingAnalyze));
+    // A grandfathered org gets no wall to click, so the refusal has to say
+    // where to go instead of handing over a bare number.
+    expect(result.error).toContain("Wallet");
   });
 
   it("carries the paywall so the caller can resolve it in place", async () => {

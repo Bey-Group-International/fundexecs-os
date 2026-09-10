@@ -92,7 +92,11 @@ export async function gateConversationalSpend(
       status: 402,
       error:
         paywall?.message ??
-        `Insufficient credits: ${spent.balance ?? 0} available, ${cost} required.`,
+        // No wall to offer — a grandfathered org, which keeps the pre-existing
+        // top-up flow. Name where that is: the engine's refusal already does
+        // (lib/engine.ts:858), and a bare shortfall leaves someone with a
+        // number and nowhere to go.
+        `Insufficient credits: ${spent.balance ?? 0} available, ${cost} required. Top up on the Wallet page to continue.`,
       ...(paywall ? { paywall } : {}),
     };
   }
