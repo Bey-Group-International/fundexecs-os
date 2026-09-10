@@ -39,6 +39,8 @@ export interface MeetingLogRow {
    * present a report it cannot read as one that does not exist.
    */
   attended: boolean;
+  /** Whether the caller hosted it — the gate on regenerating its report. */
+  isHost: boolean;
 }
 
 /**
@@ -98,6 +100,7 @@ export async function loadMeetingLog(
         is_draft: (row.is_draft as boolean | null) ?? null,
       },
       attended: attendedIds.has(row.id as string) || (row.host_id as string | null) === userId,
+      isHost: (row.host_id as string | null) === userId,
       report: report
         ? {
             summary: (report.summary as string | null) ?? null,

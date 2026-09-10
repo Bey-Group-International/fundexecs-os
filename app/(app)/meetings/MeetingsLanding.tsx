@@ -7,7 +7,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useBodyScrollLock, useFocusTrap } from "@/hooks/useFocusTrap";
 import { MeetingLobby } from "./MeetingLobby";
 import { UpcomingMeetingsList, type UpcomingMeeting } from "./UpcomingMeetingsList";
-import { TranscriptAnalysisCard } from "@/app/(app)/meetings/TranscriptAnalysisCard";
 import { SchedulingLinkCard } from "./SchedulingLinkCard";
 import { CALENDAR_VIEW_PARAM, calendarViewUrl, parseCalendarView, type CalendarView } from "./calendar-view";
 import type { PastMeeting } from "./PastMeetingsList";
@@ -146,9 +145,15 @@ export function MeetingsLanding({
   return (
     // One centred column for the whole page. Previously the lobby and the
     // Upcoming list each carried their own `max-w-3xl` while the scheduling
-    // card, the tabs and the transcript card ran the full width of the shell —
-    // so nothing lined up and the page was wider than it was readable. The
-    // measure lives here now, once, and every child is `w-full` inside it.
+    // card and the tabs ran the full width of the shell — so nothing lined up
+    // and the page was wider than it was readable. The measure lives here now,
+    // once, and every child is `w-full` inside it.
+    //
+    // The page ends at the tabs. It used to carry an "Analyze a transcript"
+    // card below them, which asked you to paste a transcript by hand to get an
+    // analysis of a meeting the app had already recorded and already analysed —
+    // so it sat at the bottom doing nothing. Regenerating a report from the
+    // transcript on file lives in the Logs tab now, where the meeting is.
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
       {/* The app's page-header vocabulary — mono eyebrow, display title, one
           line of lede — held at a compact scale. Meetings is a desk somebody
@@ -191,10 +196,6 @@ export function MeetingsLanding({
           <MeetingLogs entries={initialLogs} />
         </div>
       </div>
-
-      {/* Between meetings is where a transcript gets analysed — it was a tab in
-          the in-call copilot, which is the one place nobody is pasting one. */}
-      <TranscriptAnalysisCard />
 
       {calendarOpen && mounted
         ? createPortal(

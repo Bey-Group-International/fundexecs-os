@@ -5,6 +5,7 @@ import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import { createTeamTask } from "@/lib/team-tasks";
 import { persistInstitutionalMeetingRecord } from "@/lib/meetings/service";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
 
 export const runtime = "nodejs";
 
@@ -44,85 +45,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Cap transcript to ~12 000 chars to stay within model context / cost budget
-    const transcript = body.transcript.length > 12_000
-      ? body.transcript.slice(-12_000)
-      : body.transcript;
+    // Cap transcript to stay within model context / cost budget.
+    const transcript = clampTranscript(body.transcript);
 
-    let analysis: Record<string, unknown> = { key_points: [], action_items: [], summary: "" };
-
-    if (client) {
-      const schema = {
-        type: "object" as const,
-        properties: {
-          summary: { type: "string", description: "2-3 sentence meeting summary" },
-          key_points: { type: "array", items: { type: "string" }, description: "Main discussion points" },
-          action_items: {
-            type: "array",
-            items: { type: "string" },
-            description: "Action items prefixed with owner name, e.g. 'Sarah: Send deck by Friday'",
-          },
-          decisions: { type: "array", items: { type: "string" }, description: "Key decisions reached" },
-          sentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
-          next_meeting_suggestion: {
-            type: "string",
-            description: "One sentence suggesting when to meet next and why, or empty string if not applicable",
-          },
-          follow_up_draft: {
-            type: "string",
-            description: "Complete follow-up email including: greeting, 1-paragraph summary, bullet list of decisions made, numbered action items with owners, next meeting proposal (if applicable), and professional sign-off. Use plain text, no markdown.",
-          },
-        },
-        required: ["summary", "key_points", "action_items", "decisions", "sentiment", "next_meeting_suggestion", "follow_up_draft"],
-      };
-
-      const durationMin = body.duration ? Math.round(body.duration / 60) : null;
-
-      const msg = await client.messages.create({
-        model: MODEL,
-        max_tokens: 2048,
-        system: `You are an expert meeting analyst for a venture-capital / investor-relations platform.
-Produce comprehensive, actionable meeting reports. Transcript lines are prefixed "SpeakerName: text" — use speaker names when assigning action items.
-For the follow_up_draft, write a ready-to-send professional email covering: (1) brief summary paragraph, (2) decisions made, (3) numbered action items with owners and deadlines where stated, (4) proposed next meeting if relevant, (5) professional closing. Plain text only.`,
-        messages: [
-          {
-            role: "user",
-            content: `Meeting: ${body.title ?? "Untitled"}
-Participants: ${body.participants?.join(", ") ?? "Unknown"}
-${durationMin ? `Duration: ~${durationMin} minutes` : ""}
-
-FULL TRANSCRIPT:
-${transcript}
-
-Generate a comprehensive post-meeting report.`,
-          },
-        ],
-        tools: [
-          {
-            name: "meeting_report",
-            description: "Generate structured meeting report",
-            input_schema: schema,
-          },
-        ],
-        tool_choice: { type: "any" },
+    // The prompt and schema live in lib/meetings/report-analysis so the
+    // regenerate path produces the identical shape — the log reads
+    // `analysis.decisions`, which exists in no column of its own.
+    let analysis: Record<string, unknown> = { ...EMPTY_REPORT };
+    try {
+      analysis = await generateMeetingReport(client, MODEL, {
+        title: body.title ?? "Untitled",
+        participants: body.participants ?? [],
+        transcript,
+        durationSeconds: body.duration ?? null,
       });
-
-      const toolUse = msg.content.find((b) => b.type === "tool_use");
-      if (toolUse && toolUse.type === "tool_use") {
-        const raw = toolUse.input as Record<string, unknown>;
-        // The list fields are rendered on the report page and turned into team
-        // tasks below, both of which assume strings. A model answering a prompt
-        // about "action items with owners" does not always agree — so coerce
-        // here rather than letting `item.slice` throw mid-request and lose the
-        // whole report at the moment the meeting ends.
-        analysis = {
-          ...raw,
-          summary: normalizeNoteText(raw.summary),
-          key_points: normalizeNoteList(raw.key_points),
-          action_items: normalizeNoteList(raw.action_items),
-          decisions: normalizeNoteList(raw.decisions),
-        };
-      }
+    } catch (err) {
+      // A model failure must not cost the transcript: the report is saved
+      // empty and the meeting still ends, which is what happened before this
+      // was extracted.
+      console.error("[/api/meetings/report] analysis failed", err);
     }
 
     // Save to DB

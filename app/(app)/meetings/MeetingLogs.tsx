@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   groupLogsByMonth,
@@ -18,9 +18,19 @@ import { CARD, EYEBROW } from "./tone";
 // thing that still identifies a meeting, and the detail is one click away
 // rather than a page away.
 
-export function MeetingLogs({ entries }: { entries: MeetingLogEntry[] }) {
+export function MeetingLogs({ entries: initialEntries }: { entries: MeetingLogEntry[] }) {
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  // Held locally so a regenerated report replaces its row in place. The
+  // alternative is router.refresh(), which re-runs the page's whole server
+  // query and collapses the row you were reading.
+  const [entries, setEntries] = useState(initialEntries);
+
+  const replaceEntry = useCallback(
+    (next: MeetingLogEntry) =>
+      setEntries((prev) => prev.map((e) => (e.id === next.id ? next : e))),
+    [],
+  );
 
   const groups = useMemo(
     () => groupLogsByMonth(entries.filter((e) => matchesLogSearch(e, query))),
@@ -80,6 +90,7 @@ export function MeetingLogs({ entries }: { entries: MeetingLogEntry[] }) {
                   entry={entry}
                   open={openId === entry.id}
                   onToggle={() => setOpenId(openId === entry.id ? null : entry.id)}
+                  onRegenerated={replaceEntry}
                 />
               ))}
             </div>
@@ -91,12 +102,33 @@ export function MeetingLogs({ entries }: { entries: MeetingLogEntry[] }) {
 }
 
 function LogRow({
-  entry, open, onToggle,
+  entry, open, onToggle, onRegenerated,
 }: {
   entry: MeetingLogEntry;
   open: boolean;
   onToggle: () => void;
+  onRegenerated: (entry: MeetingLogEntry) => void;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function regenerate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/meetings/${entry.id}/report/regenerate`, { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as { entry?: MeetingLogEntry; error?: string };
+      if (!res.ok || !json.entry) {
+        setError(json.error ?? "Could not regenerate the report.");
+        return;
+      }
+      onRegenerated(json.entry);
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  }
   const when = new Date(entry.occurredAt);
   const dateLabel = Number.isFinite(when.getTime())
     ? when.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
@@ -172,10 +204,29 @@ function LogRow({
               >
                 Open full report
               </Link>
+              {/* Reads the transcript already on file and writes a fresh
+                  report from it. Host only, and it appends rather than
+                  overwrites, so the previous report is never lost. */}
+              {entry.isHost && entry.hasReport && (
+                <button
+                  type="button"
+                  onClick={() => void regenerate()}
+                  disabled={busy}
+                  className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+                >
+                  {busy ? "Re-reading the transcript…" : "Regenerate from transcript"}
+                </button>
+              )}
               <span className="text-xs text-fg-muted">
                 Transcript and export are on the report
               </span>
             </div>
+          )}
+
+          {error && (
+            <p role="alert" className="mt-2 text-xs text-[var(--status-danger)]">
+              {error}
+            </p>
           )}
         </div>
       )}
