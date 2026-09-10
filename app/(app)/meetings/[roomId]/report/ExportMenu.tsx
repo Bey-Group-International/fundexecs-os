@@ -86,7 +86,7 @@ export function ExportMenu({ roomId }: { roomId: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:border-[var(--gold-400)]/40 transition-colors"
+        className="rounded-lg border border-[var(--line)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:border-gold-400/40 transition-colors"
       >
         Export
       </button>

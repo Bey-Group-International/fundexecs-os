@@ -8,6 +8,7 @@ import {
   matchesLogSearch,
   type MeetingLogEntry,
 } from "@/lib/meetings/meeting-log";
+import { CARD, EYEBROW } from "./tone";
 
 // The meeting log: what every meeting left behind, kept so it can be found
 // again months later.
@@ -31,9 +32,9 @@ export function MeetingLogs({ entries }: { entries: MeetingLogEntry[] }) {
 
   if (total === 0) {
     return (
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-10 text-center">
-        <p className="text-sm text-[var(--fg-primary)]">No meetings yet</p>
-        <p className="mt-1 text-xs text-[var(--fg-muted)]">
+      <div className={`${CARD} border-dashed px-4 py-10 text-center`}>
+        <p className="text-sm font-medium text-fg-primary">No meetings yet</p>
+        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
           Once a meeting ends, its summary, decisions and action items are kept here.
         </p>
       </div>
@@ -44,7 +45,7 @@ export function MeetingLogs({ entries }: { entries: MeetingLogEntry[] }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-muted)]">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted">
             <SearchIcon />
           </span>
           <input
@@ -53,27 +54,25 @@ export function MeetingLogs({ entries }: { entries: MeetingLogEntry[] }) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search summaries, decisions, action items, people…"
             aria-label="Search the meeting log"
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-1)] py-2 pl-9 pr-3 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:border-[var(--gold-400)] focus:outline-none"
+            className="w-full rounded-lg border border-line bg-surface-1 py-2 pl-9 pr-3 text-sm text-fg-primary transition-colors placeholder:text-fg-muted focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400/30"
           />
         </div>
-        <span className="shrink-0 text-xs text-[var(--fg-muted)]">
+        <span className="shrink-0 text-xs tabular-nums text-fg-muted">
           {query.trim() ? `${shown} of ${total}` : `${total} meeting${total === 1 ? "" : "s"}`}
         </span>
       </div>
 
       {shown === 0 ? (
-        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-8 text-center">
-          <p className="text-sm text-[var(--fg-primary)]">Nothing matches “{query.trim()}”</p>
-          <p className="mt-1 text-xs text-[var(--fg-muted)]">
+        <div className={`${CARD} border-dashed px-4 py-8 text-center`}>
+          <p className="text-sm font-medium text-fg-primary">Nothing matches “{query.trim()}”</p>
+          <p className="mt-1 text-xs leading-relaxed text-fg-muted">
             The log searches titles, summaries, decisions, action items and attendees.
           </p>
         </div>
       ) : (
         groups.map((group) => (
           <section key={group.label} className="flex flex-col gap-2">
-            <h3 className="px-1 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]">
-              {group.label}
-            </h3>
+            <h3 className={`px-1 ${EYEBROW}`}>{group.label}</h3>
             <div className="flex flex-col gap-1.5">
               {group.entries.map((entry) => (
                 <LogRow
@@ -104,58 +103,61 @@ function LogRow({
     : "Undated";
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)]">
+    <div className={`${CARD} overflow-hidden transition duration-200`}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-2)]"
+        className="fx-focus flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition-colors hover:bg-surface-2/70"
       >
-        <span className={`shrink-0 text-[var(--fg-muted)] transition-transform ${open ? "rotate-90" : ""}`}>
+        <span
+          aria-hidden
+          className={`shrink-0 text-fg-muted transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        >
           <ChevronIcon />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-[var(--fg-primary)]">
+          <span className="block truncate text-sm font-medium text-fg-primary">
             {entry.title}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-[var(--fg-muted)]">
+          <span className="mt-0.5 block truncate text-xs text-fg-muted">
             {dateLabel}
             {entry.durationMinutes ? ` · ${entry.durationMinutes} min` : ""}
             {` · ${logEntrySubtitle(entry)}`}
           </span>
         </span>
         {entry.attendeeNames.length > 0 && (
-          <span className="hidden shrink-0 text-xs text-[var(--fg-muted)] sm:block">
+          <span className="hidden shrink-0 text-xs tabular-nums text-fg-muted sm:block">
             {entry.attendeeNames.length} attendee{entry.attendeeNames.length === 1 ? "" : "s"}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="border-t border-[var(--line)] px-4 py-4">
+        <div className="border-t border-line/70 bg-surface-0/40 px-4 py-4 motion-safe:animate-fade-up">
           {entry.hasReport ? (
             <div className="flex flex-col gap-4">
               <Detail label="Summary">
-                <p className="text-sm leading-relaxed text-[var(--fg-primary)]">{entry.summary}</p>
+                <p className="text-sm leading-relaxed text-fg-primary">{entry.summary}</p>
               </Detail>
               {entry.keyPoints.length > 0 && <DetailList label="Key points" items={entry.keyPoints} />}
               {entry.decisions.length > 0 && <DetailList label="Decisions" items={entry.decisions} marker="✓" />}
               {entry.actionItems.length > 0 && <DetailList label="Action items" items={entry.actionItems} marker="☐" />}
               {entry.attendeeNames.length > 0 && (
                 <Detail label="Attendees">
-                  <p className="text-sm text-[var(--fg-secondary)]">{entry.attendeeNames.join(", ")}</p>
+                  <p className="text-sm text-fg-secondary">{entry.attendeeNames.join(", ")}</p>
                 </Detail>
               )}
             </div>
           ) : entry.attended ? (
-            <p className="text-sm text-[var(--fg-muted)]">
+            <p className="text-sm text-fg-muted">
               This meeting has no report. One is generated when a meeting is ended from inside the room.
             </p>
           ) : (
             // Not the same sentence as "no report", and the difference matters:
             // the record exists, it is simply not this member's to read. Saying
             // "no report" here would be the log misreporting its own contents.
-            <p className="text-sm text-[var(--fg-muted)]">
+            <p className="text-sm text-fg-muted">
               You weren&rsquo;t in this meeting, so its report isn&rsquo;t shown here. Ask the host if you need it.
             </p>
           )}
@@ -163,14 +165,14 @@ function LogRow({
           {/* The report page is where the transcript and the export live. The
               log deliberately does not load a transcript to draw a list. */}
           {entry.attended && (
-            <div className="mt-4 flex items-center gap-3 border-t border-[var(--line)] pt-3">
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line/70 pt-3">
               <Link
                 href={`/meetings/${entry.roomCode}/report`}
-                className="text-xs font-medium text-[var(--gold-400)] transition-colors hover:text-[var(--gold-500)]"
+                className="fx-btn rounded-lg border border-gold-400/35 bg-gold-400/10 px-3 py-1.5 text-xs font-semibold text-[var(--gold-300)] hover:bg-gold-400/20"
               >
-                Open full report →
+                Open full report
               </Link>
-              <span className="text-xs text-[var(--fg-muted)]">
+              <span className="text-xs text-fg-muted">
                 Transcript and export are on the report
               </span>
             </div>
@@ -184,7 +186,7 @@ function LogRow({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-[var(--fg-secondary)]">{label}</p>
+      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-muted">{label}</p>
       {children}
     </div>
   );
@@ -195,8 +197,8 @@ function DetailList({ label, items, marker = "•" }: { label: string; items: st
     <Detail label={label}>
       <ul className="flex flex-col gap-1.5">
         {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
-            <span className="mt-0.5 shrink-0 text-[var(--fg-muted)]">{marker}</span>
+          <li key={i} className="flex items-start gap-2 text-sm text-fg-primary">
+            <span className="mt-0.5 shrink-0 text-fg-muted">{marker}</span>
             {item}
           </li>
         ))}

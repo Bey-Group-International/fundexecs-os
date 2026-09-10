@@ -207,7 +207,7 @@ export function SchedulingSettings({
       </section>
 
       {error ? (
-        <p className="rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
+        <p className="rounded-lg border border-status-danger/20 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)]">
           {error}
         </p>
       ) : null}
@@ -387,7 +387,7 @@ function EventTypesEditor({
           type="button"
           onClick={() => void create()}
           disabled={creating || !title.trim()}
-          className="rounded-lg border border-[var(--gold-400)]/40 bg-[var(--gold-400)]/10 px-4 py-2 text-sm font-medium text-[var(--gold-400)] transition-colors hover:bg-[var(--gold-400)]/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 py-2 text-sm font-medium text-[var(--gold-400)] transition-colors hover:bg-gold-400/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {creating ? "Adding…" : "Add"}
         </button>

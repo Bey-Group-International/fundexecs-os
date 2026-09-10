@@ -608,7 +608,7 @@ export function MeetingEditScreen({
 
           {advancedOpen ? (
             <div className="pl-0 sm:pl-11">
-              <div className="flex flex-col gap-6 rounded-xl border border-[var(--line)] bg-[var(--surface-0)]/40 px-4 py-5">
+              <div className="flex flex-col gap-6 rounded-xl border border-[var(--line)] bg-surface-0/40 px-4 py-5">
                 <Section title="Schedule">
                   <TextField label="Time zone" required value={timezone} onChange={setTimezone} error={fieldErrors.timezone} />
                 </Section>
@@ -680,7 +680,7 @@ export function MeetingEditScreen({
           ) : null}
 
           {notice ? <p className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-xs text-[var(--fg-secondary)] sm:ml-11">{notice}</p> : null}
-          {error ? <p className="mt-4 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
+          {error ? <p className="mt-4 rounded-lg border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
         </div>
       </div>
     </div>
@@ -820,7 +820,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       onClick={onClick}
       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
         active
-          ? "border-[var(--gold-400)] bg-[var(--gold-400)]/15 text-[var(--gold-400)]"
+          ? "border-[var(--gold-400)] bg-gold-400/15 text-[var(--gold-400)]"
           : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
       }`}
     >

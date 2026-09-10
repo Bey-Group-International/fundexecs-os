@@ -216,7 +216,7 @@ export default function MeetingReportPage() {
 
       {/* Next meeting suggestion */}
       {nextMeeting && (
-        <div className="rounded-xl border border-[var(--gold-400)]/20 bg-[var(--gold-400)]/5 px-4 py-3 flex items-start gap-3">
+        <div className="rounded-xl border border-gold-400/20 bg-gold-400/5 px-4 py-3 flex items-start gap-3">
           <span className="text-[var(--gold-400)] text-base shrink-0">📅</span>
           <p className="text-sm text-[var(--fg-primary)]">{nextMeeting}</p>
         </div>
@@ -332,10 +332,10 @@ function Section({
 
 function SentimentBadge({ value }: { value: string }) {
   const map: Record<string, string> = {
-    positive: "bg-[var(--status-success)]/15 text-[var(--status-success)]",
+    positive: "bg-status-success/15 text-[var(--status-success)]",
     neutral: "bg-[var(--surface-3)] text-[var(--fg-secondary)]",
-    negative: "bg-[var(--status-danger)]/15 text-[var(--status-danger)]",
-    mixed: "bg-[var(--status-warning)]/15 text-[var(--status-warning)]",
+    negative: "bg-status-danger/15 text-[var(--status-danger)]",
+    mixed: "bg-status-warning/15 text-[var(--status-warning)]",
   };
   const knownKey = value?.toLowerCase();
   const className = map[knownKey] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400";

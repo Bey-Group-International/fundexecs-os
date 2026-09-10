@@ -55,7 +55,7 @@ export class CopilotErrorBoundary extends React.Component<Props, State> {
         <button
           type="button"
           onClick={() => this.setState({ error: null })}
-          className="mt-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--fg-primary)] transition-colors hover:border-[var(--gold-400)]/40"
+          className="mt-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--fg-primary)] transition-colors hover:border-gold-400/40"
         >
           Reload panel
         </button>

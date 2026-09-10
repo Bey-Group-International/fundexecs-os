@@ -470,7 +470,7 @@ function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon }: {
     <button onClick={onClick} title={title}
       className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
         active ? "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
-               : "border-[var(--status-danger)]/40 bg-[var(--status-danger)]/10 text-[var(--status-danger)]"
+               : "border-status-danger/40 bg-status-danger/10 text-[var(--status-danger)]"
       }`}>
       {active ? activeIcon : inactiveIcon}
     </button>
@@ -536,7 +536,7 @@ function ControlBar({
             aria-label="Background effects"
             className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
               backgroundActive
-                ? "border-[var(--gold-400)]/60 bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                ? "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]"
                 : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
             }`}
           >
@@ -558,7 +558,7 @@ function ControlBar({
         {/* Raise hand */}
         <button onClick={onRaiseHand} title={handRaised ? "Lower hand" : "Raise hand"}
           className={`w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors ${
-            handRaised ? "border-[var(--gold-400)]/60 bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+            handRaised ? "border-gold-400/60 bg-gold-400/10 text-[var(--gold-400)]"
                        : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
           }`}>✋</button>
 
@@ -614,14 +614,14 @@ function ControlBar({
       {/* Right side: BW indicator + copy link + copilot toggle */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {linkNotice(bwMode) && (
-          <span title={linkNotice(bwMode)!} className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-[var(--status-warning)]/30 rounded-full px-2 py-1">
+          <span title={linkNotice(bwMode)!} className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-status-warning/30 rounded-full px-2 py-1">
             📶 <span className="hidden sm:inline">{bwMode === "audio-only" ? "Video paused" : "Reduced quality"}</span>
           </span>
         )}
         <span className="hidden sm:flex"><MeetingShareLink roomCode={roomCode} compact /></span>
         <button onClick={onToggleCopilot}
           className={`relative flex items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
-            copilotOpen ? "border-[var(--gold-400)] bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+            copilotOpen ? "border-[var(--gold-400)] bg-gold-400/10 text-[var(--gold-400)]"
                         : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
           }`}>
           ✨ <span className="hidden sm:inline">Copilot</span>
@@ -784,7 +784,7 @@ function CopilotSidebar({
           <div className="flex flex-col gap-3">
             {/* Waiting room (host only) */}
             {isHost && waitingPeers.length > 0 && (
-              <div className="rounded-lg border border-[var(--gold-400)]/40 bg-[var(--gold-400)]/5 p-3 flex flex-col gap-2">
+              <div className="rounded-lg border border-gold-400/40 bg-gold-400/5 p-3 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-[var(--gold-400)] uppercase tracking-wide">
                     Waiting to join{waitingPeers.length > 1 ? ` (${waitingPeers.length})` : ""}
@@ -835,7 +835,7 @@ function CopilotSidebar({
                 return (
                   <div key={p.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2">
                     <div
-                      className={`w-7 h-7 rounded-full bg-[var(--gold-400)]/20 flex items-center justify-center text-xs font-semibold transition-colors ${isSpeaking ? "border-2" : "border border-[var(--gold-400)]/30"}`}
+                      className={`w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center text-xs font-semibold transition-colors ${isSpeaking ? "border-2" : "border border-gold-400/30"}`}
                       style={isSpeaking ? { borderColor: color, color } : { color: "var(--gold-400)" }}
                     >
                       {p.displayName.slice(0, 1).toUpperCase()}
@@ -3219,7 +3219,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           )}
           {/* Guest upsell banner */}
           {isGuest && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-[var(--gold-400)]/8 border-b border-[var(--gold-400)]/20 shrink-0">
+            <div className="flex items-center gap-3 px-4 py-2 bg-gold-400/10 border-b border-gold-400/20 shrink-0">
               <span className="text-[var(--gold-400)] text-xs shrink-0">✦</span>
               <p className="flex-1 text-xs text-[var(--fg-secondary)]">You&apos;re joining as a guest. Request access for AI transcription, notes, and action items.</p>
               <a href="/request-access" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Request access →</a>
@@ -3379,7 +3379,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       {/* Report generation error banner */}
       {callPhase === "failed" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
-          <div className="rounded-2xl border border-[var(--status-danger)]/40 bg-[var(--surface-1)] shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4">
+          <div className="rounded-2xl border border-status-danger/40 bg-[var(--surface-1)] shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4">
             <div className="flex items-start gap-3">
               <span className="text-xl shrink-0">⚠️</span>
               <div>

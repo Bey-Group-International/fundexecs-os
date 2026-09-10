@@ -47,7 +47,7 @@ function Tile({
       className={`group relative aspect-video w-full overflow-hidden rounded-lg border text-left transition-colors ${
         selected
           ? "border-[var(--gold-400)] ring-1 ring-[var(--gold-400)]"
-          : "border-[var(--line)] hover:border-[var(--gold-400)]/50"
+          : "border-[var(--line)] hover:border-gold-400/50"
       }`}
     >
       {children}
@@ -150,7 +150,7 @@ export function BackgroundPicker({
   return (
     <div className="flex flex-col gap-2">
       {notice && (
-        <p className="rounded-lg border border-[var(--status-warning)]/30 bg-[var(--status-warning)]/10 px-2.5 py-1.5 text-[11px] text-[var(--fg-secondary)]">
+        <p className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-2.5 py-1.5 text-[11px] text-[var(--fg-secondary)]">
           {notice}
         </p>
       )}
@@ -220,7 +220,7 @@ export function BackgroundPicker({
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={busy}
-          className="flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--line)] text-[10px] font-medium text-[var(--fg-muted)] transition-colors hover:border-[var(--gold-400)]/50 hover:text-[var(--fg-secondary)] disabled:opacity-50"
+          className="flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--line)] text-[10px] font-medium text-[var(--fg-muted)] transition-colors hover:border-gold-400/50 hover:text-[var(--fg-secondary)] disabled:opacity-50"
         >
           <span className="text-sm leading-none">＋</span>
           {busy ? "Adding…" : "Upload"}

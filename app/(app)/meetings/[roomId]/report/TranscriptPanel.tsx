@@ -143,7 +143,7 @@ export function TranscriptPanel({ transcript }: { transcript: string }) {
                             ? "People were speaking over each other, so this attribution is uncertain."
                             : "The room was not confident who said this."
                         }
-                        className="rounded px-1 py-0.5 text-[10px] font-medium text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30"
+                        className="rounded px-1 py-0.5 text-[10px] font-medium text-[var(--status-warning)] ring-1 ring-status-warning/30"
                       >
                         {turn.overlapped ? "overlap" : "uncertain"}
                       </span>

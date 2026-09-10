@@ -70,7 +70,7 @@ export default function CalendarLayers({
       {unavailable.length > 0 ? (
         <p
           role="status"
-          className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-2.5 py-2 text-[11px] leading-relaxed text-[var(--status-danger)]"
+          className="rounded-lg border border-status-danger/30 bg-status-danger/10 px-2.5 py-2 text-[11px] leading-relaxed text-[var(--status-danger)]"
         >
           {unavailable.includes("google") && unavailable.includes("ics")
             ? "Your calendars couldn't be read, so this view is incomplete. Events may be missing."
@@ -98,7 +98,7 @@ export default function CalendarLayers({
             type="button"
             onClick={onSync}
             disabled={syncing}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-[var(--gold-400)]/50 hover:text-[var(--gold-400)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-gold-400/50 hover:text-[var(--gold-400)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshIcon spinning={syncing} />
             {syncing ? "Syncing…" : "Sync now"}
@@ -114,7 +114,7 @@ export default function CalendarLayers({
       {googleConfigured ? (
         <a
           href="/api/oauth/google/calendar/start"
-          className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-[var(--gold-400)]/50 hover:text-[var(--gold-400)]"
+          className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--fg-secondary)] transition hover:border-gold-400/50 hover:text-[var(--gold-400)]"
         >
           {connectedAs ? "Reconnect Google" : "Connect Google"}
         </a>
@@ -162,7 +162,7 @@ function LayerRow({
 
   return (
     <li>
-      <div className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-[var(--surface-2)]/60">
+      <div className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-surface-2/60">
         <input
           type="checkbox"
           checked={layer.isVisible}

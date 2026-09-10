@@ -166,7 +166,7 @@ export function CalendarManager() {
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
+        <p className="rounded-lg border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)]">
           {error}
         </p>
       ) : null}
@@ -245,7 +245,7 @@ export function CalendarManager() {
                         type="button"
                         disabled={busyId === b.id}
                         onClick={() => void remove(b.id)}
-                        className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10 disabled:opacity-50"
+                        className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--status-danger)] hover:bg-status-danger/10 disabled:opacity-50"
                       >
                         {busyId === b.id ? "Clearing…" : "Clear"}
                       </button>
@@ -500,7 +500,7 @@ function ConnectedCalendarsPanel({ status }: { status: CalendarStatus | null }) 
   return (
     <div className="flex flex-col gap-5">
       {error ? (
-        <p className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
+        <p className="rounded-lg border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)]">
           {error}
         </p>
       ) : null}
@@ -593,7 +593,7 @@ function ConnectedCalendarsPanel({ status }: { status: CalendarStatus | null }) 
                     type="button"
                     disabled={busy === f.id}
                     onClick={() => void disconnect(f.id)}
-                    className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10 disabled:opacity-50"
+                    className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--status-danger)] hover:bg-status-danger/10 disabled:opacity-50"
                   >
                     Disconnect
                   </button>
@@ -639,7 +639,7 @@ function ConnectedCalendarsPanel({ status }: { status: CalendarStatus | null }) 
                 type="button"
                 disabled={busy === "__publish__"}
                 onClick={() => void setPublished(false)}
-                className="rounded-lg px-3 py-1.5 text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10 disabled:opacity-50"
+                className="rounded-lg px-3 py-1.5 text-xs text-[var(--status-danger)] hover:bg-status-danger/10 disabled:opacity-50"
               >
                 Turn off
               </button>
