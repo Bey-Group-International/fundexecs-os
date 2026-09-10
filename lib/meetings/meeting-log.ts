@@ -61,6 +61,11 @@ export interface MeetingLogEntry {
    * a report and you may not read it", and reads as data having been lost.
    */
   attended: boolean;
+  /**
+   * Whether the viewer ran this meeting. Regenerating a report rewrites a
+   * record every attendee reads, so only the host is offered it.
+   */
+  isHost: boolean;
 }
 
 /** What an untitled meeting is called in the log. */
@@ -119,6 +124,7 @@ export function toLogEntry(
   meeting: MeetingLogSource,
   report: MeetingLogReport | null,
   attended = true,
+  isHost = false,
 ): MeetingLogEntry {
   const analysis = report?.analysis ?? null;
   const summary = normalizeNoteText(report?.summary);
@@ -137,6 +143,7 @@ export function toLogEntry(
     sentiment: normalizeNoteText(analysis?.sentiment),
     hasReport: summary.length > 0,
     attended,
+    isHost,
   };
 }
 

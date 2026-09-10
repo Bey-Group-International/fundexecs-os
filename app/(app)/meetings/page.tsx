@@ -162,7 +162,7 @@ export default async function MeetingsPage(props: {
         duration_minutes: row.meeting.duration_minutes,
         is_draft: row.meeting.is_draft,
       }, now))
-      .map((row) => toLogEntry(row.meeting, row.report, row.attended)),
+      .map((row) => toLogEntry(row.meeting, row.report, row.attended, row.isHost)),
   );
 
   return (
