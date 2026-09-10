@@ -119,6 +119,7 @@ export const CRAWLER_DISALLOW: readonly string[] = [
   "/envelopes",
   "/finance",
   "/gift",
+  "/invite",
   "/graph",
   "/grid",
   "/investor",
