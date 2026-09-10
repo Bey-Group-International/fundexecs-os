@@ -45,6 +45,7 @@ export interface CalendarMeeting {
   tags: string[] | null;
   external_calendar_provider: string | null;
   external_calendar_sync_enabled: boolean | null;
+  guest_quick_access?: boolean | null;
   external_calendar_sync_status: string | null;
 }
 

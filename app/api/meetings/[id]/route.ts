@@ -214,6 +214,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         relatedRecordId: cleanString(body.relatedRecordId),
         externalCalendarProvider: cleanString(body.externalCalendarProvider),
         externalCalendarSyncEnabled: typeof body.externalCalendarSyncEnabled === "boolean" ? body.externalCalendarSyncEnabled : undefined,
+        // Only an explicit boolean changes it — anything else leaves the
+        // meeting's current admission policy exactly as the host set it.
+        guestQuickAccess: typeof body.guestQuickAccess === "boolean" ? body.guestQuickAccess : undefined,
       },
     );
 

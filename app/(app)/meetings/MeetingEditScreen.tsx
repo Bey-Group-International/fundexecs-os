@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AGENTS } from "@/lib/agents";
 import { parseAttendeeInput } from "@/lib/meetings/attendees";
+import { MeetingShareLink } from "./MeetingShareLink";
 import {
   MEETING_TYPES,
   CALENDAR_VISIBILITIES,
@@ -46,6 +47,7 @@ export interface MeetingEditInitial {
   priority?: "low" | "normal" | "high" | "critical" | null;
   tags?: string[] | null;
   externalCalendarSyncEnabled?: boolean;
+  guestQuickAccess?: boolean;
   externalCalendarProvider?: string | null;
 }
 
@@ -142,6 +144,9 @@ export function MeetingEditScreen({
   const [timezone, setTimezone] = useState(initial?.timezone ?? browserTz);
   const [internalAttendees, setInternalAttendees] = useState(initial?.internalAttendees ?? "");
   const [externalGuests, setExternalGuests] = useState(initial?.externalGuests ?? "");
+  // Off unless this meeting was already saved with it on — the waiting room is
+  // the safe default, and a host opts a specific call out of it.
+  const [guestQuickAccess, setGuestQuickAccess] = useState(initial?.guestQuickAccess ?? false);
   const [objective, setObjective] = useState(initial?.objective ?? "");
   const [agenda, setAgenda] = useState(initial?.agenda ?? "");
   const [preparationRequirements, setPreparationRequirements] = useState(initial?.preparationRequirements ?? "");
@@ -255,6 +260,7 @@ export function MeetingEditScreen({
       calendarVisibility,
       reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
       externalCalendarSyncEnabled: syncEnabled,
+      guestQuickAccess,
       externalCalendarProvider: syncProvider || null,
     };
   }
@@ -388,8 +394,17 @@ export function MeetingEditScreen({
       if (json.externalSyncError) {
         messages.push(`external calendar sync failed: ${json.externalSyncError}`);
       }
+      // Stay open after a real save. Previously the screen closed unless
+      // something noteworthy had happened, which meant the moment you most want
+      // a link to paste to a guest — the one right after scheduling — was the
+      // moment the meeting vanished off screen. A draft still closes: it has a
+      // room code but nothing to invite anyone to yet.
       if (messages.length > 0) {
         setNotice(`Meeting saved — ${messages.join("; ")}.`);
+        setSavedResult(result);
+        return;
+      }
+      if (!draft && result.roomCode) {
         setSavedResult(result);
         return;
       }
@@ -580,6 +595,27 @@ export function MeetingEditScreen({
                 <BareTextArea value={externalGuests} onChange={setExternalGuests} placeholder="Jane Doe <jane@fund.com>" rows={1} />
                 <span className="text-[11px] leading-snug text-[var(--fg-muted)]">Guests are invited by email on save.</span>
               </div>
+
+              {/* Who the shareable link actually lets in. It sits with Guests
+                  rather than in Advanced because it is a decision about this
+                  meeting's audience, and burying it would mean hosts of large
+                  external calls never find it. */}
+              <label className="flex items-start gap-2 rounded-lg border border-line bg-surface-0 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={guestQuickAccess}
+                  onChange={(e) => setGuestQuickAccess(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-xs font-medium text-fg-primary">Quick access</span>
+                  <span className="text-[11px] leading-snug text-fg-muted">
+                    {guestQuickAccess
+                      ? "Anyone with the link joins immediately, without waiting for you."
+                      : "Guests with the link wait until you let them in. Teammates always skip the wait."}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -679,7 +715,24 @@ export function MeetingEditScreen({
             </div>
           ) : null}
 
-          {notice ? <p className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-xs text-[var(--fg-secondary)] sm:ml-11">{notice}</p> : null}
+          {savedResult && !savedResult.isDraft && savedResult.roomCode ? (
+            <div className="mt-4 rounded-xl border border-gold-400/35 bg-gold-400/5 px-3 py-3 sm:ml-11">
+              <p className="text-xs font-semibold text-fg-primary">Meeting saved — here is the guest link</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-fg-muted">
+                Anyone with this link can ask to join. External guests wait for you to let them in.
+              </p>
+              <div className="mt-2.5">
+                <MeetingShareLink
+                  roomCode={savedResult.roomCode}
+                  title={title}
+                  scheduledAt={localToIso(date, startTime, timezone)}
+                  timeZone={timezone}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {notice ? <p className="mt-4 rounded-lg border border-line bg-surface-0 px-3 py-2 text-xs text-fg-secondary sm:ml-11">{notice}</p> : null}
           {error ? <p className="mt-4 rounded-lg border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
         </div>
       </div>

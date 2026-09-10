@@ -75,7 +75,7 @@ import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./h
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 const CAL_SELECT =
-  "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status";
+  "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access";
 
 const HOUR_PX = 46; // row height in the week/day time grid
 const DAY_SCROLL_HOUR = 7; // initial scroll position for time views
@@ -130,6 +130,7 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
     tags: m.tags,
     externalCalendarSyncEnabled: m.external_calendar_sync_enabled ?? false,
     externalCalendarProvider: m.external_calendar_provider,
+    guestQuickAccess: m.guest_quick_access ?? false,
   };
 }
 

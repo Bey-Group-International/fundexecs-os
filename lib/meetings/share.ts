@@ -89,6 +89,35 @@ export function shareTargetFor(details: MeetingShareDetails): ShareTarget {
 }
 
 /**
+ * The whole invitation, as text, ready to paste into an email or a chat.
+ *
+ * "Copy link" and "Copy invite" are two different jobs and one button cannot do
+ * both: pasting a bare URL into a thread that already says what the meeting is
+ * is right, and pasting that same bare URL into a cold email to an LP is not —
+ * they get a link with no idea what it opens or when it starts. So the URL stays
+ * on its own button and this one carries the context with it.
+ *
+ * The time is written in the meeting's own zone AND labelled with it (via
+ * formatMeetingWhen), because this text is copied precisely when it is about to
+ * cross into somebody else's timezone.
+ *
+ * Lines are omitted rather than left blank when there is nothing to say, so an
+ * unscheduled meeting produces a two-line invite instead of one with a hole
+ * where the date should be.
+ */
+export function inviteTextFor(details: MeetingShareDetails): string {
+  const url = meetingInviteUrl(details.origin, details.roomCode);
+  if (!url) return "";
+
+  const title = details.title?.trim() || DEFAULT_TITLE;
+  const when = formatMeetingWhen(details.scheduledAt, details.timeZone);
+
+  return [title, when ? `When: ${when}` : null, `Join: ${url}`]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
  * Whether to offer a native share button at all.
  *
  * Rendering one that throws `NotAllowedError` on click is worse than not

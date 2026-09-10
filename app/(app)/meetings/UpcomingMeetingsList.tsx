@@ -12,6 +12,7 @@ import {
 } from "@/lib/meetings/schedule";
 import { CARD, COUNTDOWN_TONE, EYEBROW, STATUS_TONE, chip } from "./tone";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
 
 export interface UpcomingMeeting {
@@ -53,6 +54,7 @@ export interface UpcomingMeeting {
   is_draft: boolean | null;
   locked_at: string | null;
   updated_at: string | null;
+  guest_quick_access: boolean | null;
 }
 
 function formatScheduled(iso: string) {
@@ -115,6 +117,7 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
     tags: m.tags,
     externalCalendarSyncEnabled: m.external_calendar_sync_enabled ?? false,
     externalCalendarProvider: m.external_calendar_provider,
+    guestQuickAccess: m.guest_quick_access ?? false,
   };
 }
 
@@ -563,10 +566,10 @@ function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
     ["Visibility", meeting.calendar_visibility],
     ["Reminder", meeting.reminder_minutes != null ? `${meeting.reminder_minutes} min before` : null],
     ["Meeting ID", meeting.id],
-    ["Room", meeting.room_code],
   ];
   const present = rows.filter(([, v]) => v);
-  if (present.length === 0) return null;
+  // The share row always renders: a meeting always has a link, and this is the
+  // one place outside a live call where you can get at it.
   return (
     <dl className="mt-3 divide-y divide-line/60 overflow-hidden rounded-lg border border-line/70 bg-surface-1 text-xs">
       {present.map(([k, v]) => (
@@ -577,6 +580,22 @@ function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
           <dd className="min-w-0 whitespace-pre-line break-words leading-5 text-fg-secondary">{v}</dd>
         </div>
       ))}
+      {/* This used to be `Room: abc-def-gh` — the code, as text, which you
+          could read but not use. Sharing a meeting meant joining it first to
+          reach the copy button in the call. It is the actual link now. */}
+      <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:gap-3">
+        <dt className="w-24 shrink-0 font-mono text-[10px] uppercase leading-5 tracking-[0.1em] text-fg-muted">
+          Guest link
+        </dt>
+        <dd className="min-w-0 flex-1">
+          <MeetingShareLink
+            roomCode={meeting.room_code}
+            title={meeting.title}
+            scheduledAt={meeting.scheduled_at}
+            timeZone={meeting.timezone}
+          />
+        </dd>
+      </div>
     </dl>
   );
 }
