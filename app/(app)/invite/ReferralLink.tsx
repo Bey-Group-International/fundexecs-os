@@ -11,14 +11,18 @@ export function ReferralLink({ code }: { code: string }) {
   useEffect(() => setOrigin(window.location.origin), []);
   const link = origin ? `${origin}/join?ref=${code}` : `/join?ref=${code}`;
 
-  function copy(value: string, which: "link" | "code") {
+  // Only flip to the "Copied!" label once the write actually resolves — a
+  // rejected clipboard (blocked permission, insecure origin) must not claim
+  // success.
+  async function copy(value: string, which: "link" | "code") {
     try {
-      void navigator.clipboard.writeText(value);
-      setCopied(which);
-      setTimeout(() => setCopied(null), 1600);
+      await navigator.clipboard.writeText(value);
     } catch {
-      // clipboard unavailable — no-op
+      // clipboard unavailable — leave the label unchanged
+      return;
     }
+    setCopied(which);
+    setTimeout(() => setCopied(null), 1600);
   }
 
   return (
@@ -32,7 +36,7 @@ export function ReferralLink({ code }: { code: string }) {
         />
         <button
           type="button"
-          onClick={() => copy(link, "link")}
+          onClick={() => void copy(link, "link")}
           className="shrink-0 rounded-md bg-gold-400 px-3 py-2 text-xs font-medium text-on-gold transition hover:bg-gold-300"
         >
           {copied === "link" ? "Copied!" : "Copy link"}
@@ -42,7 +46,7 @@ export function ReferralLink({ code }: { code: string }) {
         <span>Or share your code</span>
         <button
           type="button"
-          onClick={() => copy(code, "code")}
+          onClick={() => void copy(code, "code")}
           title="Copy code"
           className="rounded-md border border-line px-2 py-1 font-mono text-xs tracking-widest text-gold-300 transition hover:bg-surface-2"
         >
