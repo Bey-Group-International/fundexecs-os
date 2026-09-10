@@ -50,13 +50,22 @@ it("resolves the base URL from the request rather than throwing on a Promise", a
   expect(sessionsCreate).toHaveBeenCalled();
 
   const params = sessionsCreate.mock.calls[0]?.[0] as
-    | { success_url?: string; cancel_url?: string }
+    | { success_url?: string; cancel_url?: string; return_url?: string }
     | undefined;
+  const urls = [params?.success_url, params?.cancel_url, params?.return_url].filter(
+    (u): u is string => typeof u === "string" && u.startsWith("http"),
+  );
+  // Guard against a vacuous pass: if the shape changes and no absolute URL is
+  // built at all, the loop below would iterate zero times and report success.
+  expect(urls.length).toBeGreaterThan(0);
   // Whichever URLs this deployment builds, they must be absolute and rooted at
   // the request's own origin — a relative or "undefined" return_url is rejected
   // by Stripe and strands the operator mid-purchase.
-  for (const url of [params?.success_url, params?.cancel_url].filter(Boolean)) {
-    expect(url).toMatch(/^https:\/\/www\.fundexecs\.com/);
+  for (const url of urls) {
+    // Anchored on the path separator, not just the host: without the trailing
+    // "/" this also matches https://www.fundexecs.com.example.com, so the
+    // assertion would pass for a URL pointing somewhere else entirely.
+    expect(url).toMatch(/^https:\/\/www\.fundexecs\.com\//);
   }
 });
 
