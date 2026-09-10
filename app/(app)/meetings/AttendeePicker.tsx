@@ -127,6 +127,12 @@ export function AttendeePicker({
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  /**
+   * The keyboard contract of a token field: arrows move the highlight, Enter and
+   * comma commit, Backspace on an empty box removes the last chip, Escape closes
+   * the list. Tab only commits when something is highlighted, so it still moves
+   * focus on when the member is simply leaving the field.
+   */
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Backspace" && !query && value.length > 0) {
       // Backspace on an empty box removes the last chip — the behaviour every
@@ -253,6 +259,8 @@ export function AttendeePicker({
   );
 }
 
+/** A chosen attendee: disc, name, and a remove control. Title-attributed with
+ * the address, because two colleagues can share a display name. */
 function Chip({ attendee, onRemove }: { attendee: SelectedAttendee; onRemove: () => void }) {
   return (
     <span

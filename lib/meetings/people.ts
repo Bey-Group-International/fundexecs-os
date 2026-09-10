@@ -35,6 +35,13 @@ export interface SelectedAttendee {
 
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
+/**
+ * Is this a usable address?
+ *
+ * The gate the whole picker turns on: anything that fails here cannot become an
+ * attendee, because an attendee with no address is one nobody invites. Note it
+ * rejects the "Name <addr>" form — that is a rendering of an address, not one.
+ */
 export function isEmail(value: string): boolean {
   return EMAIL_RE.test(value.trim().toLowerCase());
 }
@@ -107,11 +114,23 @@ export function avatarColorFor(email: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-/** Members are teammates; everyone else is a guest. */
+/**
+ * Members are teammates; everyone else is a guest.
+ *
+ * This is the whole of the internal/external decision, and it is inferred from
+ * which directory somebody came from rather than asked — the app already knows
+ * the answer, so the form does not put the question to the member.
+ */
 export function attendeeTypeFor(source: PeopleSource): "internal" | "external" {
   return source === "member" ? "internal" : "external";
 }
 
+/**
+ * Turn a chosen suggestion into the attendee shape the meeting stores.
+ *
+ * Falls back to the address as the display name, so a contact saved without one
+ * still reads as somebody rather than as an empty chip.
+ */
 export function toAttendee(person: PersonSuggestion): SelectedAttendee {
   return {
     name: person.name || person.email,

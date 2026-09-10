@@ -44,6 +44,7 @@ export const TONE = {
 
 export type Tone = keyof typeof TONE;
 
+/** One chip's full class string: the shared shape plus the tone's colours. */
 export function chip(tone: Tone): string {
   return `${CHIP} ${TONE[tone]}`;
 }
