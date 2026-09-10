@@ -163,6 +163,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         analysis: (saved.analysis ?? null) as Record<string, unknown> | null,
       },
       true,
+      // attended AND isHost. Only the host reaches this line, and the log gates
+      // the regenerate button on `isHost` — omitting it defaulted the returned
+      // entry to false, so the button disappeared the first time it was used.
+      true,
     ),
   });
 }
