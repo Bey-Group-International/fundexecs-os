@@ -161,6 +161,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         // `analysis` comes back typed as Json (which includes scalars); the log
         // wants the object form it was written as.
         analysis: (saved.analysis ?? null) as Record<string, unknown> | null,
+        // The row just written carries the same transcript this route read to
+        // write it — the 409 above guarantees it was non-empty. Saying so keeps
+        // the regenerate button on the row it replaces; the generated column
+        // says the same thing on the next load.
+        has_transcript: true,
       },
       true,
       // attended AND isHost. Only the host reaches this line, and the log gates

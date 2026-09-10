@@ -123,6 +123,38 @@ describe("toLogEntry", () => {
   it("treats a whitespace-only summary as no report", () => {
     expect(toLogEntry(meeting, { ...report, summary: "   " }).hasReport).toBe(false);
   });
+
+  // canRegenerate answers a different question from hasReport: whether there is
+  // a TRANSCRIPT to re-read, not whether there is a SUMMARY to show.
+  describe("canRegenerate", () => {
+    it("is true for a report whose analysis failed, which has no summary at all", () => {
+      // The end-of-meeting route writes exactly this row when the model fails:
+      // the transcript kept, the summary empty. Gating the regenerate action on
+      // hasReport hid the button from the one row that most needed it.
+      const entry = toLogEntry(meeting, { ...report, summary: "", has_transcript: true });
+      expect(entry.hasReport).toBe(false);
+      expect(entry.canRegenerate).toBe(true);
+    });
+
+    it("is false for a report with a summary but no transcript behind it", () => {
+      const entry = toLogEntry(meeting, { ...report, has_transcript: false });
+      expect(entry.hasReport).toBe(true);
+      // Offering to re-read a transcript that is not there would be a button
+      // that answers 409.
+      expect(entry.canRegenerate).toBe(false);
+    });
+
+    it("is false when there is no report row at all", () => {
+      expect(toLogEntry(meeting, null).canRegenerate).toBe(false);
+    });
+
+    it("is false when the column is missing or null, rather than assuming", () => {
+      // Rows read through a path that did not select the column, and rows from
+      // before the column existed. Absence is not evidence of a transcript.
+      expect(toLogEntry(meeting, { ...report, has_transcript: undefined }).canRegenerate).toBe(false);
+      expect(toLogEntry(meeting, { ...report, has_transcript: null }).canRegenerate).toBe(false);
+    });
+  });
 });
 
 describe("matchesLogSearch", () => {

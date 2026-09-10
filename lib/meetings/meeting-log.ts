@@ -6,10 +6,14 @@
 // somebody still had. This shapes those rows into entries that can be listed,
 // searched and read months later.
 //
-// Deliberately absent: the transcript. Its presence is not knowable without
-// reading tens of kilobytes per meeting, and a list of fifty meetings would
-// read every one of them to draw a badge nobody needs. The report page is
-// where a transcript is looked at, and it fetches it there.
+// Deliberately absent: the transcript itself. A list of fifty meetings would
+// read tens of kilobytes per row to draw a badge nobody needs. The report page
+// is where a transcript is looked at, and it fetches it there.
+//
+// Its PRESENCE is another matter, and is known here: `has_transcript` is a
+// generated boolean on the report row (migration 20260910180000), so the log
+// can tell whether there is something to regenerate from without paying for
+// the text.
 //
 // Pure: no DOM, no Supabase, no model calls.
 
@@ -35,6 +39,8 @@ export interface MeetingLogReport {
   key_points: unknown;
   action_items: unknown;
   analysis: Record<string, unknown> | null;
+  /** Generated in Postgres; see the note at the top of this file. */
+  has_transcript?: boolean | null;
 }
 
 export interface MeetingLogEntry {
@@ -52,6 +58,18 @@ export interface MeetingLogEntry {
   sentiment: string;
   /** A report exists and has been generated. */
   hasReport: boolean;
+  /**
+   * Whether there is a transcript on file to build a fresh report from.
+   *
+   * Separate from `hasReport` on purpose. `hasReport` answers "is there a
+   * summary to READ"; this answers "is there a transcript to RE-READ", and the
+   * two come apart exactly where it matters. When the model fails at the end of
+   * a meeting, the report row is written holding the transcript and an empty
+   * summary — everything regeneration needs, and nothing the summary check can
+   * see. Gating the regenerate action on `hasReport` hid it from the one row
+   * that most needed it.
+   */
+  canRegenerate: boolean;
   /**
    * Whether the viewer was in this meeting.
    *
@@ -142,6 +160,7 @@ export function toLogEntry(
     actionItems: normalizeNoteList(report?.action_items),
     sentiment: normalizeNoteText(analysis?.sentiment),
     hasReport: summary.length > 0,
+    canRegenerate: report?.has_transcript === true,
     attended,
     isHost,
   };
