@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PLANS, PLAN_BY_KEY, formatCredits, formatUsd, type PlanInterval, type PlanKey } from "@/lib/billing";
 import type { PaywallPayload } from "@/lib/paywall";
-import { commitToPlanAction } from "@/app/(app)/wallet/paywall-actions";
+import {
+  commitToPlanAction,
+  settlementOptionsAction,
+} from "@/app/(app)/wallet/paywall-actions";
+import type { PayableRoute, RouteFacts } from "@/lib/native-payments";
 
 /**
  * The credit wall, rendered where the action was blocked.
@@ -34,14 +38,39 @@ export function PaywallDialog({
     credits: number;
     invoice?: string;
     collecting?: boolean;
+    route?: PayableRoute | null;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  // How this org can pay. Empty until resolved, and empty is a legitimate
+  // resting state: a deployment with no rails configured still lets someone
+  // start a plan, we just decide the rail ourselves.
+  const [routes, setRoutes] = useState<RouteFacts[]>([]);
+  const [route, setRoute] = useState<PayableRoute | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    settlementOptionsAction()
+      .then(({ options, current }) => {
+        if (!alive) return;
+        setRoutes(options);
+        // Their standing choice if they have one, otherwise the rail we would
+        // have picked anyway — which offeredRoutes already returns first.
+        setRoute(current ?? options[0]?.route ?? null);
+      })
+      .catch(() => {
+        // Chooser unavailable; the wall still works and the engine still picks.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function commit() {
     setError(null);
     const fd = new FormData();
     fd.set("plan_key", choice);
     fd.set("interval", interval);
+    if (route) fd.set("route", route);
     startTransition(async () => {
       const res = await commitToPlanAction(fd);
       if (res?.ok) {
@@ -49,6 +78,7 @@ export function PaywallDialog({
           credits: res.credits ?? 0,
           invoice: res.invoiceNumber,
           collecting: res.collecting,
+          route: res.route,
         });
         router.refresh();
         // Straight back to what they were doing.
@@ -88,15 +118,26 @@ export function PaywallDialog({
               ) : null}
             </p>
             {done.invoice && !done.collecting ? (
-              // Encouraged, never required: the plan already started. Linking is
-              // what turns every future invoice into something that settles
-              // itself instead of something someone has to remember to send.
-              <p className="mt-2 text-xs text-fg-muted">
-                <Link href="/wallet" className="text-neural-300 underline hover:text-neural-200">
-                  Link a bank account
-                </Link>{" "}
-                and invoices collect themselves — no transfers to remember.
-              </p>
+              done.route === "transfer" ? (
+                // They chose to send it themselves, so the one thing they now
+                // need is where to send it — which lives on the invoice panel.
+                <p className="mt-2 text-xs text-fg-muted">
+                  <Link href="/wallet" className="text-neural-300 underline hover:text-neural-200">
+                    Open the Wallet
+                  </Link>{" "}
+                  for the account details and the reference to quote.
+                </p>
+              ) : (
+                // Encouraged, never required: the plan already started. Linking
+                // is what turns every future invoice into something that settles
+                // itself instead of something someone has to remember to send.
+                <p className="mt-2 text-xs text-fg-muted">
+                  <Link href="/wallet" className="text-neural-300 underline hover:text-neural-200">
+                    Link a bank account
+                  </Link>{" "}
+                  and invoices collect themselves — no transfers to remember.
+                </p>
+              )
             ) : null}
             <button
               type="button"
@@ -177,6 +218,52 @@ export function PaywallDialog({
                     );
                   })}
                 </div>
+
+                {routes.length > 1 ? (
+                  <div className="mt-5">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
+                      How you&apos;ll pay
+                    </p>
+                    <p className="mt-1.5 text-xs text-fg-muted">
+                      Your credits arrive immediately either way — this only changes how the
+                      money moves.
+                    </p>
+                    <div className="mt-2.5 grid gap-2">
+                      {routes.map((r) => {
+                        const picked = route === r.route;
+                        return (
+                          <button
+                            key={r.route}
+                            type="button"
+                            onClick={() => setRoute(r.route)}
+                            aria-pressed={picked}
+                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                              picked
+                                ? "border-neural-400/60 bg-neural-400/[0.06]"
+                                : "border-line/60 hover:border-neural-400/40"
+                            }`}
+                          >
+                            <span className="flex items-baseline justify-between gap-3">
+                              <span className="text-sm font-medium text-fg-primary">
+                                {r.label}
+                              </span>
+                              <span className="font-mono text-[11px] text-neural-300">
+                                {r.speed}
+                              </span>
+                            </span>
+                            <span className="mt-1 block text-xs text-fg-secondary">
+                              {r.process}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-fg-muted">{r.note}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[11px] text-fg-muted">
+                      We&apos;ll remember this for renewals. Change it any time in the Wallet.
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="mt-5 flex items-center gap-3">
                   <button

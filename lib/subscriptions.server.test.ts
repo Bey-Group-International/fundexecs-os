@@ -18,6 +18,12 @@ const settlementCapability = jest.fn(async (..._args: unknown[]) => ({
   hasRemittance: false,
   hasCard: false,
 }));
+// The engine asks for capability and stored preference together; the tests that
+// care about routing drive it through this.
+const settlementContext = jest.fn(async (...args: unknown[]) => ({
+  cap: await settlementCapability(...args),
+  preference: null as "ach_debit" | "card" | "transfer" | null,
+}));
 const debitInvoice = jest.fn(async (..._args: unknown[]) => ({
   ok: false,
   processing: false,
@@ -144,6 +150,7 @@ jest.mock("@/lib/credits", () => ({ grantCredits: (...a: unknown[]) => grantCred
 jest.mock("@/lib/gift-earn", () => ({ awardReferralOnSubscription: jest.fn(async () => {}) }));
 jest.mock("@/lib/native-payments.server", () => ({
   settlementCapability: (...a: unknown[]) => settlementCapability(...a),
+  settlementContext: (...a: unknown[]) => settlementContext(...a),
   debitInvoice: (...a: unknown[]) => debitInvoice(...a),
   uncollectedInvoices: (...a: unknown[]) => uncollectedInvoices(...a),
   inFlightDebits: (...a: unknown[]) => inFlightDebits(...a),
@@ -196,6 +203,7 @@ beforeEach(() => {
   grantCredits.mockClear();
   chargeSubscription.mockClear();
   settlementCapability.mockClear();
+  settlementContext.mockClear();
   debitInvoice.mockClear();
   uncollectedInvoices.mockClear();
   inFlightDebits.mockClear();
@@ -204,6 +212,10 @@ beforeEach(() => {
     hasRemittance: false,
     hasCard: false,
   });
+  settlementContext.mockImplementation(async (...args: unknown[]) => ({
+    cap: await settlementCapability(...args),
+    preference: null,
+  }));
   debitInvoice.mockResolvedValue({ ok: false, processing: false });
   uncollectedInvoices.mockResolvedValue([]);
   inFlightDebits.mockResolvedValue([]);
@@ -676,5 +688,62 @@ describe("collectNativePayments", () => {
     );
 
     expect(stats.submitted).toBe(1);
+  });
+});
+
+describe("the rail an org chose", () => {
+  it("is not silently overridden by the one we would have picked", async () => {
+    // A linked account exists, so preferredRoute would debit it. They asked to
+    // pay by card. Pulling from their bank anyway would be taking money a way
+    // they explicitly declined.
+    settlementContext.mockResolvedValue({
+      cap: { hasLinkedAccount: true, hasRemittance: false, hasCard: true },
+      preference: "card",
+    });
+    uncollectedInvoices.mockResolvedValue([
+      {
+        id: "inv_1",
+        organization_id: ORG,
+        subscription_id: "sub_1",
+        number: "FX-0001",
+        plan: "pro",
+        interval: "monthly",
+        amount_usd: 30,
+        status: "open",
+        settlement_intent: null,
+        settlement_failure: null,
+        settlement_attempts: 0,
+      },
+    ]);
+
+    const stats = await collectNativePayments(
+      makeClient({ subscriptions: [liveSub()], subscription_events: [] }),
+    );
+
+    expect(stats.submitted).toBe(0);
+    expect(debitInvoice).not.toHaveBeenCalled();
+  });
+
+  it("drives the debit on commit when they chose the pull rail", async () => {
+    settlementContext.mockResolvedValue({
+      cap: { hasLinkedAccount: true, hasRemittance: false, hasCard: true },
+      preference: "ach_debit",
+    });
+    debitInvoice.mockResolvedValue({ ok: true, processing: true, intent: "pi_chosen" });
+
+    const tables = {
+      subscriptions: [] as Row[],
+      subscription_events: [] as Row[],
+      subscription_invoices: [] as Row[],
+      wallets: [] as Row[],
+      linked_accounts: [] as Row[],
+    };
+    await startSubscription(
+      { orgId: ORG, planKey: "pro", interval: "monthly", grantBeforeSettlement: true },
+      makeClient(tables),
+    );
+
+    expect(debitInvoice).toHaveBeenCalled();
+    expect(tables.subscriptions[0]).toMatchObject({ next_attempt_at: null });
   });
 });

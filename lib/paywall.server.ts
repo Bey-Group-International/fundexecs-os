@@ -5,6 +5,8 @@
 // needs and owns the one action that clears it — committing to a plan, which
 // grants the period's credits immediately and leaves the invoice outstanding.
 import { createServiceClient } from "@/lib/supabase/server";
+import { settlementContext } from "@/lib/native-payments.server";
+import { offeredRoutes, type PayableRoute, type RouteFacts } from "@/lib/native-payments";
 import { recentSpend } from "@/lib/credits";
 import { startSubscription } from "@/lib/subscriptions.server";
 import type { PlanKey, PlanInterval } from "@/lib/billing";
@@ -60,6 +62,22 @@ export async function paywallStateFor(
   });
 }
 
+/**
+ * The ways this org could settle, for the chooser at the wall.
+ *
+ * Resolved server-side because availability is a fact about the org and the
+ * deployment (a linked account, configured remittance, a card on file), never
+ * something the browser should assert.
+ */
+export async function settlementOptionsFor(
+  orgId: string,
+  client?: ServiceClient,
+): Promise<{ options: RouteFacts[]; current: PayableRoute | null }> {
+  const service = client ?? createServiceClient();
+  const { cap, preference } = await settlementContext(service, orgId);
+  return { options: offeredRoutes(cap), current: preference };
+}
+
 /** The payload a blocked route hands back so the client can render the wall. */
 export async function paywallFor(
   orgId: string,
@@ -103,8 +121,26 @@ export async function commitToPlan(
   interval: PlanInterval,
   createdBy: string | null,
   client?: ServiceClient,
+  route?: PayableRoute | null,
 ): Promise<CommitResult> {
   const service = client ?? createServiceClient();
+
+  // Record how they want to pay BEFORE starting the plan: startSubscription
+  // reads the preference when it decides whether to debit the commit invoice on
+  // the spot, so storing it afterwards would miss the very first collection —
+  // the one the operator just chose a rail for.
+  if (route) {
+    const { error } = await service
+      .from("wallets")
+      .update({ preferred_route: route })
+      .eq("organization_id", orgId);
+    if (error) {
+      // Not fatal. A stored preference is an optimisation over preferredRoute,
+      // and refusing to start a paid plan because we could not write it down
+      // would be a worse outcome than collecting on the default rail.
+      console.error("[paywall] could not record the settlement choice:", error);
+    }
+  }
 
   const state = await paywallStateFor(orgId, 0, service);
   if (!state.canUnlockOnCommitment) {

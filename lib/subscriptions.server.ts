@@ -34,8 +34,9 @@ import {
   inFlightDebits,
   uncollectedInvoices,
   settlementCapability,
+  settlementContext,
 } from "@/lib/native-payments.server";
-import { preferredRoute, overdueRoute } from "@/lib/native-payments";
+import { chosenRoute, overdueRoute } from "@/lib/native-payments";
 import {
   PLAN_BY_KEY,
   planPrice,
@@ -432,8 +433,8 @@ export async function startSubscription(
       // nobody watching for an inbound transfer. Where there is no account to
       // pull from, fall back to chasing it when it comes due.
       let chaseAt: string | null = issued.invoice.due_at;
-      const cap = await settlementCapability(service, input.orgId);
-      if (preferredRoute(cap) === "ach_debit") {
+      const { cap, preference } = await settlementContext(service, input.orgId);
+      if (chosenRoute(cap, preference) === "ach_debit") {
         const debit = await debitInvoice(issued.invoice, service);
         if (debit.ok && debit.processing) {
           // In flight: collectNativePayments owns it from here, so the renewal
@@ -790,11 +791,12 @@ export async function collectNativePayments(
   // whatever raised it.
   for (const invoice of await uncollectedInvoices(service)) {
     try {
-      const cap = await settlementCapability(service, invoice.organization_id);
+      const { cap, preference } = await settlementContext(service, invoice.organization_id);
       // Only the pull rail self-collects. A transfer needs the operator to send
       // the money and a card is the fallback the dunning ladder reaches for; nothing
-      // here should quietly charge a card that no one has been asked about.
-      if (preferredRoute(cap) !== "ach_debit") continue;
+      // here should quietly charge a card that no one has been asked about — an
+      // org that chose the card rail is charged by the dunning path, in the open.
+      if (chosenRoute(cap, preference) !== "ach_debit") continue;
       const debit = await debitInvoice(invoice, service);
       if (debit.ok && debit.processing) {
         stats.submitted += 1;
@@ -1054,8 +1056,8 @@ async function settleByInvoice(
   // org with a linked account gets debited, which is the whole point of the
   // native rail — nobody has to remember to send anything.
   if (!isOverdue(invoice, now)) {
-    const cap = await settlementCapability(service, sub.organization_id);
-    if (preferredRoute(cap) === "ach_debit" && !invoice.settlement_intent) {
+    const { cap, preference } = await settlementContext(service, sub.organization_id);
+    if (chosenRoute(cap, preference) === "ach_debit" && !invoice.settlement_intent) {
       const debit = await debitInvoice(invoice, service);
       if (debit.ok && debit.processing) {
         await recordEvent(service, {
