@@ -7,6 +7,11 @@ import {
   recommendedPlanFor,
   type PaywallInput,
 } from "@/lib/paywall";
+import {
+  chosenRoute,
+  offeredRoutes,
+  type SettlementCapability,
+} from "@/lib/native-payments";
 
 const AFTER = "2026-10-01T00:00:00.000Z";
 const BEFORE = "2026-08-01T00:00:00.000Z";
@@ -128,5 +133,48 @@ describe("the payload a blocked route hands back", () => {
   it("is null when nothing is blocked, so a caller cannot render a phantom wall", () => {
     expect(paywallPayload(evaluatePaywall(input({ balance: 50 })))).toBeNull();
     expect(paywallPayload(evaluatePaywall(input({ orgCreatedAt: BEFORE, balance: 0 })))).toBeNull();
+  });
+});
+
+// The chooser at the wall: an operator picks how the money moves, and that
+// choice has to survive as far as the sweep that collects it.
+describe("settlement choice", () => {
+  const cap = (over: Partial<SettlementCapability> = {}): SettlementCapability => ({
+    hasLinkedAccount: false,
+    hasRemittance: false,
+    hasCard: false,
+    ...over,
+  });
+
+  it("offers every rail this deployment can actually complete", () => {
+    const offered = offeredRoutes(cap({ hasLinkedAccount: true, hasRemittance: true, hasCard: true }));
+    // Ordered the way we would choose ourselves, so the default is the top one.
+    expect(offered.map((r) => r.route)).toEqual(["ach_debit", "card", "transfer"]);
+  });
+
+  it("never offers a rail that cannot settle", () => {
+    // A wall that offers a payment method which cannot complete is a dead end,
+    // which is the one thing a paywall must never be.
+    expect(offeredRoutes(cap({ hasCard: true })).map((r) => r.route)).toEqual(["card"]);
+  });
+
+  it("tells the operator the speed and the process for each rail", () => {
+    for (const facts of offeredRoutes(cap({ hasLinkedAccount: true, hasRemittance: true, hasCard: true }))) {
+      expect(facts.speed.length).toBeGreaterThan(0);
+      expect(facts.process.length).toBeGreaterThan(0);
+      // Never the processor's name — the operator picks a method, not a vendor.
+      expect(facts.label.toLowerCase()).not.toContain("stripe");
+      expect(facts.label.toLowerCase()).not.toContain("square");
+    }
+  });
+
+  it("is honoured when the org can still be settled that way", () => {
+    expect(chosenRoute(cap({ hasLinkedAccount: true, hasCard: true }), "card")).toBe("card");
+  });
+
+  it("gives way to reality rather than blocking collection", () => {
+    // Chose bank debit, then unlinked the account. Holding the choice would
+    // mean the invoice never collects at all.
+    expect(chosenRoute(cap({ hasCard: true }), "ach_debit")).toBe("card");
   });
 });

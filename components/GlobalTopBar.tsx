@@ -7,7 +7,7 @@ import { dockHiddenOn } from "@/lib/copilot";
 import { SessionCommandBar } from "@/components/session/SessionCommandBar";
 import { TopNavAlerts } from "@/components/TopNavAlerts";
 import { MobileNavToggle } from "@/components/nav/MobileNavToggle";
-import { formatCredits } from "@/lib/billing";
+import { NavCreditBalance } from "@/components/NavCreditBalance";
 
 // The global top bar. Inside a session it renders the full command surface
 // (session name + Share + ⋮ Session Actions); elsewhere it shows the app-level
@@ -69,15 +69,7 @@ export function GlobalTopBar({
           </button>
         ) : null}
         <TopNavAlerts initialMessages={messagesUnread} initialDeals={dealsUnread} />
-        <Link
-          href="/wallet"
-          title="Wallet — credit balance"
-          aria-label="Wallet"
-          className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
-        >
-          <span className="text-gold-300">◇</span>
-          {formatCredits(balance)}
-        </Link>
+        <NavCreditBalance initialBalance={balance} />
         <Link
           href="/settings"
           title="Settings"

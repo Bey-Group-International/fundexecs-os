@@ -12,7 +12,7 @@
 // The routing is a pure function of what an org has on file, so the decision is
 // testable and the same everywhere it is asked. Execution lives in
 // lib/native-payments.server.
-import type { SubscriptionInvoice } from "@/lib/subscription-invoices";
+import { NET_TERMS_DAYS, type SubscriptionInvoice } from "@/lib/subscription-invoices";
 
 export type SettlementRoute = "ach_debit" | "transfer" | "card" | "none";
 
@@ -152,4 +152,99 @@ export function settlementSummary(
     return invoice.settlement_failure;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Choosing a rail, rather than being assigned one
+// ---------------------------------------------------------------------------
+
+/** A rail an operator can actually pick. "none" is a state, not a choice. */
+export type PayableRoute = Exclude<SettlementRoute, "none">;
+
+/**
+ * What each rail costs an operator in time and effort.
+ *
+ * Copy lives here rather than in the dialog because the same facts are needed
+ * server-side (the invoice panel, the confirmation) and because a promise about
+ * settlement speed is a claim about the engine's behaviour — ACH_EXPECTED_DAYS
+ * and NET_TERMS_DAYS are the numbers the code actually runs on, so they belong
+ * next to it. A speed quoted in the UI that the engine does not honour is worse
+ * than quoting none.
+ */
+export interface RouteFacts {
+  route: PayableRoute;
+  /** What the operator recognises it as. Never the processor's name. */
+  label: string;
+  /** When the money actually moves. */
+  speed: string;
+  /** What the operator has to do, in one line. */
+  process: string;
+  /** Why they might pick it. */
+  note: string;
+  /** True when picking it means every later invoice settles with no further action. */
+  selfCollecting: boolean;
+}
+
+export const ROUTE_FACTS: Record<PayableRoute, RouteFacts> = {
+  ach_debit: {
+    route: "ach_debit",
+    label: "Bank debit",
+    speed: `Clears in about ${ACH_EXPECTED_DAYS} business days`,
+    process: "Link your account once — every invoice after this collects itself",
+    note: "No card fees, and nothing to remember at renewal",
+    selfCollecting: true,
+  },
+  card: {
+    route: "card",
+    label: "Card",
+    speed: "Charged immediately",
+    process: "Pay with a saved card, or add one now",
+    note: "The only rail that settles the same day",
+    selfCollecting: true,
+  },
+  transfer: {
+    route: "transfer",
+    label: "Bank transfer",
+    speed: `You send it — due within ${NET_TERMS_DAYS} days`,
+    process: "We show you the account details and a reference to quote",
+    note: "No fees, but someone has to send it and we have to match it",
+    selfCollecting: false,
+  },
+};
+
+/** Whether an org could actually be settled on `route` right now. */
+export function routeAvailable(cap: SettlementCapability, route: PayableRoute): boolean {
+  if (route === "ach_debit") return cap.hasLinkedAccount;
+  if (route === "transfer") return cap.hasRemittance;
+  return cap.hasCard;
+}
+
+/**
+ * The rails worth showing an operator — every one this deployment could settle,
+ * in the order we would pick them ourselves.
+ *
+ * Deliberately not "everything Square/Stripe could theoretically do": offering a
+ * rail that cannot complete is how a paywall becomes a dead end, which is the
+ * one thing it must never be.
+ */
+export function offeredRoutes(cap: SettlementCapability): RouteFacts[] {
+  return (["ach_debit", "card", "transfer"] as PayableRoute[])
+    .filter((r) => routeAvailable(cap, r))
+    .map((r) => ROUTE_FACTS[r]);
+}
+
+/**
+ * The rail to actually use, given what the org asked for.
+ *
+ * A preference is a preference, not a guarantee: an org that chose bank debit
+ * and then unlinked the account cannot be debited, and silently failing every
+ * collection to honour a stale choice would be worse than quietly falling back.
+ * Capability wins, and preferredRoute decides what happens next.
+ */
+export function chosenRoute(
+  cap: SettlementCapability,
+  preference: PayableRoute | null | undefined,
+): SettlementRoute {
+  if (preference && routeAvailable(cap, preference)) return preference;
+  return preferredRoute(cap);
 }

@@ -16,6 +16,7 @@ import type { SubscriptionInvoice } from "@/lib/subscription-invoices";
 import {
   failureMessage,
   isPermanentFailure,
+  type PayableRoute,
   type SettlementCapability,
 } from "@/lib/native-payments";
 import { remittanceConfigured } from "@/lib/subscription-invoices";
@@ -42,23 +43,52 @@ export async function debitableAccount(
   return { id: row.id, paymentMethodId: row.stripe_payment_method_id, last4: row.last4 };
 }
 
+/**
+ * What this org can be collected from, and how it asked to be.
+ *
+ * Both in one read: every caller that needs the capability also needs the
+ * preference (they are the two arguments to chosenRoute), and issuing two
+ * queries for one decision is how a sweep over many invoices turns into twice
+ * the round trips.
+ */
+export async function settlementContext(
+  service: ServiceClient,
+  orgId: string,
+): Promise<{ cap: SettlementCapability; preference: PayableRoute | null }> {
+  const [account, wallet] = await Promise.all([
+    debitableAccount(service, orgId),
+    service
+      .from("wallets")
+      .select("stripe_payment_method_id, preferred_route")
+      .eq("organization_id", orgId)
+      .maybeSingle(),
+  ]);
+  const walletRow = wallet.data as {
+    stripe_payment_method_id?: string | null;
+    preferred_route?: string | null;
+  } | null;
+  const savedCard = walletRow?.stripe_payment_method_id;
+  const stored = walletRow?.preferred_route;
+  return {
+    cap: {
+      hasLinkedAccount: Boolean(account) && stripeConfigured(),
+      hasRemittance: remittanceConfigured(),
+      // A card is only a route if there is both a card and a processor to run it.
+      hasCard: Boolean(savedCard) && stripeConfigured(),
+    },
+    // Anything unrecognised (an older value, a hand-edited row) reads as "no
+    // preference" rather than throwing: the fallback is always safe.
+    preference:
+      stored === "ach_debit" || stored === "card" || stored === "transfer" ? stored : null,
+  };
+}
+
 /** What this org can actually be collected from — the input to route selection. */
 export async function settlementCapability(
   service: ServiceClient,
   orgId: string,
 ): Promise<SettlementCapability> {
-  const [account, wallet] = await Promise.all([
-    debitableAccount(service, orgId),
-    service.from("wallets").select("stripe_payment_method_id").eq("organization_id", orgId).maybeSingle(),
-  ]);
-  const savedCard = (wallet.data as { stripe_payment_method_id?: string | null } | null)
-    ?.stripe_payment_method_id;
-  return {
-    hasLinkedAccount: Boolean(account) && stripeConfigured(),
-    hasRemittance: remittanceConfigured(),
-    // A card is only a route if there is both a card and a processor to run it.
-    hasCard: Boolean(savedCard) && stripeConfigured(),
-  };
+  return (await settlementContext(service, orgId)).cap;
 }
 
 export interface DebitResult {
@@ -232,6 +262,32 @@ export async function pollSettlement(
 }
 
 /** In-flight debits, oldest first — the sweep's poll list. */
+/**
+ * Open invoices nobody has tried to collect yet — no debit submitted, no card
+ * taken. These are what the sweep initiates against.
+ *
+ * An invoice can reach this state from several directions: raised when someone
+ * cleared the paywall, raised while the org had no linked account and left
+ * waiting for one, or raised by a renewal whose collection attempt died
+ * mid-flight. Before this existed the sweep only ever polled debits that were
+ * already running, so an invoice with no debit behind it was collected only if
+ * the renewal path happened to touch it again — which, for a first period, is
+ * not until the period ends.
+ */
+export async function uncollectedInvoices(
+  service: ServiceClient,
+  limit = 100,
+): Promise<SubscriptionInvoice[]> {
+  const { data } = await service
+    .from("subscription_invoices")
+    .select("*")
+    .eq("status", "open")
+    .is("settlement_intent", null)
+    .order("issued_at", { ascending: true })
+    .limit(limit);
+  return (data as SubscriptionInvoice[] | null) ?? [];
+}
+
 export async function inFlightDebits(
   service: ServiceClient,
   limit = 100,

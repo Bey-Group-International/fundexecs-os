@@ -5,7 +5,7 @@ import Link from "next/link";
 import { HUB_BY_KEY, HUB_ORDER } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
 import type { ShareScope } from "@/lib/session-share";
-import { formatCredits } from "@/lib/billing";
+import { NavCreditBalance } from "@/components/NavCreditBalance";
 import { MobileNavToggle } from "@/components/nav/MobileNavToggle";
 import {
   renameSession,
@@ -205,14 +205,7 @@ export function SessionCommandBar({
         </div>
 
         {/* Balance → Wallet */}
-        <Link
-          href="/wallet"
-          title="Credit balance — open wallet"
-          className="hidden items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition hover:bg-surface-2 hover:text-fg-primary sm:flex"
-        >
-          <span className="text-gold-300">◇</span>
-          {formatCredits(balance)}
-        </Link>
+        <NavCreditBalance initialBalance={balance} title="Credit balance — open wallet" />
 
         {/* Profile → Settings */}
         <Link

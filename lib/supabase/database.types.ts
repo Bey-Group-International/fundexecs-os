@@ -583,6 +583,10 @@ export type Wallet = Timestamps & {
   trial_granted_at: string | null;
   // migration 20260907160000 — saved instrument for off-session renewal charges
   stripe_payment_method_id: string | null;
+  // migration 20260910160000 — the rail the org chose at the paywall.
+  // Null means "decide for me" (lib/native-payments preferredRoute), which is
+  // what every org predating the chooser has.
+  preferred_route: string | null;
 };
 
 // Native subscription lifecycle (migration 20260907160000). FundExecs owns the

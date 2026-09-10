@@ -1,6 +1,9 @@
 import {
   ACH_EXPECTED_DAYS,
+  ROUTE_FACTS,
+  chosenRoute,
   expectedClearingDate,
+  offeredRoutes,
   failureMessage,
   isPermanentFailure,
   isSettlementStale,
@@ -9,6 +12,7 @@ import {
   settlementSummary,
   type SettlementCapability,
 } from "@/lib/native-payments";
+import { NET_TERMS_DAYS } from "@/lib/subscription-invoices";
 
 function cap(overrides: Partial<SettlementCapability> = {}): SettlementCapability {
   return { hasLinkedAccount: false, hasRemittance: false, hasCard: false, ...overrides };
@@ -114,5 +118,45 @@ describe("what the operator is told", () => {
 
   it("says nothing when there is nothing in flight", () => {
     expect(settlementSummary({ status: "open", settlement_started_at: null, settlement_failure: null })).toBeNull();
+  });
+});
+
+// Letting the operator choose the rail, rather than being assigned one.
+describe("choosing a rail", () => {
+  it("honours the choice when it can actually be settled that way", () => {
+    expect(chosenRoute(cap({ hasLinkedAccount: true, hasCard: true }), "card")).toBe("card");
+  });
+
+  it("falls back rather than failing every collection on a stale choice", () => {
+    // Chose bank debit, then unlinked the account. Honouring the choice would
+    // mean nothing ever collects again.
+    expect(chosenRoute(cap({ hasCard: true }), "ach_debit")).toBe("card");
+  });
+
+  it("decides for an org that never expressed one", () => {
+    expect(chosenRoute(cap({ hasLinkedAccount: true, hasCard: true }), null)).toBe("ach_debit");
+  });
+
+  it("only offers rails this deployment can complete", () => {
+    // No remittance details configured, so a wire has nowhere to go — offering
+    // it would make the paywall a dead end.
+    const offered = offeredRoutes(cap({ hasLinkedAccount: true, hasCard: true }));
+    expect(offered.map((r) => r.route)).toEqual(["ach_debit", "card"]);
+  });
+
+  it("offers nothing when nothing can settle", () => {
+    expect(offeredRoutes(cap())).toEqual([]);
+  });
+
+  it("quotes speeds the engine actually honours", () => {
+    // A promise in the UI that the sweep does not keep is worse than no promise.
+    expect(ROUTE_FACTS.ach_debit.speed).toContain(String(ACH_EXPECTED_DAYS));
+    expect(ROUTE_FACTS.transfer.speed).toContain(String(NET_TERMS_DAYS));
+  });
+
+  it("marks the transfer rail as the one that does not collect itself", () => {
+    expect(ROUTE_FACTS.ach_debit.selfCollecting).toBe(true);
+    expect(ROUTE_FACTS.card.selfCollecting).toBe(true);
+    expect(ROUTE_FACTS.transfer.selfCollecting).toBe(false);
   });
 });
