@@ -59,9 +59,9 @@ function ProbabilityGauge({ value }: { value: number }) {
 
 function SentimentBadge({ value }: { value: MeetingAnalysis["sentiment"] }) {
   const map = {
-    positive: { label: "Positive", cls: "bg-[var(--status-success)]/15 text-[var(--status-success)]" },
+    positive: { label: "Positive", cls: "bg-status-success/15 text-[var(--status-success)]" },
     neutral: { label: "Neutral", cls: "bg-[var(--surface-3)] text-[var(--fg-secondary)]" },
-    negative: { label: "Negative", cls: "bg-[var(--status-danger)]/15 text-[var(--status-danger)]" },
+    negative: { label: "Negative", cls: "bg-status-danger/15 text-[var(--status-danger)]" },
   };
   const { label, cls } = map[value];
   return (
@@ -193,7 +193,7 @@ export function MeetingCopilotConsole() {
       </form>
 
       {error && (
-        <div className="rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-4 py-3 text-sm text-[var(--status-danger)]">
+        <div className="rounded-lg border border-status-danger/30 bg-status-danger/10 px-4 py-3 text-sm text-[var(--status-danger)]">
           {error}
         </div>
       )}

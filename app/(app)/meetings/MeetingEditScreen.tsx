@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AGENTS } from "@/lib/agents";
-import { parseAttendeeInput } from "@/lib/meetings/attendees";
+import { parseAttendeeInput, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
+import { AttendeePicker } from "./AttendeePicker";
+import { toAttendee, type SelectedAttendee } from "@/lib/meetings/people";
+import { MeetingShareLink } from "./MeetingShareLink";
 import {
   MEETING_TYPES,
   CALENDAR_VISIBILITIES,
@@ -36,6 +39,14 @@ export interface MeetingEditInitial {
   objective?: string | null;
   agenda?: string | null;
   preparationRequirements?: string | null;
+  /**
+   * Preferred: the meeting's attendees as stored. An entry may lack an address
+   * — meetings saved before the picker existed hold bare names — and those are
+   * carried through rather than filtered out by the caller, so this screen can
+   * show them instead of quietly dropping them.
+   */
+  attendees?: MeetingAttendeeInput[];
+  /** Legacy free-text forms, still parsed when `attendees` is absent. */
   internalAttendees?: string;
   externalGuests?: string;
   assignedCopilotAgent?: string | null;
@@ -46,6 +57,7 @@ export interface MeetingEditInitial {
   priority?: "low" | "normal" | "high" | "critical" | null;
   tags?: string[] | null;
   externalCalendarSyncEnabled?: boolean;
+  guestQuickAccess?: boolean;
   externalCalendarProvider?: string | null;
 }
 
@@ -140,8 +152,41 @@ export function MeetingEditScreen({
   // the presets, keeping the common path down to a single tap.
   const [customEnd, setCustomEnd] = useState(!DURATION_PRESETS.some((p) => p.minutes === initialDuration));
   const [timezone, setTimezone] = useState(initial?.timezone ?? browserTz);
-  const [internalAttendees, setInternalAttendees] = useState(initial?.internalAttendees ?? "");
-  const [externalGuests, setExternalGuests] = useState(initial?.externalGuests ?? "");
+  // One list, not two boxes. Seeded from `attendees` where the caller has the
+  // real rows, otherwise parsed out of the legacy strings, so a meeting saved
+  // before the picker existed still opens with its guests intact.
+  //
+  // Split in two, because the old boxes accepted bare names and some meetings
+  // still carry them. Those cannot be chips — the picker's contract is that
+  // every chip is somebody reachable — but they must not be deleted either:
+  // requiring an address for what you ADD is not a licence to erase what is
+  // already on the record. They are held aside, shown, and written back out on
+  // save until the host resolves or removes them.
+  const seeded = useMemo<MeetingAttendeeInput[]>(() => {
+    if (initial?.attendees?.length) return initial.attendees;
+    return [
+      ...parseAttendeeInput(initial?.internalAttendees ?? "").map((a) => ({ ...a, type: "internal" as const })),
+      ...parseAttendeeInput(initial?.externalGuests ?? "").map((a) => ({ ...a, type: "external" as const })),
+    ];
+  }, [initial?.attendees, initial?.internalAttendees, initial?.externalGuests]);
+
+  const [attendees, setAttendees] = useState<SelectedAttendee[]>(() =>
+    seeded
+      .filter((a): a is MeetingAttendeeInput & { email: string } => Boolean(a.email?.trim()))
+      .map((a) => ({
+        name: a.name || a.email,
+        email: a.email.trim().toLowerCase(),
+        type: a.type === "internal" ? "internal" : "external",
+      })),
+  );
+
+  /** Attendees on the record with no address. Nobody ever emailed these. */
+  const [unreachable, setUnreachable] = useState<MeetingAttendeeInput[]>(() =>
+    seeded.filter((a) => !a.email?.trim()),
+  );
+  // Off unless this meeting was already saved with it on — the waiting room is
+  // the safe default, and a host opts a specific call out of it.
+  const [guestQuickAccess, setGuestQuickAccess] = useState(initial?.guestQuickAccess ?? false);
   const [objective, setObjective] = useState(initial?.objective ?? "");
   const [agenda, setAgenda] = useState(initial?.agenda ?? "");
   const [preparationRequirements, setPreparationRequirements] = useState(initial?.preparationRequirements ?? "");
@@ -221,11 +266,9 @@ export function MeetingEditScreen({
   }
 
   function buildPayload(draft: boolean) {
-    // parseAttendeeInput extracts "Name <email>" / bare emails into a validated
-    // { name, email } shape; we just override the type per field. Without this
-    // the raw string lands in `name` and the email is lost.
-    const internalList = parseAttendeeInput(internalAttendees).map((a) => ({ ...a, type: "internal" as const }));
-    const externalList = parseAttendeeInput(externalGuests).map((a) => ({ ...a, type: "external" as const }));
+    // Already resolved: every attendee was chosen from a directory or typed as
+    // a full address, so there is nothing left to parse and nothing for the
+    // server's name-matching pass to guess at.
     return {
       meetingId: initial?.meetingId,
       draft,
@@ -239,7 +282,7 @@ export function MeetingEditScreen({
       objective: objective.trim() || null,
       agenda: agenda.trim() || null,
       preparationRequirements: preparationRequirements.trim() || null,
-      attendees: [...internalList, ...externalList],
+      attendees: [...attendees, ...unreachable],
       attachments: attachments
         .split(/[\n]/)
         .map((v) => v.trim())
@@ -255,6 +298,7 @@ export function MeetingEditScreen({
       calendarVisibility,
       reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
       externalCalendarSyncEnabled: syncEnabled,
+      guestQuickAccess,
       externalCalendarProvider: syncProvider || null,
     };
   }
@@ -307,6 +351,12 @@ export function MeetingEditScreen({
                 reminderMinutes: payload.reminderMinutes,
                 externalCalendarProvider: payload.externalCalendarProvider,
                 externalCalendarSyncEnabled: payload.externalCalendarSyncEnabled,
+                // Must be sent even when false. This is an explicit projection,
+                // not a spread, so a field left out is not "unchanged" — it is
+                // never transmitted, the PATCH route reads undefined and skips
+                // the column, and a host who switched quick access OFF keeps a
+                // meeting that lets anyone holding the link walk straight in.
+                guestQuickAccess: payload.guestQuickAccess,
               }
             : payload,
         ),
@@ -388,8 +438,17 @@ export function MeetingEditScreen({
       if (json.externalSyncError) {
         messages.push(`external calendar sync failed: ${json.externalSyncError}`);
       }
+      // Stay open after a real save. Previously the screen closed unless
+      // something noteworthy had happened, which meant the moment you most want
+      // a link to paste to a guest — the one right after scheduling — was the
+      // moment the meeting vanished off screen. A draft still closes: it has a
+      // room code but nothing to invite anyone to yet.
       if (messages.length > 0) {
         setNotice(`Meeting saved — ${messages.join("; ")}.`);
+        setSavedResult(result);
+        return;
+      }
+      if (!draft && result.roomCode) {
         setSavedResult(result);
         return;
       }
@@ -571,15 +630,62 @@ export function MeetingEditScreen({
             {/* Right — guests */}
             <div className="flex flex-col gap-3 md:pl-2">
               <h3 className="text-sm font-medium text-[var(--fg-primary)]">Guests</h3>
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-medium text-[var(--fg-muted)]">Internal attendees</span>
-                <BareTextArea value={internalAttendees} onChange={setInternalAttendees} placeholder="Add people" rows={1} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-medium text-[var(--fg-muted)]">External guests</span>
-                <BareTextArea value={externalGuests} onChange={setExternalGuests} placeholder="Jane Doe <jane@fund.com>" rows={1} />
-                <span className="text-[11px] leading-snug text-[var(--fg-muted)]">Guests are invited by email on save.</span>
-              </div>
+              {/* One box for everyone. Which directory somebody came from
+                  decides internal vs external, so nobody has to answer a
+                  question the app can answer itself. */}
+              <AttendeePicker value={attendees} onChange={setAttendees} label="Add guests" />
+
+              {unreachable.length > 0 ? (
+                <div className="rounded-lg border border-status-warning/45 bg-status-warning/10 px-3 py-2">
+                  <p className="text-[11px] font-medium text-[var(--status-warning)]">
+                    {unreachable.length} attendee{unreachable.length === 1 ? "" : "s"} with no email address
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-fg-muted">
+                    Added before guests needed an address, so {unreachable.length === 1 ? "this one has" : "these have"} never
+                    been invited. Add {unreachable.length === 1 ? "them" : "each of them"} above by email, then remove the
+                    placeholder.
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {unreachable.map((a, i) => (
+                      <span
+                        key={`${a.name}-${i}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-status-warning/45 bg-surface-1 py-0.5 pl-2 pr-1.5 text-xs text-fg-secondary"
+                      >
+                        {a.name}
+                        <button
+                          type="button"
+                          onClick={() => setUnreachable((prev) => prev.filter((_, j) => j !== i))}
+                          aria-label={`Remove ${a.name}`}
+                          className="fx-focus shrink-0 rounded-full px-0.5 leading-none text-fg-muted transition-colors hover:text-[var(--status-danger)]"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Who the shareable link actually lets in. It sits with Guests
+                  rather than in Advanced because it is a decision about this
+                  meeting's audience, and burying it would mean hosts of large
+                  external calls never find it. */}
+              <label className="flex items-start gap-2 rounded-lg border border-line bg-surface-0 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={guestQuickAccess}
+                  onChange={(e) => setGuestQuickAccess(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-xs font-medium text-fg-primary">Quick access</span>
+                  <span className="text-[11px] leading-snug text-fg-muted">
+                    {guestQuickAccess
+                      ? "Anyone with the link joins immediately, without waiting for you."
+                      : "Guests with the link wait until you let them in. Teammates always skip the wait."}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -608,7 +714,7 @@ export function MeetingEditScreen({
 
           {advancedOpen ? (
             <div className="pl-0 sm:pl-11">
-              <div className="flex flex-col gap-6 rounded-xl border border-[var(--line)] bg-[var(--surface-0)]/40 px-4 py-5">
+              <div className="flex flex-col gap-6 rounded-xl border border-[var(--line)] bg-surface-0/40 px-4 py-5">
                 <Section title="Schedule">
                   <TextField label="Time zone" required value={timezone} onChange={setTimezone} error={fieldErrors.timezone} />
                 </Section>
@@ -679,8 +785,27 @@ export function MeetingEditScreen({
             </div>
           ) : null}
 
-          {notice ? <p className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-xs text-[var(--fg-secondary)] sm:ml-11">{notice}</p> : null}
-          {error ? <p className="mt-4 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
+          {savedResult && !savedResult.isDraft && savedResult.roomCode ? (
+            <div className="mt-4 rounded-xl border border-gold-400/35 bg-gold-400/5 px-3 py-3 sm:ml-11">
+              <p className="text-xs font-semibold text-fg-primary">Meeting saved — here is the guest link</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-fg-muted">
+                {guestQuickAccess
+                  ? "Quick access is on — anyone with this link joins immediately, without waiting for you."
+                  : "Anyone with this link can ask to join. External guests wait for you to let them in."}
+              </p>
+              <div className="mt-2.5">
+                <MeetingShareLink
+                  roomCode={savedResult.roomCode}
+                  title={title}
+                  scheduledAt={localToIso(date, startTime, timezone)}
+                  timeZone={timezone}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {notice ? <p className="mt-4 rounded-lg border border-line bg-surface-0 px-3 py-2 text-xs text-fg-secondary sm:ml-11">{notice}</p> : null}
+          {error ? <p className="mt-4 rounded-lg border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)] sm:ml-11">{error}</p> : null}
         </div>
       </div>
     </div>
@@ -820,7 +945,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       onClick={onClick}
       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
         active
-          ? "border-[var(--gold-400)] bg-[var(--gold-400)]/15 text-[var(--gold-400)]"
+          ? "border-[var(--gold-400)] bg-gold-400/15 text-[var(--gold-400)]"
           : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
       }`}
     >

@@ -51,10 +51,13 @@ function getDuration(started_at: string | null, ended_at: string | null) {
   return `${mins} min`;
 }
 
+// Raw green/yellow read as a different product on a white page and sat at
+// roughly 2:1 against it. These are the section's status tones instead: the
+// tint comes off Tailwind's scale, the text off the deeper CSS variables.
 const STATUS_STYLES: Record<string, string> = {
-  ended:   "bg-[var(--fg-muted)]/10 text-[var(--fg-muted)]",
-  active:  "bg-green-500/10 text-green-500",
-  waiting: "bg-yellow-500/10 text-yellow-500",
+  ended:   "bg-fg-muted/10 text-[var(--fg-muted)]",
+  active:  "bg-status-success/10 text-[var(--status-success)]",
+  waiting: "bg-status-warning/10 text-[var(--status-warning)]",
 };
 
 // Inline confirm popover for destructive actions
@@ -72,7 +75,7 @@ function ConfirmDelete({
       <span className="text-[var(--fg-muted)]">{label}</span>
       <button
         onClick={onConfirm}
-        className="px-2 py-0.5 rounded bg-[var(--status-danger)]/15 text-[var(--status-danger)] hover:bg-[var(--status-danger)]/25 font-medium"
+        className="px-2 py-0.5 rounded bg-status-danger/15 text-[var(--status-danger)] hover:bg-status-danger/25 font-medium"
       >
         Yes, delete
       </button>
@@ -278,7 +281,7 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                     {isActive && (
                       <Link
                         href={`/meetings/${m.room_code}`}
-                        className="sm:hidden text-xs font-semibold text-[var(--gold-400)] bg-[var(--gold-400)]/10 px-2.5 py-1 rounded-lg hover:bg-[var(--gold-400)]/20 transition-colors"
+                        className="sm:hidden text-xs font-semibold text-[var(--gold-400)] bg-gold-400/10 px-2.5 py-1 rounded-lg hover:bg-gold-400/20 transition-colors"
                       >
                         {m.status === "active" ? "Rejoin" : "Start"}
                       </Link>
@@ -296,7 +299,9 @@ export function PastMeetingsList({ initialMeetings, userId, compact = false }: P
                       {isActive && (
                         <span
                           className={`w-1.5 h-1.5 rounded-full inline-block ${
-                            m.status === "active" ? "bg-green-500 animate-pulse" : "bg-yellow-500"
+                            m.status === "active"
+                              ? "bg-[var(--status-success)] animate-pulse"
+                              : "bg-[var(--status-warning)]"
                           }`}
                         />
                       )}

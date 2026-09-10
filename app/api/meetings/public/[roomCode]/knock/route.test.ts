@@ -146,6 +146,51 @@ describe("POST knock", () => {
     expect(await res.json()).toEqual({ admissionId: "a1", status: "denied" });
   });
 
+  // Quick access — a per-meeting opt-out of the waiting room. The default
+  // (absent/false) must keep every existing meeting knocking, and the flag must
+  // only ever be believed from the meeting row, never from the guest's request.
+  it("admits an external guest immediately when quick access is on", async () => {
+    wire(
+      { ...meeting, guest_quick_access: true },
+      { existing: null, inserted: { id: "a1", status: "admitted" } },
+    );
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ana" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "admitted" });
+    // Never asks who the caller is: holding the link is the whole check.
+    expect(tablesHit).not.toContain("organization_members");
+  });
+
+  it("still makes guests wait when quick access is off or absent", async () => {
+    for (const row of [{ ...meeting, guest_quick_access: false }, meeting]) {
+      tablesHit.length = 0;
+      wire(row, { existing: null, inserted: { id: "a1", status: "waiting" } });
+      const res = await POST(postReq({ guestKey: "g1" }), params());
+      expect(await res.json()).toEqual({ admissionId: "a1", status: "waiting" });
+    }
+  });
+
+  it("releases a guest already in the queue when quick access is switched on", async () => {
+    wire({ ...meeting, guest_quick_access: true }, { existing: { id: "a1", status: "waiting" } });
+    const res = await POST(postReq({ guestKey: "g1" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "admitted" });
+    expect(updateCapture.patch).toMatchObject({ status: "admitted" });
+  });
+
+  it("cannot be turned on by the guest's own request body", async () => {
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    const res = await POST(
+      postReq({ guestKey: "g1", guestQuickAccess: true, guest_quick_access: true, status: "admitted" }),
+      params(),
+    );
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "waiting" });
+  });
+
+  it("does not let quick access override an explicit denial", async () => {
+    wire({ ...meeting, guest_quick_access: true }, { existing: { id: "a1", status: "denied" } });
+    const res = await POST(postReq({ guestKey: "g1" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "denied" });
+  });
+
   it("400s without a guestKey", async () => {
     wire(meeting);
     const res = await POST(postReq({ displayName: "Ada" }), params());

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   canNativeShare,
   displayUrl,
+  inviteTextFor,
   meetingInviteUrl,
   shareTargetFor,
   type ShareCapableNavigator,
@@ -64,6 +65,15 @@ function ShareIcon() {
   );
 }
 
+function NoteIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+    </svg>
+  );
+}
+
 export interface MeetingShareLinkProps {
   roomCode: string;
   title?: string | null;
@@ -92,8 +102,10 @@ export function MeetingShareLink({
   // a guessed origin would hydrate-mismatch. Empty until mounted, so the first
   // paint matches the server's.
   const [origin, setOrigin] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
+  // Which button last succeeded, or failed. One piece of state rather than a
+  // flag per button: copying the invite must not light up "Copied" under the
+  // link button, which is what a shared boolean would do.
+  const [flash, setFlash] = useState<{ what: "link" | "invite"; ok: boolean } | null>(null);
 
   useEffect(() => setOrigin(window.location.origin), []);
 
@@ -108,12 +120,16 @@ export function MeetingShareLink({
     setShareable(canNativeShare(navigator as ShareCapableNavigator, target));
   }, [target]);
 
-  const copy = useCallback(async () => {
-    const ok = await copyText(url);
-    setCopied(ok);
-    setCopyFailed(!ok);
-    setTimeout(() => { setCopied(false); setCopyFailed(false); }, 2000);
-  }, [url]);
+  const invite = useMemo(
+    () => inviteTextFor({ origin, roomCode, title, scheduledAt, timeZone }),
+    [origin, roomCode, title, scheduledAt, timeZone],
+  );
+
+  const copy = useCallback(async (what: "link" | "invite") => {
+    const ok = await copyText(what === "link" ? url : invite);
+    setFlash({ what, ok });
+    setTimeout(() => setFlash(null), 2000);
+  }, [url, invite]);
 
   const share = useCallback(async () => {
     try {
@@ -126,12 +142,15 @@ export function MeetingShareLink({
 
   if (!url) return null;
 
+  const label = (what: "link" | "invite", idle: string) =>
+    flash?.what === what ? (flash.ok ? "Copied" : "Press ⌘C") : idle;
+
   return (
-    <div className={`flex items-center gap-2 min-w-0 ${className}`}>
+    <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
       {!compact && (
         <span
           title={url}
-          className="flex-1 min-w-0 truncate font-mono text-xs text-[var(--fg-secondary)] bg-[var(--surface-2)] rounded-md px-2 py-1 select-all"
+          className="min-w-0 flex-1 select-all truncate rounded-md border border-line bg-surface-2 px-2 py-1 font-mono text-xs text-fg-secondary"
         >
           {displayUrl(url)}
         </span>
@@ -139,25 +158,44 @@ export function MeetingShareLink({
 
       <button
         type="button"
-        onClick={() => void copy()}
+        onClick={() => void copy("link")}
         title={`Copy ${url}`}
-        className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] transition-colors"
+        className={BTN}
       >
         <LinkIcon />
-        {copied ? "Copied" : copyFailed ? "Press ⌘C" : "Copy link"}
+        {label("link", "Copy link")}
       </button>
 
-      {shareable && (
+      {/* "Copy invite" only exists where there is something to say beyond the
+          URL. In the control bar (compact) there is no room for it, and inside
+          a call the people you would send it to are already in the room. */}
+      {!compact && invite && (
         <button
           type="button"
-          onClick={() => void share()}
-          title="Share this meeting"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs font-medium text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-2)] transition-colors"
+          onClick={() => void copy("invite")}
+          title="Copy the title, time and link as text"
+          className={BTN}
         >
+          <NoteIcon />
+          {label("invite", "Copy invite")}
+        </button>
+      )}
+
+      {shareable && (
+        <button type="button" onClick={() => void share()} title="Share this meeting" className={BTN}>
           <ShareIcon />
           Share
         </button>
       )}
+
+      {/* Announced rather than only coloured — the label change is the only
+          feedback a copy gives, and a screen reader would otherwise get none. */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {flash ? (flash.ok ? `${flash.what === "link" ? "Link" : "Invite"} copied` : "Copy failed") : ""}
+      </span>
     </div>
   );
 }
+
+const BTN =
+  "fx-btn shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-1 px-2.5 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-2 hover:text-fg-primary";

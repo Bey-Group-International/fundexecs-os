@@ -18,11 +18,19 @@ async function resolveMeeting(code: string) {
   const supabase = client() ?? (await createServerClient());
   const { data } = await supabase
     .from("live_meetings")
-    .select("id, organization_id, status")
+    .select("id, organization_id, status, guest_quick_access")
     .eq("room_code", code)
     .is("deleted_at", null)
     .maybeSingle();
-  return { supabase, meeting: data as { id: string; organization_id: string | null; status: string } | null };
+  return {
+    supabase,
+    meeting: data as {
+      id: string;
+      organization_id: string | null;
+      status: string;
+      guest_quick_access: boolean | null;
+    } | null,
+  };
 }
 
 // Teammate check: is the (signed-in) caller a member of the meeting's org? If so
@@ -61,11 +69,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   if (meeting.status === "ended") return NextResponse.json({ status: "ended" });
 
   // Org teammates are auto-admitted; only external guests actually wait.
-  const isMember = await callerIsOrgMember(meeting.organization_id, supabase);
+  //
+  // ...unless the host turned quick access on for this meeting, in which case
+  // holding the link is the whole check and nobody waits. Read off the meeting
+  // row rather than trusted from the request: the client that knocks is the
+  // guest's, and a guest must never be able to admit themselves.
+  const quickAccess = meeting.guest_quick_access === true;
+  const admitOnSight = quickAccess || (await callerIsOrgMember(meeting.organization_id, supabase));
 
-  // Return the existing decision rather than clobbering it — but promote a
-  // still-waiting teammate (e.g. if their client knocked before we recognized
-  // them) so the host never has to admit their own team.
+  // Return the existing decision rather than clobbering it — but promote anyone
+  // who should not be waiting at all: a teammate whose client knocked before we
+  // recognized them, or any guest on a meeting whose quick access was switched
+  // on while they were already in the queue.
   const { data: existing } = await (supabase as any)
     .from("live_meeting_admissions")
     .select("id, status, display_name")
@@ -73,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     .eq("guest_key", guestKey)
     .maybeSingle();
   if (existing) {
-    if (isMember && existing.status === "waiting") {
+    if (admitOnSight && existing.status === "waiting") {
       await (supabase as any)
         .from("live_meeting_admissions")
         .update({ status: "admitted", decided_at: new Date().toISOString() })
@@ -101,8 +116,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
       organization_id: meeting.organization_id,
       guest_key: guestKey,
       display_name: displayName,
-      status: isMember ? "admitted" : "waiting",
-      ...(isMember ? { decided_at: new Date().toISOString() } : {}),
+      status: admitOnSight ? "admitted" : "waiting",
+      ...(admitOnSight ? { decided_at: new Date().toISOString() } : {}),
     })
     .select("id, status")
     .maybeSingle();

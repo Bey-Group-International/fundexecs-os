@@ -4,6 +4,7 @@ import {
   shareTargetFor,
   canNativeShare,
   displayUrl,
+  inviteTextFor,
 } from "./share";
 
 describe("meetingInviteUrl", () => {
@@ -151,5 +152,41 @@ describe("displayUrl", () => {
   it("keeps the host visible so the reader can tell where the link goes", () => {
     const shown = displayUrl("https://fundexecs.example.com/meeting-invite/abc-def-1234", 30);
     expect(shown.startsWith("fundexecs")).toBe(true);
+  });
+});
+
+describe("inviteTextFor", () => {
+  const base = { origin: "https://app.test", roomCode: "abc-def-12" };
+
+  it("carries the title, the time and the link", () => {
+    expect(
+      inviteTextFor({ ...base, title: "LP Update", scheduledAt: "2026-03-04T15:00:00Z", timeZone: "UTC" }),
+    ).toBe("LP Update\nWhen: Wed, Mar 4, 3:00 PM UTC\nJoin: https://app.test/meeting-invite/abc-def-12");
+  });
+
+  it("drops the When line rather than leaving it blank for an unscheduled meeting", () => {
+    expect(inviteTextFor({ ...base, title: "Standup" })).toBe(
+      "Standup\nJoin: https://app.test/meeting-invite/abc-def-12",
+    );
+  });
+
+  it("falls back to a generic title so the paste is never headed by an empty line", () => {
+    expect(inviteTextFor({ ...base, title: "   " })).toBe(
+      "FundExecs meeting\nJoin: https://app.test/meeting-invite/abc-def-12",
+    );
+  });
+
+  it("is empty without a room code — there is no invitation to send", () => {
+    expect(inviteTextFor({ origin: "https://app.test", roomCode: "", title: "LP Update" })).toBe("");
+  });
+
+  it("writes the time in the meeting's zone, not the reader's", () => {
+    const text = inviteTextFor({
+      ...base,
+      title: "Board",
+      scheduledAt: "2026-03-04T15:00:00Z",
+      timeZone: "America/New_York",
+    });
+    expect(text).toContain("10:00 AM EST");
   });
 });

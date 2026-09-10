@@ -8,11 +8,11 @@ import {
   deriveMeetingStatus,
   meetingTimeState,
   EXTERNAL_SYNC_STATUS_LABELS,
-  type MeetingDisplayStatus,
-  type MeetingTimePhase,
   type ExternalSyncStatus,
 } from "@/lib/meetings/schedule";
+import { CARD, COUNTDOWN_TONE, EYEBROW, STATUS_TONE, chip } from "./tone";
 import { MeetingEditScreen, type MeetingEditInitial } from "./MeetingEditScreen";
+import { MeetingShareLink } from "./MeetingShareLink";
 import { useNow, useLivePresence, nextChannelName } from "./hooks";
 
 export interface UpcomingMeeting {
@@ -54,6 +54,7 @@ export interface UpcomingMeeting {
   is_draft: boolean | null;
   locked_at: string | null;
   updated_at: string | null;
+  guest_quick_access: boolean | null;
 }
 
 function formatScheduled(iso: string) {
@@ -66,22 +67,16 @@ function formatScheduled(iso: string) {
   });
 }
 
-const STATUS_TONE: Record<MeetingDisplayStatus, string> = {
-  Scheduled: "border-[var(--gold-400)]/40 bg-[var(--gold-400)]/10 text-[var(--gold-400)]",
-  "Prep Needed": "border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 text-[var(--status-warning,#f59e0b)]",
-  Ready: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
-  Updated: "border-sky-500/40 bg-sky-500/10 text-sky-400",
-  Live: "border-emerald-500/50 bg-emerald-500/15 text-emerald-400",
-  Completed: "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-muted)]",
-  "Follow-Up Needed": "border-purple-500/40 bg-purple-500/10 text-purple-400",
-};
-
-const COUNTDOWN_TONE: Record<MeetingTimePhase, string> = {
-  upcoming: "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-muted)]",
-  imminent: "border-[var(--gold-400)]/50 bg-[var(--gold-400)]/15 text-[var(--gold-400)]",
-  in_progress: "border-emerald-500/50 bg-emerald-500/15 text-emerald-400",
-  ended: "border-[var(--line)] bg-[var(--surface-0)] text-[var(--fg-muted)]",
-};
+/** The collapsed row's time column: short enough to sit on one line beside the
+ * title without pushing the status chip and Join button off the end. */
+function formatScheduledShort(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 function copilotName(key: string | null): string | null {
   if (!key) return null;
@@ -111,8 +106,14 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
     objective: m.objective,
     agenda: m.agenda,
     preparationRequirements: m.preparation_requirements,
-    internalAttendees: internal.map((a) => a.email ?? a.name).join("\n"),
-    externalGuests: external.map((a) => (a.email ? `${a.name} <${a.email}>` : a.name)).join("\n"),
+    // Structured, not re-serialised into "Name <email>" for the form to parse
+    // back out again. Everyone is passed through, address or not: the edit
+    // screen shows the address-less ones separately rather than dropping them,
+    // so opening a meeting and saving it cannot quietly erase an attendee.
+    attendees: [
+      ...internal.map((a) => ({ name: a.name || a.email || "", email: a.email, type: "internal" as const })),
+      ...external.map((a) => ({ name: a.name || a.email || "", email: a.email, type: "external" as const })),
+    ].filter((a) => a.name || a.email),
     assignedCopilotAgent: m.assigned_copilot_agent,
     relatedRecordType: m.related_record_type,
     relatedRecordId: m.related_record_id,
@@ -122,6 +123,7 @@ function toEditInitial(m: UpcomingMeeting): MeetingEditInitial {
     tags: m.tags,
     externalCalendarSyncEnabled: m.external_calendar_sync_enabled ?? false,
     externalCalendarProvider: m.external_calendar_provider,
+    guestQuickAccess: m.guest_quick_access ?? false,
   };
 }
 
@@ -130,7 +132,7 @@ export function UpcomingMeetingsList({
   compact = false,
 }: {
   initialMeetings: UpcomingMeeting[];
-  /** Rail variant: drop the centered max-width wrapper so it fits a sidebar. */
+  /** Rail variant: drop the row's time column so it fits a narrow sidebar. */
   compact?: boolean;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
@@ -138,7 +140,9 @@ export function UpcomingMeetingsList({
   // Per-meeting outcome of the reminder button, so one meeting's result never
   // appears under another.
   const [reminded, setReminded] = useState<Record<string, { state: "sending" | "sent" | "failed"; message?: string }>>({});
-  const [detailsId, setDetailsId] = useState<string | null>(null);
+  // Which meeting is expanded. One at a time: the whole point of the collapsed
+  // list is that the page stays short, and a second open row undoes that.
+  const [openId, setOpenId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -292,7 +296,6 @@ export function UpcomingMeetingsList({
   }
 
   const editingMeeting = editingId ? meetings.find((m) => m.id === editingId) : null;
-  const detailsMeeting = detailsId ? meetings.find((m) => m.id === detailsId) : null;
 
   // Live roll-up for the section header: how many meetings have someone in the
   // room right now, and how many start within the hour.
@@ -303,21 +306,22 @@ export function UpcomingMeetingsList({
   }).length;
 
   return (
-    <section className={compact ? "w-full" : "mx-auto w-full max-w-3xl px-4"}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-baseline gap-3">
-          <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
+    <section className="w-full">
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className={EYEBROW}>
             Upcoming
+            <span className="ml-2 font-normal tabular-nums text-fg-muted">{meetings.length}</span>
           </h2>
-          <div className="flex items-center gap-2 text-[11px] text-[var(--fg-muted)]">
-            {liveCount > 0 ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                {liveCount} live
-              </span>
-            ) : null}
-            {startingSoon > 0 ? <span>{startingSoon} within the hour</span> : null}
-          </div>
+          {liveCount > 0 ? (
+            <span className={chip("success")}>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+              {liveCount} live
+            </span>
+          ) : null}
+          {startingSoon > 0 ? (
+            <span className={chip("accent")}>{startingSoon} within the hour</span>
+          ) : null}
         </div>
         {/* No Refresh button: the realtime subscription below already refetches
             on every change, so offering the control implied it didn't. Clear
@@ -329,7 +333,14 @@ export function UpcomingMeetingsList({
           />
         ) : null}
       </div>
-      {error ? <p className="mb-2 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">{error}</p> : null}
+      {error ? (
+        <p
+          role="alert"
+          className="mb-2 rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)]"
+        >
+          {error}
+        </p>
+      ) : null}
 
       {clearConfirm ? (
         <ConfirmBox
@@ -342,15 +353,15 @@ export function UpcomingMeetingsList({
       ) : null}
 
       {meetings.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-1)] p-6 text-center">
-          <p className="text-sm font-medium text-[var(--fg-primary)]">No upcoming meetings.</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--fg-muted)]">
+        <div className={`${CARD} border-dashed px-6 py-10 text-center`}>
+          <p className="text-sm font-medium text-fg-primary">No upcoming meetings</p>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-fg-muted">
             Schedule a meeting, connect a calendar, or ask Earn to prepare your schedule.
           </p>
         </div>
       ) : null}
 
-      <div className="grid gap-2">
+      <div className="grid gap-1.5">
         {meetings.map((meeting) => {
           const status = deriveMeetingStatus(meeting, now);
           const timeState = meetingTimeState(meeting.scheduled_at, meeting.duration_minutes, now);
@@ -369,146 +380,171 @@ export function UpcomingMeetingsList({
           const prep = meeting.preparation_status ?? "prep_needed";
           // A meeting that has run its clock wants a follow-up, not a prep.
           const ended = timeState?.phase === "ended" || meeting.status === "ended";
+          const isOpen = openId === meeting.id;
           return (
-            <div
-              key={meeting.id}
-              className={`rounded-xl border bg-[var(--surface-1)] p-4 transition-colors ${
-                live ? "border-emerald-500/40" : "border-[var(--line)]"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3 pb-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_TONE[status]}`}>{status}</span>
+              <div
+                key={meeting.id}
+                className={`${CARD} overflow-hidden transition duration-200 ${
+                  live ? "border-status-success/50" : ""
+                } ${isOpen ? "shadow-[0_10px_30px_-18px_rgb(15_23_42/0.35)]" : ""}`}
+              >
+                {/* Collapsed: one row per meeting — when, what, where it stands,
+                    and the way in. The name is the disclosure; every other
+                    detail and action comes with it when it opens. Join stays
+                    outside the disclosure so the common case is still one
+                    click, and because a link cannot nest inside a button. */}
+                <div className="flex items-center gap-1 pr-2">
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(isOpen ? null : meeting.id)}
+                    aria-expanded={isOpen}
+                    aria-controls={`meeting-panel-${meeting.id}`}
+                    className="fx-focus flex min-w-0 flex-1 items-center gap-2.5 rounded-l-2xl px-3 py-2.5 text-left transition-colors hover:bg-surface-2/70"
+                  >
+                    <span
+                      aria-hidden
+                      className={`shrink-0 text-fg-muted transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                    >
+                      <ChevronIcon />
+                    </span>
+                    {!compact ? (
+                      <span className="hidden w-[124px] shrink-0 font-mono text-[11px] tabular-nums uppercase tracking-[0.06em] text-fg-secondary sm:block">
+                        {meeting.scheduled_at ? formatScheduledShort(meeting.scheduled_at) : "Time TBD"}
+                      </span>
+                    ) : null}
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-primary">
+                      {meeting.title}
+                    </span>
                     {timeState && timeState.phase !== "ended" ? (
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${COUNTDOWN_TONE[timeState.phase]}`}>
-                        {(timeState.phase === "imminent" || timeState.phase === "in_progress") ? (
+                      <span className={`${chip(COUNTDOWN_TONE[timeState.phase])} hidden sm:inline-flex`}>
+                        {timeState.phase === "imminent" || timeState.phase === "in_progress" ? (
                           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
                         ) : null}
                         {timeState.phase === "in_progress" ? "In progress" : timeState.label}
                       </span>
                     ) : null}
-                    <p className="text-sm font-medium text-[var(--fg-primary)]">{meeting.title}</p>
-                  </div>
-                  <p className="mt-1 text-xs text-[var(--fg-muted)]">
-                    {(meeting.meeting_type ?? "meeting").replace(/_/g, " ")}
-                    {" · "}
-                    {meeting.scheduled_at ? formatScheduled(meeting.scheduled_at) : "Time TBD"}
-                    {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
-                    {meeting.timezone ? ` · ${meeting.timezone}` : ""}
-                  </p>
-
-                  {/* Live presence — who is in the room right now */}
-                  {room && room.count > 0 ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                        {room.count} in the room
-                      </span>
-                      <span className="truncate text-[11px] text-[var(--fg-muted)]">{room.names.join(", ")}</span>
-                    </div>
-                  ) : null}
-                  {joinLabel ? (
-                    <p className="mt-1 text-[11px] text-emerald-400/80">{joinLabel.name} just joined</p>
-                  ) : null}
-
-                  {/* One quiet line rather than four bordered pills, and no
-                      second copy of the attendee list underneath it — the names
-                      themselves live in Details. */}
-                  <p className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">
-                    {[
-                      `prep: ${prep}`,
-                      copilot ? `copilot: ${copilot}` : null,
-                      `calendar: ${EXTERNAL_SYNC_STATUS_LABELS[syncStatus]}`,
-                      meeting.attendees?.length
-                        ? `${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                      .replace(/_/g, " ")}
-                  </p>
+                    <span className={chip(STATUS_TONE[status])}>{status}</span>
+                  </button>
+                  <Link
+                    href={`/meetings/${meeting.room_code}`}
+                    className={`fx-btn shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      live
+                        ? "bg-[var(--status-success)] text-white hover:opacity-90"
+                        : "border border-gold-400/35 bg-gold-400/10 text-[var(--gold-300)] hover:bg-gold-400/20"
+                    }`}
+                  >
+                    {live ? "Join live" : "Join"}
+                  </Link>
                 </div>
-                <Link
-                  href={`/meetings/${meeting.room_code}`}
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    live
-                      ? "bg-emerald-500/15 text-emerald-400"
-                      : "bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
-                  }`}
-                >
-                  {live ? "Join live →" : "Join →"}
-                </Link>
-              </div>
-              {/* Two actions on the card — Join, top right, and the one thing
-                  the meeting's phase says you'd do next. Everything else is a
-                  keystroke away in the menu instead of seven buttons per card
-                  multiplied by every meeting on screen. */}
-              <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
-                <ActionButton
-                  onClick={() => (ended ? followUpWithEarn(meeting) : prepareWithEarn(meeting))}
-                >
-                  {ended ? "Follow up" : "Prepare with Earn"}
-                </ActionButton>
-                <OverflowMenu
-                  label={`More actions for ${meeting.title}`}
-                  items={[
-                    {
-                      label: detailsId === meeting.id ? "Hide details" : "Open details",
-                      onSelect: () => setDetailsId(detailsId === meeting.id ? null : meeting.id),
-                    },
-                    { label: "Edit meeting", onSelect: () => setEditingId(meeting.id) },
-                    {
-                      label: ended ? "Prepare with Earn" : "Follow up",
-                      onSelect: () => (ended ? prepareWithEarn(meeting) : followUpWithEarn(meeting)),
-                    },
-                    {
-                      label: reminded[meeting.id]?.state === "sending" ? "Sending…" : "Send reminder",
-                      disabled: busy === meeting.id || reminded[meeting.id]?.state === "sending",
-                      onSelect: () => void sendReminder(meeting.id),
-                    },
-                    ...(syncStatus === "sync_failed" || syncStatus === "needs_resync"
-                      ? [{ label: "Retry sync", onSelect: () => void retrySync(meeting.id) }]
-                      : []),
-                    { label: "Delete", danger: true, onSelect: () => setDeleteId(meeting.id) },
-                  ]}
-                />
-              </div>
-              {reminded[meeting.id]?.message ? (
-                <p
-                  role="status"
-                  className={`mt-2 text-xs ${
-                    reminded[meeting.id]!.state === "sent"
-                      ? "text-[var(--status-success)]"
-                      : "text-[var(--status-warning)]"
-                  }`}
-                >
-                  {reminded[meeting.id]!.message}
-                </p>
-              ) : null}
 
-              {detailsMeeting?.id === meeting.id ? <MeetingDetails meeting={meeting} /> : null}
+                {isOpen ? (
+                  <div
+                    id={`meeting-panel-${meeting.id}`}
+                    className="border-t border-line/70 bg-surface-0/40 px-4 py-3.5 motion-safe:animate-fade-up"
+                  >
+                    <p className="text-xs capitalize text-fg-secondary">
+                      {(meeting.meeting_type ?? "meeting").replace(/_/g, " ")}
+                      {" · "}
+                      {meeting.scheduled_at ? formatScheduled(meeting.scheduled_at) : "Time TBD"}
+                      {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
+                      {meeting.timezone ? ` · ${meeting.timezone}` : ""}
+                    </p>
 
-              {deleteId === meeting.id ? (
-                <ConfirmBox
-                  title="Delete this meeting?"
-                  body={
-                    // Deleting now emails the guests. Say so before the click,
-                    // not after — a host should never mail their LPs by accident.
-                    notifiableGuestCount(meeting) > 0
-                      ? `This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced. ${notifiableGuestCount(meeting)} guest${
-                          notifiableGuestCount(meeting) === 1 ? "" : "s"
-                        } will be emailed that it's cancelled.`
-                      : "This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced."
-                  }
-                  confirmLabel={busy === meeting.id ? "Deleting..." : "Delete from FundExecs only"}
-                  onConfirm={() => void deleteMeeting(meeting.id)}
-                  onCancel={() => setDeleteId(null)}
-                />
-              ) : null}
-            </div>
-          );
-        })}
+                    {/* Live presence — who is in the room right now */}
+                    {room && room.count > 0 ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className={chip("success")}>
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                          {room.count} in the room
+                        </span>
+                        <span className="truncate text-[11px] text-fg-muted">{room.names.join(", ")}</span>
+                      </div>
+                    ) : null}
+                    {joinLabel ? (
+                      <p className="mt-1 text-[11px] text-[var(--status-success)]">{joinLabel.name} just joined</p>
+                    ) : null}
+
+                    {/* One quiet line rather than four bordered pills, and no
+                        second copy of the attendee list underneath it — the names
+                        themselves live in the detail rows below. */}
+                    <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-fg-muted">
+                      {[
+                        `prep: ${prep}`,
+                        copilot ? `copilot: ${copilot}` : null,
+                        `calendar: ${EXTERNAL_SYNC_STATUS_LABELS[syncStatus]}`,
+                        meeting.attendees?.length
+                          ? `${meeting.attendees.length} attendee${meeting.attendees.length === 1 ? "" : "s"}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                        .replace(/_/g, " ")}
+                    </p>
+
+                    <MeetingDetails meeting={meeting} />
+
+                    {/* Open is the deliberate state, so the actions are all on
+                        screen here rather than hidden a second click deep in a
+                        menu. At rest the row shows none of them. */}
+                    <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-line/70 pt-3">
+                      <ActionButton onClick={() => (ended ? followUpWithEarn(meeting) : prepareWithEarn(meeting))}>
+                        {ended ? "Follow up" : "Prepare with Earn"}
+                      </ActionButton>
+                      <ActionButton onClick={() => (ended ? prepareWithEarn(meeting) : followUpWithEarn(meeting))}>
+                        {ended ? "Prepare with Earn" : "Follow up"}
+                      </ActionButton>
+                      <ActionButton onClick={() => setEditingId(meeting.id)}>Edit meeting</ActionButton>
+                      <ActionButton
+                        disabled={busy === meeting.id || reminded[meeting.id]?.state === "sending"}
+                        onClick={() => void sendReminder(meeting.id)}
+                      >
+                        {reminded[meeting.id]?.state === "sending" ? "Sending…" : "Send reminder"}
+                      </ActionButton>
+                      {syncStatus === "sync_failed" || syncStatus === "needs_resync" ? (
+                        <ActionButton disabled={busy === meeting.id} onClick={() => void retrySync(meeting.id)}>
+                          Retry sync
+                        </ActionButton>
+                      ) : null}
+                      <ActionButton danger onClick={() => setDeleteId(meeting.id)}>
+                        Delete
+                      </ActionButton>
+                    </div>
+
+                    {reminded[meeting.id]?.message ? (
+                      <p
+                        role="status"
+                        className={`mt-2 text-xs ${
+                          reminded[meeting.id]!.state === "sent"
+                            ? "text-[var(--status-success)]"
+                            : "text-[var(--status-warning)]"
+                        }`}
+                      >
+                        {reminded[meeting.id]!.message}
+                      </p>
+                    ) : null}
+
+                    {deleteId === meeting.id ? (
+                      <ConfirmBox
+                        title="Delete this meeting?"
+                        body={
+                          // Deleting now emails the guests. Say so before the click,
+                          // not after — a host should never mail their LPs by accident.
+                          notifiableGuestCount(meeting) > 0
+                            ? `This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced. ${notifiableGuestCount(meeting)} guest${
+                                notifiableGuestCount(meeting) === 1 ? "" : "s"
+                              } will be emailed that it's cancelled.`
+                            : "This deletes the local FundExecs meeting record only. Connected calendar events are not deleted unless separately approved and synced."
+                        }
+                        confirmLabel={busy === meeting.id ? "Deleting..." : "Delete from FundExecs only"}
+                        onConfirm={() => void deleteMeeting(meeting.id)}
+                        onCancel={() => setDeleteId(null)}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
       </div>
 
       {editingMeeting ? (
@@ -536,18 +572,36 @@ function MeetingDetails({ meeting }: { meeting: UpcomingMeeting }) {
     ["Visibility", meeting.calendar_visibility],
     ["Reminder", meeting.reminder_minutes != null ? `${meeting.reminder_minutes} min before` : null],
     ["Meeting ID", meeting.id],
-    ["Room", meeting.room_code],
   ];
+  const present = rows.filter(([, v]) => v);
+  // The share row always renders: a meeting always has a link, and this is the
+  // one place outside a live call where you can get at it.
   return (
-    <dl className="mt-3 grid gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] p-3 text-xs">
-      {rows
-        .filter(([, v]) => v)
-        .map(([k, v]) => (
-          <div key={k} className="flex gap-2">
-            <dt className="w-24 shrink-0 font-mono uppercase tracking-wider text-[var(--fg-muted)]">{k}</dt>
-            <dd className="min-w-0 break-words text-[var(--fg-secondary)]">{v}</dd>
-          </div>
-        ))}
+    <dl className="mt-3 divide-y divide-line/60 overflow-hidden rounded-lg border border-line/70 bg-surface-1 text-xs">
+      {present.map(([k, v]) => (
+        <div key={k} className="flex gap-3 px-3 py-2">
+          <dt className="w-24 shrink-0 font-mono text-[10px] uppercase leading-5 tracking-[0.1em] text-fg-muted">
+            {k}
+          </dt>
+          <dd className="min-w-0 whitespace-pre-line break-words leading-5 text-fg-secondary">{v}</dd>
+        </div>
+      ))}
+      {/* This used to be `Room: abc-def-gh` — the code, as text, which you
+          could read but not use. Sharing a meeting meant joining it first to
+          reach the copy button in the call. It is the actual link now. */}
+      <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:gap-3">
+        <dt className="w-24 shrink-0 font-mono text-[10px] uppercase leading-5 tracking-[0.1em] text-fg-muted">
+          Guest link
+        </dt>
+        <dd className="min-w-0 flex-1">
+          <MeetingShareLink
+            roomCode={meeting.room_code}
+            title={meeting.title}
+            scheduledAt={meeting.scheduled_at}
+            timeZone={meeting.timezone}
+          />
+        </dd>
+      </div>
     </dl>
   );
 }
@@ -591,14 +645,14 @@ function OverflowMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-[var(--line)] px-2 py-1 text-xs leading-none text-[var(--fg-muted)] transition hover:text-[var(--fg-primary)]"
+        className="fx-btn rounded-lg border border-line bg-surface-1 px-2 py-1.5 text-xs leading-none text-fg-muted hover:bg-surface-2 hover:text-fg-primary"
       >
         <span aria-hidden="true">⋯</span>
       </button>
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface-1)] py-1 shadow-2xl"
+          className="absolute right-0 top-full z-30 mt-1.5 w-52 overflow-hidden rounded-xl border border-line bg-surface-1 py-1 shadow-[0_18px_40px_-20px_rgb(15_23_42/0.45)]"
         >
           {items.map((item) => (
             <button
@@ -612,8 +666,8 @@ function OverflowMenu({
               }}
               className={`block w-full px-3 py-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 item.danger
-                  ? "text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10"
-                  : "text-[var(--fg-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--fg-primary)]"
+                  ? "text-[var(--status-danger)] hover:bg-status-danger/10"
+                  : "text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
               }`}
             >
               {item.label}
@@ -622,6 +676,14 @@ function OverflowMenu({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
   );
 }
 
@@ -641,10 +703,10 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-md border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`fx-btn rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
         danger
-          ? "border-[var(--status-danger)]/35 text-[var(--status-danger)] hover:bg-[var(--status-danger)]/10"
-          : "border-[var(--line)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+          ? "border-status-danger/40 text-[var(--status-danger)] hover:bg-status-danger/10"
+          : "border-line bg-surface-1 text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary"
       }`}
     >
       {children}
@@ -666,14 +728,26 @@ function ConfirmBox({
   onCancel: () => void;
 }) {
   return (
-    <div className="mt-3 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/8 p-3">
-      <p className="text-sm font-medium text-[var(--fg-primary)]">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-[var(--fg-muted)]">{body}</p>
+    <div
+      role="alertdialog"
+      aria-label={title}
+      className="mt-3 rounded-xl border border-status-danger/40 bg-status-danger/5 p-3.5"
+    >
+      <p className="text-sm font-semibold text-fg-primary">{title}</p>
+      <p className="mt-1 text-xs leading-relaxed text-fg-secondary">{body}</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={onConfirm} className="rounded-md bg-[var(--status-danger)] px-3 py-1.5 text-xs font-medium text-white">
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="fx-btn rounded-lg bg-[var(--status-danger)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+        >
           {confirmLabel}
         </button>
-        <button type="button" onClick={onCancel} className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)]">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="fx-btn rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
+        >
           Cancel
         </button>
       </div>

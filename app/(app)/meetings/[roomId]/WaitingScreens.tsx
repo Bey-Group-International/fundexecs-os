@@ -52,7 +52,7 @@ export function WaitingRoomBar({
     <div
       role="region"
       aria-label={`${count} ${count === 1 ? "person" : "people"} waiting to join`}
-      className="shrink-0 border-t border-[var(--gold-400)]/40 bg-[var(--gold-400)]/10 px-3 sm:px-6 py-2"
+      className="shrink-0 border-t border-gold-400/40 bg-gold-400/10 px-3 sm:px-6 py-2"
     >
       <div className="flex items-center gap-3 flex-wrap">
         <span className="flex items-center gap-2 text-xs font-semibold text-[var(--gold-400)] uppercase tracking-wide">

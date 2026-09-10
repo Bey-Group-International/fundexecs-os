@@ -59,6 +59,7 @@ export interface UpdateMeetingInput {
   relatedRecordId?: string | null;
   externalCalendarSyncEnabled?: boolean;
   externalCalendarProvider?: string | null;
+  guestQuickAccess?: boolean;
 }
 
 export interface PersistMeetingRecordInput {
@@ -189,6 +190,8 @@ export interface ScheduleMeetingInput {
   tags?: string[];
   externalCalendarSyncEnabled?: boolean;
   externalCalendarProvider?: string | null;
+  /** Let anyone holding the invite link in without the host admitting them. */
+  guestQuickAccess?: boolean;
 }
 
 export interface SavedScheduledMeeting {
@@ -254,6 +257,7 @@ export async function saveScheduledMeeting(
     external_calendar_sync_enabled: !!input.externalCalendarSyncEnabled,
     external_calendar_provider: input.externalCalendarProvider ?? null,
     external_calendar_sync_status: externalStatus,
+    guest_quick_access: !!input.guestQuickAccess,
     is_draft: isDraft,
     preparation_status: isDraft ? "draft" : "prep_needed",
     followup_status: "not_started",
@@ -432,6 +436,7 @@ export async function updateMeeting(
   if (input.relatedRecordType !== undefined) update.related_record_type = input.relatedRecordType;
   if (input.relatedRecordId !== undefined) update.related_record_id = input.relatedRecordId;
   if (input.externalCalendarProvider !== undefined) update.external_calendar_provider = input.externalCalendarProvider;
+  if (input.guestQuickAccess !== undefined) update.guest_quick_access = input.guestQuickAccess;
 
   // If a locked meeting's timing or attendees changed while a third-party sync
   // is enabled, the external mirror needs re-syncing. The native meeting stays

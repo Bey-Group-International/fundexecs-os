@@ -19,36 +19,41 @@ export function TranscriptAnalysisCard() {
   const [open, setOpen] = useState(false);
 
   return (
-    <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)]">
+    <section className="fx-card overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="fx-focus flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-2.5 text-left transition-colors hover:bg-surface-2/70"
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="text-[var(--gold-400)]">✦</span>
-          <span className="truncate text-sm font-medium text-[var(--fg-primary)]">
-            Analyze a transcript
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden
+            className={`shrink-0 text-fg-muted transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+          >
+            <ChevronIcon />
           </span>
-          <span className="hidden truncate text-xs text-[var(--fg-muted)] sm:inline">
+          <span className="truncate text-sm font-medium text-fg-primary">Analyze a transcript</span>
+          <span className="hidden truncate text-xs text-fg-muted sm:inline">
             Sentiment, objections, commitment and a follow-up draft
           </span>
-        </span>
-        <span
-          aria-hidden
-          className={`shrink-0 text-[var(--fg-muted)] transition-transform ${open ? "rotate-90" : ""}`}
-        >
-          ›
         </span>
       </button>
 
       {/* Hidden rather than unmounted: the console owns the pasted transcript,
           the analysis and any error, so collapsing the card would throw away
           work somebody waited on a model for. */}
-      <div hidden={!open} className="border-t border-[var(--line)] px-4 py-4">
+      <div hidden={!open} className="border-t border-line/70 bg-surface-0/40 px-4 py-4">
         <MeetingCopilotConsole />
       </div>
     </section>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
   );
 }

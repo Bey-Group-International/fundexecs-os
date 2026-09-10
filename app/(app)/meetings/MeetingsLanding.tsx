@@ -144,7 +144,28 @@ export function MeetingsLanding({
   }, [calendarOpen, pane, hideSettings, closeCalendar]);
 
   return (
-    <div className="flex flex-col gap-5">
+    // One centred column for the whole page. Previously the lobby and the
+    // Upcoming list each carried their own `max-w-3xl` while the scheduling
+    // card, the tabs and the transcript card ran the full width of the shell —
+    // so nothing lined up and the page was wider than it was readable. The
+    // measure lives here now, once, and every child is `w-full` inside it.
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+      {/* The app's page-header vocabulary — mono eyebrow, display title, one
+          line of lede — held at a compact scale. Meetings is a desk somebody
+          opens every day, so the header identifies the page without taking a
+          third of the first screen the way a 3xl hero would. */}
+      <header>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300">
+          Operations
+        </span>
+        <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-fg-primary">
+          Meetings
+        </h1>
+        <p className="mt-1 max-w-prose text-sm text-fg-secondary">
+          Start or join a room, keep the calendar, and hold the record of what each meeting decided.
+        </p>
+      </header>
+
       <MeetingLobby onOpenCalendar={() => openCalendar("calendar")} />
       {/* Booking link sits between "start a meeting" and "meetings you have":
           it's how meetings arrive when someone else picks the time. Collapsed to
@@ -152,7 +173,7 @@ export function MeetingsLanding({
       <SchedulingLinkCard />
 
       <div>
-        <div role="tablist" aria-label="Meetings" className="mb-3 flex items-center gap-1 border-b border-[var(--line)]">
+        <div role="tablist" aria-label="Meetings" className="mb-3 flex items-center gap-1 border-b border-line">
           <TabButton id="upcoming" active={tab === "upcoming"} onSelect={setTab}>
             Upcoming
           </TabButton>
@@ -186,12 +207,12 @@ export function MeetingsLanding({
               // isn't a control — a screen reader then announces the dialog
               // and its label rather than "Close, button".
               tabIndex={-1}
-              className="fixed inset-0 z-50 flex flex-col bg-[var(--surface-0)] focus:outline-none"
+              className="fixed inset-0 z-50 flex flex-col bg-surface-0 focus:outline-none"
             >
-              <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface-1)] px-4 py-3 sm:px-6">
+              <header className="flex shrink-0 items-center justify-between border-b border-line bg-surface-1 px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-[var(--gold-400)]"><CalendarIcon /></span>
-                  <h2 className="truncate text-base font-semibold text-[var(--fg-primary)]">
+                  <span className="text-[var(--gold-300)]"><CalendarIcon /></span>
+                  <h2 className="truncate font-display text-base font-semibold tracking-tight text-fg-primary">
                     {pane === "settings" ? "Calendar settings" : "Calendar"}
                   </h2>
                 </div>
@@ -200,10 +221,10 @@ export function MeetingsLanding({
                     type="button"
                     onClick={() => (pane === "settings" ? hideSettings() : showSettings())}
                     aria-pressed={pane === "settings"}
-                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`fx-btn flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
                       pane === "settings"
-                        ? "border-[var(--gold-400)] bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
-                        : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+                        ? "border-gold-400/50 bg-gold-400/10 text-[var(--gold-300)]"
+                        : "border-line bg-surface-1 text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
                     }`}
                   >
                     <GearIcon />
@@ -212,14 +233,14 @@ export function MeetingsLanding({
                   <button
                     type="button"
                     onClick={closeCalendar}
-                    className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--fg-secondary)] transition-colors hover:text-[var(--fg-primary)]"
+                    className="fx-btn flex items-center gap-1.5 rounded-lg border border-line bg-surface-1 px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-2 hover:text-fg-primary"
                   >
                     <CloseIcon /> <span className="hidden sm:inline">Close</span>
                   </button>
                 </div>
               </header>
               <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-                <div className={pane === "calendar" ? "" : "hidden"}>
+                <div className={pane === "calendar" ? "mx-auto w-full max-w-7xl" : "hidden"}>
                   <MeetingsCalendar
                     initialMeetings={initialMeetings}
                     initialUpcoming={initialUpcoming}
@@ -259,15 +280,15 @@ function TabButton({
       aria-selected={active}
       aria-controls={`panel-${id}`}
       onClick={() => onSelect(id)}
-      className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+      className={`fx-focus -mb-px flex items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
         active
-          ? "border-[var(--gold-400)] text-[var(--fg-primary)]"
-          : "border-transparent text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
+          ? "border-gold-400 text-fg-primary"
+          : "border-transparent text-fg-muted hover:text-fg-secondary"
       }`}
     >
       {children}
       {typeof count === "number" && count > 0 && (
-        <span className="rounded-full bg-[var(--surface-3)] px-1.5 py-0.5 text-[11px] font-normal text-[var(--fg-muted)]">
+        <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium tabular-nums tracking-normal text-fg-secondary">
           {count}
         </span>
       )}
@@ -277,7 +298,7 @@ function TabButton({
 
 function PaneLoading({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--fg-muted)]">
+    <div className="flex items-center justify-center gap-2 py-16 text-sm text-fg-muted">
       <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
         <path d="M21 12a9 9 0 1 1-6.219-8.56" />
       </svg>

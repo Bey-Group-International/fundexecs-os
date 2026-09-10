@@ -83,8 +83,11 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
   }
 
   return (
-    <div className="px-4 pt-4 sm:pt-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+    // No max-width or page padding of its own: the landing owns the column and
+    // the app shell owns the gutters. Carrying a second, narrower measure here
+    // is what made the toolbar sit off-axis from everything under it.
+    <div className="w-full">
+      <div className="flex w-full flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
             <div className="relative flex-1 sm:flex-none" ref={menuRef}>
@@ -94,7 +97,7 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
                 disabled={isPending}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold-400)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--gold-500)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="fx-btn flex w-full items-center justify-center gap-2 rounded-lg bg-gold-400 px-4 py-2 text-sm font-semibold text-white hover:bg-gold-500 sm:w-auto"
               >
                 {isPending ? <SpinnerIcon /> : <VideoIcon />}
                 {isPending ? "Starting…" : "New meeting"}
@@ -104,7 +107,7 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="absolute left-0 top-full z-20 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl"
+                  className="absolute left-0 top-full z-20 mt-1.5 w-64 overflow-hidden rounded-xl border border-line bg-surface-1 shadow-[0_18px_40px_-20px_rgb(15_23_42/0.45)]"
                 >
                   <MenuItem
                     icon={<BoltIcon />}
@@ -112,7 +115,7 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
                     subtitle="Create a room and join now"
                     onClick={startInstant}
                   />
-                  <div className="h-px bg-[var(--line)]" />
+                  <div className="h-px bg-line" />
                   <MenuItem
                     icon={<CalendarIcon />}
                     title="Schedule for later"
@@ -127,33 +130,33 @@ export function MeetingLobby({ onOpenCalendar }: { onOpenCalendar?: () => void }
             <button
               type="button"
               onClick={openCalendar}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-semibold text-[var(--fg-secondary)] transition-colors hover:border-[var(--gold-400)]/40 hover:bg-[var(--surface-2)] hover:text-[var(--fg-primary)]"
+              className="fx-btn flex shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface-1 px-4 py-2 text-sm font-semibold text-fg-secondary hover:border-gold-400/40 hover:bg-surface-2 hover:text-fg-primary"
             >
-              <span className="text-[var(--gold-400)]"><CalendarIcon /></span>
+              <span className="text-[var(--gold-300)]"><CalendarIcon /></span>
               Calendar
             </button>
           </div>
 
           {/* Code entry */}
           <form onSubmit={handleJoin} className="flex flex-1 items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 focus-within:ring-2 focus-within:ring-[var(--gold-400)]">
-              <KeyboardIcon />
+            <div className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface-1 px-3 py-1.5 transition-colors focus-within:border-gold-400 focus-within:ring-2 focus-within:ring-gold-400/30">
+              <span className="text-fg-muted"><KeyboardIcon /></span>
               <input
                 type="text"
                 aria-label="Meeting code"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
                 placeholder="Enter a meeting code"
-                className="w-full bg-transparent text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none"
+                className="w-full bg-transparent py-1 text-sm text-fg-primary placeholder:text-fg-muted focus:outline-none"
               />
             </div>
             <button
               type="submit"
               disabled={!joinCode.trim()}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+              className={`fx-btn rounded-lg px-4 py-2 text-sm font-semibold ${
                 joinCode.trim()
-                  ? "text-[var(--gold-400)] hover:bg-[var(--gold-400)]/10"
-                  : "cursor-not-allowed text-[var(--fg-muted)]"
+                  ? "text-[var(--gold-300)] hover:bg-gold-400/10"
+                  : "cursor-not-allowed text-fg-muted"
               }`}
             >
               Join
@@ -196,12 +199,12 @@ function MenuItem({
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-2)]"
+      className="fx-focus flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2"
     >
-      <span className="mt-0.5 text-[var(--gold-400)]">{icon}</span>
+      <span className="mt-0.5 text-[var(--gold-300)]">{icon}</span>
       <span className="flex flex-col">
-        <span className="text-sm font-medium text-[var(--fg-primary)]">{title}</span>
-        <span className="text-xs text-[var(--fg-muted)]">{subtitle}</span>
+        <span className="text-sm font-medium text-fg-primary">{title}</span>
+        <span className="text-xs text-fg-muted">{subtitle}</span>
       </span>
     </button>
   );
@@ -209,7 +212,7 @@ function MenuItem({
 
 function ErrorMsg({ msg }: { msg: string }) {
   return (
-    <p className="w-fit rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--status-danger)]">
+    <p role="alert" className="w-fit rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-xs text-[var(--status-danger)]">
       {msg}
     </p>
   );
@@ -250,7 +253,7 @@ function SpinnerIcon() {
 
 function KeyboardIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="6" width="20" height="12" rx="2" ry="2" />
       <line x1="6" y1="10" x2="6" y2="10" /><line x1="10" y1="10" x2="10" y2="10" /><line x1="14" y1="10" x2="14" y2="10" /><line x1="18" y1="10" x2="18" y2="10" />
       <line x1="7" y1="14" x2="17" y2="14" />

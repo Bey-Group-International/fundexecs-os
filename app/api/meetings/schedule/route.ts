@@ -49,6 +49,7 @@ interface ScheduleBody {
   priority?: "low" | "normal" | "high" | "critical";
   tags?: string[];
   externalCalendarSyncEnabled?: boolean;
+  guestQuickAccess?: boolean;
   externalCalendarProvider?: string;
 }
 
@@ -181,6 +182,9 @@ export async function POST(req: NextRequest) {
       priority: body.priority ?? "normal",
       tags: body.tags ?? [],
       externalCalendarSyncEnabled: body.externalCalendarSyncEnabled ?? false,
+      // Coerced, not passed through: this decides whether a stranger with the
+      // link walks straight into the room, so a truthy string must not enable it.
+      guestQuickAccess: body.guestQuickAccess === true,
       externalCalendarProvider: body.externalCalendarProvider ?? null,
     });
 

@@ -75,7 +75,7 @@ import { useNow, useLivePresence, nextChannelName, type RoomPresence } from "./h
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 const CAL_SELECT =
-  "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status";
+  "id, room_code, title, status, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, timezone, meeting_type, attendees, preparation_status, followup_status, assigned_copilot_agent, is_draft, locked_at, updated_at, description, location, meeting_url, objective, agenda, preparation_requirements, related_record_type, related_record_id, calendar_visibility, reminder_minutes, priority, tags, external_calendar_provider, external_calendar_sync_enabled, external_calendar_sync_status, guest_quick_access";
 
 const HOUR_PX = 46; // row height in the week/day time grid
 const DAY_SCROLL_HOUR = 7; // initial scroll position for time views
@@ -119,8 +119,14 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
     objective: m.objective,
     agenda: m.agenda,
     preparationRequirements: m.preparation_requirements,
-    internalAttendees: internal.map((a) => a.email ?? a.name).join("\n"),
-    externalGuests: external.map((a) => (a.email ? `${a.name} <${a.email}>` : a.name)).join("\n"),
+    // Structured, not re-serialised into "Name <email>" for the form to parse
+    // back out again. Everyone is passed through, address or not: the edit
+    // screen shows the address-less ones separately rather than dropping them,
+    // so opening a meeting and saving it cannot quietly erase an attendee.
+    attendees: [
+      ...internal.map((a) => ({ name: a.name || a.email || "", email: a.email, type: "internal" as const })),
+      ...external.map((a) => ({ name: a.name || a.email || "", email: a.email, type: "external" as const })),
+    ].filter((a) => a.name || a.email),
     assignedCopilotAgent: m.assigned_copilot_agent,
     relatedRecordType: m.related_record_type,
     relatedRecordId: m.related_record_id,
@@ -130,6 +136,7 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
     tags: m.tags,
     externalCalendarSyncEnabled: m.external_calendar_sync_enabled ?? false,
     externalCalendarProvider: m.external_calendar_provider,
+    guestQuickAccess: m.guest_quick_access ?? false,
   };
 }
 
@@ -523,7 +530,7 @@ export function MeetingsCalendar({
       {moveError ? (
         <div
           role="status"
-          className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[var(--status-danger)]/40 bg-[var(--status-danger)]/10 px-3 py-2 text-xs text-[var(--fg-secondary)]"
+          className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-xs text-[var(--fg-secondary)]"
         >
           <span>{moveError}</span>
           <button
@@ -891,7 +898,7 @@ function Toolbar({
   }, [setFilterOpen]);
 
   return (
-    <div className="sticky top-0 z-20 -mx-4 mb-6 flex flex-col gap-3 border-b border-[var(--line)] bg-[var(--surface-0)]/80 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+    <div className="sticky top-0 z-20 -mx-4 mb-6 flex flex-col gap-3 border-b border-[var(--line)] bg-surface-0/80 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold tracking-tight text-[var(--fg-primary)]">Calendar</h2>
@@ -940,7 +947,7 @@ function Toolbar({
               onClick={() => setFilterOpen(!filterOpen)}
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
                 activeFilters > 0
-                  ? "border-[var(--gold-400)]/50 bg-[var(--gold-400)]/10 text-[var(--gold-400)]"
+                  ? "border-gold-400/50 bg-gold-400/10 text-[var(--gold-400)]"
                   : "border-[var(--line)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
               }`}
             >
@@ -999,7 +1006,7 @@ function FilterMenu({ filter, onFilter }: { filter: CalendarFilter; onFilter: (f
             <button
               key={s}
               onClick={() => toggle("statuses", s)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${active ? "border-[var(--gold-400)]/50 bg-[var(--gold-400)]/10 text-[var(--gold-400)]" : "border-[var(--line)] text-[var(--fg-muted)]"}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] ${active ? "border-gold-400/50 bg-gold-400/10 text-[var(--gold-400)]" : "border-[var(--line)] text-[var(--fg-muted)]"}`}
             >
               {s}
             </button>
@@ -1068,7 +1075,7 @@ function MonthView({ anchor, meetings, blocks, externalEvents, layersById, today
                 )
               }
               className={`flex min-h-[104px] flex-col gap-1 border-b border-r border-[var(--line)] p-1.5 text-left transition-colors hover:bg-[var(--surface-0)] ${
-                inMonth ? "" : "bg-[var(--surface-0)]/40"
+                inMonth ? "" : "bg-surface-0/40"
               }`}
             >
               <span
@@ -1154,7 +1161,7 @@ function MonthChip({ m, live, onClick }: { m: CalendarMeeting; live: boolean; on
       className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[11px] font-medium ${meta.chip}`}
       title={m.title}
     >
-      {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" /> : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />}
+      {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />}
       <span className="shrink-0 tabular-nums opacity-80">{m.scheduled_at ? shortTime(m.scheduled_at) : ""}</span>
       <span className="truncate">{m.title}</span>
     </span>
@@ -1361,7 +1368,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
             >
               {/* Hour lines */}
               {hours.map((h) => (
-                <div key={h} className="absolute left-0 right-0 border-b border-[var(--line)]/60" style={{ top: h * HOUR_PX, height: HOUR_PX }} />
+                <div key={h} className="absolute left-0 right-0 border-b border-line/60" style={{ top: h * HOUR_PX, height: HOUR_PX }} />
               ))}
 
               {/* Events from connected calendars, drawn beneath everything
@@ -1473,7 +1480,7 @@ function TimeGridView({ days, meetings, blocks, externalEvents, layersById, now,
                     title={m.title}
                   >
                     <div className="flex items-center gap-1">
-                      {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" /> : null}
+                      {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-[11px] font-medium text-[var(--fg-primary)]">{m.title}</span>
                     </div>
                     <div className="truncate text-[11px] text-[var(--fg-muted)]">
@@ -1554,13 +1561,13 @@ function AgendaView({ anchor, meetings, now, today, presence, statusOf, onSelect
                 <button
                   key={m.id}
                   onClick={() => onSelectEvent(m)}
-                  className="flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-left hover:border-[var(--fg-muted)]/40"
+                  className="flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-0)] px-3 py-2 text-left hover:border-fg-muted/40"
                 >
                   <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: meta.accent }} />
                   <div className="w-20 shrink-0 text-xs tabular-nums text-[var(--fg-secondary)]">{m.scheduled_at ? shortTime(m.scheduled_at) : ""}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" /> : null}
+                      {live ? <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" /> : null}
                       <span className="truncate text-sm font-medium text-[var(--fg-primary)]">{m.title}</span>
                     </div>
                     <div className="truncate text-xs text-[var(--fg-muted)]">
@@ -1703,8 +1710,8 @@ function EventDetail({
               <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.chip}`}>{meta.label}</span>
               <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{status}</span>
               {live ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Live
+                <span className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success/10 px-2 py-0.5 text-[11px] font-medium text-[var(--status-success)]">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--status-success)]" /> Live
                 </span>
               ) : null}
             </div>
@@ -1722,7 +1729,7 @@ function EventDetail({
 
         <div className="flex flex-col gap-2 p-4 text-sm">
           {presence && presence.count > 0 ? (
-            <p className="text-xs text-emerald-400">{presence.count} in the room · {presence.names.join(", ")}</p>
+            <p className="text-xs text-[var(--status-success)]">{presence.count} in the room · {presence.names.join(", ")}</p>
           ) : null}
           {meeting.objective ? <DetailRow label="Objective" value={meeting.objective} /> : null}
           {meeting.agenda ? <DetailRow label="Agenda" value={meeting.agenda} /> : null}
@@ -1732,7 +1739,7 @@ function EventDetail({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] p-3">
-          <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-emerald-500/15 text-emerald-400" : "bg-[var(--gold-400)] text-white hover:bg-[var(--gold-500)]"}`}>
+          <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-[var(--status-success)] text-white hover:opacity-90" : "bg-gold-400 text-white hover:bg-gold-500"}`}>
             {live ? "Join live →" : "Join →"}
           </Link>
           <button onClick={onEdit} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">Edit</button>
