@@ -32,6 +32,7 @@ import {
   debitInvoice,
   pollSettlement,
   inFlightDebits,
+  uncollectedInvoices,
   settlementCapability,
 } from "@/lib/native-payments.server";
 import { preferredRoute, overdueRoute } from "@/lib/native-payments";
@@ -72,6 +73,11 @@ export interface LifecycleResult {
   invoiced?: boolean;
   /** The invoice the period is waiting on, when one was issued or found. */
   invoice?: SubscriptionInvoice;
+  /**
+   * A bank debit is already in flight for that invoice, so the money collects
+   * itself. False means the invoice is waiting on the operator to send it.
+   */
+  collecting?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +316,11 @@ export async function startSubscription(
   // Checkout collected the first period; the rail only runs when it didn't
   // (the native in-app path, or a plan started server-side).
   let reference = input.reference ?? null;
-  if (!input.alreadyPaid) {
+  // A commit-first start is the operator saying "bill me" — the period is handed
+  // over now and the invoice chases the money. Running the card rail here asked
+  // for a saved card and failed the whole commit without one, which is exactly
+  // the friction the one-click unlock exists to remove.
+  if (!input.alreadyPaid && !input.grantBeforeSettlement) {
     const charge = await chargeSubscription({
       orgId: input.orgId,
       amountUsd: price,
@@ -383,7 +393,12 @@ export async function startSubscription(
   // invoice now so the money is actually chased — a period granted with no bill
   // behind it is a gift, not a subscription.
   let commitInvoice: SubscriptionInvoice | undefined;
-  if (input.grantBeforeSettlement && !input.alreadyPaid && remittanceConfigured()) {
+  let collecting = false;
+  // Not gated on remittanceConfigured(): the bill exists because a period was
+  // handed over, not because we can print wire instructions. Whether an operator
+  // can be shown somewhere to send a transfer is a display question, and the
+  // debit below does not need it at all.
+  if (input.grantBeforeSettlement && !input.alreadyPaid) {
     const issued = await issueInvoice(
       {
         orgId: input.orgId,
@@ -412,10 +427,34 @@ export async function startSubscription(
         reference: issued.invoice.number,
         note: `${issued.invoice.number} issued — access started before settlement`,
       });
-      // Don't chase it before it is due.
+      // Collect it now if we can. An org that has linked a bank account gets
+      // debited the moment it commits — no waiting for terms to run out, and
+      // nobody watching for an inbound transfer. Where there is no account to
+      // pull from, fall back to chasing it when it comes due.
+      let chaseAt: string | null = issued.invoice.due_at;
+      const cap = await settlementCapability(service, input.orgId);
+      if (preferredRoute(cap) === "ach_debit") {
+        const debit = await debitInvoice(issued.invoice, service);
+        if (debit.ok && debit.processing) {
+          // In flight: collectNativePayments owns it from here, so the renewal
+          // sweep must not also reach for it.
+          chaseAt = null;
+          collecting = true;
+          await recordEvent(service, {
+            orgId: input.orgId,
+            subscriptionId: sub.id,
+            kind: "debit_submitted",
+            plan: input.planKey,
+            interval: input.interval,
+            amountUsd: price,
+            reference: debit.intent ?? issued.invoice.number,
+            note: `${issued.invoice.number} — bank debit submitted on commit`,
+          });
+        }
+      }
       await service
         .from("subscriptions")
-        .update({ next_attempt_at: issued.invoice.due_at })
+        .update({ next_attempt_at: chaseAt })
         .eq("id", sub.id);
     }
   }
@@ -427,7 +466,7 @@ export async function startSubscription(
     console.error("[referral] awardReferralOnSubscription failed:", err);
   }
 
-  return { ok: true, subscription: sub, credits, invoice: commitInvoice };
+  return { ok: true, subscription: sub, credits, invoice: commitInvoice, collecting };
 }
 
 export interface ChangePlanInput {
@@ -740,8 +779,49 @@ function expectedClearing(now: Date): string {
 export async function collectNativePayments(
   service: ServiceClient,
   now: Date = new Date(),
-): Promise<{ polled: number; settled: number; bounced: number }> {
-  const stats = { polled: 0, settled: 0, bounced: 0 };
+): Promise<{ submitted: number; polled: number; settled: number; bounced: number }> {
+  const stats = { submitted: 0, polled: 0, settled: 0, bounced: 0 };
+
+  // Start collecting anything nobody has reached for yet. This sweep used to
+  // only poll debits that were already running, so an open invoice with no debit
+  // behind it waited for the renewal path to notice it — for a first period,
+  // that is the end of the period. An org with a linked account is now debited
+  // on the next sweep after the invoice is raised, whenever it was raised and
+  // whatever raised it.
+  for (const invoice of await uncollectedInvoices(service)) {
+    try {
+      const cap = await settlementCapability(service, invoice.organization_id);
+      // Only the pull rail self-collects. A transfer needs the operator to send
+      // the money and a card is the fallback the dunning ladder reaches for; nothing
+      // here should quietly charge a card that no one has been asked about.
+      if (preferredRoute(cap) !== "ach_debit") continue;
+      const debit = await debitInvoice(invoice, service);
+      if (debit.ok && debit.processing) {
+        stats.submitted += 1;
+        await recordEvent(service, {
+          orgId: invoice.organization_id,
+          subscriptionId: invoice.subscription_id,
+          kind: "debit_submitted",
+          plan: invoice.plan,
+          interval: invoice.interval,
+          amountUsd: Number(invoice.amount_usd),
+          reference: debit.intent ?? invoice.number,
+          note: `${invoice.number} — bank debit submitted`,
+        });
+        if (invoice.subscription_id) {
+          // In flight now; the poll below owns the outcome, so the renewal sweep
+          // must not reach for the same invoice on this pass.
+          await service
+            .from("subscriptions")
+            .update({ next_attempt_at: null })
+            .eq("id", invoice.subscription_id);
+        }
+      }
+    } catch (err) {
+      console.error("[subscriptions] submitting a debit failed", invoice.id, err);
+    }
+  }
+
   for (const invoice of await inFlightDebits(service)) {
     try {
       stats.polled += 1;

@@ -10,6 +10,21 @@ const chargeSubscription = jest.fn(async (..._args: unknown[]) => ({
   reference: "ref_1",
 }) as { ok: boolean; reference?: string; error?: string; requiresAction?: boolean });
 
+// The collection rail. Defaults to "this org has nothing to pull from", which
+// is what the rest of this suite assumes (it covers the CARD path); the
+// commit-collection tests below override it per case.
+const settlementCapability = jest.fn(async (..._args: unknown[]) => ({
+  hasLinkedAccount: false,
+  hasRemittance: false,
+  hasCard: false,
+}));
+const debitInvoice = jest.fn(async (..._args: unknown[]) => ({
+  ok: false,
+  processing: false,
+}) as { ok: boolean; processing?: boolean; intent?: string; error?: string });
+const uncollectedInvoices = jest.fn(async (..._args: unknown[]) => [] as Row[]);
+const inFlightDebits = jest.fn(async (..._args: unknown[]) => [] as Row[]);
+
 type Row = Record<string, unknown>;
 
 // A minimal in-memory Supabase double: enough query surface for this module
@@ -109,7 +124,16 @@ function makeClient(tables: Record<string, Row[]>) {
     };
     return b;
   }
-  return { from: (table: string) => builder(table) } as never;
+  // The invoice number comes from a Postgres sequence in the real thing; here it
+  // just has to be unique and ascending.
+  let issued = 0;
+  return {
+    from: (table: string) => builder(table),
+    rpc: async (fn: string) =>
+      fn === "next_subscription_invoice_number"
+        ? { data: ++issued, error: null }
+        : { data: null, error: null },
+  } as never;
 }
 
 jest.mock("@/lib/supabase/server", () => ({
@@ -118,6 +142,13 @@ jest.mock("@/lib/supabase/server", () => ({
 }));
 jest.mock("@/lib/credits", () => ({ grantCredits: (...a: unknown[]) => grantCredits(...a) }));
 jest.mock("@/lib/gift-earn", () => ({ awardReferralOnSubscription: jest.fn(async () => {}) }));
+jest.mock("@/lib/native-payments.server", () => ({
+  settlementCapability: (...a: unknown[]) => settlementCapability(...a),
+  debitInvoice: (...a: unknown[]) => debitInvoice(...a),
+  uncollectedInvoices: (...a: unknown[]) => uncollectedInvoices(...a),
+  inFlightDebits: (...a: unknown[]) => inFlightDebits(...a),
+  pollSettlement: jest.fn(async () => ({ settled: false, failed: false })),
+}));
 jest.mock("@/lib/billing-rail", () => ({
   chargeSubscription: (...a: unknown[]) => chargeSubscription(...a),
   activeRail: () => "native",
@@ -129,6 +160,7 @@ import {
   cancelSubscription,
   resumeSubscription,
   runSubscriptionRenewals,
+  collectNativePayments,
 } from "@/lib/subscriptions.server";
 
 const ORG = "org_1";
@@ -163,6 +195,18 @@ function liveSub(overrides: Row = {}): Row {
 beforeEach(() => {
   grantCredits.mockClear();
   chargeSubscription.mockClear();
+  settlementCapability.mockClear();
+  debitInvoice.mockClear();
+  uncollectedInvoices.mockClear();
+  inFlightDebits.mockClear();
+  settlementCapability.mockResolvedValue({
+    hasLinkedAccount: false,
+    hasRemittance: false,
+    hasCard: false,
+  });
+  debitInvoice.mockResolvedValue({ ok: false, processing: false });
+  uncollectedInvoices.mockResolvedValue([]);
+  inFlightDebits.mockResolvedValue([]);
   chargeSubscription.mockResolvedValue({ ok: true, reference: "ref_1" });
   // This suite covers the CARD path. Settlement chooses the invoice path when
   // remittance details exist, so they must be absent here — the invoice path has
@@ -467,5 +511,170 @@ describe("runSubscriptionRenewals", () => {
     await runSubscriptionRenewals(makeClient(tables), AFTER);
     expect(tables.subscriptions[0].status).not.toBe("past_due");
     expect(tables.subscriptions[0].ended_at).toBeTruthy();
+  });
+});
+
+// Clearing the paywall hands the period over and bills for it. Getting that
+// money in is what makes the native rail native: an org that has linked an
+// account is pulled from, not waited on.
+describe("commit-first collection", () => {
+  const commitTables = () => ({
+    subscriptions: [] as Row[],
+    subscription_events: [] as Row[],
+    subscription_invoices: [] as Row[],
+    wallets: [] as Row[],
+    linked_accounts: [] as Row[],
+  });
+
+  it("bills for the period instead of demanding a card", async () => {
+    const tables = commitTables();
+    const res = await startSubscription(
+      { orgId: ORG, planKey: "pro", interval: "monthly", grantBeforeSettlement: true },
+      makeClient(tables),
+    );
+
+    expect(res.ok).toBe(true);
+    // The whole point of the one-click unlock: no saved card is required, so
+    // the card rail must not be consulted at all.
+    expect(chargeSubscription).not.toHaveBeenCalled();
+    expect(tables.subscriptions).toHaveLength(1);
+    expect(tables.subscription_invoices).toHaveLength(1);
+  });
+
+  it("raises the bill even with nowhere to wire money to", async () => {
+    // Remittance details are unset (see beforeEach). The invoice exists because
+    // a period was handed over, not because we can print wire instructions.
+    const tables = commitTables();
+    await startSubscription(
+      { orgId: ORG, planKey: "pro", interval: "monthly", grantBeforeSettlement: true },
+      makeClient(tables),
+    );
+    expect(tables.subscription_invoices).toHaveLength(1);
+    expect(tables.subscription_invoices[0]).toMatchObject({ status: "open" });
+  });
+
+  it("debits at once when there is an account to pull from", async () => {
+    settlementCapability.mockResolvedValue({
+      hasLinkedAccount: true,
+      hasRemittance: false,
+      hasCard: false,
+    });
+    debitInvoice.mockResolvedValue({ ok: true, processing: true, intent: "pi_commit" });
+
+    const tables = commitTables();
+    await startSubscription(
+      { orgId: ORG, planKey: "pro", interval: "monthly", grantBeforeSettlement: true },
+      makeClient(tables),
+    );
+
+    expect(debitInvoice).toHaveBeenCalled();
+    // In flight — the renewal sweep must not reach for the same invoice.
+    expect(tables.subscriptions[0]).toMatchObject({ next_attempt_at: null });
+    expect(
+      tables.subscription_events.some((e) => e.kind === "debit_submitted"),
+    ).toBe(true);
+  });
+
+  it("falls back to chasing it at the due date with nothing to pull from", async () => {
+    const tables = commitTables();
+    await startSubscription(
+      { orgId: ORG, planKey: "pro", interval: "monthly", grantBeforeSettlement: true },
+      makeClient(tables),
+    );
+
+    expect(debitInvoice).not.toHaveBeenCalled();
+    expect(tables.subscriptions[0].next_attempt_at).toBe(
+      tables.subscription_invoices[0].due_at,
+    );
+  });
+});
+
+describe("collectNativePayments", () => {
+  const openInvoice = (overrides: Row = {}): Row => ({
+    id: "inv_1",
+    organization_id: ORG,
+    subscription_id: "sub_1",
+    number: "FX-0001",
+    plan: "pro",
+    interval: "monthly",
+    amount_usd: 30,
+    status: "open",
+    settlement_intent: null,
+    settlement_failure: null,
+    settlement_attempts: 0,
+    ...overrides,
+  });
+
+  it("starts collecting an invoice nobody has reached for yet", async () => {
+    uncollectedInvoices.mockResolvedValue([openInvoice()]);
+    settlementCapability.mockResolvedValue({
+      hasLinkedAccount: true,
+      hasRemittance: false,
+      hasCard: false,
+    });
+    debitInvoice.mockResolvedValue({ ok: true, processing: true, intent: "pi_sweep" });
+
+    const tables = { subscriptions: [liveSub()], subscription_events: [] as Row[] };
+    const stats = await collectNativePayments(makeClient(tables));
+
+    expect(stats.submitted).toBe(1);
+    expect(debitInvoice).toHaveBeenCalled();
+    // Handed to the poll; the renewal sweep must not also chase it.
+    expect(tables.subscriptions[0]).toMatchObject({ next_attempt_at: null });
+  });
+
+  it("never quietly charges a card nobody was asked about", async () => {
+    uncollectedInvoices.mockResolvedValue([openInvoice()]);
+    // A card on file is not consent to be charged by a background sweep — the
+    // dunning ladder is what reaches for it, in the open.
+    settlementCapability.mockResolvedValue({
+      hasLinkedAccount: false,
+      hasRemittance: false,
+      hasCard: true,
+    });
+
+    const stats = await collectNativePayments(
+      makeClient({ subscriptions: [liveSub()], subscription_events: [] }),
+    );
+
+    expect(stats.submitted).toBe(0);
+    expect(debitInvoice).not.toHaveBeenCalled();
+  });
+
+  it("leaves a wire-only org to send its own money", async () => {
+    uncollectedInvoices.mockResolvedValue([openInvoice()]);
+    settlementCapability.mockResolvedValue({
+      hasLinkedAccount: false,
+      hasRemittance: true,
+      hasCard: false,
+    });
+
+    const stats = await collectNativePayments(
+      makeClient({ subscriptions: [liveSub()], subscription_events: [] }),
+    );
+
+    expect(stats.submitted).toBe(0);
+    expect(debitInvoice).not.toHaveBeenCalled();
+  });
+
+  it("survives one invoice failing without abandoning the rest", async () => {
+    uncollectedInvoices.mockResolvedValue([
+      openInvoice({ id: "inv_1" }),
+      openInvoice({ id: "inv_2", number: "FX-0002" }),
+    ]);
+    settlementCapability.mockResolvedValue({
+      hasLinkedAccount: true,
+      hasRemittance: false,
+      hasCard: false,
+    });
+    debitInvoice
+      .mockRejectedValueOnce(new Error("stripe down"))
+      .mockResolvedValueOnce({ ok: true, processing: true, intent: "pi_2" });
+
+    const stats = await collectNativePayments(
+      makeClient({ subscriptions: [liveSub()], subscription_events: [] }),
+    );
+
+    expect(stats.submitted).toBe(1);
   });
 });

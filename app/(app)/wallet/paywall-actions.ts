@@ -13,6 +13,8 @@ export interface CommitActionResult {
   credits?: number;
   invoiceNumber?: string;
   planName?: string;
+  /** The invoice is already being pulled from a linked bank account. */
+  collecting?: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ export async function commitToPlanAction(formData: FormData): Promise<CommitActi
       credits: result.credits,
       invoiceNumber: result.invoiceNumber,
       planName: plan.name,
+      collecting: result.collecting,
     };
   } catch (err) {
     console.error("[paywall] commitToPlanAction failed:", err);

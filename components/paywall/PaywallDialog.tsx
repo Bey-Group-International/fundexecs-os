@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PLANS, PLAN_BY_KEY, formatCredits, formatUsd, type PlanInterval, type PlanKey } from "@/lib/billing";
@@ -29,7 +30,11 @@ export function PaywallDialog({
   const [interval, setInterval] = useState<PlanInterval>("monthly");
   const [choice, setChoice] = useState<PlanKey>(paywall.recommendedPlan ?? "pro");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ credits: number; invoice?: string } | null>(null);
+  const [done, setDone] = useState<{
+    credits: number;
+    invoice?: string;
+    collecting?: boolean;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
 
   function commit() {
@@ -40,7 +45,11 @@ export function PaywallDialog({
     startTransition(async () => {
       const res = await commitToPlanAction(fd);
       if (res?.ok) {
-        setDone({ credits: res.credits ?? 0, invoice: res.invoiceNumber });
+        setDone({
+          credits: res.credits ?? 0,
+          invoice: res.invoiceNumber,
+          collecting: res.collecting,
+        });
         router.refresh();
         // Straight back to what they were doing.
         onUnlocked(res.balance ?? 0);
@@ -69,9 +78,26 @@ export function PaywallDialog({
             <p className="mt-2 text-sm text-fg-secondary">
               {formatCredits(done.credits)} credits added.
               {done.invoice ? (
-                <> Invoice {done.invoice} is on its way — normal terms, nothing else to do now.</>
+                done.collecting ? (
+                  // The debit is already in flight, so "nothing to do" is
+                  // literally true rather than a way of saying "later".
+                  <> Invoice {done.invoice} is being collected from your linked account.</>
+                ) : (
+                  <> Invoice {done.invoice} is on its way — normal terms.</>
+                )
               ) : null}
             </p>
+            {done.invoice && !done.collecting ? (
+              // Encouraged, never required: the plan already started. Linking is
+              // what turns every future invoice into something that settles
+              // itself instead of something someone has to remember to send.
+              <p className="mt-2 text-xs text-fg-muted">
+                <Link href="/wallet" className="text-neural-300 underline hover:text-neural-200">
+                  Link a bank account
+                </Link>{" "}
+                and invoices collect themselves — no transfers to remember.
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={onDismiss}

@@ -232,6 +232,32 @@ export async function pollSettlement(
 }
 
 /** In-flight debits, oldest first — the sweep's poll list. */
+/**
+ * Open invoices nobody has tried to collect yet — no debit submitted, no card
+ * taken. These are what the sweep initiates against.
+ *
+ * An invoice can reach this state from several directions: raised when someone
+ * cleared the paywall, raised while the org had no linked account and left
+ * waiting for one, or raised by a renewal whose collection attempt died
+ * mid-flight. Before this existed the sweep only ever polled debits that were
+ * already running, so an invoice with no debit behind it was collected only if
+ * the renewal path happened to touch it again — which, for a first period, is
+ * not until the period ends.
+ */
+export async function uncollectedInvoices(
+  service: ServiceClient,
+  limit = 100,
+): Promise<SubscriptionInvoice[]> {
+  const { data } = await service
+    .from("subscription_invoices")
+    .select("*")
+    .eq("status", "open")
+    .is("settlement_intent", null)
+    .order("issued_at", { ascending: true })
+    .limit(limit);
+  return (data as SubscriptionInvoice[] | null) ?? [];
+}
+
 export async function inFlightDebits(
   service: ServiceClient,
   limit = 100,

@@ -77,6 +77,11 @@ export interface CommitResult {
   credits?: number;
   /** The invoice now outstanding for the period just unlocked. */
   invoiceNumber?: string;
+  /**
+   * The invoice is already being collected from a linked bank account. When
+   * false there is genuinely something left for the operator to do.
+   */
+  collecting?: boolean;
 }
 
 /**
@@ -139,5 +144,6 @@ export async function commitToPlan(
     balance: (wallet as { credits?: number } | null)?.credits ?? 0,
     credits: started.credits,
     invoiceNumber: started.invoice?.number,
+    collecting: started.collecting ?? false,
   };
 }
