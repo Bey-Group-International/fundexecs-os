@@ -19,6 +19,40 @@ four consequences, all of them visible to paying operators:
 None of these are processor bugs. They are the shape of a system that let an
 external service hold state the product needed to reason about.
 
+## The credit wall
+
+The product stays open until an action cannot be paid for. That moment is the
+wall — not a plan check, not a locked feature, just "this costs 3 credits and
+you have 1". It renders where the action was blocked (`components/paywall`),
+never as a redirect: an operator who hits it is in the middle of something.
+
+**Unlock on commitment.** Choosing a plan grants the period's credits
+*immediately* and leaves the invoice outstanding on normal terms. This is a
+deliberate extension of credit, and the only thing that makes the wall clearable
+in one click when settlement is a bank transfer that takes days. The exposure is
+one period; dunning closes a subscription that is never paid for.
+
+Two limits keep that exposure capped:
+
+- An org with a **written-off invoice** — a period it never paid for — is
+  refused a second one. Extending credit twice to someone who did not settle the
+  first time is how a capped exposure stops being capped.
+- An org **already on a plan** that has run its credits down is topping up, not
+  subscribing, and goes through the Wallet rather than getting another period on
+  credit.
+
+Eligibility for a period on credit is a fact about the ORG, not about the price
+of the action attempted — the commit path asks with `required: 0`, and deciding
+it only in the walled branch refused every commit.
+
+**Grandfathering.** Organizations created before `PAYWALL_EFFECTIVE_FROM` never
+hit the wall. People already using the product did not agree to a paywall, and a
+deploy is not the moment to tell them. An org whose age cannot be established is
+also exempt: failing open is the only safe direction.
+
+**The wall depends on `CREDITS_SPEND_ENABLED=true`.** `spendCredits` is a no-op
+without it, so nothing is ever refused and the wall never fires.
+
 ## Collecting: the invoice pays itself
 
 An invoice is collected on the best rail the org has, preferred in this order:

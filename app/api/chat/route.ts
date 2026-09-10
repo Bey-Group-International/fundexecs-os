@@ -76,7 +76,9 @@ export async function POST(request: Request) {
   // path below costs nothing real).
   const gate = await gateConversationalSpend(orgId, CONVERSATIONAL_COST.chat, "chat");
   if (!gate.ok) {
-    return new Response(JSON.stringify({ error: gate.error }), {
+    // Carry the wall itself, not just the refusal — the client resolves it in
+    // place rather than sending the operator off to the Wallet page.
+    return new Response(JSON.stringify({ error: gate.error, paywall: gate.paywall }), {
       status: gate.status,
       headers: { "Content-Type": "application/json" },
     });

@@ -11,6 +11,8 @@
 // well below a full orchestrated workflow step (15-30 credits): these are
 // single completions, not multi-step tool-dispatching agent runs.
 import { spendCredits } from "@/lib/credits";
+import { paywallFor } from "@/lib/paywall.server";
+import type { PaywallPayload } from "@/lib/paywall";
 
 export const CONVERSATIONAL_COST = {
   /** Earn's main conversational reply — streamed, with live DB context. */
@@ -36,6 +38,12 @@ export interface ConversationalGateResult {
   ok: boolean;
   status?: number;
   error?: string;
+  /**
+   * Present when the block is a paywall rather than an outage. Carries what the
+   * client needs to resolve it in place — the shortfall, the plan to offer, and
+   * whether one click can clear it — instead of sending someone off to a page.
+   */
+  paywall?: PaywallPayload;
 }
 
 /**
@@ -67,10 +75,25 @@ export async function gateConversationalSpend(
     };
   }
   if (!spent.ok) {
+    // Resolve the wall rather than just refusing: the caller renders it where
+    // the action was blocked, so nobody loses their place to go and pay.
+    //
+    // Best-effort on purpose. The refusal is already decided by this point, and
+    // a failure to look up the offer must not turn a clean 402 into a 500 — the
+    // operator still gets told what they need, just without the one-click path.
+    let paywall: PaywallPayload | undefined;
+    try {
+      paywall = (await paywallFor(orgId, cost)) ?? undefined;
+    } catch (err) {
+      console.error(`[conversational-gate] could not resolve the paywall (${label}):`, err);
+    }
     return {
       ok: false,
       status: 402,
-      error: `Insufficient credits: ${spent.balance ?? 0} available, ${cost} required. Top up on the Wallet page to continue.`,
+      error:
+        paywall?.message ??
+        `Insufficient credits: ${spent.balance ?? 0} available, ${cost} required.`,
+      ...(paywall ? { paywall } : {}),
     };
   }
   return { ok: true };

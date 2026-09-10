@@ -222,6 +222,16 @@ export interface StartSubscriptionInput {
    * over (a settled invoice claims and grants its own period).
    */
   skipInitialGrant?: boolean;
+  /**
+   * Start the plan and hand over its credits NOW, with the invoice outstanding,
+   * instead of waiting for the transfer to clear.
+   *
+   * This is a deliberate extension of credit and the only thing that makes a
+   * one-click unlock possible when settlement takes days (lib/paywall.server).
+   * The exposure is one period; dunning closes a subscription that is never paid
+   * for, and an org with an unpaid period behind it is refused a second one.
+   */
+  grantBeforeSettlement?: boolean;
 }
 
 /**
@@ -257,7 +267,11 @@ export async function startSubscription(
   // it is precisely the giveaway this rail used to be. The invoice carries the
   // period, and settling it is what starts the subscription (see
   // applySettledInvoices).
-  if (!input.alreadyPaid && remittanceConfigured()) {
+  //
+  // `grantBeforeSettlement` is the deliberate exception: the plan starts and its
+  // credits are handed over now, with the invoice outstanding. Only the paywall
+  // sets it, and only for an org entitled to a period on credit.
+  if (!input.alreadyPaid && !input.grantBeforeSettlement && remittanceConfigured()) {
     const issued = await issueInvoice(
       {
         orgId: input.orgId,
@@ -365,6 +379,47 @@ export async function startSubscription(
     note: `${plan.name} plan started`,
   });
 
+  // A commit-first start owes for the period it just handed over. Issue the
+  // invoice now so the money is actually chased — a period granted with no bill
+  // behind it is a gift, not a subscription.
+  let commitInvoice: SubscriptionInvoice | undefined;
+  if (input.grantBeforeSettlement && !input.alreadyPaid && remittanceConfigured()) {
+    const issued = await issueInvoice(
+      {
+        orgId: input.orgId,
+        subscriptionId: sub.id,
+        planKey: input.planKey,
+        interval: input.interval,
+        periodStart: now,
+        periodEnd: periodEnd(now, input.interval),
+        amountUsd: price,
+        // The credits were granted above; the invoice must not grant them again
+        // when it settles.
+        credits: 0,
+        note: `${plan.name} plan — first period (access started immediately)`,
+      },
+      service,
+    );
+    if (issued.ok && issued.invoice) {
+      commitInvoice = issued.invoice;
+      await recordEvent(service, {
+        orgId: input.orgId,
+        subscriptionId: sub.id,
+        kind: "invoice_issued",
+        plan: input.planKey,
+        interval: input.interval,
+        amountUsd: price,
+        reference: issued.invoice.number,
+        note: `${issued.invoice.number} issued — access started before settlement`,
+      });
+      // Don't chase it before it is due.
+      await service
+        .from("subscriptions")
+        .update({ next_attempt_at: issued.invoice.due_at })
+        .eq("id", sub.id);
+    }
+  }
+
   // Settle any pending referral chain now that the org is a subscriber.
   try {
     await awardReferralOnSubscription(input.orgId, service);
@@ -372,7 +427,7 @@ export async function startSubscription(
     console.error("[referral] awardReferralOnSubscription failed:", err);
   }
 
-  return { ok: true, subscription: sub, credits };
+  return { ok: true, subscription: sub, credits, invoice: commitInvoice };
 }
 
 export interface ChangePlanInput {

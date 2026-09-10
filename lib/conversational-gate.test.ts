@@ -4,7 +4,9 @@
 // scripted loop against any one of them had no bound at all.
 
 const spendCredits = jest.fn();
+const paywallFor = jest.fn();
 jest.mock("@/lib/credits", () => ({ spendCredits: (...a: unknown[]) => spendCredits(...a) }));
+jest.mock("@/lib/paywall.server", () => ({ paywallFor: (...a: unknown[]) => paywallFor(...a) }));
 
 import { anthropicConfigured, gateConversationalSpend, CONVERSATIONAL_COST } from "./conversational-gate";
 
@@ -52,6 +54,7 @@ describe("gateConversationalSpend", () => {
   it("rejects with a 402-shaped result and a clear message when credits are insufficient", async () => {
     process.env.ANTHROPIC_API_KEY = "sk-test";
     spendCredits.mockResolvedValue({ ok: false, insufficient: true, balance: 0 });
+    paywallFor.mockResolvedValue(null);
 
     const result = await gateConversationalSpend("org-1", CONVERSATIONAL_COST.meetingAnalyze, "meeting_analyze");
 
@@ -59,5 +62,39 @@ describe("gateConversationalSpend", () => {
     expect(result.status).toBe(402);
     expect(result.error).toContain("Insufficient credits");
     expect(result.error).toContain(String(CONVERSATIONAL_COST.meetingAnalyze));
+  });
+
+  it("carries the paywall so the caller can resolve it in place", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-test";
+    spendCredits.mockResolvedValue({ ok: false, insufficient: true, balance: 1 });
+    paywallFor.mockResolvedValue({
+      reason: "insufficient_credits",
+      balance: 1,
+      required: 3,
+      recommendedPlan: "pro",
+      canUnlockOnCommitment: true,
+      message: "This needs 3 credits and you have 1.",
+    });
+
+    const result = await gateConversationalSpend("org-1", CONVERSATIONAL_COST.chat, "chat");
+
+    expect(result.status).toBe(402);
+    expect(result.paywall).toMatchObject({ recommendedPlan: "pro", canUnlockOnCommitment: true });
+    // The wall's own wording wins — it names the shortfall and the way out.
+    expect(result.error).toBe("This needs 3 credits and you have 1.");
+  });
+
+  it("still refuses cleanly when the paywall lookup itself fails", async () => {
+    // The refusal is already decided; a lookup failure must not turn a 402 into
+    // a 500 and hand the operator a crash instead of an explanation.
+    process.env.ANTHROPIC_API_KEY = "sk-test";
+    spendCredits.mockResolvedValue({ ok: false, insufficient: true, balance: 0 });
+    paywallFor.mockRejectedValue(new Error("db down"));
+
+    const result = await gateConversationalSpend("org-1", CONVERSATIONAL_COST.chat, "chat");
+
+    expect(result.status).toBe(402);
+    expect(result.paywall).toBeUndefined();
+    expect(result.error).toContain("Insufficient credits");
   });
 });
