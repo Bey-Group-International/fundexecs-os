@@ -38,10 +38,6 @@ import {
   type PlanKey,
 } from "@/lib/billing";
 
-type HeaderStore = {
-  get(name: string): string | null;
-};
-
 // Read keys trimmed — values pasted into env UIs frequently carry a trailing
 // newline/space, which Stripe rejects as "Invalid API Key".
 function secretKey(): string {
@@ -80,8 +76,15 @@ export function getStripe(): Stripe {
 
 // Absolute base URL for Checkout success/cancel redirects. Prefer the request's
 // own origin so previews and localhost work, then the configured app URL.
-function appBaseUrl(): string {
-  const h = headers() as unknown as HeaderStore;
+async function appBaseUrl(): Promise<string> {
+  // headers() is async. It was previously cast through `unknown` to a
+  // hand-written sync shape, which silenced the type error and left `.get`
+  // being called on a Promise — "a.get is not a function", thrown inside
+  // createCheckout, surfacing as "Something went wrong starting checkout" on
+  // every plan purchase and every billing-portal open. No cast: if the return
+  // type changes again, this must fail to compile rather than fail in
+  // production.
+  const h = await headers();
   const origin = h.get("origin");
   if (origin) return origin.replace(/\/$/, "");
   const host = h.get("host");
@@ -147,7 +150,7 @@ export type CheckoutIntent =
 export async function createCheckout(
   intent: CheckoutIntent,
 ): Promise<{ clientSecret?: string; url?: string; error?: string }> {
-  const base = appBaseUrl();
+  const base = await appBaseUrl();
   let stripe: Stripe;
   try {
     stripe = getStripe();
@@ -412,7 +415,7 @@ export async function createPortalSession(
 
   try {
     const stripe = getStripe();
-    const base = appBaseUrl();
+    const base = await appBaseUrl();
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${base}${returnPath}`,
