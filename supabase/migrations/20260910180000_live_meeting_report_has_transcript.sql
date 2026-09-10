@@ -24,18 +24,47 @@
 -- "nothing to analyse" check, and this has to agree with it or the log offers a
 -- button that answers 409.
 --
--- The trim set is spelled out. Bare `btrim(text)` strips SPACES ONLY, which is
--- the wrong answer here: a transcript is built by joining lines with "\n", so a
--- meeting where every line came through empty produces "\n\n\n" — whitespace by
--- any reading, and non-empty to a space-only trim. Matching JavaScript's
--- String.prototype.trim on the characters that actually occur.
+-- The trim set is JavaScript's, exactly, because JavaScript is what it has to
+-- agree with -- `String.prototype.trim` in app/api/meetings/[id]/report/
+-- regenerate. That is ECMAScript WhiteSpace + LineTerminator: the six ASCII
+-- ones, NBSP, ZWNBSP (the BOM), LS, PS, and the Unicode Zs category.
+--
+-- Two ways to get this wrong, and they are not symmetric:
+--
+--   too FEW characters here -> a transcript of nothing but, say, NBSP counts as
+--     present, the log offers the button, and the route trims it to empty and
+--     answers 409. A control that fails when pressed.
+--   too MANY -> a real transcript could read as absent and the button would be
+--     missing. Also wrong, but it fails closed.
+--
+-- Matching exactly avoids both. Bare `btrim(text)` is the first mistake at its
+-- worst: it strips SPACES ONLY, so "\n\n\n" -- what a meeting whose lines all
+-- came through empty produces, since lines are joined with "\n" -- reads as a
+-- transcript.
+--
+-- Dropped first rather than relying on IF NOT EXISTS alone. The column is
+-- derived from full_transcript and holds nothing of its own, so re-deriving it
+-- is free; and if an earlier revision of this file ever landed somewhere with a
+-- different expression, IF NOT EXISTS would silently keep the wrong one.
 
 ALTER TABLE live_meeting_reports
-  ADD COLUMN IF NOT EXISTS has_transcript boolean
+  DROP COLUMN IF EXISTS has_transcript;
+
+ALTER TABLE live_meeting_reports
+  ADD COLUMN has_transcript boolean
   GENERATED ALWAYS AS (
     full_transcript IS NOT NULL
-    AND length(btrim(full_transcript, E' \t\n\r\f\v')) > 0
+    AND length(btrim(
+      full_transcript,
+      -- ASCII: TAB LF VT FF CR SP
+      E'\t\n\u000B\f\r ' ||
+      -- NBSP, ZWNBSP (BOM), LINE SEPARATOR, PARAGRAPH SEPARATOR
+      E'\u00A0\uFEFF\u2028\u2029' ||
+      -- Unicode Zs: OGHAM SPACE MARK, EN QUAD .. HAIR SPACE,
+      -- NARROW NO-BREAK SPACE, MEDIUM MATHEMATICAL SPACE, IDEOGRAPHIC SPACE
+      E'\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000'
+    )) > 0
   ) STORED;
 
 COMMENT ON COLUMN live_meeting_reports.has_transcript IS
-  'Generated: true when full_transcript holds more than whitespace. Lets the meeting log gate "Regenerate from transcript" without reading the transcript itself. Never written by the application.';
+  'Generated: true when full_transcript holds more than whitespace, using JavaScript''s trim set so it agrees with the regenerate route. Lets the meeting log gate "Regenerate from transcript" without reading the transcript itself. Never written by the application.';
