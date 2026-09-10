@@ -9,6 +9,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { getApprovalsCount } from "@/lib/inbox";
+import { getWalletBalance } from "@/lib/wallet";
 
 export interface AlertCounts {
   // Unread messages — capital/LP, partners, providers + email/chat/booking/video
@@ -63,4 +64,17 @@ export async function markDealAlertsRead(): Promise<void> {
     .eq("channel", "deal_share")
     .eq("unread", true)
     .eq("status", "open");
+}
+
+/**
+ * The active org's credit balance, for the top-nav display.
+ *
+ * Reads getWalletBalance rather than getWallet: this is polled to observe
+ * debits that happened after the page was rendered, so the per-request cache
+ * getWallet carries is exactly the wrong thing here.
+ */
+export async function getCreditBalance(): Promise<number> {
+  const ctx = await getSessionContext();
+  if (!ctx?.orgId) return 0;
+  return getWalletBalance(ctx.orgId);
 }
