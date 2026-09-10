@@ -195,8 +195,15 @@ function LogRow({
               )}
             </div>
           ) : entry.attended ? (
+            // Two different silences. A meeting with a transcript and no
+            // summary was transcribed and then failed to be analysed — telling
+            // its host "no report is generated until you end from inside the
+            // room" would be describing something they already did, next to a
+            // button offering to finish the job.
             <p className="text-sm text-fg-muted">
-              This meeting has no report. One is generated when a meeting is ended from inside the room.
+              {entry.canRegenerate
+                ? "The transcript is on file, but no summary was written from it — the analysis didn\u2019t finish."
+                : "This meeting has no report. One is generated when a meeting is ended from inside the room."}
             </p>
           ) : (
             // Not the same sentence as "no report", and the difference matters:
@@ -219,8 +226,11 @@ function LogRow({
               </Link>
               {/* Reads the transcript already on file and writes a fresh
                   report from it. Host only, and it appends rather than
-                  overwrites, so the previous report is never lost. */}
-              {entry.isHost && entry.hasReport && (
+                  overwrites, so the previous report is never lost.
+                  Gated on the TRANSCRIPT, not on the summary: a report whose
+                  analysis failed holds the one and not the other, and that is
+                  the row this button exists for. */}
+              {entry.isHost && entry.canRegenerate && (
                 <button
                   type="button"
                   onClick={() => void regenerate()}

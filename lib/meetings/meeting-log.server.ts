@@ -9,6 +9,9 @@
 // difference between one round trip and fifty-one. And full_transcript is
 // deliberately not selected: it is tens of kilobytes per meeting, the log never
 // shows it, and reading it here would mean pulling megabytes to draw a list.
+// `has_transcript` is selected in its place — a generated boolean saying
+// whether that text exists, which is all the log needs to decide whether to
+// offer "Regenerate from transcript".
 
 import type { createServerClient } from "@/lib/supabase/server";
 import type { MeetingLogReport, MeetingLogSource } from "@/lib/meetings/meeting-log";
@@ -27,7 +30,7 @@ export const MEETING_LOG_LIMIT = 200;
 // Written out rather than assembled: supabase-js parses the select string at
 // the type level to check the columns exist, and a string it cannot read as a
 // literal takes those checks with it.
-const LOG_SELECT = "id, room_code, title, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, status, attendees, is_draft, live_meeting_reports(summary, key_points, action_items, analysis, created_at)";
+const LOG_SELECT = "id, room_code, title, host_id, created_at, started_at, ended_at, scheduled_at, duration_minutes, status, attendees, is_draft, live_meeting_reports(summary, key_points, action_items, analysis, has_transcript, created_at)";
 
 export interface MeetingLogRow {
   meeting: MeetingLogSource & { is_draft: boolean | null };
@@ -82,7 +85,13 @@ export async function loadMeetingLog(
   return (data ?? []).map((row) => {
     const embedded = (row as { live_meeting_reports?: unknown }).live_meeting_reports;
     const report = (Array.isArray(embedded) ? embedded[0] : embedded) as
-      | { summary?: unknown; key_points?: unknown; action_items?: unknown; analysis?: unknown }
+      | {
+          summary?: unknown;
+          key_points?: unknown;
+          action_items?: unknown;
+          analysis?: unknown;
+          has_transcript?: unknown;
+        }
       | undefined;
 
     return {
@@ -107,6 +116,10 @@ export async function loadMeetingLog(
             key_points: report.key_points ?? null,
             action_items: report.action_items ?? null,
             analysis: (report.analysis as Record<string, unknown> | null) ?? null,
+            // Strictly `=== true`. A row read before the column existed, or
+            // through a select that omitted it, must not be taken as having a
+            // transcript: the log would offer a button that answers 409.
+            has_transcript: report.has_transcript === true,
           }
         : null,
     };

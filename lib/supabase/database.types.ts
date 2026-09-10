@@ -2721,6 +2721,13 @@ export type LiveMeetingReport = {
   key_points: Json;
   action_items: Json;
   full_transcript: string | null;
+  /**
+   * Generated in Postgres (migration 20260910180000): whether full_transcript
+   * holds more than whitespace. Read-only — the database rejects any write.
+   * It exists so the meeting log can gate "Regenerate from transcript" without
+   * selecting the transcript itself.
+   */
+  has_transcript: boolean;
   analysis: Json | null;
   created_at: string;
 };

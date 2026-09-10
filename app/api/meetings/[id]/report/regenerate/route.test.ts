@@ -171,6 +171,15 @@ describe("what it writes", () => {
     // button vanish the first time it is pressed.
     expect(json.entry.isHost).toBe(true);
   });
+
+  it("leaves the replaced row still regenerable", async () => {
+    wire();
+    const json = (await (await POST(req(), params)).json()) as { entry: Record<string, unknown> };
+    // The log swaps this entry in over the old one and gates the button on
+    // canRegenerate. The row just written holds the same transcript this route
+    // read to write it, so the button has to survive its own use here too.
+    expect(json.entry.canRegenerate).toBe(true);
+  });
 });
 
 describe("when the model gives nothing back", () => {
