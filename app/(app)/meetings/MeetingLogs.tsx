@@ -26,6 +26,19 @@ export function MeetingLogs({ entries: initialEntries }: { entries: MeetingLogEn
   // query and collapses the row you were reading.
   const [entries, setEntries] = useState(initialEntries);
 
+  // ...but local state must still yield to the server. Siblings under
+  // MeetingsLanding call router.refresh() after scheduling or saving a
+  // meeting, which re-renders this component with new props WITHOUT
+  // unmounting it. Without this the Logs tab's count badge (read from the
+  // prop) moved while the list below it kept a stale snapshot, and the two
+  // disagreed for the rest of the session. Adjusted during render rather than
+  // in an effect: an effect would paint the stale list once first.
+  const [lastProp, setLastProp] = useState(initialEntries);
+  if (initialEntries !== lastProp) {
+    setLastProp(initialEntries);
+    setEntries(initialEntries);
+  }
+
   const replaceEntry = useCallback(
     (next: MeetingLogEntry) =>
       setEntries((prev) => prev.map((e) => (e.id === next.id ? next : e))),

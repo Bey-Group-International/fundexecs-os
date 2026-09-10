@@ -15,6 +15,43 @@ const client = process.env.ANTHROPIC_API_KEY
   ? anthropicClient(process.env.ANTHROPIC_API_KEY, LONG_RUN_TIMEOUT_MS)
   : null;
 
+type ReportSupabase = Awaited<ReturnType<typeof createServerClient>>;
+
+/**
+ * Close a meeting out when the model could not summarise it.
+ *
+ * Two things here belong to the meeting, not to the model, so a failed
+ * analysis must not skip them:
+ *
+ *  - the transcript is kept on a report row, which is where the regenerate
+ *    route reads `full_transcript` from; and
+ *  - the meeting is marked ended. This route is the ONLY place that ever
+ *    marks one ended, and `/api/meetings/upcoming` lists anything that is
+ *    not — so skipping it strands a finished meeting in "Upcoming" forever.
+ *
+ * Deliberately not doing the rest of the success path: no institutional
+ * record and no auto-created tasks. There is nothing to record and no action
+ * items to create, and the retry re-runs both.
+ */
+async function endWithoutAnalysis(
+  supabase: ReportSupabase,
+  meetingId: string,
+  transcript: string,
+): Promise<void> {
+  await supabase.from("live_meeting_reports").insert({
+    meeting_id: meetingId,
+    summary: "",
+    key_points: [] as import("@/lib/supabase/database.types").Json,
+    action_items: [] as import("@/lib/supabase/database.types").Json,
+    full_transcript: transcript,
+    analysis: { ...EMPTY_REPORT } as import("@/lib/supabase/database.types").Json,
+  });
+  await supabase
+    .from("live_meetings")
+    .update({ status: "ended", ended_at: new Date().toISOString() })
+    .eq("id", meetingId);
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createServerClient();
@@ -51,7 +88,18 @@ export async function POST(req: Request) {
     // The prompt and schema live in lib/meetings/report-analysis so the
     // regenerate path produces the identical shape — the log reads
     // `analysis.decisions`, which exists in no column of its own.
-    let analysis: Record<string, unknown> = { ...EMPTY_REPORT };
+    // A model failure is preserved, then reported — it used to be preserved
+    // and then reported as success, which is the bug this shape exists to fix.
+    // MeetingRoom navigates to the report page on `res.ok` and only offers its
+    // "try again" on a failure, so answering 200 with an empty report sent the
+    // host to a blank page with no way back: the log's regenerate action is
+    // gated on `hasReport` (`summary.length > 0`), so it was hidden for that
+    // row too. Answering 500 puts the room in its retry state, and the retry
+    // re-posts the transcript it still holds in memory.
+    //
+    // A missing API key is NOT a failure and still takes the success path:
+    // generateMeetingReport returns the empty report rather than throwing.
+    let analysis: Record<string, unknown>;
     try {
       analysis = await generateMeetingReport(client, MODEL, {
         title: body.title ?? "Untitled",
@@ -60,10 +108,9 @@ export async function POST(req: Request) {
         durationSeconds: body.duration ?? null,
       });
     } catch (err) {
-      // A model failure must not cost the transcript: the report is saved
-      // empty and the meeting still ends, which is what happened before this
-      // was extracted.
       console.error("[/api/meetings/report] analysis failed", err);
+      await endWithoutAnalysis(supabase, body.meetingId, transcript);
+      throw err;
     }
 
     // Save to DB

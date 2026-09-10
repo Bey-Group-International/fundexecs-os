@@ -46,6 +46,13 @@ async function RecentMeetingsCard() {
         .from("live_meeting_reports")
         .select("summary, key_points, action_items")
         .eq("meeting_id", meeting.id)
+        // A meeting can hold several reports — the end-of-meeting route
+        // inserts, and regenerating from the log inserts again. Without an
+        // order and a limit, maybeSingle() sees more than one row, answers
+        // PGRST116 with data: null, and this card silently loses its summary
+        // and action badge. Newest wins, matching every other reader.
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       return { ...meeting, report };
     })

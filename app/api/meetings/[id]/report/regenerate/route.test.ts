@@ -161,6 +161,16 @@ describe("what it writes", () => {
       decisions: ["Wire on Friday"], hasReport: true, attended: true,
     });
   });
+
+  it("marks the entry as the host's, so the button survives its own use", async () => {
+    wire();
+    const json = (await (await POST(req(), params)).json()) as { entry: Record<string, unknown> };
+    // MeetingLogs gates the regenerate action on `entry.isHost && entry.hasReport`
+    // and swaps this entry in over the old one. Only the host reaches this
+    // route at all, so an entry that comes back with isHost false makes the
+    // button vanish the first time it is pressed.
+    expect(json.entry.isHost).toBe(true);
+  });
 });
 
 describe("when the model gives nothing back", () => {
