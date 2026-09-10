@@ -71,6 +71,39 @@ export async function getOrCreateReferralCode(
   }
 }
 
+// The public invite page at /join/[code] is served to signed-out strangers, so
+// it can't read through the session. This resolves a shared code to just the
+// referring firm's name — nothing else about that org crosses the boundary.
+// Returns null for an unknown code (and on any failure), which the page renders
+// as a generic invitation rather than an error.
+export async function getReferralInvite(
+  code: string,
+): Promise<{ code: string; orgName: string } | null> {
+  const clean = code.trim().toUpperCase();
+  if (!clean) return null;
+  try {
+    const service = createServiceClient();
+    const { data: codeRow } = await service
+      .from("referral_codes")
+      .select("organization_id")
+      .eq("code", clean)
+      .maybeSingle();
+    if (!codeRow) return null;
+
+    const { data: org } = await service
+      .from("organizations")
+      .select("name")
+      .eq("id", codeRow.organization_id)
+      .maybeSingle();
+    if (!org?.name) return null;
+
+    return { code: clean, orgName: org.name };
+  } catch (err) {
+    console.error("[gift-earn] getReferralInvite failed:", err);
+    return null;
+  }
+}
+
 export interface DownlineRow {
   orgId: string;
   name: string;

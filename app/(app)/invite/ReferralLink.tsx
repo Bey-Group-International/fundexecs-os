@@ -9,7 +9,7 @@ export function ReferralLink({ code }: { code: string }) {
   const [copied, setCopied] = useState<"link" | "code" | null>(null);
 
   useEffect(() => setOrigin(window.location.origin), []);
-  const link = origin ? `${origin}/join?ref=${code}` : `/join?ref=${code}`;
+  const link = origin ? `${origin}/join/${code}` : `/join/${code}`;
 
   // Only flip to the "Copied!" label once the write actually resolves — a
   // rejected clipboard (blocked permission, insecure origin) must not claim
