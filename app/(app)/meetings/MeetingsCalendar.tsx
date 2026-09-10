@@ -119,8 +119,14 @@ function toEditInitial(m: CalendarMeeting): MeetingEditInitial {
     objective: m.objective,
     agenda: m.agenda,
     preparationRequirements: m.preparation_requirements,
-    internalAttendees: internal.map((a) => a.email ?? a.name).join("\n"),
-    externalGuests: external.map((a) => (a.email ? `${a.name} <${a.email}>` : a.name)).join("\n"),
+    // Structured, not re-serialised into "Name <email>" for the form to parse
+    // back out again. Everyone is passed through, address or not: the edit
+    // screen shows the address-less ones separately rather than dropping them,
+    // so opening a meeting and saving it cannot quietly erase an attendee.
+    attendees: [
+      ...internal.map((a) => ({ name: a.name || a.email || "", email: a.email, type: "internal" as const })),
+      ...external.map((a) => ({ name: a.name || a.email || "", email: a.email, type: "external" as const })),
+    ].filter((a) => a.name || a.email),
     assignedCopilotAgent: m.assigned_copilot_agent,
     relatedRecordType: m.related_record_type,
     relatedRecordId: m.related_record_id,

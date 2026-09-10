@@ -123,20 +123,40 @@ export function toAttendee(person: PersonSuggestion): SelectedAttendee {
 /**
  * Does this suggestion answer to what was typed?
  *
- * Prefix-matching on each word rather than a bare `includes`, so "jo do"
- * finds "John Doe" and "doe" does not surface "doeling@". The address is
- * matched on its whole string, because people search for the part they
- * remember and that is as often the domain as the local part.
+ * Prefix-matching on each word, so "jo do" finds "John Doe" while "oh" finds
+ * nobody. The address is split on its punctuation and each piece is a prefix
+ * target too — people search by the local part ("jane") as readily as by the
+ * domain ("fund"), and both are words to them even though the address is one
+ * string.
+ *
+ * Matching the address as a bare substring instead is the obvious shortcut and
+ * it quietly undoes the rest: nearly every address is derived from a name, so
+ * `jane.doe@fund.test` contains "ane", "oe" and "und", and the careful prefix
+ * rule on names buys nothing. Prefix everywhere, or prefix nowhere.
+ *
+ * The exception is a query carrying "@" or "." — that is address-shaped, so it
+ * is somebody typing or pasting an actual address or domain rather than a name,
+ * and it is matched against the whole string. Nothing else could serve it:
+ * punctuation is exactly what the word split throws away.
  */
 export function matchesQuery(person: PersonSuggestion, query: string): boolean {
-  const q = fold(query);
-  if (!q) return true;
-  const terms = q.split(" ").filter(Boolean);
-  const words = fold(`${person.name} ${person.subtitle ?? ""}`).split(" ").filter(Boolean);
+  const raw = query.trim().toLowerCase();
+  if (!raw) return true;
   const email = person.email.toLowerCase();
-  return terms.every(
-    (term) => email.includes(term) || words.some((word) => word.startsWith(term)),
-  );
+
+  if (raw.includes("@") || raw.includes(".")) {
+    return email.includes(raw) || fold(person.name).includes(fold(raw));
+  }
+
+  const words = [
+    ...fold(`${person.name} ${person.subtitle ?? ""}`).split(" "),
+    ...email.split(/[^a-z0-9]+/),
+  ].filter(Boolean);
+
+  return fold(raw)
+    .split(" ")
+    .filter(Boolean)
+    .every((term) => words.some((word) => word.startsWith(term)));
 }
 
 /** Rank order between sources: teammates first, then saved contacts, then history. */
