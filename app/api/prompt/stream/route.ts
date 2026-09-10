@@ -48,7 +48,12 @@ export async function POST(request: Request) {
         // scripting requests against this route had zero cost metering.
         const gate = await gateConversationalSpend(auth.ctx.orgId, CONVERSATIONAL_COST.promptPlan, "prompt_plan");
         if (!gate.ok) {
-          send({ type: "error", reason: "insufficient_credits", message: gate.error });
+          send({
+            type: "error",
+            reason: "insufficient_credits",
+            message: gate.error,
+            paywall: gate.paywall,
+          });
           return;
         }
         send({ type: "planning" });
