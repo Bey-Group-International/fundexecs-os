@@ -108,6 +108,7 @@ export const MORE_GROUPS: MoreGroup[] = [
       { key: "notifications", label: "Notifications & Inbox", href: "/inbox", icon: BellIcon, desc: "Approvals, replies & alerts" },
       { key: "profile", label: "Profile", href: "/settings/account", icon: UserIcon, desc: "Your account details" },
       { key: "wallet", label: "Wallet & Billing", href: "/wallet", icon: WalletIcon, desc: "Credits & subscription" },
+      { key: "invite", label: "Invite & Earn", href: "/invite", icon: UsersIcon, desc: "Your invite link & partner network" },
       { key: "settings", label: "Settings", href: "/settings", icon: SettingsIcon, desc: "Preferences & integrations" },
       { key: "help", label: "Help & Support", href: "/settings", icon: HelpIcon, desc: "Guides & assistance" },
     ],

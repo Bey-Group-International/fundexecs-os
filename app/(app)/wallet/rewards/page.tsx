@@ -98,9 +98,9 @@ export default async function WalletRewardsPage() {
       </h2>
       <GamificationPanel />
 
-      {/* Earn more — referral / gift flywheel, moved off the wallet. */}
+      {/* Earn more — the referral flywheel, which lives on its own page. */}
       <Link
-        href="/gift"
+        href="/invite"
         className="group relative mt-10 flex items-center gap-3 overflow-hidden rounded-2xl border border-line/60 bg-surface-1/30 p-5 transition hover:border-neural-400/40 hover:bg-surface-1/50"
       >
         <span className="absolute left-0 top-0 h-full w-0.5 rounded-l-2xl bg-neural-400/50 opacity-0 transition group-hover:opacity-100" />
@@ -111,7 +111,7 @@ export default async function WalletRewardsPage() {
           <p className="mt-1 text-sm font-medium text-fg-primary">Earn credits instead of buying them</p>
           <p className="mt-0.5 text-xs text-fg-secondary">
             Introduce other firms and build a partner network — escalating rewards three levels
-            deep, plus milestone bonuses. Or gift credits to a colleague or portfolio company.
+            deep, plus milestone bonuses.
           </p>
         </div>
         <span className="font-mono text-fg-muted transition group-hover:text-neural-300">→</span>
