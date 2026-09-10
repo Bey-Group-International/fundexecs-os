@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   avatarColorFor,
   initialsFor,
@@ -43,7 +43,12 @@ export function AttendeePicker({
 
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listId = useId("attendee-listbox");
+  // React's own useId, not a counter: it derives the id from the component's
+  // position in the tree, so the server and the client agree. A module-global
+  // counter increments in render order, which differs between an SSR pass and
+  // hydration — the ids then disagree and React reports a mismatch on the very
+  // attributes (aria-controls, aria-activedescendant) that make this a combobox.
+  const listId = useId();
 
   const selectedEmails = useMemo(() => value.map((a) => a.email), [value]);
 
@@ -314,11 +319,4 @@ function Avatar({
       {initialsFor(person)}
     </span>
   );
-}
-
-/** Stable per-instance id, so two pickers on one page don't share a listbox id. */
-let idSeq = 0;
-function useId(prefix: string): string {
-  const [id] = useState(() => `${prefix}-${(idSeq += 1)}`);
-  return id;
 }

@@ -351,6 +351,12 @@ export function MeetingEditScreen({
                 reminderMinutes: payload.reminderMinutes,
                 externalCalendarProvider: payload.externalCalendarProvider,
                 externalCalendarSyncEnabled: payload.externalCalendarSyncEnabled,
+                // Must be sent even when false. This is an explicit projection,
+                // not a spread, so a field left out is not "unchanged" — it is
+                // never transmitted, the PATCH route reads undefined and skips
+                // the column, and a host who switched quick access OFF keeps a
+                // meeting that lets anyone holding the link walk straight in.
+                guestQuickAccess: payload.guestQuickAccess,
               }
             : payload,
         ),
@@ -783,7 +789,9 @@ export function MeetingEditScreen({
             <div className="mt-4 rounded-xl border border-gold-400/35 bg-gold-400/5 px-3 py-3 sm:ml-11">
               <p className="text-xs font-semibold text-fg-primary">Meeting saved — here is the guest link</p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-fg-muted">
-                Anyone with this link can ask to join. External guests wait for you to let them in.
+                {guestQuickAccess
+                  ? "Quick access is on — anyone with this link joins immediately, without waiting for you."
+                  : "Anyone with this link can ask to join. External guests wait for you to let them in."}
               </p>
               <div className="mt-2.5">
                 <MeetingShareLink

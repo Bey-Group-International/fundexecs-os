@@ -112,7 +112,7 @@ export function SchedulingLinkCard() {
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4">
+      <div className="w-full">
         <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-1 px-4 py-5 text-sm text-fg-muted">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-400)] border-t-transparent" />
           Loading your scheduling link…
@@ -123,7 +123,7 @@ export function SchedulingLinkCard() {
 
   if (!snapshot) {
     return error ? (
-      <div className="mx-auto w-full max-w-3xl px-4">
+      <div className="w-full">
         <p className="rounded-xl border border-line bg-surface-1 px-4 py-4 text-sm text-fg-muted">
           {error}
         </p>
