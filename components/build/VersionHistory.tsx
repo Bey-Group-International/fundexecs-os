@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { listDocumentVersions, restoreDocumentVersion } from "./materials-actions";
+import { listDocumentVersions, restoreDocumentVersion } from "@/components/documents/document-actions";
 import type { DocumentVersion } from "@/lib/supabase/database.types";
 
 function relativeTime(iso: string): string {

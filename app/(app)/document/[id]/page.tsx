@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 const SECTION_LABEL = new Map(DATA_ROOM_SECTIONS.map((s) => [s.key, s.label]));
 
 // Document builder: manual editing, parse/compose-from-data, or Earn chat.
-// Reached by clicking a file in the Materials & Data Room.
+// Reached by clicking a document in the Documents library. Editing here never
+// changes who can see the document — that is decided by publishing it into a
+// data room.
 export default async function DocumentBuilderPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const ctx = await getSessionContext();
@@ -33,10 +35,10 @@ export default async function DocumentBuilderPage(props: { params: Promise<{ id:
       <header className="mb-5">
         <div className="flex items-center justify-between gap-4">
           <Link
-            href="/build/data_room"
+            href="/build/documents"
             className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold-300 hover:underline"
           >
-            ← Materials &amp; Data Room
+            ← Documents
           </Link>
           {!doc.storage_key && doc.content && (
             <a

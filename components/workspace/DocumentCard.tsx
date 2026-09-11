@@ -79,8 +79,8 @@ export function WorkspaceDocumentList({ docs }: { docs: WorkspaceDoc[] }) {
           Start from a template or create a blank note.
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          <Link href="/build/data_room" className="fx-btn-primary">
-            Open Data Room
+          <Link href="/build/documents" className="fx-btn-primary">
+            Open Documents
           </Link>
           <Link href="/workspace" className="fx-btn-secondary">
             Ask Earn

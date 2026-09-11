@@ -52,7 +52,7 @@ export function MobileDealCard({ deal }: { deal: MobileDeal }) {
       href: `/earn?ask=${encodeURIComponent(`Create a task to advance ${deal.name}`)}`,
       tone: "neutral",
     },
-    { key: "docs", label: "Docs", icon: DataRoomIcon, href: "/build/data_room", tone: "neutral" },
+    { key: "docs", label: "Docs", icon: DataRoomIcon, href: "/build/documents", tone: "neutral" },
     {
       key: "earn",
       label: "Ask Earn",

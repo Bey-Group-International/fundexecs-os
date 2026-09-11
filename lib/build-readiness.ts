@@ -309,7 +309,7 @@ export function computeBuildReadiness(input: BuildReadinessInput): BuildReadines
   // hub order so they're built front-to-back (profile → thesis → … → team).
   // Only once the foundation is complete does the next step point at the data
   // room — and then at the single highest-leverage missing section, deep-linked
-  // straight to that section's builder in the Materials module.
+  // straight to that section's builder in the Documents library.
   const foundationModules = [profile, thesisMod, brand, entity, trackRecord, team];
   let nextAction: NextAction | null = null;
   for (const m of foundationModules) {
@@ -322,10 +322,11 @@ export function computeBuildReadiness(input: BuildReadinessInput): BuildReadines
   const topGap = dataRoomSummary.suggestions[0] ?? null;
   if (!nextAction && topGap) {
     nextAction = {
-      moduleKey: "data_room",
-      moduleLabel: "Materials & Data Room",
+      moduleKey: "documents",
+      moduleLabel: "Documents",
       label: topGap.suggestion,
-      href: `/build/data_room#section-${topGap.key}`,
+      // Documents owns creation; a gap is filled there, then published to a room.
+      href: `/build/documents#section-${topGap.key}`,
     };
   }
 

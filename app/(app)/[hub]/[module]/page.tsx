@@ -70,9 +70,6 @@ const PortfolioHealthLive = nextDynamic(() =>
 const ThesisLive = nextDynamic(() =>
   import("@/components/intelligence/ThesisLive").then((m) => m.ThesisLive),
 );
-const WorkspaceDocumentListLive = nextDynamic(() =>
-  import("@/components/workspace/WorkspaceDocumentListLive").then((m) => m.WorkspaceDocumentListLive),
-);
 const PeopleLookupLive = nextDynamic(() =>
   import("@/components/source/PeopleLookupLive").then((m) => m.PeopleLookupLive),
 );
@@ -123,12 +120,14 @@ export const dynamic = "force-dynamic";
 export default async function ModulePage(
   props: {
     params: Promise<{ hub: string; module: string }>;
-    searchParams?: Promise<{ q?: string | string[] }>;
+    searchParams?: Promise<{ q?: string | string[]; room?: string | string[] }>;
   }
 ) {
   const searchParams = await props.searchParams;
   const params = await props.params;
   const q = Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q;
+  // Which data room the Materials & Data Room module should open (?room=<id>).
+  const room = Array.isArray(searchParams?.room) ? searchParams?.room[0] : searchParams?.room;
   const initialPrompt = typeof q === "string" && q.trim() ? q : undefined;
 
   if (params.hub === "source") {
@@ -182,19 +181,13 @@ export default async function ModulePage(
     );
   }
 
-  // Build › Data Room — Workspace Document List.
+  // Build › Materials & Data Room — the sharing surface. The knowledge-workspace
+  // document list that used to sit on top of this page moved to Documents, which
+  // owns every view of the library; a room shows only what it publishes.
   if (params.hub === "build" && params.module === "data_room") {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
-        <section>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
-            Knowledge Workspace
-          </p>
-          <WorkspaceDocumentListLive />
-        </section>
-        <div className="mt-8 border-t border-line pt-8">
-          <ModuleView hub={params.hub} module={params.module} />
-        </div>
+        <ModuleView hub={params.hub} module={params.module} roomId={room} />
       </div>
     );
   }

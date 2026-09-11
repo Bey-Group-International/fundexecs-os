@@ -1,6 +1,6 @@
 "use client";
 
-import { deleteDocument } from "./materials-actions";
+import { deleteDocument } from "@/components/documents/document-actions";
 
 export function DeleteDocumentButton({ id, name }: { id: string; name: string }) {
   return (

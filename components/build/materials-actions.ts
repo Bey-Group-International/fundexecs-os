@@ -1,203 +1,16 @@
 "use server";
 
+// Sharing, not authoring. This file governs who can see a data room: link
+// creation with its gates, password verification, dwell tracking, and
+// revocation. Documents themselves are created and edited in the library
+// (components/documents/document-actions.ts) and reach a room only through the
+// explicit publish manifest (components/build/room-actions.ts).
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
-import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
-import type { Document, DocumentVersion } from "@/lib/supabase/database.types";
-import { sendEmail, shareGrantedEmail, documentUpdatedEmail, escapeHtml } from "@/lib/email";
+import { sendEmail, shareGrantedEmail, escapeHtml } from "@/lib/email";
 
-const SECTION_KEYS = new Set(DATA_ROOM_SECTIONS.map((s) => s.key));
 const ROOM = "/build/data_room";
-
-function section(formData: FormData): string {
-  const s = String(formData.get("section") ?? "").trim();
-  return SECTION_KEYS.has(s) ? s : "other";
-}
-
-// Accept only real http(s) links so a stored document URL can never carry a
-// javascript:/data: payload into the rendered <a href> (the renderer also guards).
-function safeLink(raw: string): string | null {
-  try {
-    const u = new URL(raw.trim());
-    if (u.protocol === "http:" || u.protocol === "https:") return u.href;
-  } catch {
-    // not a valid absolute URL
-  }
-  return null;
-}
-
-// Add a document as a link (no file storage). The external URL is held in
-// `storage_key`; the section is the `doc_type`.
-export async function addDocument(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const name = String(formData.get("name") ?? "").trim();
-  const link = safeLink(String(formData.get("url") ?? ""));
-  if (!name || !link) return;
-  const supabase = await createServerClient();
-  await supabase.from("documents").insert({
-    organization_id: ctx.orgId,
-    name,
-    doc_type: section(formData),
-    storage_key: link,
-    mime_type: "text/uri-list",
-    uploaded_by: ctx.userId,
-  });
-  revalidatePath(ROOM);
-}
-
-// Create a document in-app: a written note/memo stored inline (no file, no link).
-export async function createDocument(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const name = String(formData.get("name") ?? "").trim();
-  const content = String(formData.get("content") ?? "").trim();
-  if (!name || !content) return;
-  const supabase = await createServerClient();
-  await supabase.from("documents").insert({
-    organization_id: ctx.orgId,
-    name,
-    doc_type: section(formData),
-    content,
-    mime_type: "text/markdown",
-    uploaded_by: ctx.userId,
-  });
-  revalidatePath(ROOM);
-}
-
-// Rename / re-categorize a document, and update its inline content when present.
-export async function updateDocument(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const id = String(formData.get("id") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  if (!id || !name) return;
-
-  const patch: Partial<Document> = { name, doc_type: section(formData) };
-  // Only the fields actually submitted are touched.
-  if (formData.get("content") !== null) {
-    patch.content = String(formData.get("content") ?? "").trim() || null;
-  }
-  if (formData.get("url") !== null) {
-    patch.storage_key = safeLink(String(formData.get("url") ?? "")) ?? null;
-  }
-
-  const supabase = await createServerClient();
-  await supabase.from("documents").update(patch).eq("id", id).eq("organization_id", ctx.orgId);
-
-  // Snapshot version on every save (content only — links have no content to version).
-  if (patch.content !== undefined) {
-    await supabase.from("document_versions").insert({
-      document_id: id,
-      organization_id: ctx.orgId,
-      content: patch.content ?? null,
-      name: patch.name ?? name,
-      saved_by: ctx.userId,
-    } as never);
-  }
-  revalidatePath(ROOM);
-
-  // Notify LP recipients on all active shares for this org.
-  void notifyShareRecipientsDocumentUpdated(ctx.orgId, name).catch(() => undefined);
-}
-
-async function notifyShareRecipientsDocumentUpdated(orgId: string, docName: string): Promise<void> {
-  const supabase = await createServerClient();
-  // Fetch org name and active shares with recipient emails in one pass.
-  const [{ data: orgRow }, { data: shares }] = await Promise.all([
-    supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
-    supabase
-      .from("data_room_shares")
-      .select("token, recipient_email")
-      .eq("organization_id", orgId)
-      .is("revoked_at", null)
-      .not("recipient_email", "is", null),
-  ]);
-  if (!orgRow || !shares || shares.length === 0) return;
-  const orgName = orgRow.name as string;
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.fundexecs.com";
-  await Promise.all(
-    (shares as Array<{ token: string; recipient_email: string | null }>)
-      .filter((s) => s.recipient_email)
-      .map((s) => {
-        const { subject, html } = documentUpdatedEmail(orgName, docName, `${baseUrl}/dataroom/${s.token}`);
-        return sendEmail({ orgId, to: { name: "", email: s.recipient_email! }, subject, htmlBody: html });
-      }),
-  );
-}
-
-export async function deleteDocument(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const id = String(formData.get("id") ?? "");
-  if (!id) return;
-  const supabase = await createServerClient();
-  await supabase.from("documents").delete().eq("id", id).eq("organization_id", ctx.orgId);
-  revalidatePath(ROOM);
-}
-
-// Move a document up/down within its section. Normalizes sort_order across the
-// section, then swaps the target with its neighbour.
-export async function moveDocument(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const id = String(formData.get("id") ?? "");
-  const dir = String(formData.get("dir") ?? "");
-  if (!id || (dir !== "up" && dir !== "down")) return;
-  const orgId = ctx.orgId;
-
-  const supabase = await createServerClient();
-  const { data: target } = await supabase
-    .from("documents")
-    .select("*")
-    .eq("id", id)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  const doc = target as Document | null;
-  if (!doc) return;
-
-  const { data: peerRows } = await supabase
-    .from("documents")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("doc_type", doc.doc_type ?? "other")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
-  const peers = (peerRows ?? []) as Document[];
-
-  const idx = peers.findIndex((p) => p.id === id);
-  const swapWith = dir === "up" ? idx - 1 : idx + 1;
-  if (idx < 0 || swapWith < 0 || swapWith >= peers.length) return;
-
-  // Re-number sequentially after swapping the two neighbours, so order is stable
-  // even when prior sort_order values were all 0 (the column default).
-  const reordered = [...peers];
-  [reordered[idx], reordered[swapWith]] = [reordered[swapWith], reordered[idx]];
-  await Promise.all(
-    reordered.map((p, i) =>
-      supabase.from("documents").update({ sort_order: i }).eq("id", p.id).eq("organization_id", orgId),
-    ),
-  );
-  revalidatePath(ROOM);
-}
-
-// Set a document's publish status (draft | review | ready).
-export async function updateDocumentStatus(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const id = String(formData.get("id") ?? "");
-  const s = String(formData.get("status") ?? "");
-  if (!id || !["draft", "review", "ready"].includes(s)) return;
-  const supabase = await createServerClient();
-  await supabase
-    .from("documents")
-    .update({ status: s as import("@/lib/supabase/database.types").DocumentStatus })
-    .eq("id", id)
-    .eq("organization_id", ctx.orgId);
-  revalidatePath(ROOM);
-}
 
 // --- Shareable data-room links --------------------------------------------
 
@@ -219,9 +32,14 @@ async function comparePassword(password: string, stored: string): Promise<boolea
   return actualHash === expectedHash;
 }
 
+// Create a link into one room. A link is always scoped to a room: there is no
+// "share everything" link, because the library holds drafts and internal-only
+// material that must never be reachable from a token.
 export async function createShare(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
+  const roomId = String(formData.get("room_id") ?? "").trim();
+  if (!roomId) return;
   const label = String(formData.get("label") ?? "").trim() || null;
   const days = Number(String(formData.get("expires_in_days") ?? "").trim());
   const expires_at =
@@ -248,10 +66,22 @@ export async function createShare(formData: FormData): Promise<void> {
   }
 
   const supabase = await createServerClient();
+  // Re-check the room against the caller's org so a stray id can't mint a link
+  // into another firm's room.
+  const { data: room } = await supabase
+    .from("data_rooms")
+    .select("id")
+    .eq("id", roomId)
+    .eq("organization_id", ctx.orgId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (!room) return;
+
   const { data: inserted } = await supabase
     .from("data_room_shares")
     .insert({
       organization_id: ctx.orgId,
+      room_id: roomId,
       label,
       expires_at,
       created_by: ctx.userId,
@@ -329,7 +159,7 @@ export async function trackDwell(formData: FormData): Promise<void> {
   // Validate the share exists and is still valid before recording.
   const { data: share } = await supabase
     .from("data_room_shares")
-    .select("organization_id, revoked_at, expires_at, label, notify_on_open, created_by")
+    .select("organization_id, room_id, revoked_at, expires_at, label, notify_on_open, created_by")
     .eq("id", shareId)
     .maybeSingle();
   if (!share || share.revoked_at) return;
@@ -337,6 +167,7 @@ export async function trackDwell(formData: FormData): Promise<void> {
 
   const shareData = share as {
     organization_id: string;
+    room_id: string | null;
     revoked_at: string | null;
     expires_at: string | null;
     label: string | null;
@@ -349,6 +180,7 @@ export async function trackDwell(formData: FormData): Promise<void> {
     .insert({
       organization_id: shareData.organization_id,
       share_id: shareId,
+      room_id: shareData.room_id,
       document_id: documentId,
       kind: documentId ? "document" : "room",
       viewer_email: viewerEmail,
@@ -426,81 +258,4 @@ export async function revokeShare(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   revalidatePath(ROOM);
-}
-
-// --- Document version history --------------------------------------------------
-export async function listDocumentVersions(docId: string): Promise<DocumentVersion[]> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return [];
-  const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("document_versions")
-    .select("*")
-    .eq("document_id", docId)
-    .eq("organization_id", ctx.orgId)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  return (data ?? []) as DocumentVersion[];
-}
-
-export async function restoreDocumentVersion(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const versionId = String(formData.get("version_id") ?? "");
-  const docId = String(formData.get("doc_id") ?? "");
-  if (!versionId || !docId) return;
-  const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("document_versions")
-    .select("*")
-    .eq("id", versionId)
-    .eq("organization_id", ctx.orgId)
-    .maybeSingle();
-  const version = data as DocumentVersion | null;
-  if (!version) return;
-  await supabase
-    .from("documents")
-    .update({ content: version.content, name: version.name })
-    .eq("id", docId)
-    .eq("organization_id", ctx.orgId);
-  revalidatePath(ROOM);
-  revalidatePath(`/document/${docId}`);
-}
-
-// Open a section's builder: jump to the section's most recent document, creating
-// an empty one first when the section has none. Drives the coverage list — each
-// section/document is a click into the document builder.
-export async function openSection(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const sectionKey = String(formData.get("section") ?? "").trim();
-  const sectionDef = DATA_ROOM_SECTIONS.find((s) => s.key === sectionKey);
-  if (!sectionDef) return;
-
-  const supabase = await createServerClient();
-  const { data: existing } = await supabase
-    .from("documents")
-    .select("id")
-    .eq("organization_id", ctx.orgId)
-    .eq("doc_type", sectionDef.key)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let id = existing?.id;
-  if (!id) {
-    const { data: created } = await supabase
-      .from("documents")
-      .insert({
-        organization_id: ctx.orgId,
-        name: sectionDef.label,
-        doc_type: sectionDef.key,
-        mime_type: "text/markdown",
-        uploaded_by: ctx.userId,
-      })
-      .select("id")
-      .maybeSingle();
-    id = created?.id;
-  }
-  if (id) redirect(`/document/${id}`);
 }

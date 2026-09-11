@@ -25,16 +25,30 @@ function fmtDate(iso: string): string {
 /**
  * Renders a table of NDA signatures for all data room shares belonging to
  * the current user's organisation.  Intended to sit alongside ViewerAnalytics
- * inside the Materials module.
+ * inside the Materials module. Scoped by `roomId` so each room shows the
+ * counterparties who signed to enter it.
  */
-export async function NdaSignatures() {
+export async function NdaSignatures({ roomId }: { roomId?: string } = {}) {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return null;
 
   const supabase = await createServerClient();
 
+  // Signatures hang off a share, so narrowing to a room means narrowing to that
+  // room's shares first.
+  let shareIds: string[] | null = null;
+  if (roomId) {
+    const { data: shareRows } = await supabase
+      .from("data_room_shares")
+      .select("id")
+      .eq("organization_id", ctx.orgId)
+      .eq("room_id", roomId);
+    shareIds = ((shareRows ?? []) as { id: string }[]).map((r) => r.id);
+    if (shareIds.length === 0) return <EmptyState />;
+  }
+
   // Fetch signatures for this org, joining the share label for display.
-  const { data: rows } = await supabase
+  const query = supabase
     .from("nda_signatures")
     .select(
       `
@@ -48,7 +62,9 @@ export async function NdaSignatures() {
       data_room_shares ( label, token )
     `
     )
-    .eq("organization_id", ctx.orgId)
+    .eq("organization_id", ctx.orgId);
+
+  const { data: rows } = await (shareIds ? query.in("share_id", shareIds) : query)
     .order("signed_at", { ascending: false })
     .limit(200);
 
@@ -58,16 +74,7 @@ export async function NdaSignatures() {
 
   const signatures = (rows ?? []) as unknown as Row[];
 
-  if (signatures.length === 0) {
-    return (
-      <div className="rounded-xl border border-line bg-surface-1 px-6 py-10 text-center">
-        <p className="text-sm text-fg-muted">No NDA signatures recorded yet.</p>
-        <p className="mt-1 text-xs text-fg-muted">
-          Signatures appear here once viewers sign the NDA gate on a shared data room.
-        </p>
-      </div>
-    );
-  }
+  if (signatures.length === 0) return <EmptyState />;
 
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface-1">
@@ -118,6 +125,17 @@ export async function NdaSignatures() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-xl border border-line bg-surface-1 px-6 py-10 text-center">
+      <p className="text-sm text-fg-muted">No NDA signatures recorded yet.</p>
+      <p className="mt-1 text-xs text-fg-muted">
+        Signatures appear here once viewers sign the NDA gate on a link into this room.
+      </p>
     </div>
   );
 }

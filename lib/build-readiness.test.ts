@@ -100,9 +100,11 @@ describe("computeBuildReadiness — data room dimension", () => {
   it("once the foundation is complete, the next-best action points at a missing material", () => {
     const r = computeBuildReadiness(fullFoundation());
     expect(r.nextAction).not.toBeNull();
-    expect(r.nextAction!.moduleKey).toBe("data_room");
+    // Documents owns creation, so a missing material sends you there — not to
+    // the data room, which only shares what has already been published.
+    expect(r.nextAction!.moduleKey).toBe("documents");
     // Deep-links straight to the section's builder so scroll + highlight can fire.
-    expect(r.nextAction!.href).toMatch(/^\/build\/data_room#section-/);
+    expect(r.nextAction!.href).toMatch(/^\/build\/documents#section-/);
   });
 
   it("exposes a compact data-room digest for command-center snapshots", () => {
