@@ -10,7 +10,7 @@ export const maxDuration = 60;
 // (delegate-vs-execute + recommendation + action bullets + closing). Authed
 // like the rest of the (app) surface; the spend gate is a no-op when Claude
 // isn't configured, so the deterministic fallback runs free. Consumed by the
-// session composer's "Plan with Earn" action and the Build hub's Plan module.
+// session composer's "Plan with Earn" action.
 export async function POST(request: Request) {
   const auth = await requireOrgContext();
   if (!auth.ok) {
