@@ -161,6 +161,15 @@ export function DataRoomViewer({
   const [selected, setSelected] = useState<string>(nav[0]?.key ?? "overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // The nav can change under a live selection — most visibly in the GP preview,
+  // where scoping to a link removes the section being read. Without this the
+  // content panel matches nothing and renders an empty pane with no nav item
+  // highlighted; fall back to the first item that still exists.
+  useEffect(() => {
+    if (nav.length === 0) return;
+    if (!nav.some((n) => n.key === selected)) setSelected(nav[0].key);
+  }, [nav, selected]);
+
   // ---------------------------------------------------------------------------
   // Dwell tracking
   // ---------------------------------------------------------------------------

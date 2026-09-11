@@ -47,7 +47,15 @@ function Flag({ tone, children, title }: { tone: "amber" | "muted"; children: st
   );
 }
 
-function DocRow({ roomId, doc }: { roomId: string; doc: RoomContentDoc }) {
+function DocRow({
+  roomId,
+  doc,
+  hideReorder,
+}: {
+  roomId: string;
+  doc: RoomContentDoc;
+  hideReorder?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   function act(fn: (fd: FormData) => Promise<void>, extra?: Record<string, string>) {
@@ -82,26 +90,32 @@ function DocRow({ roomId, doc }: { roomId: string; doc: RoomContentDoc }) {
         </Flag>
       ) : null}
 
-      <div className="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => act(moveRoomDocument, { dir: "up" })}
-          title="Move up"
-          className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => act(moveRoomDocument, { dir: "down" })}
-          title="Move down"
-          className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
-        >
-          ↓
-        </button>
-      </div>
+      {/* Reordering moves a document relative to its real neighbours in the
+          room, which a filtered view is not showing — the arrows would appear
+          to swap the wrong rows. Hidden while filtering, as "Publish from
+          library" is, for the same reason. */}
+      {hideReorder ? null : (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => act(moveRoomDocument, { dir: "up" })}
+            title="Move up"
+            className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => act(moveRoomDocument, { dir: "down" })}
+            title="Move down"
+            className="rounded px-1.5 py-1 font-mono text-[11px] text-fg-muted transition hover:text-fg-primary disabled:opacity-40"
+          >
+            ↓
+          </button>
+        </div>
+      )}
 
       <button
         type="button"
@@ -220,6 +234,7 @@ export function RoomContents({
   sections,
   available,
   hideAddFromLibrary,
+  hideReorder,
 }: {
   roomId: string;
   sections: RoomContentSection[];
@@ -227,6 +242,8 @@ export function RoomContents({
   /** Suppressed while the pane is filtered — publishing into a partial view of
    * the room reads as publishing into the filter. */
   hideAddFromLibrary?: boolean;
+  /** Suppressed while filtered — see DocRow. */
+  hideReorder?: boolean;
 }) {
   const count = sections.reduce((n, s) => n + s.docs.length, 0);
 
@@ -248,7 +265,7 @@ export function RoomContents({
               </p>
               <div className="flex flex-col gap-1.5">
                 {s.docs.map((d) => (
-                  <DocRow key={d.id} roomId={roomId} doc={d} />
+                  <DocRow key={d.id} roomId={roomId} doc={d} hideReorder={hideReorder} />
                 ))}
               </div>
             </div>

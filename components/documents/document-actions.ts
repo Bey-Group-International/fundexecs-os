@@ -117,17 +117,37 @@ async function notifyPublishedShareRecipients(
   const roomIds = [...new Set((manifest ?? []).map((r) => r.room_id as string))];
   if (roomIds.length === 0) return;
 
-  const [{ data: orgRow }, { data: shares }] = await Promise.all([
+  const [{ data: orgRow }, { data: shareRows }, { data: docRow }] = await Promise.all([
     supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
     supabase
       .from("data_room_shares")
-      .select("token, recipient_email, room_id")
+      .select("token, recipient_email, room_id, expires_at, allowed_sections")
       .eq("organization_id", orgId)
       .in("room_id", roomIds)
       .is("revoked_at", null)
       .not("recipient_email", "is", null),
+    supabase.from("documents").select("doc_type").eq("id", documentId).maybeSingle(),
   ]);
-  if (!orgRow || !shares || shares.length === 0) return;
+  if (!orgRow || !shareRows || shareRows.length === 0) return;
+
+  // Tell only the people who can actually open it. A link that has expired, or
+  // whose allowlist excludes this document's section, would otherwise get mail
+  // naming a document it cannot reach.
+  const section = (docRow as { doc_type: string | null } | null)?.doc_type ?? "other";
+  const now = Date.now();
+  const shares = (
+    shareRows as Array<{
+      token: string;
+      recipient_email: string | null;
+      expires_at: string | null;
+      allowed_sections: string[] | null;
+    }>
+  ).filter((s) => {
+    if (s.expires_at && new Date(s.expires_at).getTime() < now) return false;
+    if (s.allowed_sections !== null && !s.allowed_sections.includes(section)) return false;
+    return true;
+  });
+  if (shares.length === 0) return;
 
   const orgName = orgRow.name as string;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.fundexecs.com";

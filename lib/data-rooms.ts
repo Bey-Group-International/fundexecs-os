@@ -114,18 +114,25 @@ export function shareState(share: ShareLike, now: number = Date.now()): ShareSta
 }
 
 /**
- * Narrow a set of sections by an allowlist. `null` or empty means no
- * restriction — every section passes.
+ * Narrow a set of sections by a link's allowlist.
+ *
+ * `null`/`undefined` means unrestricted — the link opens every published
+ * section. An *empty array* means the opposite: it allows nothing. That
+ * asymmetry is deliberate. An allowlist is a deny-by-default boundary, so a
+ * row that somehow carries `[]` (a hand-written link, a bad import, a future
+ * caller that forgets to coerce) must fail closed. Reading `[]` as "no
+ * restriction" would turn a corrupt value into a full-room disclosure, and it
+ * would disagree with the document route, which has always denied on `[]`.
  *
  * Generic over the section shape so the GP-side room list and the LP-facing
  * viewer both scope through this one rule: a preview that filters differently
- * from the live room is exactly the bug this page exists to prevent.
+ * from the live room is exactly the bug this function exists to prevent.
  */
 export function sectionsAllowedBy<S extends { key: string }>(
   allowed: string[] | null | undefined,
   sections: S[],
 ): S[] {
-  if (!allowed || allowed.length === 0) return sections;
+  if (allowed === null || allowed === undefined) return sections;
   const set = new Set(allowed);
   return sections.filter((s) => set.has(s.key));
 }

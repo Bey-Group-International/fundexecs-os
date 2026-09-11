@@ -153,8 +153,11 @@ describe("shareExposure", () => {
     expect(shareDocCount(share, sections)).toBe(1);
   });
 
-  it("treats an empty allowlist as no restriction", () => {
-    expect(shareExposure({ ...base, allowed_sections: [] }, sections)).toHaveLength(2);
+  it("treats an empty allowlist as allowing nothing, not everything", () => {
+    // An allowlist is deny-by-default: a corrupt [] must fail closed rather
+    // than disclose the whole room.
+    expect(shareExposure({ ...base, allowed_sections: [] }, sections)).toHaveLength(0);
+    expect(shareDocCount({ ...base, allowed_sections: [] }, sections)).toBe(0);
   });
 });
 
@@ -172,10 +175,14 @@ describe("sectionLabel", () => {
 describe("sectionsAllowedBy", () => {
   const sections = [{ key: "thesis" }, { key: "financials" }, { key: "legal" }];
 
-  it("passes everything through for null or an empty allowlist", () => {
+  it("passes everything through only when there is no allowlist at all", () => {
     expect(sectionsAllowedBy(null, sections)).toHaveLength(3);
     expect(sectionsAllowedBy(undefined, sections)).toHaveLength(3);
-    expect(sectionsAllowedBy([], sections)).toHaveLength(3);
+  });
+
+  it("fails closed on an empty allowlist", () => {
+    // Matches app/dataroom/[token]/d/[id] , which has always denied on [].
+    expect(sectionsAllowedBy([], sections)).toHaveLength(0);
   });
 
   it("keeps only allowed keys, in the original order", () => {

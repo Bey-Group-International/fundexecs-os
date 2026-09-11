@@ -77,9 +77,9 @@ export function RoomPreview({
           {shares.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label || "Untitled link"}
-              {s.allowedSections && s.allowedSections.length > 0
-                ? ` · ${s.allowedSections.length} section${s.allowedSections.length > 1 ? "s" : ""}`
-                : " · full room"}
+              {s.allowedSections === null
+                ? " · full room"
+                : ` · ${s.allowedSections.length} section${s.allowedSections.length === 1 ? "" : "s"}`}
             </option>
           ))}
         </select>
