@@ -846,6 +846,31 @@ export type NdaSignature = {
   ip_hint: string | null;
 };
 
+// A named, curated sharing surface (supabase/migrations 20260911120000). The
+// library of record is `documents`; a room shows only what has been explicitly
+// published into it via `data_room_documents`.
+export type DataRoom = {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+// Publish manifest: one row per document published into a room.
+export type DataRoomDocument = {
+  id: string;
+  organization_id: string;
+  room_id: string;
+  document_id: string;
+  sort_order: number;
+  added_by: string | null;
+  created_at: string;
+};
+
 export type DataRoomShare = {
   id: string;
   organization_id: string;
@@ -863,8 +888,10 @@ export type DataRoomShare = {
   // LP notification fields
   recipient_email: string | null;
   notify_on_open: boolean;
-  // Selective sharing — null = full data room, array = only these section keys
+  // Selective sharing — null = every published section, array = only these keys
   allowed_sections: string[] | null;
+  // The room this link opens. Null only for pre-migration rows.
+  room_id: string | null;
 };
 
 export type DataRoomView = {
@@ -878,6 +905,7 @@ export type DataRoomView = {
   viewer_email: string | null;
   duration_seconds: number | null;
   session_id: string | null;
+  room_id: string | null;
 };
 
 export type InvestorPortalShare = {
@@ -2958,6 +2986,8 @@ export type Database = {
       brain_runs: TableShape<BrainRun>;
       brain_documents: TableShape<BrainDocument>;
       brain_kb_chunks: TableShape<BrainKbChunk>;
+      data_rooms: TableShape<DataRoom>;
+      data_room_documents: TableShape<DataRoomDocument>;
       data_room_shares: TableShape<DataRoomShare>;
       data_room_views: TableShape<DataRoomView>;
       investor_portal_shares: TableShape<InvestorPortalShare>;

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { scoreDocument } from "@/lib/document-quality";
-import { deleteDocument, updateDocument, updateDocumentStatus } from "./materials-actions";
+import { deleteDocument, updateDocument, updateDocumentStatus } from "@/components/documents/document-actions";
 import type { DocumentStatus } from "@/lib/supabase/database.types";
 import { autoComposeContent, earnChat, institutionalize } from "./builder-actions";
 import { BuilderWizard } from "./BuilderWizard";

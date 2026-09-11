@@ -15,7 +15,7 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { ProfileForm } from "@/components/build/ProfileForm";
 import { MandateStrip } from "@/components/build/MandateStrip";
 import { RunRiskModule, RunStressTestModule } from "@/components/run/RunModules";
-import { DocumentsModuleLive } from "@/components/run/DocumentsModuleLive";
+import { DocumentsHub } from "@/components/documents/DocumentsHub";
 import { AllocatorDirectoryLive } from "@/components/source/AllocatorDirectoryLive";
 import { ServiceProviderDirectoryLive } from "@/components/source/ServiceProviderDirectoryLive";
 import { PartnersLive } from "@/components/source/PartnersLiveServer";
@@ -26,7 +26,6 @@ import { RunUnderwritingModule } from "@/components/run/RunUnderwritingModule";
 import { BrainsModule } from "@/components/run/BrainsModule";
 import { FundScoringModule } from "@/components/run/FundScoringModule";
 import { DiligenceRoomModule } from "@/components/run/DiligenceRoomModule";
-import { ContractReviewModule } from "@/components/run/ContractReviewModule";
 import {
   ExecuteReportingModule,
   ExecuteExitModule,
@@ -177,10 +176,13 @@ export async function ModuleView({
   hub: hubKey,
   module: moduleKey,
   sessionId,
+  roomId,
 }: {
   hub: string;
   module: string;
   sessionId?: string;
+  /** Build › Materials & Data Room: which room to open (?room=<id>). */
+  roomId?: string;
 }) {
   if (!HUB_KEYS.includes(hubKey as Hub)) notFound();
   const hub = HUB_BY_KEY[hubKey as Hub];
@@ -291,14 +293,11 @@ export async function ModuleView({
     if (mod.key === "entity") return <EntityModule />;
     if (mod.key === "track_record") return <TrackRecordModule />;
     if (mod.key === "team") return <TeamModule />;
-    if (mod.key === "data_room") return <MaterialsModule />;
-    if (mod.key === "documents")
-      return (
-        <>
-          <DocumentsModuleLive />
-          <ContractReviewModule />
-        </>
-      );
+    if (mod.key === "data_room") return <MaterialsModule roomId={roomId} />;
+    // Documents holds and creates; the data room only shares. The hub carries
+    // both halves of the paper the firm handles: its own library, and contract
+    // paper with counterparties.
+    if (mod.key === "documents") return <DocumentsHub />;
     // profile falls through to the editable org form below
   }
 

@@ -62,11 +62,11 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { key: "ask-earn", label: "Ask Earn", hint: "Delegate a task to your copilot", href: "/earn", icon: SparkIcon },
   { key: "add-deal", label: "Add a deal", hint: "Start a new opportunity", href: "/deals/feed", icon: DealsIcon },
   { key: "add-contact", label: "Add a contact", hint: "Investor, LP, advisor or operator", href: "/network", icon: ContactIcon },
-  { key: "upload-doc", label: "Upload a document", hint: "Into your materials & data room", href: "/build/data_room", icon: UploadIcon },
+  { key: "upload-doc", label: "Upload a document", hint: "Into your document library", href: "/build/documents", icon: UploadIcon },
   { key: "create-task", label: "Create a task", hint: "Route work to an executive agent", href: "/earn", icon: TaskIcon },
   { key: "start-diligence", label: "Start diligence", hint: "Open the diligence workspace", href: "/run/diligence", icon: ShieldIcon },
   { key: "investor-update", label: "Investor update", hint: "Generate an LP-facing report", href: "/execute/reporting", icon: ReportIcon, gated: true },
-  { key: "data-room", label: "Open a data room", hint: "Materials, files & sharing", href: "/build/data_room", icon: DataRoomIcon },
+  { key: "data-room", label: "Open a data room", hint: "Curated rooms you share", href: "/build/data_room", icon: DataRoomIcon },
   { key: "request-capital", label: "Request capital support", hint: "Debt, hybrid & capital partners", href: "/source/debt", icon: CapitalIcon },
   { key: "invite", label: "Invite a teammate", hint: "Add your deal team", href: "/settings/account", icon: UsersIcon },
 ];
@@ -98,7 +98,7 @@ export const MORE_GROUPS: MoreGroup[] = [
     heading: "Relationships & deals",
     items: [
       { key: "marketplace", label: "Marketplace", href: "/marketplace/browse", icon: StoreIcon, desc: "Opportunities & listings" },
-      { key: "data-room", label: "Materials & Data Room", href: "/build/data_room", icon: DataRoomIcon, desc: "Documents & sharing" },
+      { key: "data-room", label: "Materials & Data Room", href: "/build/data_room", icon: DataRoomIcon, desc: "Curated rooms you share" },
       { key: "reports", label: "Reports", href: "/reports", icon: ReportIcon, desc: "Fund & portfolio reporting" },
     ],
   },

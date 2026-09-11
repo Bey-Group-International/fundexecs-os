@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 
-// When the Materials & Data Room is opened via a deep link from the readiness
-// next-best action (/build/data_room#section-<key>), scroll the matching
+// When the Documents library is opened via a deep link from the readiness
+// next-best action (/build/documents#section-<key>), scroll the matching
 // section into view and briefly highlight it so the operator sees exactly
 // where to act. No-op when there's no matching section hash.
 const RING = ["ring-2", "ring-gold-400", "ring-offset-2", "ring-offset-surface-0"];

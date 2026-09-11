@@ -20,10 +20,10 @@ function safeHref(url: string | null): string | null {
 // Token-gated open-and-track: validates the share, checks the same
 // server-verified gate the room page enforces (previously this route only
 // checked token validity/expiry — any document id that appeared in the page's
-// props could be opened directly, bypassing password/NDA/email entirely) and
-// the share's allowed_sections whitelist, logs a 'document' view, then
-// redirects to the document's external link. Invalid or ungated requests
-// bounce to the room.
+// props could be opened directly, bypassing password/NDA/email entirely), then
+// checks the room's publish manifest and the share's allowed_sections
+// whitelist, logs a 'document' view, and redirects to the document's external
+// link. Invalid or ungated requests bounce to the room.
 export async function GET(req: Request, props: { params: Promise<{ token: string; id: string }> }) {
   const params = await props.params;
   const roomUrl = new URL(`/dataroom/${params.token}`, req.url);
@@ -57,6 +57,20 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
   );
   if (!passed) return NextResponse.redirect(roomUrl);
 
+  // Membership is checked against the room's publish manifest first. Being in
+  // the org's library is not enough — an unpublished draft must stay
+  // unreachable even to someone holding a valid token and the document's id.
+  const roomId = share.room_id;
+  if (!roomId) return NextResponse.redirect(roomUrl);
+  const { data: manifestRow } = await supabase
+    .from("data_room_documents")
+    .select("id")
+    .eq("organization_id", share.organization_id)
+    .eq("room_id", roomId)
+    .eq("document_id", params.id)
+    .maybeSingle();
+  if (!manifestRow) return NextResponse.redirect(roomUrl);
+
   const { data: docRow } = await supabase
     .from("documents")
     .select("*")
@@ -74,7 +88,13 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
 
   await supabase
     .from("data_room_views")
-    .insert({ organization_id: share.organization_id, share_id: share.id, document_id: doc.id, kind: "document" })
+    .insert({
+      organization_id: share.organization_id,
+      share_id: share.id,
+      room_id: roomId,
+      document_id: doc.id,
+      kind: "document",
+    })
     .then(() => undefined, () => undefined);
 
   return NextResponse.redirect(href);

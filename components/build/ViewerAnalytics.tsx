@@ -56,23 +56,31 @@ interface ShareAnalytics {
 // ViewerAnalytics — server component
 // ---------------------------------------------------------------------------
 
-export async function ViewerAnalytics() {
+/** Engagement for one room's links. Scoped by `roomId` so a firm running
+ * several rooms reads each one's traffic separately rather than a single
+ * org-wide blur. */
+export async function ViewerAnalytics({ roomId }: { roomId?: string } = {}) {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return null;
 
   const supabase = await createServerClient();
 
+  const sharesQuery = supabase
+    .from("data_room_shares")
+    .select("*")
+    .eq("organization_id", ctx.orgId);
+  const viewsQuery = supabase
+    .from("data_room_views")
+    .select("*")
+    .eq("organization_id", ctx.orgId);
+
   const [sharesRes, viewsRes, docsRes] = await Promise.all([
-    supabase
-      .from("data_room_shares")
-      .select("*")
-      .eq("organization_id", ctx.orgId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("data_room_views")
-      .select("*")
-      .eq("organization_id", ctx.orgId)
-      .order("created_at", { ascending: false }),
+    (roomId ? sharesQuery.eq("room_id", roomId) : sharesQuery).order("created_at", {
+      ascending: false,
+    }),
+    // Views are filtered through their share below, so an older row written
+    // before rooms existed (room_id null) still shows against its link.
+    viewsQuery.order("created_at", { ascending: false }),
     supabase
       .from("documents")
       .select("id, name")

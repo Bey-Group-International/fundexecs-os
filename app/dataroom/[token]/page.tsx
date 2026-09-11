@@ -65,12 +65,16 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
   if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return <Unavailable />;
 
   const orgId = share.organization_id;
+  // Every link is scoped to a room. A share with no room predates the split and
+  // has nothing to show rather than falling back to the whole library.
+  const roomId = share.room_id;
+  if (!roomId) return <Unavailable />;
 
   // Log the visit regardless of gate status — this tracks link opens, not
   // gate completion. Fire-and-forget.
   await supabase
     .from("data_room_views")
-    .insert({ organization_id: orgId, share_id: share.id, kind: "room" })
+    .insert({ organization_id: orgId, share_id: share.id, room_id: roomId, kind: "room" })
     .then(() => undefined, () => undefined);
 
   const gateConfig: GateConfig = {
@@ -125,6 +129,19 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
     );
   }
 
+  // A link opens exactly one room, and a room shows exactly what was published
+  // into it. The manifest — not the org's whole `documents` table — decides what
+  // a viewer can reach, so a draft in the library is unreachable here even if
+  // someone guesses its id.
+  const { data: manifestRows } = await supabase
+    .from("data_room_documents")
+    .select("document_id, sort_order")
+    .eq("organization_id", orgId)
+    .eq("room_id", roomId)
+    .order("sort_order", { ascending: true });
+  const manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
+  const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
+
   const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, docsRes] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
     supabase
@@ -138,13 +155,13 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
     supabase.from("track_records").select("*").eq("organization_id", orgId).order("vintage_year", { ascending: false }),
     supabase.from("entities").select("*").eq("organization_id", orgId),
     supabase.from("organization_members").select("*").eq("organization_id", orgId),
-    supabase
-      .from("documents")
-      .select("*")
-      .eq("organization_id", orgId)
-      .eq("status", "ready")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true }),
+    manifest.length
+      ? supabase
+          .from("documents")
+          .select("*")
+          .eq("organization_id", orgId)
+          .in("id", manifest.map((m) => m.document_id))
+      : Promise.resolve({ data: [] as Document[] }),
   ]);
 
   const org = orgRes.data as Organization | null;
@@ -166,9 +183,12 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
   const byId = new Map(principals.map((p) => [p.id, p]));
   const blended = blendTrackRecord(records);
 
-  // Group ready documents by section.
+  // Group published documents by section, in the order the room sets.
+  const ordered = [...documents].sort(
+    (a, b) => (manifestOrder.get(a.id) ?? 0) - (manifestOrder.get(b.id) ?? 0) || a.name.localeCompare(b.name),
+  );
   const docsBySection = new Map<string, ViewerDoc[]>();
-  for (const d of documents) {
+  for (const d of ordered) {
     const k = d.doc_type ?? "other";
     const doc: ViewerDoc = {
       id: d.id,
@@ -182,7 +202,7 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
     else docsBySection.set(k, [doc]);
   }
 
-  // Build ordered section list (only sections that have ready docs).
+  // Build ordered section list (only sections with published docs).
   // If the share has an allowed_sections whitelist, filter to only those keys.
   const allowedSections = (share as { allowed_sections?: string[] | null }).allowed_sections ?? null;
   const docSections: ViewerSection[] = DATA_ROOM_SECTIONS
