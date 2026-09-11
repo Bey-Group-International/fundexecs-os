@@ -91,12 +91,20 @@ function ShareRow({ share }: { share: ShareView }) {
       {live ? (
         <div className="border-t border-line/50 bg-surface-0 px-4 py-2">
           <p className="truncate font-mono text-[11px] text-fg-muted">{url}</p>
-          {share.allowed_sections && share.allowed_sections.length > 0 ? (
+          {/* Three states, not two. An allowlist is deny-by-default, so an
+              empty array grants nothing — reading it as "no restriction" would
+              tell the operator a link gives full access while it shows the
+              recipient an empty room. */}
+          {share.allowed_sections === null ? (
+            <p className="mt-1 font-mono text-[11px] text-fg-muted/50">Everything published in this room</p>
+          ) : share.allowed_sections.length === 0 ? (
+            <p className="mt-1 font-mono text-[11px] text-amber-400/80">
+              No sections — this link shows nothing
+            </p>
+          ) : (
             <p className="mt-1 font-mono text-[11px] text-fg-muted/70">
               Sections: {share.allowed_sections.join(", ")}
             </p>
-          ) : (
-            <p className="mt-1 font-mono text-[11px] text-fg-muted/50">Everything published in this room</p>
           )}
         </div>
       ) : null}

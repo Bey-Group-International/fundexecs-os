@@ -12,8 +12,10 @@ import type { DataRoom, Document } from "@/lib/supabase/database.types";
  * so a firm never lands on an empty screen with nothing to click. Archived rooms
  * are excluded — they keep their history but leave the switcher.
  */
-export async function listRooms(orgId: string): Promise<DataRoom[]> {
-  const supabase = await createServerClient();
+async function selectRooms(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  orgId: string,
+): Promise<DataRoom[]> {
   const { data } = await supabase
     .from("data_rooms")
     .select("*")
@@ -21,7 +23,12 @@ export async function listRooms(orgId: string): Promise<DataRoom[]> {
     .is("archived_at", null)
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true });
-  const rooms = (data ?? []) as DataRoom[];
+  return (data ?? []) as DataRoom[];
+}
+
+export async function listRooms(orgId: string): Promise<DataRoom[]> {
+  const supabase = await createServerClient();
+  const rooms = await selectRooms(supabase, orgId);
   if (rooms.length > 0) return rooms;
 
   const ctx = await getSessionContext();
@@ -35,7 +42,14 @@ export async function listRooms(orgId: string): Promise<DataRoom[]> {
     })
     .select("*")
     .maybeSingle();
-  return created ? [created as DataRoom] : [];
+  if (created) return [created as DataRoom];
+
+  // The insert can fail for two ordinary reasons, and neither is an error the
+  // operator should see as a dead end: a reader-role member is refused by the
+  // write policy, and two first visits at once race the one-default-per-org
+  // unique index. Re-read either way — the racing request may have just
+  // created the room this one needs.
+  return selectRooms(supabase, orgId);
 }
 
 /** The room to show: the requested one when it belongs to the org, else the default. */

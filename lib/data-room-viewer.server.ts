@@ -66,6 +66,7 @@ export async function buildViewerPayload(
   supabase: Client,
   orgId: string,
   roomId: string,
+  /** A link's section allowlist. `null` = unrestricted; `[]` allows nothing. */
   allowedSections: string[] | null,
 ): Promise<ViewerPayload | null> {
   const { data: manifestRows } = await supabase

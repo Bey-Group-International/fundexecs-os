@@ -68,6 +68,9 @@ export function buildAuditCsv(args: {
   views: AuditView[];
   shares: AuditShare[];
   docs: AuditDoc[];
+  /** Older history exists beyond these rows. Stated in the file rather than
+   * dropped silently — a log that looks complete but is not defeats the point. */
+  truncated?: boolean;
 }): string {
   const shareById = new Map(args.shares.map((s) => [s.id, s]));
   const docById = new Map(args.docs.map((d) => [d.id, d]));
@@ -88,6 +91,14 @@ export function buildAuditCsv(args: {
         doc?.name ?? (v.documentId ? "(deleted document)" : ""),
         v.durationSeconds ?? "",
         v.sessionId ?? "",
+      ]),
+    );
+  }
+  if (args.truncated) {
+    lines.push(
+      csvRow([
+        "",
+        `Truncated: older activity exists beyond these ${sorted.length} rows and is not included.`,
       ]),
     );
   }

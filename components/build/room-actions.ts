@@ -97,6 +97,40 @@ export async function archiveRoom(formData: FormData): Promise<void> {
 // --- Publishing ------------------------------------------------------------
 
 /**
+ * Next free position in a room. New publications used to copy
+ * `documents.sort_order`, but nothing writes that column any more, so every
+ * manifest row landed on 0 — leaving the reorder arrows swapping whichever tied
+ * row the database happened to return. Appending at the end gives each document
+ * its own position instead.
+ *
+ * This is a read then a write, not an atomic allocation: two publications
+ * racing in the same instant can both read the same maximum and land on the
+ * same position, since the manifest's unique constraint is on
+ * (room_id, document_id) rather than (room_id, sort_order). Order stays
+ * deterministic regardless — every reader breaks ties by name
+ * (groupRoomDocuments, buildViewerPayload, and moveRoomDocument below) — so the
+ * two documents sort alphabetically against each other rather than by
+ * insertion. Making positions strictly distinct would need a unique index and
+ * a transactional allocation; that is a schema change, not a fix.
+ */
+async function nextSortOrder(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  orgId: string,
+  roomId: string,
+): Promise<number> {
+  const { data } = await supabase
+    .from("data_room_documents")
+    .select("sort_order")
+    .eq("organization_id", orgId)
+    .eq("room_id", roomId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const top = (data as { sort_order: number } | null)?.sort_order;
+  return typeof top === "number" ? top + 1 : 0;
+}
+
+/**
  * Publish a document into a room. Both rows are re-checked against the caller's
  * org before the manifest row is written, so a stray id can't pull another
  * firm's document into a room. Idempotent — re-publishing is a no-op.
@@ -116,13 +150,20 @@ export async function publishDocument(formData: FormData): Promise<void> {
   ]);
   if (!room || !doc) return;
 
-  await supabase.from("data_room_documents").insert({
-    organization_id: orgId,
-    room_id: roomId,
-    document_id: documentId,
-    sort_order: (doc as { sort_order: number }).sort_order ?? 0,
-    added_by: ctx.userId,
-  });
+  // Upsert, not insert: the table has unique (room_id, document_id), and a
+  // plain insert on an already-published document raises a duplicate-key error
+  // that this action would discard — making a re-publish a silent failure
+  // rather than the no-op it reads as.
+  await supabase.from("data_room_documents").upsert(
+    {
+      organization_id: orgId,
+      room_id: roomId,
+      document_id: documentId,
+      sort_order: await nextSortOrder(supabase, orgId, roomId),
+      added_by: ctx.userId,
+    },
+    { onConflict: "room_id,document_id", ignoreDuplicates: true },
+  );
   revalidatePath(ROOMS);
   revalidatePath(LIBRARY);
 }
@@ -173,14 +214,19 @@ export async function publishSection(formData: FormData): Promise<void> {
   const rows = (docs ?? []) as { id: string; sort_order: number }[];
   if (rows.length === 0) return;
 
-  await supabase.from("data_room_documents").insert(
-    rows.map((d) => ({
+  // Same reason as publishDocument, and more acute in bulk: with a plain
+  // insert, one already-published document aborts the whole statement, so
+  // "publish this section" silently publishes nothing.
+  const base = await nextSortOrder(supabase, orgId, roomId);
+  await supabase.from("data_room_documents").upsert(
+    rows.map((d, i) => ({
       organization_id: orgId,
       room_id: roomId,
       document_id: d.id,
-      sort_order: d.sort_order ?? 0,
+      sort_order: base + i,
       added_by: ctx.userId,
     })),
+    { onConflict: "room_id,document_id", ignoreDuplicates: true },
   );
   revalidatePath(ROOMS);
   revalidatePath(LIBRARY);
@@ -210,15 +256,30 @@ export async function moveRoomDocument(formData: FormData): Promise<void> {
   // not across the whole room.
   const { data: docRows } = await supabase
     .from("documents")
-    .select("id, doc_type")
+    .select("id, doc_type, name")
     .eq("organization_id", orgId)
     .in("id", rows.map((r) => r.document_id));
-  const sectionOf = new Map(
-    ((docRows ?? []) as { id: string; doc_type: string | null }[]).map((d) => [d.id, d.doc_type ?? "other"]),
+  const docMeta = new Map(
+    ((docRows ?? []) as { id: string; doc_type: string | null; name: string }[]).map((d) => [
+      d.id,
+      { section: d.doc_type ?? "other", name: d.name },
+    ]),
   );
   const target = rows.find((r) => r.document_id === documentId);
   if (!target) return;
-  const peers = rows.filter((r) => sectionOf.get(r.document_id) === sectionOf.get(documentId));
+
+  // Sort peers the way groupRoomDocuments renders them — by sort_order, then
+  // name. Ordering by sort_order alone leaves tied rows in whatever order the
+  // database returns, so the arrows would swap rows other than the ones the
+  // operator can see.
+  const section = docMeta.get(documentId)?.section;
+  const peers = rows
+    .filter((r) => docMeta.get(r.document_id)?.section === section)
+    .sort(
+      (a, b) =>
+        a.sort_order - b.sort_order ||
+        (docMeta.get(a.document_id)?.name ?? "").localeCompare(docMeta.get(b.document_id)?.name ?? ""),
+    );
 
   const idx = peers.findIndex((r) => r.document_id === documentId);
   const swapWith = dir === "up" ? idx - 1 : idx + 1;

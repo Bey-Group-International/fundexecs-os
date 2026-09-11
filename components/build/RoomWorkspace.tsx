@@ -294,6 +294,7 @@ export function RoomWorkspace({
               sections={filtered}
               available={available}
               hideAddFromLibrary={filtering}
+              hideReorder={filtering}
             />
           )}
         </div>

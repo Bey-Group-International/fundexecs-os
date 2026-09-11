@@ -140,6 +140,33 @@ describe("buildAuditCsv", () => {
   });
 });
 
+describe("truncation marker", () => {
+  const shares = [{ id: "s1", label: "Q3 raise", recipientEmail: null }];
+
+  it("says so in the file when older activity was cut", () => {
+    const csv = buildAuditCsv({
+      roomName: "Fund III",
+      views: [view({ createdAt: "2026-06-01T10:00:00.000Z" })],
+      shares,
+      docs: [],
+      truncated: true,
+    });
+    // A log that looks complete but is not defeats the point of the export.
+    expect(csv).toContain("Truncated: older activity exists beyond these 1 rows");
+  });
+
+  it("adds nothing when the whole log fits", () => {
+    const csv = buildAuditCsv({
+      roomName: "Fund III",
+      views: [view({ createdAt: "2026-06-01T10:00:00.000Z" })],
+      shares,
+      docs: [],
+    });
+    expect(csv).not.toContain("Truncated");
+    expect(csv.trimEnd().split("\r\n")).toHaveLength(2);
+  });
+});
+
 describe("auditFilename", () => {
   it("slugs the room name and stamps the date", () => {
     expect(auditFilename("Fund III Raise", new Date("2026-06-01T00:00:00Z"))).toBe(

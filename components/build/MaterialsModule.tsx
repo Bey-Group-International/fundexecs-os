@@ -52,13 +52,20 @@ export async function MaterialsModule({ roomId }: { roomId?: string } = {}) {
     return (
       <div>
         <Header />
-        <p className="text-sm text-fg-secondary">
-          Couldn&apos;t load your data rooms. Refresh, or{" "}
-          <Link href="/build/documents" className="text-gold-300 hover:underline">
-            start in Documents
+        <div className="rounded-xl border border-dashed border-line bg-surface-0 px-4 py-6">
+          <p className="text-sm text-fg-secondary">No data room yet.</p>
+          <p className="mt-1 text-xs text-fg-muted">
+            Your first room is created automatically the first time someone with edit access opens
+            this page. If you have view-only access, ask a colleague who can edit to open it once —
+            then this page will work for you too.
+          </p>
+          <Link
+            href="/build/documents"
+            className="mt-3 inline-block font-mono text-[11px] uppercase tracking-wider text-gold-300 hover:underline"
+          >
+            Open Documents →
           </Link>
-          .
-        </p>
+        </div>
       </div>
     );
   }
