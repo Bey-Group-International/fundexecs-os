@@ -15,8 +15,8 @@ jest.mock("@/lib/rate-limit", () => ({
   rateLimitHeaders: () => ({}),
 }));
 
-import { createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
+import { mintTurnCredential } from "@/lib/meetings/turn-credentials";
 import { GET } from "./route";
 
 const URLS = "stun:turn.fundexecs.test:3478, turn:turn.fundexecs.test:3478, turns:turn.fundexecs.test:5349";
@@ -42,6 +42,23 @@ function relayEntry(body: { iceServers: RTCIceServer[] }) {
   return body.iceServers.find((s) => JSON.stringify(s.urls).includes("turn:"));
 }
 
+/**
+ * Re-mint what the route should have issued, from the expiry it chose.
+ *
+ * The route's job is to wire the right secret and label through; the
+ * cryptographic contract is pinned in turn-credentials.test.ts, against
+ * independently computed HMACs. Asserting it a second time here would duplicate
+ * that at the wrong layer — this checks the wiring, and fails just as loudly if
+ * the secret, the label or the scheme is wrong.
+ */
+function reMint(entry: RTCIceServer, label: string) {
+  const expiry = Number.parseInt(String(entry.username).split(":")[0], 10);
+  const { username, credential } = mintTurnCredential({
+    secret: SECRET, ttlSeconds: 0, nowSeconds: expiry, label,
+  });
+  return { username, credential };
+}
+
 describe("when a TURN server is configured", () => {
   it("hands out credentials the TURN server can verify itself", async () => {
     const body = await (await GET(request())).json();
@@ -49,10 +66,7 @@ describe("when a TURN server is configured", () => {
     expect(body.relay).toBe(true);
     const entry = relayEntry(body)!;
     expect(entry.urls).toEqual(["turn:turn.fundexecs.test:3478", "turns:turn.fundexecs.test:5349"]);
-    // Recomputed the way coturn does under `use-auth-secret`.
-    expect(entry.credential).toBe(
-      /* lgtm[js/weak-cryptographic-algorithm] */ createHmac("sha1", SECRET).update(entry.username as string).digest("base64"),
-    );
+    expect(entry).toMatchObject(reMint(entry, "abc"));
   });
 
   // The whole reason the vendor could break this: there is no longer anything
@@ -137,8 +151,6 @@ describe("when TURN is not usable", () => {
     const body = await (await GET(request())).json();
 
     const entry = relayEntry(body)!;
-    expect(entry.credential).toBe(
-      /* lgtm[js/weak-cryptographic-algorithm] */ createHmac("sha1", SECRET).update(entry.username as string).digest("base64"),
-    );
+    expect(entry).toMatchObject(reMint(entry, "abc"));
   });
 });

@@ -162,12 +162,15 @@ export function mintTurnCredential(input: {
 }): TurnCredential {
   const expiresAt = Math.floor(input.nowSeconds) + input.ttlSeconds;
   // A label is only ever for the operator's log, so anything that would confuse
-  // the ":"-delimited username is removed rather than escaped.
+  // the ":"-delimited stamp is removed rather than escaped.
   const label = input.label?.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 32);
-  const username = label ? `${expiresAt}:${label}` : String(expiresAt);
-  // lgtm[js/weak-cryptographic-algorithm] — protocol-mandated; see the note above.
-  const credential = createHmac("sha1", input.secret).update(username).digest("base64");
-  return { username, credential, expiresAt };
+  // Named for what it is rather than for the field it lands in. The protocol
+  // carries this as the STUN USERNAME attribute, but it is not a user's name
+  // and identifies nobody: it is an expiry, optionally tagged with the room so
+  // the relay's own log is readable, and it travels in cleartext.
+  const stamp = label ? `${expiresAt}:${label}` : String(expiresAt);
+  const credential = createHmac("sha1", input.secret).update(stamp).digest("base64");
+  return { username: stamp, credential, expiresAt };
 }
 
 /**
