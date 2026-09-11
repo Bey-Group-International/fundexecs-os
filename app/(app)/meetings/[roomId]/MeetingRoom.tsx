@@ -67,6 +67,7 @@ import {
   type LinkState,
   type PeerLinkStatus,
   type RecoveryState,
+  type SendCap,
 } from "@/lib/meetings/connection";
 import {
   formatTransceivers,
@@ -75,6 +76,11 @@ import {
   videoSenderNeedsRepair,
   type TransceiverState,
 } from "@/lib/meetings/media-repair";
+import {
+  allocateSendCaps,
+  tierForView,
+  type VideoTier,
+} from "@/lib/meetings/send-tiers";
 import { rememberDevice } from "@/lib/meetings/device-prefs";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
@@ -156,6 +162,9 @@ type SignalMsg =
   //
   // Reply content is used for a console line and nothing else — it is a peer's
   // self-report, not a fact this client acts on.
+  // What one participant needs from another, so a sender can encode per peer
+  // rather than sending everyone the same picture. See lib/meetings/send-tiers.
+  | { type: "video_request"; from: string; to: string; tier: VideoTier }
   | { type: "media_probe"; from: string; to: string }
   | { type: "media_report"; from: string; to: string; transceivers: TransceiverState[] }
 ;
@@ -985,6 +994,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const inboundAuditRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   /** Peers with a camera re-attach already in flight, so two never race. */
   const repairInFlightRef = useRef<Set<string>>(new Set());
+  /** What each peer has asked US to send them. Absent means "not yet said". */
+  const requestedTierRef = useRef<Map<string, VideoTier>>(new Map());
+  /** What we last asked each peer for, so only changes go on the wire. */
+  const sentRequestRef = useRef<Map<string, VideoTier>>(new Map());
   // Whether the servers above actually include a TURN relay. Read when a peer
   // fails to connect, so the logs distinguish "this network needed a relay and
   // had none" from an ordinary blip.
@@ -1096,7 +1109,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Layout
   const [layout, setLayout] = useState<"grid" | "speaker">("grid");
+  // Mirrors for refreshVideoRequests, which runs from a visibility listener and
+  // from effects and must see the current view without being rebuilt by it.
+  const layoutRef = useRef<"grid" | "speaker">("grid");
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
+  const activeSpeakerIdRef = useRef<string | null>(null);
+  useEffect(() => { activeSpeakerIdRef.current = activeSpeakerId; }, [activeSpeakerId]);
 
   // Bandwidth adaptation
   const [bwMode, setBwMode] = useState<BandwidthMode>("normal");
@@ -1325,6 +1344,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const audit = inboundAuditRef.current.get(peerId);
     if (audit) { clearTimeout(audit); inboundAuditRef.current.delete(peerId); }
     repairInFlightRef.current.delete(peerId);
+    requestedTierRef.current.delete(peerId);
+    sentRequestRef.current.delete(peerId);
   }, []);
 
   /**
@@ -1343,11 +1364,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const applySendCaps = useCallback(() => {
     const sharing = shareOnRef.current;
     const wanted = sharing || camOnRef.current;
-    const cap = wanted
-      ? (sharing ? screenSendCap(peersRef.current.size, bwModeRef.current) : videoSendCap(peersRef.current.size, bwModeRef.current))
-      : null;
+    const ids = [...videoSenderRef.current.keys()];
 
-    videoSenderRef.current.forEach((sender) => {
+    // A shared screen is the thing everyone is looking at, so it is not sized
+    // per viewer — it keeps the even split and full resolution. A camera is the
+    // opposite: in a presented meeting most people are a 96px thumbnail on
+    // every other screen, and sending them a sixth of the budget at half
+    // resolution spends the upload, and the encoder, on detail that is drawn
+    // four times smaller than it is sent.
+    const caps: Map<string, SendCap | null> = !wanted
+      ? new Map(ids.map((id) => [id, null]))
+      : sharing
+        ? new Map(ids.map((id) => [id, screenSendCap(ids.length, bwModeRef.current)]))
+        : allocateSendCaps(requestedTierRef.current, ids, bwModeRef.current);
+
+    videoSenderRef.current.forEach((sender, peerId) => {
+      const cap = caps.get(peerId) ?? null;
       let params: RTCRtpSendParameters;
       try { params = sender.getParameters(); } catch { return; }
       if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
@@ -1368,6 +1400,45 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
   const applySendCapsRef = useRef(applySendCaps);
   useEffect(() => { applySendCapsRef.current = applySendCaps; }, [applySendCaps]);
+
+  /**
+   * Tell each peer what size we are drawing them at.
+   *
+   * The saving this unlocks is not marginal. In a presented meeting with six
+   * guests, five of six people are a 96px thumbnail on every screen in the
+   * room — and were being sent a sixth of the upload budget at half resolution
+   * each. Asking for a thumbnail instead takes their outgoing video from
+   * 2.4Mbps across six full-size encoders to about 1Mbps across six quarter-
+   * resolution ones, and hands what that frees to whoever is actually being
+   * watched.
+   *
+   * Only changes go on the wire, and the tier comes from the LAYOUT rather than
+   * from measuring an element: a tile's size changes continuously while a
+   * window is dragged, and quality that followed it would renegotiate on every
+   * frame of the drag.
+   */
+  const refreshVideoRequests = useCallback(() => {
+    const ids = [...peersRef.current.keys()];
+    const hidden = typeof document !== "undefined" && document.hidden;
+    // Including ourselves: the grid draws our own tile too, and it is the total
+    // that decides how small each one is.
+    const tileCount = ids.length + 1;
+    for (const id of ids) {
+      const said = peerVideoRef.current.get(id);
+      const tier = tierForView({
+        documentHidden: hidden,
+        isSpotlight: layoutRef.current === "speaker" && activeSpeakerIdRef.current === id,
+        layout: layoutRef.current,
+        tileCount,
+        cameraOn: said ? said.camOn && !said.paused : true,
+      });
+      if (sentRequestRef.current.get(id) === tier) continue;
+      sentRequestRef.current.set(id, tier);
+      sendSignalRef.current({ type: "video_request", from: myIdRef.current, to: id, tier });
+    }
+  }, []);
+  const refreshVideoRequestsRef = useRef(refreshVideoRequests);
+  useEffect(() => { refreshVideoRequestsRef.current = refreshVideoRequests; }, [refreshVideoRequests]);
 
   /** Tell the room what our video is doing, so nobody has to guess from pixels. */
   const announceVideoState = useCallback(() => {
@@ -1861,6 +1932,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!msg.micOn) lastAudibleRef.current.delete(msg.from);
     }
 
+    if (msg.type === "video_request" && msg.to === myId) {
+      // A peer's own claim about what it is drawing. Validated rather than
+      // trusted: this decides what we encode, and an unknown value would fall
+      // through allocateSendCaps as "high" and quietly undo the saving.
+      if (msg.tier !== "high" && msg.tier !== "low" && msg.tier !== "none") return;
+      if (requestedTierRef.current.get(msg.from) === msg.tier) return;
+      requestedTierRef.current.set(msg.from, msg.tier);
+      applySendCapsRef.current();
+      return;
+    }
+
     if (msg.type === "media_probe" && msg.to === myId) {
       // Somebody is receiving no video from us. Describe our side of that
       // connection so the two snapshots can be read together.
@@ -2171,6 +2253,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Stable handle so the waiting-room poll can enter without re-creating itself.
   const enterRoomRef = useRef(enterRoom);
   useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
+
+  // What we ask for follows what we draw: the layout, who is in the spotlight,
+  // who is in the room, and whether they say their camera is on.
+  useEffect(() => {
+    if (!ready) return;
+    refreshVideoRequestsRef.current();
+  }, [ready, layout, activeSpeakerId, peers, peerVideo]);
+
+  // A backgrounded tab draws nothing, so it should receive nothing. This is the
+  // only lever that removes encoder cost at the far end rather than reducing
+  // it — five people with the call in a background tab stop five encoders each
+  // on everyone else's machine.
+  useEffect(() => {
+    if (!ready) return;
+    const onVisibility = () => refreshVideoRequestsRef.current();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [ready]);
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
   const joinMeeting = useCallback(async (choice?: GreenRoomChoice) => {
