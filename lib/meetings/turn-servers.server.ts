@@ -1,19 +1,24 @@
 // lib/meetings/turn-servers.server.ts
-// Fetching TURN credentials from the provider, and remembering the good ones.
+// Assembling the ICE server list for one caller.
 //
-// Lives here rather than in the route for two reasons. A Next.js route module
-// may only export the names the framework recognises, so the reset a test needs
-// cannot live beside the handler — and the handler is better off thin anyway:
-// authorize, ask, answer. The decisions this makes are all in
-// turn-credentials.ts, which is pure; this is the part that calls out.
+// Short, now, and that is the point. This used to hold an outbound fetch to a
+// TURN vendor, a cache to stop a failure being served for an hour, a
+// classification of the vendor's HTTP statuses, and a retry story. All of it
+// existed because the credentials came from somewhere else. They are computed
+// here, so the failure modes it managed no longer exist: there is no request
+// to fail, no status to classify, nothing worth caching, and no bill.
+//
+// It still reads the environment and still logs, so it stays out of the pure
+// module — and out of the route, which a Next.js route module's export rules
+// would not let hold a testable reset anyway.
 
 import {
-  TURN_CREDENTIAL_TTL_MS,
-  classifyTurnStatus,
+  buildIceServers,
   cleanCredential,
-  credentialWasDirty,
-  isUsableIceServerList,
-  meteredCredentialsUrl,
+  hasRelayUrl,
+  mintTurnCredential,
+  normalizeTtlSeconds,
+  parseTurnUrls,
   turnFailureLog,
   type TurnUnavailableReason,
 } from "./turn-credentials";
@@ -23,73 +28,51 @@ export type TurnLookup =
   | { relay: false; reason: TurnUnavailableReason };
 
 /**
- * Credentials held in the instance, not in the fetch cache.
+ * Public STUN, for deployments that have not stood a TURN server up yet.
  *
- * This replaces `next: { revalidate: 3540 }`, and the difference is the whole
- * point: Next's data cache stores whatever the fetch returned, so a single 401
- * was liable to be served back for the next 59 minutes without the provider
- * being asked again. An operator who fixed the key would see nothing change for
- * an hour and reasonably conclude the fix had not worked.
- *
- * Only successes are stored here. A failure leaves the slot empty, so the very
- * next request re-asks — which is exactly the behaviour you want on the day
- * somebody is standing at the dashboard pasting in a new key.
+ * Enough to connect two people on ordinary home or office networks, and not
+ * enough for the ones this change is about. Kept so a developer running
+ * locally, and a deployment mid-migration, still get working calls between
+ * peers that can reach each other directly.
  */
-let cachedServers: { servers: RTCIceServer[]; expiresAt: number } | null = null;
-
-/** Drop the cached credentials. For tests, and for an explicit re-read. */
-export function resetTurnCache(): void {
-  cachedServers = null;
-}
+export const FALLBACK_STUN: RTCIceServer[] = [
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+];
 
 /**
- * Fetch TURN credentials, or say why there are none.
+ * The ICE servers for one caller.
  *
- * Never throws: every caller would rather have STUN and a reason than a 500.
+ * `label` only ever reaches the TURN server's own log, so an operator watching
+ * relayed sessions can tell which room they belong to. It is not an identity
+ * and nothing is authorized by it — the HMAC is.
  */
-export async function turnServers(): Promise<TurnLookup> {
-  const now = Date.now();
-  if (cachedServers && cachedServers.expiresAt > now) {
-    return { relay: true, iceServers: cachedServers.servers };
-  }
+export function turnServers(label?: string): TurnLookup {
+  const urls = parseTurnUrls(process.env.TURN_URLS);
+  const secret = cleanCredential(process.env.TURN_SECRET);
 
-  const rawKey = process.env.METERED_API_KEY;
-  const apiKey = cleanCredential(rawKey);
-  const appName = cleanCredential(process.env.METERED_APP_NAME) ?? "fundexecs";
-
-  if (!apiKey) {
-    console.error(turnFailureLog({ reason: "unconfigured", appName, dirty: false }));
+  if (urls.length === 0 && !secret) {
+    console.error(turnFailureLog("unconfigured"));
     return { relay: false, reason: "unconfigured" };
   }
 
-  const dirty = credentialWasDirty(rawKey);
-
-  try {
-    // `no-store` rather than a revalidate window: the caching is done above,
-    // where a failure cannot be mistaken for an answer.
-    const res = await fetch(meteredCredentialsUrl(appName, apiKey), { cache: "no-store" });
-    const status = classifyTurnStatus(res.status);
-
-    if (status !== "ok") {
-      const reason: TurnUnavailableReason = status === "rejected" ? "rejected" : "unavailable";
-      console.error(turnFailureLog({ reason, status: res.status, appName, dirty }));
-      return { relay: false, reason };
-    }
-
-    const servers = await res.json() as unknown;
-    if (!isUsableIceServerList(servers)) {
-      // A 200 carrying nothing usable. Treated as the provider failing rather
-      // than as success, because handing a peer connection an empty server list
-      // looks like success at every point that checks it.
-      console.error(turnFailureLog({ reason: "unavailable", status: res.status, appName, dirty }));
-      return { relay: false, reason: "unavailable" };
-    }
-
-    const iceServers = servers as RTCIceServer[];
-    cachedServers = { servers: iceServers, expiresAt: now + TURN_CREDENTIAL_TTL_MS };
-    return { relay: true, iceServers };
-  } catch (err) {
-    console.error(turnFailureLog({ reason: "unavailable", appName, dirty }), err);
-    return { relay: false, reason: "unavailable" };
+  // Half-configured is its own case, and a likelier mistake than either of the
+  // clean ones: somebody sets the URLs and forgets the secret, or stands up the
+  // server and leaves TURN_URLS holding only a stun: entry.
+  if (!secret) {
+    console.error(turnFailureLog("misconfigured", "TURN_URLS is set but TURN_SECRET is empty"));
+    return { relay: false, reason: "misconfigured" };
   }
+  if (!hasRelayUrl(urls)) {
+    console.error(turnFailureLog("misconfigured", "TURN_URLS contains no turn: or turns: entry"));
+    return { relay: false, reason: "misconfigured" };
+  }
+
+  const credential = mintTurnCredential({
+    secret,
+    ttlSeconds: normalizeTtlSeconds(process.env.TURN_TTL_SECONDS),
+    nowSeconds: Math.floor(Date.now() / 1000),
+    label,
+  });
+
+  return { relay: true, iceServers: buildIceServers(urls, credential) };
 }
