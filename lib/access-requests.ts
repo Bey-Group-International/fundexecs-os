@@ -338,7 +338,7 @@ export async function lookupDecisionToken(
 /**
  * What an authenticating principal is allowed to do.
  *
- *   allow    — already approved (or internal); let the session stand.
+ *   allow    — approved (or internal) and not declined; let the session stand.
  *   grant    — an approved request exists but the principal isn't stamped yet;
  *              stamp access_approved_at, then let the session stand.
  *   pending  — request is in the queue, not decided. Sign them back out.
@@ -349,9 +349,18 @@ export async function lookupDecisionToken(
 export type AccessDecision = "allow" | "grant" | "pending" | "declined" | "none";
 
 /**
- * Pure decision table for the sign-in gate. Platform admins are never gated —
- * the internal team must always be able to reach the console that approves
- * everyone else, even on a brand-new account.
+ * Pure decision table for the sign-in gate.
+ *
+ * A DECLINE is checked first, ahead of any standing approval stamp. It used to
+ * lose to the stamp, which made declining a no-op against anyone who already
+ * had an account: migration 20260906120000 backfilled every principal existing
+ * at the time as approved, so the accounts a decline most needs to reach were
+ * exactly the ones it could not. Revoking access has to beat a past approval,
+ * or it isn't revocation.
+ *
+ * Platform admins are never gated — the internal team must always be able to
+ * reach the console that approves everyone else, even on a brand-new account,
+ * and even if some stale row carries their address.
  */
 export function decideAccess(input: {
   approvedAt: string | null;
@@ -359,10 +368,10 @@ export function decideAccess(input: {
   isInternal: boolean;
 }): AccessDecision {
   if (input.isInternal) return "allow";
+  if (input.requestStatus === "declined") return "declined";
   if (input.approvedAt) return "allow";
   if (input.requestStatus === "approved") return "grant";
   if (input.requestStatus === "pending") return "pending";
-  if (input.requestStatus === "declined") return "declined";
   return "none";
 }
 
@@ -401,8 +410,11 @@ export async function enforceAccessGate(args: {
       .eq("id", args.userId)
       .maybeSingle();
 
+    // Read the queue even when the principal is already stamped. Skipping this
+    // for a stamped principal was the other half of the decline hole above: the
+    // gate never saw the decline for precisely the accounts that carry a stamp.
     let requestStatus: AccessRequestStatus | null = null;
-    if (!principal?.access_approved_at && email) {
+    if (email) {
       const { data: request } = await supabase
         .from("access_requests")
         .select("status")
@@ -602,6 +614,17 @@ export async function applyAccessDecision(args: {
 
   const email = normalizeEmail(updated.email);
   if (args.decision !== "approved") {
+    // Clear any standing approval, so the decline reaches an account that
+    // already exists rather than only the queue row. Without this the stamp
+    // outlives the decision and the person keeps signing in. Exact match only,
+    // for the same reason the approval path below uses one.
+    //
+    // Decisions stay reversible: a later approve re-stamps via the
+    // `.is("access_approved_at", null)` update below, which now matches again.
+    await supabase
+      .from("principals")
+      .update({ access_approved_at: null })
+      .eq("email", email);
     return { ok: true, email, fullName: updated.full_name };
   }
 

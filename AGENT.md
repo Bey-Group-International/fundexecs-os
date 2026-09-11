@@ -1486,6 +1486,35 @@ Deployed, monitoring               →  live, observability active
              |  compliance guardrail.
              |  Confidence: typecheck/eslint clean, Jest 5295 green (422 suites). Copy
              |  and comments only — no logic, no migration, no new deps.
+2026-09-11  |  Declining someone actually revokes them now  |  It didn't. A decline
+             |  wrote the queue row and left the account signing in.
+             |  Three parts, all one bug: decideAccess checked access_approved_at
+             |  BEFORE requestStatus, so a stamp outranked a decline;
+             |  enforceAccessGate skipped the access_requests lookup entirely when a
+             |  principal carried a stamp, so it never read the decline at all; and
+             |  applyAccessDecision recorded "declined" on the request without
+             |  clearing principals.access_approved_at.
+             |  Why it mattered: migration 20260906120000 backfilled EVERY principal
+             |  existing then as approved. So all three failed in the same direction,
+             |  for exactly the accounts a decline is for — anyone who already had
+             |  one. Declining a stranger with no account worked; declining a real
+             |  user did nothing.
+             |  Fixed: decline is checked first in the table, the gate reads the queue
+             |  regardless of the stamp, and a decline nulls the column. Decisions
+             |  stay reversible — approve re-stamps through the same
+             |  `.is("access_approved_at", null)` filter, which now matches again.
+             |  Unchanged: pending still blocks, no-request still blocks, platform
+             |  admins are still never gated, and the gate still fails OPEN on a
+             |  missing service-role env or a thrown read. Only a decline's reach
+             |  changed.
+             |  Added: lib/access-requests.gate.test.ts — the service-client halves
+             |  had NO coverage, which is how this survived. Each of the three legs
+             |  was verified to fail against the old code before the fix landed.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +26
+             |  new (5343 total green, 425 suites). No migration, no new deps.
+             |  Note: existing principals declined BEFORE this shipped still carry a
+             |  stale stamp — their decline was a no-op and stays one until the
+             |  request is re-declined. Worth a one-off sweep if any exist.
 ```
 
 ---

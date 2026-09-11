@@ -193,6 +193,37 @@ describe("decideAccess", () => {
     expect(decideAccess({ ...base, requestStatus: "declined" })).toBe("declined");
   });
 
+  it("lets a decline outrank a standing approval stamp", () => {
+    // The whole point of the ordering. Migration 20260906120000 backfilled
+    // every principal existing then as approved, so a decline that lost to the
+    // stamp could not revoke anyone who already had an account.
+    expect(
+      decideAccess({
+        ...base,
+        approvedAt: "2026-01-01T00:00:00Z",
+        requestStatus: "declined",
+      }),
+    ).toBe("declined");
+  });
+
+  it("still gates a pending request behind the stamp, not ahead of it", () => {
+    // Only a decline jumps the queue. An approved-then-stamped principal who
+    // later files a fresh request must not be locked out by it.
+    expect(
+      decideAccess({
+        ...base,
+        approvedAt: "2026-01-01T00:00:00Z",
+        requestStatus: "pending",
+      }),
+    ).toBe("allow");
+  });
+
+  it("never gates an internal email, even one carrying a declined row", () => {
+    expect(
+      decideAccess({ ...base, requestStatus: "declined", isInternal: true }),
+    ).toBe("allow");
+  });
+
   it("blocks a sign-in that never asked for access — the Google self-serve hole", () => {
     expect(decideAccess(base)).toBe("none");
   });
