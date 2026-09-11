@@ -10,6 +10,7 @@ import {
   shareState,
   shareExposure,
   shareDocCount,
+  sectionsAllowedBy,
   sectionLabel,
   type RoomDocument,
 } from "@/lib/data-rooms";
@@ -165,5 +166,31 @@ describe("sectionLabel", () => {
   it("falls back to the catch-all for null or unknown keys", () => {
     expect(sectionLabel(null)).toBe("Other Materials");
     expect(sectionLabel("nope")).toBe("Other Materials");
+  });
+});
+
+describe("sectionsAllowedBy", () => {
+  const sections = [{ key: "thesis" }, { key: "financials" }, { key: "legal" }];
+
+  it("passes everything through for null or an empty allowlist", () => {
+    expect(sectionsAllowedBy(null, sections)).toHaveLength(3);
+    expect(sectionsAllowedBy(undefined, sections)).toHaveLength(3);
+    expect(sectionsAllowedBy([], sections)).toHaveLength(3);
+  });
+
+  it("keeps only allowed keys, in the original order", () => {
+    expect(sectionsAllowedBy(["legal", "thesis"], sections).map((s) => s.key)).toEqual([
+      "thesis",
+      "legal",
+    ]);
+  });
+
+  it("ignores allowlist entries with no matching section", () => {
+    expect(sectionsAllowedBy(["nope"], sections)).toEqual([]);
+  });
+
+  it("works on any shape carrying a key — GP rows and viewer sections alike", () => {
+    const viewerish = [{ key: "thesis", label: "Thesis", docs: [{ id: "d1" }] }];
+    expect(sectionsAllowedBy(["thesis"], viewerish)[0].docs).toHaveLength(1);
   });
 });
