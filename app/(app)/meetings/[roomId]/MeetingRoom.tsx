@@ -67,6 +67,7 @@ import {
   type LinkState,
   type PeerLinkStatus,
   type RecoveryState,
+  type SendCap,
 } from "@/lib/meetings/connection";
 import {
   formatTransceivers,
@@ -75,7 +76,16 @@ import {
   videoSenderNeedsRepair,
   type TransceiverState,
 } from "@/lib/meetings/media-repair";
-import { rememberDevice } from "@/lib/meetings/device-prefs";
+import {
+  allocateSendCaps,
+  tierForView,
+  withDemotionDelay,
+  DEMOTION_LINGER_MS,
+  type VideoTier,
+} from "@/lib/meetings/send-tiers";
+import { rememberDevice, rememberedDevice } from "@/lib/meetings/device-prefs";
+import { acquisitionMessage, cameraMessage } from "@/lib/meetings/media-acquisition";
+import { openCallMedia, openCameraOnly } from "@/lib/meetings/open-media";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
 import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
@@ -156,6 +166,9 @@ type SignalMsg =
   //
   // Reply content is used for a console line and nothing else — it is a peer's
   // self-report, not a fact this client acts on.
+  // What one participant needs from another, so a sender can encode per peer
+  // rather than sending everyone the same picture. See lib/meetings/send-tiers.
+  | { type: "video_request"; from: string; to: string; tier: VideoTier }
   | { type: "media_probe"; from: string; to: string }
   | { type: "media_report"; from: string; to: string; transceivers: TransceiverState[] }
 ;
@@ -452,35 +465,72 @@ function VideoTile({
 
 // ─── DeviceChevron ────────────────────────────────────────────────────────────
 
-function DeviceChevron({ kind, onSelect }: { kind: "audioinput" | "videoinput" | "audiooutput"; onSelect: (id: string) => void }) {
+/**
+ * The device picker beside the mic and camera buttons.
+ *
+ * `activeId` is the device the call is actually running on, read back from the
+ * live track rather than from whatever was requested — the two differ exactly
+ * when it matters. A request for the system default resolves to a concrete
+ * device, and a camera that was busy at join time is quietly replaced by
+ * another, so a menu that ticked the requested id would tell a member they are
+ * on their headset while they talk into their laptop.
+ *
+ * The list is re-read every time the menu opens, and again on `devicechange`
+ * while it is open: plugging a headset in with the picker showing and not
+ * seeing it there is the moment somebody decides the meeting is broken.
+ */
+function DeviceChevron({ kind, activeId, onSelect }: {
+  kind: "audioinput" | "videoinput" | "audiooutput";
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [devs, setDevs] = useState<MediaDeviceInfo[]>([]);
   const anchorRef = useRef<HTMLButtonElement>(null);
 
-  const openPicker = async () => {
-    const all = await navigator.mediaDevices.enumerateDevices();
-    setDevs(all.filter((d) => d.kind === kind && d.deviceId));
-    setOpen(true);
-  };
+  const refresh = useCallback(async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      setDevs(all.filter((d) => d.kind === kind && d.deviceId));
+    } catch { setDevs([]); }
+  }, [kind]);
+
+  useEffect(() => {
+    if (!open) return;
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+    const onChange = () => { void refresh(); };
+    md.addEventListener("devicechange", onChange);
+    return () => md.removeEventListener("devicechange", onChange);
+  }, [open, refresh]);
+
+  const label = kind === "audioinput" ? "Microphone" : kind === "videoinput" ? "Camera" : "Speaker";
 
   return (
     <>
-      <button ref={anchorRef} onClick={() => (open ? setOpen(false) : void openPicker())}
+      <button ref={anchorRef} aria-label={`Choose ${label.toLowerCase()}`} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => { if (open) { setOpen(false); return; } void refresh(); setOpen(true); }}
         className="flex items-center justify-center w-4 h-4 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors">
         <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
           <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
       </button>
       <FloatingMenu open={open} anchorRef={anchorRef} onClose={() => setOpen(false)}>
-        <p className="text-[11px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">
-          {kind === "audioinput" ? "Microphone" : kind === "videoinput" ? "Camera" : "Speaker"}
-        </p>
-        {devs.length === 0 ? <p className="text-xs text-[var(--fg-muted)] px-2 py-1">No devices found</p> : devs.map((d: MediaDeviceInfo) => (
-          <button key={d.deviceId} onClick={() => { onSelect(d.deviceId); setOpen(false); }}
-            className="w-full text-left text-xs text-[var(--fg-primary)] px-2 py-1.5 rounded-lg hover:bg-[var(--surface-3)] transition-colors truncate">
-            {d.label || `Device ${d.deviceId.slice(0, 6)}`}
-          </button>
-        ))}
+        <p className="text-[11px] font-medium text-[var(--fg-muted)] uppercase tracking-wide px-2 py-1">{label}</p>
+        {devs.length === 0 ? <p className="text-xs text-[var(--fg-muted)] px-2 py-1">No devices found</p> : devs.map((d: MediaDeviceInfo) => {
+          const live = !!activeId && d.deviceId === activeId;
+          return (
+            <button key={d.deviceId} role="menuitemradio" aria-checked={live}
+              onClick={() => { onSelect(d.deviceId); setOpen(false); }}
+              className={`w-full flex items-center gap-1.5 text-left text-xs px-2 py-1.5 rounded-lg transition-colors hover:bg-[var(--surface-3)] ${
+                live ? "text-[var(--gold-400)]" : "text-[var(--fg-primary)]"
+              }`}>
+              {/* Always rendered, so the rows line up whether or not one is live. */}
+              <span aria-hidden="true" className="w-3 shrink-0 text-center">{live ? "\u2713" : ""}</span>
+              <span className="truncate">{d.label || `Device ${d.deviceId.slice(0, 6)}`}</span>
+            </button>
+          );
+        })}
       </FloatingMenu>
     </>
   );
@@ -488,12 +538,18 @@ function DeviceChevron({ kind, onSelect }: { kind: "audioinput" | "videoinput" |
 
 // ─── CtrlBtn ──────────────────────────────────────────────────────────────────
 
-function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon }: {
+function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon, busy = false }: {
   active: boolean; onClick: () => void; title: string; activeIcon: React.ReactNode; inactiveIcon: React.ReactNode;
+  /** A device being opened. Opening one takes a moment, and longer when the
+   *  first camera tried is held by something else — without this the press
+   *  looks like it did nothing and gets pressed again. */
+  busy?: boolean;
 }) {
   return (
-    <button onClick={onClick} title={title}
+    <button onClick={onClick} title={busy ? "Starting…" : title} disabled={busy} aria-busy={busy}
       className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors ${
+        busy ? "animate-pulse cursor-wait" : ""
+      } ${
         active ? "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-primary)] hover:bg-[var(--surface-3)]"
                : "border-status-danger/40 bg-status-danger/10 text-[var(--status-danger)]"
       }`}>
@@ -510,6 +566,7 @@ function ControlBar({
   micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
+  activeMicId, activeCamId, camStarting,
   leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
 }: {
   onOpenBackgrounds: () => void;
@@ -524,6 +581,9 @@ function ControlBar({
   onToggleMic: () => void; onToggleCam: () => void; onToggleScreen: () => void;
   onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
   onSwitchMic: (id: string) => void; onSwitchCam: (id: string) => void; onSwitchSpeaker: (id: string) => void;
+  /** The devices the call is actually running on, so the pickers can say so. */
+  activeMicId: string; activeCamId: string;
+  camStarting: boolean;
   onRaiseHand: () => void; onReaction: (emoji: string) => void; onMuteAll: () => void; onToggleLayout: () => void;
   onFlipCamera: () => void;
 }) {
@@ -541,11 +601,11 @@ function ControlBar({
         {/* Core controls — always visible */}
         <div className="flex items-center gap-0.5">
           <CtrlBtn active={micOn} onClick={onToggleMic} title={micOn ? "Mute" : "Unmute"} activeIcon={<MicIcon />} inactiveIcon={<MicOffIcon />} />
-          <span className="hidden sm:block"><DeviceChevron kind="audioinput" onSelect={onSwitchMic} /></span>
+          <span className="hidden sm:block"><DeviceChevron kind="audioinput" activeId={activeMicId} onSelect={onSwitchMic} /></span>
         </div>
         <div className="flex items-center gap-0.5">
-          <CtrlBtn active={camOn} onClick={onToggleCam} title={camOn ? "Camera off" : "Camera on"} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
-          <span className="hidden sm:block"><DeviceChevron kind="videoinput" onSelect={onSwitchCam} /></span>
+          <CtrlBtn active={camOn} onClick={onToggleCam} busy={camStarting} title={camOn ? "Camera off" : "Camera on"} activeIcon={<CamIcon />} inactiveIcon={<CamOffIcon />} />
+          <span className="hidden sm:block"><DeviceChevron kind="videoinput" activeId={activeCamId} onSelect={onSwitchCam} /></span>
         </div>
 
         {/* Backgrounds — next to the camera controls, because that is what it
@@ -985,6 +1045,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const inboundAuditRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   /** Peers with a camera re-attach already in flight, so two never race. */
   const repairInFlightRef = useRef<Set<string>>(new Set());
+  /** What each peer has asked US to send them. Absent means "not yet said". */
+  const requestedTierRef = useRef<Map<string, VideoTier>>(new Map());
+  /** What we last asked each peer for, so only changes go on the wire. */
+  const sentRequestRef = useRef<Map<string, VideoTier>>(new Map());
+  /** When each peer was last genuinely wanted large, for the demotion linger. */
+  const lastHighAtRef = useRef<Map<string, number>>(new Map());
+  /** The single re-check that lands a held demotion once the linger expires. */
+  const demoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Whether the servers above actually include a TURN relay. Read when a peer
   // fails to connect, so the logs distinguish "this network needed a relay and
   // had none" from an ordinary blip.
@@ -1096,7 +1164,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Layout
   const [layout, setLayout] = useState<"grid" | "speaker">("grid");
+  // Mirrors for refreshVideoRequests, which runs from a visibility listener and
+  // from effects and must see the current view without being rebuilt by it.
+  const layoutRef = useRef<"grid" | "speaker">("grid");
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
+  const activeSpeakerIdRef = useRef<string | null>(null);
+  useEffect(() => { activeSpeakerIdRef.current = activeSpeakerId; }, [activeSpeakerId]);
 
   // Bandwidth adaptation
   const [bwMode, setBwMode] = useState<BandwidthMode>("normal");
@@ -1165,6 +1239,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // settled on, for the in-call speaker routing and device switcher.
   const [selectedMicId, setSelectedMicId] = useState("");
   const [selectedCamId, setSelectedCamId] = useState("");
+  // Read by startCamera, which must not be rebuilt every time the live camera
+  // changes — it is the thing that changes it.
+  const selectedCamIdRef = useRef("");
+  useEffect(() => { selectedCamIdRef.current = selectedCamId; }, [selectedCamId]);
+  // A camera being opened from the button. Held so the control can say it is
+  // working rather than looking like a press that did nothing: opening a camera
+  // takes a moment, and longer when the first one tried is busy.
+  const [camStarting, setCamStarting] = useState(false);
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
   // Read synchronously by `enterRoom`, which runs in the same tick as the click
   // that produced the choice — a state update would not be visible to it yet.
@@ -1325,6 +1407,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const audit = inboundAuditRef.current.get(peerId);
     if (audit) { clearTimeout(audit); inboundAuditRef.current.delete(peerId); }
     repairInFlightRef.current.delete(peerId);
+    requestedTierRef.current.delete(peerId);
+    sentRequestRef.current.delete(peerId);
+    lastHighAtRef.current.delete(peerId);
   }, []);
 
   /**
@@ -1343,11 +1428,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const applySendCaps = useCallback(() => {
     const sharing = shareOnRef.current;
     const wanted = sharing || camOnRef.current;
-    const cap = wanted
-      ? (sharing ? screenSendCap(peersRef.current.size, bwModeRef.current) : videoSendCap(peersRef.current.size, bwModeRef.current))
-      : null;
+    const ids = [...videoSenderRef.current.keys()];
 
-    videoSenderRef.current.forEach((sender) => {
+    // A shared screen is the thing everyone is looking at, so it is not sized
+    // per viewer — it keeps the even split and full resolution. A camera is the
+    // opposite: in a presented meeting most people are a 96px thumbnail on
+    // every other screen, and sending them a sixth of the budget at half
+    // resolution spends the upload, and the encoder, on detail that is drawn
+    // four times smaller than it is sent.
+    const caps: Map<string, SendCap | null> = !wanted
+      ? new Map(ids.map((id) => [id, null]))
+      : sharing
+        ? new Map(ids.map((id) => [id, screenSendCap(ids.length, bwModeRef.current)]))
+        : allocateSendCaps(requestedTierRef.current, ids, bwModeRef.current);
+
+    videoSenderRef.current.forEach((sender, peerId) => {
+      const cap = caps.get(peerId) ?? null;
       let params: RTCRtpSendParameters;
       try { params = sender.getParameters(); } catch { return; }
       if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
@@ -1368,6 +1464,67 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
   const applySendCapsRef = useRef(applySendCaps);
   useEffect(() => { applySendCapsRef.current = applySendCaps; }, [applySendCaps]);
+
+  /**
+   * Tell each peer what size we are drawing them at.
+   *
+   * The saving this unlocks is not marginal. In a presented meeting with six
+   * guests, five of six people are a 96px thumbnail on every screen in the
+   * room — and were being sent a sixth of the upload budget at half resolution
+   * each. Asking for a thumbnail instead takes their outgoing video from
+   * 2.4Mbps across six full-size encoders to about 1Mbps across six quarter-
+   * resolution ones, and hands what that frees to whoever is actually being
+   * watched.
+   *
+   * Only changes go on the wire, and the tier comes from the LAYOUT rather than
+   * from measuring an element: a tile's size changes continuously while a
+   * window is dragged, and quality that followed it would renegotiate on every
+   * frame of the drag.
+   */
+  const refreshVideoRequests = useCallback(() => {
+    const ids = [...peersRef.current.keys()];
+    const hidden = typeof document !== "undefined" && document.hidden;
+    const now = Date.now();
+    // Including ourselves: the grid draws our own tile too, and it is the total
+    // that decides how small each one is.
+    const tileCount = ids.length + 1;
+    let holding = false;
+    for (const id of ids) {
+      const said = peerVideoRef.current.get(id);
+      const desired = tierForView({
+        documentHidden: hidden,
+        isSpotlight: layoutRef.current === "speaker" && activeSpeakerIdRef.current === id,
+        layout: layoutRef.current,
+        tileCount,
+        cameraOn: said ? said.camOn && !said.paused : true,
+      });
+      if (desired === "high") lastHighAtRef.current.set(id, now);
+      const tier = withDemotionDelay({
+        desired,
+        lastHighAt: lastHighAtRef.current.get(id) ?? null,
+        now,
+      });
+      // A tier that is only `high` because of the linger has to be revisited,
+      // or the demotion never lands: nothing else in the room changes when a
+      // timer expires.
+      if (tier !== desired) holding = true;
+      if (sentRequestRef.current.get(id) === tier) continue;
+      sentRequestRef.current.set(id, tier);
+      sendSignalRef.current({ type: "video_request", from: myIdRef.current, to: id, tier });
+    }
+
+    // One timer for the whole room rather than one per peer: they all expire
+    // within the same linger, and a single re-check re-evaluates every peer.
+    if (demoteTimerRef.current) { clearTimeout(demoteTimerRef.current); demoteTimerRef.current = null; }
+    if (holding) {
+      demoteTimerRef.current = setTimeout(() => {
+        demoteTimerRef.current = null;
+        refreshVideoRequestsRef.current();
+      }, DEMOTION_LINGER_MS);
+    }
+  }, []);
+  const refreshVideoRequestsRef = useRef(refreshVideoRequests);
+  useEffect(() => { refreshVideoRequestsRef.current = refreshVideoRequests; }, [refreshVideoRequests]);
 
   /** Tell the room what our video is doing, so nobody has to guess from pixels. */
   const announceVideoState = useCallback(() => {
@@ -1861,6 +2018,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!msg.micOn) lastAudibleRef.current.delete(msg.from);
     }
 
+    if (msg.type === "video_request" && msg.to === myId) {
+      // A peer's own claim about what it is drawing. Validated rather than
+      // trusted: this decides what we encode, and an unknown value would fall
+      // through allocateSendCaps as "high" and quietly undo the saving.
+      if (msg.tier !== "high" && msg.tier !== "low" && msg.tier !== "none") return;
+      if (requestedTierRef.current.get(msg.from) === msg.tier) return;
+      requestedTierRef.current.set(msg.from, msg.tier);
+      applySendCapsRef.current();
+      return;
+    }
+
     if (msg.type === "media_probe" && msg.to === myId) {
       // Somebody is receiving no video from us. Describe our side of that
       // connection so the two snapshots can be read together.
@@ -2025,33 +2193,39 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // the whole point of the toggle.
     const wantCam = choice ? choice.cameraEnabled : true;
 
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: wantCam ? constraintsFor("videoinput", camId || null) : false,
-        audio: constraintsFor("audioinput", micId || null),
-      });
-    } catch (err) {
-      const errName = err instanceof Error ? err.name : "";
-      // Stale/unavailable exact device id (e.g. virtual cameras) → retry unconstrained.
-      let recovered: MediaStream | null = null;
-      if ((errName === "OverconstrainedError" || errName === "NotFoundError") && (camId || micId)) {
-        try { recovered = await navigator.mediaDevices.getUserMedia({ video: wantCam, audio: true }); }
-        catch { recovered = null; }
-      }
-      if (recovered) {
-        stream = recovered;
-      } else {
-        if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
-          setMediaError("Camera and microphone access was denied. Click the camera icon in your browser's address bar to allow access, then rejoin.");
-        } else if (errName === "NotFoundError") {
-          setMediaError("No camera or microphone found. Check that your devices are connected.");
-        } else {
-          setMediaError("Could not access camera/microphone. Check your device settings.");
-        }
-        stream = new MediaStream();
-      }
-    }
+    // One unavailable device no longer costs the other. This used to be a
+    // single combined getUserMedia, and a combined request fails WHOLE: one
+    // camera another application already held — Zoom left open, OBS, or simply
+    // the green room's own preview a few milliseconds from being released —
+    // and the member landed here with an empty MediaStream. No camera, which
+    // was the real problem, and no microphone, which was never broken, for the
+    // rest of the call: unable to be seen OR heard, with nothing saying why.
+    //
+    // openCallMedia keeps the single permission prompt for the ordinary path
+    // and only splits the request when that fails, then walks the member's
+    // choice, their remembered device, the system default and the rest of the
+    // hardware in that order — retrying a merely-busy device once, because
+    // releasing a camera is asynchronous and the green room let go of this one
+    // a moment ago.
+    const opened = await openCallMedia({
+      wantCamera: wantCam,
+      cameraId: camId,
+      micId,
+      rememberedCameraId: rememberedDevice("videoinput"),
+      rememberedMicId: rememberedDevice("audioinput"),
+    });
+
+    const stream = new MediaStream();
+    if (opened.micTrack) stream.addTrack(opened.micTrack);
+    if (opened.cameraTrack) stream.addTrack(opened.cameraTrack);
+
+    // What is LIVE, not what was asked for. The in-call pickers read these, and
+    // a fallback nobody is told about is how somebody spends a meeting talking
+    // into their laptop while the menu insists they are on their headset.
+    setSelectedCamId(opened.camera.deviceId ?? "");
+    setSelectedMicId(opened.microphone.deviceId ?? "");
+    // Null when everything opened as asked, so a clean join says nothing.
+    setMediaError(acquisitionMessage(opened));
     // Carry the green room's mic/camera state into the call, so someone who
     // muted themselves before joining is still muted a second later.
     const micWanted = choice ? choice.micEnabled : true;
@@ -2171,6 +2345,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Stable handle so the waiting-room poll can enter without re-creating itself.
   const enterRoomRef = useRef(enterRoom);
   useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
+
+  // What we ask for follows what we draw: the layout, who is in the spotlight,
+  // who is in the room, and whether they say their camera is on.
+  useEffect(() => {
+    if (!ready) return;
+    refreshVideoRequestsRef.current();
+  }, [ready, layout, activeSpeakerId, peers, peerVideo]);
+
+  // A backgrounded tab draws nothing, so it should receive nothing. This is the
+  // only lever that removes encoder cost at the far end rather than reducing
+  // it — five people with the call in a background tab stop five encoders each
+  // on everyone else's machine.
+  useEffect(() => {
+    if (!ready) return;
+    const onVisibility = () => refreshVideoRequestsRef.current();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [ready]);
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
   const joinMeeting = useCallback(async (choice?: GreenRoomChoice) => {
@@ -2760,6 +2952,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Derived from the ref, like toggleMic: the ref write is a side effect and
     // does not belong inside a state updater.
     const next = !camOnRef.current;
+    // Turning on with nothing to turn on. `enabled` only means something to a
+    // track that exists, and a track that has ended is no better than none.
+    if (next && !localStreamRef.current?.getVideoTracks().some((t) => t.readyState === "live")) {
+      void startCameraRef.current();
+      return;
+    }
     camOnRef.current = next;
     localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
     setCamOn(next);
@@ -2951,6 +3149,53 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (previousRaw && previousRaw !== track) { try { previousRaw.stop(); } catch { /* already stopped */ } }
   }, [shareOn, swapOutgoingVideo]);
 
+  /**
+   * Start a camera for someone who has none.
+   *
+   * Two ways to arrive here and they are the same problem: joining with the
+   * camera off never opens one, and a camera another application held at join
+   * time leaves the member with no video track either. In both cases the
+   * button used to flip a flag, announce a live camera to the room, and send
+   * nothing — so everyone else drew a black tile for a member whose own screen
+   * said they were on.
+   *
+   * No renegotiation: the video transceiver was created when the peer
+   * connection was, carrying nothing, so putting a track on it is a
+   * replaceTrack. That is also why this works at all mid-call.
+   */
+  const startCamera = useCallback(async () => {
+    setCamStarting(true);
+    try {
+      const opened = await openCameraOnly({
+        // What we were last actually on, which is not necessarily what was
+        // asked for at join time — that camera may be the busy one.
+        cameraId: selectedCamIdRef.current,
+        rememberedCameraId: rememberedDevice("videoinput"),
+      });
+      if (!opened.track) {
+        setMediaError(cameraMessage(opened.outcome.failure ?? "unknown"));
+        return;
+      }
+      // Before adopting: swapOutgoingVideo takes the track's intended enabled
+      // state from this ref, so setting it afterwards would put a disabled
+      // track on the wire.
+      camOnRef.current = true;
+      setCamOn(true);
+      setSelectedCamId(opened.outcome.deviceId ?? "");
+      setMediaError(null);
+      await adoptCameraTrack(opened.track);
+      applySendCapsRef.current();
+      announceVideoStateRef.current();
+    } finally {
+      setCamStarting(false);
+    }
+  }, [adoptCameraTrack]);
+
+  // Declared after adoptCameraTrack, which it needs, and reached from toggleCam
+  // through this ref — the same forward reference the rest of the room uses.
+  const startCameraRef = useRef(startCamera);
+  useEffect(() => { startCameraRef.current = startCamera; }, [startCamera]);
+
   const toggleScreen = useCallback(async () => {
     if (shareOn) { restoreCameraTrack(); return; }
     try {
@@ -3008,6 +3253,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       localStreamRef.current.getAudioTracks().forEach((t2) => { try { t2.stop(); } catch { /* already stopped */ } localStreamRef.current!.removeTrack(t2); });
       localStreamRef.current.addTrack(t);
       setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      // The id the track REPORTS, not the one requested. "" is a request for
+      // the system default and resolves to a concrete device, so recording what
+      // was asked for would leave the picker unable to tick anything.
+      setSelectedMicId(t.getSettings().deviceId || deviceId);
       rememberDevice("audioinput", deviceId);
       setMediaError(null);
     } catch (e) {
@@ -3031,6 +3280,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const t = s.getVideoTracks()[0];
       if (!t || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return; }
       await adoptCameraTrack(t);
+      setSelectedCamId(t.getSettings().deviceId || deviceId);
       rememberDevice("videoinput", deviceId);
       setMediaError(null);
     } catch (e) {
@@ -3118,6 +3368,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const t = s.getVideoTracks()[0];
       if (!t || !localStreamRef.current) return;
       await adoptCameraTrack(t);
+      setSelectedCamId(t.getSettings().deviceId || "");
       setFacingMode(next);
     } catch (e) { console.warn("[flipCamera]", e); }
   }, [facingMode, adoptCameraTrack]);
@@ -3213,6 +3464,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // fired after teardown would report on a call that no longer exists.
     inboundAuditRef.current.forEach((t) => clearTimeout(t));
     inboundAuditRef.current.clear();
+    // The held-demotion re-check has no peers left to re-evaluate, and would
+    // signal into a channel that is about to be unsubscribed.
+    if (demoteTimerRef.current) { clearTimeout(demoteTimerRef.current); demoteTimerRef.current = null; }
     try { channelRef.current?.unsubscribe(); } catch { /* already gone */ }
     channelRef.current = null;
     if (recognitionRef.current) {
@@ -3544,6 +3798,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         backgroundActive={bgEffect.kind !== "none"}
         backgroundBtnRef={bgBtnRef}
         onSwitchMic={switchMic} onSwitchCam={switchCam} onSwitchSpeaker={switchSpeaker}
+        activeMicId={selectedMicId} activeCamId={selectedCamId} camStarting={camStarting}
         onRaiseHand={toggleRaiseHand} onReaction={sendReaction} onMuteAll={muteAll}
         onToggleLayout={() => setLayout((v) => v === "grid" ? "speaker" : "grid")}
         onFlipCamera={() => void flipCamera()}
