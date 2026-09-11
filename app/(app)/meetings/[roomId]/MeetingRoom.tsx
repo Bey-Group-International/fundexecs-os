@@ -2312,16 +2312,25 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       try {
         const r = await fetch(`/api/meetings/ice-servers?${query}`, { cache: "no-store" });
         if (r.ok) {
-          const { iceServers, relay } = await r.json() as { iceServers?: RTCIceServer[]; relay?: boolean };
+          const { iceServers, relay, reason } = await r.json() as {
+            iceServers?: RTCIceServer[]; relay?: boolean; reason?: string;
+          };
           if (Array.isArray(iceServers) && iceServers.length > 0) {
             iceConfigRef.current = { iceServers };
             relayAvailableRef.current = relay === true;
             if (relay !== true) {
               // Worth a line even though the call may still work: it explains
-              // any later connection failure on a restrictive network, and it
-              // is the difference between "TURN is down" and "TURN was never
-              // configured for this deployment".
-              console.warn("[meeting] no TURN relay available — calls across restrictive networks may not connect");
+              // any later connection failure on a restrictive network. The
+              // reason is what makes it actionable — "TURN was never configured
+              // here" and "the provider is refusing our key" look identical
+              // from a blank tile, and have completely different owners.
+              console.warn(
+                reason === "rejected"
+                  ? "[meeting] TURN credentials were REJECTED by the provider — this deployment has no relay until the key is fixed. Guests behind symmetric NAT or CGNAT will fail to connect."
+                  : reason === "unconfigured"
+                    ? "[meeting] no TURN configured for this deployment — calls across restrictive networks may not connect"
+                    : "[meeting] TURN provider unavailable — falling back to STUN; calls across restrictive networks may not connect",
+              );
             }
             return;
           }
