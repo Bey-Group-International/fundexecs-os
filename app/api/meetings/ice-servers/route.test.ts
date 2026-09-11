@@ -17,7 +17,8 @@ jest.mock("@/lib/rate-limit", () => ({
 }));
 
 import { NextRequest } from "next/server";
-import { GET, __resetTurnCacheForTests } from "./route";
+import { GET } from "./route";
+import { resetTurnCache } from "@/lib/meetings/turn-servers.server";
 
 const REAL_SERVERS = [
   { urls: "stun:relay.metered.test:80" },
@@ -50,7 +51,7 @@ const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   jest.restoreAllMocks();
-  __resetTurnCacheForTests();
+  resetTurnCache();
   process.env = { ...ORIGINAL_ENV, METERED_API_KEY: "good-key", METERED_APP_NAME: "fundexecs" };
   jest.spyOn(console, "error").mockImplementation(() => {});
 });
