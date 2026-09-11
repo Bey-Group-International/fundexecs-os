@@ -2,8 +2,8 @@
 // recommendation — delegate to the executive team (A) or have Earn execute
 // directly (B) — plus concrete action bullets and a closing next-step line.
 //
-// This is the reusable core the session composer ("Plan with Earn") and the
-// Build hub's Plan module both call. It replaces the Command Center's
+// This is the reusable core the session composer's "Plan with Earn" action
+// calls. It replaces the Command Center's
 // world-coupled planner: same Claude call and deterministic-fallback
 // convention (lib/claude.ts), but it returns the plain plan instead of a
 // spatial Step[] timeline, so it has no dependency on the retired world engine.
