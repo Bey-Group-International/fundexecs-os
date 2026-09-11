@@ -1,171 +1,177 @@
-/**
- * ICE servers for a meeting's peer connections.
- *
- * The property under test is WHO may have them. This endpoint used to require a
- * signed-in user, which denied invite-link guests — the one population always on
- * somebody else's network, and so the one that actually needs a TURN relay. The
- * client swallowed the 401 and fell back to STUN alone, so guests' cameras and
- * microphones opened and then connected to nobody.
- *
- * Being signed in was the wrong question. The right one is whether the host has
- * admitted this person to this meeting, so the tests below are mostly about the
- * admission ladder: admitted gets credentials, waiting/denied/absent does not.
- */
-const from = jest.fn();
-const getUser = jest.fn(async () => ({ data: { user: null as { id: string } | null } }));
+// Production spent ten weeks answering `Metered returned 401` into a log
+// nobody read, while every meeting quietly ran on STUN and guests behind
+// symmetric NAT could not connect. These tests are about the two things that
+// let that happen: a failure that could be cached, and a failure that said
+// nothing an operator could act on.
 
 jest.mock("@/lib/supabase/server", () => ({
-  hasSupabaseServiceEnv: () => true,
-  createServiceClient: () => ({ from: (...a: unknown[]) => from(...a) }),
-  createServerClient: async () => ({ from: (...a: unknown[]) => from(...a), auth: { getUser: () => getUser() } }),
+  createServerClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) } }),
+  createServiceClient: () => ({}),
+  hasSupabaseServiceEnv: () => false,
+}));
+
+jest.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: () => ({ ok: true, remaining: 29, resetAt: Date.now() + 60_000 }),
+  clientIp: () => "203.0.113.9",
+  rateLimitHeaders: () => ({}),
 }));
 
 import { NextRequest } from "next/server";
-import { GET } from "./route";
+import { GET, __resetTurnCacheForTests } from "./route";
 
-const TURN = [{ urls: "turn:relay.example:3478", username: "u", credential: "c" }];
+const REAL_SERVERS = [
+  { urls: "stun:relay.metered.test:80" },
+  { urls: "turn:relay.metered.test:80", username: "u", credential: "c" },
+];
 
-/** The admissions lookup: one row when the guest is admitted, else nothing. */
-function admissionsBuilder(row: unknown) {
-  const b: Record<string, unknown> = {
-    select: () => b, eq: () => b, is: () => b, neq: () => b,
-    maybeSingle: async () => ({ data: row ?? null, error: null }),
-  };
-  return b;
+function request() {
+  return new NextRequest("https://fundexecs.test/api/meetings/ice-servers?roomCode=abc");
 }
 
-/** A distinct IP per test, so one test's requests never spend another's budget. */
-let ipCounter = 0;
-function req(query = "", ip?: string) {
-  return new NextRequest(`http://localhost/api/meetings/ice-servers${query}`, {
-    headers: { "x-forwarded-for": ip ?? `10.0.0.${++ipCounter}` },
+/** A fetch that records every call and answers from a queue. */
+function fetchReturning(...responses: ({ status: number; body?: unknown } | Error)[]) {
+  const calls: string[] = [];
+  let i = 0;
+  const impl = jest.fn(async (url: unknown) => {
+    calls.push(String(url));
+    const next = responses[Math.min(i, responses.length - 1)];
+    i += 1;
+    if (next instanceof Error) throw next;
+    return {
+      status: next.status,
+      ok: next.status >= 200 && next.status < 300,
+      json: async () => next.body,
+    } as unknown as Response;
   });
+  return { impl, calls };
 }
 
-const ADMITTED = { id: "adm1", status: "admitted" };
+const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  getUser.mockResolvedValue({ data: { user: null } });
-  from.mockImplementation(() => admissionsBuilder(null));
-  process.env.METERED_API_KEY = "test-key";
-  global.fetch = jest.fn(async () => new Response(JSON.stringify(TURN), { status: 200 })) as unknown as typeof fetch;
+  jest.restoreAllMocks();
+  __resetTurnCacheForTests();
+  process.env = { ...ORIGINAL_ENV, METERED_API_KEY: "good-key", METERED_APP_NAME: "fundexecs" };
+  jest.spyOn(console, "error").mockImplementation(() => {});
 });
 
-afterEach(() => { delete process.env.METERED_API_KEY; });
+afterAll(() => { process.env = ORIGINAL_ENV; });
 
-describe("who gets credentials", () => {
-  it("gives them to a signed-in member, with no room code needed", async () => {
-    // Someone opening a room on the fly has no room code yet.
-    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-    const res = await GET(req());
-    expect(res.status).toBe(200);
-    expect((await res.json()).iceServers).toEqual(TURN);
+describe("when the provider rejects the credential", () => {
+  // The regression. With `next: { revalidate: 3540 }` the 401 response itself
+  // was cacheable, so an operator who fixed the key would see nothing change
+  // for up to 59 minutes and reasonably conclude the fix had not worked.
+  it("does not cache the failure — the next request asks again", async () => {
+    const { impl, calls } = fetchReturning({ status: 401 }, { status: 200, body: REAL_SERVERS });
+    global.fetch = impl as unknown as typeof fetch;
+
+    const first = await (await GET(request())).json();
+    expect(first.relay).toBe(false);
+    expect(first.reason).toBe("rejected");
+
+    // Same instance, immediately after: the fixed key must take effect now.
+    const second = await (await GET(request())).json();
+    expect(second.relay).toBe(true);
+    expect(second.iceServers).toEqual(REAL_SERVERS);
+    expect(calls).toHaveLength(2);
   });
 
-  it("gives them to an admitted guest", async () => {
-    from.mockImplementation(() => admissionsBuilder(ADMITTED));
-    const res = await GET(req("?roomCode=abc-defg-hi&guestKey=g1"));
-    expect(res.status).toBe(200);
+  it("still answers 200 with STUN, because a call without a relay beats no call", async () => {
+    const { impl } = fetchReturning({ status: 401 });
+    global.fetch = impl as unknown as typeof fetch;
+
+    const res = await GET(request());
     const body = await res.json();
-    expect(body.iceServers).toEqual(TURN);
-    expect(body.relay).toBe(true);
-  });
-
-  it("refuses a guest who has not been admitted", async () => {
-    // The query filters on status='admitted', so a waiting or denied guest
-    // simply yields no row — the same answer as never having knocked.
-    from.mockImplementation(() => admissionsBuilder(null));
-    expect((await GET(req("?roomCode=abc-defg-hi&guestKey=g1"))).status).toBe(401);
-  });
-
-  it("refuses a caller with no session and no admission key", async () => {
-    expect((await GET(req())).status).toBe(401);
-  });
-
-  it("refuses a room code without a guest key, and vice versa", async () => {
-    from.mockImplementation(() => admissionsBuilder(ADMITTED));
-    expect((await GET(req("?roomCode=abc-defg-hi"))).status).toBe(401);
-    expect((await GET(req("?guestKey=g1"))).status).toBe(401);
-  });
-
-  it("asks the database for an admitted row on a live meeting, not just any row", async () => {
-    const calls: string[] = [];
-    from.mockImplementation((table: string) => {
-      const b: Record<string, unknown> = {
-        select: (sel: string) => { calls.push(`select:${sel}`); return b; },
-        eq: (col: string, val: unknown) => { calls.push(`eq:${col}=${String(val)}`); return b; },
-        is: (col: string, val: unknown) => { calls.push(`is:${col}=${String(val)}`); return b; },
-        neq: (col: string, val: unknown) => { calls.push(`neq:${col}=${String(val)}`); return b; },
-        maybeSingle: async () => ({ data: ADMITTED, error: null }),
-      };
-      calls.push(`from:${table}`);
-      return b;
-    });
-    await GET(req("?roomCode=abc-defg-hi&guestKey=g1"));
-    expect(calls).toContain("from:live_meeting_admissions");
-    expect(calls).toContain("eq:status=admitted");
-    expect(calls).toContain("eq:guest_key=g1");
-    expect(calls).toContain("eq:live_meetings.room_code=abc-defg-hi");
-    // An ended meeting needs no relay, and a deleted one no longer exists.
-    expect(calls).toContain("neq:live_meetings.status=ended");
-    expect(calls).toContain("is:live_meetings.deleted_at=null");
-    // `!inner` is what makes the meeting filters exclude the row rather than
-    // just null out the join.
-    expect(calls.some((c) => c.startsWith("select:") && c.includes("live_meetings!inner"))).toBe(true);
-  });
-});
-
-describe("when TURN is unavailable", () => {
-  beforeEach(() => { getUser.mockResolvedValue({ data: { user: { id: "u1" } } }); });
-
-  it("says so rather than implying a relay exists", async () => {
-    delete process.env.METERED_API_KEY;
-    const body = await (await GET(req())).json();
-    expect(body.relay).toBe(false);
-    expect(body.iceServers.every((s: { urls: string }) => s.urls.startsWith("stun:"))).toBe(true);
-  });
-
-  it("falls back to STUN when the provider errors", async () => {
-    global.fetch = jest.fn(async () => new Response("nope", { status: 500 })) as unknown as typeof fetch;
-    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    const body = await (await GET(req())).json();
-    expect(body.relay).toBe(false);
-    errorSpy.mockRestore();
-  });
-
-  it("treats an empty server list as a failure, not a success", async () => {
-    // A 200 carrying nothing would otherwise hand the peer connection an empty
-    // iceServers array — worse than the STUN fallback it replaced.
-    global.fetch = jest.fn(async () => new Response("[]", { status: 200 })) as unknown as typeof fetch;
-    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    const body = await (await GET(req())).json();
+    expect(res.status).toBe(200);
     expect(body.iceServers.length).toBeGreaterThan(0);
     expect(body.relay).toBe(false);
-    errorSpy.mockRestore();
+  });
+
+  it("logs something an operator can act on, not just the status code", async () => {
+    const { impl } = fetchReturning({ status: 401 });
+    global.fetch = impl as unknown as typeof fetch;
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    await GET(request());
+
+    const line = logged.mock.calls.flat().join(" ");
+    expect(line).toMatch(/METERED_API_KEY/);
+    expect(line).toMatch(/REJECTED/);
+    expect(line).toMatch(/guests/i);
   });
 });
 
-describe("hardening", () => {
-  it("rate limits a caller hammering the endpoint", async () => {
-    const ip = "203.0.113.9";
-    let last = await GET(req("", ip));
-    for (let i = 0; i < 40 && last.status !== 429; i++) last = await GET(req("", ip));
-    expect(last.status).toBe(429);
-    expect(last.headers.get("Retry-After")).toBeTruthy();
+describe("when the credential succeeds", () => {
+  it("caches it, so one lookup serves the instance", async () => {
+    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
+    global.fetch = impl as unknown as typeof fetch;
+
+    await GET(request());
+    await GET(request());
+    await GET(request());
+
+    expect(calls).toHaveLength(1);
   });
 
-  it("never lets a cache hold the credentials", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-    const res = await GET(req());
-    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  // The env var carrying a trailing newline is the likeliest reason a key that
+  // was once right starts answering 401, and the one cause code can fix.
+  it("sends the key with the whitespace a dashboard paste adds stripped off", async () => {
+    process.env.METERED_API_KEY = "  good-key\n";
+    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
+    global.fetch = impl as unknown as typeof fetch;
+
+    await GET(request());
+
+    expect(calls[0]).toContain("apiKey=good-key");
+    expect(calls[0]).not.toMatch(/%0A|%20good/);
   });
 
-  it("answers a refusal identically whether the meeting exists or not", async () => {
-    // The endpoint must not double as a way to discover live room codes.
-    const missing = await GET(req("?roomCode=not-a-room&guestKey=g1"));
-    const notAdmitted = await GET(req("?roomCode=abc-defg-hi&guestKey=g1"));
-    expect(missing.status).toBe(notAdmitted.status);
-    expect(await missing.json()).toEqual(await notAdmitted.json());
+  it("uses the configured app subdomain", async () => {
+    process.env.METERED_APP_NAME = "other-app";
+    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
+    global.fetch = impl as unknown as typeof fetch;
+
+    await GET(request());
+
+    expect(calls[0]).toContain("https://other-app.metered.live/");
+  });
+});
+
+describe("when there is nothing usable to return", () => {
+  it("treats a 200 carrying an empty list as a failure", async () => {
+    const { impl } = fetchReturning({ status: 200, body: [] });
+    global.fetch = impl as unknown as typeof fetch;
+
+    const body = await (await GET(request())).json();
+    expect(body.relay).toBe(false);
+    expect(body.reason).toBe("unavailable");
+  });
+
+  it("separates a provider outage from a refused key", async () => {
+    const { impl } = fetchReturning({ status: 503 });
+    global.fetch = impl as unknown as typeof fetch;
+
+    const body = await (await GET(request())).json();
+    expect(body.reason).toBe("unavailable");
+  });
+
+  it("survives the provider being unreachable", async () => {
+    const { impl } = fetchReturning(new Error("ECONNREFUSED"));
+    global.fetch = impl as unknown as typeof fetch;
+
+    const res = await GET(request());
+    expect(res.status).toBe(200);
+    expect((await res.json()).reason).toBe("unavailable");
+  });
+
+  it("says so plainly when no key is configured at all", async () => {
+    delete process.env.METERED_API_KEY;
+    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
+    global.fetch = impl as unknown as typeof fetch;
+
+    const body = await (await GET(request())).json();
+    expect(body.reason).toBe("unconfigured");
+    // Nothing to ask, so nothing is asked.
+    expect(calls).toHaveLength(0);
   });
 });

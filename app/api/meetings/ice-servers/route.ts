@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
+import {
+  TURN_CREDENTIAL_TTL_MS,
+  classifyTurnStatus,
+  cleanCredential,
+  credentialWasDirty,
+  isUsableIceServerList,
+  meteredCredentialsUrl,
+  turnFailureLog,
+  type TurnUnavailableReason,
+} from "@/lib/meetings/turn-credentials";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +37,83 @@ const FALLBACK_STUN: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ];
+
+/**
+ * Credentials held in the instance, not in the fetch cache.
+ *
+ * This replaces `next: { revalidate: 3540 }`, and the difference is the whole
+ * point: Next's data cache stores whatever the fetch returned, so a single 401
+ * was liable to be served back for the next 59 minutes without the provider
+ * being asked again. An operator who fixed the key would see nothing change for
+ * an hour and reasonably conclude the fix had not worked.
+ *
+ * Only successes are stored here. A failure leaves the slot empty, so the very
+ * next request re-asks — which is exactly the behaviour you want on the day
+ * somebody is standing at the dashboard pasting in a new key.
+ */
+let cachedServers: { servers: RTCIceServer[]; expiresAt: number } | null = null;
+
+/** So a fix is visible immediately in the same instance, and tests are honest. */
+export function __resetTurnCacheForTests(): void {
+  cachedServers = null;
+}
+
+type TurnLookup =
+  | { relay: true; iceServers: RTCIceServer[] }
+  | { relay: false; reason: TurnUnavailableReason };
+
+/**
+ * Fetch TURN credentials, or say why there are none.
+ *
+ * Never throws: every caller of this endpoint would rather have STUN and a
+ * reason than a 500.
+ */
+async function turnServers(): Promise<TurnLookup> {
+  const now = Date.now();
+  if (cachedServers && cachedServers.expiresAt > now) {
+    return { relay: true, iceServers: cachedServers.servers };
+  }
+
+  const rawKey = process.env.METERED_API_KEY;
+  const apiKey = cleanCredential(rawKey);
+  const appName = cleanCredential(process.env.METERED_APP_NAME) ?? "fundexecs";
+
+  if (!apiKey) {
+    console.error(turnFailureLog({ reason: "unconfigured", appName, dirty: false }));
+    return { relay: false, reason: "unconfigured" };
+  }
+
+  const dirty = credentialWasDirty(rawKey);
+
+  try {
+    // `no-store` rather than a revalidate window: the caching is done above,
+    // where a failure cannot be mistaken for an answer.
+    const res = await fetch(meteredCredentialsUrl(appName, apiKey), { cache: "no-store" });
+    const status = classifyTurnStatus(res.status);
+
+    if (status !== "ok") {
+      const reason: TurnUnavailableReason = status === "rejected" ? "rejected" : "unavailable";
+      console.error(turnFailureLog({ reason, status: res.status, appName, dirty }));
+      return { relay: false, reason };
+    }
+
+    const servers = await res.json() as unknown;
+    if (!isUsableIceServerList(servers)) {
+      // A 200 carrying nothing usable. Treated as the provider failing rather
+      // than as success, because handing a peer connection an empty server list
+      // looks like success at every point that checks it.
+      console.error(turnFailureLog({ reason: "unavailable", status: res.status, appName, dirty }));
+      return { relay: false, reason: "unavailable" };
+    }
+
+    const iceServers = servers as RTCIceServer[];
+    cachedServers = { servers: iceServers, expiresAt: now + TURN_CREDENTIAL_TTL_MS };
+    return { relay: true, iceServers };
+  } catch (err) {
+    console.error(turnFailureLog({ reason: "unavailable", appName, dirty }), err);
+    return { relay: false, reason: "unavailable" };
+  }
+}
 
 // Generous for people (one call joins once, plus a reconnect or two) and tight
 // enough that the endpoint is not a free TURN-credential dispenser. Keyed by IP
@@ -101,29 +188,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: PRIVATE });
   }
 
-  const apiKey = process.env.METERED_API_KEY;
-  const appName = process.env.METERED_APP_NAME ?? "fundexecs";
-
-  if (!apiKey) {
-    // No TURN configured anywhere in this deployment. Say so in the payload
-    // rather than only in the shape of it: the client tells the room that
-    // relaying is unavailable instead of silently hoping STUN is enough.
-    return NextResponse.json({ iceServers: FALLBACK_STUN, relay: false }, { headers: PRIVATE });
+  const turn = await turnServers();
+  if (turn.relay) {
+    return NextResponse.json({ iceServers: turn.iceServers, relay: true }, { headers: PRIVATE });
   }
 
-  try {
-    const res = await fetch(
-      `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`,
-      { next: { revalidate: 3540 } }, // cache 59 min (credentials valid 1 hr)
-    );
-    if (!res.ok) throw new Error(`Metered returned ${res.status}`);
-    const servers = await res.json() as RTCIceServer[];
-    // An empty or malformed list is a failure wearing a 200: falling through to
-    // STUN is better than handing the peer connection an empty server list.
-    if (!Array.isArray(servers) || servers.length === 0) throw new Error("Metered returned no servers");
-    return NextResponse.json({ iceServers: servers, relay: true }, { headers: PRIVATE });
-  } catch (err) {
-    console.error("[/api/meetings/ice-servers]", err);
-    return NextResponse.json({ iceServers: FALLBACK_STUN, relay: false }, { headers: PRIVATE });
-  }
+  // `reason` rather than only `relay: false`. The client logs it, so the next
+  // person to open a console on a failing call learns in one line whether this
+  // deployment has no TURN, has a key the provider refuses, or caught the
+  // provider having a bad afternoon — three problems with three different owners.
+  return NextResponse.json(
+    { iceServers: FALLBACK_STUN, relay: false, reason: turn.reason },
+    { headers: PRIVATE },
+  );
 }
