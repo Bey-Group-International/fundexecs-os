@@ -63,4 +63,12 @@ describe("GET /join", () => {
     expect(location(res)).toBe("/login");
     expect(res.cookies.get("referral_code")).toBeUndefined();
   });
+
+  it("treats a ref that isn't code-shaped as no code at all", async () => {
+    for (const ref of ["..%2Fadmin", "a%20b", "%", "K7M2%2FQX4P"]) {
+      const res = await GET(req(`/join?ref=${ref}`));
+      expect(location(res)).toBe("/login");
+      expect(res.cookies.get("referral_code")).toBeUndefined();
+    }
+  });
 });

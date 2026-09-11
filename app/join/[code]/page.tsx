@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { getReferralInvite } from "@/lib/gift-earn";
+import { normalizeReferralCode } from "@/lib/referral-link";
 import { formatCredits } from "@/lib/billing";
 import { REFERRAL_WELCOME_BONUS } from "@/lib/referrals";
 
@@ -28,11 +29,14 @@ export default async function JoinInvitePage(props: {
   params: Promise<{ code: string }>;
 }) {
   const { code: rawCode } = await props.params;
-  const code = decodeURIComponent(rawCode).trim().toUpperCase();
-  const invite = await getReferralInvite(code);
+  // Next hands this over already decoded, so decoding again would throw on a
+  // stray "%" and 500 the page instead of rendering the generic invitation.
+  const code = normalizeReferralCode(rawCode);
+  const invite = code ? await getReferralInvite(code) : null;
 
-  const requestHref = `/join?ref=${encodeURIComponent(code)}&next=%2Frequest-access`;
-  const signInHref = `/join?ref=${encodeURIComponent(code)}&next=%2Flogin`;
+  const query = code ? `?ref=${encodeURIComponent(code)}&` : "?";
+  const requestHref = `/join${query}next=%2Frequest-access`;
+  const signInHref = `/join${query}next=%2Flogin`;
 
   return (
     <div className="fx-blueprint flex min-h-screen bg-surface-0">
@@ -72,24 +76,30 @@ export default async function JoinInvitePage(props: {
             )}
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
-            FundExecs OS is invite-only. This link puts your request in front of the
-            team with the invitation already attached.
+            {invite
+              ? "FundExecs OS is invite-only. This link puts your request in front of the team with the invitation already attached."
+              : "FundExecs OS is invite-only. Request access below and we'll be in touch."}
           </p>
 
-          {/* The welcome bonus — the concrete thing the invite is worth. */}
-          <div className="mt-5 flex items-center gap-3 rounded-xl border border-gold-400/25 bg-gold-400/[0.06] px-4 py-3">
-            <span className="text-xl text-gold-300 drop-shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.6)]">
-              ◇
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-fg-primary">
-                {formatCredits(REFERRAL_WELCOME_BONUS)} credits to start
-              </p>
-              <p className="mt-0.5 text-xs text-fg-secondary">
-                Added to your wallet the moment your workspace opens.
-              </p>
+          {/* The welcome bonus — the concrete thing the invite is worth. Only
+              shown when the code actually resolves: an unrecognised one grants
+              nothing, and promising credits we won't pay is worse than a plain
+              invitation. */}
+          {invite && (
+            <div className="mt-5 flex items-center gap-3 rounded-xl border border-gold-400/25 bg-gold-400/[0.06] px-4 py-3">
+              <span className="text-xl text-gold-300 drop-shadow-[0_0_14px_rgb(var(--fx-gold-rgb)/0.6)]">
+                ◇
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-fg-primary">
+                  {formatCredits(REFERRAL_WELCOME_BONUS)} credits to start
+                </p>
+                <p className="mt-0.5 text-xs text-fg-secondary">
+                  Added to your wallet the moment your workspace opens.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           <Link
             href={requestHref}
@@ -105,7 +115,7 @@ export default async function JoinInvitePage(props: {
             </Link>
           </p>
 
-          {code && (
+          {invite && (
             <p className="mt-6 border-t border-line/60 pt-4 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">
               Invite code {code}
             </p>
