@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
+import { isRoomOpen } from "@/lib/data-room-viewer.server";
 import type { DataRoomShare, Document } from "@/lib/supabase/database.types";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
@@ -62,6 +63,10 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
   // unreachable even to someone holding a valid token and the document's id.
   const roomId = share.room_id;
   if (!roomId) return NextResponse.redirect(roomUrl);
+  // An archived room serves nothing, whatever its links still say.
+  if (!(await isRoomOpen(supabase, share.organization_id, roomId))) {
+    return NextResponse.redirect(roomUrl);
+  }
   const { data: manifestRow } = await supabase
     .from("data_room_documents")
     .select("id")
