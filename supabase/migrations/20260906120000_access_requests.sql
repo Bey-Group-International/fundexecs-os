@@ -1,5 +1,5 @@
 -- 20260906120000_access_requests.sql
--- Invite-only entry. Self-serve account creation is removed: a prospective
+-- Approval-gated entry. Self-serve account creation is removed: a prospective
 -- operator submits an access request, an internal platform admin approves it,
 -- and only an approved principal can complete a sign-in.
 --

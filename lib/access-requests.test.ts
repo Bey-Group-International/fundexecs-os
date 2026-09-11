@@ -206,7 +206,7 @@ describe("blockedRedirectPath", () => {
     expect(blockedRedirectPath("declined", "alex@firm.com")).toContain("status=declined");
   });
 
-  it("falls back to the generic 'invite-only' notice", () => {
+  it("falls back to the generic 'access required' notice", () => {
     expect(blockedRedirectPath("none", "")).toBe("/request-access?status=required");
   });
 });

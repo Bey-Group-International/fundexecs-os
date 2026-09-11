@@ -1,4 +1,4 @@
-// Email bodies for the invite-only access queue.
+// Email bodies for the access-request queue.
 //
 // Split out of lib/access-requests.ts so the request lifecycle (validation, the
 // sign-in gate, tokens, decisions) reads as logic rather than as markup. Both

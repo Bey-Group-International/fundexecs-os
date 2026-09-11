@@ -63,7 +63,7 @@ export default async function AdminPage() {
         </div>
       ) : null}
 
-      {/* Access requests — the invite-only queue. Nobody gets an account until a
+      {/* Access requests — the access queue. Nobody gets an account until a
           request here is approved, so it leads the page. */}
       <section>
         <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">

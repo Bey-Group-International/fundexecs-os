@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { submitAccessRequest } from "@/lib/access-requests";
 import { fieldsFor, isApplicantType } from "@/lib/access-request-fields";
 
-// Public entry point for the invite-only queue. There is no self-serve sign-up:
+// Public entry point for the access queue. There is no self-serve sign-up:
 // this records the request and alerts the internal team, and grants nothing.
 //
 // The form posts whatever fields the chosen applicant type asks for, so the

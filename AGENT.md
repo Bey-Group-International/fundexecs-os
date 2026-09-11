@@ -1332,7 +1332,7 @@ Deployed, monitoring               →  live, observability active
              |  persisted value is the only correct one.
              |  Confidence: typecheck/eslint clean, production build passes, Jest +13 new
              |  (4485 total green). No migration, no new deps.
-2026-09-06  |  Invite-only: no self-serve account creation  |  Request access is now
+2026-09-06  |  Access requests: no self-serve account creation  |  Request access is now
              |  a real queue, not a label on the sign-up form.
              |  Built: migration 20260906120000_access_requests — public.access_requests
              |  (email-unique queue, pending/approved/declined, RLS with NO policies so
@@ -1465,6 +1465,27 @@ Deployed, monitoring               →  live, observability active
              |  are unit-tested; the wiring in MeetingRoom.tsx is not, and wants a
              |  two-browser pass (join camera-off then share; pull the network) before
              |  it is trusted. No migration, no new deps.
+2026-09-11  |  Dropped the invite-only framing  |  The access queue stays; the
+             |  exclusivity language around it does not.
+             |  Changed (public copy): landing FAQ + closing CTA, /request-access
+             |  (metadata description, the `required` gate notice, body copy), /login
+             |  and /join/[code], and lib/seo/llms.ts. The "Invite-only · Early Access"
+             |  branding strip on all three auth entry points is now "Early Access".
+             |  Every "Request access" CTA and the /request-access form are untouched —
+             |  they are still the way in, just no longer sold as a velvet rope.
+             |  Changed (internal): comments, JSDoc and type docs that named the gate
+             |  "invite-only" now call it the access gate / access-request queue
+             |  (lib/access-requests*, lib/admin/access-requests, app/login/actions,
+             |  app/auth/callback, app/admin/*, the 20260906120000 migration header).
+             |  Behaviour identical — enforceAccessGate() still bounces an unapproved
+             |  principal on both auth paths; a platform admin still approves by hand.
+             |  Not touched: lib/brains/knowledge/* ("keep the event private and
+             |  invitation-only unless securities counsel approves broader
+             |  solicitation"). That is Reg D general-solicitation guidance the agents
+             |  give operators, not our own positioning — removing it would strip a
+             |  compliance guardrail.
+             |  Confidence: typecheck/eslint clean, Jest 5295 green (422 suites). Copy
+             |  and comments only — no logic, no migration, no new deps.
 ```
 
 ---

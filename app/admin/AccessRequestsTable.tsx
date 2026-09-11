@@ -57,7 +57,7 @@ const STATUS_STYLE: Record<AccessRequestRow["status"], string> = {
 };
 
 /**
- * The invite-only queue. Approving stamps the request AND, when the person
+ * The access-request queue. Approving stamps the request AND, when the person
  * already has an auth account, unblocks their next sign-in; the approval email
  * goes out server-side. Decisions are reversible — approve a declined request
  * and it flips back — so neither button is destructive.
