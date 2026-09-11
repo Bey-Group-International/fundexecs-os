@@ -69,11 +69,11 @@ cannot go direct.
 
 ### Ports
 
-| Port | Protocol | Why |
-|---|---|---|
-| 3478 | UDP + TCP | Standard TURN/STUN |
-| 5349 | UDP + TCP | TURN over TLS/DTLS — the one that gets through restrictive firewalls |
-| 49152–65535 | UDP | Relay range; each relayed stream takes one |
+|    Port     | Protocol  |                                 Why                                  |
+|-------------|-----------|----------------------------------------------------------------------|
+| 3478        | UDP + TCP | Standard TURN/STUN                                                   |
+| 5349        | UDP + TCP | TURN over TLS/DTLS — the one that gets through restrictive firewalls |
+| 49152–65535 | UDP       | Relay range; each relayed stream takes one                           |
 
 Open all of them inbound. The relay range is the one people forget, and without
 it sessions authenticate and then carry no media — the same symptom as having no
@@ -165,11 +165,11 @@ turnutils_uclient -v turn.yourdomain.com
 https://www.fundexecs.com/api/meetings/ice-servers
 ```
 
-| Response | Meaning |
-|---|---|
-| `"relay": true` with `turn:` URLs carrying `username`/`credential` | Working |
-| `"relay": false, "reason": "unconfigured"` | Neither variable is set, or the redeploy has not happened |
-| `"relay": false, "reason": "misconfigured"` | One of them is set and unusable — no `turn:` URL, or an empty secret |
+|                              Response                              |                               Meaning                                |
+|--------------------------------------------------------------------|----------------------------------------------------------------------|
+| `"relay": true` with `turn:` URLs carrying `username`/`credential` | Working                                                              |
+| `"relay": false, "reason": "unconfigured"`                         | Neither variable is set, or the redeploy has not happened            |
+| `"relay": false, "reason": "misconfigured"`                        | One of them is set and unusable — no `turn:` URL, or an empty secret |
 
 **3. The credentials are accepted.** Paste the `username` and `credential` from
 step 2 into <https://icetest.info> or Chrome's `webrtc-internals`, or:
@@ -187,13 +187,13 @@ office WiFi**. Cellular CGNAT is exactly the network that needed the relay.
 
 ## When it is not working
 
-| Symptom | Cause |
-|---|---|
-| `reason: "unconfigured"` after setting the variables | No redeploy |
-| `reason: "misconfigured"` | `TURN_URLS` has only a `stun:` entry, or `TURN_SECRET` is blank |
-| Credentials issued, allocation returns 401 | `TURN_SECRET` ≠ `static-auth-secret`; usually stray whitespace |
-| Allocation succeeds, media never flows | Relay port range 49152–65535/UDP is closed, or `external-ip` is wrong |
-| Works on WiFi, fails on mobile | You are testing the direct path; the relay is not being exercised. Force it with `iceTransportPolicy: "relay"` in `webrtc-internals` |
+|                       Symptom                        |                                                                Cause                                                                 |
+|------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `reason: "unconfigured"` after setting the variables | No redeploy                                                                                                                          |
+| `reason: "misconfigured"`                            | `TURN_URLS` has only a `stun:` entry, or `TURN_SECRET` is blank                                                                      |
+| Credentials issued, allocation returns 401           | `TURN_SECRET` ≠ `static-auth-secret`; usually stray whitespace                                                                       |
+| Allocation succeeds, media never flows               | Relay port range 49152–65535/UDP is closed, or `external-ip` is wrong                                                                |
+| Works on WiFi, fails on mobile                       | You are testing the direct path; the relay is not being exercised. Force it with `iceTransportPolicy: "relay"` in `webrtc-internals` |
 
 ## What this costs
 
