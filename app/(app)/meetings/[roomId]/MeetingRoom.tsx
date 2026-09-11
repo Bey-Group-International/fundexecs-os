@@ -956,6 +956,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const isHostRef = useRef(false);
 
   const iceConfigRef = useRef<RTCConfiguration>(FALLBACK_ICE);
+  // Whether the servers above actually include a TURN relay. Read when a peer
+  // fails to connect, so the logs distinguish "this network needed a relay and
+  // had none" from an ordinary blip.
+  const relayAvailableRef = useRef(false);
 
   // Peers
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -1533,7 +1537,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         return;
       }
 
-      if (pc.connectionState === "failed") { recoverPeerRef.current(peerId); return; }
+      if (pc.connectionState === "failed") {
+        // Name the most likely cause while the evidence is still here. A
+        // connection that fails outright with no relay in the config is the
+        // signature of a network that needed one — which is precisely how
+        // invite-link guests used to fail, silently, having been refused TURN.
+        if (!relayAvailableRef.current) {
+          console.warn(`[meeting] peer ${peerId} failed with no TURN relay configured — a restrictive network cannot connect without one`);
+        }
+        recoverPeerRef.current(peerId);
+        return;
+      }
 
       if (pc.connectionState === "disconnected") {
         // Most of these repair themselves within a second or two — a Wi-Fi roam,
@@ -1831,10 +1845,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // admits for everyone else — so a waiting guest never opens a sending stream or
   // touches the signaling channel until they're let in.
   const enterRoom = useCallback(async (mId: string | null, name: string) => {
-    try {
-      const r = await fetch("/api/meetings/ice-servers");
-      if (r.ok) { const { iceServers } = await r.json() as { iceServers: RTCIceServer[] }; iceConfigRef.current = { iceServers }; }
-    } catch { /* keep fallback */ }
+    // Started, not awaited: it overlaps the permission prompt and getUserMedia
+    // below instead of holding the join up on its own round trip. Awaited again
+    // just before signaling, which is the first moment a peer connection can be
+    // built and therefore the last moment the config still matters.
+    const icePromise = loadIceServersRef.current();
 
     if (mId) {
       void (supabase.from("live_meetings") as any)
@@ -1942,6 +1957,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       void applyBackgroundRef.current(wanted);
     }
 
+    // Peers are only ever created in response to signaling, so this is the
+    // deadline: every RTCPeerConnection built from here on sees the real config.
+    await icePromise;
+
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
     channel.on("broadcast", { event: "signal" }, ({ payload }: { payload: SignalMsg }) => { void handleSignal(payload); })
@@ -1961,6 +1980,58 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setReady(true);
     setJoining(false);
   }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers]);
+
+  /**
+   * Fetch the ICE servers for this call.
+   *
+   * Carries the guest's room code and admission key, because an invite-link
+   * guest has no session and the endpoint authorizes them by the admission the
+   * host already granted. Without them a guest got a 401, the failure was
+   * swallowed, and the call fell back to STUN with no relay — which is how
+   * cameras and microphones opened correctly and then connected to nobody.
+   *
+   * A failure here is not cosmetic: on a network that needs a relay it is the
+   * difference between a working call and a black square. So it retries once,
+   * and says so in the console either way rather than failing silently.
+   */
+  const loadIceServers = useCallback(async () => {
+    const query = new URLSearchParams({ roomCode });
+    const key = guestKeyRef.current;
+    if (key) query.set("guestKey", key);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(`/api/meetings/ice-servers?${query}`, { cache: "no-store" });
+        if (r.ok) {
+          const { iceServers, relay } = await r.json() as { iceServers?: RTCIceServer[]; relay?: boolean };
+          if (Array.isArray(iceServers) && iceServers.length > 0) {
+            iceConfigRef.current = { iceServers };
+            relayAvailableRef.current = relay === true;
+            if (relay !== true) {
+              // Worth a line even though the call may still work: it explains
+              // any later connection failure on a restrictive network, and it
+              // is the difference between "TURN is down" and "TURN was never
+              // configured for this deployment".
+              console.warn("[meeting] no TURN relay available — calls across restrictive networks may not connect");
+            }
+            return;
+          }
+        }
+        // 401 here means the guest is not admitted (or the key was lost); any
+        // other status is the endpoint failing. Neither is retried more than
+        // once, and neither is silent.
+        if (r.status === 401 || r.status === 429) {
+          console.warn(`[meeting] ice-servers refused (${r.status}) — falling back to STUN only`);
+          return;
+        }
+      } catch (err) {
+        if (attempt === 1) console.warn("[meeting] ice-servers unreachable — falling back to STUN only", err);
+      }
+    }
+  }, [roomCode]);
+
+  const loadIceServersRef = useRef(loadIceServers);
+  useEffect(() => { loadIceServersRef.current = loadIceServers; }, [loadIceServers]);
 
   // Stable handle so the waiting-room poll can enter without re-creating itself.
   const enterRoomRef = useRef(enterRoom);
