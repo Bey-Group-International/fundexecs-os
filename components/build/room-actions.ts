@@ -78,19 +78,25 @@ export async function archiveRoom(formData: FormData): Promise<void> {
     .maybeSingle();
   if (!room || (room as { is_default: boolean }).is_default) return;
 
-  await supabase
-    .from("data_rooms")
-    .update({ archived_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("organization_id", ctx.orgId);
+  const now = new Date().toISOString();
 
-  // Revoke the room's live links rather than leaving dangling tokens.
-  await supabase
+  // Revoke the links BEFORE archiving. The order matters: archiving first and
+  // failing here would leave a room the operator can no longer see, still
+  // reachable through links they believe are dead. This way a failure leaves
+  // the room visible with its links already closed — the safe half-state.
+  const { error: revokeErr } = await supabase
     .from("data_room_shares")
-    .update({ revoked_at: new Date().toISOString() })
+    .update({ revoked_at: now })
     .eq("room_id", id)
     .eq("organization_id", ctx.orgId)
     .is("revoked_at", null);
+  if (revokeErr) return;
+
+  await supabase
+    .from("data_rooms")
+    .update({ archived_at: now })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
   revalidatePath(ROOMS);
 }
 
@@ -183,51 +189,6 @@ export async function unpublishDocument(formData: FormData): Promise<void> {
     .eq("organization_id", ctx.orgId)
     .eq("room_id", roomId)
     .eq("document_id", documentId);
-  revalidatePath(ROOMS);
-  revalidatePath(LIBRARY);
-}
-
-/** Publish every document filed under a section into a room, in one click. */
-export async function publishSection(formData: FormData): Promise<void> {
-  const ctx = await getSessionContext();
-  if (!ctx?.orgId) return;
-  const roomId = String(formData.get("room_id") ?? "");
-  const sectionKey = String(formData.get("section") ?? "").trim();
-  if (!roomId || !sectionKey) return;
-  const orgId = ctx.orgId;
-
-  const supabase = await createServerClient();
-  const { data: room } = await supabase
-    .from("data_rooms")
-    .select("id")
-    .eq("id", roomId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!room) return;
-
-  const { data: docs } = await supabase
-    .from("documents")
-    .select("id, sort_order")
-    .eq("organization_id", orgId)
-    .eq("doc_type", sectionKey)
-    .order("sort_order", { ascending: true });
-  const rows = (docs ?? []) as { id: string; sort_order: number }[];
-  if (rows.length === 0) return;
-
-  // Same reason as publishDocument, and more acute in bulk: with a plain
-  // insert, one already-published document aborts the whole statement, so
-  // "publish this section" silently publishes nothing.
-  const base = await nextSortOrder(supabase, orgId, roomId);
-  await supabase.from("data_room_documents").upsert(
-    rows.map((d, i) => ({
-      organization_id: orgId,
-      room_id: roomId,
-      document_id: d.id,
-      sort_order: base + i,
-      added_by: ctx.userId,
-    })),
-    { onConflict: "room_id,document_id", ignoreDuplicates: true },
-  );
   revalidatePath(ROOMS);
   revalidatePath(LIBRARY);
 }

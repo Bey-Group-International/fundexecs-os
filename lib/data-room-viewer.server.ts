@@ -62,6 +62,34 @@ type Client = SupabaseClient<Database>;
  * manifest — never the org's whole library — so an unpublished draft cannot
  * appear here for either caller.
  */
+/**
+ * Whether a room is still open to the outside world.
+ *
+ * Archiving a room is meant to end its exposure, but the only thing that
+ * previously stopped a token was `revoked_at` on the share. Archiving revokes
+ * the room's links as a second write, so any failure of that write left an
+ * archived room still serving documents through links the operator believes
+ * are dead — and invisible to them, since archived rooms leave the switcher.
+ * Both public surfaces check this directly, so the room's own state is the
+ * boundary rather than a bookkeeping step that has to succeed.
+ */
+export async function isRoomOpen(
+  supabase: Client,
+  orgId: string,
+  roomId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("data_rooms")
+    .select("id")
+    .eq("id", roomId)
+    .eq("organization_id", orgId)
+    .is("archived_at", null)
+    .maybeSingle();
+  // Fail closed: a read that errored is not evidence the room is open.
+  if (error) return false;
+  return Boolean(data);
+}
+
 export async function buildViewerPayload(
   supabase: Client,
   orgId: string,
@@ -69,6 +97,8 @@ export async function buildViewerPayload(
   /** A link's section allowlist. `null` = unrestricted; `[]` allows nothing. */
   allowedSections: string[] | null,
 ): Promise<ViewerPayload | null> {
+  if (!(await isRoomOpen(supabase, orgId, roomId))) return null;
+
   const { data: manifestRows } = await supabase
     .from("data_room_documents")
     .select("document_id, sort_order")
