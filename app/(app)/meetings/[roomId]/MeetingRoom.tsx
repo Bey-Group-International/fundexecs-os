@@ -61,11 +61,19 @@ import {
   stepLink,
   videoSendCap,
   withOpusResilience,
+} from "@/lib/meetings/connection";
+import {
   type BandwidthMode,
   type LinkState,
   type PeerLinkStatus,
   type RecoveryState,
 } from "@/lib/meetings/connection";
+import {
+  formatTransceivers,
+  looksLikeMissingVideo,
+  summarizeTransceivers,
+  videoSenderNeedsRepair,
+} from "@/lib/meetings/media-repair";
 import { rememberDevice } from "@/lib/meetings/device-prefs";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
@@ -148,6 +156,10 @@ const FALLBACK_ICE: RTCConfiguration = {
   ],
 };
 
+// How long a connected peer is given to start delivering video before the
+// connection is described in the console. Long enough that a normal call never
+// trips it, short enough to still be on screen when somebody reports it.
+const INBOUND_VIDEO_AUDIT_MS = 8_000;
 const TRANSCRIPT_FLUSH_MS = 60_000;
 // Voice metering: fast enough that a short "yes" leaves samples behind for
 // attribution, slow enough not to compete with rendering for the main thread.
@@ -956,6 +968,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const isHostRef = useRef(false);
 
   const iceConfigRef = useRef<RTCConfiguration>(FALLBACK_ICE);
+  /** Pending "is video actually arriving?" checks, one per peer. */
+  const inboundAuditRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Whether the servers above actually include a TURN relay. Read when a peer
   // fails to connect, so the logs distinguish "this network needed a relay and
   // had none" from an ordinary blip.
@@ -1292,6 +1306,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     gaveUpRef.current.delete(peerId);
     const timer = recoveryTimerRef.current.get(peerId);
     if (timer) { clearTimeout(timer); recoveryTimerRef.current.delete(peerId); }
+    // A peer that left owes no explanation for video that never arrived.
+    const audit = inboundAuditRef.current.get(peerId);
+    if (audit) { clearTimeout(audit); inboundAuditRef.current.delete(peerId); }
   }, []);
 
   /**
@@ -1433,6 +1450,69 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const renegotiateRef = useRef(renegotiate);
   useEffect(() => { renegotiateRef.current = renegotiate; }, [renegotiate]);
 
+  /**
+   * Make sure this peer's video sender is actually holding the camera.
+   *
+   * A sender whose track is missing or has ended keeps a perfectly healthy
+   * connection: the m-line was negotiated, ICE succeeded, audio flows, and the
+   * far end simply never receives a frame. Nothing in the connection reports
+   * that, and no renegotiation fixes it, because from the connection's point of
+   * view nothing is wrong.
+   *
+   * `replaceTrack` needs no renegotiation and is a no-op when the sender is
+   * already correct, so this is safe to run on every connect. It deliberately
+   * does NOT touch a disabled track: that is somebody's camera switched off,
+   * and re-attaching would turn it back on for the whole room.
+   */
+  const repairOutgoingVideo = useCallback((peerId: string) => {
+    const sender = videoSenderRef.current.get(peerId);
+    if (!sender) return;
+    const local = localStreamRef.current?.getVideoTracks()[0] ?? null;
+    if (!videoSenderNeedsRepair(sender.track, local) || !local) return;
+    console.warn(`[meeting] peer ${peerId} had no live outgoing video track — re-attaching the camera`);
+    void sender.replaceTrack(local).catch(() => { /* peer closed mid-repair */ });
+  }, []);
+  const repairOutgoingVideoRef = useRef(repairOutgoingVideo);
+  useEffect(() => { repairOutgoingVideoRef.current = repairOutgoingVideo; }, [repairOutgoingVideo]);
+
+  /**
+   * Say what a connection is carrying when it claims to be healthy and isn't.
+   *
+   * Checked a few seconds after connecting rather than immediately, because
+   * video legitimately lands a beat after audio and complaining at once would
+   * cry wolf on every call. When it does fire it prints both sides of every
+   * transceiver, which is the evidence that distinguishes "we never attached a
+   * track" from "the direction came back one-way" — the two causes that produce
+   * an otherwise perfect connection with one dark direction, and which are
+   * impossible to tell apart after the call has ended.
+   */
+  const auditInboundVideo = useCallback((peerId: string) => {
+    const existing = inboundAuditRef.current.get(peerId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      inboundAuditRef.current.delete(peerId);
+      const pc = peersRef.current.get(peerId);
+      if (!pc) return;
+      const stream = remoteStreamsRef.current.get(peerId);
+      const said = peerVideoRef.current.get(peerId);
+      const stale = looksLikeMissingVideo({
+        connectionState: pc.connectionState ?? "connected",
+        connectedForMs: Date.now() - (connChangedAtRef.current.get(peerId) ?? Date.now()),
+        // Missing means "has not said otherwise", which the tiles already read
+        // as camera-on; keep the two agreeing.
+        peerSaysCameraOn: said ? said.camOn && !said.paused : true,
+        hasInboundVideoTrack: (stream?.getVideoTracks().length ?? 0) > 0,
+      });
+      if (!stale) return;
+      console.warn(
+        `[meeting] peer ${peerId} is connected and says its camera is on, but no video is arriving — ${formatTransceivers(summarizeTransceivers(pc.getTransceivers()))}`,
+      );
+    }, INBOUND_VIDEO_AUDIT_MS);
+    inboundAuditRef.current.set(peerId, timer);
+  }, []);
+  const auditInboundVideoRef = useRef(auditInboundVideo);
+  useEffect(() => { auditInboundVideoRef.current = auditInboundVideo; }, [auditInboundVideo]);
+
   const createPeerConnection = useCallback((peerId: string): RTCPeerConnection => {
     // Close any prior connection for this peer first — a duplicate `join`
     // (reconnect / re-admit) would otherwise orphan the old RTCPeerConnection
@@ -1534,6 +1614,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // Encoder parameters do not survive a renegotiation on every engine.
         applySendCapsRef.current();
         announceVideoStateRef.current();
+        // A connected peer is the moment to check that this connection is
+        // carrying what it agreed to — see repairOutgoingVideo.
+        repairOutgoingVideoRef.current(peerId);
+        auditInboundVideoRef.current(peerId);
         return;
       }
 
@@ -3069,6 +3153,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     pendingIceRef.current.clear();
     recoveryTimerRef.current.forEach((t) => clearTimeout(t));
     recoveryTimerRef.current.clear();
+    // Belt and braces alongside forgetPeerState above: a pending audit that
+    // fired after teardown would report on a call that no longer exists.
+    inboundAuditRef.current.forEach((t) => clearTimeout(t));
+    inboundAuditRef.current.clear();
     try { channelRef.current?.unsubscribe(); } catch { /* already gone */ }
     channelRef.current = null;
     if (recognitionRef.current) {
