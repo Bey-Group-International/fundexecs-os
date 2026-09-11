@@ -1,4 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
+import {
+  REFERRAL_COOKIE,
+  REFERRAL_COOKIE_OPTIONS,
+  normalizeReferralCode,
+} from "@/lib/referral-link";
 
 // The cookie-setting step of the referral flow: /join?ref=CODE
 //
@@ -17,19 +22,14 @@ import { type NextRequest, NextResponse } from "next/server";
 const NEXT_ALLOWED = new Set(["/request-access", "/login"]);
 
 export async function GET(req: NextRequest) {
-  const ref = (req.nextUrl.searchParams.get("ref") ?? "").trim().toUpperCase();
+  const ref = normalizeReferralCode(req.nextUrl.searchParams.get("ref"));
   const next = req.nextUrl.searchParams.get("next") ?? "";
 
-  // No code at all: nothing to store, and no invite page to show.
+  // Nothing code-shaped to store, and so no invite page to show.
   if (!ref) return NextResponse.redirect(new URL("/login", req.url));
 
-  const dest = NEXT_ALLOWED.has(next) ? next : `/join/${encodeURIComponent(ref)}`;
+  const dest = NEXT_ALLOWED.has(next) ? next : `/join/${ref}`;
   const res = NextResponse.redirect(new URL(dest, req.url));
-  res.cookies.set("referral_code", ref, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-    httpOnly: true,
-    sameSite: "lax",
-  });
+  res.cookies.set(REFERRAL_COOKIE, ref, REFERRAL_COOKIE_OPTIONS);
   return res;
 }
