@@ -129,9 +129,28 @@ export interface TurnCredential {
  * never needs to have heard of the user, which is why no account exists to be
  * billed or revoked.
  *
- * SHA-1 is not a choice here, it is the protocol's — and it is used as the key
- * to an HMAC over a short string with a short life, which is not where SHA-1's
- * collision weaknesses live. Using anything else would simply not authenticate.
+ * ── On SHA-1, because a scanner will flag this and someone will want to fix it
+ *
+ * DO NOT change this to SHA-256. It is not a preference; it is the wire format.
+ * coturn computes base64(HMAC-SHA1(static-auth-secret, username)) and compares
+ * byte for byte, so a credential minted with any other hash is rejected by
+ * every TURN server on earth, and every guest who needed a relay silently
+ * stops connecting. There is no negotiation step in which a stronger hash
+ * could be agreed.
+ *
+ * It is also not a weakness. What is broken about SHA-1 is collision
+ * resistance — an attacker's ability to find two inputs with the same digest.
+ * HMAC does not rest on that property, and HMAC-SHA1 remains unbroken as a
+ * message authentication code; NIST still permits it for exactly this use.
+ * Here it authenticates a short, server-chosen string under a secret the
+ * attacker does not have, for at most a few hours.
+ *
+ * The alternative that would satisfy a scanner is worse: static long-term
+ * credentials in the TURN server's user database, handed to every invite-link
+ * guest, never expiring, and giving anyone who captures one free use of the
+ * relay forever. And it would not even remove SHA-1 from the system — STUN's
+ * MESSAGE-INTEGRITY (RFC 5389), which every TURN exchange carries, is
+ * HMAC-SHA1 regardless of how the credential was derived.
  */
 export function mintTurnCredential(input: {
   secret: string;
@@ -146,6 +165,7 @@ export function mintTurnCredential(input: {
   // the ":"-delimited username is removed rather than escaped.
   const label = input.label?.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 32);
   const username = label ? `${expiresAt}:${label}` : String(expiresAt);
+  // lgtm[js/weak-cryptographic-algorithm] — protocol-mandated; see the note above.
   const credential = createHmac("sha1", input.secret).update(username).digest("base64");
   return { username, credential, expiresAt };
 }

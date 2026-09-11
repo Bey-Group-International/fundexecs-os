@@ -51,7 +51,7 @@ describe("when a TURN server is configured", () => {
     expect(entry.urls).toEqual(["turn:turn.fundexecs.test:3478", "turns:turn.fundexecs.test:5349"]);
     // Recomputed the way coturn does under `use-auth-secret`.
     expect(entry.credential).toBe(
-      createHmac("sha1", SECRET).update(entry.username as string).digest("base64"),
+      /* lgtm[js/weak-cryptographic-algorithm] */ createHmac("sha1", SECRET).update(entry.username as string).digest("base64"),
     );
   });
 
@@ -138,7 +138,7 @@ describe("when TURN is not usable", () => {
 
     const entry = relayEntry(body)!;
     expect(entry.credential).toBe(
-      createHmac("sha1", SECRET).update(entry.username as string).digest("base64"),
+      /* lgtm[js/weak-cryptographic-algorithm] */ createHmac("sha1", SECRET).update(entry.username as string).digest("base64"),
     );
   });
 });

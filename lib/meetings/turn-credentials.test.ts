@@ -114,7 +114,7 @@ describe("mintTurnCredential", () => {
     expect(out.expiresAt).toBe(1_700_003_600);
     expect(out.username).toBe("1700003600");
     expect(out.credential).toBe(
-      createHmac("sha1", SECRET).update("1700003600").digest("base64"),
+      /* lgtm[js/weak-cryptographic-algorithm] */ createHmac("sha1", SECRET).update("1700003600").digest("base64"),
     );
   });
 
@@ -124,7 +124,7 @@ describe("mintTurnCredential", () => {
     });
     expect(out.username).toBe("1700000060:room-42");
     expect(out.credential).toBe(
-      createHmac("sha1", SECRET).update("1700000060:room-42").digest("base64"),
+      /* lgtm[js/weak-cryptographic-algorithm] */ createHmac("sha1", SECRET).update("1700000060:room-42").digest("base64"),
     );
   });
 
