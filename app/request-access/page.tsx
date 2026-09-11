@@ -6,27 +6,18 @@ import { RequestAccessForm } from "./RequestAccessForm";
 
 export const metadata: Metadata = {
   title: "Request access",
-  description: "Tell us about your firm and we'll open a workspace for you.",
+  description:
+    "Tell us about your firm and our team will reach out. Or create an account and start now.",
 };
 
-// Copy for the three ways an operator lands here from a blocked sign-in
-// (lib/access-requests.ts → blockedRedirectPath). `showForm` is false only when
-// there is nothing useful to resubmit.
+// Copy for a blocked sign-in landing here (lib/access-requests.ts →
+// blockedRedirectPath). Sign-up is self-serve, so a decline is the only thing
+// that still blocks — and there is nothing useful for them to resubmit.
 const GATE_NOTICES: Record<string, { message: string; showForm: boolean }> = {
-  pending: {
-    message:
-      "Your access request is in review. We'll email you the moment your workspace is open.",
-    showForm: false,
-  },
   declined: {
     message:
       "This email isn't approved for FundExecs OS. If you think that's a mistake, reply to the team you've been speaking with.",
     showForm: false,
-  },
-  required: {
-    message:
-      "We couldn't find an open workspace for that email. Request access below and we'll be in touch.",
-    showForm: true,
   },
 };
 
@@ -74,8 +65,8 @@ export default async function RequestAccessPage(props: {
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
             {submitted
-              ? "We review every request by hand. You'll get an email as soon as your workspace is open."
-              : "Tell us about your firm and we'll open a workspace for you."}
+              ? "We read every one by hand. Someone will be in touch shortly."
+              : "Tell us about your firm and our team will reach out. You don't have to wait on us, though — you can create an account and start right now."}
           </p>
 
           {searchParams.error && (
@@ -92,7 +83,10 @@ export default async function RequestAccessPage(props: {
           {showForm && <RequestAccessForm defaultEmail={email} defaultType={type} />}
 
           <p className="mt-5 text-center text-sm text-fg-muted">
-            Already have an account?{" "}
+            <Link href="/login?mode=signup" className="text-gold-300 hover:underline">
+              Create an account
+            </Link>{" "}
+            ·{" "}
             <Link href="/login" className="text-gold-300 hover:underline">
               Sign in
             </Link>

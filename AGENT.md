@@ -1486,6 +1486,41 @@ Deployed, monitoring               →  live, observability active
              |  compliance guardrail.
              |  Confidence: typecheck/eslint clean, Jest 5295 green (422 suites). Copy
              |  and comments only — no logic, no migration, no new deps.
+2026-09-11  |  Self-serve sign-up, reopened  |  Anyone can create an account again.
+             |  The queue survives as a sales path; a decline survives as the one block.
+             |  Restored: signUp() in app/login/actions.ts and the /login?mode=signup
+             |  form (full-name field, Create account button, the sign-in/sign-up
+             |  toggle) — superseding the 2026-09-06 removal. Email confirmation is
+             |  whatever the Supabase project says: no session back ⇒ "check your
+             |  email", otherwise straight into /onboarding, which creates the org and
+             |  grants the trial.
+             |  Gate: decideAccess now returns "allow" for a pending request AND for no
+             |  request at all. AccessDecision narrowed 5 variants → 3 ("allow" |
+             |  "grant" | "declined") so the dead states can't drift back in;
+             |  blockedRedirectPath lost its decision arg with them.
+             |  Decision: a decline is checked FIRST, ahead of any approval stamp, and
+             |  applyAccessDecision now CLEARS principals.access_approved_at on decline.
+             |  Both were holes: migration 20260906120000 backfilled every account
+             |  existing then as approved, so a decline that lost to the stamp would
+             |  have blocked nobody who already had an account — i.e. everyone actually
+             |  worth revoking. enforceAccessGate also reads the queue even for a
+             |  stamped principal now, for the same reason. Decline is the only lever
+             |  left, so it had to actually work.
+             |  signUp() runs the SAME enforceAccessGate as sign-in, before the signup
+             |  alert fires: a declined email must not walk in through the front door
+             |  it was turned away from.
+             |  CTAs: landing header/CTA/footer, /join/[code], the meeting-invite page
+             |  and the in-meeting guest upsell now point at /login?mode=signup;
+             |  /request-access is demoted to a secondary "rather talk to us first?"
+             |  link on /login and the landing CTA. /join/route.ts allowlists
+             |  "/login?mode=signup" so an invite's referral cookie survives the hop to
+             |  sign-up — without it the invite's credits are silently lost.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest +22
+             |  new (5317 total green, 423 suites). No migration, no new deps.
+             |  Not exercised: a real Supabase signUp round trip. The decision table,
+             |  the redirect and the referral hop are unit-tested; the provider call
+             |  and the confirmation-email branch are not, and want one live pass
+             |  (sign up, confirm, land in onboarding) before they are trusted.
 ```
 
 ---

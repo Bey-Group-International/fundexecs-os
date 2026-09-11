@@ -70,7 +70,7 @@ export default function MeetingInvitePage() {
   }, [roomCode]);
 
   function handleRequestAccess() {
-    router.push("/request-access");
+    router.push("/login?mode=signup");
   }
 
   function handleSignIn() {
@@ -154,7 +154,7 @@ export default function MeetingInvitePage() {
               onClick={handleRequestAccess}
               className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
             >
-              Request access for the full workspace
+              Create an account for the full workspace
             </button>
 
             <button
@@ -178,7 +178,7 @@ export default function MeetingInvitePage() {
             </button>
 
             <p className="text-[11px] text-[var(--fg-muted)] text-center leading-relaxed">
-              Guests can join this meeting without an account. Request access for AI transcription, notes, and action items.
+              Guests can join this meeting without an account. Create one for AI transcription, notes, and action items.
             </p>
           </div>
         )}

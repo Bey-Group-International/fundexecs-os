@@ -188,26 +188,47 @@ describe("decideAccess", () => {
     expect(decideAccess({ ...base, requestStatus: "approved" })).toBe("grant");
   });
 
-  it("blocks a pending or declined request", () => {
-    expect(decideAccess({ ...base, requestStatus: "pending" })).toBe("pending");
+  it("lets a self-serve sign-up straight in — no request at all is the norm", () => {
+    expect(decideAccess(base)).toBe("allow");
+  });
+
+  it("no longer holds a pending request at the door", () => {
+    expect(decideAccess({ ...base, requestStatus: "pending" })).toBe("allow");
+  });
+
+  it("blocks a declined email — the one lever that still refuses an account", () => {
     expect(decideAccess({ ...base, requestStatus: "declined" })).toBe("declined");
   });
 
-  it("blocks a sign-in that never asked for access — the Google self-serve hole", () => {
-    expect(decideAccess(base)).toBe("none");
+  it("lets a decline outrank a standing approval stamp", () => {
+    // Every principal that predates migration 20260906120000 was backfilled as
+    // approved, so a decline that lost to the stamp would never block anyone
+    // who already had an account — i.e. everyone worth revoking.
+    expect(
+      decideAccess({
+        ...base,
+        approvedAt: "2026-01-01T00:00:00Z",
+        requestStatus: "declined",
+      }),
+    ).toBe("declined");
+  });
+
+  it("never gates an internal email, even one that was declined", () => {
+    expect(
+      decideAccess({ ...base, requestStatus: "declined", isInternal: true }),
+    ).toBe("allow");
   });
 });
 
 describe("blockedRedirectPath", () => {
-  it("carries the reason and the email so the form explains itself", () => {
-    expect(blockedRedirectPath("pending", "alex@firm.com")).toBe(
-      "/request-access?email=alex%40firm.com&status=pending",
+  it("carries the email so the form explains itself", () => {
+    expect(blockedRedirectPath("alex@firm.com")).toBe(
+      "/request-access?email=alex%40firm.com&status=declined",
     );
-    expect(blockedRedirectPath("declined", "alex@firm.com")).toContain("status=declined");
   });
 
-  it("falls back to the generic 'access required' notice", () => {
-    expect(blockedRedirectPath("none", "")).toBe("/request-access?status=required");
+  it("still names the reason when there is no email to carry", () => {
+    expect(blockedRedirectPath("")).toBe("/request-access?status=declined");
   });
 });
 

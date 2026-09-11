@@ -151,10 +151,12 @@ export type Principal = {
   // Set once, atomically, the first time the platform-admin new-signup alert is
   // emailed for this principal (migration 20260708120000). Null until alerted.
   signup_alerted_at: string | null;
-  // Access gate (migration 20260906120000). Null until a platform admin
-  // approves the person's access request; the auth paths bounce an unapproved
-  // principal back to /request-access. Every principal that existed when the
-  // migration ran was backfilled as approved.
+  // Access gate (migration 20260906120000). Stamped when a platform admin
+  // approves the person's access request, and cleared again on a decline.
+  // Since sign-up opened it no longer decides who gets in — a null here is an
+  // ordinary self-serve account — but a decline still outranks it and blocks
+  // the sign-in. Every principal that existed when the migration ran was
+  // backfilled as approved.
   access_approved_at: string | null;
   created_at: string;
   updated_at: string;

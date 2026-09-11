@@ -18,10 +18,9 @@ export const metadata: Metadata = {
 // The page a referral link opens: /join/CODE
 //
 // Signed-out strangers land here, so it reads as an invitation rather than a
-// sign-in wall — the recipient of an invite has no account yet, so "Request
-// access" is the way in. Both actions route back through /join?ref=CODE, which
-// sets the referral cookie before forwarding; a Server Component can't write
-// one itself.
+// sign-in wall — the recipient of an invite has no account yet, so creating one
+// is the way in. Both actions route back through /join?ref=CODE, which sets the
+// referral cookie before forwarding; a Server Component can't write one itself.
 //
 // An unknown code still renders, minus the firm's name. Someone who mistyped a
 // character should get an invitation, not an error page.
@@ -35,7 +34,7 @@ export default async function JoinInvitePage(props: {
   const invite = code ? await getReferralInvite(code) : null;
 
   const query = code ? `?ref=${encodeURIComponent(code)}&` : "?";
-  const requestHref = `/join${query}next=%2Frequest-access`;
+  const signUpHref = `/join${query}next=%2Flogin%3Fmode%3Dsignup`;
   const signInHref = `/join${query}next=%2Flogin`;
 
   return (
@@ -77,8 +76,8 @@ export default async function JoinInvitePage(props: {
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
             {invite
-              ? "This link puts your request in front of the team with the invitation already attached."
-              : "Request access below and we'll be in touch."}
+              ? "Create your account below and the invitation — and its credits — come with you."
+              : "Create your account below to get started."}
           </p>
 
           {/* The welcome bonus — the concrete thing the invite is worth. Only
@@ -102,10 +101,10 @@ export default async function JoinInvitePage(props: {
           )}
 
           <Link
-            href={requestHref}
+            href={signUpHref}
             className="mt-6 flex w-full items-center justify-center rounded-md bg-gold-400 px-4 py-2.5 text-sm font-medium text-on-gold transition hover:bg-gold-300"
           >
-            Request access
+            Create your account
           </Link>
 
           <p className="mt-5 text-center text-sm text-fg-muted">

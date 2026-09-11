@@ -162,15 +162,15 @@ export function GuestThanksScreen({ onLeave }: { onLeave: () => void }) {
           <span className="text-3xl">✦</span>
           <h2 className="text-xl font-semibold text-[var(--fg-primary)]">Thanks for joining!</h2>
           <p className="text-sm text-[var(--fg-secondary)]">
-            Request access to get AI-generated meeting notes, transcripts, and action items — automatically.
+            Create an account to get AI-generated meeting notes, transcripts, and action items — automatically.
           </p>
         </div>
         <div className="flex flex-col gap-3">
           <a
-            href="/request-access"
+            href="/login?mode=signup"
             className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 text-center hover:opacity-90 transition-opacity"
           >
-            Request access →
+            Get started →
           </a>
           <a
             href="/login"

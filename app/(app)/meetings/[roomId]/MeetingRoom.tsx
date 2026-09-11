@@ -3221,8 +3221,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           {isGuest && (
             <div className="flex items-center gap-3 px-4 py-2 bg-gold-400/10 border-b border-gold-400/20 shrink-0">
               <span className="text-[var(--gold-400)] text-xs shrink-0">✦</span>
-              <p className="flex-1 text-xs text-[var(--fg-secondary)]">You&apos;re joining as a guest. Request access for AI transcription, notes, and action items.</p>
-              <a href="/request-access" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Request access →</a>
+              <p className="flex-1 text-xs text-[var(--fg-secondary)]">You&apos;re joining as a guest. Create an account for AI transcription, notes, and action items.</p>
+              <a href="/login?mode=signup" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Get started →</a>
             </div>
           )}
           {layout === "grid" ? (

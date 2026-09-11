@@ -19,7 +19,7 @@ import {
 // Where a recipient may be sent from here. An allowlist, because `next` is
 // attacker-controllable in a link anyone can craft and forward — an open
 // redirect off this route would be handed out under our own domain.
-const NEXT_ALLOWED = new Set(["/request-access", "/login"]);
+const NEXT_ALLOWED = new Set(["/request-access", "/login", "/login?mode=signup"]);
 
 export async function GET(req: NextRequest) {
   const ref = normalizeReferralCode(req.nextUrl.searchParams.get("ref"));

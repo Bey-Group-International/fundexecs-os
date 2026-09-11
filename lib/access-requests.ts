@@ -1,13 +1,16 @@
 // Access control for sign-in.
 //
-// FundExecs OS has no self-serve sign-up. A prospective operator submits an
-// access request (app/request-access), a platform admin approves it — from the
-// admin console or straight from the alert email — and only then does a sign-in
-// complete. The pieces live here so every entry point applies the SAME rules and
-// they can never drift apart:
+// Sign-up is self-serve: anyone can create an account (app/login?mode=signup or
+// Google) and land in onboarding. The access request queue (app/request-access)
+// is a sales path — it records an inbound lead and alerts the team — and it no
+// longer decides who gets in. The one thing that still blocks a session is an
+// explicit DECLINE, which is how an account is refused or revoked.
+//
+// The pieces live here so every entry point applies the SAME rules and they can
+// never drift apart:
 //
 //   submitAccessRequest    the public form writes the queue + alerts the team
-//   enforceAccessGate      both auth paths check approval before a session stands
+//   enforceAccessGate      every auth path checks for a decline before a session stands
 //   applyAccessDecision    the one place a decision is recorded, either door
 //   *DecisionToken         the credential behind the email's Approve / Decline
 //
@@ -338,20 +341,26 @@ export async function lookupDecisionToken(
 /**
  * What an authenticating principal is allowed to do.
  *
- *   allow    — already approved (or internal); let the session stand.
+ *   allow    — let the session stand. The default, now that sign-up is
+ *              self-serve: no request at all is just a new customer.
  *   grant    — an approved request exists but the principal isn't stamped yet;
  *              stamp access_approved_at, then let the session stand.
- *   pending  — request is in the queue, not decided. Sign them back out.
- *   declined — request was turned down. Sign them back out.
- *   none     — no request at all (e.g. a fresh Google sign-in). Sign them out
- *              and send them to the request form.
+ *   declined — this email was explicitly turned down. Sign them back out.
  */
-export type AccessDecision = "allow" | "grant" | "pending" | "declined" | "none";
+export type AccessDecision = "allow" | "grant" | "declined";
 
 /**
- * Pure decision table for the sign-in gate. Platform admins are never gated —
- * the internal team must always be able to reach the console that approves
- * everyone else, even on a brand-new account.
+ * Pure decision table for the sign-in gate.
+ *
+ * Since sign-up opened, the queue no longer gates: a pending request, or none
+ * at all, is an ordinary sign-in. Only an explicit decline blocks — so it is
+ * checked FIRST, ahead of any standing approval stamp. A principal can carry
+ * one from an earlier approval, or from migration 20260906120000's backfill of
+ * every account that existed then, and a decline has to outrank both or the
+ * only lever we kept would quietly do nothing.
+ *
+ * Platform admins are never gated — the internal team must always be able to
+ * reach the console, even on a brand-new account.
  */
 export function decideAccess(input: {
   approvedAt: string | null;
@@ -359,25 +368,26 @@ export function decideAccess(input: {
   isInternal: boolean;
 }): AccessDecision {
   if (input.isInternal) return "allow";
+  if (input.requestStatus === "declined") return "declined";
   if (input.approvedAt) return "allow";
   if (input.requestStatus === "approved") return "grant";
-  if (input.requestStatus === "pending") return "pending";
-  if (input.requestStatus === "declined") return "declined";
-  return "none";
+  return "allow";
 }
 
-/** Where a blocked sign-in is sent, with copy explaining what happens next. */
-export function blockedRedirectPath(decision: AccessDecision, email: string): string {
+/**
+ * Where a blocked sign-in is sent. Only a decline blocks now, so there is one
+ * destination: the request page, showing the "not approved" notice.
+ */
+export function blockedRedirectPath(email: string): string {
   const params = new URLSearchParams();
   if (email) params.set("email", email);
-  if (decision === "pending") params.set("status", "pending");
-  else if (decision === "declined") params.set("status", "declined");
-  else params.set("status", "required");
+  params.set("status", "declined");
   return `/request-access?${params.toString()}`;
 }
 
 /**
- * Apply the access gate to a just-authenticated user.
+ * Apply the access gate to a just-authenticated user. Every auth path calls it:
+ * password sign-in, password sign-up, and the OAuth / email-link callback.
  *
  * Returns null when the session may stand, or the path to bounce them to.
  * Fails OPEN when the service-role env is absent (local/preview deployments
@@ -401,8 +411,12 @@ export async function enforceAccessGate(args: {
       .eq("id", args.userId)
       .maybeSingle();
 
+    // Read the queue even when the principal is already stamped: a decline
+    // outranks a standing approval, so skipping this lookup for a stamped
+    // principal would make the block unreachable for exactly the accounts most
+    // likely to be revoked.
     let requestStatus: AccessRequestStatus | null = null;
-    if (!principal?.access_approved_at && email) {
+    if (email) {
       const { data: request } = await supabase
         .from("access_requests")
         .select("status")
@@ -425,7 +439,7 @@ export async function enforceAccessGate(args: {
         .eq("id", args.userId);
       return null;
     }
-    return blockedRedirectPath(decision, email);
+    return blockedRedirectPath(email);
   } catch (err) {
     // A gate that throws must not become a gate that locks everyone out.
     console.error("[access-gate] enforceAccessGate failed:", err);
@@ -602,6 +616,15 @@ export async function applyAccessDecision(args: {
 
   const email = normalizeEmail(updated.email);
   if (args.decision !== "approved") {
+    // Clear any standing approval. Declining is the only thing that still
+    // blocks a sign-in, and a principal approved earlier — or backfilled as
+    // approved by migration 20260906120000 — carries a stamp that would
+    // otherwise survive the decision and let them straight back in. Exact
+    // match only, for the same reason the approval path below uses one.
+    await supabase
+      .from("principals")
+      .update({ access_approved_at: null })
+      .eq("email", email);
     return { ok: true, email, fullName: updated.full_name };
   }
 

@@ -63,7 +63,7 @@ describe("GuestThanksScreen", () => {
   it("thanks the guest and offers both ways in", () => {
     render(<GuestThanksScreen onLeave={jest.fn()} />);
     expect(screen.getByRole("heading", { name: /thanks for joining/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /request access/i })).toHaveAttribute("href", "/request-access");
+    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute("href", "/login?mode=signup");
     expect(screen.getByRole("link", { name: /already have an account/i })).toHaveAttribute("href", "/login");
   });
 

@@ -62,7 +62,7 @@ const FAQ_ITEMS = [
   {
     question: "How do I get access?",
     answer:
-      "Request access and tell us about your firm — our team opens your workspace and onboards your first mandate.",
+      "Create an account and you're in — onboarding sets up your workspace and your first mandate. If you'd rather talk to our team first, request access and we'll reach out.",
   },
 ];
 
@@ -93,10 +93,10 @@ export default async function LandingPage(
               Sign in
             </Link>
             <Link
-              href="/request-access"
+              href="/login?mode=signup"
               className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
-              Request access
+              Get started
             </Link>
           </div>
         </div>
@@ -280,12 +280,18 @@ export default async function LandingPage(
             Sign in
           </Link>
           <Link
-            href="/request-access"
+            href="/login?mode=signup"
             className="rounded-md bg-gold-400 px-6 py-3 text-sm font-medium text-on-gold transition hover:opacity-90"
           >
-            Request access
+            Get started
           </Link>
         </div>
+        <p className="mt-5 text-xs text-fg-muted">
+          Rather talk to us first?{" "}
+          <Link href="/request-access" className="hover:text-fg-secondary hover:underline">
+            Request access
+          </Link>
+        </p>
       </section>
 
       <footer className="border-t border-line px-4 py-8 sm:px-6">
@@ -304,10 +310,10 @@ export default async function LandingPage(
               Sign in
             </Link>
             <Link
-              href="/request-access"
+              href="/login?mode=signup"
               className="rounded-md bg-gold-400 px-3 py-1.5 text-sm font-medium text-on-gold transition hover:opacity-90"
             >
-              Request access
+              Get started
             </Link>
           </div>
         </div>

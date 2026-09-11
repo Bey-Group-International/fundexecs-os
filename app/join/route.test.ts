@@ -40,6 +40,15 @@ describe("GET /join", () => {
     const signIn = await GET(req("/join?ref=K7M2QX4P&next=%2Flogin"));
     expect(location(signIn)).toBe("/login");
     expect(signIn.cookies.get("referral_code")?.value).toBe("K7M2QX4P");
+
+    // The invite page's primary action since sign-up opened: the referral
+    // cookie has to survive the trip to the sign-up form, or the invite's
+    // credits are lost when onboarding claims it.
+    // Asserted on the raw header, not location(): the destination's query
+    // string is the whole point here, and location() keeps only the pathname.
+    const signUp = await GET(req("/join?ref=K7M2QX4P&next=%2Flogin%3Fmode%3Dsignup"));
+    expect(signUp.headers.get("location")).toBe("http://localhost/login?mode=signup");
+    expect(signUp.cookies.get("referral_code")?.value).toBe("K7M2QX4P");
   });
 
   it("refuses to redirect anywhere else, however next is dressed up", async () => {

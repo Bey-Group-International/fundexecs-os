@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerClient, hasSupabaseServerEnv } from "@/lib/supabase/server";
 import { enforceAccessGate } from "@/lib/access-requests";
+import { notifyNewSignupOnce } from "@/lib/admin/signup-alert";
 import { getAppUrlFromHeaders } from "@/lib/integrations/adapters/app-url";
 import { DEFAULT_POST_AUTH_PATH, safeNextPathOrNull } from "@/lib/safe-next-path";
 
@@ -51,9 +52,7 @@ function asPath(value: FormDataEntryValue | null | undefined): string | null {
   return typeof value === "string" ? value : null;
 }
 
-// Email/password sign-in. There is no sign-up counterpart: an account exists
-// only once a platform admin has approved an access request
-// (app/request-access) and provisioned the credential.
+// Email/password sign-in. See signUp below for the self-serve counterpart.
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
@@ -68,8 +67,8 @@ export async function signIn(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  // A principal who has not been approved gets no session, even with valid
-  // credentials. The same gate runs on the OAuth callback.
+  // A declined principal gets no session, even with valid credentials. The
+  // same gate runs on sign-up and on the OAuth callback.
   const blocked = data.user
     ? await enforceAccessGate({ userId: data.user.id, email: data.user.email })
     : null;
@@ -81,6 +80,78 @@ export async function signIn(formData: FormData) {
   // Same deep-link courtesy as the Google path: honor where they were headed.
   const base = getAppUrlFromHeaders(await headers());
   redirect(safeNextPathOrNull(asPath(formData.get("next")), base) ?? DEFAULT_POST_AUTH_PATH);
+}
+
+// Email/password sign-up. Self-serve: anyone can create an account and land in
+// onboarding, which creates their organization.
+//
+// The access-request queue (app/request-access) is a sales path, not a gate —
+// nobody waits on an approval to get in. The one thing that still refuses an
+// account is an explicit decline, so this runs the SAME enforceAccessGate the
+// sign-in path runs: a front door nobody checks is not a door the decline
+// closes.
+export async function signUp(formData: FormData) {
+  const email = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const fullName = String(formData.get("full_name") ?? "");
+
+  if (!hasSupabaseServerEnv()) {
+    redirect(`/login?mode=signup&error=${encodeURIComponent(SUPABASE_CONFIG_ERROR)}`);
+  }
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: fullName } },
+  });
+  if (error) {
+    // Keep the user on the sign-up form so they can correct and retry.
+    redirect(`/login?mode=signup&error=${encodeURIComponent(error.message)}`);
+  }
+
+  // A declined email must not walk in through the door it was turned away
+  // from. Runs before the session is used for anything, and before the
+  // internal alert — a refused account is not a new signup worth pinging about.
+  if (data.user) {
+    const blocked = await enforceAccessGate({
+      userId: data.user.id,
+      email: data.user.email ?? email,
+    });
+    if (blocked) {
+      await supabase.auth.signOut();
+      redirect(blocked);
+    }
+  }
+
+  // Alert the internal team about the new signup. Fire-and-forget with an
+  // await'd best-effort call (it never throws) so it runs before the redirect
+  // unwinds the request; the DB claim in the helper makes it exactly-once even
+  // if the OAuth path also fires.
+  if (data.user?.id) {
+    await notifyNewSignupOnce(data.user.id);
+  }
+
+  // When email confirmation is required, signUp returns no session. Attempt an
+  // immediate sign-in (this succeeds when confirmations are disabled — see
+  // supabase/config.toml). Only if that fails do we ask the user to confirm,
+  // rather than silently bouncing them back through onboarding → login.
+  if (!data.session) {
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (signInError) {
+      redirect(
+        `/login?message=${encodeURIComponent(
+          "Account created. Check your email to confirm, then sign in.",
+        )}`,
+      );
+    }
+  }
+
+  // New principals have no org yet — onboarding handles creation.
+  redirect("/onboarding");
 }
 
 export async function signOut() {
