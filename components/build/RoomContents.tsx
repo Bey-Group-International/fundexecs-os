@@ -219,10 +219,14 @@ export function RoomContents({
   roomId,
   sections,
   available,
+  hideAddFromLibrary,
 }: {
   roomId: string;
   sections: RoomContentSection[];
   available: AvailableDoc[];
+  /** Suppressed while the pane is filtered — publishing into a partial view of
+   * the room reads as publishing into the filter. */
+  hideAddFromLibrary?: boolean;
 }) {
   const count = sections.reduce((n, s) => n + s.docs.length, 0);
 
@@ -252,7 +256,7 @@ export function RoomContents({
         </div>
       )}
 
-      <AddFromLibrary roomId={roomId} available={available} />
+      {hideAddFromLibrary ? null : <AddFromLibrary roomId={roomId} available={available} />}
     </div>
   );
 }

@@ -82,6 +82,11 @@ interface Props {
    * server never sent the real data at all, so there is nothing to leak from
    * this component regardless of client-side state. */
   contentReady: boolean;
+  /** Renders the viewer inside the GP workspace as a read-only preview: no
+   * dwell tracking, no working document links, and sized to its container
+   * rather than the whole screen. The payload is built by the same function the
+   * public room uses, so what shows here is what a recipient gets. */
+  preview?: boolean;
 }
 
 function compactUsd(n: number | null): string | null {
@@ -126,6 +131,7 @@ export function DataRoomViewer({
   docSections,
   gateConfig,
   contentReady,
+  preview = false,
 }: Props) {
   const accent =
     org.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(org.brand_color)
@@ -172,6 +178,9 @@ export function DataRoomViewer({
 
   const fireDwell = useCallback(
     (sectionKey: string, startMs: number) => {
+      // A preview is the GP looking at their own room. Recording it would
+      // corrupt the engagement analytics they use to read LP interest.
+      if (preview) return;
       const duration = Math.round((Date.now() - startMs) / 1000);
       if (duration < 3) return; // Skip accidental hovers
 
@@ -185,7 +194,7 @@ export function DataRoomViewer({
 
       void trackDwell(fd);
     },
-    [shareId, sessionId, viewerEmail, sectionDocId],
+    [shareId, sessionId, viewerEmail, sectionDocId, preview],
   );
 
   // Fire dwell on section change.
@@ -265,7 +274,11 @@ export function DataRoomViewer({
   const current = nav.find((n) => n.key === selected) ?? nav[0];
 
   return (
-    <div className="flex min-h-screen flex-col bg-surface-0 text-fg-primary">
+    <div
+      className={`flex flex-col bg-surface-0 text-fg-primary ${
+        preview ? "h-full min-h-0" : "min-h-screen"
+      }`}
+    >
       {/* Top bar */}
       <header
         className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-3"
@@ -275,7 +288,7 @@ export function DataRoomViewer({
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
-          className="rounded-lg border border-line p-2 text-fg-muted lg:hidden"
+          className={`rounded-lg border border-line p-2 text-fg-muted lg:hidden ${preview ? "hidden" : ""}`}
           aria-label="Toggle navigation"
         >
           <span className="block h-0.5 w-4 bg-current mb-1" />
@@ -304,18 +317,28 @@ export function DataRoomViewer({
           </div>
         </div>
 
-        <span className="shrink-0 rounded-full border border-line bg-surface-1 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-          Read-only
+        <span
+          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
+            preview
+              ? "border-gold-500/40 bg-gold-500/10 text-gold-300"
+              : "border-line bg-surface-1 text-fg-muted"
+          }`}
+        >
+          {preview ? "Preview" : "Read-only"}
         </span>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside
-          className={`
+          className={
+            preview
+              ? "relative flex w-48 shrink-0 flex-col border-r border-line bg-surface-1"
+              : `
             fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-line bg-surface-1 pt-16 transition-transform duration-200 lg:relative lg:inset-auto lg:z-auto lg:flex lg:w-56 lg:shrink-0 lg:pt-0 lg:translate-x-0
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          `}
+          `
+          }
         >
           {/* Mobile close overlay */}
           {sidebarOpen ? (
@@ -378,6 +401,7 @@ export function DataRoomViewer({
             token={token}
             accent={accent}
             current={current}
+            preview={preview}
           />
         </main>
       </div>
@@ -395,6 +419,7 @@ function ContentPanel({
   docSections,
   token,
   accent,
+  preview,
 }: {
   selected: string;
   org: ViewerOrg;
@@ -405,6 +430,7 @@ function ContentPanel({
   docSections: ViewerSection[];
   token: string;
   accent: string;
+  preview?: boolean;
   current: NavItem;
 }) {
   if (selected === "overview") {
@@ -518,7 +544,7 @@ function ContentPanel({
       <SectionHeader title={sec.label} accent={accent} />
       <div className="mt-4 space-y-6">
         {sec.docs.map((doc) => (
-          <DocCard key={doc.id} doc={doc} token={token} accent={accent} />
+          <DocCard key={doc.id} doc={doc} token={token} accent={accent} preview={preview} />
         ))}
       </div>
     </div>
@@ -534,7 +560,17 @@ function SectionHeader({ title, accent }: { title: string; accent: string }) {
   );
 }
 
-function DocCard({ doc, token, accent }: { doc: ViewerDoc; token: string; accent: string }) {
+function DocCard({
+  doc,
+  token,
+  accent,
+  preview,
+}: {
+  doc: ViewerDoc;
+  token: string;
+  accent: string;
+  preview?: boolean;
+}) {
   const [expanded, setExpanded] = useState(true);
   const href = safeHref(doc.storage_key);
 
@@ -553,7 +589,7 @@ function DocCard({ doc, token, accent }: { doc: ViewerDoc; token: string; accent
             {expanded ? "Collapse" : "Expand"}
           </button>
         ) : null}
-        {href ? (
+        {href && !preview ? (
           <a
             href={`/dataroom/${token}/d/${doc.id}`}
             target="_blank"
@@ -563,6 +599,15 @@ function DocCard({ doc, token, accent }: { doc: ViewerDoc; token: string; accent
           >
             Open →
           </a>
+        ) : null}
+        {href && preview ? (
+          // No live token in a preview: the real link is minted per recipient.
+          <span
+            title="Opens the linked file for the recipient. Inert in preview."
+            className="rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted"
+          >
+            Open →
+          </span>
         ) : null}
       </div>
 

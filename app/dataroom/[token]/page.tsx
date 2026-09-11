@@ -1,28 +1,9 @@
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
-import { blendTrackRecord } from "@/lib/track-record";
-import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
-import type {
-  Organization,
-  InvestmentThesis,
-  TrackRecord,
-  Entity,
-  OrganizationMember,
-  Principal,
-  Document,
-  DataRoomShare,
-} from "@/lib/supabase/database.types";
+import { buildViewerPayload, EMPTY_BLENDED } from "@/lib/data-room-viewer.server";
+import type { Organization, DataRoomShare } from "@/lib/supabase/database.types";
 import { DataRoomViewer } from "@/components/dataroom/DataRoomViewer";
-import type {
-  ViewerOrg,
-  ViewerTrackRecord,
-  ViewerThesis,
-  ViewerTeamMember,
-  ViewerEntity,
-  ViewerSection,
-  ViewerDoc,
-  GateConfig,
-} from "@/components/dataroom/DataRoomViewer";
+import type { GateConfig } from "@/components/dataroom/DataRoomViewer";
 
 // Public, read-only data room — outside the authed (app) group so it's
 // reachable without a login. The token is the sole gate.
@@ -39,16 +20,6 @@ function Unavailable() {
     </main>
   );
 }
-
-const EMPTY_BLENDED: ViewerTrackRecord = {
-  dealCount: 0,
-  realizedCount: 0,
-  weightedGrossIrr: null,
-  pooledMoic: null,
-  dpi: null,
-  totalInvested: null,
-  vintageRange: null,
-};
 
 export default async function PublicDataRoom(props: { params: Promise<{ token: string }> }) {
   const params = await props.params;
@@ -129,146 +100,21 @@ export default async function PublicDataRoom(props: { params: Promise<{ token: s
     );
   }
 
-  // A link opens exactly one room, and a room shows exactly what was published
-  // into it. The manifest — not the org's whole `documents` table — decides what
-  // a viewer can reach, so a draft in the library is unreachable here even if
-  // someone guesses its id.
-  const { data: manifestRows } = await supabase
-    .from("data_room_documents")
-    .select("document_id, sort_order")
-    .eq("organization_id", orgId)
-    .eq("room_id", roomId)
-    .order("sort_order", { ascending: true });
-  const manifest = (manifestRows ?? []) as { document_id: string; sort_order: number }[];
-  const manifestOrder = new Map(manifest.map((m) => [m.document_id, m.sort_order ?? 0]));
-
-  const [orgRes, thesisRes, recordsRes, entitiesRes, membersRes, docsRes] = await Promise.all([
-    supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
-    supabase
-      .from("investment_theses")
-      .select("*")
-      .eq("organization_id", orgId)
-      .order("is_active", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase.from("track_records").select("*").eq("organization_id", orgId).order("vintage_year", { ascending: false }),
-    supabase.from("entities").select("*").eq("organization_id", orgId),
-    supabase.from("organization_members").select("*").eq("organization_id", orgId),
-    manifest.length
-      ? supabase
-          .from("documents")
-          .select("*")
-          .eq("organization_id", orgId)
-          .in("id", manifest.map((m) => m.document_id))
-      : Promise.resolve({ data: [] as Document[] }),
-  ]);
-
-  const org = orgRes.data as Organization | null;
-  if (!org) return <Unavailable />;
-  const thesis = thesisRes.data as InvestmentThesis | null;
-  const records = (recordsRes.data ?? []) as TrackRecord[];
-  const entities = (entitiesRes.data ?? []) as Entity[];
-  const members = (membersRes.data ?? []) as OrganizationMember[];
-  const documents = (docsRes.data ?? []) as Document[];
-
-  let principals: Principal[] = [];
-  if (members.length) {
-    const { data } = await supabase
-      .from("principals")
-      .select("*")
-      .in("id", members.map((m) => m.principal_id));
-    principals = (data ?? []) as Principal[];
-  }
-  const byId = new Map(principals.map((p) => [p.id, p]));
-  const blended = blendTrackRecord(records);
-
-  // Group published documents by section, in the order the room sets.
-  const ordered = [...documents].sort(
-    (a, b) => (manifestOrder.get(a.id) ?? 0) - (manifestOrder.get(b.id) ?? 0) || a.name.localeCompare(b.name),
-  );
-  const docsBySection = new Map<string, ViewerDoc[]>();
-  for (const d of ordered) {
-    const k = d.doc_type ?? "other";
-    const doc: ViewerDoc = {
-      id: d.id,
-      name: d.name,
-      content: d.content ?? null,
-      storage_key: d.storage_key ?? null,
-      doc_type: d.doc_type ?? null,
-    };
-    const bucket = docsBySection.get(k);
-    if (bucket) bucket.push(doc);
-    else docsBySection.set(k, [doc]);
-  }
-
-  // Build ordered section list (only sections with published docs).
-  // If the share has an allowed_sections whitelist, filter to only those keys.
-  const allowedSections = (share as { allowed_sections?: string[] | null }).allowed_sections ?? null;
-  const docSections: ViewerSection[] = DATA_ROOM_SECTIONS
-    .map((s) => ({ key: s.key, label: s.label, docs: docsBySection.get(s.key) ?? [] }))
-    .filter((s) => s.docs.length > 0)
-    .filter((s) => !allowedSections || allowedSections.includes(s.key));
-
-  // Serialize for client component.
-  const viewerOrg: ViewerOrg = {
-    name: org.name,
-    tagline: org.tagline ?? null,
-    legal_name: org.legal_name ?? null,
-    entity_type: org.entity_type ?? null,
-    jurisdiction: org.jurisdiction ?? null,
-    website: org.website ?? null,
-    brand_color: org.brand_color ?? null,
-    logo_url: org.logo_url ?? null,
-  };
-
-  const viewerBlended: ViewerTrackRecord = {
-    dealCount: blended.dealCount,
-    realizedCount: blended.realizedCount,
-    weightedGrossIrr: blended.weightedGrossIrr ?? null,
-    pooledMoic: blended.pooledMoic ?? null,
-    dpi: blended.dpi ?? null,
-    totalInvested: blended.totalInvested ?? null,
-    vintageRange: blended.vintageRange ?? null,
-  };
-
-  const viewerThesis: ViewerThesis | null = thesis
-    ? {
-        title: thesis.title,
-        summary: thesis.summary ?? null,
-        asset_classes: thesis.asset_classes ?? null,
-        geographies: thesis.geographies ?? null,
-        target_irr: thesis.target_irr ?? null,
-        target_moic: thesis.target_moic ?? null,
-        check_size_min: thesis.check_size_min ?? null,
-        check_size_max: thesis.check_size_max ?? null,
-      }
-    : null;
-
-  const viewerTeam: ViewerTeamMember[] = members.map((m) => {
-    const p = byId.get(m.principal_id);
-    return {
-      name: p?.full_name || p?.email || "Member",
-      title: p?.title ?? null,
-      email: p?.email ?? null,
-    };
-  });
-
-  const viewerEntities: ViewerEntity[] = entities.map((e) => ({
-    name: e.name,
-    entity_type: (e as { entity_type?: string | null }).entity_type ?? null,
-  }));
+  // One builder serves this page and the GP-side preview, so "what will they
+  // see?" is answered by the same code that renders what they do see.
+  const payload = await buildViewerPayload(supabase, orgId, roomId, share.allowed_sections ?? null);
+  if (!payload) return <Unavailable />;
 
   return (
     <DataRoomViewer
       token={params.token}
       shareId={share.id}
-      org={viewerOrg}
-      blended={viewerBlended}
-      thesis={viewerThesis}
-      team={viewerTeam}
-      entities={viewerEntities}
-      docSections={docSections}
+      org={payload.org}
+      blended={payload.blended}
+      thesis={payload.thesis}
+      team={payload.team}
+      entities={payload.entities}
+      docSections={payload.docSections}
       gateConfig={gateConfig}
       contentReady
     />

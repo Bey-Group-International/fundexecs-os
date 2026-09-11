@@ -114,15 +114,29 @@ export function shareState(share: ShareLike, now: number = Date.now()): ShareSta
 }
 
 /**
+ * Narrow a set of sections by an allowlist. `null` or empty means no
+ * restriction — every section passes.
+ *
+ * Generic over the section shape so the GP-side room list and the LP-facing
+ * viewer both scope through this one rule: a preview that filters differently
+ * from the live room is exactly the bug this page exists to prevent.
+ */
+export function sectionsAllowedBy<S extends { key: string }>(
+  allowed: string[] | null | undefined,
+  sections: S[],
+): S[] {
+  if (!allowed || allowed.length === 0) return sections;
+  const set = new Set(allowed);
+  return sections.filter((s) => set.has(s.key));
+}
+
+/**
  * What a link actually exposes: the room's published sections narrowed by the
  * link's own allowlist. `allowed_sections: null` means every published section.
  * Answers the question a GP asks before sending — "what does this person see?"
  */
 export function shareExposure(share: ShareLike, sections: RoomSection[]): RoomSection[] {
-  const allowed = share.allowed_sections;
-  if (!allowed || allowed.length === 0) return sections;
-  const set = new Set(allowed);
-  return sections.filter((s) => set.has(s.key));
+  return sectionsAllowedBy(share.allowed_sections, sections);
 }
 
 /** Count of documents a link exposes. */
