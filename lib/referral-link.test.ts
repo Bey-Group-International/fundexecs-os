@@ -2,7 +2,20 @@
 // middleware writes a cookie off the back of it on every matched request, so
 // what it refuses matters as much as what it accepts.
 
-import { normalizeReferralCode, referralCodeFromJoinPath } from "@/lib/referral-link";
+import {
+  REFERRAL_COOKIE,
+  normalizeReferralCode,
+  referralCodeFromJoinPath,
+} from "@/lib/referral-link";
+
+describe("REFERRAL_COOKIE", () => {
+  it("keeps the name already on recipients' machines", () => {
+    // Codes ride this cookie for 30 days, and onboarding claims them on the
+    // far side. Renaming it would silently orphan every invite in flight, so
+    // the wire value is pinned here rather than left to follow the constant.
+    expect(REFERRAL_COOKIE).toBe("referral_code");
+  });
+});
 
 describe("normalizeReferralCode", () => {
   it("upper-cases and trims a code however it was retyped", () => {
