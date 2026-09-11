@@ -2325,11 +2325,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               // here" and "the provider is refusing our key" look identical
               // from a blank tile, and have completely different owners.
               console.warn(
-                reason === "rejected"
-                  ? "[meeting] TURN credentials were REJECTED by the provider — this deployment has no relay until the key is fixed. Guests behind symmetric NAT or CGNAT will fail to connect."
-                  : reason === "unconfigured"
-                    ? "[meeting] no TURN configured for this deployment — calls across restrictive networks may not connect"
-                    : "[meeting] TURN provider unavailable — falling back to STUN; calls across restrictive networks may not connect",
+                reason === "misconfigured"
+                  ? "[meeting] TURN is configured but unusable — check TURN_URLS lists a turn: URL and TURN_SECRET matches the TURN server. Guests behind symmetric NAT or CGNAT will fail to connect."
+                  : "[meeting] no TURN relay configured for this deployment — guests behind symmetric NAT, a corporate firewall or mobile CGNAT will fail to connect",
               );
             }
             return;

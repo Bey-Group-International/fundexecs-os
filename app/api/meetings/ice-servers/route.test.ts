@@ -1,8 +1,7 @@
-// Production spent ten weeks answering `Metered returned 401` into a log
-// nobody read, while every meeting quietly ran on STUN and guests behind
-// symmetric NAT could not connect. These tests are about the two things that
-// let that happen: a failure that could be cached, and a failure that said
-// nothing an operator could act on.
+// The endpoint that decides whether a guest on a restrictive network can be
+// seen or heard at all. It used to ask a TURN vendor for credentials and spent
+// ten weeks being refused; it now computes them from a shared secret, so these
+// tests are about what it hands out and who it hands it to.
 
 jest.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) } }),
@@ -17,162 +16,141 @@ jest.mock("@/lib/rate-limit", () => ({
 }));
 
 import { NextRequest } from "next/server";
+import { mintTurnCredential } from "@/lib/meetings/turn-credentials";
 import { GET } from "./route";
-import { resetTurnCache } from "@/lib/meetings/turn-servers.server";
 
-const REAL_SERVERS = [
-  { urls: "stun:relay.metered.test:80" },
-  { urls: "turn:relay.metered.test:80", username: "u", credential: "c" },
-];
+const URLS = "stun:turn.fundexecs.test:3478, turn:turn.fundexecs.test:3478, turns:turn.fundexecs.test:5349";
+const SECRET = "shared-with-coturn";
 
-function request() {
-  return new NextRequest("https://fundexecs.test/api/meetings/ice-servers?roomCode=abc");
-}
-
-/** A fetch that records every call and answers from a queue. */
-function fetchReturning(...responses: ({ status: number; body?: unknown } | Error)[]) {
-  const calls: string[] = [];
-  let i = 0;
-  const impl = jest.fn(async (url: unknown) => {
-    calls.push(String(url));
-    const next = responses[Math.min(i, responses.length - 1)];
-    i += 1;
-    if (next instanceof Error) throw next;
-    return {
-      status: next.status,
-      ok: next.status >= 200 && next.status < 300,
-      json: async () => next.body,
-    } as unknown as Response;
-  });
-  return { impl, calls };
+function request(query = "?roomCode=abc") {
+  return new NextRequest(`https://fundexecs.test/api/meetings/ice-servers${query}`);
 }
 
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   jest.restoreAllMocks();
-  resetTurnCache();
-  process.env = { ...ORIGINAL_ENV, METERED_API_KEY: "good-key", METERED_APP_NAME: "fundexecs" };
+  process.env = { ...ORIGINAL_ENV, TURN_URLS: URLS, TURN_SECRET: SECRET };
+  delete process.env.TURN_TTL_SECONDS;
   jest.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterAll(() => { process.env = ORIGINAL_ENV; });
 
-describe("when the provider rejects the credential", () => {
-  // The regression. With `next: { revalidate: 3540 }` the 401 response itself
-  // was cacheable, so an operator who fixed the key would see nothing change
-  // for up to 59 minutes and reasonably conclude the fix had not worked.
-  it("does not cache the failure — the next request asks again", async () => {
-    const { impl, calls } = fetchReturning({ status: 401 }, { status: 200, body: REAL_SERVERS });
-    global.fetch = impl as unknown as typeof fetch;
+/** The relay entry, which is the only one that carries credentials. */
+function relayEntry(body: { iceServers: RTCIceServer[] }) {
+  return body.iceServers.find((s) => JSON.stringify(s.urls).includes("turn:"));
+}
 
-    const first = await (await GET(request())).json();
-    expect(first.relay).toBe(false);
-    expect(first.reason).toBe("rejected");
+/**
+ * Re-mint what the route should have issued, from the expiry it chose.
+ *
+ * The route's job is to wire the right secret and label through; the
+ * cryptographic contract is pinned in turn-credentials.test.ts, against
+ * independently computed HMACs. Asserting it a second time here would duplicate
+ * that at the wrong layer — this checks the wiring, and fails just as loudly if
+ * the secret, the label or the scheme is wrong.
+ */
+function reMint(entry: RTCIceServer, label: string) {
+  const expiry = Number.parseInt(String(entry.username).split(":")[0], 10);
+  const { username, credential } = mintTurnCredential({
+    secret: SECRET, ttlSeconds: 0, nowSeconds: expiry, label,
+  });
+  return { username, credential };
+}
 
-    // Same instance, immediately after: the fixed key must take effect now.
-    const second = await (await GET(request())).json();
-    expect(second.relay).toBe(true);
-    expect(second.iceServers).toEqual(REAL_SERVERS);
-    expect(calls).toHaveLength(2);
+describe("when a TURN server is configured", () => {
+  it("hands out credentials the TURN server can verify itself", async () => {
+    const body = await (await GET(request())).json();
+
+    expect(body.relay).toBe(true);
+    const entry = relayEntry(body)!;
+    expect(entry.urls).toEqual(["turn:turn.fundexecs.test:3478", "turns:turn.fundexecs.test:5349"]);
+    expect(entry).toMatchObject(reMint(entry, "abc"));
   });
 
-  it("still answers 200 with STUN, because a call without a relay beats no call", async () => {
-    const { impl } = fetchReturning({ status: 401 });
-    global.fetch = impl as unknown as typeof fetch;
+  // The whole reason the vendor could break this: there is no longer anything
+  // to call, so there is nothing to be refused by, rate-limited by, or billed by.
+  it("makes no outbound request at all", async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    await GET(request());
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("expires the credential, so a leaked one is worth little", async () => {
+    process.env.TURN_TTL_SECONDS = "3600";
+    const before = Math.floor(Date.now() / 1000);
+
+    const body = await (await GET(request())).json();
+
+    const expiry = Number.parseInt((relayEntry(body)!.username as string).split(":")[0], 10);
+    expect(expiry).toBeGreaterThanOrEqual(before + 3600);
+    expect(expiry).toBeLessThanOrEqual(before + 3601);
+  });
+
+  // STUN is a public service that rejects authenticated requests, so it must
+  // not be handed a username and password.
+  it("leaves the STUN entry uncredentialed", async () => {
+    const body = await (await GET(request())).json();
+
+    const stun = body.iceServers.find((s: RTCIceServer) => JSON.stringify(s.urls).includes("stun:"));
+    expect(stun).toEqual({ urls: ["stun:turn.fundexecs.test:3478"] });
+  });
+
+  it("carries the room code into the username, where the relay logs it", async () => {
+    const body = await (await GET(request("?roomCode=board-review"))).json();
+
+    expect(relayEntry(body)!.username).toMatch(/^\d+:board-review$/);
+  });
+});
+
+describe("when TURN is not usable", () => {
+  it("says nothing is configured, and still answers with STUN", async () => {
+    delete process.env.TURN_URLS;
+    delete process.env.TURN_SECRET;
 
     const res = await GET(request());
     const body = await res.json();
+
     expect(res.status).toBe(200);
-    expect(body.iceServers.length).toBeGreaterThan(0);
     expect(body.relay).toBe(false);
+    expect(body.reason).toBe("unconfigured");
+    expect(body.iceServers.length).toBeGreaterThan(0);
   });
 
-  it("logs something an operator can act on, not just the status code", async () => {
-    const { impl } = fetchReturning({ status: 401 });
-    global.fetch = impl as unknown as typeof fetch;
+  // The likelier mistake than either clean case: half the configuration.
+  it("separates half-configured from not configured", async () => {
+    delete process.env.TURN_SECRET;
+    expect((await (await GET(request())).json()).reason).toBe("misconfigured");
+
+    process.env.TURN_SECRET = SECRET;
+    process.env.TURN_URLS = "stun:turn.fundexecs.test:3478";
+    expect((await (await GET(request())).json()).reason).toBe("misconfigured");
+  });
+
+  it("logs which variable is wrong and what it costs", async () => {
+    process.env.TURN_URLS = "stun:turn.fundexecs.test:3478";
     const logged = jest.spyOn(console, "error").mockImplementation(() => {});
 
     await GET(request());
 
     const line = logged.mock.calls.flat().join(" ");
-    expect(line).toMatch(/METERED_API_KEY/);
-    expect(line).toMatch(/REJECTED/);
-    expect(line).toMatch(/guests/i);
-  });
-});
-
-describe("when the credential succeeds", () => {
-  it("caches it, so one lookup serves the instance", async () => {
-    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
-    global.fetch = impl as unknown as typeof fetch;
-
-    await GET(request());
-    await GET(request());
-    await GET(request());
-
-    expect(calls).toHaveLength(1);
+    expect(line).toMatch(/TURN_URLS/);
+    expect(line).toMatch(/no turn: or turns: entry/);
+    expect(line).toMatch(/CGNAT/);
   });
 
-  // The env var carrying a trailing newline is the likeliest reason a key that
-  // was once right starts answering 401, and the one cause code can fix.
-  it("sends the key with the whitespace a dashboard paste adds stripped off", async () => {
-    process.env.METERED_API_KEY = "  good-key\n";
-    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
-    global.fetch = impl as unknown as typeof fetch;
-
-    await GET(request());
-
-    expect(calls[0]).toContain("apiKey=good-key");
-    expect(calls[0]).not.toMatch(/%0A|%20good/);
-  });
-
-  it("uses the configured app subdomain", async () => {
-    process.env.METERED_APP_NAME = "other-app";
-    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
-    global.fetch = impl as unknown as typeof fetch;
-
-    await GET(request());
-
-    expect(calls[0]).toContain("https://other-app.metered.live/");
-  });
-});
-
-describe("when there is nothing usable to return", () => {
-  it("treats a 200 carrying an empty list as a failure", async () => {
-    const { impl } = fetchReturning({ status: 200, body: [] });
-    global.fetch = impl as unknown as typeof fetch;
+  // A secret that picked up a newline in a dashboard field would otherwise mint
+  // credentials the relay rejects, which looks exactly like a wrong secret.
+  it("mints from the cleaned secret, not the pasted one", async () => {
+    process.env.TURN_SECRET = `  ${SECRET}\n`;
 
     const body = await (await GET(request())).json();
-    expect(body.relay).toBe(false);
-    expect(body.reason).toBe("unavailable");
-  });
 
-  it("separates a provider outage from a refused key", async () => {
-    const { impl } = fetchReturning({ status: 503 });
-    global.fetch = impl as unknown as typeof fetch;
-
-    const body = await (await GET(request())).json();
-    expect(body.reason).toBe("unavailable");
-  });
-
-  it("survives the provider being unreachable", async () => {
-    const { impl } = fetchReturning(new Error("ECONNREFUSED"));
-    global.fetch = impl as unknown as typeof fetch;
-
-    const res = await GET(request());
-    expect(res.status).toBe(200);
-    expect((await res.json()).reason).toBe("unavailable");
-  });
-
-  it("says so plainly when no key is configured at all", async () => {
-    delete process.env.METERED_API_KEY;
-    const { impl, calls } = fetchReturning({ status: 200, body: REAL_SERVERS });
-    global.fetch = impl as unknown as typeof fetch;
-
-    const body = await (await GET(request())).json();
-    expect(body.reason).toBe("unconfigured");
-    // Nothing to ask, so nothing is asked.
-    expect(calls).toHaveLength(0);
+    const entry = relayEntry(body)!;
+    expect(entry).toMatchObject(reMint(entry, "abc"));
   });
 });

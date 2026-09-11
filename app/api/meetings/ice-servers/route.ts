@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
-import { turnServers } from "@/lib/meetings/turn-servers.server";
+import { FALLBACK_STUN, turnServers } from "@/lib/meetings/turn-servers.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +21,14 @@ export const dynamic = "force-dynamic";
 // Being signed in was never the right question. The right one is "has the host
 // let this person into this meeting" — so an admitted guest is authorized by
 // their admission row, the same record the waiting room already decides. TURN
-// credentials are metered and worth money, so the gate stays closed to anyone
-// who has not been admitted: no room code, no admission, no credentials.
-
-const FALLBACK_STUN: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-];
+// relay capacity is worth money and worth protecting, so the gate stays closed
+// to anyone who has not been admitted: no room code, no admission, no
+// credentials. Credentials are now minted here from a shared secret rather than
+// fetched from a vendor, which removes the only outbound call this endpoint
+// made — but the gate matters more, not less: a credential this hands out is
+// good on OUR relay, and bandwidth we pay for.
+//
+// See docs/infra/turn-server.md for the relay itself.
 
 // Generous for people (one call joins once, plus a reconnect or two) and tight
 // enough that the endpoint is not a free TURN-credential dispenser. Keyed by IP
@@ -102,15 +103,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: PRIVATE });
   }
 
-  const turn = await turnServers();
+  // The room code reaches the TURN server's own log, so an operator can see
+  // which meeting a relayed session belongs to. It authorizes nothing.
+  const turn = turnServers(req.nextUrl.searchParams.get("roomCode")?.trim() || undefined);
   if (turn.relay) {
     return NextResponse.json({ iceServers: turn.iceServers, relay: true }, { headers: PRIVATE });
   }
 
   // `reason` rather than only `relay: false`. The client logs it, so the next
   // person to open a console on a failing call learns in one line whether this
-  // deployment has no TURN, has a key the provider refuses, or caught the
-  // provider having a bad afternoon — three problems with three different owners.
+  // deployment has no TURN server configured at all, or has one configured
+  // wrongly — which are different jobs for the same person.
   return NextResponse.json(
     { iceServers: FALLBACK_STUN, relay: false, reason: turn.reason },
     { headers: PRIVATE },
