@@ -34,7 +34,7 @@ export default async function LoginPage(
             advisory professionals.
           </p>
         </div>
-        <p className="font-mono text-xs text-fg-muted">Invite-only · Early Access</p>
+        <p className="font-mono text-xs text-fg-muted">Early Access</p>
       </div>
 
       {/* Right form panel */}

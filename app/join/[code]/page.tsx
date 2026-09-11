@@ -18,10 +18,10 @@ export const metadata: Metadata = {
 // The page a referral link opens: /join/CODE
 //
 // Signed-out strangers land here, so it reads as an invitation rather than a
-// sign-in wall — the recipient of an invite has no account yet, and FundExecs is
-// invite-only, so "Request access" is the way in. Both actions route back
-// through /join?ref=CODE, which sets the referral cookie before forwarding; a
-// Server Component can't write one itself.
+// sign-in wall — the recipient of an invite has no account yet, so "Request
+// access" is the way in. Both actions route back through /join?ref=CODE, which
+// sets the referral cookie before forwarding; a Server Component can't write
+// one itself.
 //
 // An unknown code still renders, minus the firm's name. Someone who mistyped a
 // character should get an invitation, not an error page.
@@ -54,7 +54,7 @@ export default async function JoinInvitePage(props: {
             advisory professionals.
           </p>
         </div>
-        <p className="font-mono text-xs text-fg-muted">Invite-only · Early Access</p>
+        <p className="font-mono text-xs text-fg-muted">Early Access</p>
       </div>
 
       {/* Right panel — the invitation */}
@@ -77,8 +77,8 @@ export default async function JoinInvitePage(props: {
           </h1>
           <p className="mt-1.5 text-sm text-fg-secondary">
             {invite
-              ? "FundExecs OS is invite-only. This link puts your request in front of the team with the invitation already attached."
-              : "FundExecs OS is invite-only. Request access below and we'll be in touch."}
+              ? "This link puts your request in front of the team with the invitation already attached."
+              : "Request access below and we'll be in touch."}
           </p>
 
           {/* The welcome bonus — the concrete thing the invite is worth. Only

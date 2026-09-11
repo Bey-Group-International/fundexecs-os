@@ -151,7 +151,7 @@ export type Principal = {
   // Set once, atomically, the first time the platform-admin new-signup alert is
   // emailed for this principal (migration 20260708120000). Null until alerted.
   signup_alerted_at: string | null;
-  // Invite-only gate (migration 20260906120000). Null until a platform admin
+  // Access gate (migration 20260906120000). Null until a platform admin
   // approves the person's access request; the auth paths bounce an unapproved
   // principal back to /request-access. Every principal that existed when the
   // migration ran was backfilled as approved.
@@ -2892,7 +2892,7 @@ export type Annotation = {
   updated_at: string;
 };
 
-// Invite-only access queue (migration 20260906120000). Written by the public
+// Access-request queue (migration 20260906120000). Written by the public
 // /request-access form and read by the platform-admin console, both through the
 // service-role client — the table has RLS with no policies.
 export type AccessRequest = {

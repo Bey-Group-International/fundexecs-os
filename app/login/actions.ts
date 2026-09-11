@@ -51,9 +51,9 @@ function asPath(value: FormDataEntryValue | null | undefined): string | null {
   return typeof value === "string" ? value : null;
 }
 
-// Email/password sign-in. There is no sign-up counterpart: FundExecs OS is
-// invite-only, so an account exists only once a platform admin has approved an
-// access request (app/request-access) and provisioned the credential.
+// Email/password sign-in. There is no sign-up counterpart: an account exists
+// only once a platform admin has approved an access request
+// (app/request-access) and provisioned the credential.
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
@@ -68,8 +68,8 @@ export async function signIn(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Invite-only: a principal who has not been approved gets no session, even
-  // with valid credentials. The same gate runs on the OAuth callback.
+  // A principal who has not been approved gets no session, even with valid
+  // credentials. The same gate runs on the OAuth callback.
   const blocked = data.user
     ? await enforceAccessGate({ userId: data.user.id, email: data.user.email })
     : null;

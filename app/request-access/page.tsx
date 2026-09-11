@@ -6,8 +6,7 @@ import { RequestAccessForm } from "./RequestAccessForm";
 
 export const metadata: Metadata = {
   title: "Request access",
-  description:
-    "FundExecs OS is invite-only. Tell us about your firm and we'll open a workspace for you.",
+  description: "Tell us about your firm and we'll open a workspace for you.",
 };
 
 // Copy for the three ways an operator lands here from a blocked sign-in
@@ -26,7 +25,7 @@ const GATE_NOTICES: Record<string, { message: string; showForm: boolean }> = {
   },
   required: {
     message:
-      "FundExecs OS is invite-only — there's no self-serve sign-up. Request access below and we'll be in touch.",
+      "We couldn't find an open workspace for that email. Request access below and we'll be in touch.",
     showForm: true,
   },
 };
@@ -62,7 +61,7 @@ export default async function RequestAccessPage(props: {
             advisory professionals.
           </p>
         </div>
-        <p className="font-mono text-xs text-fg-muted">Invite-only · Early Access</p>
+        <p className="font-mono text-xs text-fg-muted">Early Access</p>
       </div>
 
       {/* Right form panel */}
@@ -76,7 +75,7 @@ export default async function RequestAccessPage(props: {
           <p className="mt-1.5 text-sm text-fg-secondary">
             {submitted
               ? "We review every request by hand. You'll get an email as soon as your workspace is open."
-              : "FundExecs OS is invite-only. Tell us about your firm and we'll open a workspace for you."}
+              : "Tell us about your firm and we'll open a workspace for you."}
           </p>
 
           {searchParams.error && (

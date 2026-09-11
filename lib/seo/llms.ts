@@ -50,7 +50,7 @@ ${SITE_NAME} is an AI-native operating system for private markets. A copilot nam
 ## Key pages
 - [Home](${SITE_URL}/): Product overview and the Command → Plan → Execute → Report operating loop.
 - [Sign in](${SITE_URL}/login): Entry for operators with an approved account.
-- [Request access](${SITE_URL}/request-access): FundExecs OS is invite-only — request access here.
+- [Request access](${SITE_URL}/request-access): Request a FundExecs OS workspace for your firm.
 - [Sitemap](${SITE_URL}/sitemap.xml): Machine-readable index of indexable pages.
 
 ## Operating hubs

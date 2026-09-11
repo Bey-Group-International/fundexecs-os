@@ -1,4 +1,4 @@
-// Platform-admin side of the invite-only queue: list what's waiting and record
+// Platform-admin side of the access queue: list what's waiting and record
 // an approve/decline made in the console. Every read goes through the
 // service-role client (the queue table has RLS with no policies), so this module
 // must only ever be reached after requirePlatformAdmin() has passed — the gate

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       // Google sign-in is the one path that can mint a brand-new auth user
-      // without anyone asking us first — so the invite-only gate runs here
+      // without anyone asking us first — so the access gate runs here
       // BEFORE the session is allowed to stand.
       const blocked = await enforceAccessOrSignOut(supabase);
       if (blocked) return NextResponse.redirect(`${origin}${blocked}`);
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
 }
 
 /**
- * Run the invite-only gate on the user this exchange just authenticated. Returns
+ * Run the access gate on the user this exchange just authenticated. Returns
  * null when the session may stand, or the path to bounce them to — in which case
  * the session has already been revoked. Uses the SAME client that performed the
  * exchange, for the reason described on maybeGrantTrial below.

@@ -1,4 +1,4 @@
-// Invite-only access control.
+// Access control for sign-in.
 //
 // FundExecs OS has no self-serve sign-up. A prospective operator submits an
 // access request (app/request-access), a platform admin approves it — from the
@@ -377,7 +377,7 @@ export function blockedRedirectPath(decision: AccessDecision, email: string): st
 }
 
 /**
- * Apply the invite-only gate to a just-authenticated user.
+ * Apply the access gate to a just-authenticated user.
  *
  * Returns null when the session may stand, or the path to bounce them to.
  * Fails OPEN when the service-role env is absent (local/preview deployments

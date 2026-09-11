@@ -62,7 +62,7 @@ const FAQ_ITEMS = [
   {
     question: "How do I get access?",
     answer:
-      "FundExecs OS is invite-only during early access. Request access and our team will onboard your first mandate.",
+      "Request access and tell us about your firm — our team opens your workspace and onboards your first mandate.",
   },
 ];
 
@@ -269,7 +269,7 @@ export default async function LandingPage(
           Meet the executive agent that runs the operating system.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-fg-secondary">
-          Invite-only for private-market teams ready to replace fragmented tools
+          Built for private-market teams ready to replace fragmented tools
           with one autonomous execution layer.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
