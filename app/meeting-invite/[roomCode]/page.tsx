@@ -69,7 +69,7 @@ export default function MeetingInvitePage() {
     if (roomCode) void fetchMeeting();
   }, [roomCode]);
 
-  function handleRequestAccess() {
+  function handleCreateAccount() {
     router.push("/login?mode=signup");
   }
 
@@ -151,7 +151,7 @@ export default function MeetingInvitePage() {
             <p className="text-sm text-[var(--fg-secondary)] text-center">How would you like to join?</p>
 
             <button
-              onClick={handleRequestAccess}
+              onClick={handleCreateAccount}
               className="w-full rounded-lg bg-[var(--gold-400)] text-white text-sm font-semibold py-2.5 hover:opacity-90 transition-opacity"
             >
               Create an account for the full workspace
@@ -213,8 +213,8 @@ export default function MeetingInvitePage() {
         {meeting?.status === "ended" && (
           <div className="fx-glass rounded-xl p-5 flex flex-col gap-3 items-center text-center">
             <p className="text-sm text-[var(--fg-muted)]">This meeting has already ended.</p>
-            <button onClick={handleRequestAccess} className="text-[var(--gold-400)] text-sm hover:underline">
-              Request FundExecs OS access →
+            <button onClick={handleCreateAccount} className="text-[var(--gold-400)] text-sm hover:underline">
+              Create a FundExecs OS account →
             </button>
           </div>
         )}
