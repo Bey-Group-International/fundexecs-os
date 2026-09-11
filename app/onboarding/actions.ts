@@ -7,6 +7,7 @@ import { getSessionContext } from "@/lib/auth";
 import { sanitizeMandateActions } from "@/lib/mandate-options";
 import { matchNewOrgAndNotify } from "@/lib/ecosystem-match.server";
 import { claimReferralCode } from "@/lib/gift-earn";
+import { REFERRAL_COOKIE } from "@/lib/referral-link";
 import { grantTrialCreditsIfEligible } from "@/lib/trial";
 import { HUB_BY_KEY } from "@/lib/hubs";
 import type { Hub } from "@/lib/supabase/database.types";
@@ -142,15 +143,16 @@ export async function createOrganization(
     // ignore — onboarding succeeds regardless of matchmaking
   }
 
-  // Auto-claim any referral code that was stored when the user landed via a
-  // /join?ref=CODE link. Best-effort: a bad code or a DB hiccup must never
-  // block the newly created org from entering the app.
+  // Auto-claim any referral code stored when the user landed on an invite link
+  // — /join/CODE, captured in the middleware, or an older /join?ref=CODE.
+  // Best-effort: a bad code or a DB hiccup must never block the newly created
+  // org from entering the app.
   try {
     const jar = await cookies();
-    const refCode = jar.get("referral_code")?.value ?? "";
+    const refCode = jar.get(REFERRAL_COOKIE)?.value ?? "";
     if (refCode) {
       await claimReferralCode(refCode, orgId);
-      jar.delete("referral_code");
+      jar.delete(REFERRAL_COOKIE);
     }
   } catch {
     // ignore
