@@ -73,6 +73,7 @@ import {
   looksLikeMissingVideo,
   summarizeTransceivers,
   videoSenderNeedsRepair,
+  type TransceiverState,
 } from "@/lib/meetings/media-repair";
 import { rememberDevice } from "@/lib/meetings/device-prefs";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
@@ -145,6 +146,18 @@ type SignalMsg =
   | { type: "admit_request"; from: string; displayName: string }
   | { type: "admit"; from: string; target: string }
   | { type: "deny"; from: string; target: string }
+  // Diagnostics for one-way media. A peer that is connected and receiving no
+  // video asks the far end what its side of the connection looks like, because
+  // the answer is not visible locally: `getTransceivers()` describes THIS
+  // browser's senders and receivers, so a guest staring at a blank tile can see
+  // that nothing is arriving and cannot see whether the host ever attached a
+  // track to send. Only that snapshot separates "they never sent" from "the
+  // direction negotiated one-way", and only the far end holds it.
+  //
+  // Reply content is used for a console line and nothing else — it is a peer's
+  // self-report, not a fact this client acts on.
+  | { type: "media_probe"; from: string; to: string }
+  | { type: "media_report"; from: string; to: string; transceivers: TransceiverState[] }
 ;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -970,6 +983,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const iceConfigRef = useRef<RTCConfiguration>(FALLBACK_ICE);
   /** Pending "is video actually arriving?" checks, one per peer. */
   const inboundAuditRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** Peers with a camera re-attach already in flight, so two never race. */
+  const repairInFlightRef = useRef<Set<string>>(new Set());
   // Whether the servers above actually include a TURN relay. Read when a peer
   // fails to connect, so the logs distinguish "this network needed a relay and
   // had none" from an ordinary blip.
@@ -1309,6 +1324,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // A peer that left owes no explanation for video that never arrived.
     const audit = inboundAuditRef.current.get(peerId);
     if (audit) { clearTimeout(audit); inboundAuditRef.current.delete(peerId); }
+    repairInFlightRef.current.delete(peerId);
   }, []);
 
   /**
@@ -1465,12 +1481,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * and re-attaching would turn it back on for the whole room.
    */
   const repairOutgoingVideo = useCallback((peerId: string) => {
+    // `connected` can fire more than once before a replaceTrack settles — an
+    // ICE restart on a flapping link is the ordinary way — and two repairs
+    // racing on one sender is worth avoiding even though the last writer wins.
+    if (repairInFlightRef.current.has(peerId)) return;
     const sender = videoSenderRef.current.get(peerId);
     if (!sender) return;
     const local = localStreamRef.current?.getVideoTracks()[0] ?? null;
-    if (!videoSenderNeedsRepair(sender.track, local) || !local) return;
+    if (!local || !videoSenderNeedsRepair(sender.track, local)) return;
+    repairInFlightRef.current.add(peerId);
     console.warn(`[meeting] peer ${peerId} had no live outgoing video track — re-attaching the camera`);
-    void sender.replaceTrack(local).catch(() => { /* peer closed mid-repair */ });
+    void sender
+      .replaceTrack(local)
+      .catch(() => { /* peer closed mid-repair */ })
+      .finally(() => { repairInFlightRef.current.delete(peerId); });
   }, []);
   const repairOutgoingVideoRef = useRef(repairOutgoingVideo);
   useEffect(() => { repairOutgoingVideoRef.current = repairOutgoingVideo; }, [repairOutgoingVideo]);
@@ -1504,9 +1528,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         hasInboundVideoTrack: (stream?.getVideoTracks().length ?? 0) > 0,
       });
       if (!stale) return;
+      // OUR side of the connection. Necessary but not sufficient: this shows
+      // our receiver (empty, which is the symptom) and our sender (fine, which
+      // is not in question). Whether the far end ever attached a track to send
+      // is not knowable from here, so ask — the reply is logged beside this.
       console.warn(
-        `[meeting] peer ${peerId} is connected and says its camera is on, but no video is arriving — ${formatTransceivers(summarizeTransceivers(pc.getTransceivers()))}`,
+        `[meeting] peer ${peerId} is connected and says its camera is on, but no video is arriving. Our side: ${formatTransceivers(summarizeTransceivers(pc.getTransceivers()))}`,
       );
+      sendSignalRef.current({ type: "media_probe", from: myIdRef.current, to: peerId });
     }, INBOUND_VIDEO_AUDIT_MS);
     inboundAuditRef.current.set(peerId, timer);
   }, []);
@@ -1830,6 +1859,28 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // A mic that just went off is not "still speaking" — release the hold now
       // rather than letting it decay as if the voice merely paused.
       if (!msg.micOn) lastAudibleRef.current.delete(msg.from);
+    }
+
+    if (msg.type === "media_probe" && msg.to === myId) {
+      // Somebody is receiving no video from us. Describe our side of that
+      // connection so the two snapshots can be read together.
+      const pc = peersRef.current.get(msg.from);
+      if (!pc) return;
+      sendSignalRef.current({
+        type: "media_report",
+        from: myId,
+        to: msg.from,
+        transceivers: summarizeTransceivers(pc.getTransceivers()),
+      });
+      return;
+    }
+
+    if (msg.type === "media_report" && msg.to === myId) {
+      // The half that was missing: what the far end thinks it is sending us.
+      // `send=NO TRACK` here means they never attached a camera to this
+      // connection; `got=recvonly` means the direction negotiated one-way.
+      console.warn(`[meeting] peer ${msg.from} reports its side: ${formatTransceivers(msg.transceivers)}`);
+      return;
     }
 
     if (msg.type === "video" && msg.from !== myId) {
@@ -3074,8 +3125,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const kickPeer = useCallback((peerId: string) => {
     sendSignal({ type: "kick", from: myIdRef.current, target: peerId });
     peersRef.current.get(peerId)?.close(); peersRef.current.delete(peerId);
+    // Locally, not on the strength of a `leave` coming back: a removed client
+    // that has already gone, crashed, or lost the channel sends nothing, and
+    // its senders, buffered candidates and pending audit would then sit in
+    // these maps for the rest of the call.
+    forgetPeerState(peerId);
     setPeers((prev) => { const next = new Map(prev); next.delete(peerId); return next; });
-  }, [sendSignal]);
+  }, [sendSignal, forgetPeerState]);
 
   // Admit / deny write the decision through the host-only admissions route
   // (service-role). The waiting guest's poll then picks up the new status and
