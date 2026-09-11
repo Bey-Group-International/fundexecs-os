@@ -162,20 +162,19 @@ export function DataRoomViewer({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // The nav can change under a live selection — most visibly in the GP preview,
-  // where scoping to a link removes the section being read. Without this the
-  // content panel matches nothing and renders an empty pane with no nav item
-  // highlighted; fall back to the first item that still exists.
-  useEffect(() => {
-    if (nav.length === 0) return;
-    if (!nav.some((n) => n.key === selected)) setSelected(nav[0].key);
-  }, [nav, selected]);
+  // where scoping to a link removes the section being read. Resolve the
+  // selection during render rather than repairing it in an effect: an effect
+  // runs after the render that already dropped the section, so the viewer would
+  // paint one frame with an empty pane and no nav item highlighted.
+  const effectiveSelected =
+    nav.length === 0 || nav.some((n) => n.key === selected) ? selected : nav[0].key;
 
   // ---------------------------------------------------------------------------
   // Dwell tracking
   // ---------------------------------------------------------------------------
 
   const dwellStart = useRef<number>(Date.now());
-  const dwellSection = useRef<string>(selected);
+  const dwellSection = useRef<string>(effectiveSelected);
   // Map section key → first document id in that section (for analytics).
   const sectionDocId = useMemo(() => {
     const m = new Map<string, string | null>();
@@ -209,14 +208,14 @@ export function DataRoomViewer({
   // Fire dwell on section change.
   const handleSelect = useCallback(
     (key: string) => {
-      if (key === selected) return;
+      if (key === effectiveSelected) return;
       fireDwell(dwellSection.current, dwellStart.current);
       dwellSection.current = key;
       dwellStart.current = Date.now();
       setSelected(key);
       setSidebarOpen(false);
     },
-    [selected, fireDwell],
+    [effectiveSelected, fireDwell],
   );
 
   // Fire dwell on page unload.
@@ -280,7 +279,7 @@ export function DataRoomViewer({
   // Main viewer
   // ---------------------------------------------------------------------------
 
-  const current = nav.find((n) => n.key === selected) ?? nav[0];
+  const current = nav.find((n) => n.key === effectiveSelected) ?? nav[0];
 
   return (
     <div
@@ -363,7 +362,7 @@ export function DataRoomViewer({
             <p className="px-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg-muted">Contents</p>
             <nav className="flex flex-col gap-0.5 px-2">
               {nav.map((item) => {
-                const active = item.key === selected;
+                const active = item.key === effectiveSelected;
                 return (
                   <button
                     key={item.key}
@@ -400,7 +399,7 @@ export function DataRoomViewer({
         {/* Content panel */}
         <main className="min-w-0 flex-1 overflow-y-auto px-6 py-8 lg:px-10">
           <ContentPanel
-            selected={selected}
+            selected={effectiveSelected}
             org={org}
             blended={blended}
             thesis={thesis}

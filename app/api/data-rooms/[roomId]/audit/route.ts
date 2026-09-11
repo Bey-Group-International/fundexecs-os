@@ -26,12 +26,16 @@ export async function GET(_req: Request, props: { params: Promise<{ roomId: stri
   const orgId = ctx.orgId;
 
   const supabase = await createServerClient();
-  const { data: roomRow } = await supabase
+  const { data: roomRow, error: roomErr } = await supabase
     .from("data_rooms")
     .select("*")
     .eq("id", params.roomId)
     .eq("organization_id", orgId)
     .maybeSingle();
+  // Separate "the read failed" from "no such room". Without this a transient
+  // database error reads as 404, telling the caller their room does not exist
+  // when the honest answer is retry.
+  if (roomErr) return NextResponse.json({ error: "Failed to read room" }, { status: 500 });
   const room = roomRow as DataRoom | null;
   if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

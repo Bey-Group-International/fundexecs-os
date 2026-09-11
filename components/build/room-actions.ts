@@ -99,9 +99,19 @@ export async function archiveRoom(formData: FormData): Promise<void> {
 /**
  * Next free position in a room. New publications used to copy
  * `documents.sort_order`, but nothing writes that column any more, so every
- * manifest row landed on 0 — leaving the room's order undefined and the
- * reorder arrows swapping whichever tied row the database happened to return.
- * Appending at the end gives each document a distinct, stable position.
+ * manifest row landed on 0 — leaving the reorder arrows swapping whichever tied
+ * row the database happened to return. Appending at the end gives each document
+ * its own position instead.
+ *
+ * This is a read then a write, not an atomic allocation: two publications
+ * racing in the same instant can both read the same maximum and land on the
+ * same position, since the manifest's unique constraint is on
+ * (room_id, document_id) rather than (room_id, sort_order). Order stays
+ * deterministic regardless — every reader breaks ties by name
+ * (groupRoomDocuments, buildViewerPayload, and moveRoomDocument below) — so the
+ * two documents sort alphabetically against each other rather than by
+ * insertion. Making positions strictly distinct would need a unique index and
+ * a transactional allocation; that is a schema change, not a fix.
  */
 async function nextSortOrder(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
