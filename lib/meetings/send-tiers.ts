@@ -78,6 +78,45 @@ export function tierForView(input: {
   return input.tileCount > GRID_THUMBNAIL_THRESHOLD ? "low" : "high";
 }
 
+/**
+ * How long someone keeps full quality after they stop being the spotlight.
+ *
+ * The active speaker is chosen from the audio meter, which moves every time
+ * somebody says "mm" — so in any real conversation the spotlight changes several
+ * times a minute, and often several times in a few seconds. Following that
+ * exactly would drop the previous speaker to a quarter resolution and raise them
+ * back moments later, and every one of those changes costs a keyframe and a
+ * visible blip on everyone's screen.
+ *
+ * So the rule is asymmetric: promote at once, because the new speaker should be
+ * sharp immediately, and demote only after they have been quiet for a while.
+ * Cross-talk and short interjections then cost nothing at all.
+ */
+const DEMOTE_LINGER_MS = 4_000;
+
+/**
+ * Hold a peer at `high` for a moment after they stop being watched.
+ *
+ * `none` is never held: a backgrounded tab or a camera switched off should stop
+ * the far encoder immediately, which is the saving that matters most and the one
+ * a delay would throw away.
+ */
+export function withDemotionDelay(input: {
+  desired: VideoTier;
+  /** When this peer was last genuinely wanted at `high`, or null if never. */
+  lastHighAt: number | null;
+  now: number;
+  lingerMs?: number;
+}): VideoTier {
+  if (input.desired === "high" || input.desired === "none") return input.desired;
+  if (input.lastHighAt === null) return input.desired;
+  const linger = input.lingerMs ?? DEMOTE_LINGER_MS;
+  return input.now - input.lastHighAt < linger ? "high" : input.desired;
+}
+
+/** How long a held promotion lasts, so a caller can schedule the re-check. */
+export const DEMOTION_LINGER_MS = DEMOTE_LINGER_MS;
+
 const THUMBNAIL_CAP: SendCap = {
   maxBitrate: THUMBNAIL_KBPS * 1000,
   scaleResolutionDownBy: THUMBNAIL_SCALE,

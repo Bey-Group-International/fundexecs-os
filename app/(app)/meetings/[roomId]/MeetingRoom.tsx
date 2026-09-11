@@ -79,6 +79,8 @@ import {
 import {
   allocateSendCaps,
   tierForView,
+  withDemotionDelay,
+  DEMOTION_LINGER_MS,
   type VideoTier,
 } from "@/lib/meetings/send-tiers";
 import { rememberDevice } from "@/lib/meetings/device-prefs";
@@ -998,6 +1000,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const requestedTierRef = useRef<Map<string, VideoTier>>(new Map());
   /** What we last asked each peer for, so only changes go on the wire. */
   const sentRequestRef = useRef<Map<string, VideoTier>>(new Map());
+  /** When each peer was last genuinely wanted large, for the demotion linger. */
+  const lastHighAtRef = useRef<Map<string, number>>(new Map());
+  /** The single re-check that lands a held demotion once the linger expires. */
+  const demoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Whether the servers above actually include a TURN relay. Read when a peer
   // fails to connect, so the logs distinguish "this network needed a relay and
   // had none" from an ordinary blip.
@@ -1346,6 +1352,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     repairInFlightRef.current.delete(peerId);
     requestedTierRef.current.delete(peerId);
     sentRequestRef.current.delete(peerId);
+    lastHighAtRef.current.delete(peerId);
   }, []);
 
   /**
@@ -1420,21 +1427,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const refreshVideoRequests = useCallback(() => {
     const ids = [...peersRef.current.keys()];
     const hidden = typeof document !== "undefined" && document.hidden;
+    const now = Date.now();
     // Including ourselves: the grid draws our own tile too, and it is the total
     // that decides how small each one is.
     const tileCount = ids.length + 1;
+    let holding = false;
     for (const id of ids) {
       const said = peerVideoRef.current.get(id);
-      const tier = tierForView({
+      const desired = tierForView({
         documentHidden: hidden,
         isSpotlight: layoutRef.current === "speaker" && activeSpeakerIdRef.current === id,
         layout: layoutRef.current,
         tileCount,
         cameraOn: said ? said.camOn && !said.paused : true,
       });
+      if (desired === "high") lastHighAtRef.current.set(id, now);
+      const tier = withDemotionDelay({
+        desired,
+        lastHighAt: lastHighAtRef.current.get(id) ?? null,
+        now,
+      });
+      // A tier that is only `high` because of the linger has to be revisited,
+      // or the demotion never lands: nothing else in the room changes when a
+      // timer expires.
+      if (tier !== desired) holding = true;
       if (sentRequestRef.current.get(id) === tier) continue;
       sentRequestRef.current.set(id, tier);
       sendSignalRef.current({ type: "video_request", from: myIdRef.current, to: id, tier });
+    }
+
+    // One timer for the whole room rather than one per peer: they all expire
+    // within the same linger, and a single re-check re-evaluates every peer.
+    if (demoteTimerRef.current) { clearTimeout(demoteTimerRef.current); demoteTimerRef.current = null; }
+    if (holding) {
+      demoteTimerRef.current = setTimeout(() => {
+        demoteTimerRef.current = null;
+        refreshVideoRequestsRef.current();
+      }, DEMOTION_LINGER_MS);
     }
   }, []);
   const refreshVideoRequestsRef = useRef(refreshVideoRequests);
@@ -3313,6 +3342,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // fired after teardown would report on a call that no longer exists.
     inboundAuditRef.current.forEach((t) => clearTimeout(t));
     inboundAuditRef.current.clear();
+    // The held-demotion re-check has no peers left to re-evaluate, and would
+    // signal into a channel that is about to be unsubscribed.
+    if (demoteTimerRef.current) { clearTimeout(demoteTimerRef.current); demoteTimerRef.current = null; }
     try { channelRef.current?.unsubscribe(); } catch { /* already gone */ }
     channelRef.current = null;
     if (recognitionRef.current) {

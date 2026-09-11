@@ -11,6 +11,7 @@ import {
   allocateSendCaps,
   tierForView,
   totalUpstreamKbps,
+  withDemotionDelay,
   type VideoTier,
 } from "./send-tiers";
 
@@ -129,5 +130,36 @@ describe("allocateSendCaps", () => {
 
   it("handles an empty room without dividing by zero", () => {
     expect(allocateSendCaps(new Map(), [], "normal").size).toBe(0);
+  });
+});
+
+describe("withDemotionDelay", () => {
+  const hold = (over: Partial<Parameters<typeof withDemotionDelay>[0]>) =>
+    withDemotionDelay({ desired: "low", lastHighAt: 0, now: 1_000, lingerMs: 4_000, ...over });
+
+  it("promotes immediately, so a new speaker is sharp at once", () => {
+    expect(hold({ desired: "high", lastHighAt: null })).toBe("high");
+  });
+
+  it("holds full quality through cross-talk rather than flapping", () => {
+    // The active speaker comes from the audio meter and moves every time
+    // somebody says "mm". Following it exactly would cost a keyframe and a
+    // visible blip on every interjection.
+    expect(hold({ desired: "low", lastHighAt: 0, now: 500 })).toBe("high");
+    expect(hold({ desired: "low", lastHighAt: 0, now: 3_999 })).toBe("high");
+  });
+
+  it("demotes once they have genuinely stopped speaking", () => {
+    expect(hold({ desired: "low", lastHighAt: 0, now: 4_001 })).toBe("low");
+  });
+
+  it("never holds a peer who should be sending nothing", () => {
+    // A backgrounded tab or a camera switched off stops the far encoder at
+    // once: that is the saving a delay would throw away.
+    expect(hold({ desired: "none", lastHighAt: 0, now: 1 })).toBe("none");
+  });
+
+  it("does not hold someone who was never watched", () => {
+    expect(hold({ desired: "low", lastHighAt: null })).toBe("low");
   });
 });
