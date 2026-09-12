@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "./DraftWithEarn";
+import { isUploadedFile } from "@/lib/document-files";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 import { scoreDocument } from "@/lib/document-quality";
 import { deleteDocument, updateDocument, updateDocumentStatus } from "@/components/documents/document-actions";
@@ -41,7 +42,12 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
   const [docStatus, setDocStatus] = useState<DocumentStatus>(doc.status ?? "ready");
   const [statusPending, startStatusTransition] = useTransition();
   const [pending, startTransition] = useTransition();
+  // A document's file is either somebody else's URL or an object in our private
+  // bucket, and the two are opened very differently: a link goes straight out,
+  // an upload goes through the route that mints a signed URL for it.
+  const isUpload = isUploadedFile(doc.storage_key);
   const isLink = !!doc.storage_key;
+  const fileHref = isUpload ? `/api/documents/${doc.id}/file` : (doc.storage_key ?? "#");
   const showZeroState = !content.trim() && !isLink;
 
   const STATUS_CYCLE: DocumentStatus[] = ["draft", "review", "ready"];
@@ -81,7 +87,10 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
       fd.set("name", name.trim() || doc.name);
       fd.set("section", section);
       fd.set("content", overrideContent ?? content);
-      if (isLink) fd.set("url", doc.storage_key ?? "");
+      // Only an external link round-trips through the form. An uploaded file's
+      // storage_key is a bucket path, which `updateDocument` would reject as a
+      // URL and null out — detaching the file on every save.
+      if (isLink && !isUpload) fd.set("url", doc.storage_key ?? "");
       await updateDocument(fd);
       setDirtySaved("saved");
       setTimeout(() => setDirtySaved("idle"), 1500);
@@ -232,9 +241,9 @@ export function DocumentBuilder({ doc }: { doc: BuilderDoc }) {
 
           {isLink ? (
             <p className="-mt-2 text-xs text-fg-muted">
-              This is a linked file.{" "}
-              <a href={doc.storage_key ?? "#"} target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:underline">
-                Open original →
+              {isUpload ? "This document carries an uploaded file." : "This is a linked file."}{" "}
+              <a href={fileHref} target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:underline">
+                {isUpload ? "Open file →" : "Open original →"}
               </a>{" "}
               Any notes you write below are saved with this document.
             </p>

@@ -828,6 +828,9 @@ export type Document = {
   sort_order: number;
   status: DocumentStatus;
   created_at: string;
+  // Added by migration 20260912140000. Rows written before it are backfilled to
+  // their creation time by the column default.
+  updated_at: string;
 };
 
 export type DocumentVersion = {
@@ -838,6 +841,12 @@ export type DocumentVersion = {
   name: string;
   saved_by: string | null;
   created_at: string;
+  // File identity of the snapshot (migration 20260912140000). Null on a version
+  // that captured inline content only. The object these point at is left in the
+  // bucket, so restoring a version is a pointer swap, not a re-upload.
+  storage_key: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
 };
 
 export type NdaSignature = {
