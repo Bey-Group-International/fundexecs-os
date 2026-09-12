@@ -2,6 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import type { MemberRole } from "@/lib/supabase/database.types";
+import { avatarInitial, safeAvatarUrl } from "@/lib/avatar";
+import { MAX_BIO_LENGTH } from "@/lib/member-profile";
+import { AvatarUpload } from "@/components/shared/AvatarUpload";
 import { inputClass } from "./DraftWithEarn";
 import {
   updateMyProfile,
@@ -17,6 +20,7 @@ export interface TeamMemberView {
   name: string;
   email: string;
   title: string | null;
+  bio: string | null;
   avatarUrl: string | null;
   role: MemberRole;
 }
@@ -34,6 +38,7 @@ interface TeamControlsProps {
   ownProfile: {
     full_name: string | null;
     title: string | null;
+    bio: string | null;
     avatar_url: string | null;
   };
   seats: SeatInfo;
@@ -49,23 +54,10 @@ const HUB_OPTIONS = [
 ];
 const PRIORITY_OPTIONS = ["low", "normal", "high", "urgent"];
 
-// Only allow user-supplied avatar URLs that resolve to a real http(s)
-// resource. Parsing with the URL constructor and re-emitting `.href` breaks the
-// taint flow into the <img> sink and rejects javascript:/data:/other-scheme
-// payloads (CodeQL js/xss-through-dom). Falls back to initials when unsafe.
-function safeImageUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return parsed.href;
-    }
-  } catch {
-    // not a valid absolute URL
-  }
-  return null;
-}
-
+// Photos are uploaded files we host, never arbitrary URLs. `safeAvatarUrl`
+// accepts only a public object URL from our own member-avatars bucket and
+// re-emits it via the URL constructor, which breaks the taint flow into the
+// <img> sink (CodeQL js/xss-through-dom). Anything else falls back to initials.
 function Avatar({
   name,
   avatarUrl,
@@ -73,7 +65,7 @@ function Avatar({
   name: string;
   avatarUrl?: string | null;
 }) {
-  const safe = safeImageUrl(avatarUrl);
+  const safe = safeAvatarUrl(avatarUrl);
   if (safe) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -86,7 +78,7 @@ function Avatar({
   }
   return (
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-500/20 text-sm font-medium text-gold-300">
-      {(name || "M").charAt(0).toUpperCase()}
+      {avatarInitial(name)}
     </span>
   );
 }
@@ -271,20 +263,21 @@ function AssignTaskForm({
 }
 
 // --- Your profile ---------------------------------------------------------
+// The photo is NOT part of this form. `AvatarUpload` posts the file to its own
+// action the moment it is picked, so a large image never has to ride along in
+// the profile submit and the operator sees the new photo immediately.
 function YourProfile({
   ownProfile,
 }: {
   ownProfile: {
     full_name: string | null;
     title: string | null;
+    bio: string | null;
     avatar_url: string | null;
   };
 }) {
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState(ownProfile.avatar_url ?? "");
-
-  const trimmedAvatar = avatarUrl.trim();
 
   return (
     <form
@@ -300,9 +293,18 @@ function YourProfile({
       <div className="sm:col-span-2">
         <p className="text-sm font-medium text-fg-primary">Your profile</p>
         <p className="mt-0.5 text-xs text-fg-muted">
-          Update how your name, title, and photo appear across the firm.
+          Update how your name, title, bio, and photo appear across the firm.
         </p>
       </div>
+
+      <div className="sm:col-span-2">
+        <AvatarUpload
+          name={ownProfile.full_name}
+          currentUrl={ownProfile.avatar_url}
+          size="md"
+        />
+      </div>
+
       <input
         name="full_name"
         defaultValue={ownProfile.full_name ?? ""}
@@ -315,16 +317,14 @@ function YourProfile({
         placeholder="Title"
         className={inputClass}
       />
-      <div className="flex items-center gap-3 sm:col-span-2">
-        <Avatar name={ownProfile.full_name ?? ""} avatarUrl={trimmedAvatar} />
-        <input
-          name="avatar_url"
-          value={avatarUrl}
-          onChange={(e) => setAvatarUrl(e.target.value)}
-          placeholder="Avatar image URL"
-          className={`${inputClass} flex-1`}
-        />
-      </div>
+      <textarea
+        name="bio"
+        rows={3}
+        maxLength={MAX_BIO_LENGTH}
+        defaultValue={ownProfile.bio ?? ""}
+        placeholder="Short bio — what you run, and the track record behind it."
+        className={`${inputClass} sm:col-span-2`}
+      />
       <div className="flex items-center gap-3 sm:col-span-2">
         <button
           disabled={pending}
@@ -453,8 +453,14 @@ function AdminMemberRow({
   const [removePending, startRemove] = useTransition();
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-3">
-      <Avatar name={member.name} avatarUrl={member.avatarUrl} />
+    <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-1 p-3">
+      {/* Owners and admins may set any member's photo, so a teammate who has
+          not logged in yet still has a face on the firm page. */}
+      <AvatarUpload
+        name={member.name}
+        currentUrl={member.avatarUrl}
+        principalId={member.principalId}
+      />
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 truncate text-sm text-fg-primary">
           <span className="truncate">{member.name}</span>
@@ -470,9 +476,14 @@ function AdminMemberRow({
         {member.email ? (
           <p className="truncate text-xs text-fg-muted">{member.email}</p>
         ) : null}
+        {member.bio ? (
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-fg-secondary">
+            {member.bio}
+          </p>
+        ) : null}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <RoleBadge role={member.role} />
         <form
           action={(fd) => {
@@ -534,7 +545,7 @@ function ReadOnlyMemberRow({
   isSelf: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-3">
+    <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-1 p-3">
       <Avatar name={member.name} avatarUrl={member.avatarUrl} />
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 truncate text-sm text-fg-primary">
@@ -551,8 +562,13 @@ function ReadOnlyMemberRow({
         {member.email ? (
           <p className="truncate text-xs text-fg-muted">{member.email}</p>
         ) : null}
+        {member.bio ? (
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-fg-secondary">
+            {member.bio}
+          </p>
+        ) : null}
       </div>
-      <span className="ml-auto">
+      <span className="ml-auto shrink-0">
         <RoleBadge role={member.role} />
       </span>
     </div>

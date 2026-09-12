@@ -25,11 +25,13 @@ export async function updateUserProfile(
   const full_name = String(formData.get("full_name") ?? "").trim() || null;
   const title = String(formData.get("title") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
-  const avatar_url = String(formData.get("avatar_url") ?? "").trim() || null;
 
+  // No `avatar_url` here: the photo is an uploaded file, and it cannot be
+  // stored until the org that owns its storage folder exists. The wizard holds
+  // the file and calls uploadAvatar right after createOrganization succeeds.
   const { error } = await supabase
     .from("principals")
-    .update({ full_name, title, phone, avatar_url, updated_at: new Date().toISOString() })
+    .update({ full_name, title, phone, updated_at: new Date().toISOString() })
     .eq("id", ctx.userId);
 
   if (error) return { error: error.message };

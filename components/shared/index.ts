@@ -17,3 +17,5 @@ export { HubContextBar } from "./HubContextBar";
 export { ActionForm } from "./ActionForm";
 export type { ActionFormResult } from "./ActionForm";
 export { TypedConfirmDialog } from "./TypedConfirmDialog";
+export { AvatarUpload } from "./AvatarUpload";
+export type { AvatarUploadProps } from "./AvatarUpload";
