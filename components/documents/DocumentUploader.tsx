@@ -21,7 +21,9 @@ import {
   checkUploadCandidate,
   formatBytes,
 } from "@/lib/document-files";
+import { ZIP_EXTENSION, isZipFile } from "@/lib/document-zip";
 import { abandonUpload, createUploadTicket, finalizeUpload } from "./upload-actions";
+import { ZipImport } from "./ZipImport";
 
 type Supabase = ReturnType<typeof createClient>;
 
@@ -96,11 +98,20 @@ export function DocumentUploader({
   const inputId = useId();
   const [dragging, setDragging] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  // Archives waiting to be reviewed. A zip is a container, not a document: it is
+  // never stored, so it goes to the import dialog instead of the upload path.
+  // Reviewed one at a time — each dialog is a filing decision, not a progress bar.
+  const [archives, setArchives] = useState<File[]>([]);
   const busy = useRef(false);
 
   const run = useCallback(
-    async (files: File[]) => {
+    async (dropped: File[]) => {
+      if (dropped.length === 0) return;
+      const zips = dropped.filter(isZipFile);
+      const files = dropped.filter((f) => !isZipFile(f));
+      if (zips.length > 0) setArchives((prev) => [...prev, ...zips]);
       if (files.length === 0) return;
+
       const items: QueueItem[] = files.map((f, i) => ({
         key: `${Date.now()}-${i}-${f.name}`,
         name: f.name,
@@ -171,12 +182,15 @@ export function DocumentUploader({
           Filed under {sectionLabel} · PDF, Office, text, or image · up to{" "}
           {formatBytes(MAX_UPLOAD_BYTES)} each
         </span>
+        <span className="text-xs text-fg-muted">
+          Drop a .zip to import a whole pack — its folders become sections.
+        </span>
         <input
           id={inputId}
           ref={inputRef}
           type="file"
           multiple
-          accept={ACCEPTED_DOCUMENT_ATTR}
+          accept={`${ACCEPTED_DOCUMENT_ATTR},${ZIP_EXTENSION}`}
           className="sr-only"
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
@@ -217,6 +231,15 @@ export function DocumentUploader({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {archives.length > 0 ? (
+        <ZipImport
+          key={`${archives[0].name}-${archives[0].size}-${archives[0].lastModified}`}
+          file={archives[0]}
+          defaultSection={section}
+          onClose={() => setArchives((prev) => prev.slice(1))}
+        />
       ) : null}
 
       {failed.length > 0 ? (
