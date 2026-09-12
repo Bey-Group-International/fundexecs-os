@@ -9,6 +9,7 @@ import {
   normalizeTeamTaskPriority,
   recordOperatorFeedback,
 } from "@/lib/team-tasks";
+import { normalizeBio } from "@/lib/member-profile";
 import type { Hub, MemberRole } from "@/lib/supabase/database.types";
 
 const TEAM = "/build/team";
@@ -51,6 +52,11 @@ async function countOwners(orgId: string): Promise<number> {
 
 // 1. Update the CALLER's own principal row. RLS allows a principal to UPDATE
 // only their own row (id = auth.uid()), so this is safe with the RLS client.
+//
+// `avatar_url` is deliberately NOT writable here. A photo is an uploaded file
+// we host, set through uploadAvatar/removeAvatar (components/shared/
+// avatar-actions) -- accepting a caller-supplied string on this path is exactly
+// how the column ended up holding three incompatible kinds of value.
 export async function updateMyProfile(formData: FormData): Promise<void> {
   const ctx = await getSessionContext();
   if (!ctx?.orgId) return;
@@ -61,7 +67,7 @@ export async function updateMyProfile(formData: FormData): Promise<void> {
     .update({
       full_name: String(formData.get("full_name") ?? "").trim() || null,
       title: String(formData.get("title") ?? "").trim() || null,
-      avatar_url: String(formData.get("avatar_url") ?? "").trim() || null,
+      bio: normalizeBio(formData.get("bio")),
     })
     .eq("id", ctx.userId);
 

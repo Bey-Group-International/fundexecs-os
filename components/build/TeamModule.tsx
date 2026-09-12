@@ -3,6 +3,7 @@ import { getSessionContext } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { getWallet } from "@/lib/wallet";
 import { planSeatLimit } from "@/lib/billing";
+import { avatarUrlWithVersion } from "@/lib/avatar";
 import type { OrganizationMember, Principal } from "@/lib/supabase/database.types";
 import { ModuleHeader } from "./DraftWithEarn";
 import { TeamControls, type TeamMemberView } from "./TeamControls";
@@ -33,7 +34,8 @@ export async function TeamModule() {
       name: p?.full_name || p?.email || "Member",
       email: p?.email || "",
       title: p?.title ?? null,
-      avatarUrl: p?.avatar_url ?? null,
+      bio: p?.bio ?? null,
+      avatarUrl: p?.avatar_url ? avatarUrlWithVersion(p.avatar_url, p.updated_at) : null,
       role: m.role,
     };
   });
@@ -42,7 +44,10 @@ export async function TeamModule() {
   const ownProfile = {
     full_name: self?.full_name ?? null,
     title: self?.title ?? null,
-    avatar_url: self?.avatar_url ?? null,
+    bio: self?.bio ?? null,
+    avatar_url: self?.avatar_url
+      ? avatarUrlWithVersion(self.avatar_url, self.updated_at)
+      : null,
   };
 
   const wallet = await getWallet(ctx.orgId);

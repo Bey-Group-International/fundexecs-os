@@ -7,6 +7,7 @@ import type { ApiKey, MandateRow } from "@/lib/supabase/database.types";
 import { loadOrgConnections, orgConnectedChannels } from "@/lib/integrations/gateway";
 import { CHANNEL_SECRET_KEYS } from "@/lib/integrations/credentials";
 import { vaultConfigured } from "@/lib/vault";
+import { avatarUrlWithVersion } from "@/lib/avatar";
 import { NewMandateForm } from "./NewMandateForm";
 import { Connections } from "./Connections";
 import { OrgSecretsPanel, type SecretKeyGroup } from "./OrgSecretsPanel";
@@ -126,7 +127,7 @@ export default async function SettingsPage(props: {
 
   const { data: principalRow } = await supabase
     .from("principals")
-    .select("full_name, title, phone, avatar_url")
+    .select("full_name, title, phone, avatar_url, updated_at")
     .eq("id", ctx.userId)
     .maybeSingle();
 
@@ -193,7 +194,14 @@ export default async function SettingsPage(props: {
                   full_name: (principalRow as any)?.full_name ?? "",
                   title: (principalRow as any)?.title ?? "",
                   phone: (principalRow as any)?.phone ?? "",
-                  avatar_url: (principalRow as any)?.avatar_url ?? "",
+                  // Versioned: the photo's object path is deterministic, so
+                  // only updated_at tells the browser cache it changed.
+                  avatar_url: (principalRow as any)?.avatar_url
+                    ? avatarUrlWithVersion(
+                        (principalRow as any).avatar_url,
+                        (principalRow as any).updated_at,
+                      )
+                    : "",
                 }}
               />
               <div className="fx-card p-4">
