@@ -5,18 +5,20 @@
 // shared-strings parts, and flatten the first sheet into a string matrix that
 // the existing CSV pipelines can consume.
 //
-// Isomorphic and dependency-free: raw DEFLATE is inflated with the standard
-// `DecompressionStream` Web API, available both in browsers and in Node 18+.
+// The ZIP layer lives in lib/zip.ts — it was extracted from here once importing
+// a zip of documents needed the same reader. This file keeps the Excel-specific
+// half: which parts to read, how to parse them, and how to phrase a failure to
+// someone who thinks they uploaded a spreadsheet, not an archive.
 //
 // Scope: handles the common shape produced by Excel, Google Sheets, Numbers,
-// and most exporters — STORE (method 0) and DEFLATE (method 8) entries, shared
-// strings, inline strings, and numeric cells. It is deliberately tolerant, not
-// a full OOXML implementation.
+// and most exporters — shared strings, inline strings, and numeric cells. It is
+// deliberately tolerant, not a full OOXML implementation.
 //
 // Hardening: a hostile or corrupt workbook must not be able to exhaust memory.
 // We only ever inflate the two parts we need, cap the total inflated bytes
-// (decompression-bomb guard), bound the row/column counts, bounds-check every
-// ZIP offset against the buffer, and refuse ZIP64 rather than misreading it.
+// (decompression-bomb guard), and bound the row/column counts. The ZIP-level
+// guards — bounds-checked offsets, ZIP64 refusal — come from lib/zip.ts.
+import { ZipError, createBudget, readZipEntries, readZipEntry, type ByteBudget, type ZipEntry } from "./zip";
 
 // ─── Resource limits ───────────────────────────────────────────────────────────
 
@@ -25,123 +27,41 @@ export const MAX_INFLATED_BYTES = 64 * 1024 * 1024; // 64 MB
 /** Excel's own maximums — anything beyond this is malformed, not legitimate. */
 const MAX_ROWS = 1_048_576;
 const MAX_COLS = 16_384; // column XFD
-/** ZIP32 uses 0xFFFFFFFF as the "see ZIP64 record" sentinel, which we don't support. */
-const ZIP64_SENTINEL = 0xffffffff;
 
-// ─── Inflate (Web Streams, byte-budgeted) ──────────────────────────────────────
+// ─── Excel-facing wrappers over the ZIP layer ─────────────────────────────────
 
-// Inflate raw DEFLATE, aborting as soon as the running total would exceed the
-// remaining budget so a small compressed part can't expand without bound.
-async function inflateRaw(bytes: Uint8Array, budget: { remaining: number }): Promise<Uint8Array> {
-  if (typeof DecompressionStream === "undefined") {
-    throw new Error("This runtime cannot read compressed Excel workbooks. Please export as CSV.");
-  }
-  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+// lib/zip.ts speaks about archives; this file's callers uploaded a spreadsheet.
+// Map each failure onto wording that tells them what to do about it.
+const EXCEL_MESSAGE: Record<string, string> = {
+  "not-zip": "Not a valid Excel workbook (no ZIP directory found).",
+  zip64: "This Excel workbook uses ZIP64, which isn't supported. Please export as CSV.",
+  truncated: "Corrupt Excel workbook (entry runs past end of file).",
+  "bad-header": "Corrupt Excel workbook (bad local header).",
+  "too-large": "This Excel workbook is too large to process safely. Please export a smaller CSV.",
+  "no-decompressor": "This runtime cannot read compressed Excel workbooks. Please export as CSV.",
+};
+
+function asExcelError(err: unknown): unknown {
+  if (!(err instanceof ZipError)) return err;
+  const message =
+    EXCEL_MESSAGE[err.code] ?? `Unsupported compression in Excel workbook (${err.message}).`;
+  return new Error(message);
+}
+
+function entriesOf(view: DataView): ZipEntry[] {
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.length;
-      if (total > budget.remaining) {
-        await reader.cancel().catch(() => {});
-        throw new Error("This Excel workbook expands too large to process safely. Please export a smaller CSV.");
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
+    return readZipEntries(view);
+  } catch (err) {
+    throw asExcelError(err);
   }
-  budget.remaining -= total;
-  const out = new Uint8Array(total);
-  let p = 0;
-  for (const c of chunks) {
-    out.set(c, p);
-    p += c.length;
-  }
-  return out;
 }
 
-// ─── ZIP central-directory reader ──────────────────────────────────────────────
-
-interface ZipEntry {
-  name: string;
-  method: number; // 0 = store, 8 = deflate
-  offset: number; // local header offset
-  compressedSize: number;
-}
-
-const EOCD_SIG = 0x06054b50;
-const CDH_SIG = 0x02014b50;
-
-function readZipEntries(view: DataView): ZipEntry[] {
-  const len = view.byteLength;
-
-  // Locate the End Of Central Directory record by scanning backwards (its
-  // trailing comment is almost always empty, so it sits near the very end).
-  let eocd = -1;
-  for (let i = len - 22; i >= 0 && i >= len - 22 - 0xffff; i--) {
-    if (view.getUint32(i, true) === EOCD_SIG) {
-      eocd = i;
-      break;
-    }
+async function readEntry(view: DataView, entry: ZipEntry, budget: ByteBudget): Promise<Uint8Array> {
+  try {
+    return await readZipEntry(view, entry, budget);
+  } catch (err) {
+    throw asExcelError(err);
   }
-  if (eocd < 0) throw new Error("Not a valid Excel workbook (no ZIP directory found).");
-
-  const count = view.getUint16(eocd + 10, true);
-  let ptr = view.getUint32(eocd + 16, true); // central directory offset
-
-  const entries: ZipEntry[] = [];
-  for (let i = 0; i < count && ptr + 46 <= len; i++) {
-    if (view.getUint32(ptr, true) !== CDH_SIG) break;
-    const method = view.getUint16(ptr + 10, true);
-    const compressedSize = view.getUint32(ptr + 20, true);
-    const nameLen = view.getUint16(ptr + 28, true);
-    const extraLen = view.getUint16(ptr + 30, true);
-    const commentLen = view.getUint16(ptr + 32, true);
-    const offset = view.getUint32(ptr + 42, true);
-
-    if (ptr + 46 + nameLen > len) break; // truncated central directory
-    const nameBytes = new Uint8Array(view.buffer, view.byteOffset + ptr + 46, nameLen);
-    const name = new TextDecoder("utf-8").decode(nameBytes);
-    entries.push({ name, method, offset, compressedSize });
-
-    ptr += 46 + nameLen + extraLen + commentLen;
-  }
-  return entries;
-}
-
-async function readEntry(view: DataView, entry: ZipEntry, budget: { remaining: number }): Promise<Uint8Array> {
-  const len = view.byteLength;
-
-  if (entry.compressedSize === ZIP64_SENTINEL || entry.offset === ZIP64_SENTINEL) {
-    throw new Error("This Excel workbook uses ZIP64, which isn't supported. Please export as CSV.");
-  }
-  // Local file header: name/extra lengths can differ from the central header,
-  // so read them here to find the true data offset. Bounds-check everything
-  // against the buffer so a corrupt header can't read out of range.
-  const lh = entry.offset;
-  if (lh < 0 || lh + 30 > len) throw new Error("Corrupt Excel workbook (bad local header offset).");
-  if (view.getUint32(lh, true) !== 0x04034b50) throw new Error("Corrupt Excel workbook (bad local header).");
-  const nameLen = view.getUint16(lh + 26, true);
-  const extraLen = view.getUint16(lh + 28, true);
-  const dataStart = lh + 30 + nameLen + extraLen;
-  if (dataStart + entry.compressedSize > len) throw new Error("Corrupt Excel workbook (entry runs past end of file).");
-
-  const compressed = new Uint8Array(view.buffer, view.byteOffset + dataStart, entry.compressedSize);
-
-  if (entry.method === 0) {
-    // Stored: no inflation, but it still counts against the byte budget.
-    if (entry.compressedSize > budget.remaining) {
-      throw new Error("This Excel workbook is too large to process safely. Please export a smaller CSV.");
-    }
-    budget.remaining -= entry.compressedSize;
-    return compressed.slice();
-  }
-  if (entry.method === 8) return inflateRaw(compressed, budget);
-  throw new Error(`Unsupported compression in Excel workbook (method ${entry.method}).`);
 }
 
 // ─── XML helpers ───────────────────────────────────────────────────────────────
@@ -247,11 +167,11 @@ export async function xlsxToRows(
   opts: { maxInflatedBytes?: number } = {},
 ): Promise<string[][]> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const entries = readZipEntries(view);
+  const entries = entriesOf(view);
   const byName = new Map(entries.map((e) => [e.name, e]));
 
   // Shared byte budget across every part we inflate (decompression-bomb guard).
-  const budget = { remaining: opts.maxInflatedBytes ?? MAX_INFLATED_BYTES };
+  const budget = createBudget(opts.maxInflatedBytes ?? MAX_INFLATED_BYTES);
 
   const dec = new TextDecoder("utf-8");
   const readXml = async (name: string): Promise<string | null> => {
