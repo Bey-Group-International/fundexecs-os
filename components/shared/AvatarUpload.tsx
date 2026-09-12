@@ -6,9 +6,11 @@ import { encodeAvatar } from "./avatar-encode";
 import { uploadAvatar, removeAvatar } from "./avatar-actions";
 
 // The one member-photo control, shared by Build > Team, /settings, and
-// onboarding. Before this existed each screen had its own idea of what a photo
-// was -- a URL box here, a base64 data URL there -- and they disagreed on
-// screen.
+// onboarding.
+//
+// The whole circle is the control: click it to pick a file, or drop an image
+// on it. With no photo it is simply the member's initials, which is also the
+// fallback everywhere else a member is shown.
 //
 // Two modes:
 //  - immediate (default): picking a file uploads it and saves the profile now.
@@ -19,7 +21,7 @@ import { uploadAvatar, removeAvatar } from "./avatar-actions";
 
 const SIZE_CLASS = {
   sm: "h-10 w-10 text-sm",
-  md: "h-16 w-16 text-lg",
+  md: "h-20 w-20 text-xl",
 } as const;
 
 export interface AvatarUploadProps {
@@ -53,6 +55,7 @@ export function AvatarUpload({
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [storedUrl, setStoredUrl] = useState<string | null>(currentUrl);
   const [pending, setPending] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => setStoredUrl(currentUrl), [currentUrl]);
@@ -66,6 +69,12 @@ export function AvatarUpload({
 
   const shown = localPreview ?? safeAvatarUrl(storedUrl);
   const hasPhoto = Boolean(shown);
+
+  // `md` is the dedicated profile control, where the hint and Remove belong.
+  // `sm` sits inline in a member list, where the same chrome on every row is
+  // noise -- there the circle alone does the job, and Remove stays available
+  // on that member's own profile control.
+  const showChrome = size === "md";
 
   async function onPick(file: File) {
     setError("");
@@ -126,44 +135,96 @@ export function AvatarUpload({
     }
   }
 
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    if (pending) return;
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) {
+      // Dragging a picture from another tab hands over a URL, not a file.
+      setError("Drop an image file saved on your device.");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setError("That isn't an image. Drop a PNG or JPEG.");
+      return;
+    }
+    void onPick(file);
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-3">
-        {shown ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={shown}
-            alt={name ? `${name}'s photo` : "Profile photo"}
-            className={`${SIZE_CLASS[size]} shrink-0 rounded-full border border-line object-cover`}
-          />
-        ) : (
-          <span
-            className={`${SIZE_CLASS[size]} flex shrink-0 items-center justify-center rounded-full bg-gold-500/20 font-medium text-gold-300`}
-          >
-            {avatarInitial(name)}
-          </span>
-        )}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => {
+            // Without preventDefault the browser opens the file instead.
+            e.preventDefault();
+            if (!pending) setDragging(true);
+          }}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            if (!pending) setDragging(true);
+          }}
+          onDragLeave={(e) => {
+            // Moving across a child fires dragleave on the parent too; only
+            // clear when the pointer has actually left the circle.
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              setDragging(false);
+            }
+          }}
+          onDrop={onDrop}
+          aria-label={hasPhoto ? "Change profile photo" : "Add a profile photo"}
+          title="Click, or drop an image here"
+          className={`${SIZE_CLASS[size]} group relative shrink-0 overflow-hidden rounded-full border transition disabled:opacity-60 ${
+            dragging
+              ? "border-gold-400 ring-2 ring-gold-400/50"
+              : "border-line hover:border-gold-500/50"
+          }`}
+        >
+          {shown ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={shown}
+              alt={name ? `${name}'s photo` : "Profile photo"}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center bg-gold-500/20 font-medium text-gold-300">
+              {avatarInitial(name)}
+            </span>
+          )}
 
-        <div className="flex flex-col items-start gap-1">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => fileRef.current?.click()}
-            className="rounded-md border border-line px-2.5 py-1 text-xs text-fg-secondary transition hover:border-gold-500/40 hover:text-fg-primary disabled:opacity-50"
+          {/* Says what the circle does, without adding another control. */}
+          <span
+            className={`absolute inset-0 flex items-center justify-center bg-surface-0/75 text-[10px] font-medium text-fg-primary transition ${
+              pending || dragging ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
           >
-            {pending ? "Uploading…" : hasPhoto ? "Change photo" : "Upload photo"}
-          </button>
-          {hasPhoto && allowRemove ? (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={onRemove}
-              className="text-left text-[11px] text-fg-muted transition hover:text-status-danger disabled:opacity-50"
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
+            {pending ? "…" : dragging ? "Drop" : hasPhoto ? "Change" : "Add"}
+          </span>
+        </button>
+
+        {showChrome ? (
+          <div className="flex flex-col items-start gap-0.5">
+            <p className="text-xs text-fg-secondary">
+              {pending ? "Uploading…" : "Click or drag an image here"}
+            </p>
+            {hasPhoto && allowRemove ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onRemove}
+                className="text-[11px] text-fg-muted transition hover:text-status-danger disabled:opacity-50"
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <input
           ref={fileRef}
