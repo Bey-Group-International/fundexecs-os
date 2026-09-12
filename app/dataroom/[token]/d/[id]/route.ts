@@ -2,20 +2,16 @@ import { NextResponse } from "next/server";
 import { createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
 import { gateSatisfied, readGatePass } from "@/lib/data-room-gate";
 import { isRoomOpen } from "@/lib/data-room-viewer.server";
+import { isExternalLink, isUploadedFile } from "@/lib/document-files";
+import { signDocumentUrl } from "@/lib/document-storage.server";
 import type { DataRoomShare, Document } from "@/lib/supabase/database.types";
 import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 function safeHref(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    if (u.protocol === "http:" || u.protocol === "https:") return u.href;
-  } catch {
-    /* not absolute */
-  }
-  return null;
+  if (!isExternalLink(url)) return null;
+  return new URL(url as string).href;
 }
 
 // Token-gated open-and-track: validates the share, checks the same
@@ -23,8 +19,9 @@ function safeHref(url: string | null): string | null {
 // checked token validity/expiry — any document id that appeared in the page's
 // props could be opened directly, bypassing password/NDA/email entirely), then
 // checks the room's publish manifest and the share's allowed_sections
-// whitelist, logs a 'document' view, and redirects to the document's external
-// link. Invalid or ungated requests bounce to the room.
+// whitelist, logs a 'document' view, and redirects to the file — an external
+// link as-is, or a freshly signed URL for a file uploaded into our private
+// bucket. Invalid or ungated requests bounce to the room.
 export async function GET(req: Request, props: { params: Promise<{ token: string; id: string }> }) {
   const params = await props.params;
   const roomUrl = new URL(`/dataroom/${params.token}`, req.url);
@@ -83,13 +80,24 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     .eq("organization_id", share.organization_id)
     .maybeSingle();
   const doc = docRow as Document | null;
-  const href = safeHref(doc?.storage_key ?? null);
-  if (!doc || !href) return NextResponse.redirect(roomUrl);
+  if (!doc || !doc.storage_key) return NextResponse.redirect(roomUrl);
 
   const allowedSections = (share as { allowed_sections?: string[] | null }).allowed_sections ?? null;
   if (allowedSections && (!doc.doc_type || !allowedSections.includes(doc.doc_type))) {
     return NextResponse.redirect(roomUrl);
   }
+
+  // A document is either a link to a file living elsewhere or a file uploaded
+  // into our private bucket. The bucket has no public URL by design, so an
+  // uploaded file is served by minting a signed URL here — after every check
+  // above has passed, and never before.
+  let destination: string | null = safeHref(doc.storage_key);
+  if (!destination && isUploadedFile(doc.storage_key)) {
+    // Served inline, not as an attachment: a reader opening the LPA from a
+    // data room expects it to render, the way a linked file does.
+    destination = await signDocumentUrl(doc.storage_key, { client: supabase });
+  }
+  if (!destination) return NextResponse.redirect(roomUrl);
 
   await supabase
     .from("data_room_views")
@@ -102,5 +110,5 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     })
     .then(() => undefined, () => undefined);
 
-  return NextResponse.redirect(href);
+  return NextResponse.redirect(destination);
 }

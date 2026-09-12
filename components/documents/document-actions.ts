@@ -10,6 +10,8 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSessionContext } from "@/lib/auth";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { isUploadedFile } from "@/lib/document-files";
+import { removeDocumentPrefix } from "@/lib/document-storage.server";
 import type { Document, DocumentStatus, DocumentVersion } from "@/lib/supabase/database.types";
 import { sendEmail, documentUpdatedEmail } from "@/lib/email";
 
@@ -169,7 +171,17 @@ export async function deleteDocument(formData: FormData): Promise<void> {
   const supabase = await createServerClient();
   // The manifest cascades on delete, so removing a document also withdraws it
   // from every room it was published into.
-  await supabase.from("documents").delete().eq("id", id).eq("organization_id", ctx.orgId);
+  const { error } = await supabase
+    .from("documents")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId);
+  // Only once the row is gone: the rows in `document_versions` cascade with it,
+  // so this is the last moment anything still references those objects. Every
+  // version of the file shares the document's prefix, which is why the whole
+  // prefix goes rather than the current storage_key alone — otherwise deleting
+  // a document would leave its earlier files in the bucket for good.
+  if (!error) await removeDocumentPrefix(ctx.orgId, id);
   revalidateBoth();
 }
 
@@ -221,9 +233,44 @@ export async function restoreDocumentVersion(formData: FormData): Promise<void> 
     .maybeSingle();
   const version = data as DocumentVersion | null;
   if (!version) return;
+
+  // Snapshot what is being replaced before replacing it, so restoring is
+  // reversible. Without this, restoring an old version of a document discards
+  // the current one — including its file, which has no other copy.
+  const { data: currentRow } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("id", docId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  const current = currentRow as Document | null;
+  if (!current) return;
+  if (current.storage_key || current.content) {
+    await supabase.from("document_versions").insert({
+      document_id: docId,
+      organization_id: ctx.orgId,
+      name: current.name,
+      content: current.content ?? null,
+      storage_key: current.storage_key ?? null,
+      mime_type: current.mime_type ?? null,
+      size_bytes: current.size_bytes ?? null,
+      saved_by: ctx.userId,
+    } as never);
+  }
+
+  // A version restores whole. Restoring the name and content but leaving the
+  // current file in place would put one version's title on another's document.
+  // Older snapshots predate file versioning and carry no storage_key; those
+  // restore as content-only, leaving whatever file is attached alone.
+  const patch: Partial<Document> = { content: version.content, name: version.name };
+  if (version.storage_key !== null || isUploadedFile(current.storage_key)) {
+    patch.storage_key = version.storage_key;
+    patch.mime_type = version.mime_type;
+    patch.size_bytes = version.size_bytes;
+  }
   await supabase
     .from("documents")
-    .update({ content: version.content, name: version.name })
+    .update(patch)
     .eq("id", docId)
     .eq("organization_id", ctx.orgId);
   revalidateBoth(docId);

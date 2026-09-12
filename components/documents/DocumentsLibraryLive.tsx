@@ -13,7 +13,10 @@ import { listRooms, publishedRoomsByDocument } from "@/lib/data-rooms.server";
 import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { SectionHighlighter } from "@/components/build/SectionHighlighter";
 import { WorkspaceDocumentListLive } from "@/components/workspace/WorkspaceDocumentListLive";
-import { LibrarySections, type LibraryDoc, type LibrarySection } from "./LibrarySections";
+import { documentKindLabel, formatBytes, isUploadedFile } from "@/lib/document-files";
+import { relativeTime } from "@/lib/activity";
+import { LibraryWorkspace } from "./LibraryWorkspace";
+import type { LibraryDoc, LibrarySection } from "./LibraryControls";
 import type {
   Organization,
   InvestmentThesis,
@@ -92,18 +95,30 @@ export async function DocumentsLibraryLive() {
     docCounts,
   });
 
+  const now = new Date();
   const sections: LibrarySection[] = DATA_ROOM_SECTIONS.map((s) => {
     const docs: LibraryDoc[] = (docsBySection.get(s.key) ?? []).map((d) => {
       const q = d.content ? scoreDocument(d.name, d.doc_type ?? null, d.content) : null;
+      // `updated_at` only exists from migration 20260912120000 onward; a row
+      // written before it falls back to its creation time rather than showing
+      // an empty column.
+      const updatedAt = (d as { updated_at?: string | null }).updated_at ?? d.created_at;
       return {
         id: d.id,
         name: d.name,
-        storage_key: d.storage_key ?? null,
+        storageKey: d.storage_key ?? null,
+        hasContent: Boolean(d.content),
+        kind: documentKindLabel(d.storage_key, Boolean(d.content)),
+        sizeBytes: d.size_bytes ?? null,
+        uploaded: isUploadedFile(d.storage_key),
         status: d.status ?? "ready",
         qualityScore: q?.score ?? null,
         qualityLevel: q?.level ?? null,
         qualityGaps: q?.gaps.length ?? null,
         roomIds: publishedBy.get(d.id) ?? [],
+        section: s.key,
+        updatedAt,
+        updatedLabel: relativeTime(updatedAt, now),
       };
     });
     const viaBuild =
@@ -121,8 +136,9 @@ export async function DocumentsLibraryLive() {
   });
 
   const total = documents.length;
-  const shared = documents.filter((d) => (publishedBy.get(d.id) ?? []).length > 0).length;
   const drafts = documents.filter((d) => (d.status ?? "ready") !== "ready").length;
+  const files = documents.filter((d) => isUploadedFile(d.storage_key));
+  const storedBytes = files.reduce((n, d) => n + (d.size_bytes ?? 0), 0);
 
   return (
     <div>
@@ -132,21 +148,24 @@ export async function DocumentsLibraryLive() {
         module="documents"
       />
 
-      {/* Counters: the split in one line — what you hold, what is out. */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Stat label="Documents" value={String(total)} />
-        <Stat label="Published" value={String(shared)} tone={shared > 0 ? "gold" : undefined} />
-        <Stat label="In progress" value={String(drafts)} tone={drafts > 0 ? "amber" : undefined} />
-        <Link
-          href="/build/data_room"
-          className="ml-auto rounded-lg border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-fg-secondary transition hover:border-gold-500/40 hover:text-gold-300"
-        >
-          Data rooms →
-        </Link>
-      </div>
+      {/* What the counters do NOT repeat is the point: the rail already carries
+          the library's size and how much of it is published, so this line is
+          only what the rail cannot say — what is unfinished, and how much the
+          firm is actually storing. */}
+      {total > 0 ? (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <Stat label="In progress" value={String(drafts)} tone={drafts > 0 ? "amber" : undefined} />
+          {files.length > 0 ? (
+            <Stat
+              label={`file${files.length === 1 ? "" : "s"} · ${formatBytes(storedBytes)}`}
+              value={String(files.length)}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       <SectionHighlighter />
-      <LibrarySections sections={sections} rooms={rooms.map((r) => ({ id: r.id, name: r.name }))} />
+      <LibraryWorkspace sections={sections} rooms={rooms.map((r) => ({ id: r.id, name: r.name }))} />
 
       {/* The knowledge-workspace view of the same library — recency and shape
           rather than filing. It used to sit on top of the data room; it belongs

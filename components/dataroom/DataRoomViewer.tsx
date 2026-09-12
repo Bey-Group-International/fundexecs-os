@@ -99,13 +99,18 @@ function compactUsd(n: number | null): string | null {
   }).format(n);
 }
 
-function safeHref(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    if (u.protocol === "http:" || u.protocol === "https:") return u.href;
-  } catch { /* not absolute */ }
-  return null;
+/**
+ * Whether this document has a file behind it — an external link, or a file
+ * uploaded into the private bucket.
+ *
+ * The card never links to `storage_key` itself. It links to
+ * `/dataroom/<token>/d/<id>`, which re-checks the gate, the room manifest and
+ * the link's section allowlist before deciding what to serve, and for an
+ * uploaded file mints a signed URL there. So this only decides whether to show
+ * an Open button, not where it points.
+ */
+function hasFile(storageKey: string | null): boolean {
+  return Boolean(storageKey);
 }
 
 type NavItem =
@@ -580,7 +585,7 @@ function DocCard({
   preview?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const href = safeHref(doc.storage_key);
+  const href = hasFile(doc.storage_key);
 
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface-1" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }}>
