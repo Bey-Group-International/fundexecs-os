@@ -1,8 +1,10 @@
 import {
   canExit,
   exitLabel,
+  hostLeaveNote,
   isAwaitingReport,
   isCallRunning,
+  leaveWithoutEndingLabel,
   nextPhase,
   type CallPhase,
 } from "@/lib/meetings/call-phase";
@@ -103,5 +105,59 @@ describe("nextPhase", () => {
     for (const phase of ALL) {
       for (const event of events) expect(ALL).toContain(nextPhase(phase, event));
     }
+  });
+});
+
+describe("leaveWithoutEndingLabel", () => {
+  // The distinction is the whole point of the control: a host pressing this is
+  // choosing the thing that does NOT end the call for everyone else.
+  it("says what it does not do", () => {
+    expect(leaveWithoutEndingLabel("live")).toBe("Leave without ending");
+  });
+
+  it("shows progress while ending, like every other exit control", () => {
+    expect(leaveWithoutEndingLabel("ending")).toBe("Leaving…");
+  });
+
+  it("offers the action again after a failed report", () => {
+    expect(leaveWithoutEndingLabel("failed")).toBe("Leave without ending");
+  });
+
+  // It must never read "Ending…", which is the label for the exit that takes
+  // everyone with it.
+  it("is never confusable with the end-for-all label", () => {
+    const phases: CallPhase[] = ["live", "ending", "failed", "left"];
+    for (const phase of phases) {
+      expect(leaveWithoutEndingLabel(phase)).not.toBe(exitLabel(phase, true));
+    }
+  });
+});
+
+describe("hostLeaveNote", () => {
+  it("says the meeting survives, which is the reason to press it", () => {
+    expect(hostLeaveNote(0)).toMatch(/keeps running/);
+    expect(hostLeaveNote(0)).toMatch(/rejoin/);
+  });
+
+  // Nothing else ends the meeting, so a host who leaves and never comes back
+  // leaves a room with no report. Better said than discovered.
+  it("warns that no report is generated", () => {
+    expect(hostLeaveNote(0)).toMatch(/No report/);
+  });
+
+  // The cost that falls on someone else: admission is checked against host_id
+  // server-side, so nobody left in the room can answer a knock.
+  it("names the people who would be stranded", () => {
+    expect(hostLeaveNote(1)).toBe(
+      "1 person is still waiting to be admitted, and only you can let them in."
+      + " The meeting keeps running, and you can rejoin from your meetings list.",
+    );
+    expect(hostLeaveNote(3)).toMatch(/^3 people are still waiting/);
+  });
+
+  it("does not claim anyone is waiting when nobody is", () => {
+    expect(hostLeaveNote(0)).not.toMatch(/waiting/);
+    // A count that arrived negative is not a reason to announce phantom guests.
+    expect(hostLeaveNote(-1)).toBe(hostLeaveNote(0));
   });
 });
