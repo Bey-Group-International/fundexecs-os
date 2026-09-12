@@ -35,8 +35,10 @@ import { getBackground } from "@/lib/meetings/background-store";
 import {
   canExit,
   exitLabel,
+  hostLeaveNote,
   isAwaitingReport,
   isCallRunning,
+  leaveWithoutEndingLabel,
   nextPhase,
   type CallPhase,
 } from "@/lib/meetings/call-phase";
@@ -560,6 +562,83 @@ function CtrlBtn({ active, onClick, title, activeIcon, inactiveIcon, busy = fals
 
 // ─── WaitingRoomBar ──────────────────────────────────────────────────────────
 
+// ─── HostExitControl ──────────────────────────────────────────────────────────
+
+/**
+ * The host's two ways out of a live meeting.
+ *
+ * A host used to have one, and it took the whole room with it. Ending is still
+ * the primary press — it is what a host usually means — but it is not the only
+ * thing a host ever wants, and the alternative to offering the second exit was
+ * not "hosts never leave early": it was hosts closing the tab, which leaves the
+ * room running with nobody able to end it and no report at the end.
+ *
+ * The chevron is the confirmation step. Leaving without ending has a cost that
+ * lands on other people — only the host can admit from the waiting room — so
+ * that cost is written inside the menu, next to the control that causes it,
+ * where it can still change the decision. A separate dialog would put it one
+ * click further from the thing it is about.
+ */
+export function HostExitControl({
+  leaving, waitingCount, onLeave, onEndForAll,
+}: {
+  /** The call is already being torn down — neither exit may re-fire. */
+  leaving: boolean;
+  /** Guests who would be stranded, because admission is host-only. */
+  waitingCount: number;
+  onLeave: () => void;
+  onEndForAll: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const chevronRef = useRef<HTMLButtonElement>(null);
+
+  // Closing on the same press that leaves avoids a menu left hanging over the
+  // exit screen: teardown unmounts this bar, but the portal is on document.body.
+  const leaveWithoutEnding = () => { setOpen(false); onLeave(); };
+
+  return (
+    <div className="flex items-center">
+      {/* The label is the button's only text and it is display:none below `sm`,
+          which takes it out of the accessibility tree — and PhoneOffIcon is a
+          bare <svg> with no text alternative, so on a phone this announced as
+          an unnamed button. aria-label matches the visible text exactly, so the
+          two never disagree where both are present.
+
+          Closing the menu is not cosmetic: the ControlBar stays mounted under
+          the "ending" overlay, and FloatingMenu portals to document.body at
+          z-[9999] against that overlay's z-50 — so a menu left open would hang
+          over the report-generating screen. The leave path already closed it;
+          this is the same rule applied to the path that ends the call. */}
+      <button onClick={() => { setOpen(false); onEndForAll(); }} disabled={leaving} aria-busy={leaving}
+        aria-label={exitLabel(leaving ? "ending" : "live", true)}
+        className="flex items-center gap-1.5 sm:gap-2 rounded-l-full rounded-r-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium pl-3 sm:pl-5 pr-2 sm:pr-3 py-2 transition-colors">
+        <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", true)}</span>
+      </button>
+      {/* A hairline, so the two halves read as two actions rather than one wide
+          button that happens to have an arrow on it. */}
+      <span aria-hidden="true" className="w-px self-stretch bg-white/25" />
+      <button ref={chevronRef} onClick={() => setOpen((v: boolean) => !v)} disabled={leaving}
+        aria-label="Other ways to leave" aria-haspopup="menu" aria-expanded={open}
+        className="flex items-center justify-center rounded-r-full rounded-l-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white pl-1.5 pr-2.5 sm:pr-3 py-2 self-stretch transition-colors">
+        <svg width="10" height="10" viewBox="0 0 8 8" fill="none">
+          <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </button>
+      <FloatingMenu open={open} anchorRef={chevronRef} onClose={() => setOpen(false)} minWidth={260}>
+        <button role="menuitem" onClick={leaveWithoutEnding} disabled={leaving}
+          className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--surface-3)] disabled:opacity-60 disabled:cursor-wait transition-colors">
+          <span className="flex items-center gap-2 text-sm font-medium text-[var(--fg-primary)]">
+            <PhoneOffIcon /> {leaveWithoutEndingLabel(leaving ? "ending" : "live")}
+          </span>
+          <span className="block mt-1 text-xs leading-snug text-[var(--fg-muted)]">
+            {hostLeaveNote(waitingCount)}
+          </span>
+        </button>
+      </FloatingMenu>
+    </div>
+  );
+}
+
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
@@ -682,14 +761,17 @@ function ControlBar({
         )}
 
         {/* Leave / End — always visible. Disabled once pressed: ending posts a
-            transcript to a model, and a second press would post a second report. */}
+            transcript to a model, and a second press would post a second report.
+
+            The host gets both exits. "End for all" stays the primary press, so
+            the muscle memory of every host who has used this room still does what
+            it always did; leaving without ending is the deliberate one, behind
+            the chevron. */}
         {isHost ? (
-          <button onClick={onEndForAll} disabled={leaving} aria-busy={leaving}
-            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
-            <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", true)}</span>
-          </button>
+          <HostExitControl leaving={leaving} waitingCount={waitingCount} onLeave={onLeave} onEndForAll={onEndForAll} />
         ) : (
           <button onClick={onLeave} disabled={leaving} aria-busy={leaving}
+            aria-label={exitLabel(leaving ? "ending" : "live", false)}
             className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
             <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", false)}</span>
           </button>

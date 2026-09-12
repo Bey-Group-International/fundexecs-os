@@ -63,6 +63,43 @@ export function exitLabel(phase: CallPhase, isHost: boolean): string {
   return isHost ? "End for all" : "Leave";
 }
 
+/**
+ * What the host's second exit reads.
+ *
+ * A host used to have exactly one way out, and it took everyone with them. That
+ * is the right default — a host leaving is usually the meeting finishing — but
+ * it is not the only thing a host ever wants. Someone who dialled in to open a
+ * board call and hand it to the chair, or who has to step out of a session that
+ * carries on without them, had to choose between killing a live call and
+ * closing the tab. Closing the tab is what people actually did, which leaves the
+ * meeting running with nobody able to end it properly and no report at the end.
+ *
+ * Named for the distinction rather than matching the guest's bare "Leave": for a
+ * host the interesting part is what does NOT happen.
+ */
+export function leaveWithoutEndingLabel(phase: CallPhase): string {
+  return phase === "ending" ? "Leaving…" : "Leave without ending";
+}
+
+/**
+ * What a host is told before taking that exit, at the moment of taking it.
+ *
+ * This is the confirmation step. There is no separate dialog: the menu has to be
+ * opened deliberately, and the consequence is written next to the thing that
+ * causes it, which is where it can still change the decision.
+ *
+ * The waiting-room half is the part worth spelling out. Admission is checked
+ * against `host_id` server-side, so a host who leaves with people still knocking
+ * strands them — they keep waiting on a request nobody left in the room has the
+ * authority to answer.
+ */
+export function hostLeaveNote(waitingCount: number): string {
+  const rejoin = "The meeting keeps running, and you can rejoin from your meetings list.";
+  if (waitingCount <= 0) return `${rejoin} No report is generated until someone ends it.`;
+  const who = waitingCount === 1 ? "1 person is" : `${waitingCount} people are`;
+  return `${who} still waiting to be admitted, and only you can let them in. ${rejoin}`;
+}
+
 export function nextPhase(phase: CallPhase, event: CallEvent): CallPhase {
   // Being removed, or the host ending the room, wins from any phase: there is no
   // call left to wait on.
