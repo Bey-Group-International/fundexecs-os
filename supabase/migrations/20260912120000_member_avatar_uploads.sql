@@ -127,10 +127,53 @@ create policy member_avatars_delete on storage.objects
 --
 -- Members whose photo is cleared fall back to their initials until someone
 -- uploads a real file -- the agreed trade for a single, trustworthy source.
+--
+-- The clear is snapshotted first, because it is otherwise unrecoverable: this
+-- runs against production on merge (.github/workflows/db-migrate.yml), and
+-- nothing else holds the old values. Snapshotting does not give back the row
+-- width the data URLs cost -- but that cost was never the bytes on disk, it was
+-- carrying them in `principals`, which every team, meetings, and people query
+-- selects from. Parked in a table nobody reads, they stop being in the way.
+create table if not exists public.principals_avatar_url_backup (
+  principal_id  uuid primary key references public.principals (id) on delete cascade,
+  avatar_url    text not null,
+  backed_up_at  timestamptz not null default now()
+);
+
+comment on table public.principals_avatar_url_backup is
+  'Pre-cut snapshot of principals.avatar_url values this platform does not host (migration 20260912120000), kept so the uploads-only clear can be undone. Recovery data: service-role only, no policies by design.';
+
+-- RLS with NO policies, deliberately: enabled satisfies the repo-wide rule that
+-- every table has row level security, and an empty policy set denies anon and
+-- authenticated outright. Only the service role (which bypasses RLS) can read
+-- this, which is right for a recovery table holding other people's photo URLs.
+alter table public.principals_avatar_url_backup enable row level security;
+
+-- `on conflict do nothing` keeps the FIRST snapshot on a replay, which is the
+-- true original -- a second run must not overwrite it with a newer value.
+insert into public.principals_avatar_url_backup (principal_id, avatar_url)
+select id, avatar_url
+  from public.principals
+ where avatar_url is not null
+   and avatar_url not like '%/storage/v1/object/public/member-avatars/%'
+on conflict (principal_id) do nothing;
+
 update public.principals
    set avatar_url = null
  where avatar_url is not null
    and avatar_url not like '%/storage/v1/object/public/member-avatars/%';
+
+-- To undo the clear (psql as the service role / project owner):
+--
+--   update public.principals p
+--      set avatar_url = b.avatar_url
+--     from public.principals_avatar_url_backup b
+--    where b.principal_id = p.id
+--      and p.avatar_url is null;
+--
+-- Note this restores values the app will not render -- safeAvatarUrl (lib/avatar.ts)
+-- accepts only member-avatars URLs -- so a restore is for recovering WHICH photo
+-- someone had, e.g. to re-fetch it, not for putting the old ones back on screen.
 
 -- ---------------------------------------------------------------------------
 -- Stop the signup trigger from seeding a URL that can never render
