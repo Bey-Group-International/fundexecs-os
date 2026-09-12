@@ -142,6 +142,10 @@ export type Principal = {
   full_name: string | null;
   title: string | null;
   phone: string | null;
+  // Short member biography shown on Build > Team (migration 20260912120000).
+  bio: string | null;
+  // Public URL of the member's photo in the `member-avatars` bucket. Only ever
+  // a URL we host — see lib/avatar.ts.
   avatar_url: string | null;
   // Internal identity verification (migration 20260623140000). Set by an
   // owner/admin internal attestation now; an external KYC provider would set the

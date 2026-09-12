@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionKind } from "@/lib/gates";
 import { MANDATE_ACTION_OPTIONS } from "@/lib/mandate-options";
+import { AvatarUpload } from "@/components/shared/AvatarUpload";
+import { uploadAvatar } from "@/components/shared/avatar-actions";
 import { createOrganization, updateUserProfile } from "./actions";
 
 const TOTAL_STEPS = 6;
@@ -87,7 +89,6 @@ interface UserFormData {
   full_name: string;
   title: string;
   phone: string;
-  avatar_url: string;
 }
 
 export interface OnboardingPrefillProps {
@@ -125,8 +126,11 @@ export default function OnboardingWizard({
     full_name: initialFullName ?? prefill?.fullName ?? "",
     title: prefill?.title ?? "",
     phone: prefill?.phone ?? "",
-    avatar_url: "",
   });
+
+  // Held, not uploaded: the photo lives under the org's storage folder, and the
+  // org does not exist until the final step. Uploaded right after it does.
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [data, setData] = useState<OrgFormData>({
     org_name: prefill?.orgName ?? "",
     entity_type: "",
@@ -191,7 +195,6 @@ export default function OnboardingWizard({
     ufd.append("full_name", userData.full_name);
     ufd.append("title", userData.title);
     ufd.append("phone", userData.phone);
-    ufd.append("avatar_url", userData.avatar_url);
     const userResult = await updateUserProfile(ufd);
     if (userResult?.error) {
       setFormWarning(`Profile details will need review in Settings: ${userResult.error}`);
@@ -216,6 +219,19 @@ export default function OnboardingWizard({
         setPending(false);
         return;
       }
+      // The org now exists, so the photo has a folder to live in. Best-effort:
+      // a failed upload must never strand the operator outside the workspace
+      // they just created — they can set it again in Settings.
+      if (avatarFile) {
+        try {
+          const afd = new FormData();
+          afd.append("file", avatarFile);
+          await uploadAvatar(afd);
+        } catch {
+          // ignore — onboarding succeeds regardless of the photo
+        }
+      }
+
       router.replace(result.redirectTo ?? "/workspace");
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Something went wrong");
@@ -319,14 +335,13 @@ export default function OnboardingWizard({
                 onChange={(e) => setUser("phone", e.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-fg-secondary">Profile photo URL</label>
-              <input
-                className={inputCls}
-                type="url"
-                placeholder="https://… — optional"
-                value={userData.avatar_url}
-                onChange={(e) => setUser("avatar_url", e.target.value)}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-fg-secondary">Profile photo — optional</label>
+              <AvatarUpload
+                name={userData.full_name}
+                onFileSelected={setAvatarFile}
+                size="md"
+                allowRemove
               />
             </div>
           </div>

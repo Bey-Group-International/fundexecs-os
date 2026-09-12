@@ -118,13 +118,14 @@ export async function saveUserProfile(formData: FormData): Promise<{ error?: str
   const supabase = await createServerClient();
   const str = (key: string) => String(formData.get(key) ?? "").trim() || null;
 
+  // `avatar_url` is not writable here — a photo is an uploaded file we host,
+  // set through uploadAvatar/removeAvatar (components/shared/avatar-actions).
   const { error } = await supabase
     .from("principals")
     .update({
       full_name: str("full_name"),
       title: str("title"),
       phone: str("phone"),
-      avatar_url: str("avatar_url"),
       updated_at: new Date().toISOString(),
     })
     .eq("id", ctx.userId);
