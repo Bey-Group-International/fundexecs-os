@@ -598,7 +598,19 @@ export function HostExitControl({
 
   return (
     <div className="flex items-center">
-      <button onClick={onEndForAll} disabled={leaving} aria-busy={leaving}
+      {/* The label is the button's only text and it is display:none below `sm`,
+          which takes it out of the accessibility tree — and PhoneOffIcon is a
+          bare <svg> with no text alternative, so on a phone this announced as
+          an unnamed button. aria-label matches the visible text exactly, so the
+          two never disagree where both are present.
+
+          Closing the menu is not cosmetic: the ControlBar stays mounted under
+          the "ending" overlay, and FloatingMenu portals to document.body at
+          z-[9999] against that overlay's z-50 — so a menu left open would hang
+          over the report-generating screen. The leave path already closed it;
+          this is the same rule applied to the path that ends the call. */}
+      <button onClick={() => { setOpen(false); onEndForAll(); }} disabled={leaving} aria-busy={leaving}
+        aria-label={exitLabel(leaving ? "ending" : "live", true)}
         className="flex items-center gap-1.5 sm:gap-2 rounded-l-full rounded-r-none bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium pl-3 sm:pl-5 pr-2 sm:pr-3 py-2 transition-colors">
         <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", true)}</span>
       </button>
@@ -759,6 +771,7 @@ function ControlBar({
           <HostExitControl leaving={leaving} waitingCount={waitingCount} onLeave={onLeave} onEndForAll={onEndForAll} />
         ) : (
           <button onClick={onLeave} disabled={leaving} aria-busy={leaving}
+            aria-label={exitLabel(leaving ? "ending" : "live", false)}
             className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-[var(--status-danger)] hover:bg-red-600 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium px-3 sm:px-5 py-2 transition-colors">
             <PhoneOffIcon /> <span className="hidden sm:inline">{exitLabel(leaving ? "ending" : "live", false)}</span>
           </button>

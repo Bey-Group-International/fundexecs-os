@@ -52,6 +52,40 @@ describe("the primary press", () => {
     setup();
     expect(screen.queryByText(/leave without ending/i)).not.toBeInTheDocument();
   });
+
+  // Asserted as the attribute, not through getByRole's name: the label span is
+  // hidden below `sm` by a Tailwind class, and jsdom applies no stylesheet — so
+  // a name query passes whether or not the button is nameable on a real phone,
+  // which is the only place the bug exists. PhoneOffIcon is a bare <svg> with no
+  // text alternative, so without this the control announced as "button".
+  it("names itself for a screen reader on a phone, where the label is hidden", () => {
+    setup();
+    expect(screen.getByRole("button", { name: /end for all/i })).toHaveAttribute("aria-label", "End for all");
+  });
+
+  // The ControlBar stays mounted under the "ending" overlay, and FloatingMenu
+  // portals to document.body at z-[9999] against that overlay's z-50 — an open
+  // menu would hang over the report-generating screen.
+  //
+  // Driven by keyboard, which is the only way to reach this. FloatingMenu
+  // already closes on any mousedown outside its panel and anchor, so a MOUSE
+  // press on this button dismisses the menu before the click handler runs and
+  // the assertion holds whether or not the handler closes anything. Keyboard
+  // activation fires click with no preceding mousedown, so it is the one path
+  // where closing has to be done explicitly — and the one that fails if the
+  // setOpen(false) is removed.
+  it("closes the menu it left open when the call is ended from the keyboard", async () => {
+    const { onEndForAll, user } = setup();
+
+    await openMenu(user);
+    expect(screen.getByRole("menuitem")).toBeInTheDocument();
+
+    screen.getByRole("button", { name: /end for all/i }).focus();
+    await user.keyboard("{Enter}");
+
+    expect(onEndForAll).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
+  });
 });
 
 describe("leaving without ending", () => {
