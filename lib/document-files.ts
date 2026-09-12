@@ -14,7 +14,7 @@
 /** Storage bucket holding library files. Private; every read is signed. */
 export const DOCUMENT_BUCKET = "documents";
 
-/** Matches the bucket's own `file_size_limit` (migration 20260912120000). */
+/** Matches the bucket's own `file_size_limit` (migration 20260912140000). */
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 export interface DocumentFileType {

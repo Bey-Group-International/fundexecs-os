@@ -99,7 +99,7 @@ export async function DocumentsLibraryLive() {
   const sections: LibrarySection[] = DATA_ROOM_SECTIONS.map((s) => {
     const docs: LibraryDoc[] = (docsBySection.get(s.key) ?? []).map((d) => {
       const q = d.content ? scoreDocument(d.name, d.doc_type ?? null, d.content) : null;
-      // `updated_at` only exists from migration 20260912120000 onward; a row
+      // `updated_at` only exists from migration 20260912140000 onward; a row
       // written before it falls back to its creation time rather than showing
       // an empty column.
       const updatedAt = (d as { updated_at?: string | null }).updated_at ?? d.created_at;
