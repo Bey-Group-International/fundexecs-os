@@ -49,6 +49,7 @@ import {
 } from "@/lib/meetings/attendance";
 import {
   DISCONNECT_GRACE_MS,
+  canSetLocalOffer,
   connectionStateFromIce,
   INITIAL_LINK,
   INITIAL_RECOVERY,
@@ -1477,6 +1478,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   /** Forget everything held about one peer, without touching the connection. */
   const forgetPeerState = useCallback((peerId: string) => {
     pendingIceRef.current.delete(peerId);
+    connChangedAtRef.current.delete(peerId);
     videoSenderRef.current.delete(peerId);
     audioSenderRef.current.delete(peerId);
     makingOfferRef.current.delete(peerId);
@@ -1692,8 +1694,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       makingOfferRef.current.set(peerId, true);
       const offer = await pc.createOffer(options);
       offer.sdp = withOpusResilience(offer.sdp ?? "");
-      // The state can have moved under us while createOffer was in flight.
-      if (pc.signalingState !== "stable") return;
+      // The state can have moved under us while createOffer was in flight — but
+      // only some states are a reason to stop. See canSetLocalOffer: an offer
+      // that was never answered leaves the connection in `have-local-offer`
+      // permanently, and that is precisely the connection an ICE restart is
+      // trying to rescue.
+      if (!canSetLocalOffer(pc.signalingState)) return;
       await pc.setLocalDescription(offer);
       sendSignalRef.current({ type: "offer", from: myIdRef.current, to: peerId, sdp: offer, displayName: localNameRef.current });
       negotiationArmedRef.current.set(peerId, true);

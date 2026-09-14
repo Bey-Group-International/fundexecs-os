@@ -11,11 +11,17 @@ jest.mock("@/lib/supabase/server", () => ({
 }));
 
 import { NextRequest } from "next/server";
+import { clearRateLimitBucketsForTests } from "@/lib/rate-limit";
 import { GET } from "./route";
 
-function req(): NextRequest {
-  return new NextRequest("http://localhost/api/meetings/public/abc-defg-hi");
+function req(ip = "198.51.100.7"): NextRequest {
+  return new NextRequest("http://localhost/api/meetings/public/abc-defg-hi", {
+    headers: { "x-vercel-forwarded-for": ip },
+  });
 }
+
+// Module state in the limiter, so one test's lookups must not spend another's.
+beforeEach(() => clearRateLimitBucketsForTests());
 
 function makeFromStub(result: { data?: unknown; error?: unknown }) {
   return () => {
@@ -117,5 +123,30 @@ describe("GET /api/meetings/public/[roomCode]", () => {
   it("400s on a blank room code", async () => {
     const res = await GET(req(), { params: Promise.resolve({ roomCode: "  " }) });
     expect(res.status).toBe(400);
+  });
+});
+
+// Not because a 40-bit room code is guessable, but because this answers "is
+// this code real?" to anyone, unauthenticated, and an unbounded oracle is worth
+// closing whether or not the search space makes it worth using.
+describe("rate limiting", () => {
+  it("refuses a caller walking room codes", async () => {
+    from.mockImplementation(makeFromStub({ data: null }));
+    let refused = false;
+    for (let i = 0; i < 200; i++) {
+      const res = await GET(req(), { params: Promise.resolve({ roomCode: `code-${i}` }) });
+      if (res.status === 429) { refused = true; break; }
+    }
+    expect(refused).toBe(true);
+  });
+
+  it("does not let one address lock out another", async () => {
+    from.mockImplementation(makeFromStub({ data: null }));
+    for (let i = 0; i < 200; i++) {
+      const res = await GET(req("203.0.113.1"), { params: Promise.resolve({ roomCode: `code-${i}` }) });
+      if (res.status === 429) break;
+    }
+    const other = await GET(req("203.0.113.2"), { params: Promise.resolve({ roomCode: "abc-defg-hi" }) });
+    expect(other.status).not.toBe(429);
   });
 });

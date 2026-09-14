@@ -12,6 +12,7 @@ jest.mock("@/lib/supabase/server", () => ({
 }));
 
 import { NextRequest } from "next/server";
+import { clearRateLimitBucketsForTests } from "@/lib/rate-limit";
 import { POST, GET } from "./route";
 
 const params = (roomCode = "abc-defg-hi") => ({ params: Promise.resolve({ roomCode }) });
@@ -61,10 +62,13 @@ function wire(
   });
 }
 
-function postReq(body: unknown) {
+function postReq(body: unknown, ip = "198.51.100.7") {
   return new NextRequest("http://localhost/api/meetings/public/abc-defg-hi/knock", {
     method: "POST",
     body: JSON.stringify(body),
+    // Set at the edge and stripped from anything the client sends, which is why
+    // clientIp reads this one first — see lib/rate-limit.ts.
+    headers: { "x-vercel-forwarded-for": ip },
   });
 }
 
@@ -73,6 +77,9 @@ beforeEach(() => {
   updateCapture.patch = undefined;
   tablesHit.length = 0;
   getUser.mockResolvedValue({ data: { user: null } });
+  // The limiter's buckets are module state. Cleared between tests so one test's
+  // knocks cannot spend another's allowance and the order stops mattering.
+  clearRateLimitBucketsForTests();
 });
 
 describe("POST knock", () => {
@@ -285,5 +292,87 @@ describe("GET poll", () => {
       existing: { status: "waiting", live_meetings: [{ status: "ended", room_code: "abc-defg-hi", deleted_at: null }] },
     });
     expect(await (await GET(getReq(), params())).json()).toEqual({ status: "ended" });
+  });
+});
+
+// Both halves of this endpoint are unauthenticated and reachable by anyone who
+// was ever forwarded an invite link. The POST is the one with teeth: it inserts
+// a row under a guest_key the CALLER chooses, so nothing in the row collapses a
+// flood — an unbounded POST is an unbounded waiting list, in a panel a host is
+// reading during a live meeting.
+describe("rate limiting", () => {
+  const meeting = { id: "m1", organization_id: "org1", status: "waiting" };
+
+  function pollReq(ip = "198.51.100.7") {
+    return new NextRequest("http://localhost/api/meetings/public/abc-defg-hi/knock?key=g1", {
+      headers: { "x-vercel-forwarded-for": ip },
+    });
+  }
+
+  it("refuses a flood of knocks from one address", async () => {
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    let refused: Response | null = null;
+    for (let i = 0; i < 200; i++) {
+      const res = await POST(postReq({ guestKey: `g${i}` }), params());
+      if (res.status === 429) { refused = res; break; }
+    }
+    expect(refused).not.toBeNull();
+    expect(refused!.headers.get("Retry-After")).toBeTruthy();
+  });
+
+  // Stops before the database, not after it: a limiter that answered 429 having
+  // already written the row would be bounding the response and nothing else.
+  it("refuses before touching the database", async () => {
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    for (let i = 0; i < 200; i++) {
+      const res = await POST(postReq({ guestKey: `g${i}` }), params());
+      if (res.status === 429) break;
+    }
+    const before = tablesHit.length;
+    const res = await POST(postReq({ guestKey: "one-more" }), params());
+    expect(res.status).toBe(429);
+    expect(tablesHit.length).toBe(before);
+  });
+
+  // An office behind one NAT is a real thing; a limiter keyed on the address
+  // must not let one busy building lock out another.
+  it("counts each address separately", async () => {
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    for (let i = 0; i < 200; i++) {
+      const res = await POST(postReq({ guestKey: `g${i}` }, "203.0.113.1"), params());
+      if (res.status === 429) break;
+    }
+    const other = await POST(postReq({ guestKey: "fresh" }, "203.0.113.2"), params());
+    expect(other.status).toBe(200);
+  });
+
+  // The poll is a read, so it is bounded for load rather than for content — and
+  // well clear of a real guest, who polls about 26 times in their first minute.
+  it("lets a waiting guest poll at the cadence they actually poll at", async () => {
+    wire(meeting, { existing: { status: "waiting", live_meetings: { status: "waiting" } } });
+    for (let i = 0; i < 30; i++) {
+      const res = await GET(pollReq(), params());
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("still refuses a poll that is not a guest waiting", async () => {
+    wire(meeting, { existing: { status: "waiting", live_meetings: { status: "waiting" } } });
+    let refused = false;
+    for (let i = 0; i < 1200; i++) {
+      const res = await GET(pollReq(), params());
+      if (res.status === 429) { refused = true; break; }
+    }
+    expect(refused).toBe(true);
+  });
+
+  // A knock and a poll are bounded separately: sharing one bucket would mean a
+  // guest who polls for two minutes cannot re-knock when told to.
+  it("does not let polling spend the knock allowance", async () => {
+    wire(meeting, { existing: { status: "waiting", live_meetings: { status: "waiting" } } });
+    for (let i = 0; i < 100; i++) await GET(pollReq(), params());
+    wire(meeting, { existing: null, inserted: { id: "a1", status: "waiting" } });
+    const res = await POST(postReq({ guestKey: "g1" }), params());
+    expect(res.status).toBe(200);
   });
 });

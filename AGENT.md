@@ -1618,6 +1618,44 @@ Deployed, monitoring               →  live, observability active
              |  5644 green (+15). Not exercised: a real camera, a real screen share,
              |  or two browsers in one room.
 
+2026-09-14  |  Live meetings: recovery and the public waiting-room endpoints  |
+             |  Second inspection pass, over the WebRTC connection layer and the
+             |  admission server side (chosen by the user after the client-media
+             |  pass above).
+             |  1. An unanswered offer made a peer UNRECOVERABLE. renegotiate()
+             |  re-checked `signalingState !== "stable"` after createOffer and bailed,
+             |  but a connection whose offer was never answered — a frozen tab, a
+             |  network that went away mid-handshake — sits in `have-local-offer` for
+             |  good. That is exactly the connection recoverPeer() is trying to
+             |  rescue, so every rescue bailed before sending anything while still
+             |  spending one of its five attempts: five silent no-ops, then
+             |  "Connection lost" permanently, and a page reload the only way back —
+             |  the failure the recovery path was written to prevent. canSetLocalOffer
+             |  in connection.ts now allows `stable` and `have-local-offer`, which is
+             |  what setLocalDescription(offer) is defined for.
+             |  2. forgetPeerState did not clear connChangedAtRef, so it grew for the
+             |  length of a call across join/leave cycles.
+             |  3. The public waiting-room endpoints had no rate limit, while
+             |  ice-servers next to them has had one for a while. POST knock is the
+             |  one with teeth: unauthenticated, reachable by anyone ever forwarded an
+             |  invite link, and it INSERTS a row under a guest_key the caller
+             |  chooses — so nothing in the row collapses a flood. Unbounded, it is an
+             |  unbounded waiting list in a panel a host is reading during a live
+             |  meeting, and an unbounded table behind it. Now 60 per 10 minutes per
+             |  address, checked BEFORE any database work; the poll separately at 600
+             |  per minute (a waiting guest generates ~26 in their first minute, or ~4
+             |  with the Realtime push); the public room lookup at 60 per minute.
+             |  Decision: keyed on clientIp() like every other limit here, and knock
+             |  and poll get separate buckets — sharing one would mean a guest who
+             |  polls for two minutes cannot re-knock when the server tells them to.
+             |  Residual, stated rather than fixed: this bounds a flood per address,
+             |  not per meeting. A distributed flood still fills one host's waiting
+             |  list. Capping waiting rows per meeting is the fix for that and has its
+             |  own failure mode (locking out real guests), so it was not taken here.
+             |  Confidence: typecheck/eslint clean, Jest green. Nine new tests, all
+             |  verified to fail before the fix. Not exercised: a real peer connection
+             |  losing its answer, or a real flood.
+
 ```
 
 ---

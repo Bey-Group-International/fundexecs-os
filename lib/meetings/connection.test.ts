@@ -2,6 +2,7 @@ import {
   DISCONNECT_GRACE_MS,
   INITIAL_LINK,
   INITIAL_RECOVERY,
+  canSetLocalOffer,
   connectionStateFromIce,
   contentHintFor,
   isPolite,
@@ -345,5 +346,39 @@ describe("contentHintFor", () => {
     expect(contentHintFor("screen")).toBe("detail");
     expect(contentHintFor("camera")).toBe("motion");
     expect(contentHintFor("microphone")).toBe("speech");
+  });
+});
+
+describe("canSetLocalOffer", () => {
+  it("takes an offer on a settled connection", () => {
+    expect(canSetLocalOffer("stable")).toBe(true);
+  });
+
+  // The whole reason this is not `=== "stable"`. A connection whose offer was
+  // never answered sits here for good, and it is the one ICE recovery exists to
+  // rescue: refusing to re-offer made every rescue a silent no-op that still
+  // spent one of its five attempts, so the peer was declared lost and only a
+  // page reload brought it back.
+  it("re-offers over an offer that was never answered", () => {
+    expect(canSetLocalOffer("have-local-offer")).toBe(true);
+  });
+
+  it("stands down when the far end got in first", () => {
+    expect(canSetLocalOffer("have-remote-offer")).toBe(false);
+  });
+
+  it("refuses the states that genuinely cannot take one", () => {
+    expect(canSetLocalOffer("have-local-pranswer")).toBe(false);
+    expect(canSetLocalOffer("have-remote-pranswer")).toBe(false);
+    expect(canSetLocalOffer("closed")).toBe(false);
+  });
+
+  // An ICE restart is the reason this matters, so state the pair together: the
+  // impolite side of a collision ignores the incoming offer and relies on its
+  // own completing, which it can only do if it was allowed to send one.
+  it("lets an impolite peer's own offer proceed after it ignores a collision", () => {
+    const action = offerCollision({ signalingState: "have-local-offer", makingOffer: true, polite: false });
+    expect(action).toBe("ignore");
+    expect(canSetLocalOffer("have-local-offer")).toBe(true);
   });
 });

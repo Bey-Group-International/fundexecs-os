@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,38 @@ export const dynamic = "force-dynamic";
 // (like the public room lookup) and is keyed by a client-generated guest_key
 // rather than auth. Knocking is idempotent: an existing knock returns its current
 // decision, so re-POSTs (and reconnects) never reset an admit/deny.
+
+// Both halves of this endpoint are unauthenticated and reachable by anyone
+// holding a room code — which is anyone a link was ever forwarded to. The
+// ice-servers route beside this one has been bounded for a while; these two were
+// not, and they are the pair that matter more.
+//
+// A knock INSERTS a row and puts a name in front of the host. The guest_key it
+// is filed under is chosen by the client, so a caller can mint a new one per
+// request and there is nothing in the row itself to collapse them: an
+// unbounded POST is an unbounded waiting list, in a panel a host is trying to
+// read during a live meeting, and an unbounded table behind it. Bounded hard,
+// and still far above what a person does — one knock per join, plus the
+// occasional re-knock, for everyone sharing an office NAT.
+const KNOCK_LIMIT = 60;
+const KNOCK_WINDOW_MS = 10 * 60_000;
+
+// Polling only reads, so this is about load rather than about content — but it
+// is the hottest endpoint in the meeting stack and it is paid per guest per
+// tick. The ceiling is set well clear of what real guests generate: a waiting
+// guest polls roughly 26 times in its first minute (1.5s, widening), or 4 with
+// a live push, so this leaves room for a couple of dozen of them behind one
+// address while still bounding a loop that would otherwise run flat out.
+const POLL_LIMIT = 600;
+const POLL_WINDOW_MS = 60_000;
+
+/** A 429 that says when to come back, in the shape the rest of the API uses. */
+function tooMany(result: ReturnType<typeof checkRateLimit>, limit: number) {
+  return NextResponse.json(
+    { error: "Rate limit exceeded" },
+    { status: 429, headers: rateLimitHeaders(result, limit) },
+  );
+}
 
 function client() {
   return hasSupabaseServiceEnv() ? createServiceClient() : null;
@@ -55,6 +88,11 @@ type SupabaseLike = { from: (table: string) => any };
 
 // POST — record (or look up) this guest's knock. Returns the current status.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
+  // Before any database work: a limiter that only bites after the insert would
+  // be bounding the response rather than the damage.
+  const limit = checkRateLimit({ key: `knock:${clientIp(req)}`, limit: KNOCK_LIMIT, windowMs: KNOCK_WINDOW_MS });
+  if (!limit.ok) return tooMany(limit, KNOCK_LIMIT);
+
   const { roomCode } = await params;
   const code = roomCode?.trim();
   if (!code) return NextResponse.json({ error: "Missing room code" }, { status: 400 });
@@ -141,6 +179,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
 // stop) apart from "no knock recorded" ("unknown", re-knock) — a distinction the
 // client acts on, so it has to be exact.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
+  const limit = checkRateLimit({ key: `knock-poll:${clientIp(req)}`, limit: POLL_LIMIT, windowMs: POLL_WINDOW_MS });
+  if (!limit.ok) return tooMany(limit, POLL_LIMIT);
+
   const { roomCode } = await params;
   const code = roomCode?.trim();
   const guestKey = req.nextUrl.searchParams.get("key")?.trim() ?? "";

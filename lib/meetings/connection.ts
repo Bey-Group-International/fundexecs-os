@@ -71,6 +71,30 @@ export function offerCollision(input: {
   return input.polite ? "rollback_then_accept" : "ignore";
 }
 
+/**
+ * Whether an offer we have just built can be applied to this connection.
+ *
+ * `stable` is the ordinary case. `have-local-offer` is the one that matters and
+ * the one a plain `=== "stable"` check gets wrong: a connection whose offer was
+ * never answered — the peer's tab froze, its network went away mid-handshake —
+ * stays in `have-local-offer` for good. That is EXACTLY the connection ICE
+ * recovery exists to rescue, and a stable-only guard made every rescue attempt
+ * bail before sending anything. The attempts were still counted, so after five
+ * silent no-ops the peer was marked permanently lost and the only way back was
+ * a page reload: the failure the recovery path was written to prevent.
+ *
+ * Re-offering there is legal — setLocalDescription with an offer is defined for
+ * `stable` and `have-local-offer`, and in the latter it replaces the pending
+ * local description, which is what an ICE restart wants.
+ *
+ * Everything else genuinely cannot take one. `have-remote-offer` in particular
+ * means the far end got in first while we were building ours; theirs is the one
+ * that survives, and the answer path handles it.
+ */
+export function canSetLocalOffer(signalingState: RTCSignalingState): boolean {
+  return signalingState === "stable" || signalingState === "have-local-offer";
+}
+
 // ─── Send caps ───────────────────────────────────────────────────────────────
 
 export interface SendCap {
