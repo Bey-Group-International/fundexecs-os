@@ -1515,6 +1515,47 @@ Deployed, monitoring               →  live, observability active
              |  Note: existing principals declined BEFORE this shipped still carry a
              |  stale stamp — their decline was a no-op and stays one until the
              |  request is re-declined. Worth a one-off sweep if any exist.
+
+2026-09-14  |  Background masks keep headwear  |  The blur was cutting the tops
+             |  of people's heads off.
+             |  Cause: selfie_segmenter.tflite was read through its CATEGORY mask —
+             |  the model's yes/no at its own threshold. It was trained on selfies and
+             |  is markedly less sure about what sits ON a head, so a cap, hijab,
+             |  turban, headwrap, helmet, over-ear headphones or a lot of hair came
+             |  back under that threshold and were composited away. For a religious or
+             |  medical head covering that is not a cosmetic defect.
+             |  Fix, in two parts. Read the CONFIDENCE mask instead and ramp coverage
+             |  from 0.08 to 0.30 rather than cutting at the model's ~0.5: the pixels
+             |  headwear occupies do not score zero, they score low. Then grow what is
+             |  left outward ~1% of frame width with a chamfer dilation, because the
+             |  boundary the model does draw tends to sit inside the fabric.
+             |  Decision (per user): bias toward over-including. The cost of too much
+             |  is a faint ring of real room travelling with the silhouette; the cost
+             |  of too little is erasing part of someone. Not the same size of mistake.
+             |  Decision: the widen applies to every effect, not just blur — one mask,
+             |  one behaviour across blur, templates and uploaded images.
+             |  Performance, which is why this is not just a threshold change: growing
+             |  the mask at frame resolution measured +10.3ms/frame at 720p, a quarter
+             |  of FRAME_BUDGET_MS before the compositor draws anything, and would have
+             |  tripped the CPU suspension on modest laptops. The whole mask pipeline
+             |  now runs on a fixed 320-wide grid and the compositor upscales it — a
+             |  scale that was already happening. Net 2.55ms/frame at 720p against
+             |  9.07ms for the old, narrower pipeline: headwear support AND ~3.5x less
+             |  per-frame mask work, now flat across resolutions (1080p costs what
+             |  720p costs, where before it cost 2.25x).
+             |  blendMask (category labels) is replaced by blendCoverage (0-255 both
+             |  sides); personCoverage stays for the category fallback, which is used
+             |  when a build returns no confidence mask.
+             |  Tested with a still-frame harness (per user): frames are BUILT, not
+             |  captured — a confident head, a headwear band at 0.18-0.28, room at
+             |  0.02 — and run through the shipped pipeline end to end. Verified the
+             |  harness bites: restoring the threshold to 0.50 turns 5 tests red.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5629 green (+29 new). Not exercised: a real camera. Very tall headwear
+             |  is beyond what growing a silhouette can fix and wants the multiclass
+             |  model (selfie_multiclass_256x256 has an accessories class) — offered
+             |  and not chosen, deliberately, as the heavier option.
+
 ```
 
 ---

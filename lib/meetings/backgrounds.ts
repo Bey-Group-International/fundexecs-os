@@ -92,27 +92,248 @@ export function personCoverage(label: number): number {
 }
 
 /**
- * Blend a new mask into the running one, in place.
+ * Blend a new coverage map into the running one, in place.
  *
  * Writes into `previous` and returns it: this runs on every pixel of every
  * frame, and allocating a second buffer 24 times a second is exactly the kind
  * of garbage the frame budget cannot absorb.
  *
- * `next` is MediaPipe's category mask; `previous` is 0-255 coverage of the
- * person. See PERSON_LABEL for which way round the category values run.
+ * Both sides are 0-255 coverage of the person, so this no longer needs to know
+ * how the segmenter labels anything — that translation happens once, on the way
+ * in, in the fill functions below.
  */
-export function blendMask(
+export function blendCoverage(
   previous: Uint8ClampedArray,
-  next: Uint8Array,
+  target: Uint8ClampedArray,
   alpha: number = MASK_SMOOTHING,
 ): Uint8ClampedArray {
   const a = Math.max(0, Math.min(1, alpha));
-  const n = Math.min(previous.length, next.length);
+  const n = Math.min(previous.length, target.length);
   for (let i = 0; i < n; i++) {
-    const target = personCoverage(next[i]);
-    previous[i] += (target - previous[i]) * a;
+    previous[i] += (target[i] - previous[i]) * a;
   }
   return previous;
+}
+
+// ── Headwear ─────────────────────────────────────────────────────────────────
+
+// The model is called selfie_segmenter and it was trained on selfies: faces,
+// hair, shoulders. It is markedly less sure about what sits ON a head. A cap, a
+// hijab, a turban, a headwrap, a helmet, over-ear headphones, a lot of hair —
+// these come back with middling confidence, and a straight yes/no at the usual
+// halfway mark throws all of them away. The visible result is a person composited
+// with the top of their head missing, which for a religious or medical head
+// covering is not a cosmetic defect.
+//
+// Two things widen the mask enough to keep headwear. First, believe the model
+// sooner: read its confidence rather than its verdict, and treat anything with a
+// real chance of being the person as the person. Second, grow what is left
+// outward a little, because the boundary the model draws still tends to sit
+// inside the covering rather than outside it.
+//
+// Both are deliberately biased toward including too much. The cost of over-
+// including is a faint ring of the real room travelling with the silhouette; the
+// cost of under-including is erasing part of someone. Those are not the same
+// size of mistake.
+
+/** At or above this confidence a pixel is fully the person. */
+export const CONFIDENCE_PERSON = 0.30;
+
+/** At or below this confidence a pixel is fully background. */
+export const CONFIDENCE_BACKGROUND = 0.08;
+
+/**
+ * Coverage for one pixel of the segmenter's confidence mask.
+ *
+ * The ramp between the two thresholds matters as much as their values: a hard
+ * cut at any single number puts a staircase wherever the model is undecided,
+ * which around hair and headwear is most of the boundary. Letting coverage rise
+ * through the uncertain band makes the edge fall off the way an out-of-focus
+ * background does, from the data rather than from a blur applied afterwards.
+ */
+export function coverageFromConfidence(confidence: number): number {
+  if (!Number.isFinite(confidence)) return 0;
+  if (confidence >= CONFIDENCE_PERSON) return 255;
+  if (confidence <= CONFIDENCE_BACKGROUND) return 0;
+  const t = (confidence - CONFIDENCE_BACKGROUND) / (CONFIDENCE_PERSON - CONFIDENCE_BACKGROUND);
+  return Math.round(t * 255);
+}
+
+// ── The grid the mask is worked on ───────────────────────────────────────────
+
+// Everything above happens per pixel per frame, so the pixel count is the whole
+// cost. A silhouette is the lowest-frequency thing in the picture — it has no
+// detail to lose — so it is carried on a coarse grid and the canvas scales it
+// back up when it composites, which costs nothing because that scale was already
+// happening.
+//
+// Measured on a 1280x720 frame: growing the mask at full resolution adds ~10ms
+// per frame, a quarter of the budget, before the compositor has drawn anything.
+// On the grid it is a fraction of a millisecond. A widened mask that made modest
+// laptops drop frames would have traded one visible fault for another.
+
+/** Roughly this wide, whatever the camera is. */
+const MASK_GRID_WIDTH = 320;
+
+export interface MaskGrid {
+  width: number;
+  height: number;
+  /** Frame pixels per grid pixel. */
+  scale: number;
+}
+
+/** The grid to carry the mask on for a given frame. */
+export function maskGrid(frameWidth: number, frameHeight: number): MaskGrid {
+  const fw = Number.isFinite(frameWidth) && frameWidth > 0 ? Math.round(frameWidth) : 640;
+  const fh = Number.isFinite(frameHeight) && frameHeight > 0 ? Math.round(frameHeight) : 480;
+  // Never upscale: a camera already smaller than the grid is worked as it is.
+  const width = Math.min(fw, MASK_GRID_WIDTH);
+  const scale = fw / width;
+  return { width, height: Math.max(1, Math.round(fh / scale)), scale };
+}
+
+/**
+ * Fill a grid-sized coverage buffer from a frame-sized confidence mask.
+ *
+ * Each grid cell averages the four frame pixels nearest its centre rather than
+ * taking one. A single sample is cheaper, but it makes the edge land on whichever
+ * pixel it happened to hit, and that choice changes frame to frame — which is
+ * the crawling edge the temporal blend exists to suppress. Averaging keeps the
+ * boundary where it actually is.
+ */
+export function sampleCoverageFromConfidence(
+  out: Uint8ClampedArray,
+  confidences: Float32Array,
+  srcWidth: number,
+  srcHeight: number,
+  grid: MaskGrid,
+): Uint8ClampedArray {
+  return sampleInto(out, grid, srcWidth, srcHeight, (i) => coverageFromConfidence(confidences[i]));
+}
+
+/** The same, from the hard category mask — the fallback when no confidence mask arrives. */
+export function sampleCoverageFromCategory(
+  out: Uint8ClampedArray,
+  labels: Uint8Array,
+  srcWidth: number,
+  srcHeight: number,
+  grid: MaskGrid,
+): Uint8ClampedArray {
+  return sampleInto(out, grid, srcWidth, srcHeight, (i) => personCoverage(labels[i]));
+}
+
+function sampleInto(
+  out: Uint8ClampedArray,
+  grid: MaskGrid,
+  srcWidth: number,
+  srcHeight: number,
+  coverageAt: (index: number) => number,
+): Uint8ClampedArray {
+  if (!(srcWidth > 0) || !(srcHeight > 0)) return out;
+  const sx = srcWidth / grid.width;
+  const sy = srcHeight / grid.height;
+  const lastX = srcWidth - 1;
+  const lastY = srcHeight - 1;
+
+  for (let gy = 0; gy < grid.height; gy++) {
+    const cy = (gy + 0.5) * sy;
+    const y0 = Math.min(lastY, Math.max(0, Math.floor(cy - sy / 4)));
+    const y1 = Math.min(lastY, Math.max(0, Math.floor(cy + sy / 4)));
+    const row0 = y0 * srcWidth;
+    const row1 = y1 * srcWidth;
+    const outRow = gy * grid.width;
+
+    for (let gx = 0; gx < grid.width; gx++) {
+      const cx = (gx + 0.5) * sx;
+      const x0 = Math.min(lastX, Math.max(0, Math.floor(cx - sx / 4)));
+      const x1 = Math.min(lastX, Math.max(0, Math.floor(cx + sx / 4)));
+      const sum = coverageAt(row0 + x0) + coverageAt(row0 + x1)
+                + coverageAt(row1 + x0) + coverageAt(row1 + x1);
+      out[outRow + gx] = sum / 4;
+    }
+  }
+  return out;
+}
+
+/**
+ * How far to grow the mask outward, as a fraction of frame width.
+ *
+ * Modest on purpose. Enough to carry the boundary from inside a cap's brim to
+ * outside it, not enough to drag a visible slab of room along with the
+ * shoulders. Very tall headwear is beyond what growing a silhouette can fix and
+ * wants a model that classifies accessories; this is the cheap 90%.
+ */
+const DILATE_FRACTION = 0.010;
+
+/**
+ * How far to grow the mask, in GRID pixels, for a given frame.
+ *
+ * Expressed against the frame and then converted, so the widening is the same
+ * share of a face whatever the camera resolution and whatever grid it is
+ * carried on.
+ */
+export function maskDilatePx(frameWidth: number, grid: MaskGrid): number {
+  const width = Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : 640;
+  const scale = Number.isFinite(grid.scale) && grid.scale > 0 ? grid.scale : 1;
+  return Math.max(1, Math.round((width * DILATE_FRACTION) / scale));
+}
+
+/**
+ * Grow covered regions outward by roughly `radiusPx`, in place.
+ *
+ * A chamfer dilation rather than a true one: each pass carries a running value
+ * forward that decays with distance, so coverage bleeds out of a covered region
+ * and fades over the radius instead of ending at a hard new edge. Four passes —
+ * left, right, up, down — approximate growing in every direction.
+ *
+ * Linear in the number of pixels and independent of the radius, which is the
+ * only reason this can run on every frame. A true morphological dilation costs
+ * the radius again per pixel, and at 720p24 that is the whole frame budget.
+ */
+export function dilateCoverage(
+  coverage: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radiusPx: number,
+): Uint8ClampedArray {
+  const r = Math.floor(radiusPx);
+  if (!(r > 0) || !(width > 0) || !(height > 0)) return coverage;
+  if (coverage.length < width * height) return coverage;
+
+  const falloff = 255 / r;
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let m = 0;
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      m -= falloff;
+      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+    }
+    m = 0;
+    for (let x = width - 1; x >= 0; x--) {
+      const i = row + x;
+      m -= falloff;
+      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+    }
+  }
+
+  for (let x = 0; x < width; x++) {
+    let m = 0;
+    for (let y = 0; y < height; y++) {
+      const i = y * width + x;
+      m -= falloff;
+      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+    }
+    m = 0;
+    for (let y = height - 1; y >= 0; y--) {
+      const i = y * width + x;
+      m -= falloff;
+      if (coverage[i] > m) m = coverage[i]; else coverage[i] = m;
+    }
+  }
+
+  return coverage;
 }
 
 // ── Native templates ─────────────────────────────────────────────────────────
