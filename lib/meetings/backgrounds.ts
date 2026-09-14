@@ -541,3 +541,21 @@ export function effectLabel(effect: BackgroundEffect): string {
   if (effect.kind === "template") return templateById(effect.id)?.name ?? "Background";
   return "Your image";
 }
+
+/**
+ * Whether two choices are the same background.
+ *
+ * Needed because the choice can move while a background is being applied: the
+ * segmenter is a 12MB download, and someone who picks blur and then a template
+ * during it has made two choices that arrive out of order. The code that
+ * finishes the build compares what it was asked for against what is wanted now,
+ * and a structural comparison is the only honest way to do that — the objects
+ * are rebuilt on every pick, so identity says nothing.
+ */
+export function sameEffect(a: BackgroundEffect, b: BackgroundEffect): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "blur" && b.kind === "blur") return a.strength === b.strength;
+  if (a.kind === "template" && b.kind === "template") return a.id === b.id;
+  if (a.kind === "custom" && b.kind === "custom") return a.id === b.id;
+  return true;
+}

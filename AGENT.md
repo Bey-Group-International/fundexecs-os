@@ -1556,6 +1556,68 @@ Deployed, monitoring               →  live, observability active
              |  model (selfie_multiclass_256x256 has an accessories class) — offered
              |  and not chosen, deliberately, as the heavier option.
 
+2026-09-14  |  Live meetings: join, backgrounds, camera and mic  |  Six defects
+             |  found by inspecting the join path, the background pipeline and the
+             |  device handling end to end. No new feature; all six were already
+             |  reachable.
+             |  1. A remembered camera or microphone that has since been unplugged
+             |  left the GREEN ROOM with no preview and no meter. The recovery is to
+             |  forget the id and re-open against the system default, but the
+             |  setCamId("")/setMicId("") that forgets it happens DURING the first
+             |  combined open, while the per-device effects are still standing down
+             |  behind a `primedRef`. A ref does not re-render, so nothing ran them
+             |  again: "No camera found" with a working camera plugged in. Primed is
+             |  now state.
+             |  2. A device another application was holding was reported as a device
+             |  that is not there. Those have different fixes and only one of them
+             |  involves going to look for hardware. The green room now classifies
+             |  through media-acquisition's classifyMediaError — the same one the call
+             |  uses, rather than a second list of DOMException names that had drifted
+             |  from it — and readinessProblems gained camera_busy/mic_busy.
+             |  3. The green room did not retry a busy device; the call has for a
+             |  while. The commonest cause is the page that was just here not having
+             |  finished releasing the camera (a reload, a bounce through the invite
+             |  link). One retry at RETRY_SAME_DEVICE_MS, only for the failures that
+             |  are about timing.
+             |  4. A background chosen while the 12MB segmenter was still downloading
+             |  was silently dropped: the second call returns early behind the
+             |  build guard, and the build applied the effect it was STARTED for. The
+             |  picker said "Terminal" while the room saw the blur chosen first. The
+             |  build now applies bgEffectRef.current — sameEffect() in backgrounds.ts
+             |  is the value comparison that needs (every pick is a fresh object).
+             |  5. BackgroundProcessor kept segmenting a stopped camera. A stopped
+             |  track leaves the hidden <video> holding its last frame with a
+             |  readyState that still says it has data, so the loop runs at 24fps over
+             |  one still picture, on the GPU, indefinitely. This happens on EVERY
+             |  join — the green room's preview processor outlives by a few hundred ms
+             |  the tracks the room stops when it takes over — and again on an
+             |  unplugged webcam. The processor now watches its source for `ended`.
+             |  6. The same loop also ran through a screen share, where the composited
+             |  canvas reaches neither the peers nor the local tile. setPaused now
+             |  follows `!camOn || shareOn`.
+             |  Hardening alongside: BackgroundProcessor.create() is wrapped, because
+             |  a throw (rather than a null) left processorBuildingRef set and blocked
+             |  every future build for the rest of the call; and the fire-and-forget
+             |  applyBackground at join now catches, because the camera is disabled
+             |  waiting for it and a floating rejection is a member whose controls say
+             |  their camera is on while every tile shows nothing.
+             |  Decision: the green room keeps its own acquisition rather than being
+             |  folded into openCallMedia. It maintains camera and microphone as
+             |  independent live tracks so a mic change cannot restart segmentation;
+             |  openCallMedia opens once and returns. Sharing the CLASSIFIER, not the
+             |  sequence, is what these two actually have in common.
+             |  Tested: 15 new tests. Seven are behavioural and were run against the
+             |  pre-fix code: six fail, the seventh is the control that must pass
+             |  either way. The green room ones drive a stubbed getUserMedia through
+             |  the real component (unplugged device, busy device, busy-then-free);
+             |  the processor one drives the real class over a stubbed canvas/video.
+             |  enumerateDevices is deferred a turn in those tests on purpose — that
+             |  is what lets React render between the forget and the prime, which is
+             |  the ordering a real browser produces and the one defect 1 needs.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5644 green (+15). Not exercised: a real camera, a real screen share,
+             |  or two browsers in one room.
+
 ```
 
 ---

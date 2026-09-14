@@ -141,7 +141,7 @@ export function levelBars(level: number, total = 12): number {
 }
 
 export interface ReadinessProblem {
-  kind: "no_camera" | "no_mic" | "camera_blocked" | "mic_blocked" | "mic_silent";
+  kind: "no_camera" | "no_mic" | "camera_blocked" | "mic_blocked" | "mic_silent" | "camera_busy" | "mic_busy";
   message: string;
 }
 
@@ -160,6 +160,9 @@ export function readinessProblems(state: {
   micPeak: number;
   cameraEnabled: boolean;
   micEnabled: boolean;
+  /** The device is there and something else has it — not the same as absent. */
+  cameraBusy?: boolean;
+  micBusy?: boolean;
 }): ReadinessProblem[] {
   const problems: ReadinessProblem[] = [];
 
@@ -167,6 +170,14 @@ export function readinessProblems(state: {
     problems.push({
       kind: "mic_blocked",
       message: "Your browser is blocking the microphone. Allow it in the address bar, then reload.",
+    });
+  } else if (state.micBusy) {
+    // Ranked above "none found", because it is a different instruction: the
+    // microphone exists, and telling somebody to go and look for one they are
+    // holding is how they end up joining a call they cannot be heard on.
+    problems.push({
+      kind: "mic_busy",
+      message: "Another app is using your microphone. Close it, then pick your mic again.",
     });
   } else if (state.mics === 0) {
     problems.push({ kind: "no_mic", message: "No microphone found. Others won't hear you." });
@@ -183,6 +194,11 @@ export function readinessProblems(state: {
     problems.push({
       kind: "camera_blocked",
       message: "Your browser is blocking the camera. Allow it in the address bar, then reload.",
+    });
+  } else if (state.cameraBusy && state.cameraEnabled) {
+    problems.push({
+      kind: "camera_busy",
+      message: "Another app is using your camera. Close it, then turn your camera off and on again.",
     });
   } else if (state.cameras === 0 && state.cameraEnabled) {
     problems.push({ kind: "no_camera", message: "No camera found. You can still join with audio." });

@@ -26,6 +26,7 @@ import {
   effectLabel,
   encodeEffect,
   needsSegmentation,
+  sameEffect,
   shouldSuspendEffect,
   suspensionMessage,
   type BackgroundEffect,
@@ -1421,7 +1422,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { callPhaseRef.current = callPhase; }, [callPhase]);
   useEffect(() => { bwModeRef.current = bwMode; }, [bwMode]);
   // Nothing is transmitted while the camera is off, so nothing needs compositing.
-  useEffect(() => { processorRef.current?.setPaused(!camOn); }, [camOn]);
+  // A screen share is the same case wearing a different hat: the composited
+  // canvas goes neither to the peers nor to the local tile while the screen
+  // holds the video sender, so segmenting for it is a warm fan and nothing else.
+  useEffect(() => { processorRef.current?.setPaused(!camOn || shareOn); }, [camOn, shareOn]);
 
   // A call already dropping video to protect audio should not be spending the
   // remaining budget on scenery. The CPU half of this rule is applied from
@@ -2345,7 +2349,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // the moment the processed track replaces this one.
       bgPendingRef.current = true;
       stream.getVideoTracks().forEach((t) => { t.enabled = false; });
-      void applyBackgroundRef.current(wanted);
+      // Caught rather than left to float: the camera is disabled above and it is
+      // this call that re-enables it, so a rejection nobody handles is a member
+      // sitting in a meeting whose own controls say their camera is on while
+      // every other tile shows nothing.
+      void applyBackgroundRef.current(wanted).catch((err) => {
+        console.warn("[meeting] background could not be applied", err);
+        abandonBackgroundRef.current("Your background couldn't be applied — your camera is off so your room stays private. Turn it on when you're ready.");
+      });
     }
 
     // Peers are only ever created in response to signaling, so this is the
@@ -3157,21 +3168,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!processorRef.current) {
       if (processorBuildingRef.current) return;
       processorBuildingRef.current = true;
-      const processor = await BackgroundProcessor.create(raw, {
-        onSlowFrames: (consecutive) => {
-          if (bgSuspendedRef.current) return;
-          const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
-          if (!decision.suspend || !decision.reason) return;
-          bgSuspendedRef.current = true;
-          setBgNotice(suspensionMessage(decision.reason));
-          void applyBackgroundRef.current(NO_BACKGROUND);
-        },
-        onUnavailable: () => {
-          setBgUnavailable(true);
-          abandonBackgroundRef.current("Background effects couldn't load — your camera is off so your room stays private. Turn it on when you're ready.");
-        },
-      });
-      processorBuildingRef.current = false;
+      // The flag is cleared in a finally and the throw is swallowed for the
+      // same reason: this guard blocks every future build while it is set, so a
+      // canvas or a WASM loader that throws rather than returning null would
+      // cost the member their background for the rest of the call — and leave
+      // the camera held off the wire by enterRoom with nothing coming to
+      // release it. A failure to build is a failure to build, however it is
+      // reported.
+      let processor: BackgroundProcessor | null = null;
+      try {
+        processor = await BackgroundProcessor.create(raw, {
+          onSlowFrames: (consecutive) => {
+            if (bgSuspendedRef.current) return;
+            const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
+            if (!decision.suspend || !decision.reason) return;
+            bgSuspendedRef.current = true;
+            setBgNotice(suspensionMessage(decision.reason));
+            void applyBackgroundRef.current(NO_BACKGROUND);
+          },
+          onUnavailable: () => {
+            setBgUnavailable(true);
+            abandonBackgroundRef.current("Background effects couldn't load — your camera is off so your room stays private. Turn it on when you're ready.");
+          },
+        });
+      } catch (err) {
+        console.warn("[meeting] background processor failed to build", err);
+      } finally {
+        processorBuildingRef.current = false;
+      }
       if (!processor) {
         setBgUnavailable(true);
         abandonBackground("Background effects aren't available here — your camera is off so your room stays private. Turn it on when you're ready.");
@@ -3183,10 +3207,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       processorRef.current = processor;
     }
 
-    // A custom pick carries its blob; a remembered one has to be looked up.
-    let blob = image ?? null;
-    if (effect.kind === "custom" && !blob) {
-      const stored = await getBackground(effect.id);
+    // What is wanted NOW, not what this call was asked for. A pick made while
+    // the segmenter was downloading returns early at the guard above — there is
+    // a build already in flight and a second one would strand a camera tap — so
+    // this call is the only one left that can honour it. Reading the argument
+    // instead is how somebody ends up looking at "Terminal" in the picker while
+    // the room sees the blur they chose first.
+    const wanted = bgEffectRef.current;
+    // The blob belongs to the effect it arrived with; a different choice has to
+    // be looked up like any remembered one.
+    let blob = sameEffect(wanted, effect) ? (image ?? null) : null;
+    if (wanted.kind === "custom" && !blob) {
+      const stored = await getBackground(wanted.id);
       if (!stored) {
         // Remembered on this account but stored in another browser. Same rule:
         // a background they cannot have does not become the room they are in.
@@ -3195,8 +3227,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
       blob = stored.blob;
     }
+    // One more look: the store read above is another await, and a processor
+    // torn down under it must not be spoken to.
+    if (!processorRef.current || !needsSegmentation(bgEffectRef.current)) return;
 
-    processorRef.current.setEffect(effect, blob);
+    processorRef.current.setEffect(wanted, blob);
     cameraTrackRef.current = processorRef.current.track;
     // The processed track is what goes out now, so the hold from enterRoom can
     // be released — swapOutgoingVideo re-enables video as it makes the swap.
