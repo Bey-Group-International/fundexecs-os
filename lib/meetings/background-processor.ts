@@ -99,14 +99,6 @@ function loadSegmenter(): Promise<Segmenter | null> {
   return segmenterPromise;
 }
 
-/** Whether the machine could run effects at all, without committing to one. */
-export async function backgroundsSupported(): Promise<boolean> {
-  if (typeof document === "undefined") return false;
-  const canvas = document.createElement("canvas");
-  if (typeof canvas.captureStream !== "function") return false;
-  return (await loadSegmenter()) !== null;
-}
-
 export interface ProcessorCallbacks {
   /** Sustained slow frames, so the caller can decide to suspend. */
   onSlowFrames: (consecutive: number) => void;

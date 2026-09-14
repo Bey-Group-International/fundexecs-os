@@ -1284,9 +1284,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Guards the async build below: two quick picks would otherwise each start a
   // processor, and the loser would keep a camera tap and a render loop alive.
   const processorBuildingRef = useRef(false);
-  // True while a chosen background is still being built and the camera is being
-  // held off the wire for it. See enterRoom.
-  const bgPendingRef = useRef(false);
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -2345,9 +2342,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // the channel below announces us immediately — so peers offer, tracks are
       // added, and the raw camera goes out for however long the build takes. For
       // someone who chose to hide the room they are sitting in, that is the one
-      // failure this feature exists to prevent. Re-enabled by swapOutgoingVideo
-      // the moment the processed track replaces this one.
-      bgPendingRef.current = true;
+      // failure this feature exists to prevent.
+      //
+      // The hold is the disabled track itself and nothing else: every path out
+      // of here goes through swapOutgoingVideo, which sets `enabled` from
+      // camOnRef as it puts a track on the wire — the processed track when the
+      // effect lands, the raw camera when it is abandoned. (A flag that tracked
+      // this separately was only ever written, never read.)
       stream.getVideoTracks().forEach((t) => { t.enabled = false; });
       // Caught rather than left to float: the camera is disabled above and it is
       // this call that re-enables it, so a rejection nobody handles is a member
@@ -3118,7 +3119,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * they can act on immediately.
    */
   const abandonBackground = useCallback((message: string) => {
-    bgPendingRef.current = false;
     bgEffectRef.current = NO_BACKGROUND;
     setBgEffect(NO_BACKGROUND);
     // Set before the swap: swapOutgoingVideo takes the camera's intended state
@@ -3233,9 +3233,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     processorRef.current.setEffect(wanted, blob);
     cameraTrackRef.current = processorRef.current.track;
-    // The processed track is what goes out now, so the hold from enterRoom can
-    // be released — swapOutgoingVideo re-enables video as it makes the swap.
-    bgPendingRef.current = false;
+    // The processed track is what goes out now, so the hold enterRoom put on the
+    // camera lifts here: swapOutgoingVideo re-enables video as it makes the swap.
     if (!shareOn) swapOutgoingVideo(processorRef.current.track, false);
   }, [shareOn, swapOutgoingVideo, abandonBackground]);
 
