@@ -4,6 +4,7 @@ import {
   INITIAL_RECOVERY,
   canSetLocalOffer,
   connectionStateFromIce,
+  peerConfig,
   contentHintFor,
   isPolite,
   linkNotice,
@@ -380,5 +381,33 @@ describe("canSetLocalOffer", () => {
     const action = offerCollision({ signalingState: "have-local-offer", makingOffer: true, polite: false });
     expect(action).toBe("ignore");
     expect(canSetLocalOffer("have-local-offer")).toBe(true);
+  });
+});
+
+describe("peerConfig", () => {
+  it("carries the servers it was given", () => {
+    const servers = [{ urls: ["stun:a.example:3478"] }];
+    expect(peerConfig(servers).iceServers).toBe(servers);
+  });
+
+  // Both of these are a guest's problem before they are anyone's. A call is two
+  // m-sections, and under the default policy a browser prepares two transports
+  // for them until BUNDLE is agreed in the answer — two candidate gatherings,
+  // two sets of connectivity checks, and behind a relay two TURN allocations.
+  // The participant most likely to be behind that relay is the guest.
+  it("puts audio and video on one transport from the offer onwards", () => {
+    expect(peerConfig([]).bundlePolicy).toBe("max-bundle");
+  });
+
+  it("multiplexes RTCP rather than giving it a port of its own", () => {
+    expect(peerConfig([]).rtcpMuxPolicy).toBe("require");
+  });
+
+  // Stated as a test because the omission is deliberate and looks like a gap:
+  // pre-gathering only pays when a connection exists well before its offer, and
+  // here a peer connection is created and offered on in the same breath — so a
+  // pool would buy nothing and open a TURN allocation per candidate to buy it.
+  it("does not pre-gather a candidate pool", () => {
+    expect(peerConfig([]).iceCandidatePoolSize).toBeUndefined();
   });
 });

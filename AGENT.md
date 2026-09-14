@@ -1660,6 +1660,66 @@ Deployed, monitoring               →  live, observability active
              |  different bug). Not exercised: a real peer connection losing its
              |  answer, or a real flood.
 
+2026-09-14  |  Guest connections  |  Third pass, on what it costs an invite-link
+             |  guest to get connected (asked for by the user). Guests are the
+             |  participants most likely to be behind the NAT that needs a relay, so
+             |  everything here is either a path they take that nobody else does, or
+             |  a cost they pay twice.
+             |  1. A deployment that sets TURN_URLS to its relay and nothing else —
+             |  which is nearly all of them, because the relay was the thing that was
+             |  missing — handed browsers NO stun: entry. A browser with no STUN
+             |  server never learns its own public address, so it offers host and
+             |  relay candidates and nothing in between: two guests on ordinary home
+             |  networks, who would have hole-punched a direct path given a reflexive
+             |  candidate, relay every frame instead. An extra hop of latency, paid
+             |  for on the operator's own bandwidth. The relay IS a STUN server —
+             |  coturn answers a binding request on the same host and port — so
+             |  buildIceServers now derives stun: from plain turn: URLs when nothing
+             |  else answers that question. Only turn: over its default transport:
+             |  turns: and ?transport=tcp yield no UDP reflexive candidate, so an
+             |  entry for either costs a handshake and returns nothing usable.
+             |  Decision: a configured stun: entry always wins — an operator who named
+             |  one meant it, and it may be a different box.
+             |  2. Peer connections were built on the browser default bundlePolicy. A
+             |  call is two m-sections, and under `balanced` a browser prepares them on
+             |  separate transports until BUNDLE is agreed in the ANSWER — two
+             |  candidate gatherings, two sets of connectivity checks, and behind a
+             |  relay two TURN allocations, per peer. peerConfig() now states
+             |  max-bundle and rtcpMuxPolicy require, so there is one transport from
+             |  the offer onwards. Safe unilaterally: both ends are this code.
+             |  Deliberately NOT added: iceCandidatePoolSize. Pre-gathering only pays
+             |  when a connection exists well before its offer, and here a peer
+             |  connection is created and offered on in the same breath — it would buy
+             |  nothing and open a TURN allocation per pooled candidate to buy it.
+             |  3. The ICE fetch and the signalling WebSocket took turns. enterRoom
+             |  awaited the config, THEN opened the socket — two independent round
+             |  trips, serialized, at the worst moment for a guest who has just been
+             |  let in. Now both start together and the deadline moves to the two
+             |  places it actually falls: nothing is announced until the config lands,
+             |  and handleSignal awaits the same promise before acting on anything, so
+             |  no connection is ever built on the STUN-only fallback. Awaiting one
+             |  shared promise releases waiters in queue order, so messages keep theirs.
+             |  4. That made an unbounded fetch dangerous, so it is bounded. A request
+             |  that is never answered is never rejected either — a captive portal or a
+             |  black-holing proxy leaves it pending for the life of the tab — and
+             |  signalling now waits on it. 4s per attempt, two attempts: a stalled
+             |  endpoint degrades to STUN-only and says so, instead of a member who is
+             |  nominally in the meeting and never receives a message.
+             |  5. Two round trips a guest was paying for nothing: joinMeeting asked
+             |  auth.getUser() twice (same answer both times), and read live_meetings
+             |  under RLS before falling back to the public endpoint — a read that for
+             |  a guest either returns nothing or returns exactly what the public
+             |  endpoint returns. The host-detection effect did the same on every page
+             |  load, competing for the connection with the public lookup and the
+             |  camera. Both now skip when there is no signed-in user. Cost, stated:
+             |  a signed-in host makes two calls in sequence rather than together, for
+             |  a button label, on the one participant who is not struggling to connect.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest 5668
+             |  green (+11). Not exercised: a real relay, a real NAT, or a browser
+             |  actually gathering candidates — every claim here about what a browser
+             |  does with these settings is from the specs and from coturn's
+             |  behaviour, not from a packet capture.
+
 ```
 
 ---

@@ -29,6 +29,49 @@ const PER_PEER_FLOOR_KBPS = 150;
 
 export type BandwidthMode = "normal" | "degraded" | "audio-only";
 
+// ─── How a peer connection is configured ─────────────────────────────────────
+
+/**
+ * The connection policy every peer in a call is built with.
+ *
+ * Both fields exist for the same reason and it is a guest's reason: how many
+ * separate network paths one peer connection has to build before anybody can be
+ * seen or heard.
+ *
+ * A call carries audio and video, which is two m-sections. Under the default
+ * `balanced` policy a browser prepares to run those on separate transports and
+ * only collapses them once BUNDLE is agreed in the answer — so until then it
+ * gathers two sets of candidates, runs two sets of connectivity checks and,
+ * where a relay is involved, holds TWO TURN allocations. `max-bundle` puts
+ * everything in one bundle group in the offer itself, so there is one transport
+ * from the start.
+ *
+ * `require` says the same thing about RTCP: multiplexed onto the media port
+ * rather than given a port of its own, which is another candidate set and
+ * another set of checks per m-section.
+ *
+ * Nobody pays more for this than a guest. They are the participant most likely
+ * to be behind the NAT that needs a relay in the first place, so halving the
+ * allocations and the checking halves the slowest part of their join — and
+ * halves what the relay is asked to hold open for them.
+ *
+ * Safe to state unilaterally: every browser that can run this app has supported
+ * BUNDLE and rtcp-mux for years, and both ends of every connection here are
+ * this same code.
+ *
+ * Deliberately NOT here: `iceCandidatePoolSize`. Pre-gathering only helps when
+ * a connection exists well before its offer, and in this room a peer connection
+ * is created and offered on in the same breath — so a pool would buy nothing
+ * and would open a TURN allocation per pooled candidate to buy it with.
+ */
+export function peerConfig(iceServers: RTCIceServer[]): RTCConfiguration {
+  return {
+    iceServers,
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
+  };
+}
+
 // ─── Perfect negotiation ─────────────────────────────────────────────────────
 
 /**

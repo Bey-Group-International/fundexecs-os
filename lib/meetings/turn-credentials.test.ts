@@ -4,6 +4,7 @@ import {
   MAX_TURN_TTL_SECONDS,
   MIN_TURN_TTL_SECONDS,
   buildIceServers,
+  deriveStunUrls,
   cleanCredential,
   hasRelayUrl,
   mintTurnCredential,
@@ -170,13 +171,60 @@ describe("buildIceServers", () => {
   });
 
   it("omits a group that has no members", () => {
-    expect(buildIceServers(["turn:a.example:3478"], CRED)).toEqual([
-      { urls: ["turn:a.example:3478"], username: "1700003600", credential: "sig" },
-    ]);
     expect(buildIceServers(["stun:a.example:3478"], CRED)).toEqual([
       { urls: ["stun:a.example:3478"] },
     ]);
     expect(buildIceServers([], CRED)).toEqual([]);
+  });
+
+  // The case almost every deployment is actually in: TURN_URLS names the relay
+  // and nothing else, because the relay was the thing that was missing. Without
+  // a STUN entry the browser never learns its own public address, so two guests
+  // who could have hole-punched a direct path relay every frame instead — an
+  // extra hop of latency, on the operator's own bandwidth bill.
+  it("asks the relay for a reflexive address when nothing else can be asked", () => {
+    expect(buildIceServers(["turn:a.example:3478"], CRED)).toEqual([
+      { urls: ["stun:a.example:3478"] },
+      { urls: ["turn:a.example:3478"], username: "1700003600", credential: "sig" },
+    ]);
+  });
+
+  // A configured stun: entry wins: an operator who named one meant it, and it
+  // may well be a different box from the relay.
+  it("never second-guesses a STUN server that was configured", () => {
+    const servers = buildIceServers(["stun:stun.example:3478", "turn:relay.example:3478"], CRED);
+    expect(servers[0]).toEqual({ urls: ["stun:stun.example:3478"] });
+    expect(servers).toHaveLength(2);
+  });
+});
+
+describe("deriveStunUrls", () => {
+  it("reads a relay's plain UDP address as a STUN address", () => {
+    expect(deriveStunUrls(["turn:relay.example:3478"])).toEqual(["stun:relay.example:3478"]);
+  });
+
+  // TLS and TCP are both the same story: a browser gathers no UDP reflexive
+  // candidate through either, so the entry would cost a handshake and return
+  // nothing the media path can use.
+  it("leaves TLS and TCP relays alone", () => {
+    expect(deriveStunUrls(["turns:relay.example:5349"])).toEqual([]);
+    expect(deriveStunUrls(["turn:relay.example:3478?transport=tcp"])).toEqual([]);
+  });
+
+  it("drops the query from a relay that carries one", () => {
+    expect(deriveStunUrls(["turn:relay.example:3478?transport=udp"])).toEqual(["stun:relay.example:3478"]);
+  });
+
+  it("names each host once", () => {
+    expect(deriveStunUrls([
+      "turn:relay.example:3478",
+      "turn:relay.example:3478?transport=udp",
+    ])).toEqual(["stun:relay.example:3478"]);
+  });
+
+  it("has nothing to say about a list with no relay in it", () => {
+    expect(deriveStunUrls(["stun:a.example:3478"])).toEqual([]);
+    expect(deriveStunUrls([])).toEqual([]);
   });
 });
 
