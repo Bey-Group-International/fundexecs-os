@@ -1606,9 +1606,10 @@ Deployed, monitoring               →  live, observability active
              |  independent live tracks so a mic change cannot restart segmentation;
              |  openCallMedia opens once and returns. Sharing the CLASSIFIER, not the
              |  sequence, is what these two actually have in common.
-             |  Tested: 15 new tests. Seven are behavioural and were run against the
+             |  Tested: 15 new tests. Seven drive components and were run against the
              |  pre-fix code: six fail, the seventh is the control that must pass
-             |  either way. The green room ones drive a stubbed getUserMedia through
+             |  either way. The other eight cover functions that do not exist before
+             |  this change (sameEffect, the busy readiness problems). The green room ones drive a stubbed getUserMedia through
              |  the real component (unplugged device, busy device, busy-then-free);
              |  the processor one drives the real class over a stubbed canvas/video.
              |  enumerateDevices is deferred a turn in those tests on purpose — that
@@ -1652,9 +1653,12 @@ Deployed, monitoring               →  live, observability active
              |  not per meeting. A distributed flood still fills one host's waiting
              |  list. Capping waiting rows per meeting is the fix for that and has its
              |  own failure mode (locking out real guests), so it was not taken here.
-             |  Confidence: typecheck/eslint clean, Jest green. Nine new tests, all
-             |  verified to fail before the fix. Not exercised: a real peer connection
-             |  losing its answer, or a real flood.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest 5657
+             |  green. Thirteen new tests, all run against the pre-fix code: nine
+             |  fail, four are the controls that must pass either way (a limit that
+             |  refuses nobody is not a limit, and one that refuses everybody is a
+             |  different bug). Not exercised: a real peer connection losing its
+             |  answer, or a real flood.
 
 ```
 
