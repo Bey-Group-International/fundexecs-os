@@ -22,6 +22,7 @@ import {
   effectLabel,
   encodeEffect,
   needsSegmentation,
+  sameEffect,
   shouldSuspendEffect,
   suspensionMessage,
   templateById,
@@ -558,5 +559,30 @@ describe("effectLabel", () => {
 
   it("stays readable for a template that has gone", () => {
     expect(effectLabel({ kind: "template", id: "gone" })).toBe("Background");
+  });
+});
+
+describe("sameEffect", () => {
+  // The reason this exists: a pick made while the segmenter is downloading has
+  // to be compared against the one the build was started for, and every pick
+  // builds a fresh object.
+  it("compares by value, not by identity", () => {
+    expect(sameEffect({ kind: "blur", strength: "heavy" }, { kind: "blur", strength: "heavy" })).toBe(true);
+    expect(sameEffect({ kind: "template", id: "neural" }, { kind: "template", id: "neural" })).toBe(true);
+    expect(sameEffect({ kind: "custom", id: "a" }, { kind: "custom", id: "a" })).toBe(true);
+    expect(sameEffect(NO_BACKGROUND, { kind: "none" })).toBe(true);
+  });
+
+  it("separates two strengths of the same effect", () => {
+    expect(sameEffect({ kind: "blur", strength: "light" }, { kind: "blur", strength: "heavy" })).toBe(false);
+  });
+
+  it("separates two backgrounds of the same kind", () => {
+    expect(sameEffect({ kind: "template", id: "neural" }, { kind: "template", id: "terminal" })).toBe(false);
+    expect(sameEffect({ kind: "custom", id: "a" }, { kind: "custom", id: "b" })).toBe(false);
+  });
+
+  it("separates different kinds that share an id", () => {
+    expect(sameEffect({ kind: "template", id: "x" }, { kind: "custom", id: "x" })).toBe(false);
   });
 });

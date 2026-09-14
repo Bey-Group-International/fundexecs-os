@@ -1556,6 +1556,170 @@ Deployed, monitoring               →  live, observability active
              |  model (selfie_multiclass_256x256 has an accessories class) — offered
              |  and not chosen, deliberately, as the heavier option.
 
+2026-09-14  |  Live meetings: join, backgrounds, camera and mic  |  Six defects
+             |  found by inspecting the join path, the background pipeline and the
+             |  device handling end to end. No new feature; all six were already
+             |  reachable.
+             |  1. A remembered camera or microphone that has since been unplugged
+             |  left the GREEN ROOM with no preview and no meter. The recovery is to
+             |  forget the id and re-open against the system default, but the
+             |  setCamId("")/setMicId("") that forgets it happens DURING the first
+             |  combined open, while the per-device effects are still standing down
+             |  behind a `primedRef`. A ref does not re-render, so nothing ran them
+             |  again: "No camera found" with a working camera plugged in. Primed is
+             |  now state.
+             |  2. A device another application was holding was reported as a device
+             |  that is not there. Those have different fixes and only one of them
+             |  involves going to look for hardware. The green room now classifies
+             |  through media-acquisition's classifyMediaError — the same one the call
+             |  uses, rather than a second list of DOMException names that had drifted
+             |  from it — and readinessProblems gained camera_busy/mic_busy.
+             |  3. The green room did not retry a busy device; the call has for a
+             |  while. The commonest cause is the page that was just here not having
+             |  finished releasing the camera (a reload, a bounce through the invite
+             |  link). One retry at RETRY_SAME_DEVICE_MS, only for the failures that
+             |  are about timing.
+             |  4. A background chosen while the 12MB segmenter was still downloading
+             |  was silently dropped: the second call returns early behind the
+             |  build guard, and the build applied the effect it was STARTED for. The
+             |  picker said "Terminal" while the room saw the blur chosen first. The
+             |  build now applies bgEffectRef.current — sameEffect() in backgrounds.ts
+             |  is the value comparison that needs (every pick is a fresh object).
+             |  5. BackgroundProcessor kept segmenting a stopped camera. A stopped
+             |  track leaves the hidden <video> holding its last frame with a
+             |  readyState that still says it has data, so the loop runs at 24fps over
+             |  one still picture, on the GPU, indefinitely. This happens on EVERY
+             |  join — the green room's preview processor outlives by a few hundred ms
+             |  the tracks the room stops when it takes over — and again on an
+             |  unplugged webcam. The processor now watches its source for `ended`.
+             |  6. The same loop also ran through a screen share, where the composited
+             |  canvas reaches neither the peers nor the local tile. setPaused now
+             |  follows `!camOn || shareOn`.
+             |  Hardening alongside: BackgroundProcessor.create() is wrapped, because
+             |  a throw (rather than a null) left processorBuildingRef set and blocked
+             |  every future build for the rest of the call; and the fire-and-forget
+             |  applyBackground at join now catches, because the camera is disabled
+             |  waiting for it and a floating rejection is a member whose controls say
+             |  their camera is on while every tile shows nothing.
+             |  Decision: the green room keeps its own acquisition rather than being
+             |  folded into openCallMedia. It maintains camera and microphone as
+             |  independent live tracks so a mic change cannot restart segmentation;
+             |  openCallMedia opens once and returns. Sharing the CLASSIFIER, not the
+             |  sequence, is what these two actually have in common.
+             |  Tested: 15 new tests. Seven drive components and were run against the
+             |  pre-fix code: six fail, the seventh is the control that must pass
+             |  either way. The other eight cover functions that do not exist before
+             |  this change (sameEffect, the busy readiness problems). The green room ones drive a stubbed getUserMedia through
+             |  the real component (unplugged device, busy device, busy-then-free);
+             |  the processor one drives the real class over a stubbed canvas/video.
+             |  enumerateDevices is deferred a turn in those tests on purpose — that
+             |  is what lets React render between the forget and the prime, which is
+             |  the ordering a real browser produces and the one defect 1 needs.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5644 green (+15). Not exercised: a real camera, a real screen share,
+             |  or two browsers in one room.
+
+2026-09-14  |  Live meetings: recovery and the public waiting-room endpoints  |
+             |  Second inspection pass, over the WebRTC connection layer and the
+             |  admission server side (chosen by the user after the client-media
+             |  pass above).
+             |  1. An unanswered offer made a peer UNRECOVERABLE. renegotiate()
+             |  re-checked `signalingState !== "stable"` after createOffer and bailed,
+             |  but a connection whose offer was never answered — a frozen tab, a
+             |  network that went away mid-handshake — sits in `have-local-offer` for
+             |  good. That is exactly the connection recoverPeer() is trying to
+             |  rescue, so every rescue bailed before sending anything while still
+             |  spending one of its five attempts: five silent no-ops, then
+             |  "Connection lost" permanently, and a page reload the only way back —
+             |  the failure the recovery path was written to prevent. canSetLocalOffer
+             |  in connection.ts now allows `stable` and `have-local-offer`, which is
+             |  what setLocalDescription(offer) is defined for.
+             |  2. forgetPeerState did not clear connChangedAtRef, so it grew for the
+             |  length of a call across join/leave cycles.
+             |  3. The public waiting-room endpoints had no rate limit, while
+             |  ice-servers next to them has had one for a while. POST knock is the
+             |  one with teeth: unauthenticated, reachable by anyone ever forwarded an
+             |  invite link, and it INSERTS a row under a guest_key the caller
+             |  chooses — so nothing in the row collapses a flood. Unbounded, it is an
+             |  unbounded waiting list in a panel a host is reading during a live
+             |  meeting, and an unbounded table behind it. Now 60 per 10 minutes per
+             |  address, checked BEFORE any database work; the poll separately at 600
+             |  per minute (a waiting guest generates ~26 in their first minute, or ~4
+             |  with the Realtime push); the public room lookup at 60 per minute.
+             |  Decision: keyed on clientIp() like every other limit here, and knock
+             |  and poll get separate buckets — sharing one would mean a guest who
+             |  polls for two minutes cannot re-knock when the server tells them to.
+             |  Residual, stated rather than fixed: this bounds a flood per address,
+             |  not per meeting. A distributed flood still fills one host's waiting
+             |  list. Capping waiting rows per meeting is the fix for that and has its
+             |  own failure mode (locking out real guests), so it was not taken here.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest 5657
+             |  green. Thirteen new tests, all run against the pre-fix code: nine
+             |  fail, four are the controls that must pass either way (a limit that
+             |  refuses nobody is not a limit, and one that refuses everybody is a
+             |  different bug). Not exercised: a real peer connection losing its
+             |  answer, or a real flood.
+
+2026-09-14  |  Guest connections  |  Third pass, on what it costs an invite-link
+             |  guest to get connected (asked for by the user). Guests are the
+             |  participants most likely to be behind the NAT that needs a relay, so
+             |  everything here is either a path they take that nobody else does, or
+             |  a cost they pay twice.
+             |  1. A deployment that sets TURN_URLS to its relay and nothing else —
+             |  which is nearly all of them, because the relay was the thing that was
+             |  missing — handed browsers NO stun: entry. A browser with no STUN
+             |  server never learns its own public address, so it offers host and
+             |  relay candidates and nothing in between: two guests on ordinary home
+             |  networks, who would have hole-punched a direct path given a reflexive
+             |  candidate, relay every frame instead. An extra hop of latency, paid
+             |  for on the operator's own bandwidth. The relay IS a STUN server —
+             |  coturn answers a binding request on the same host and port — so
+             |  buildIceServers now derives stun: from plain turn: URLs when nothing
+             |  else answers that question. Only turn: over its default transport:
+             |  turns: and ?transport=tcp yield no UDP reflexive candidate, so an
+             |  entry for either costs a handshake and returns nothing usable.
+             |  Decision: a configured stun: entry always wins — an operator who named
+             |  one meant it, and it may be a different box.
+             |  2. Peer connections were built on the browser default bundlePolicy. A
+             |  call is two m-sections, and under `balanced` a browser prepares them on
+             |  separate transports until BUNDLE is agreed in the ANSWER — two
+             |  candidate gatherings, two sets of connectivity checks, and behind a
+             |  relay two TURN allocations, per peer. peerConfig() now states
+             |  max-bundle and rtcpMuxPolicy require, so there is one transport from
+             |  the offer onwards. Safe unilaterally: both ends are this code.
+             |  Deliberately NOT added: iceCandidatePoolSize. Pre-gathering only pays
+             |  when a connection exists well before its offer, and here a peer
+             |  connection is created and offered on in the same breath — it would buy
+             |  nothing and open a TURN allocation per pooled candidate to buy it.
+             |  3. The ICE fetch and the signalling WebSocket took turns. enterRoom
+             |  awaited the config, THEN opened the socket — two independent round
+             |  trips, serialized, at the worst moment for a guest who has just been
+             |  let in. Now both start together and the deadline moves to the two
+             |  places it actually falls: nothing is announced until the config lands,
+             |  and handleSignal awaits the same promise before acting on anything, so
+             |  no connection is ever built on the STUN-only fallback. Awaiting one
+             |  shared promise releases waiters in queue order, so messages keep theirs.
+             |  4. That made an unbounded fetch dangerous, so it is bounded. A request
+             |  that is never answered is never rejected either — a captive portal or a
+             |  black-holing proxy leaves it pending for the life of the tab — and
+             |  signalling now waits on it. 4s per attempt, two attempts: a stalled
+             |  endpoint degrades to STUN-only and says so, instead of a member who is
+             |  nominally in the meeting and never receives a message.
+             |  5. Two round trips a guest was paying for nothing: joinMeeting asked
+             |  auth.getUser() twice (same answer both times), and read live_meetings
+             |  under RLS before falling back to the public endpoint — a read that for
+             |  a guest either returns nothing or returns exactly what the public
+             |  endpoint returns. The host-detection effect did the same on every page
+             |  load, competing for the connection with the public lookup and the
+             |  camera. Both now skip when there is no signed-in user. Cost, stated:
+             |  a signed-in host makes two calls in sequence rather than together, for
+             |  a button label, on the one participant who is not struggling to connect.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest 5668
+             |  green (+11). Not exercised: a real relay, a real NAT, or a browser
+             |  actually gathering candidates — every claim here about what a browser
+             |  does with these settings is from the specs and from coturn's
+             |  behaviour, not from a packet capture.
+
 ```
 
 ---

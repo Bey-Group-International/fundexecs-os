@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient, hasSupabaseServiceEnv } from "@/lib/supabase/server";
+import { checkRateLimit, clientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// A room code is 8 characters from a 32-letter alphabet — 40 bits, which is
+// not guessable at any rate a bound like this would be the thing preventing.
+// The reason to bound it anyway is that this endpoint answers "is this code
+// real?" for anyone, without authentication, and an unbounded oracle is worth
+// closing whether or not the search space makes it worth using. A person opens
+// an invite link a handful of times.
+const LOOKUP_LIMIT = 60;
+const LOOKUP_WINDOW_MS = 60_000;
 
 /**
  * Minimal public lookup of a meeting by its room code, so an invitee who does
@@ -19,9 +29,17 @@ export const dynamic = "force-dynamic";
  * commitment anybody should be reading a date off.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ roomCode: string }> },
 ) {
+  const limit = checkRateLimit({ key: `room-lookup:${clientIp(req)}`, limit: LOOKUP_LIMIT, windowMs: LOOKUP_WINDOW_MS });
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: rateLimitHeaders(limit, LOOKUP_LIMIT) },
+    );
+  }
+
   const { roomCode } = await params;
   const code = roomCode?.trim();
   if (!code) return NextResponse.json({ error: "Missing room code" }, { status: 400 });

@@ -174,19 +174,68 @@ export function mintTurnCredential(input: {
 }
 
 /**
+ * STUN addresses for a set of TURN URLs, for when none was configured.
+ *
+ * Almost every deployment sets TURN_URLS to its relay and stops there, because
+ * the relay is the thing that was missing. The cost of that lands on exactly
+ * the people TURN was added for.
+ *
+ * A browser with no STUN server cannot learn its own public address, so it
+ * offers host candidates and relay candidates and nothing in between. Two
+ * guests on ordinary home networks — who would have connected directly through
+ * a NAT hole-punch, given a reflexive candidate to punch with — instead send
+ * every frame of video up to the relay and back down. That is an extra hop of
+ * latency on a call, and it is the operator's own bandwidth bill, paid for a
+ * path that did not need relaying at all.
+ *
+ * The fix costs nothing, because the relay is already a STUN server: coturn
+ * answers a STUN binding request on the same host and port it serves TURN on.
+ * So a `turn:` URL is also a `stun:` URL, and saying so is enough.
+ *
+ * Only plaintext `turn:` over its default transport is converted:
+ *   - `turns:` is TLS, and a browser gathers no UDP reflexive candidate
+ *     through it — a `stuns:` entry would cost a handshake and return nothing
+ *     usable.
+ *   - `?transport=tcp` is the same story; a STUN URI has no transport
+ *     parameter, and a reflexive address discovered over TCP does not describe
+ *     the UDP path the media will take.
+ */
+export function deriveStunUrls(urls: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const url of urls) {
+    if (!/^turn:/i.test(url)) continue;
+    const [address, query = ""] = url.split("?", 2);
+    if (/transport=tcp/i.test(query)) continue;
+    const stun = `stun:${address.slice("turn:".length)}`;
+    if (seen.has(stun)) continue;
+    seen.add(stun);
+    out.push(stun);
+  }
+  return out;
+}
+
+/**
  * The ICE server list a browser gets.
  *
  * STUN entries carry no credentials — they are a public "what is my address"
  * service and reject requests that try to authenticate. Only turn:/turns:
  * entries get the username and password, which is why they are split here
  * rather than having one blanket entry.
+ *
+ * When nothing in the configuration answers "what is my address", the relay is
+ * asked to — see deriveStunUrls. Without that a guest who could have connected
+ * directly relays instead, on the operator's bandwidth.
  */
 export function buildIceServers(
   urls: readonly string[],
   credential: TurnCredential,
 ): RTCIceServer[] {
-  const stun = urls.filter((u) => /^stuns?:/i.test(u));
+  const configuredStun = urls.filter((u) => /^stuns?:/i.test(u));
   const relay = urls.filter((u) => /^turns?:/i.test(u));
+  // A configured stun: entry wins: an operator who named one meant it, and it
+  // may well be a different box from the relay.
+  const stun = configuredStun.length > 0 ? configuredStun : deriveStunUrls(relay);
   const servers: RTCIceServer[] = [];
   if (stun.length > 0) servers.push({ urls: stun });
   if (relay.length > 0) {

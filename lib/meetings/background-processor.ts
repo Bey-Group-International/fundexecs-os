@@ -99,14 +99,6 @@ function loadSegmenter(): Promise<Segmenter | null> {
   return segmenterPromise;
 }
 
-/** Whether the machine could run effects at all, without committing to one. */
-export async function backgroundsSupported(): Promise<boolean> {
-  if (typeof document === "undefined") return false;
-  const canvas = document.createElement("canvas");
-  if (typeof canvas.captureStream !== "function") return false;
-  return (await loadSegmenter()) !== null;
-}
-
 export interface ProcessorCallbacks {
   /** Sustained slow frames, so the caller can decide to suspend. */
   onSlowFrames: (consecutive: number) => void;
@@ -144,6 +136,10 @@ export class BackgroundProcessor {
   private raf = 0;
   private slowFrames = 0;
   private lastTimestamp = -1;
+  /** The camera this was built on has stopped. Nothing left to composite. */
+  private sourceEnded = false;
+  /** Detaches the `ended` listener on that camera. */
+  private releaseSource: (() => void) | null = null;
 
   private constructor(
     video: HTMLVideoElement,
@@ -211,7 +207,30 @@ export class BackgroundProcessor {
 
     const processor = new BackgroundProcessor(video, canvas, ctx, scratch, scratchCtx, mask, maskCtx, stream, callbacks);
     processor.resizeMask(width, height);
+    processor.watchSource(source);
     return processor;
+  }
+
+  /**
+   * Stop the moment the camera underneath does.
+   *
+   * A stopped track leaves the <video> holding its last frame with a readyState
+   * that still says it has data, so the loop carries on segmenting one still
+   * picture at 24fps — indefinitely, on the GPU, for a picture nobody will ever
+   * see change. That happens on the ordinary path, not an exotic one: the green
+   * room's preview processor outlives by a few hundred milliseconds the tracks
+   * the room stops when it takes over, and a camera unplugged mid-call ends its
+   * track while the effect is still running.
+   *
+   * Stopping rather than reporting: the room already watches the raw camera
+   * track for `ended` and decides what to do about it. This only has to stop
+   * burning frames.
+   */
+  private watchSource(source: MediaStreamTrack): void {
+    if (source.readyState === "ended") { this.sourceEnded = true; return; }
+    const onEnded = () => { this.sourceEnded = true; this.stop(); };
+    source.addEventListener("ended", onEnded);
+    this.releaseSource = () => { try { source.removeEventListener("ended", onEnded); } catch { /* gone */ } };
   }
 
   /** The track to send to peers in place of the camera. */
@@ -258,7 +277,7 @@ export class BackgroundProcessor {
   }
 
   private start(): void {
-    if (this.running) return;
+    if (this.running || this.sourceEnded) return;
     this.running = true;
     this.slowFrames = 0;
 
@@ -495,6 +514,8 @@ export class BackgroundProcessor {
   /** Release the camera tap, the loop and the output track. */
   destroy(): void {
     this.stop();
+    this.releaseSource?.();
+    this.releaseSource = null;
     this.releaseCustomImage();
     try { this.outputTrack.stop(); } catch { /* already stopped */ }
     this.stream.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });

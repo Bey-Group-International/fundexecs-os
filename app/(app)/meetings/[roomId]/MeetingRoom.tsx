@@ -26,6 +26,7 @@ import {
   effectLabel,
   encodeEffect,
   needsSegmentation,
+  sameEffect,
   shouldSuspendEffect,
   suspensionMessage,
   type BackgroundEffect,
@@ -48,6 +49,7 @@ import {
 } from "@/lib/meetings/attendance";
 import {
   DISCONNECT_GRACE_MS,
+  canSetLocalOffer,
   connectionStateFromIce,
   INITIAL_LINK,
   INITIAL_RECOVERY,
@@ -56,6 +58,7 @@ import {
   linkNotice,
   nextRecovery,
   offerCollision,
+  peerConfig,
   peerLinkStatus,
   peerStatusLabel,
   recordAttempt,
@@ -177,12 +180,19 @@ type SignalMsg =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FALLBACK_ICE: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
+const FALLBACK_ICE: RTCConfiguration = peerConfig([
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+]);
+
+/**
+ * How long one attempt at the ICE config may take before it is given up on.
+ *
+ * The signalling path waits on this fetch, and a request that is never answered
+ * is never rejected — so without a deadline a black-holing proxy is a member
+ * sitting in a meeting that never delivers them a single message.
+ */
+const ICE_FETCH_TIMEOUT_MS = 4000;
 
 // How long a connected peer is given to start delivering video before the
 // connection is described in the console. Long enough that a normal call never
@@ -1123,6 +1133,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const isHostRef = useRef(false);
 
   const iceConfigRef = useRef<RTCConfiguration>(FALLBACK_ICE);
+  /** Resolves once iceConfigRef holds this deployment's real servers. */
+  const iceReadyRef = useRef<Promise<void> | null>(null);
   /** Pending "is video actually arriving?" checks, one per peer. */
   const inboundAuditRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   /** Peers with a camera re-attach already in flight, so two never race. */
@@ -1283,9 +1295,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Guards the async build below: two quick picks would otherwise each start a
   // processor, and the loser would keep a camera tap and a render loop alive.
   const processorBuildingRef = useRef(false);
-  // True while a chosen background is still being built and the camera is being
-  // held off the wire for it. See enterRoom.
-  const bgPendingRef = useRef(false);
 
   // UI
   const [copilotOpen, setCopilotOpen] = useState(true);
@@ -1421,7 +1430,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => { callPhaseRef.current = callPhase; }, [callPhase]);
   useEffect(() => { bwModeRef.current = bwMode; }, [bwMode]);
   // Nothing is transmitted while the camera is off, so nothing needs compositing.
-  useEffect(() => { processorRef.current?.setPaused(!camOn); }, [camOn]);
+  // A screen share is the same case wearing a different hat: the composited
+  // canvas goes neither to the peers nor to the local tile while the screen
+  // holds the video sender, so segmenting for it is a warm fan and nothing else.
+  useEffect(() => { processorRef.current?.setPaused(!camOn || shareOn); }, [camOn, shareOn]);
 
   // A call already dropping video to protect audio should not be spending the
   // remaining budget on scenery. The CPU half of this rule is applied from
@@ -1476,6 +1488,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   /** Forget everything held about one peer, without touching the connection. */
   const forgetPeerState = useCallback((peerId: string) => {
     pendingIceRef.current.delete(peerId);
+    connChangedAtRef.current.delete(peerId);
     videoSenderRef.current.delete(peerId);
     audioSenderRef.current.delete(peerId);
     makingOfferRef.current.delete(peerId);
@@ -1691,8 +1704,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       makingOfferRef.current.set(peerId, true);
       const offer = await pc.createOffer(options);
       offer.sdp = withOpusResilience(offer.sdp ?? "");
-      // The state can have moved under us while createOffer was in flight.
-      if (pc.signalingState !== "stable") return;
+      // The state can have moved under us while createOffer was in flight — but
+      // only some states are a reason to stop. See canSetLocalOffer: an offer
+      // that was never answered leaves the connection in `have-local-offer`
+      // permanently, and that is precisely the connection an ICE restart is
+      // trying to rescue.
+      if (!canSetLocalOffer(pc.signalingState)) return;
       await pc.setLocalDescription(offer);
       sendSignalRef.current({ type: "offer", from: myIdRef.current, to: peerId, sdp: offer, displayName: localNameRef.current });
       negotiationArmedRef.current.set(peerId, true);
@@ -1945,6 +1962,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
 
   const handleSignal = useCallback(async (msg: SignalMsg) => {
+    // Before anything is acted on, and uniformly rather than only in the
+    // branches that build a connection: awaiting one shared promise releases
+    // every waiter in the order it was queued, so the messages stay in the
+    // order they arrived. Resolved for all but the first moments of a call —
+    // see enterRoom, which now opens the socket and fetches the ICE config at
+    // the same time instead of one after the other.
+    if (iceReadyRef.current) await iceReadyRef.current;
     const myId = myIdRef.current;
 
     if (msg.type === "join" && msg.from !== myId) {
@@ -2188,12 +2212,23 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   useEffect(() => {
     async function detectHost() {
-      const [{ data: { user } }, { data: meeting }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from("live_meetings").select("host_id").eq("room_code", roomCode).maybeSingle(),
-      ]);
+      // The user first, and the row only if there is one. Nobody signed out
+      // hosts a meeting, so for an invite-link guest this query could never
+      // return anything they could use — and it was issued on every load
+      // regardless, competing for the connection with the public lookup and the
+      // camera the green room is opening at the same moment. On a phone, on
+      // someone else's network, that is the worst place to spend a round trip.
+      //
+      // The cost is that a signed-in host now makes these two calls in sequence
+      // rather than together. That is a label on a button ("Start meeting"
+      // rather than "Join meeting") on the one participant who is not the one
+      // struggling to connect.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: meeting } = await supabase
+        .from("live_meetings").select("host_id").eq("room_code", roomCode).maybeSingle();
       const m = meeting as { host_id: string } | null;
-      if (user && m && user.id === m.host_id) {
+      if (m && user.id === m.host_id) {
         setIsHost(true);
         isHostRef.current = true;
       }
@@ -2341,16 +2376,37 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // the channel below announces us immediately — so peers offer, tracks are
       // added, and the raw camera goes out for however long the build takes. For
       // someone who chose to hide the room they are sitting in, that is the one
-      // failure this feature exists to prevent. Re-enabled by swapOutgoingVideo
-      // the moment the processed track replaces this one.
-      bgPendingRef.current = true;
+      // failure this feature exists to prevent.
+      //
+      // The hold is the disabled track itself and nothing else: every path out
+      // of here goes through swapOutgoingVideo, which sets `enabled` from
+      // camOnRef as it puts a track on the wire — the processed track when the
+      // effect lands, the raw camera when it is abandoned. (A flag that tracked
+      // this separately was only ever written, never read.)
       stream.getVideoTracks().forEach((t) => { t.enabled = false; });
-      void applyBackgroundRef.current(wanted);
+      // Caught rather than left to float: the camera is disabled above and it is
+      // this call that re-enables it, so a rejection nobody handles is a member
+      // sitting in a meeting whose own controls say their camera is on while
+      // every other tile shows nothing.
+      void applyBackgroundRef.current(wanted).catch((err) => {
+        console.warn("[meeting] background could not be applied", err);
+        abandonBackgroundRef.current("Your background couldn't be applied — your camera is off so your room stays private. Turn it on when you're ready.");
+      });
     }
 
-    // Peers are only ever created in response to signaling, so this is the
-    // deadline: every RTCPeerConnection built from here on sees the real config.
-    await icePromise;
+    // Peers are only ever created in response to signaling, so the ICE config
+    // has to be real before any of it is acted on. That used to be enforced by
+    // waiting here — which also made two independent round trips take turns: the
+    // config fetch, and then a WebSocket handshake that had nothing to do with
+    // it. A guest pays for both at the worst moment, having already waited for a
+    // host to let them in.
+    //
+    // So the socket is opened now and the deadline is moved to the two places it
+    // actually falls: nothing is ANNOUNCED until the config has landed (nobody
+    // offers to us before we have said hello), and handleSignal waits on the
+    // same promise before acting on anything (so a peer who was already in the
+    // room and offers first cannot build a connection on the fallback either).
+    iceReadyRef.current = icePromise;
 
     const channel = supabase.channel(`meeting:${roomCode}`, { config: { broadcast: { self: false } } });
     channelRef.current = channel;
@@ -2360,9 +2416,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         // fires for CHANNEL_ERROR / TIMED_OUT / CLOSED and again on reconnect.
         if (status !== "SUBSCRIBED" || announcedRef.current) return;
         announcedRef.current = true;
-        sendSignal({ type: "join", from: myIdRef.current, displayName: name });
-        sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
-        announceVideoStateRef.current();
+        void icePromise.then(() => {
+          sendSignal({ type: "join", from: myIdRef.current, displayName: name });
+          sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
+          announceVideoStateRef.current();
+        });
       });
 
     clearWaitingTimers();
@@ -2384,6 +2442,15 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * A failure here is not cosmetic: on a network that needs a relay it is the
    * difference between a working call and a black square. So it retries once,
    * and says so in the console either way rather than failing silently.
+   *
+   * Every attempt is bounded, which matters more than it used to. A `fetch`
+   * that is never answered is never rejected either — a captive portal or a
+   * proxy that black-holes the request leaves it pending for as long as the tab
+   * is open — and this promise is what the signalling path waits on. Unbounded,
+   * one silent request would mean a member who is nominally in the meeting and
+   * never hears a word of it. A deadline turns that into the failure it should
+   * always have been: STUN only, said out loud, and a call that at least
+   * connects for everyone who does not need a relay.
    */
   const loadIceServers = useCallback(async () => {
     const query = new URLSearchParams({ roomCode });
@@ -2391,14 +2458,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (key) query.set("guestKey", key);
 
     for (let attempt = 0; attempt < 2; attempt++) {
+      // Long enough for a slow mobile connection to answer a request to our own
+      // origin, short enough that nobody sits through it twice and wonders.
+      const abort = new AbortController();
+      const deadline = setTimeout(() => abort.abort(), ICE_FETCH_TIMEOUT_MS);
       try {
-        const r = await fetch(`/api/meetings/ice-servers?${query}`, { cache: "no-store" });
+        const r = await fetch(`/api/meetings/ice-servers?${query}`, { cache: "no-store", signal: abort.signal });
         if (r.ok) {
           const { iceServers, relay, reason } = await r.json() as {
             iceServers?: RTCIceServer[]; relay?: boolean; reason?: string;
           };
           if (Array.isArray(iceServers) && iceServers.length > 0) {
-            iceConfigRef.current = { iceServers };
+            iceConfigRef.current = peerConfig(iceServers);
             relayAvailableRef.current = relay === true;
             if (relay !== true) {
               // Worth a line even though the call may still work: it explains
@@ -2424,6 +2495,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         }
       } catch (err) {
         if (attempt === 1) console.warn("[meeting] ice-servers unreachable — falling back to STUN only", err);
+      } finally {
+        clearTimeout(deadline);
       }
     }
   }, [roomCode]);
@@ -2473,13 +2546,24 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // and other orgs cannot), so a successful RLS read == "teammate". Teammates
     // skip the waiting room and enter directly, just like the host.
     let isOrgMember = false;
+    // Resolved once and carried: this used to be asked for twice, and the
+    // second answer was always the first one.
+    let me: { id: string } | null = null;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: existing } = await supabase
-        .from("live_meetings")
-        .select("id, status, host_id, title, organization_id")
-        .eq("room_code", roomCode)
-        .maybeSingle();
+      me = user ? { id: user.id } : null;
+      // Only a signed-in caller can learn anything here. A guest's read either
+      // returns nothing (an org-scoped meeting) or returns exactly what the
+      // public endpoint below returns anyway (an org-less one) — so for them it
+      // was a round trip that changed no outcome, spent between being admitted
+      // and being in the room.
+      const { data: existing } = user
+        ? await supabase
+          .from("live_meetings")
+          .select("id, status, host_id, title, organization_id")
+          .eq("room_code", roomCode)
+          .maybeSingle()
+        : { data: null };
       const ex = existing as { id: string; status: string; host_id: string; title: string | null; organization_id: string | null } | null;
       if (ex) {
         mId = ex.id;
@@ -2512,10 +2596,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     } catch { /* proceed */ }
 
     setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
-    try {
-      const { data: { user: me } } = await supabase.auth.getUser();
-      localUserIdRef.current = me?.id ?? null;
-    } catch { localUserIdRef.current = null; }
+    localUserIdRef.current = me?.id ?? null;
 
     // The host and org teammates enter immediately; only external guests wait.
     if (hostFlag || isOrgMember) {
@@ -3107,7 +3188,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    * they can act on immediately.
    */
   const abandonBackground = useCallback((message: string) => {
-    bgPendingRef.current = false;
     bgEffectRef.current = NO_BACKGROUND;
     setBgEffect(NO_BACKGROUND);
     // Set before the swap: swapOutgoingVideo takes the camera's intended state
@@ -3157,21 +3237,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!processorRef.current) {
       if (processorBuildingRef.current) return;
       processorBuildingRef.current = true;
-      const processor = await BackgroundProcessor.create(raw, {
-        onSlowFrames: (consecutive) => {
-          if (bgSuspendedRef.current) return;
-          const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
-          if (!decision.suspend || !decision.reason) return;
-          bgSuspendedRef.current = true;
-          setBgNotice(suspensionMessage(decision.reason));
-          void applyBackgroundRef.current(NO_BACKGROUND);
-        },
-        onUnavailable: () => {
-          setBgUnavailable(true);
-          abandonBackgroundRef.current("Background effects couldn't load — your camera is off so your room stays private. Turn it on when you're ready.");
-        },
-      });
-      processorBuildingRef.current = false;
+      // The flag is cleared in a finally and the throw is swallowed for the
+      // same reason: this guard blocks every future build while it is set, so a
+      // canvas or a WASM loader that throws rather than returning null would
+      // cost the member their background for the rest of the call — and leave
+      // the camera held off the wire by enterRoom with nothing coming to
+      // release it. A failure to build is a failure to build, however it is
+      // reported.
+      let processor: BackgroundProcessor | null = null;
+      try {
+        processor = await BackgroundProcessor.create(raw, {
+          onSlowFrames: (consecutive) => {
+            if (bgSuspendedRef.current) return;
+            const decision = shouldSuspendEffect({ bwMode: bwModeRef.current, consecutiveSlowFrames: consecutive });
+            if (!decision.suspend || !decision.reason) return;
+            bgSuspendedRef.current = true;
+            setBgNotice(suspensionMessage(decision.reason));
+            void applyBackgroundRef.current(NO_BACKGROUND);
+          },
+          onUnavailable: () => {
+            setBgUnavailable(true);
+            abandonBackgroundRef.current("Background effects couldn't load — your camera is off so your room stays private. Turn it on when you're ready.");
+          },
+        });
+      } catch (err) {
+        console.warn("[meeting] background processor failed to build", err);
+      } finally {
+        processorBuildingRef.current = false;
+      }
       if (!processor) {
         setBgUnavailable(true);
         abandonBackground("Background effects aren't available here — your camera is off so your room stays private. Turn it on when you're ready.");
@@ -3183,10 +3276,18 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       processorRef.current = processor;
     }
 
-    // A custom pick carries its blob; a remembered one has to be looked up.
-    let blob = image ?? null;
-    if (effect.kind === "custom" && !blob) {
-      const stored = await getBackground(effect.id);
+    // What is wanted NOW, not what this call was asked for. A pick made while
+    // the segmenter was downloading returns early at the guard above — there is
+    // a build already in flight and a second one would strand a camera tap — so
+    // this call is the only one left that can honour it. Reading the argument
+    // instead is how somebody ends up looking at "Terminal" in the picker while
+    // the room sees the blur they chose first.
+    const wanted = bgEffectRef.current;
+    // The blob belongs to the effect it arrived with; a different choice has to
+    // be looked up like any remembered one.
+    let blob = sameEffect(wanted, effect) ? (image ?? null) : null;
+    if (wanted.kind === "custom" && !blob) {
+      const stored = await getBackground(wanted.id);
       if (!stored) {
         // Remembered on this account but stored in another browser. Same rule:
         // a background they cannot have does not become the room they are in.
@@ -3195,12 +3296,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
       blob = stored.blob;
     }
+    // One more look: the store read above is another await, and a processor
+    // torn down under it must not be spoken to.
+    if (!processorRef.current || !needsSegmentation(bgEffectRef.current)) return;
 
-    processorRef.current.setEffect(effect, blob);
+    processorRef.current.setEffect(wanted, blob);
     cameraTrackRef.current = processorRef.current.track;
-    // The processed track is what goes out now, so the hold from enterRoom can
-    // be released — swapOutgoingVideo re-enables video as it makes the swap.
-    bgPendingRef.current = false;
+    // The processed track is what goes out now, so the hold enterRoom put on the
+    // camera lifts here: swapOutgoingVideo re-enables video as it makes the swap.
     if (!shareOn) swapOutgoingVideo(processorRef.current.track, false);
   }, [shareOn, swapOutgoingVideo, abandonBackground]);
 

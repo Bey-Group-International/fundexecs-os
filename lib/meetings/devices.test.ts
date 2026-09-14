@@ -213,6 +213,34 @@ describe("readinessProblems", () => {
     const kinds = readinessProblems({ ...ok, micDenied: true, cameraDenied: true }).map((p) => p.kind);
     expect(kinds).toEqual(["mic_blocked", "camera_blocked"]);
   });
+
+  // "No camera found" sends someone looking for hardware that is plugged in,
+  // working, and held by the Zoom window behind this one. The instruction that
+  // fixes it is a different instruction.
+  it("says a camera is taken rather than absent", () => {
+    const [p] = readinessProblems({ ...ok, cameras: 0, cameraBusy: true });
+    expect(p.kind).toBe("camera_busy");
+    expect(p.message).toMatch(/Another app/);
+  });
+
+  it("says a microphone is taken rather than absent", () => {
+    const [p] = readinessProblems({ ...ok, mics: 0, micBusy: true });
+    expect(p.kind).toBe("mic_busy");
+    expect(p.message).toMatch(/Another app/);
+  });
+
+  // Blocked is the stronger fact: no other application can be reached from the
+  // address bar, and that is the only thing that will help.
+  it("prefers blocked over busy when both are reported", () => {
+    const kinds = readinessProblems({
+      ...ok, micDenied: true, micBusy: true, cameraDenied: true, cameraBusy: true,
+    }).map((p) => p.kind);
+    expect(kinds).toEqual(["mic_blocked", "camera_blocked"]);
+  });
+
+  it("stays quiet about a busy camera that was switched off deliberately", () => {
+    expect(readinessProblems({ ...ok, cameraEnabled: false, cameras: 0, cameraBusy: true })).toEqual([]);
+  });
 });
 
 describe("canJoin", () => {

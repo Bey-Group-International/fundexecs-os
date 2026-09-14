@@ -14,6 +14,11 @@ import {
   type Device,
   type DeviceKind,
 } from "@/lib/meetings/devices";
+import {
+  RETRY_SAME_DEVICE_MS,
+  canRetrySameDevice,
+  classifyMediaError,
+} from "@/lib/meetings/media-acquisition";
 import { MeetingShareLink } from "../MeetingShareLink";
 import {
   BACKGROUND_PREF_KEY,
@@ -73,6 +78,27 @@ function toDevices(list: MediaDeviceInfo[]): Device[] {
 // microphone is dead. Long enough to cover "hasn't spoken yet"; short enough
 // that a genuinely muted input is caught before the call starts.
 const MIC_SETTLE_MS = 3000;
+
+/**
+ * getUserMedia, with one more go at a device that is merely busy.
+ *
+ * The green room is usually the FIRST thing to ask for the camera, and the
+ * commonest reason it is already taken is the page that was just here — a
+ * reload, a bounce through the invite link, a back-and-forward. Releasing a
+ * camera is asynchronous on Windows, so the reopen lands a few milliseconds
+ * early and loses a race it would have won on a second attempt. The call itself
+ * has retried this for a while (see media-acquisition.ts); the screen that
+ * decides whether someone HAS a camera did not, which is the wrong way round.
+ */
+async function openWithRetry(constraints: MediaStreamConstraints): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (err) {
+    if (!canRetrySameDevice(classifyMediaError(err))) throw err;
+    await new Promise((resolve) => setTimeout(resolve, RETRY_SAME_DEVICE_MS));
+    return navigator.mediaDevices.getUserMedia(constraints);
+  }
+}
 
 /** Segmented mic meter — the thing that answers "can they actually hear me?". */
 function MicMeter({ level, active, bars = 12 }: { level: number; active: boolean; bars?: number }) {
@@ -248,6 +274,12 @@ export function MeetingGreenRoom({
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraDenied, setCameraDenied] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
+  // "Something else has it" is a different fault from "there isn't one", and
+  // the instruction that follows from it is different too. Reported separately
+  // because a member told to go and find a camera they are looking at will
+  // simply join without one.
+  const [cameraBusy, setCameraBusy] = useState(false);
+  const [micBusy, setMicBusy] = useState(false);
   // Camera and microphone are held as separate tracks, not as one stream.
   // They used to share a single getUserMedia call that re-ran on every change,
   // so picking a different microphone closed and reopened the camera: the
@@ -275,7 +307,17 @@ export function MeetingGreenRoom({
   // Set once the first combined open has settled. Until then the per-device
   // effects stand down, so the two of them cannot race the one that holds the
   // permission prompt.
-  const primedRef = useRef(false);
+  //
+  // State rather than a ref, and the difference is a bug: the first open can
+  // CHANGE these effects' inputs while they are still standing down. A
+  // remembered camera that has since been unplugged fails overconstrained, and
+  // the recovery is to forget the id and re-open against the system default —
+  // but the setCamId("") that forgets it happens during the first open, so the
+  // camera effect ran once, saw an unprimed room, and returned. A ref does not
+  // re-render, so nothing ever ran it again: the member sat looking at "No
+  // camera found" with a working camera plugged in, and at "No microphone
+  // found" with a working microphone. Flipping state re-runs them both.
+  const [primed, setPrimed] = useState(false);
   const micPeakRef = useRef(0);
   // Set the moment someone picks a background here, so the restoration below
   // knows it has been overtaken. Reading a custom image out of IndexedDB is an
@@ -366,24 +408,36 @@ export function MeetingGreenRoom({
 
   /** What a failed open means, translated into the flags the UI reads. */
   const handleOpenFailure = useCallback((kind: "videoinput" | "audioinput", err: unknown) => {
-    const name = err instanceof Error ? err.name : "";
-    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-      if (kind === "videoinput") setCameraDenied(true); else setMicDenied(true);
+    // The same classifier the call itself uses, rather than a second reading of
+    // DOMException names that drifted from it — the legacy spellings are still
+    // in the wild and only one of these two lists had them.
+    const failure = classifyMediaError(err);
+    if (failure === "denied") {
+      if (kind === "videoinput") { setCameraDenied(true); setCameraBusy(false); }
+      else { setMicDenied(true); setMicBusy(false); }
       return;
     }
-    if (name === "OverconstrainedError" || name === "NotFoundError") {
+    if (failure === "overconstrained" || failure === "missing") {
       // A remembered device that has since been unplugged. Forget it; the
       // effect re-runs against the system default rather than leaving the
       // member staring at a black square.
-      if (kind === "videoinput") { if (camIdRef.current) { setCamId(""); return; } adoptVideo(null); return; }
+      if (kind === "videoinput") {
+        setCameraBusy(false);
+        if (camIdRef.current) { setCamId(""); return; }
+        adoptVideo(null);
+        return;
+      }
+      setMicBusy(false);
       if (micIdRef.current) { setMicId(""); return; }
       adoptAudio(null);
       return;
     }
-    // NotReadableError and friends: the device exists but something else has
-    // it. Nothing to fall back to, so leave the flags alone and show nothing
-    // rather than a wrong diagnosis.
-    if (kind === "videoinput") adoptVideo(null); else adoptAudio(null);
+    // NotReadableError and friends: the device exists and something else has
+    // it. There is nothing to fall back to — the permission is fine and so is
+    // the hardware — so say which of the two it is, because "no camera found"
+    // sends somebody looking for a camera that is plugged in and working.
+    if (kind === "videoinput") { setCameraBusy(failure === "in_use"); adoptVideo(null); }
+    else { setMicBusy(failure === "in_use"); adoptAudio(null); }
   }, [adoptVideo, adoptAudio]);
 
   // First open: one getUserMedia for both, because asking separately puts two
@@ -396,7 +450,7 @@ export function MeetingGreenRoom({
       const cam = camIdRef.current;
       const mic = micIdRef.current;
       try {
-        const s = await navigator.mediaDevices.getUserMedia({
+        const s = await openWithRetry({
           video: wantVideo ? constraintsFor("videoinput", cam || null) : false,
           audio: constraintsFor("audioinput", mic || null),
         });
@@ -412,6 +466,8 @@ export function MeetingGreenRoom({
         openedMicRef.current = mic || a?.getSettings().deviceId || null;
         setCameraDenied(false);
         setMicDenied(false);
+        setCameraBusy(false);
+        setMicBusy(false);
 
         // Labels only arrive once permission is granted, so the pickers stay
         // anonymous until this point. Re-enumerating here is what fills them in.
@@ -436,25 +492,27 @@ export function MeetingGreenRoom({
         // the member arrived in the green room with no preview AND no meter,
         // and no way to tell which device was the problem. Retry them apart.
         try {
-          const audioOnly = await navigator.mediaDevices.getUserMedia({
+          const audioOnly = await openWithRetry({
             audio: constraintsFor("audioinput", mic || null),
           });
           if (cancelled) { audioOnly.getTracks().forEach((t) => t.stop()); return; }
           adoptAudio(audioOnly.getAudioTracks()[0] ?? null);
           openedMicRef.current = mic || audioOnly.getAudioTracks()[0]?.getSettings().deviceId || null;
           setMicDenied(false);
+          setMicBusy(false);
         } catch (audioErr) {
           if (!cancelled) handleOpenFailure("audioinput", audioErr);
         }
         if (cancelled || !wantVideo) { await refreshDevices(); return; }
         try {
-          const videoOnly = await navigator.mediaDevices.getUserMedia({
+          const videoOnly = await openWithRetry({
             video: constraintsFor("videoinput", cam || null),
           });
           if (cancelled) { videoOnly.getTracks().forEach((t) => t.stop()); return; }
           adoptVideo(videoOnly.getVideoTracks()[0] ?? null);
           openedCamRef.current = cam || videoOnly.getVideoTracks()[0]?.getSettings().deviceId || null;
           setCameraDenied(false);
+          setCameraBusy(false);
         } catch (videoErr) {
           if (!cancelled) handleOpenFailure("videoinput", videoErr);
         }
@@ -462,7 +520,7 @@ export function MeetingGreenRoom({
       }
     }
 
-    void openBoth().finally(() => { primedRef.current = true; });
+    void openBoth().finally(() => { setPrimed(true); });
     return () => { cancelled = true; };
     // Mount only: the effects below maintain each device from here on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,7 +528,7 @@ export function MeetingGreenRoom({
 
   // The camera, and only the camera.
   useEffect(() => {
-    if (!primedRef.current) return;
+    if (!primed) return;
     if (!cameraEnabled) {
       // Off means closed, not disabled: the hardware light staying dark is the
       // whole point of the toggle.
@@ -484,7 +542,7 @@ export function MeetingGreenRoom({
     let cancelled = false;
     void (async () => {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({
+        const s = await openWithRetry({
           video: constraintsFor("videoinput", camId || null),
           audio: false,
         });
@@ -492,24 +550,25 @@ export function MeetingGreenRoom({
         adoptVideo(s.getVideoTracks()[0] ?? null);
         openedCamRef.current = camId || s.getVideoTracks()[0]?.getSettings().deviceId || null;
         setCameraDenied(false);
+        setCameraBusy(false);
         await refreshDevices();
       } catch (err) {
         if (!cancelled) handleOpenFailure("videoinput", err);
       }
     })();
     return () => { cancelled = true; };
-  }, [camId, cameraEnabled, cameraDenied, adoptVideo, refreshDevices, handleOpenFailure]);
+  }, [primed, camId, cameraEnabled, cameraDenied, adoptVideo, refreshDevices, handleOpenFailure]);
 
   // The microphone, and only the microphone.
   useEffect(() => {
-    if (!primedRef.current) return;
+    if (!primed) return;
     if (micDenied) { adoptAudio(null); openedMicRef.current = null; return; }
     if (audioTrackRef.current && openedMicRef.current === (micId || null)) return;
 
     let cancelled = false;
     void (async () => {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({
+        const s = await openWithRetry({
           audio: constraintsFor("audioinput", micId || null),
           video: false,
         });
@@ -517,13 +576,14 @@ export function MeetingGreenRoom({
         adoptAudio(s.getAudioTracks()[0] ?? null);
         openedMicRef.current = micId || s.getAudioTracks()[0]?.getSettings().deviceId || null;
         setMicDenied(false);
+        setMicBusy(false);
         await refreshDevices();
       } catch (err) {
         if (!cancelled) handleOpenFailure("audioinput", err);
       }
     })();
     return () => { cancelled = true; };
-  }, [micId, micDenied, adoptAudio, refreshDevices, handleOpenFailure]);
+  }, [primed, micId, micDenied, adoptAudio, refreshDevices, handleOpenFailure]);
 
   // The stream the room takes over. Rebuilt only when a track actually changes,
   // so the room is not handed a new object every render.
@@ -569,6 +629,11 @@ export function MeetingGreenRoom({
     } catch {
       return;
     }
+    // A context created before the page has had a user gesture starts
+    // suspended, and a suspended analyser reads silence — which is exactly what
+    // the readiness check calls a dead microphone. The room does this already;
+    // the screen that decides whether to warn somebody did not.
+    if (ctx.state === "suspended") void ctx.resume().catch(() => {});
     const source = ctx.createMediaStreamSource(new MediaStream([track]));
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
@@ -622,6 +687,8 @@ export function MeetingGreenRoom({
     micPeak: micSettled ? micPeakRef.current : 1,
     cameraEnabled,
     micEnabled,
+    cameraBusy,
+    micBusy,
   });
   const joinable = canJoinWith({ micDenied, mics: mics.length });
   const listenOnly = joinable && micDenied;

@@ -29,6 +29,49 @@ const PER_PEER_FLOOR_KBPS = 150;
 
 export type BandwidthMode = "normal" | "degraded" | "audio-only";
 
+// ─── How a peer connection is configured ─────────────────────────────────────
+
+/**
+ * The connection policy every peer in a call is built with.
+ *
+ * Both fields exist for the same reason and it is a guest's reason: how many
+ * separate network paths one peer connection has to build before anybody can be
+ * seen or heard.
+ *
+ * A call carries audio and video, which is two m-sections. Under the default
+ * `balanced` policy a browser prepares to run those on separate transports and
+ * only collapses them once BUNDLE is agreed in the answer — so until then it
+ * gathers two sets of candidates, runs two sets of connectivity checks and,
+ * where a relay is involved, holds TWO TURN allocations. `max-bundle` puts
+ * everything in one bundle group in the offer itself, so there is one transport
+ * from the start.
+ *
+ * `require` says the same thing about RTCP: multiplexed onto the media port
+ * rather than given a port of its own, which is another candidate set and
+ * another set of checks per m-section.
+ *
+ * Nobody pays more for this than a guest. They are the participant most likely
+ * to be behind the NAT that needs a relay in the first place, so halving the
+ * allocations and the checking halves the slowest part of their join — and
+ * halves what the relay is asked to hold open for them.
+ *
+ * Safe to state unilaterally: every browser that can run this app has supported
+ * BUNDLE and rtcp-mux for years, and both ends of every connection here are
+ * this same code.
+ *
+ * Deliberately NOT here: `iceCandidatePoolSize`. Pre-gathering only helps when
+ * a connection exists well before its offer, and in this room a peer connection
+ * is created and offered on in the same breath — so a pool would buy nothing
+ * and would open a TURN allocation per pooled candidate to buy it with.
+ */
+export function peerConfig(iceServers: RTCIceServer[]): RTCConfiguration {
+  return {
+    iceServers,
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
+  };
+}
+
 // ─── Perfect negotiation ─────────────────────────────────────────────────────
 
 /**
@@ -69,6 +112,30 @@ export function offerCollision(input: {
   const colliding = input.makingOffer || input.signalingState !== "stable";
   if (!colliding) return "accept";
   return input.polite ? "rollback_then_accept" : "ignore";
+}
+
+/**
+ * Whether an offer we have just built can be applied to this connection.
+ *
+ * `stable` is the ordinary case. `have-local-offer` is the one that matters and
+ * the one a plain `=== "stable"` check gets wrong: a connection whose offer was
+ * never answered — the peer's tab froze, its network went away mid-handshake —
+ * stays in `have-local-offer` for good. That is EXACTLY the connection ICE
+ * recovery exists to rescue, and a stable-only guard made every rescue attempt
+ * bail before sending anything. The attempts were still counted, so after five
+ * silent no-ops the peer was marked permanently lost and the only way back was
+ * a page reload: the failure the recovery path was written to prevent.
+ *
+ * Re-offering there is legal — setLocalDescription with an offer is defined for
+ * `stable` and `have-local-offer`, and in the latter it replaces the pending
+ * local description, which is what an ICE restart wants.
+ *
+ * Everything else genuinely cannot take one. `have-remote-offer` in particular
+ * means the far end got in first while we were building ours; theirs is the one
+ * that survives, and the answer path handles it.
+ */
+export function canSetLocalOffer(signalingState: RTCSignalingState): boolean {
+  return signalingState === "stable" || signalingState === "have-local-offer";
 }
 
 // ─── Send caps ───────────────────────────────────────────────────────────────
