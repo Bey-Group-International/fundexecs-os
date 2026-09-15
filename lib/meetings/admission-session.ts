@@ -28,6 +28,9 @@
 //     payload that was believed would be a payload worth forging.
 //   - Losing the push means going back to asking often. The safety-net cadence
 //     is only safe while something is actually watching.
+//   - Gaining it means asking once. A push reaches whoever is already
+//     subscribed, so everything decided before that — including during the
+//     knock the subscription follows — has to be asked for.
 //   - Stopping means stopping: no timer, no listener, and no follow-through
 //     from a request that was already in flight.
 //
@@ -168,10 +171,23 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
    * may be half a minute away, chosen on the assumption that something was
    * watching. Leaving it would make a guest pay for the disconnection with the
    * longest wait of the two cadences instead of the shortest.
+   *
+   * Connecting asks once, immediately, because a push is only delivered to
+   * whoever is already listening. There is always a gap: the knock is recorded
+   * on the server, and the subscription is only opened once its response has
+   * travelled back and the socket has joined the channel. A host watching the
+   * panel — the case the whole responsive cadence exists for — clicks Admit
+   * inside that gap, and the nudge is published to a channel nobody is on.
+   * Without this the guest then sits on the *watched* cadence, so being admitted
+   * instantly would have meant waiting fifteen seconds to hear about it.
+   *
+   * The same applies to every reconnect after a drop: nudges published while the
+   * socket was down reached nobody, and only asking finds out.
    */
   function setWatching(connected: boolean): void {
     if (stopped || settled || watching === connected) return;
     watching = connected;
+    if (connected) void pollOnce();
     if (pollTimer !== null) scheduleNext();
   }
 
