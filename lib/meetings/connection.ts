@@ -64,12 +64,41 @@ export type BandwidthMode = "normal" | "degraded" | "audio-only";
  * is created and offered on in the same breath — so a pool would buy nothing
  * and would open a TURN allocation per pooled candidate to buy it with.
  */
-export function peerConfig(iceServers: RTCIceServer[]): RTCConfiguration {
-  return {
+export function peerConfig(
+  iceServers: RTCIceServer[],
+  opts: { relayOnly?: boolean } = {},
+): RTCConfiguration {
+  const config: RTCConfiguration = {
     iceServers,
     bundlePolicy: "max-bundle",
     rtcpMuxPolicy: "require",
   };
+  // Only set when forcing it. Left undefined the browser uses "all", and
+  // writing that explicitly would say a decision was made where none was.
+  if (opts.relayOnly) config.iceTransportPolicy = "relay";
+  return config;
+}
+
+/**
+ * Whether to put this participant's media through the relay and nothing else.
+ *
+ * Invite-link guests are the one population always on somebody else's network —
+ * a corporate firewall, hotel wifi, mobile CGNAT, symmetric NAT — and they are
+ * the population whose calls fail. Sending them straight to the relay skips the
+ * direct path that was going to fail anyway, so their call forms on the first
+ * attempt instead of after a failure, a restart and a several-second stall.
+ *
+ * The condition is not "is a guest". It is "is a guest AND we actually have a
+ * relay to send them to". Relay-only with no relay server in the configuration
+ * leaves a peer connection with no usable candidates at all: it cannot fail
+ * over to a direct path, because it has been told not to have one. A guest on
+ * an ordinary home network would go from a call that worked to a call that
+ * could not physically connect. So a deployment with no TURN configured, or one
+ * whose credentials were refused, keeps the old behaviour and a guest keeps
+ * whatever chance a direct path gives them.
+ */
+export function shouldForceRelay(input: { isGuest: boolean; relayAvailable: boolean }): boolean {
+  return input.isGuest && input.relayAvailable;
 }
 
 // ─── Perfect negotiation ─────────────────────────────────────────────────────

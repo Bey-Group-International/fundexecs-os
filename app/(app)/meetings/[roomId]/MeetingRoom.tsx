@@ -59,6 +59,7 @@ import {
   nextRecovery,
   offerCollision,
   peerConfig,
+  shouldForceRelay,
   peerLinkStatus,
   peerStatusLabel,
   recordAttempt,
@@ -88,6 +89,11 @@ import {
   DEMOTION_LINGER_MS,
   type VideoTier,
 } from "@/lib/meetings/send-tiers";
+import {
+  knockAlert,
+  shouldRequestNotificationPermission,
+  type NotificationPermissionLike,
+} from "@/lib/meetings/knock-notice";
 import { rememberDevice, rememberedDevice } from "@/lib/meetings/device-prefs";
 import { acquisitionMessage, cameraMessage } from "@/lib/meetings/media-acquisition";
 import { openCallMedia, openCameraOnly } from "@/lib/meetings/open-media";
@@ -221,6 +227,12 @@ const SPEAKER_COLORS = [
 const REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "🤔"];
 
 // Synthesize a short chime using Web Audio API (no audio files needed)
+/** What the browser currently says about notifications, including "no API". */
+function notificationPermission(): NotificationPermissionLike {
+  if (typeof window === "undefined" || typeof Notification === "undefined") return "unsupported";
+  return Notification.permission as NotificationPermissionLike;
+}
+
 function playChime(type: "join" | "leave" | "knock") {
   try {
     const ctx = new AudioContext();
@@ -2428,6 +2440,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setWaitingTimedOut(false);
     setReady(true);
     setJoining(false);
+
+    // Asked here and nowhere else: this runs off the host's own press of Join,
+    // which is the gesture browsers require and the moment the request makes
+    // sense to the person seeing it. A prompt on page load is the one everybody
+    // dismisses, and a dismissal is permanent.
+    if (isHostRef.current && shouldRequestNotificationPermission({
+      isHost: true,
+      permission: notificationPermission(),
+    })) {
+      try { void Notification.requestPermission(); } catch { /* unsupported */ }
+    }
   }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers]);
 
   /**
@@ -2469,8 +2492,22 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
             iceServers?: RTCIceServer[]; relay?: boolean; reason?: string;
           };
           if (Array.isArray(iceServers) && iceServers.length > 0) {
-            iceConfigRef.current = peerConfig(iceServers);
             relayAvailableRef.current = relay === true;
+            // Guests go straight to the relay. They are the population always on
+            // somebody else's network, and the direct path they would try first
+            // is the one that fails — so skipping it turns a call that formed
+            // after a failure, a restart and a stall into one that forms on the
+            // first attempt. Guarded on actually having a relay: forcing it
+            // without one leaves a connection no candidates at all, which would
+            // break the guests who were working.
+            const relayOnly = shouldForceRelay({
+              isGuest: isGuestRef.current,
+              relayAvailable: relay === true,
+            });
+            iceConfigRef.current = peerConfig(iceServers, { relayOnly });
+            if (relayOnly) {
+              console.info("[meeting] guest media will be relayed — direct paths are not attempted");
+            }
             if (relay !== true) {
               // Worth a line even though the call may still work: it explains
               // any later connection failure on a restrictive network. The
@@ -2717,9 +2754,36 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const lastWaitingCountRef = useRef(0);
   useEffect(() => {
     const count = waitingPeers.length;
-    if (isHost && count > lastWaitingCountRef.current) playChime("knock");
+    const previous = lastWaitingCountRef.current;
     lastWaitingCountRef.current = count;
-  }, [isHost, waitingPeers.length]);
+    if (isHost && count > previous) playChime("knock");
+
+    // And a system notification, which is the only one of the three that
+    // reaches a host who has switched to another application entirely — the
+    // host most likely to leave someone standing outside. knockAlert decides:
+    // host only, only on a rise, only while this tab is hidden, only once
+    // permission has actually been granted.
+    const alert = knockAlert({
+      isHost,
+      waiting: count,
+      previousWaiting: previous,
+      hidden: typeof document !== "undefined" && document.visibilityState === "hidden",
+      permission: notificationPermission(),
+      name: waitingPeers.length === 1 ? waitingPeers[0]?.displayName : null,
+    });
+    if (!alert) return;
+
+    try {
+      const note = new Notification(alert.title, {
+        body: alert.body,
+        // One knock notification at a time. A second guest replaces the first
+        // rather than stacking, so a host who was away for a while comes back
+        // to one current notice instead of a column of stale ones.
+        tag: "fundexecs-knock",
+      });
+      note.onclick = () => { try { window.focus(); } catch { /* popup blocked */ } note.close(); };
+    } catch { /* the constructor throws on some engines even when permitted */ }
+  }, [isHost, waitingPeers]);
 
   // Carry the waiting count into the browser tab title. A host who has tabbed
   // away to pull up a document is exactly the host most likely to leave someone

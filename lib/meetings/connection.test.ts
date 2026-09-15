@@ -5,6 +5,7 @@ import {
   canSetLocalOffer,
   connectionStateFromIce,
   peerConfig,
+  shouldForceRelay,
   contentHintFor,
   isPolite,
   linkNotice,
@@ -384,6 +385,30 @@ describe("canSetLocalOffer", () => {
   });
 });
 
+describe("shouldForceRelay", () => {
+  it("sends a guest straight to the relay when there is one", () => {
+    expect(shouldForceRelay({ isGuest: true, relayAvailable: true })).toBe(true);
+  });
+
+  it("leaves signed-in members on the direct path", () => {
+    // They are on networks this deployment mostly controls, and relaying them
+    // would pay for bandwidth on calls that connect directly.
+    expect(shouldForceRelay({ isGuest: false, relayAvailable: true })).toBe(false);
+  });
+
+  it("does NOT force a guest through a relay that does not exist", () => {
+    // The guard that keeps this from making things worse. Relay-only with no
+    // relay server leaves a connection no usable candidates and no direct path
+    // to fall back to — a guest on an ordinary home network would go from a
+    // working call to one that cannot physically connect.
+    expect(shouldForceRelay({ isGuest: true, relayAvailable: false })).toBe(false);
+  });
+
+  it("changes nothing for a member on a deployment with no TURN", () => {
+    expect(shouldForceRelay({ isGuest: false, relayAvailable: false })).toBe(false);
+  });
+});
+
 describe("peerConfig", () => {
   it("carries the servers it was given", () => {
     const servers = [{ urls: ["stun:a.example:3478"] }];
@@ -409,5 +434,20 @@ describe("peerConfig", () => {
   // pool would buy nothing and open a TURN allocation per candidate to buy it.
   it("does not pre-gather a candidate pool", () => {
     expect(peerConfig([]).iceCandidatePoolSize).toBeUndefined();
+  });
+
+  it("leaves the transport policy unset unless relay-only is asked for", () => {
+    // Undefined means the browser's "all". Writing that out would claim a
+    // decision had been made where none was.
+    expect(peerConfig([]).iceTransportPolicy).toBeUndefined();
+    expect(peerConfig([], {}).iceTransportPolicy).toBeUndefined();
+    expect(peerConfig([], { relayOnly: false }).iceTransportPolicy).toBeUndefined();
+  });
+
+  it("forces the relay when asked, and keeps everything else", () => {
+    const config = peerConfig([{ urls: "turn:example" }], { relayOnly: true });
+    expect(config.iceTransportPolicy).toBe("relay");
+    expect(config.bundlePolicy).toBe("max-bundle");
+    expect(config.rtcpMuxPolicy).toBe("require");
   });
 });

@@ -1720,6 +1720,51 @@ Deployed, monitoring               →  live, observability active
              |  does with these settings is from the specs and from coturn's
              |  behaviour, not from a packet capture.
 
+
+2026-09-15  |  Guests go straight to the relay; hosts hear the door  |  Two
+             |  halves of "guests cannot connect".
+             |  Connection (per user: relay-only from the START for guests, not
+             |  after a failure): invite-link guests are the one population always
+             |  on somebody else's network — corporate firewall, hotel wifi, mobile
+             |  CGNAT, symmetric NAT — and the direct path they try first is the one
+             |  that fails. peerConfig now takes { relayOnly } and sets
+             |  iceTransportPolicy:"relay"; shouldForceRelay decides. Their call forms
+             |  on the first attempt instead of after a failure, an ICE restart and a
+             |  multi-second stall.
+             |  GUARD on that choice, which the user's option did not include and
+             |  which is not optional: relay-only is applied only when a relay
+             |  actually exists (relay===true from /api/meetings/ice-servers).
+             |  Forcing it with no TURN configured leaves a connection no usable
+             |  candidates AND no direct path to fall back to — a guest on an
+             |  ordinary home network would go from a working call to one that
+             |  cannot physically connect. A deployment without TURN keeps the old
+             |  behaviour. Members are never relayed: they are on networks this
+             |  deployment mostly controls, and relaying them buys nothing and costs
+             |  bandwidth.
+             |  Host notice (per user: the real bottleneck): a guest's wait is
+             |  usually the host not knowing. The room already chimed and already
+             |  badged the tab title — both stop at the edge of the browser window.
+             |  lib/meetings/knock-notice.ts adds a system notification, which
+             |  reaches a host who has switched application. Fires only for the
+             |  host, only on a RISE in the waiting count (admitting 3 of 4 drops
+             |  it, and notifying there would fire for something they just did),
+             |  only while the tab is HIDDEN (a visible tab already shows the bar),
+             |  and only once permission is granted. Tagged so a second guest
+             |  replaces the first rather than stacking.
+             |  Permission is requested on the host's own press of Join — the
+             |  gesture browsers require and the moment it makes sense — never on
+             |  load, and never again after a denial, which browsers remember.
+             |  Not changed (per user): knock timing stays on Join, so nobody
+             |  appears in the host's panel who is not ready.
+             |  Already in place, found and left alone: TURN is already authorized
+             |  for admitted guests by their admission row; the admission session
+             |  already pushes over Realtime with a polling safety net; the guest key
+             |  already survives a reload; the tab-title badge already existed.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5688 green (+59 new). Not exercised: a real guest on a real hostile
+             |  network, which is the only thing that proves the relay path. Worth a
+             |  phone on cellular with wifi off before this is trusted.
+
 ```
 
 ---
