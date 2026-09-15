@@ -1737,10 +1737,14 @@ Deployed, monitoring               →  live, observability active
              |  as a feature that exists.
              |  Also removed: MeetingRoom's previewStream state, written and never
              |  read (only the ref was used).
-             |  Confidence: typecheck/eslint clean, production build passes, Jest 5685
-             |  green (+17, one test removed with the option). Nineteen new tests, all
-             |  run against the pre-change code: eighteen fail, one is the control (the
-             |  green room still stops its devices when the call did NOT take them).
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5706 green — nineteen new tests and one removed with the option,
+             |  so 5688 to 5706. Run against the pre-change code, seventeen of the
+             |  nineteen fail, as do two pre-existing Opus assertions that pinned
+             |  the exact fmtp string. The other two new tests are controls and
+             |  pass either way: an SDP that already says usedtx=0 keeps it, and
+             |  the green room still stops its devices on unmount when the call
+             |  did NOT take them.
              |  Not exercised: a real camera being adopted, a real applyConstraints on
              |  hardware that may freeze while re-tuning, or DTX as heard by a person.
 

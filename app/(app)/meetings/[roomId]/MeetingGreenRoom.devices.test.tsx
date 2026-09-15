@@ -16,7 +16,7 @@
  *     just here has not finished letting go of it. The call retries that; the
  *     screen that decides whether you HAVE a camera did not.
  */
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MeetingGreenRoom } from "./MeetingGreenRoom";
 import { DEVICE_PREF_KEYS } from "@/lib/meetings/devices";
 
@@ -27,9 +27,13 @@ jest.mock("@/lib/meetings/background-store", () => ({ getBackground: async () =>
 
 type Constraints = { video?: unknown; audio?: unknown };
 
+/** Every track the mocked getUserMedia has handed out, newest last. */
+const opened: Array<{ kind: string; id: string; stop: jest.Mock }> = [];
+
 function track(kind: "video" | "audio", deviceId: string) {
-  return {
+  const t = {
     kind,
+    id: deviceId,
     readyState: "live",
     enabled: true,
     stop: jest.fn(),
@@ -37,6 +41,8 @@ function track(kind: "video" | "audio", deviceId: string) {
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
   };
+  opened.push(t);
+  return t;
 }
 
 /** The deviceId an exact constraint is asking for, or "" for the default. */
@@ -54,6 +60,9 @@ function domError(name: string) {
 
 const DEVICES = [
   { deviceId: "cam-default", kind: "videoinput", label: "FaceTime HD", groupId: "g1" },
+  // A second camera, so a test can pick a different one and make the screen
+  // actually replace a track.
+  { deviceId: "cam-other", kind: "videoinput", label: "Studio Display", groupId: "g2" },
   { deviceId: "mic-default", kind: "audioinput", label: "MacBook Mic", groupId: "g1" },
 ];
 
@@ -85,6 +94,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   window.localStorage.clear();
+  opened.length = 0;
   getUserMedia = jest.fn();
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
@@ -195,11 +205,12 @@ describe("a camera the previous page has not finished releasing", () => {
 // thing this screen must not do afterwards is stop them. Getting this wrong is
 // silent and total: the member is in the meeting, and nobody can hear them.
 describe("handing the devices to the call", () => {
+  /** Opens whatever was asked for, so switching devices yields a new track. */
   function openBoth() {
     getUserMedia.mockImplementation(async (c: Constraints) => {
       const tracks: unknown[] = [];
-      if (c.video) tracks.push(track("video", "cam-default"));
-      if (c.audio) tracks.push(track("audio", "mic-default"));
+      if (c.video) tracks.push(track("video", requestedId(c.video) || "cam-default"));
+      if (c.audio) tracks.push(track("audio", requestedId(c.audio) || "mic-default"));
       return new (globalThis as { MediaStream: new (t: unknown[]) => MediaStream }).MediaStream(tracks);
     });
   }
@@ -240,18 +251,53 @@ describe("handing the devices to the call", () => {
   // Not only on unmount: the per-device effects replace tracks too, and a
   // replacement that stopped the outgoing microphone would be the same bug
   // arriving a different way.
+  //
+  // Driven by actually picking a different camera, because that is what makes
+  // adoptVideo run. An earlier version of this dispatched a `resize` on window,
+  // which this screen does not listen to at all — so it exercised nothing and
+  // would have passed with the guard deleted.
   it("does not stop a released track when replacing it either", async () => {
     openBoth();
-    const { stream, release } = await handover();
-    const tracks = stream.getTracks() as unknown as Array<{ stop: jest.Mock }>;
+    const { view, stream, release } = await handover();
+    const before = stream.getVideoTracks() as unknown as Array<{ stop: jest.Mock }>;
+    expect(before).toHaveLength(1);
     release();
 
-    // A device change after the handover: the screen re-opens, but what it let
-    // go of stays running.
+    // The camera picker, after the handover. The screen opens the new device;
+    // what it let go of keeps running.
+    const picker = view.container.querySelector("select") as HTMLSelectElement | null;
+    expect(picker).not.toBeNull();
     await act(async () => {
-      window.dispatchEvent(new Event("resize"));
+      fireEvent.change(picker!, { target: { value: "cam-other" } });
       await Promise.resolve();
     });
-    for (const t of tracks) expect(t.stop).not.toHaveBeenCalled();
+    await waitFor(() => expect(videoRequests()).toContain("cam-other"));
+
+    for (const t of before) expect(t.stop).not.toHaveBeenCalled();
+  });
+
+  // The other half of scoping it to the tracks that were handed over: a device
+  // opened AFTER the handover belongs to nobody, so leaving the page has to
+  // stop it. A blanket "this screen owns nothing now" flag would leave a camera
+  // lit with no owner at all.
+  it("still stops a device opened after the handover", async () => {
+    openBoth();
+    const { view, stream, release } = await handover();
+    const handed = stream.getVideoTracks() as unknown as Array<{ stop: jest.Mock }>;
+    release();
+
+    const picker = view.container.querySelector("select") as HTMLSelectElement | null;
+    await act(async () => {
+      fireEvent.change(picker!, { target: { value: "cam-other" } });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(videoRequests()).toContain("cam-other"));
+    const replacement = opened.find((t) => t.kind === "video" && t.id === "cam-other");
+    expect(replacement).toBeDefined();
+
+    view.unmount();
+    // The handed-over one is the call's and survives; the later one does not.
+    for (const t of handed) expect(t.stop).not.toHaveBeenCalled();
+    expect(replacement!.stop).toHaveBeenCalled();
   });
 });

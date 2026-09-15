@@ -1376,6 +1376,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   /** A capture change already in flight, so the re-run it triggers cannot loop. */
   const captureRetuneRef = useRef(false);
   /**
+   * The capture height last asked of a given camera.
+   *
+   * Kept per track, because a different camera has different modes: one that
+   * cannot do 360p says nothing about the next one plugged in.
+   */
+  const captureAskedRef = useRef<{ track: MediaStreamTrack; height: number } | null>(null);
+  /**
    * The call has taken the preview's tracks.
    *
    * After that the green room must not be allowed to hand them back. It goes on
@@ -1577,19 +1584,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
 
   /**
-   * Push the current send budget onto every video sender.
-   *
-   * This is the whole answer to a mesh call that sounds like it is underwater.
-   * Without a cap each participant hands the encoder 720p30 and lets it spend
-   * whatever it likes, once per peer — four people is four uploads from one
-   * laptop — and the first thing that gives way when the uplink is oversold is
-   * not the picture but the audio sharing the path with it.
-   *
-   * `active: false` rather than disabling the track: it stops the RTP stream at
-   * the sender while leaving the camera, the local preview and the camera
-   * button exactly as the member left them.
-   */
-  /**
    * Point the camera at what is actually being drawn, and say what it is on now.
    *
    * Returns the capture height to size the encoders against — which is the
@@ -1615,8 +1609,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const wantsFull = [...caps.values()].some((c) => c !== null && c.scaleResolutionDownBy < THUMBNAIL_SCALE);
     const target = wantsFull ? FULL_CAPTURE : THUMBNAIL_CAPTURE;
 
-    if (current !== target.height && !captureRetuneRef.current) {
+    // Asked for once per camera per target, and not again unless something
+    // moves. `ideal` is a request, not a requirement: a camera with no 360p mode
+    // resolves the promise and stays at 720p — so a re-run that only checked the
+    // height would find the same gap, ask again, and spin applyConstraints
+    // forever on exactly the hardware that cannot satisfy it.
+    const asked = captureAskedRef.current;
+    const alreadyAsked = asked?.track === camera && asked.height === target.height;
+
+    if (current !== target.height && !alreadyAsked && !captureRetuneRef.current) {
       captureRetuneRef.current = true;
+      captureAskedRef.current = { track: camera, height: target.height };
       void camera
         .applyConstraints({
           width: { ideal: target.width },
@@ -1626,14 +1629,30 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         .catch(() => { /* a camera with no such mode keeps the one it has */ })
         .finally(() => {
           captureRetuneRef.current = false;
-          // Re-run against whatever the camera actually settled on, which may
-          // not be what was asked for.
-          applySendCapsRef.current();
+          // Only when the camera actually moved. Re-running on a camera that
+          // ignored the request is the loop this guard exists to prevent, and
+          // there is nothing new to size the encoders against anyway.
+          let settled: number | null = null;
+          try { settled = camera.getSettings().height ?? null; } catch { /* gone */ }
+          if (settled !== current) applySendCapsRef.current();
         });
     }
     return current;
   }, []);
 
+  /**
+   * Push the current send budget onto every video sender.
+   *
+   * This is the whole answer to a mesh call that sounds like it is underwater.
+   * Without a cap each participant hands the encoder 720p30 and lets it spend
+   * whatever it likes, once per peer — four people is four uploads from one
+   * laptop — and the first thing that gives way when the uplink is oversold is
+   * not the picture but the audio sharing the path with it.
+   *
+   * `active: false` rather than disabling the track: it stops the RTP stream at
+   * the sender while leaving the camera, the local preview and the camera
+   * button exactly as the member left them.
+   */
   const applySendCaps = useCallback(() => {
     const sharing = shareOnRef.current;
     const wanted = sharing || camOnRef.current;

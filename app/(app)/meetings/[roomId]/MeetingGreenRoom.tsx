@@ -374,11 +374,20 @@ export function MeetingGreenRoom({
   const onPreviewStreamRef = useRef(onPreviewStream);
   useEffect(() => { onPreviewStreamRef.current = onPreviewStream; }, [onPreviewStream]);
 
-  // Set once the room has taken the tracks over. Every place that would stop
-  // them checks it: after this, they belong to the call, and stopping them here
-  // would darken a camera that is already on the wire.
-  const relinquishedRef = useRef(false);
-  const release = useCallback(() => { relinquishedRef.current = true; }, []);
+  // The exact tracks the room has taken over. Every place that would stop a
+  // track checks this first: a track in here belongs to the call, and stopping
+  // it would darken a camera that is already on the wire.
+  //
+  // It records tracks rather than a flag because the handover is not the end of
+  // this screen's life. A guest who is admitted still sits here until the room
+  // renders, and a device change in that window opens a NEW track that the call
+  // never took. A flag would have exempted that one too, and the green room
+  // would walk away leaving a camera light on with nothing reading it.
+  const relinquishedRef = useRef<Set<MediaStreamTrack>>(new Set());
+  const release = useCallback(() => {
+    if (videoTrackRef.current) relinquishedRef.current.add(videoTrackRef.current);
+    if (audioTrackRef.current) relinquishedRef.current.add(audioTrackRef.current);
+  }, []);
 
   // Mirrors of the choices, for the mount-only open and the failure handler:
   // both need the current value without being re-created when it changes.
@@ -413,7 +422,7 @@ export function MeetingGreenRoom({
   /** Adopt a video track, releasing whatever it replaces. */
   const adoptVideo = useCallback((track: MediaStreamTrack | null) => {
     const previous = videoTrackRef.current;
-    if (previous && previous !== track && !relinquishedRef.current) {
+    if (previous && previous !== track && !relinquishedRef.current.has(previous)) {
       try { previous.stop(); } catch { /* already stopped */ }
     }
     videoTrackRef.current = track;
@@ -422,7 +431,7 @@ export function MeetingGreenRoom({
 
   const adoptAudio = useCallback((track: MediaStreamTrack | null) => {
     const previous = audioTrackRef.current;
-    if (previous && previous !== track && !relinquishedRef.current) {
+    if (previous && previous !== track && !relinquishedRef.current.has(previous)) {
       try { previous.stop(); } catch { /* already stopped */ }
     }
     audioTrackRef.current = track;
@@ -621,10 +630,15 @@ export function MeetingGreenRoom({
   // live on the wire and stopping them here is exactly the bug this screen used
   // to have in reverse. A backstop for leaving the page without joining.
   useEffect(() => {
+    const relinquished = relinquishedRef.current;
     return () => {
-      if (!relinquishedRef.current) {
-        try { videoTrackRef.current?.stop(); } catch { /* already stopped */ }
-        try { audioTrackRef.current?.stop(); } catch { /* already stopped */ }
+      const video = videoTrackRef.current;
+      const audio = audioTrackRef.current;
+      if (video && !relinquished.has(video)) {
+        try { video.stop(); } catch { /* already stopped */ }
+      }
+      if (audio && !relinquished.has(audio)) {
+        try { audio.stop(); } catch { /* already stopped */ }
       }
       videoTrackRef.current = null;
       audioTrackRef.current = null;
