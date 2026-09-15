@@ -31,6 +31,17 @@ import {
   suspensionMessage,
   type BackgroundEffect,
 } from "@/lib/meetings/backgrounds";
+import {
+  MAX_BATCH,
+  nextBatch,
+  nextFlushDelay,
+  pendingLines,
+  speakerNames,
+  transcriptRows,
+} from "@/lib/meetings/transcript-buffer";
+import { recordingNotice, type RecordingState } from "@/lib/meetings/recording-policy";
+import { useRecording } from "@/lib/meetings/use-recording";
+import type { RoomSnapshot } from "@/lib/meetings/recording-composer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
 import {
@@ -163,11 +174,20 @@ type SignalMsg =
   // Mic state has to be told, not measured: a muted track is simply silent, and
   // silence is indistinguishable from a listener who hasn't spoken yet.
   | { type: "mic"; from: string; micOn: boolean; displayName?: string }
+  // Consent, not telemetry. Several US states require every party to a
+  // conversation to know it is being recorded, and the host's own screen
+  // knowing is not that — so the room is told, and every participant shows the
+  // same badge from the same signal.
+  | { type: "recording"; from: string; recording: boolean; by?: string }
   // The same argument for video, which used to be inferred from the pixels: a
   // camera turned off sends black frames rather than nothing, and a stream the
   // network has paused freezes on its last frame. Both look like a bug and
   // neither is, so each participant says which one it is.
-  | { type: "video"; from: string; camOn: boolean; paused: boolean }
+  // `sharing` matters only to the recording: a shared screen takes the whole
+  // frame there, and without this the composer can only recognise the HOST's
+  // own share — a guest presenting slides would be composited as a small tile
+  // of their slides, which is the one thing the recording exists to capture.
+  | { type: "video"; from: string; camOn: boolean; paused: boolean; sharing?: boolean }
   | { type: "chat"; from: string; displayName: string; text: string; ts: number }
   | { type: "raise_hand"; from: string; raised: boolean }
   | { type: "reaction"; from: string; emoji: string; ts: number }
@@ -231,7 +251,10 @@ const ICE_FETCH_TIMEOUT_MS = 4000;
 // connection is described in the console. Long enough that a normal call never
 // trips it, short enough to still be on screen when somebody reports it.
 const INBOUND_VIDEO_AUDIT_MS = 8_000;
-const TRANSCRIPT_FLUSH_MS = 60_000;
+// How long the "this meeting is being recorded" notice stays up. Long enough to
+// read twice without hurrying, short enough not to become furniture — the badge
+// in the control bar is what carries the fact for the rest of the call.
+const RECORDING_NOTICE_MS = 8_000;
 // Voice metering: fast enough that a short "yes" leaves samples behind for
 // attribution, slow enough not to compete with rendering for the main thread.
 const VOICE_SAMPLE_MS = 120;
@@ -704,6 +727,17 @@ export function HostExitControl({
   );
 }
 
+/** Seconds as mm:ss, or h:mm:ss once a meeting has run past the hour. */
+function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(sec).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
@@ -712,7 +746,14 @@ function ControlBar({
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
   leaving, onOpenBackgrounds, backgroundActive, backgroundBtnRef,
+  recordingState, recordingBy, recordingElapsed, onToggleRecording,
 }: {
+  /** Drives the badge every participant sees, and the host's own control. */
+  recordingState: RecordingState;
+  /** Who is recording. Shown to everyone: "the host knew" is not consent. */
+  recordingBy: string;
+  recordingElapsed: number;
+  onToggleRecording: () => void;
   onOpenBackgrounds: () => void;
   /** An effect is applied, so the control reads as on. */
   backgroundActive: boolean;
@@ -815,6 +856,34 @@ function ControlBar({
           </button>
         </span>
 
+        {/* Record — host only. Deliberately NOT hidden on mobile like the two
+            controls either side: a host running the meeting from a phone is
+            exactly the host most likely to want a recording of it. */}
+        {isHost && (
+          <button
+            onClick={onToggleRecording}
+            disabled={recordingState === "starting" || recordingState === "stopping"}
+            aria-pressed={recordingState === "recording"}
+            title={recordingState === "recording" ? "Stop recording" : "Record this meeting"}
+            className={`flex items-center gap-1.5 rounded-full border px-3 h-10 text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-wait ${
+              recordingState === "recording"
+                ? "border-[var(--status-danger)] bg-red-500/10 text-[var(--status-danger)]"
+                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+            }`}
+          >
+            <span className={`w-2.5 h-2.5 rounded-full ${
+              recordingState === "recording" ? "bg-[var(--status-danger)] animate-pulse" : "bg-current"
+            }`} />
+            <span className="hidden sm:inline">
+              {recordingState === "recording"
+                ? `Stop · ${formatClock(recordingElapsed)}`
+                : recordingState === "starting" ? "Starting…"
+                : recordingState === "stopping" ? "Saving…"
+                : "Record"}
+            </span>
+          </button>
+        )}
+
         {/* Mute all — host only, hidden on mobile */}
         {isHost && (
           <span className="hidden sm:block">
@@ -845,6 +914,22 @@ function ControlBar({
 
       {/* Right side: BW indicator + copy link + copilot toggle */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Seen by EVERY participant, not just the host, and never hidden on a
+            small screen. Several US states require every party to a
+            conversation to know it is being recorded; a badge that collapses on
+            a phone is a badge the guest on a phone never saw. */}
+        {recordingState !== "idle" && (
+          <span
+            title={recordingNotice(recordingState, recordingBy) ?? undefined}
+            className="flex items-center gap-1.5 rounded-full border border-[var(--status-danger)] bg-red-500/10 px-2 py-1 text-xs font-medium text-[var(--status-danger)]"
+          >
+            <span className="w-2 h-2 rounded-full bg-[var(--status-danger)] animate-pulse" />
+            <span className="hidden sm:inline">
+              {recordingState === "recording" ? "Recording" : recordingState === "stopping" ? "Saving" : "Starting"}
+            </span>
+          </span>
+        )}
+
         {linkNotice(bwMode) && (
           <span title={linkNotice(bwMode)!} className="text-xs text-[var(--status-warning)] flex items-center gap-1 border border-status-warning/30 rounded-full px-2 py-1">
             📶 <span className="hidden sm:inline">{bwMode === "audio-only" ? "Video paused" : "Reduced quality"}</span>
@@ -1184,6 +1269,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [localName, setLocalName] = useState("You");
   const localNameRef = useRef("You");
   const [meetingId, setMeetingId] = useState<string | null>(null);
+  // Mirrored so the transcript flush can read it without being rebuilt — and so
+  // the unload path, which runs after React has stopped re-rendering anything,
+  // still knows which meeting it is saving.
+  const meetingIdRef = useRef<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const isHostRef = useRef(false);
 
@@ -1269,12 +1358,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [peerVideo, setPeerVideo] = useState<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
   // Read from the stats timer, which is created once.
   const peerVideoRef = useRef<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
+  // Who is presenting, by signaling id. Only the recording reads this: the live
+  // room shows a share as ordinary video, but the recording gives it the frame.
+  const sharingPeersRef = useRef<Set<string>>(new Set());
 
   // Transcript
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const transcriptRef = useRef<TranscriptLine[]>([]);
   const recognitionRef = useRef<any>(null);
   const interimIdRef = useRef<string>(crypto.randomUUID());
+  // Which of our own lines the database has confirmed. A SET of line ids, not a
+  // position: remote lines splice into the middle of the transcript by when
+  // they were spoken, so any index into it is invalidated the moment somebody
+  // else says something — which is how the old high-water mark managed to skip
+  // lines and re-send others in the same call.
+  const savedLineIdsRef = useRef<Set<string>>(new Set());
+  // Consecutive failed flushes, driving the backoff. Reset by any success.
+  const flushFailuresRef = useRef(0);
+
+  // Recording. `roomRecording` is what a GUEST knows — set from the host's
+  // broadcast, not from any local state — so the badge is driven by the same
+  // signal for everyone in the room rather than by who happens to be recording.
+  const [roomRecording, setRoomRecording] = useState<{ by: string } | null>(null);
+  // The one-time notice, distinct from the badge. The badge is permanent and
+  // small; this is the sentence that makes sure nobody can say they did not
+  // know. Shown when a recording STARTS and then withdrawn, because a notice
+  // that stays on screen gets dismissed reflexively and a notice that
+  // reappears gets ignored — the badge is what carries the fact afterwards.
+  const [recordingNoticeOpen, setRecordingNoticeOpen] = useState(false);
 
   // Speaker awareness. The recognizer reports words; these report voices — who
   // has a live mic, who is actually audible, and who was audible while the words
@@ -1400,6 +1511,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // channel re-subscribed) just because this flipped.
   const isGuestRef = useRef(false);
   const [meetingTitle, setMeetingTitle] = useState("Meeting");
+  // Read at the moment the meeting ends, which is after the last render that
+  // could have closed over the state.
+  const meetingTitleRef = useRef("Meeting");
+  useEffect(() => { meetingTitleRef.current = meetingTitle; }, [meetingTitle]);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   // Pre-join devices. The green room enumerates and picks; these hold what it
@@ -1572,6 +1687,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     recoveryRef.current.delete(peerId);
     remoteStreamsRef.current.delete(peerId);
     gaveUpRef.current.delete(peerId);
+    // A peer who left is not still presenting. Without this a recording keeps
+    // the whole frame given to a screen share whose owner has gone.
+    sharingPeersRef.current.delete(peerId);
     const timer = recoveryTimerRef.current.get(peerId);
     if (timer) { clearTimeout(timer); recoveryTimerRef.current.delete(peerId); }
     // A peer that left owes no explanation for video that never arrived.
@@ -1774,6 +1892,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       from: myIdRef.current,
       camOn: camOnRef.current || shareOnRef.current,
       paused: bwModeRef.current === "audio-only",
+      sharing: shareOnRef.current,
     });
   }, []);
   const announceVideoStateRef = useRef(announceVideoState);
@@ -2257,6 +2376,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       });
     }
 
+    if (msg.type === "recording" && msg.from !== myId) {
+      setRoomRecording(msg.recording ? { by: msg.by ?? "The host" } : null);
+      return;
+    }
+
     if (msg.type === "mic" && msg.from !== myId) {
       if (msg.displayName) setPeerName(msg.from, msg.displayName);
       setPeerMicOn((prev) => {
@@ -2304,6 +2428,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
 
     if (msg.type === "video" && msg.from !== myId) {
+      // Read by the recording composer, which needs it every frame and cannot
+      // wait for a render. Kept in step with the state below rather than
+      // derived from it.
+      if (msg.sharing) sharingPeersRef.current.add(msg.from);
+      else sharingPeersRef.current.delete(msg.from);
       setPeerVideo((prev) => {
         const ex = prev.get(msg.from);
         if (ex && ex.camOn === msg.camOn && ex.paused === msg.paused) return prev;
@@ -2818,7 +2947,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
     } catch { /* proceed */ }
 
-    setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
+    setMeetingId(mId); meetingIdRef.current = mId;
+    setIsHost(hostFlag); isHostRef.current = hostFlag;
     localUserIdRef.current = me?.id ?? null;
 
     // The host and org teammates enter immediately; only external guests wait.
@@ -3326,30 +3456,255 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── Transcript flush ──────────────────────────────────────────────────────
 
+  /**
+   * Post this device's unsaved words, and remember which ones landed.
+   *
+   * Everything about the old version of this lost speech. It wrote through the
+   * Supabase client straight at the table, which an invite-link guest is not
+   * allowed to do — their session is nobody, RLS said no, and nothing surfaced
+   * it. It saved every line in the array rather than its own, so each sentence
+   * was stored once per participant. It tracked progress as an INDEX into an
+   * array that remote lines splice into the middle of, so the mark slid over
+   * unsaved lines and back across saved ones. And it advanced that mark before
+   * the write resolved and never looked at the result, so a failed insert
+   * simply deleted those words from history.
+   *
+   * What replaces it: own lines only, keyed by id rather than position, and an
+   * id is forgotten only once the server has confirmed it. Which means a flush
+   * may safely be retried — the rows carry their own primary keys, so a retry
+   * conflicts instead of duplicating.
+   *
+   * `keepalive` is for the unload path, where the document is going away and an
+   * ordinary fetch is cancelled with it. The browser caps a keepalive body at
+   * 64KB; MAX_BATCH sits far inside that.
+   */
+  const flushTranscript = useCallback(async (opts: { keepalive?: boolean } = {}): Promise<boolean> => {
+    const mId = meetingIdRef.current;
+    if (!mId) return true;
+    const pending = pendingLines(transcriptRef.current, savedLineIdsRef.current);
+    if (!pending.length) return true;
+    const batch = nextBatch(pending, MAX_BATCH);
+
+    const query = isGuestRef.current && guestKeyRef.current
+      ? `?guestKey=${encodeURIComponent(guestKeyRef.current)}`
+      : "";
+    try {
+      const res = await fetch(`/api/meetings/${mId}/transcript${query}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines: transcriptRows(batch, mId) }),
+        keepalive: opts.keepalive === true,
+      });
+      if (!res.ok) { flushFailuresRef.current += 1; return false; }
+      // Marked saved from the batch we sent rather than from the response, so a
+      // reply that is lost in transit still retires the lines the server has:
+      // re-sending them would be harmless anyway, and the failure mode worth
+      // avoiding is the one where nothing ever retires and the batch never
+      // reaches the end of a long meeting.
+      for (const line of batch) savedLineIdsRef.current.add(line.id);
+      flushFailuresRef.current = 0;
+      return true;
+    } catch {
+      flushFailuresRef.current += 1;
+      return false;
+    }
+  }, []);
+
+  const flushTranscriptRef = useRef(flushTranscript);
+  useEffect(() => { flushTranscriptRef.current = flushTranscript; }, [flushTranscript]);
+
+  /**
+   * Keep flushing until nothing is owed.
+   *
+   * One flush sends at most MAX_BATCH lines, which is the right bound for the
+   * periodic path — the next tick takes the rest — and the wrong one for the
+   * last flush of a meeting, where there is no next tick. A call whose writes
+   * had been failing can reach the end holding hundreds of unsaved lines, and a
+   * single batch would save fifty of them and lose the rest.
+   *
+   * Bounded twice over: it stops when a flush fails, and it stops after enough
+   * rounds to carry any meeting a browser could hold. Neither is expected to
+   * bite; both are here because this runs while somebody is waiting for a
+   * report and an unbounded loop would hold them there.
+   */
+  const drainTranscript = useCallback(async (): Promise<void> => {
+    for (let round = 0; round < 20; round++) {
+      if (!pendingLines(transcriptRef.current, savedLineIdsRef.current).length) return;
+      if (!(await flushTranscriptRef.current())) return;
+    }
+  }, []);
+
+  // A timer that reschedules itself rather than a fixed interval, so a failing
+  // flush can back off instead of hammering a connection that is already gone —
+  // and so it comes straight back to the normal cadence once it recovers.
   useEffect(() => {
     if (!sessionLive || !meetingId) return;
-    const lastFlushed = { idx: 0 };
-    const interval = setInterval(() => {
-      const finalLines = transcriptRef.current.filter((l) => l.final);
-      const newLines = finalLines.slice(lastFlushed.idx);
-      if (!newLines.length) return;
-      lastFlushed.idx = finalLines.length;
-      void (supabase.from("live_meeting_transcripts") as any).insert(
-        newLines.map((l) => ({
-          meeting_id: meetingId,
-          speaker: l.speaker,
-          // The name can change mid-call and two people can share one; these
-          // identify the speaker after the fact, when the roster is gone.
-          speaker_id: l.speakerId,
-          speaker_user_id: l.userId,
-          confidence: l.confidence,
-          text: l.text,
-          ts: new Date(l.ts).toISOString(),
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    const tick = async () => {
+      await flushTranscriptRef.current();
+      if (stopped) return;
+      timer = setTimeout(() => { void tick(); }, nextFlushDelay(flushFailuresRef.current));
+    };
+    timer = setTimeout(() => { void tick(); }, nextFlushDelay(0));
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      // The last words of a meeting are the ones worth having, and they are
+      // exactly the ones a plain interval never reaches: it is cleared on the
+      // way out with up to a full period still unsaved. This is not reliable on
+      // its own — the request outlives the component but not the document — so
+      // the pagehide listener below covers a closing tab.
+      void flushTranscriptRef.current({ keepalive: true });
+    };
+  }, [sessionLive, meetingId]);
+
+  // Closing the tab is the most common way a meeting ends, and the least
+  // graceful. `pagehide` rather than `beforeunload` for the same reason the
+  // departure record uses it: it fires on mobile Safari's back-forward cache
+  // path, where beforeunload does not.
+  useEffect(() => {
+    if (!sessionLive) return;
+    const onHide = () => { void flushTranscriptRef.current({ keepalive: true }); };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [sessionLive]);
+
+  // ── Recording ─────────────────────────────────────────────────────────────
+
+  /**
+   * The live room, as the composer reads it.
+   *
+   * Every field is a function over refs rather than a value, because this is
+   * read on every drawn frame — twenty-four times a second — and a snapshot
+   * rebuilt on each render would either be stale between renders or force one
+   * per frame. Memoised with no dependencies for the same reason: the composer
+   * holds this object for the length of the recording, and swapping it out
+   * under a running encoder is how a recording loses its audio halfway through.
+   */
+  const recordingRoom = useMemo<RoomSnapshot>(() => ({
+    get participants() {
+      return [
+        {
+          id: LOCAL_SPEAKER_ID,
+          displayName: localNameRef.current,
+          hasVideo: camOnRef.current || shareOnRef.current,
+        },
+        ...[...peersDataRef.current.values()].map((p) => ({
+          id: p.id,
+          displayName: p.displayName,
+          // A peer whose camera is off, or whose video the link has paused, is
+          // drawn as a name card. Assumed live when they have said nothing yet:
+          // everyone joins with a camera, and a blank card for somebody who is
+          // on screen is the worse error.
+          hasVideo: peerVideoRef.current.get(p.id)?.camOn ?? true,
         })),
-      );
-    }, TRANSCRIPT_FLUSH_MS);
-    return () => clearInterval(interval);
-  }, [sessionLive, meetingId, supabase]);
+      ];
+    },
+    get activity() {
+      // The same log the transcript uses to decide who said what, read over the
+      // last two seconds. Reusing it means the recording cuts to the person the
+      // transcript is about to credit, rather than to a second opinion.
+      const now = Date.now();
+      return voiceLogRef.current.summarize(now - 2_000, now)
+        .map((a) => ({ speakerId: a.speakerId, share: a.share }));
+    },
+    get screenSharerId() {
+      if (shareOnRef.current) return LOCAL_SPEAKER_ID;
+      // First in iteration order, which is join order. Two people sharing at
+      // once is already an argument the room is having; the recording does not
+      // have to arbitrate it.
+      for (const id of sharingPeersRef.current) {
+        if (peersDataRef.current.has(id)) return id;
+      }
+      return null;
+    },
+    streamFor: (id: string) => (
+      id === LOCAL_SPEAKER_ID
+        ? localStreamRef.current
+        : remoteStreamsRef.current.get(id) ?? null
+    ),
+    screenStream: () => (
+      // A local share has replaced the camera track in the local stream, so it
+      // IS the local stream. A remote share arrives as that peer's ordinary
+      // stream; nothing distinguishes it except the flag they broadcast.
+      shareOnRef.current
+        ? localStreamRef.current
+        : (() => {
+            for (const id of sharingPeersRef.current) {
+              const stream = remoteStreamsRef.current.get(id);
+              if (stream) return stream;
+            }
+            return null;
+          })()
+    ),
+    audioStreams: () => [
+      // The host's own microphone never crosses a peer connection, so it has to
+      // be mixed in from the local stream or the recording is everyone except
+      // the person who made it.
+      ...(localStreamRef.current ? [localStreamRef.current] : []),
+      ...[...remoteStreamsRef.current.values()],
+    ],
+  }), []);
+
+  const announceRecording = useCallback((on: boolean) => {
+    setRoomRecording(on ? { by: localNameRef.current } : null);
+    sendSignalRef.current({
+      type: "recording",
+      from: myIdRef.current,
+      recording: on,
+      by: localNameRef.current,
+    });
+  }, []);
+
+  const recorder = useRecording({
+    supabase,
+    meetingId,
+    hostName: localName,
+    room: recordingRoom,
+    announce: announceRecording,
+  });
+
+  // A late joiner has missed the broadcast that started the recording, and
+  // would sit in a recorded meeting with no badge. Re-announced whenever
+  // somebody new arrives, which is the only moment the room's knowledge and
+  // the room's membership disagree.
+  const recorderStateRef = useRef(recorder.state);
+  useEffect(() => { recorderStateRef.current = recorder.state; }, [recorder.state]);
+  useEffect(() => {
+    if (recorderStateRef.current !== "recording") return;
+    sendSignalRef.current({
+      type: "recording",
+      from: myIdRef.current,
+      recording: true,
+      by: localNameRef.current,
+    });
+  }, [peers.size]);
+
+  // Stopping is not optional. A recording left running after the meeting ends
+  // is a row that claims to be live until the sweep closes it six hours later,
+  // and parts that stop arriving with nothing marking where they stopped.
+  const recorderStopRef = useRef(recorder.stop);
+  useEffect(() => { recorderStopRef.current = recorder.stop; }, [recorder.stop]);
+  useEffect(() => () => { recorderStopRef.current(); }, []);
+
+  /** What this participant is shown — the host's own state, or the room's broadcast. */
+  const recordingBanner: { state: RecordingState; by: string } | null =
+    recorder.state !== "idle"
+      ? { state: recorder.state, by: localName }
+      : roomRecording
+        ? { state: "recording" as RecordingState, by: roomRecording.by }
+        : null;
+
+  const bannerState = recordingBanner?.state ?? "idle";
+  useEffect(() => {
+    if (bannerState !== "recording") return;
+    setRecordingNoticeOpen(true);
+    const timer = setTimeout(() => setRecordingNoticeOpen(false), RECORDING_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [bannerState]);
 
   // ── Controls ──────────────────────────────────────────────────────────────
 
@@ -3979,12 +4334,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (!meetingId) { router.push("/meetings"); return; }
 
+    // Save what has not been saved BEFORE asking for the report, so the two
+    // records agree and so the rows survive whatever happens next. A report
+    // request can fail, time out, or be abandoned by a host who closes the tab
+    // while it runs; the transcript should not depend on any of that.
+    await drainTranscript();
+
     const fullText = transcriptRef.current.filter((l) => l.final).map(formatTranscriptLine).join("\n");
+    // The model was told "Meeting: Untitled" and "Participants: Unknown" on
+    // every meeting ever ended from this room, because neither was sent. Its
+    // system prompt asks it to assign action items to named people and to draft
+    // a follow-up email, and it was doing both without knowing whose meeting it
+    // was or who had been in it.
+    const participants = speakerNames(
+      transcriptRef.current,
+      [localNameRef.current, ...[...peersDataRef.current.values()].map((p) => p.displayName)],
+    );
     try {
       const res = await fetch("/api/meetings/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingId, transcript: fullText, duration }),
+        body: JSON.stringify({
+          meetingId,
+          title: meetingTitleRef.current,
+          participants,
+          transcript: fullText,
+          duration,
+        }),
       });
       if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
       // A failed report used to fall through to the meetings list, which reads as
@@ -3996,7 +4372,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = false;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
     setCallPhase(callPhaseRef.current);
-  }, [sendSignal, teardownCall, meetingId, duration, roomCode, router]);
+  }, [sendSignal, teardownCall, meetingId, duration, roomCode, router, drainTranscript]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
@@ -4143,6 +4519,34 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               <a href="/request-access" className="shrink-0 text-xs font-semibold text-[var(--gold-400)] hover:text-[var(--gold-500)] whitespace-nowrap transition-colors">Request access →</a>
             </div>
           )}
+          {/* The notice, distinct from the badge in the control bar. Everyone in
+              the room sees this, in the same words, the moment a recording
+              starts — a recorded conversation that only the recorder knew about
+              is the thing several US states actually prohibit. It withdraws
+              itself; the badge is what carries the fact for the rest of the
+              call. */}
+          {recordingNoticeOpen && recordingBanner && (
+            <div
+              role="status"
+              className="flex items-center gap-3 px-4 py-2.5 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0"
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-[var(--status-danger)] animate-pulse shrink-0" />
+              <p className="flex-1 text-xs font-medium text-[var(--fg-primary)]">
+                {recordingNotice("recording", recordingBanner.by)}
+              </p>
+              <button
+                onClick={() => setRecordingNoticeOpen(false)}
+                className="shrink-0 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {recorder.error && (
+            <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0">
+              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.error}</p>
+            </div>
+          )}
           {layout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
               <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
@@ -4238,6 +4642,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         waitingCount={isHost ? waitingPeers.length : 0} duration={duration}
         roomCode={roomCode} bwMode={bwMode}
+        recordingState={recordingBanner?.state ?? "idle"}
+        recordingBy={recordingBanner?.by ?? ""}
+        recordingElapsed={recorder.elapsed}
+        onToggleRecording={() => {
+          if (recorder.state === "recording") recorder.stop();
+          else void recorder.start();
+        }}
         onToggleMic={toggleMic} onToggleCam={toggleCam}
         onToggleScreen={() => void toggleScreen()}
         onToggleCopilot={() => (copilotOpen ? collapseCopilot() : expandCopilot())}

@@ -1,0 +1,134 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { formatSize } from "@/lib/meetings/recording-policy";
+
+/**
+ * The recording, on the report page.
+ *
+ * Plays through the app's own route rather than a signed Storage URL, because
+ * the recording is not one object: it is uploaded as five-second parts while
+ * the meeting runs, so a host's laptop closing costs seconds rather than an
+ * hour. The route stitches them and answers Range requests, which is what lets
+ * this <video> element seek (see lib/meetings/recording-range.ts).
+ *
+ * Renders nothing at all when there is no recording — most meetings are not
+ * recorded, and an empty "Recording" heading on every report would be noise on
+ * the majority of pages to serve the minority.
+ */
+
+interface Recording {
+  id: string;
+  status: "recording" | "complete" | "failed" | "abandoned";
+  duration_seconds: number | null;
+  size_bytes: number;
+  started_by_name: string | null;
+  started_at: string;
+  expires_at: string;
+  deleted_at: string | null;
+  mime_type: string;
+}
+
+function clock(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function daysUntil(iso: string): number {
+  return Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000);
+}
+
+export function RecordingPanel({ meetingId }: { meetingId: string }) {
+  const [recordings, setRecordings] = useState<Recording[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const supabase = createClient();
+      // RLS decides: only the host and people with an attendance row read these
+      // rows at all, which is the same rule the reports themselves use.
+      const { data } = await supabase
+        .from("live_meeting_recordings")
+        .select("id, status, duration_seconds, size_bytes, started_by_name, started_at, expires_at, deleted_at, mime_type")
+        .eq("meeting_id", meetingId)
+        .order("started_at", { ascending: true });
+      if (!cancelled) setRecordings((data as Recording[] | null) ?? []);
+    })();
+    return () => { cancelled = true; };
+  }, [meetingId]);
+
+  if (!recordings?.length) return null;
+
+  return (
+    <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-1)] p-5">
+      <h2 className="text-sm font-semibold text-[var(--fg-primary)] mb-1">
+        {recordings.length > 1 ? "Recordings" : "Recording"}
+      </h2>
+      <p className="text-xs text-[var(--fg-muted)] mb-4">
+        Visible to the people who were in this meeting.
+      </p>
+
+      <div className="flex flex-col gap-5">
+        {recordings.map((rec) => {
+          // Said plainly rather than shown as a broken player. A recording that
+          // aged out is a different thing from one that failed, and a viewer
+          // following an old link deserves to know which.
+          if (rec.deleted_at) {
+            return (
+              <div key={rec.id} className="text-xs text-[var(--fg-muted)]">
+                A recording from {new Date(rec.started_at).toLocaleDateString()} was deleted
+                after its 90-day retention period.
+              </div>
+            );
+          }
+
+          if (rec.status === "abandoned") {
+            return (
+              <div key={rec.id} className="text-xs text-[var(--fg-muted)]">
+                A recording was started on {new Date(rec.started_at).toLocaleDateString()} but
+                nothing was captured.
+              </div>
+            );
+          }
+
+          const expiringIn = daysUntil(rec.expires_at);
+
+          return (
+            <div key={rec.id} className="flex flex-col gap-2">
+              <video
+                controls
+                preload="metadata"
+                className="w-full rounded-lg bg-black aspect-video"
+                src={`/api/meetings/${meetingId}/recording/${rec.id}/stream`}
+              />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
+                {rec.status === "recording" && (
+                  <span className="text-[var(--status-warning)]">Still recording — this will grow</span>
+                )}
+                {rec.status === "failed" && (
+                  <span className="text-[var(--status-warning)]">
+                    Recording ended unexpectedly; what was captured is here
+                  </span>
+                )}
+                {rec.started_by_name && <span>Recorded by {rec.started_by_name}</span>}
+                {rec.duration_seconds ? <span>{clock(rec.duration_seconds)}</span> : null}
+                {rec.size_bytes > 0 && <span>{formatSize(rec.size_bytes)}</span>}
+                {/* The expiry is stated, not implied. A recording that vanishes
+                    without warning is worse than one that was never made. */}
+                <span className={expiringIn <= 7 ? "text-[var(--status-warning)]" : undefined}>
+                  {expiringIn > 0 ? `Deleted in ${expiringIn} day${expiringIn === 1 ? "" : "s"}` : "Deleted soon"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

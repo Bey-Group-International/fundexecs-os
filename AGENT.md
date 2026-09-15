@@ -112,6 +112,35 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
     confidence mask plus a small dilation of the person region keeps caps, hats
     and headscarves, and is cheap enough to be free when the dilation runs on the
     downscaled mask grid rather than the full frame.
+- ✅ Meeting recording — the host's browser composites the mesh to a canvas,
+  mixes every participant's audio, and encodes one watchable file. Active
+  speaker with a grid fallback; a shared screen takes the frame. Uploaded in
+  five-second parts during the call and served back through a Range-aware route
+  that stitches them, so a recording survives the laptop that made it and can
+  still be seeked. 720p, 90-day retention, swept by the hourly cron. Every
+  participant sees the same recording badge, from the same broadcast.
+  - A record only exists if something reads it. The transcript table was
+    written by every call for months and restored by nothing, so the real
+    durability of a meeting was one browser tab. A write path with no read path
+    is not a backup; it is a habit.
+  - Who owns a piece of data has to be decided once, explicitly. Everyone
+    holding the whole transcript and everyone saving it are different things,
+    and conflating them cost one stored copy per participant.
+  - Progress through a list that other people can insert into cannot be a
+    position. It has to be identity, or the mark moves under you.
+  - A guest has no session, so anything behind `auth.uid()` silently excludes
+    exactly the person the feature is for. RLS cannot fail loudly; a route can.
+  - A mesh has no server in the middle, so it has no place to record from. Any
+    feature needing every stream at once has to run in a participant's browser,
+    which makes that participant's laptop a single point of failure — and the
+    fix is always the same one phase 1 found: send the work somewhere durable as
+    it is produced, not when it is finished.
+  - Auto-directed video needs hysteresis or it is unwatchable. Cutting to
+    whoever is loudest right now produces a frame that flicks at every "mm-hm".
+  - Consent is a property of the room, not a setting on the recorder. If only
+    the person recording can see that a recording is happening, notice has not
+    been given — so it rides a broadcast every participant renders, and it is
+    re-sent whenever somebody joins.
 
 ### What has not been built yet
 
@@ -1852,6 +1881,130 @@ Deployed, monitoring               →  live, observability active
              |  5688 green (+59 new). Not exercised: a real guest on a real hostile
              |  network, which is the only thing that proves the relay path. Worth a
              |  phone on cellular with wifi off before this is trusted.
+             |
+2026-09-15  |  Live meetings: the transcript nobody was keeping  |  Asked to
+             |  optimize recording and transcripts. Recording does not exist —
+             |  no MediaRecorder anywhere, no table, no bucket — so per the
+             |  founder this is phase 1 of two, transcript now and full A/V
+             |  recording next. What the transcript path was actually doing:
+             |  Losing it (1): live_meeting_transcripts was written throughout
+             |  every call ever hosted and read by NOTHING. A backup never once
+             |  restored. The report was built from whatever the host's browser
+             |  still held in memory, so the record of a meeting hung on one tab
+             |  surviving to the end of it. Report and regenerate now read the
+             |  rows and take whichever record holds more LINES — not characters,
+             |  because a duplicated transcript is longer than a correct one.
+             |  Losing it (2): every participant saved EVERY line, its own and
+             |  everyone else's, so a three-person meeting stored each sentence
+             |  three times and the model read the room stuttering.
+             |  Losing it (3): progress was an INDEX into an array that remote
+             |  lines splice into the MIDDLE of, ordered by when they were spoken.
+             |  The mark slid over unsaved lines and back across saved ones — it
+             |  dropped and duplicated in the same call.
+             |  Losing it (4): the mark advanced BEFORE the insert resolved and
+             |  the insert was fire-and-forget. A failed write deleted those words
+             |  from history, silently, with nothing in the console.
+             |  Losing it (5): a 60s interval cleared on unmount with no final
+             |  flush, so up to a minute went unsaved — the minute a meeting
+             |  decides things in.
+             |  Losing it (6): a GUEST could not write at all. RLS on that table
+             |  is keyed on auth.uid() and a guest is nobody. Every guest line was
+             |  refused by a policy that cannot fail loudly. Fixing the duplication
+             |  alone would have deleted guests from the record entirely — the
+             |  transcript would have got cleaner and emptier at once, which is
+             |  why the new route exists.
+             |  Losing it (7): the model was handed "Meeting: Untitled" and
+             |  "Participants: Unknown" on every meeting ever ended from the room,
+             |  while its own prompt asks it to assign action items to named
+             |  people. endMeeting sent neither.
+             |  Losing it (8): TRANSCRIPT_LIMIT was 12,000 chars — twenty minutes
+             |  of speech. Longer meetings were cut to their tail, mid-WORD, with
+             |  no marker, so the model described the last twenty minutes as the
+             |  whole conversation. Now 120,000 (~2.5 hours), cut on a line
+             |  boundary, and the cut announces itself.
+             |  Built: lib/meetings/transcript-buffer.ts (ownership, id-keyed
+             |  watermark, batching, backoff) + transcript-restore.ts (rows back
+             |  to text, and which record to trust) + POST /api/meetings/[id]/
+             |  transcript, which takes the guest door the ICE endpoint already
+             |  proved and stamps speaker_user_id from the SESSION so an admitted
+             |  guest cannot post lines as the host. Rows carry the client's own
+             |  line id as primary key, so a retried flush upserts instead of
+             |  duplicating — which is what makes retrying safe at all.
+             |  Flush is now 15s, reschedules itself with backoff, drains on end,
+             |  and fires keepalive on unmount and pagehide.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5739 green (+51 new).
+             |  Not exercised: a real multi-party call. Specifically unproven —
+             |  that a guest's lines now land, and that a host killing their tab
+             |  mid-call leaves a meeting the report can still be built from.
+             |  Left undone deliberately: the meeting log still gates "regenerate"
+             |  on a report row existing (canRegenerate reads report.has_transcript),
+             |  so a meeting whose host died before pressing End has rows that are
+             |  reachable by the API and not by the UI. Closing that needs the log
+             |  query to know which meetings have lines without reading every line
+             |  — a view or an RPC — and it did not belong in this change.
+             |
+2026-09-15  |  Live meetings: recording, phase 3  |  Phase 2 of the founder's
+             |  two-phase plan (transcript first, then full A/V). Recording did
+             |  not exist at all before this — no MediaRecorder, no table, no
+             |  bucket — so this is a build, not an optimization.
+             |  The constraint that shapes everything: this is a MESH. No server
+             |  ever holds the media, so nothing server-side can record it; there
+             |  is nothing in the middle to record. The only place all the
+             |  streams exist at once is a browser, and the only browser
+             |  guaranteed present for the whole meeting and entitled to the
+             |  result is the HOST's. Decisions (all per founder): host
+             |  composites one file; active speaker with grid fallback and screen
+             |  share taking the frame; visible indicator + announcement rather
+             |  than per-person consent gates; 720p/1.5Mbps/90 days.
+             |  Built: recording-policy.ts (720p not 1080p — a quarter of the
+             |  pixels to composite on a machine already running the call; 24fps;
+             |  VP9 first, MP4 last because H.264 encoding is the most expensive
+             |  option here; zero-padded part paths so a string sort IS playback
+             |  order) + recording-layout.ts (the only interesting logic: a
+             |  challenger must hold the floor 1.5s before the frame cuts, and
+             |  crosstalk falls to the grid rather than flicking between two
+             |  people — the failure mode that makes auto-directed video
+             |  unwatchable) + recording-range.ts + recording-composer.ts +
+             |  use-recording.ts + the sweep + a Range-aware playback route.
+             |  Applying phase 1's lesson directly: a record held only in a
+             |  browser is one closed lid away from never existing. So parts are
+             |  uploaded every 5s during the call, and a host whose battery dies
+             |  loses seconds rather than an hour. Nothing ever stitches them —
+             |  Storage cannot concatenate server-side and pulling 675MB through
+             |  a function to rewrite it costs more than storing it twice — so
+             |  the playback route presents the parts as one stream and maps
+             |  Range requests onto them, which is what makes SEEKING work.
+             |  No API route in the write path at all: only the host records, the
+             |  host is signed in, and RLS on the bucket and both tables asks
+             |  exactly the question that matters. A route in the middle would be
+             |  a body limit and a round trip with no opinion.
+             |  Consent is not a host-side setting: several US states require
+             |  EVERY party to know, so the badge is driven by a broadcast signal
+             |  every participant renders, it is never hidden on mobile, and it
+             |  is re-announced whenever somebody joins — a late arrival has
+             |  missed the original and would otherwise sit in a recorded meeting
+             |  with no badge.
+             |  Self-caught before pushing: decode surfaces were pruned by what
+             |  was in the FRAME, so anyone cycling in and out of the 4-tile strip
+             |  had their <video> destroyed and rebuilt — and a new one shows
+             |  black until it decodes, so the recording would have flickered
+             |  exactly when the conversation moved around. Pruned by room
+             |  membership instead.
+             |  Also caught: the `video` signal carried no `sharing` flag, so the
+             |  composer could only recognise the HOST's own share — a guest
+             |  presenting slides would have been composited as a small tile of
+             |  their slides, which is the one thing a recording exists to catch.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5815 green (+76 new). NOT exercised, and this is the important
+             |  part: no frame of video has ever been composited by this code. No
+             |  camera, no second browser, no MediaRecorder in CI. The pure
+             |  layout/range/policy logic is tested hard because it is the only
+             |  part that can be, and the composer is deliberately thin for the
+             |  same reason. Needs a real two-browser call before it is trusted,
+             |  and specifically: whether a host's CPU can composite at 24fps
+             |  while running the call, and whether the assembled parts play and
+             |  seek in a browser.
 
 2026-09-15  |  The waiting room: the door, not the doorbell  |  Fifth pass, on
              |  the path between knocking and being let in. Three findings, each

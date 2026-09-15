@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
 import { CONVERSATIONAL_COST, gateConversationalSpend } from "@/lib/conversational-gate";
 import { generateMeetingReport } from "@/lib/meetings/report-analysis";
+import { chooseTranscript, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { toLogEntry } from "@/lib/meetings/meeting-log";
 import type { Json } from "@/lib/supabase/database.types";
@@ -67,7 +68,28 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .limit(1)
     .maybeSingle();
 
-  const transcript = (existing?.full_transcript ?? "").trim();
+  // The report row's copy, and the line-by-line record the call itself wrote.
+  //
+  // They are not the same thing and either can be the fuller one. The report
+  // holds whatever the host's browser had in memory when they pressed End —
+  // which misses anything said after their last flush, and misses everything if
+  // that tab had reloaded mid-call. The rows miss anything a participant failed
+  // to write. Regenerating is the moment to take the better of the two: it is
+  // the action a host reaches for precisely because the first report read
+  // wrong.
+  let stored = "";
+  try {
+    const { data: rows } = await supabase
+      .from("live_meeting_transcripts")
+      .select("speaker, text, ts, confidence, overlapped")
+      .eq("meeting_id", id)
+      .order("ts", { ascending: true });
+    if (rows?.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
+  } catch (err) {
+    console.warn("[regenerate] stored transcript unavailable", err);
+  }
+
+  const transcript = chooseTranscript((existing?.full_transcript ?? "").trim(), stored).trim();
   if (!transcript) {
     // Nothing to re-read. Said plainly, because "regenerate" on a meeting that
     // was never transcribed would otherwise look like a silent failure.

@@ -6,6 +6,7 @@ import { createTeamTask } from "@/lib/team-tasks";
 import { persistInstitutionalMeetingRecord } from "@/lib/meetings/service";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
+import { chooseTranscript, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 
 export const runtime = "nodejs";
 
@@ -82,8 +83,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // The transcript on file, not just the one the browser posted.
+    //
+    // `live_meeting_transcripts` has been written throughout every call this
+    // product has ever hosted and read by nothing, anywhere — a backup that was
+    // never once restored. The report was built from the host's browser memory
+    // alone, so the entire record of a meeting hung on one tab surviving to the
+    // end of it: a crash, a reload, a phone call, a closed laptop, and the
+    // meeting was gone while the rows that could have rebuilt it sat here.
+    //
+    // A failure to read is not a failure to report. The posted transcript is
+    // still in hand, and answering 500 because the backup was unreachable would
+    // lose a meeting we can perfectly well summarise.
+    let stored = "";
+    try {
+      const { data: rows } = await supabase
+        .from("live_meeting_transcripts")
+        .select("speaker, text, ts, confidence, overlapped")
+        .eq("meeting_id", body.meetingId)
+        .order("ts", { ascending: true });
+      if (rows?.length) stored = restoreTranscript(rows as unknown as StoredLine[]);
+    } catch (err) {
+      console.warn("[/api/meetings/report] stored transcript unavailable", err);
+    }
+
     // Cap transcript to stay within model context / cost budget.
-    const transcript = clampTranscript(body.transcript);
+    const transcript = clampTranscript(chooseTranscript(body.transcript, stored));
 
     // The prompt and schema live in lib/meetings/report-analysis so the
     // regenerate path produces the identical shape — the log reads
