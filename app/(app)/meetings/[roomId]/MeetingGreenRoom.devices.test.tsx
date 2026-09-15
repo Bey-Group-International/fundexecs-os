@@ -189,3 +189,69 @@ describe("a camera the previous page has not finished releasing", () => {
     expect(asks.filter((c) => c.audio && !c.video)).toHaveLength(0);
   });
 });
+
+// The contract the join path now leans on. The call takes these tracks over
+// instead of closing them and opening the same two devices again — so the one
+// thing this screen must not do afterwards is stop them. Getting this wrong is
+// silent and total: the member is in the meeting, and nobody can hear them.
+describe("handing the devices to the call", () => {
+  function openBoth() {
+    getUserMedia.mockImplementation(async (c: Constraints) => {
+      const tracks: unknown[] = [];
+      if (c.video) tracks.push(track("video", "cam-default"));
+      if (c.audio) tracks.push(track("audio", "mic-default"));
+      return new (globalThis as { MediaStream: new (t: unknown[]) => MediaStream }).MediaStream(tracks);
+    });
+  }
+
+  /** Render, and return the tracks handed up plus the means to keep them. */
+  async function handover() {
+    const onPreviewStream = jest.fn();
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<MeetingGreenRoom {...base} onPreviewStream={onPreviewStream} />);
+    });
+    await waitFor(() => expect(onPreviewStream).toHaveBeenCalled());
+    const [stream, release] = onPreviewStream.mock.calls.at(-1) as [MediaStream, () => void];
+    return { view, stream, release };
+  }
+
+  it("stops its devices on unmount when the call did not take them", async () => {
+    openBoth();
+    const { view, stream } = await handover();
+    const tracks = stream.getTracks() as unknown as Array<{ stop: jest.Mock }>;
+    expect(tracks.length).toBeGreaterThan(0);
+
+    view.unmount();
+    for (const t of tracks) expect(t.stop).toHaveBeenCalled();
+  });
+
+  it("leaves them alone once the call has taken them", async () => {
+    openBoth();
+    const { view, stream, release } = await handover();
+    const tracks = stream.getTracks() as unknown as Array<{ stop: jest.Mock }>;
+    expect(tracks.length).toBeGreaterThan(0);
+
+    release();
+    view.unmount();
+    for (const t of tracks) expect(t.stop).not.toHaveBeenCalled();
+  });
+
+  // Not only on unmount: the per-device effects replace tracks too, and a
+  // replacement that stopped the outgoing microphone would be the same bug
+  // arriving a different way.
+  it("does not stop a released track when replacing it either", async () => {
+    openBoth();
+    const { stream, release } = await handover();
+    const tracks = stream.getTracks() as unknown as Array<{ stop: jest.Mock }>;
+    release();
+
+    // A device change after the handover: the screen re-opens, but what it let
+    // go of stays running.
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+      await Promise.resolve();
+    });
+    for (const t of tracks) expect(t.stop).not.toHaveBeenCalled();
+  });
+});

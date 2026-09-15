@@ -61,10 +61,23 @@ export interface MeetingGreenRoomProps {
   admission?: AdmissionUiState;
   /** Abandon the wait. Required whenever `admission` can leave "idle". */
   onCancelAdmission?: () => void;
-  /** Hands the live preview stream up so the room can release it before it
-   *  opens the real sending stream — some platforms will not grant the same
-   *  camera twice. */
-  onPreviewStream?: (stream: MediaStream | null) => void;
+  /**
+   * Hands the live preview stream up, with the means to keep it.
+   *
+   * The room used to stop these tracks and immediately open the same devices
+   * again. That reopen is the single most expensive thing on the join path —
+   * a few hundred milliseconds on a laptop and considerably more on Windows,
+   * a camera light that blinks off and on, and a genuine race, because a
+   * camera released a moment ago is often still held when it is asked for
+   * again. All of it to arrive at the tracks that were already open.
+   *
+   * So the room may ADOPT these instead. `release` is how it says it has: once
+   * called, this screen stops treating the tracks as its own and will not stop
+   * them on unmount or when replacing them. Calling it without taking the
+   * tracks would leak a camera, so it is the room's undertaking that it now
+   * owns them.
+   */
+  onPreviewStream?: (stream: MediaStream | null, release: () => void) => void;
 }
 
 /** MediaDeviceInfo is a live browser object; this is the plain shape we test against. */
@@ -361,6 +374,12 @@ export function MeetingGreenRoom({
   const onPreviewStreamRef = useRef(onPreviewStream);
   useEffect(() => { onPreviewStreamRef.current = onPreviewStream; }, [onPreviewStream]);
 
+  // Set once the room has taken the tracks over. Every place that would stop
+  // them checks it: after this, they belong to the call, and stopping them here
+  // would darken a camera that is already on the wire.
+  const relinquishedRef = useRef(false);
+  const release = useCallback(() => { relinquishedRef.current = true; }, []);
+
   // Mirrors of the choices, for the mount-only open and the failure handler:
   // both need the current value without being re-created when it changes.
   const camIdRef = useRef(camId);
@@ -394,14 +413,18 @@ export function MeetingGreenRoom({
   /** Adopt a video track, releasing whatever it replaces. */
   const adoptVideo = useCallback((track: MediaStreamTrack | null) => {
     const previous = videoTrackRef.current;
-    if (previous && previous !== track) { try { previous.stop(); } catch { /* already stopped */ } }
+    if (previous && previous !== track && !relinquishedRef.current) {
+      try { previous.stop(); } catch { /* already stopped */ }
+    }
     videoTrackRef.current = track;
     setVideoTrack(track);
   }, []);
 
   const adoptAudio = useCallback((track: MediaStreamTrack | null) => {
     const previous = audioTrackRef.current;
-    if (previous && previous !== track) { try { previous.stop(); } catch { /* already stopped */ } }
+    if (previous && previous !== track && !relinquishedRef.current) {
+      try { previous.stop(); } catch { /* already stopped */ }
+    }
     audioTrackRef.current = track;
     setAudioTrack(track);
   }, []);
@@ -592,14 +615,17 @@ export function MeetingGreenRoom({
     return tracks.length > 0 ? new MediaStream(tracks) : null;
   }, [videoTrack, audioTrack]);
 
-  useEffect(() => { onPreviewStreamRef.current?.(previewStream); }, [previewStream]);
+  useEffect(() => { onPreviewStreamRef.current?.(previewStream, release); }, [previewStream, release]);
 
-  // Release on unmount. The room stops the same tracks before it opens its own
-  // stream, so this is a backstop for leaving the page without joining.
+  // Release on unmount — unless the room took these over, in which case they are
+  // live on the wire and stopping them here is exactly the bug this screen used
+  // to have in reverse. A backstop for leaving the page without joining.
   useEffect(() => {
     return () => {
-      try { videoTrackRef.current?.stop(); } catch { /* already stopped */ }
-      try { audioTrackRef.current?.stop(); } catch { /* already stopped */ }
+      if (!relinquishedRef.current) {
+        try { videoTrackRef.current?.stop(); } catch { /* already stopped */ }
+        try { audioTrackRef.current?.stop(); } catch { /* already stopped */ }
+      }
       videoTrackRef.current = null;
       audioTrackRef.current = null;
     };

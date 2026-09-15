@@ -74,14 +74,16 @@ export function pickDevice(devices: Device[], kind: DeviceKind, remembered: stri
 export function constraintsFor(
   kind: "audioinput" | "videoinput",
   deviceId: string | null,
-  opts: { noiseSuppression?: boolean } = {},
 ): MediaTrackConstraints | boolean {
   if (kind === "audioinput") {
     const audio: MediaTrackConstraints = {
-      // On by default: a call is a conversation, not a recording session, and
-      // these are what keep a laptop mic in a hard room usable.
+      // Always on, and not configurable: a call is a conversation, not a
+      // recording session, and these are what keep a laptop mic in a hard room
+      // usable. There was an option here to turn noise suppression off and
+      // nothing ever passed it — an unused switch reads as a feature that
+      // exists, so it is gone rather than left implying one.
       echoCancellation: true,
-      noiseSuppression: opts.noiseSuppression ?? true,
+      noiseSuppression: true,
       autoGainControl: true,
     };
     if (deviceId) audio.deviceId = { exact: deviceId };

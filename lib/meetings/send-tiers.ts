@@ -45,7 +45,8 @@ const PER_PEER_FLOOR_KBPS = 150;
  * streams cost the entire budget and look worse doing it.
  */
 const THUMBNAIL_KBPS = 180;
-const THUMBNAIL_SCALE = 4;
+/** Exported: the room reads it to tell a thumbnail cap from a full-size one. */
+export const THUMBNAIL_SCALE = 4;
 const THUMBNAIL_FPS = 15;
 
 /** Above this many tiles, a grid cell is small enough to be a thumbnail. */
@@ -189,4 +190,58 @@ export function activeEncoderCount(caps: ReadonlyMap<string, SendCap | null>): n
   let n = 0;
   for (const cap of caps.values()) if (cap) n += 1;
   return n;
+}
+
+// ─── What the camera itself should run at ────────────────────────────────────
+
+// Everything above decides what the ENCODERS do. The camera underneath them was
+// always opened at 720p and left there, so a laptop in a presented meeting
+// captures 720p thirty times a second, scales each frame down four times over
+// for four thumbnails, and throws the detail away. The capture and the scaling
+// are both real CPU, they are paid whether or not anybody is looking, and on a
+// phone they are paid out of the battery.
+//
+// So the camera follows demand too. The rule is the simplest one that cannot
+// surprise anybody: the capture serves the LARGEST thing anyone has asked for.
+// One person spotlighting you is enough to keep it at 720p, because the cost of
+// being wrong in that direction is a visibly soft picture for the one person
+// actually watching.
+
+export interface CaptureSize {
+  width: number;
+  height: number;
+  frameRate: number;
+}
+
+export const FULL_CAPTURE: CaptureSize = { width: 1280, height: 720, frameRate: 30 };
+
+/**
+ * Enough for a thumbnail with room to spare.
+ *
+ * 640x360 rather than the 320x180 a thumbnail is drawn at: a capture mode has
+ * to be one the camera actually supports, 360p is universally available where
+ * 180p is not, and leaving the encoder something to scale keeps the edges of a
+ * face from crawling.
+ */
+export const THUMBNAIL_CAPTURE: CaptureSize = { width: 640, height: 360, frameRate: 30 };
+
+/**
+ * A cap's resolution divisor, corrected for the capture actually in effect.
+ *
+ * This is the part that makes the whole idea safe, and the reason it is here
+ * rather than inline: `scaleResolutionDownBy` is a divisor, so it means a
+ * different output size on every capture size. A thumbnail's scale of 4 is
+ * 320x180 out of a 1280-wide capture and 160x90 out of a 640-wide one — so
+ * dropping the capture without correcting the divisor would quietly halve every
+ * thumbnail in the call, which is the opposite of the intent.
+ *
+ * The caps are written against 720p because that is what the camera opens at.
+ * Rescaling them against the real capture height keeps the OUTPUT fixed while
+ * the input moves, and the floor of 1 is what stops a small capture being
+ * upscaled back to a size it has no detail for.
+ */
+export function scaleForCapture(scaleFrom720: number, captureHeight: number): number {
+  if (!Number.isFinite(scaleFrom720) || scaleFrom720 <= 0) return 1;
+  if (!Number.isFinite(captureHeight) || captureHeight <= 0) return scaleFrom720;
+  return Math.max(1, (scaleFrom720 * captureHeight) / FULL_CAPTURE.height);
 }

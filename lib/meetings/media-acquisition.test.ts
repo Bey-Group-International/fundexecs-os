@@ -7,6 +7,7 @@ import {
   deviceAttemptOrder,
   type AcquisitionOutcome,
   type DeviceOutcome,
+  planPreviewAdoption,
 } from "./media-acquisition";
 import type { Device } from "./devices";
 
@@ -156,5 +157,89 @@ describe("acquisitionMessage", () => {
       camera: outcome({ fellBack: true }),
       microphone: outcome({ fellBack: true }),
     }))).toMatch(/camera and microphone/i);
+  });
+});
+
+describe("planPreviewAdoption", () => {
+  const live = (deviceId: string) => ({ deviceId, readyState: "live" });
+
+  // The whole point: the devices the green room opened are the ones the call
+  // wants, so closing them and opening the same two again buys nothing and
+  // costs a few hundred milliseconds, a blinked camera light, and a race.
+  it("takes the devices that are already the right ones", () => {
+    const plan = planPreviewAdoption({
+      wantCamera: true, cameraId: "cam-a", micId: "mic-a",
+      camera: live("cam-a"), microphone: live("mic-a"),
+    });
+    expect(plan).toEqual({ adopt: true, camera: true, reason: "adopted" });
+  });
+
+  // An empty request is "whatever the system considers current", which is
+  // exactly what the green room was given and what it opened.
+  it("treats an unspecified device as satisfied by whatever opened", () => {
+    const plan = planPreviewAdoption({
+      wantCamera: true, cameraId: "", micId: "",
+      camera: live("cam-resolved"), microphone: live("mic-resolved"),
+    });
+    expect(plan.adopt).toBe(true);
+  });
+
+  // Adopting a track that is not the chosen device would put someone on the
+  // wrong camera for a whole meeting, silently. Worse than the delay avoided.
+  it("refuses a camera that is not the one asked for", () => {
+    const plan = planPreviewAdoption({
+      wantCamera: true, cameraId: "cam-b", micId: "mic-a",
+      camera: live("cam-a"), microphone: live("mic-a"),
+    });
+    expect(plan).toEqual({ adopt: false, camera: false, reason: "camera_mismatch" });
+  });
+
+  it("refuses a microphone that is not the one asked for", () => {
+    const plan = planPreviewAdoption({
+      wantCamera: true, cameraId: "cam-a", micId: "mic-b",
+      camera: live("cam-a"), microphone: live("mic-a"),
+    });
+    expect(plan.reason).toBe("microphone_mismatch");
+  });
+
+  // Joining with the camera off is ordinary, and it carries an instruction:
+  // the preview's camera is not coming with us and has to be stopped, or the
+  // light stays on for a member who chose to be unseen.
+  it("adopts with no camera, and says the preview's camera is not coming", () => {
+    const plan = planPreviewAdoption({
+      wantCamera: false, cameraId: "cam-a", micId: "mic-a",
+      camera: live("cam-a"), microphone: live("mic-a"),
+    });
+    expect(plan).toEqual({ adopt: true, camera: false, reason: "adopted" });
+  });
+
+  // The microphone decides. A member with no camera can take part; one with no
+  // microphone is sitting in a room nobody knows they are in, so that case goes
+  // to the full path, which knows how to walk devices and report why.
+  it("will not adopt without a microphone", () => {
+    expect(planPreviewAdoption({
+      wantCamera: false, cameraId: "", micId: "",
+      camera: null, microphone: null,
+    }).reason).toBe("no_microphone");
+  });
+
+  it("will not adopt a camera that is wanted and not there", () => {
+    expect(planPreviewAdoption({
+      wantCamera: true, cameraId: "", micId: "",
+      camera: null, microphone: live("mic-a"),
+    }).reason).toBe("no_camera");
+  });
+
+  // A track that has ended is not a track. Both kinds, because a dead mic
+  // adopted as live is a member nobody can hear.
+  it("will not adopt an ended track", () => {
+    expect(planPreviewAdoption({
+      wantCamera: true, cameraId: "", micId: "",
+      camera: { deviceId: "cam-a", readyState: "ended" }, microphone: live("mic-a"),
+    }).adopt).toBe(false);
+    expect(planPreviewAdoption({
+      wantCamera: false, cameraId: "", micId: "",
+      camera: null, microphone: { deviceId: "mic-a", readyState: "ended" },
+    }).adopt).toBe(false);
   });
 });

@@ -81,10 +81,6 @@ describe("constraintsFor", () => {
     expect(c).toMatchObject({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
   });
 
-  it("lets noise suppression be turned off", () => {
-    const c = constraintsFor("audioinput", null, { noiseSuppression: false }) as MediaTrackConstraints;
-    expect(c.noiseSuppression).toBe(false);
-  });
 
   it("pins an explicitly chosen device", () => {
     const c = constraintsFor("audioinput", "headset") as MediaTrackConstraints;
