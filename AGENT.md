@@ -86,6 +86,32 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
 - ✅ Earn conversation theater — sessions now have a 2D live workspace with
   clickable agent avatars, computation panels, active model display, expanding
   composer, media attachment manifests, and browser voice transcript capture.
+- ✅ Live meetings — a browser WebRTC mesh at `/meetings/[roomId]`, with the
+  waiting room, backgrounds and device picking a call needs to be usable by a
+  guest who has never seen the product. The rules the call runs on are pure and
+  tested in `lib/meetings/` rather than buried in the component, because none of
+  them can be exercised by a browser in CI: negotiation and link policy
+  (`connection.ts`), waiting-room admission (`admission-session.ts`,
+  `admission-poll.ts`), segmentation (`backgrounds.ts`) and host alerting
+  (`knock-notice.ts`). What that layer has had to learn, so far:
+  - A mesh has no server to absorb a bad uplink, so every sender is capped
+    against a shared upstream budget and steps DOWN and back UP on measured loss.
+    Adaptation that only ever steps down is a ratchet: a room that drops to
+    audio-only can no longer produce the bitrate its own recovery test demands,
+    and stays there for the rest of the call.
+  - An external guest is the participant most likely to be behind a NAT that a
+    direct path never traverses, and the least able to do anything about it. They
+    are sent straight to the relay when one is available; the host and teammates
+    are not, because a relay they did not need is a hop they pay for.
+  - The host is the only person who can let a guest in, and is usually in another
+    tab when the guest knocks. A browser notification is the only channel that
+    reaches them there — and `Notification.requestPermission()` needs a live user
+    activation, which does not survive an `await`, so it is asked for on the same
+    tick as the click and never on page load.
+  - Person segmentation trained on faces treats headwear as background. The
+    confidence mask plus a small dilation of the person region keeps caps, hats
+    and headscarves, and is cheap enough to be free when the dilation runs on the
+    downscaled mask grid rather than the full frame.
 
 ### What has not been built yet
 

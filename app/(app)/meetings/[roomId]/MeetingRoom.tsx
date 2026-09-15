@@ -233,6 +233,22 @@ function notificationPermission(): NotificationPermissionLike {
   return Notification.permission as NotificationPermissionLike;
 }
 
+/**
+ * Ask the host, once, whether we may knock on their behalf.
+ *
+ * Deliberately synchronous. `Notification.requestPermission()` is gated on
+ * transient user activation, and activation does not survive an `await` — so
+ * this has to run on the same tick as the click that triggered it, not after
+ * the sign-in check, the meeting lookup and the camera have all been waited on.
+ * Getting that wrong does not throw: the prompt is simply never shown, the
+ * permission stays "default", and the waiting-room notification this exists for
+ * silently never fires.
+ */
+function requestHostNotifications(isHost: boolean): void {
+  if (!shouldRequestNotificationPermission({ isHost, permission: notificationPermission() })) return;
+  try { void Notification.requestPermission(); } catch { /* unsupported */ }
+}
+
 function playChime(type: "join" | "leave" | "knock") {
   try {
     const ctx = new AudioContext();
@@ -2441,16 +2457,13 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setReady(true);
     setJoining(false);
 
-    // Asked here and nowhere else: this runs off the host's own press of Join,
-    // which is the gesture browsers require and the moment the request makes
-    // sense to the person seeing it. A prompt on page load is the one everybody
-    // dismisses, and a dismissal is permanent.
-    if (isHostRef.current && shouldRequestNotificationPermission({
-      isHost: true,
-      permission: notificationPermission(),
-    })) {
-      try { void Notification.requestPermission(); } catch { /* unsupported */ }
-    }
+    // The real request is made synchronously from the Join click, where the user
+    // activation still stands. This is the fallback for the one case that misses
+    // it: a host whose own identity was not known at click time — `detectHost`
+    // still in flight, or a meeting this very call just created. The prompt may
+    // be suppressed for want of activation, which costs nothing, because the
+    // alternative is a host who is never offered it at all.
+    requestHostNotifications(isHostRef.current);
   }, [supabase, roomCode, handleSignal, sendSignal, clearWaitingTimers]);
 
   /**
@@ -2571,6 +2584,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       setSelectedMicId(choice.micId);
       setSelectedSpeakerId(choice.speakerId);
     }
+    // Before the first await, while the click that got us here is still a live
+    // user activation. `detectHost` has usually resolved by now — the green room
+    // stands between page load and this press — so the host is already known.
+    requestHostNotifications(isHostRef.current);
+
     setJoining(true);
     const name = displayName.trim() || "Participant";
     setLocalName(name);
