@@ -29,7 +29,9 @@ export type AdmissionUiState =
   /** Knocked, and the host has not answered. */
   | "waiting"
   /** Long enough that the host may not be coming. Still waiting. */
-  | "timed-out";
+  | "timed-out"
+  /** Let in, and entering the room did not work. Nothing is waiting any more. */
+  | "failed";
 
 export interface AdmissionStatusCopy {
   title: string;
@@ -41,6 +43,11 @@ export interface AdmissionStatusCopy {
 /** Whether the join control should still accept a press. */
 export function canPressJoin(state: AdmissionUiState): boolean {
   return state === "idle";
+}
+
+/** Whether this state is a failure rather than a stage of waiting. */
+export function isAdmissionFailure(state: AdmissionUiState): boolean {
+  return state === "failed";
 }
 
 /** Whether the guest is knocking or waiting, rather than merely looking. */
@@ -77,6 +84,16 @@ export function admissionStatusCopy(state: AdmissionUiState): AdmissionStatusCop
         title: "The host hasn't answered yet",
         detail: "You'll be let in as soon as they do.",
         cancelLabel: "Stop waiting",
+      };
+    case "failed":
+      // The one state here that is not a wait. The host said yes and the room
+      // could not be entered — devices, the network, the connection. Nothing is
+      // polling any more, so this must offer the way back itself rather than
+      // describing something still in progress.
+      return {
+        title: "Couldn't join the meeting",
+        detail: "The host let you in, but something went wrong on the way. Your camera and microphone are still set up.",
+        cancelLabel: "Try again",
       };
   }
 }

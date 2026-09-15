@@ -91,3 +91,30 @@ export function pollCount(waitedMs: number, schedule: readonly PollStep[] = ADMI
   }
   return n;
 }
+
+/**
+ * What an answer from the status endpoint means.
+ *
+ * The caller used to collapse every non-OK response into null — "no news, ask
+ * again" — which is right for a dropped packet and wrong for the one response
+ * that is an answer. A 404 from that route means the meeting is not there: it
+ * was deleted, or its room code never existed. Nothing about asking again can
+ * change that, so a guest whose host cancelled the meeting sat watching a
+ * spinner for the full ten minutes a wait is allowed to run, for a room that no
+ * longer exists.
+ *
+ * Everything else non-OK stays transient on purpose. A 429 is the limiter
+ * saying "slower", not "never", and a 500 is a bad minute rather than a
+ * verdict — treating either as terminal would turn a blip into a guest told
+ * the meeting is over while it is still going on.
+ */
+export function pollStatusFromResponse(
+  httpStatus: number,
+  body: { status?: string } | null,
+): string | null {
+  // The meeting is gone. For a guest that is indistinguishable from it having
+  // ended, and "ended" is a verdict the session already knows how to act on.
+  if (httpStatus === 404) return "ended";
+  if (httpStatus < 200 || httpStatus > 299) return null;
+  return body?.status ?? null;
+}
