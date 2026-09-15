@@ -11,11 +11,56 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 
-/** Model context / cost budget. The tail is kept: a meeting ends where it decided things. */
-export const TRANSCRIPT_LIMIT = 12_000;
+/**
+ * Model context / cost budget, in characters. The tail is kept: a meeting ends
+ * where it decided things.
+ *
+ * Was 12,000 — around 3,000 tokens, or twenty minutes of speech. Every meeting
+ * longer than that had most of itself silently thrown away before the model saw
+ * a word of it, and the report then described the last twenty minutes as though
+ * they were the whole conversation: an hour of context for a decision, cut, and
+ * the decision summarised without it.
+ *
+ * 120,000 characters is roughly 30,000 tokens and covers something like two and
+ * a half hours of talking, so in practice nothing is cut at all. It is a small
+ * fraction of the model's context window and it is spent once per meeting.
+ */
+export const TRANSCRIPT_LIMIT = 120_000;
 
+/** Prefixed to a transcript that had to be cut, so the model knows it is reading a fragment. */
+export const TRUNCATION_NOTE =
+  "[Earlier discussion omitted — this transcript begins partway through the meeting.]";
+
+/**
+ * Cut an over-long transcript down to the budget, from the front.
+ *
+ * Two things the old one-line slice got wrong, both of which the model then
+ * repeated as fact:
+ *
+ *  - it cut mid-sentence, and usually mid-WORD, so the transcript opened on a
+ *    fragment attributed to nobody — which reads exactly like a speaker whose
+ *    name was not captured, and got summarised as one.
+ *  - it said nothing about having cut. A model handed the last portion of a
+ *    meeting with no marker will describe it as the meeting, and write a
+ *    follow-up email that opens on whatever the transcript happens to start
+ *    with.
+ *
+ * So the cut lands on a line boundary and announces itself. Idempotent: a
+ * transcript already carrying the note and already inside the budget is handed
+ * back untouched, because this runs on both the route and the analysis path.
+ */
 export function clampTranscript(transcript: string): string {
-  return transcript.length > TRANSCRIPT_LIMIT ? transcript.slice(-TRANSCRIPT_LIMIT) : transcript;
+  const text = transcript ?? "";
+  if (text.length <= TRANSCRIPT_LIMIT) return text;
+
+  const budget = TRANSCRIPT_LIMIT - TRUNCATION_NOTE.length - 2;
+  const tail = text.slice(-budget);
+  // Drop the partial first line. `indexOf` rather than a split so a transcript
+  // with no newline at all — one enormous unbroken line — still yields
+  // something rather than nothing.
+  const firstBreak = tail.indexOf("\n");
+  const whole = firstBreak >= 0 ? tail.slice(firstBreak + 1) : tail;
+  return `${TRUNCATION_NOTE}\n${whole}`;
 }
 
 /**
