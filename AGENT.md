@@ -2115,6 +2115,122 @@ Deployed, monitoring               →  live, observability active
              |  changes its mind. Not exercised: a real Google account revoking
              |  access (the backoff path), and a rendered .docx opened in Word.
 
+2026-09-15  |  Devices that come back  |  Sixth pass, on the camera and
+             |  microphone being live when a meeting starts (asked for by the
+             |  user). Four decisions put to them; the green room stays for
+             |  everyone, both devices keep starting ON with no remembered
+             |  off-state, a device that fails to open is retried in the
+             |  background, and one lost mid-call is reopened automatically.
+             |  The first two were already true — the green room defaults both
+             |  on and carries the choice in — so the work is entirely in the
+             |  cases where "live" silently was not.
+             |  1. A CAMERA LOST MID-CALL WAS NOT RECOVERED IF A BACKGROUND WAS
+             |  ON. The recovery existed and was attached to the wrong track. It
+             |  watched the outgoing video track for `ended`, guarded on that
+             |  track being the camera — and with an effect on, the outgoing
+             |  track is the processor's CANVAS, so the guard failed and no
+             |  listener was attached at all. Backgrounds are what this product
+             |  leads with, so the members most likely to be on a laptop webcam
+             |  had no recovery. The same bug made the listener a one-shot for
+             |  everybody else: it keyed off `localStream`, which does not change
+             |  identity when the camera does, so every camera after the first —
+             |  from the picker, or from this very fallback — died unnoticed. Now
+             |  watches the camera device itself, mirrored into state so the
+             |  effect re-attaches when it changes.
+             |  2. A device that would not open at join is now gone back for.
+             |  Joining without a camera is the right trade for getting in; not
+             |  watching for it to free up is not. The failure that dominates is
+             |  "in_use" — a camera still held by the Zoom the member has not
+             |  quit — and that condition ends, usually within seconds, with
+             |  nothing watching. device-reacquire decides what each failure is
+             |  worth: in_use/aborted/missing/unknown poll on a front-loaded
+             |  backoff (2s, 5s, 10s, 20s, 30s, then a minute, stopping at ten);
+             |  overconstrained never retries, because the device is present and
+             |  cannot do what was asked, so the identical request fails
+             |  identically forever; and denied does not poll AT ALL — a browser
+             |  told no rejects the next call rather than re-prompting, so a poll
+             |  there is a loop that can never succeed. It waits on the
+             |  Permissions API instead, which is the whole mechanism for that
+             |  case rather than an optimisation.
+             |  reacquire-loop does the waiting, plus the two events that make
+             |  waiting pointless: devicechange (a webcam plugged in at second
+             |  three should not wait out an interval chosen on the assumption
+             |  nothing happened) and a permission flipping to granted. Attempts
+             |  never overlap — a dock reconnecting fires several devicechange
+             |  events and each must not start its own getUserMedia beside the
+             |  one in flight — and the backoff restarts from the front after a
+             |  real event.
+             |  3. GUARD, which the request did not include: automatic recovery
+             |  must never fight the member. Both loops stop the moment they
+             |  toggle, switch or start that device themselves, and a recovered
+             |  microphone comes back at the state they ASKED for at join, not
+             |  switched on because it happened to be recovered — someone who
+             |  joined muted stays muted. A recovered mic also re-announces over
+             |  the signal channel, because everyone else has been drawing them
+             |  as muted and the track arriving is invisible to the room.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5747 green (+33 new, 5714 to 5747), all 33 in the two new
+             |  modules.
+             |  NOT EXERCISED, and the honest gap: finding 1 has no test. The
+             |  MeetingRoom test harness deliberately stops short of entering the
+             |  room ("a test that mocked all of that would be testing its own
+             |  mocks"), so there is no media harness to extend and building one
+             |  is larger than the fix. It is verified by reading. Also not
+             |  exercised: a real camera being released by a real application, a
+             |  real permission grant mid-call, and Safari's Permissions support,
+             |  which has come and gone by version.
+
+2026-09-15  |  A camera that checks itself  |  Reported: configure the camera
+             |  in the green room, start the meeting, and it is live for NOBODY
+             |  — including the member — until they open device settings and
+             |  pick the same camera again. Reproduces on every join path, with
+             |  and without a background.
+             |  Static analysis found at least four ways to reach that state and
+             |  they are indistinguishable from inside the room: a device asked
+             |  for again before its driver let go (the green room's tracks are
+             |  stopped and the same camera requested milliseconds later;
+             |  openCallMedia retries once, and some hardware needs longer); a
+             |  track that had already ended; a track left DISABLED by the
+             |  background hold, which disables the camera until the segmenter
+             |  builds and depends on every route out re-enabling it; and an
+             |  adopted preview that was never live.
+             |  DECISION: do not chase which. The member's own repair — open
+             |  settings, pick the camera — works for all four, which means the
+             |  fix is to do that automatically rather than to find the one true
+             |  cause. camera-liveness judges the camera by what it IS doing:
+             |  wanted and no track, wanted and ended, or open-and-disabled
+             |  behind a UI that says it is on. The room asks once, 2.5s after
+             |  joining, and repairs what it finds.
+             |  Two details that matter. The check reads the CAMERA, not the
+             |  outgoing track: with an effect on, the outgoing track is the
+             |  processor's canvas, and a healthy canvas over a dead camera is
+             |  precisely the state this catches. And a disabled-but-open track
+             |  is repaired by setting the flag, not by reopening — reopening
+             |  works, and also blinks the camera light in front of somebody
+             |  watching their own face and costs a second of black on every
+             |  other tile, for a fault that is one boolean.
+             |  Deliberately late (a fresh track is briefly not producing, and
+             |  the hold is released only when a 12MB segmenter lands — judging
+             |  either sooner would condemn a camera that is merely starting)
+             |  and deliberately one-shot (a safety net under a path that is
+             |  supposed to work; anything still wrong afterwards belongs to the
+             |  re-acquisition loop, anything breaking later to the device-loss
+             |  listener).
+             |  Not repaired: a member who joined with their camera off, or who
+             |  turned it off in the first 2.5 seconds. camWantedRef follows
+             |  their intent rather than camOn, which is false in exactly the
+             |  broken case this exists to catch.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5759 green (+12 new, 5747 to 5759).
+             |  NOT EXERCISED, and the honest gap: the wiring has no test, for
+             |  the same reason as the entry above — the MeetingRoom harness
+             |  stops short of entering the room, so there is no media harness.
+             |  The verdict logic is covered; the effect that calls it is
+             |  verified by reading. And because the root cause was never
+             |  isolated, this is a net under the failure rather than a fix for
+             |  it: if it still reproduces, the console now says which of the
+             |  four states it was, which is the thing nobody could see before.
+
 ```
 
 ---
