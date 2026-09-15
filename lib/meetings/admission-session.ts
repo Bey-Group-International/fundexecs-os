@@ -16,6 +16,10 @@
 //     that was never recorded is waiting forever, so re-knock.
 //   - A decision is terminal and fires once. Nothing after it — a late poll
 //     resolving, a visibility change — may fire a second callback.
+//   - Being admitted can still fail. Entering the room opens devices and builds
+//     connections, and by then everything here has stopped; a failure nobody
+//     catches is a guest stranded on the waiting screen while the host is told
+//     they went in.
 //   - The timeout changes what the screen SAYS, and nothing else. Polling
 //     continues, because a host who answers at three minutes should still get
 //     their guest in.
@@ -65,6 +69,21 @@ export interface AdmissionSessionOptions {
   watch?: (handlers: AdmissionWatchHandlers) => () => void;
   /** The host let them in. */
   onAdmitted: () => void | Promise<void>;
+  /**
+   * Being let in did not work.
+   *
+   * `onAdmitted` is the one callback that does real work — it opens devices,
+   * negotiates ICE and joins a channel — and it is called after the session has
+   * already torn itself down, because a decision is terminal. So a failure in
+   * it used to vanish: the promise was discarded, every timer and listener was
+   * already cleared, and the guest sat on "waiting for the host to let you in"
+   * with nothing left running to change it. Not even the timed-out copy
+   * appeared, because that timer had been cleared too — while the host saw them
+   * admitted and gone from the panel.
+   *
+   * Optional, but the caller that does work in `onAdmitted` wants it.
+   */
+  onAdmitFailed?: (err: unknown) => void;
   /** The host turned them away. */
   onDenied: () => void;
   /** The meeting is over — it ended while they knocked, or before they did. */
@@ -123,7 +142,13 @@ export function createAdmissionSession(opts: AdmissionSessionOptions): Admission
     if (settled || stopped) return;
     settled = true;
     stop();
-    if (status === "admitted") void opts.onAdmitted();
+    if (status === "admitted") {
+      // Wrapped rather than called bare so a synchronous throw is caught too,
+      // and reported rather than discarded. See onAdmitFailed.
+      void Promise.resolve()
+        .then(() => opts.onAdmitted())
+        .catch((err) => { opts.onAdmitFailed?.(err); });
+    }
     else if (status === "denied") opts.onDenied();
     else opts.onEnded();
   }

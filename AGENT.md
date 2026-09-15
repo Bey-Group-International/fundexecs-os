@@ -2300,6 +2300,66 @@ Deployed, monitoring               →  live, observability active
              |  remains the largest untested module in this area and was not
              |  touched.
 
+2026-09-15  |  Three ways to be left outside the door  |  An audit of the
+             |  waiting room, asked for by the user; three defects found and
+             |  fixed. All the same shape: somebody stuck outside with nothing
+             |  watching.
+             |  1. THE HOST'S LIST HAD NO FALLBACK. `.subscribe()` was called
+             |  with no status callback and loadWaiting ran exactly once on
+             |  mount, so a host whose WebSocket never opened — corporate proxy,
+             |  firewall, captive network — read the list on joining and never
+             |  again. Guests knocked into a panel that stayed empty and gave up
+             |  at the timeout. This is the exact mirror of what the GUEST side
+             |  has had a floor under for a while, and the host is the only
+             |  person who can act on a knock: a guest polling faithfully every
+             |  1.5s is no use when the host was never told they were there. The
+             |  subscribe status is now read, and a 10s re-read runs only while
+             |  the channel is NOT connected, so a healthy call pays nothing.
+             |  2. AN ADMITTED GUEST WHOSE ENTRY FAILED WAS STRANDED FOREVER.
+             |  settle() called `void opts.onAdmitted()` AFTER stop() had cleared
+             |  every timer, listener and subscription — because a decision is
+             |  terminal. onAdmitted is the one callback that does real work
+             |  (devices, ICE, a channel), and enterRoom has no top-level
+             |  try/catch: `await supabase.auth.getUser()` is unguarded, as is
+             |  knownDevices() inside openCallMedia's split path. So a rejection
+             |  was discarded and the guest sat on "waiting for the host to let
+             |  you in" permanently — not even the timed-out copy, since that
+             |  timer was cleared too — while the host saw them admitted and gone
+             |  from the panel. New onAdmitFailed, wrapped in Promise.resolve()
+             |  so a synchronous throw is caught too, and a new "failed"
+             |  admission UI state whose copy says the host DID let them in and
+             |  offers Try again. Their devices were never torn down, so asking
+             |  again costs one press.
+             |  Worth recording: run against the pre-change code the new test
+             |  does not merely fail, it CRASHES THE NODE PROCESS with an
+             |  unhandled rejection. The defect was one step worse than it read.
+             |  3. A DELETED MEETING LOOKED LIKE A DROPPED PACKET. The poll
+             |  collapsed every non-OK response into null ("no news, ask again").
+             |  The knock route answers 404 when the meeting is gone, so a host
+             |  who cancelled left their guest watching a spinner for the full
+             |  ten minutes a wait may run. pollStatusFromResponse maps 404 to
+             |  "ended" — a verdict the session already acts on — and
+             |  deliberately leaves 429 and 5xx transient: a limiter saying
+             |  "slower" is not "never", and treating a bad minute as terminal
+             |  would tell a guest the meeting is over while it is still going.
+             |  Also: every path that leaves or resets the wait now clears the
+             |  failed state, or the "Try again" box outlives the thing it
+             |  describes.
+             |  Looked at and NOT a defect: live_meeting_admissions' RLS matches
+             |  only `organization_id IN (...)`, so a NULL-org meeting would be
+             |  invisible to its own host — while live_meetings_select
+             |  explicitly supports NULL-org rows. Not reachable: createMeeting
+             |  always passes auth.ctx.orgId. Worth knowing if a NULL-org
+             |  creation path is ever added.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5939 green (+15, 5924 to 5939). All 15 fail against the
+             |  pre-change source (9 as assertions, and the admission-session
+             |  ones by crashing the runner, as above).
+             |  NOT EXERCISED: the host fallback poll has no test — it is an
+             |  effect in MeetingRoom, and the harness stops short of entering
+             |  the room. Verified by reading. Also not exercised: a real
+             |  WebSocket-hostile network, and a real 404 mid-wait.
+
 ```
 
 ---

@@ -481,6 +481,88 @@ describe("stopping", () => {
   });
 });
 
+describe("being let in, and not getting in", () => {
+  /** A session whose onAdmitted fails the way entering a room can. */
+  function failing(reason: "throws" | "rejects") {
+    const onAdmitFailed = jest.fn();
+    const session = createAdmissionSession({
+      knock: async () => "admitted",
+      poll: async () => "admitted",
+      onAdmitted: reason === "throws"
+        ? () => { throw new Error("getUserMedia exploded"); }
+        : async () => { throw new Error("ICE never came back"); },
+      onDenied: jest.fn(),
+      onEnded: jest.fn(),
+      onAdmitFailed,
+    });
+    return { session, onAdmitFailed };
+  }
+
+  // The failure used to vanish: the promise was discarded, and every timer and
+  // listener had already been cleared because a decision is terminal. The guest
+  // sat on "waiting for the host to let you in" with nothing left running to
+  // change it — while the host saw them admitted and gone from the panel.
+  it("reports a rejected entry rather than discarding it", async () => {
+    const h = failing("rejects");
+    await h.session.start();
+    await flush();
+    expect(h.onAdmitFailed).toHaveBeenCalledTimes(1);
+    expect(h.onAdmitFailed.mock.calls[0]![0]).toBeInstanceOf(Error);
+  });
+
+  // Opening a device can throw before it ever returns a promise.
+  it("catches a synchronous throw too", async () => {
+    const h = failing("throws");
+    await h.session.start();
+    await flush();
+    expect(h.onAdmitFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when entering the room works", async () => {
+    const onAdmitFailed = jest.fn();
+    const onAdmitted = jest.fn(async () => {});
+    const session = createAdmissionSession({
+      knock: async () => "admitted",
+      poll: async () => "admitted",
+      onAdmitted, onDenied: jest.fn(), onEnded: jest.fn(), onAdmitFailed,
+    });
+    await session.start();
+    await flush();
+    expect(onAdmitted).toHaveBeenCalledTimes(1);
+    expect(onAdmitFailed).not.toHaveBeenCalled();
+  });
+
+  // The callback is optional, and a caller that does not pass one must not be
+  // handed an unhandled rejection instead.
+  it("survives a caller that does not want to know", async () => {
+    const session = createAdmissionSession({
+      knock: async () => "admitted",
+      poll: async () => "admitted",
+      onAdmitted: async () => { throw new Error("nope"); },
+      onDenied: jest.fn(), onEnded: jest.fn(),
+    });
+    await expect(session.start()).resolves.toBeUndefined();
+    await flush();
+  });
+
+  // A failure is not a second verdict. Nothing may start polling again behind
+  // it, or the guest is admitted twice.
+  it("stays settled after the failure", async () => {
+    const calls = { poll: 0 };
+    const onAdmitFailed = jest.fn();
+    const session = createAdmissionSession({
+      knock: async () => "admitted",
+      poll: async () => { calls.poll += 1; return "admitted"; },
+      onAdmitted: async () => { throw new Error("no"); },
+      onDenied: jest.fn(), onEnded: jest.fn(), onAdmitFailed,
+    });
+    await session.start();
+    await advance(60_000);
+    expect(onAdmitFailed).toHaveBeenCalledTimes(1);
+    expect(calls.poll).toBe(0);
+  });
+});
+
 describe("a decision pushed over Realtime", () => {
   /** A session with a watcher attached, sharing the harness's answer queues. */
   function watched(opts: { knock?: (string | null)[]; poll?: (string | null)[]; connected?: boolean } = {}) {
