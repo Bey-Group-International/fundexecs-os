@@ -129,6 +129,7 @@ import { openCallMedia, openCameraOnly, type OpenedMedia } from "@/lib/meetings/
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
 import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
+import { pollStatusFromResponse } from "@/lib/meetings/admission-poll";
 import type { AdmissionUiState } from "@/lib/meetings/admission-ui";
 import { applyAdmissionChange, type AdmissionChange } from "@/lib/meetings/waiting-room";
 import {
@@ -274,6 +275,19 @@ const COPILOT_SLIDE_MS = 200;
 // waiting list is re-read to confirm it. Long enough that "Admit all" over a
 // roomful is a single query, short enough to be invisible.
 const RECONCILE_MS = 400;
+// How often the host re-reads the waiting list when Realtime is not carrying it.
+//
+// The guest side has had a polling floor under its push for a while, because a
+// socket can die quietly. The host side had none — and the host is the only
+// person who can act on a knock. A host behind a proxy that eats WebSockets
+// read the list once on joining and then never again: guests knocked, the panel
+// stayed empty, and they waited out the timeout and gave up while the host sat
+// there believing nobody had arrived.
+//
+// Ten seconds, and only while the subscription is NOT connected. Long enough
+// that a normal meeting never pays for it, short enough that somebody at the
+// door is seen rather than left there.
+const WAITING_FALLBACK_MS = 10_000;
 // Palette for per-speaker colours in the transcript.
 const SPEAKER_COLORS = [
   "var(--gold-400)",
@@ -1447,6 +1461,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // Waiting room
   const [waitingPeers, setWaitingPeers] = useState<WaitingPeer[]>([]);
+  // Whether the host's admissions subscription is actually carrying events.
+  // False starts the fallback poll below; see WAITING_FALLBACK_MS.
+  const [waitingLive, setWaitingLive] = useState(false);
 
   // Layout
   const [layout, setLayout] = useState<"grid" | "speaker">("grid");
@@ -1567,6 +1584,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Waiting room state
   const [waitingForAdmit, setWaitingForAdmit] = useState(false);
   const [waitingTimedOut, setWaitingTimedOut] = useState(false);
+  // Let in, and the room could not be entered. Not a stage of waiting: nothing
+  // is polling behind it, so the screen has to offer the way back itself.
+  const [admissionFailed, setAdmissionFailed] = useState(false);
   // The host said no. Its own screen, because the old answer to a deny was to
   // push the joiner at /meetings — which lives behind the app's auth wall, so an
   // invite-link guest was answered with a login page. Being turned away and
@@ -1611,6 +1631,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     clearWaitingTimers();
     setWaitingForAdmit(false);
     setWaitingTimedOut(false);
+    // Also the way back from a failed entry: the copy's "Try again" is this
+    // button, and it has to clear the state that put it there.
+    setAdmissionFailed(false);
     setJoining(false);
   }, [clearWaitingTimers]);
 
@@ -1620,6 +1643,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     setWaitingForAdmit(false);
     setWaitingTimedOut(false);
+    setAdmissionFailed(false);
     setJoining(false);
     setDeniedByHost(true);
   }, [clearWaitingTimers]);
@@ -1633,7 +1657,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // knock's round trip — brief, but without it the button would sit there
   // looking pressable while the request was in the air.
   const admissionUi: AdmissionUiState =
-    waitingTimedOut ? "timed-out"
+    admissionFailed ? "failed"
+    : waitingTimedOut ? "timed-out"
     : waitingForAdmit ? "waiting"
     : joining && !isHost ? "asking"
     : "idle";
@@ -2786,6 +2811,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     clearWaitingTimers();
     setWaitingForAdmit(false);
     setWaitingTimedOut(false);
+    setAdmissionFailed(false);
     setReady(true);
     setJoining(false);
 
@@ -2914,6 +2940,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // press — leaves the green room still holding its own devices, so the next
     // attempt is free to adopt them again.
     adoptedPreviewRef.current = false;
+    setAdmissionFailed(false);
     if (choice) {
       joinChoiceRef.current = choice;
       setSelectedCamId(choice.cameraId);
@@ -3022,8 +3049,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       },
       poll: async () => {
         const res = await fetch(`/api/meetings/public/${roomCode}/knock?key=${encodeURIComponent(guestKey)}`, { cache: "no-store" });
-        if (!res.ok) return null;
-        return ((await res.json()) as { status?: string }).status ?? null;
+        // A 404 is the one non-OK answer that IS an answer: the meeting is not
+        // there. Collapsing it into "no news" left a guest whose host cancelled
+        // watching a spinner for the full ten minutes a wait may run.
+        const body = res.ok ? ((await res.json()) as { status?: string }) : null;
+        return pollStatusFromResponse(res.status, body);
       },
       // Realtime carries a nudge, never a verdict — see admission-channel.ts.
       // The session answers it by asking the server, so a forged broadcast buys
@@ -3043,6 +3073,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         return () => { void supabase.removeChannel(channel); };
       },
       onAdmitted: async () => { await enterRoomRef.current(mId, name); },
+      // Entering the room opens devices and builds connections, and by the time
+      // it runs the session has already torn itself down. Without this the
+      // failure vanished and the guest sat on the waiting screen for good.
+      onAdmitFailed: (err) => {
+        console.error("[meeting] admitted, but could not enter the room", err);
+        setWaitingForAdmit(false);
+        setWaitingTimedOut(false);
+        setJoining(false);
+        setAdmissionFailed(true);
+      },
       onDenied: showDenied,
       onEnded: leaveEndedMeeting,
       // Only reached when the host has not already decided — so this is where
@@ -3094,12 +3134,30 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           scheduleReconcile();
         },
       )
-      .subscribe();
+      // Anything but SUBSCRIBED means knocks are not reaching this panel. The
+      // callback also fires for CHANNEL_ERROR, TIMED_OUT and CLOSED, and again
+      // on reconnect, so this tracks the current state rather than latching.
+      .subscribe((status: string) => setWaitingLive(status === "SUBSCRIBED"));
     return () => {
       if (reconcile !== null) clearTimeout(reconcile);
+      setWaitingLive(false);
       void supabase.removeChannel(channel);
     };
   }, [isHost, sessionLive, meetingId, supabase, loadWaiting]);
+
+  /**
+   * The floor under the host's panel.
+   *
+   * Only runs while the subscription is not carrying events, which on a healthy
+   * call is never — so the ordinary meeting pays nothing for it. When the socket
+   * is gone it is the difference between a host who can admit their guests and
+   * one who never learns they are there.
+   */
+  useEffect(() => {
+    if (!isHost || !sessionLive || !meetingId || waitingLive) return;
+    const timer = setInterval(() => { void loadWaiting(); }, WAITING_FALLBACK_MS);
+    return () => clearInterval(timer);
+  }, [isHost, sessionLive, meetingId, waitingLive, loadWaiting]);
 
   // A knock makes a sound. The bar below the video is visible whatever tab the
   // sidebar is on, but a host who has switched to another window sees none of

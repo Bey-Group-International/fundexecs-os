@@ -1,4 +1,6 @@
-import { ADMISSION_POLL_SCHEDULE, WATCHED_POLL_SCHEDULE, nextPollDelay, pollCount, shouldPollNow } from "./admission-poll";
+import { ADMISSION_POLL_SCHEDULE, WATCHED_POLL_SCHEDULE, nextPollDelay, pollCount, shouldPollNow,
+  pollStatusFromResponse,
+} from "./admission-poll";
 
 describe("nextPollDelay", () => {
   it("asks fastest in the first seconds, where the host usually answers", () => {
@@ -86,5 +88,35 @@ describe("WATCHED_POLL_SCHEDULE", () => {
 
   it("costs a fraction of the unwatched schedule over a five-minute wait", () => {
     expect(pollCount(300_000, WATCHED_POLL_SCHEDULE)).toBeLessThan(pollCount(300_000) / 4);
+  });
+});
+
+describe("what an answer from the status endpoint means", () => {
+  it("passes a real verdict through", () => {
+    expect(pollStatusFromResponse(200, { status: "admitted" })).toBe("admitted");
+    expect(pollStatusFromResponse(200, { status: "denied" })).toBe("denied");
+    expect(pollStatusFromResponse(200, { status: "waiting" })).toBe("waiting");
+  });
+
+  // The one non-OK response that is an answer rather than an accident. A guest
+  // whose host cancelled the meeting used to watch a spinner for ten minutes.
+  it("treats a meeting that is not there as ended", () => {
+    expect(pollStatusFromResponse(404, null)).toBe("ended");
+  });
+
+  // "Slower", not "never". Treating this as terminal would tell a guest the
+  // meeting is over while it is still going on.
+  it("keeps waiting when the limiter pushes back", () => {
+    expect(pollStatusFromResponse(429, null)).toBeNull();
+  });
+
+  it("keeps waiting through a bad minute on the server", () => {
+    expect(pollStatusFromResponse(500, null)).toBeNull();
+    expect(pollStatusFromResponse(503, null)).toBeNull();
+  });
+
+  it("keeps waiting when the answer has no status in it", () => {
+    expect(pollStatusFromResponse(200, {})).toBeNull();
+    expect(pollStatusFromResponse(200, null)).toBeNull();
   });
 });
