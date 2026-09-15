@@ -470,6 +470,17 @@ export function peerStatusLabel(status: PeerLinkStatus): string | null {
  * actually is. It costs a few percent of bitrate and is the cheapest audio
  * quality available on a lossy link.
  *
+ * `usedtx=1` is the other half of the trade, and it pays in a mesh the way
+ * nothing else here does. In a six-person call five people are listening at any
+ * moment, and each of them is uploading a separate constant-bitrate stream of
+ * their own silence to every other participant. DTX stops transmitting when
+ * there is nothing to say and sends an occasional comfort-noise frame instead,
+ * so the cost of a room full of quiet listeners falls to almost nothing — and
+ * the bandwidth that frees is bandwidth the person actually talking gets to
+ * use. The cost is real but small: some engines clip a few milliseconds off the
+ * front of a word after a silence, and the comfort noise under a pause is
+ * synthetic rather than the room.
+ *
  * There is no API for it: the only way to set an Opus parameter is to edit the
  * SDP between `createOffer`/`createAnswer` and `setLocalDescription`. Chrome
  * offers FEC by default, Safari and some Firefox builds have not, and a call is
@@ -489,6 +500,8 @@ export function withOpusResilience(sdp: string): string {
 
   const wanted: Array<[string, string]> = [
     ["useinbandfec", "1"],
+    // Stop paying to transmit silence. Most people in a meeting are listening.
+    ["usedtx", "1"],
     // Mono. Stereo doubles the cost of a voice that has no second channel, and
     // the extra bits are exactly what a thin line cannot afford.
     ["stereo", "0"],

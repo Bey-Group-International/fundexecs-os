@@ -303,11 +303,27 @@ describe("withOpusResilience", () => {
   ].join("\r\n");
 
   it("turns in-band FEC on for the negotiated opus payload", () => {
-    expect(withOpusResilience(sdp)).toContain("a=fmtp:111 minptime=10;useinbandfec=1;stereo=0");
+    expect(withOpusResilience(sdp)).toContain("a=fmtp:111 minptime=10;useinbandfec=1;usedtx=1;stereo=0");
   });
 
   it("keeps the parameters the browser already chose", () => {
     expect(withOpusResilience(sdp)).toContain("minptime=10");
+  });
+
+  // The one that pays in a mesh: in a six-person call five people are listening
+  // at any moment, and each was uploading a separate constant-bitrate stream of
+  // their own silence to every other participant.
+  it("stops paying to transmit silence", () => {
+    expect(withOpusResilience(sdp)).toContain("usedtx=1");
+  });
+
+  // Same rule as every other parameter here: a value the browser or another
+  // munge already chose is left alone rather than overridden.
+  it("does not force DTX back on where it has been turned off", () => {
+    const off = sdp.replace("a=fmtp:111 minptime=10", "a=fmtp:111 minptime=10;usedtx=0");
+    const out = withOpusResilience(off);
+    expect(out).toContain("usedtx=0");
+    expect(out).not.toContain("usedtx=1");
   });
 
   it("does not overwrite a value that is already set", () => {
@@ -319,7 +335,7 @@ describe("withOpusResilience", () => {
 
   it("adds an fmtp line for an opus payload that has none", () => {
     const bare = sdp.replace("a=fmtp:111 minptime=10\r\n", "");
-    expect(withOpusResilience(bare)).toContain("a=fmtp:111 useinbandfec=1;stereo=0");
+    expect(withOpusResilience(bare)).toContain("a=fmtp:111 useinbandfec=1;usedtx=1;stereo=0");
   });
 
   it("leaves an SDP with no opus completely alone", () => {

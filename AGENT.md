@@ -1686,6 +1686,68 @@ Deployed, monitoring               →  live, observability active
              |  different bug). Not exercised: a real peer connection losing its
              |  answer, or a real flood.
 
+2026-09-15  |  Camera and microphone: what they cost  |  Fourth pass, on the cost
+             |  of the devices themselves rather than on defects. Four decisions put
+             |  to the user; three taken, one declined.
+             |  1. THE JOIN NO LONGER REOPENS THE DEVICES. The green room opened the
+             |  camera and microphone, and the call stopped both and opened the same
+             |  two again milliseconds later — the most expensive thing on the join
+             |  path and the least necessary. A few hundred ms on a laptop, more on
+             |  Windows, a camera light blinking at the moment somebody is watching
+             |  their own face, and a race the room could lose, since a camera
+             |  released a moment ago is often still held when asked for again (which
+             |  is why the busy-retry exists at all). planPreviewAdoption decides
+             |  whether what is open is what the call would have opened — the
+             |  microphone decides, matched on getSettings().deviceId rather than on
+             |  what was requested, because adopting the wrong camera silently for a
+             |  whole meeting is worse than the delay avoided. Anything else falls
+             |  through to openCallMedia unchanged.
+             |  The dangerous half is ownership, and it is two-directional: the green
+             |  room must stop stopping the tracks (a `release` callback sets a flag
+             |  every stop site checks), AND the room must stop listening to it — it
+             |  keeps rendering until it unmounts, its state changes keep firing
+             |  onPreviewStream, and without the second guard the room would file the
+             |  adopted microphone as a preview again and the next teardown would stop
+             |  the track the member is talking into.
+             |  2. Opus DTX (usedtx=1). In a six-person mesh five people are listening
+             |  at any moment and each was uploading a separate constant-bitrate
+             |  stream of their own silence to every other participant. Cost: some
+             |  engines clip a few ms off a word after silence, and comfort noise is
+             |  synthetic. Existing parameters are still never overridden, so a
+             |  usedtx=0 already present survives.
+             |  3. The camera now follows demand, not just the encoders. Capture was
+             |  pinned at 720p while the encoders scaled down for thumbnails, so a
+             |  laptop captured 720p30 and scaled every frame four times over to
+             |  produce pictures nobody sees at that size. applyConstraints moves it
+             |  to 360p when nothing above a thumbnail is asked for, and back up the
+             |  moment one peer spotlights. Screen shares exempt — their size is the
+             |  thing being read.
+             |  The trap, which scaleForCapture exists for: scaleResolutionDownBy is a
+             |  DIVISOR, so a thumbnail's 4 is 320x180 out of 1280 and 160x90 out of
+             |  640. Moving the capture without correcting the divisor would have
+             |  quietly halved every thumbnail in the call — the opposite of the
+             |  intent. The correction holds the OUTPUT fixed while the input moves,
+             |  with a floor of 1 so a small capture is never upscaled. The re-tune is
+             |  guarded against looping and re-runs when the constraint lands, because
+             |  the camera may settle somewhere other than what was asked for.
+             |  4. DECLINED (per user): an "original sound" toggle dropping noise
+             |  suppression and AGC. A call is a conversation and the defaults are
+             |  right for it. constraintsFor's unused noiseSuppression option is
+             |  removed instead — nothing ever passed it, and an unused switch reads
+             |  as a feature that exists.
+             |  Also removed: MeetingRoom's previewStream state, written and never
+             |  read (only the ref was used).
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5706 green — nineteen new tests and one removed with the option,
+             |  so 5688 to 5706. Run against the pre-change code, seventeen of the
+             |  nineteen fail, as do two pre-existing Opus assertions that pinned
+             |  the exact fmtp string. The other two new tests are controls and
+             |  pass either way: an SDP that already says usedtx=0 keeps it, and
+             |  the green room still stops its devices on unmount when the call
+             |  did NOT take them.
+             |  Not exercised: a real camera being adopted, a real applyConstraints on
+             |  hardware that may freeze while re-tuning, or DTX as heard by a person.
+
 2026-09-14  |  Guest connections  |  Third pass, on what it costs an invite-link
              |  guest to get connected (asked for by the user). Guests are the
              |  participants most likely to be behind the NAT that needs a relay, so

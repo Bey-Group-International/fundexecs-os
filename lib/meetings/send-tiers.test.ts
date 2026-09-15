@@ -13,6 +13,10 @@ import {
   totalUpstreamKbps,
   withDemotionDelay,
   type VideoTier,
+  scaleForCapture,
+  FULL_CAPTURE,
+  THUMBNAIL_CAPTURE,
+  THUMBNAIL_SCALE,
 } from "./send-tiers";
 
 const view = (over: Partial<Parameters<typeof tierForView>[0]> = {}) =>
@@ -161,5 +165,44 @@ describe("withDemotionDelay", () => {
 
   it("does not hold someone who was never watched", () => {
     expect(hold({ desired: "low", lastHighAt: null })).toBe("low");
+  });
+});
+
+describe("scaleForCapture", () => {
+  // The correction that makes moving the camera safe at all. A cap is a
+  // DIVISOR, so it means a different output on every capture size: a
+  // thumbnail's 4 is 320x180 out of a 1280-wide capture and 160x90 out of a
+  // 640-wide one. Dropping the capture without this would quietly halve every
+  // thumbnail in the call — the opposite of the intent.
+  it("keeps the output the same size when the capture moves", () => {
+    const outputAt720 = FULL_CAPTURE.height / THUMBNAIL_SCALE;
+    const corrected = scaleForCapture(THUMBNAIL_SCALE, THUMBNAIL_CAPTURE.height);
+    expect(THUMBNAIL_CAPTURE.height / corrected).toBe(outputAt720);
+  });
+
+  it("changes nothing at the capture the caps are written against", () => {
+    expect(scaleForCapture(4, FULL_CAPTURE.height)).toBe(4);
+    expect(scaleForCapture(1, FULL_CAPTURE.height)).toBe(1);
+    expect(scaleForCapture(1.5, FULL_CAPTURE.height)).toBe(1.5);
+  });
+
+  // A capture already at or below what the tier wants has no detail to spare;
+  // scaling it further would send less than the receiver asked for.
+  it("never asks for less than the capture already is", () => {
+    expect(scaleForCapture(1, THUMBNAIL_CAPTURE.height)).toBe(1);
+    expect(scaleForCapture(2, 360)).toBe(1);
+  });
+
+  it("survives a camera that will not say what size it is", () => {
+    expect(scaleForCapture(4, 0)).toBe(4);
+    expect(scaleForCapture(4, Number.NaN)).toBe(4);
+    expect(scaleForCapture(0, 720)).toBe(1);
+  });
+
+  // The room tells a thumbnail cap from a full-size one by comparing against
+  // this, so the two have to keep agreeing.
+  it("matches the divisor the thumbnail cap actually carries", () => {
+    const caps = allocateSendCaps(new Map([["a", "low" as const]]), ["a"]);
+    expect(caps.get("a")?.scaleResolutionDownBy).toBe(THUMBNAIL_SCALE);
   });
 });

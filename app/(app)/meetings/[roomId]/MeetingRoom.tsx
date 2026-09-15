@@ -84,6 +84,10 @@ import {
 } from "@/lib/meetings/media-repair";
 import {
   allocateSendCaps,
+  scaleForCapture,
+  FULL_CAPTURE,
+  THUMBNAIL_CAPTURE,
+  THUMBNAIL_SCALE,
   tierForView,
   withDemotionDelay,
   DEMOTION_LINGER_MS,
@@ -95,8 +99,13 @@ import {
   type NotificationPermissionLike,
 } from "@/lib/meetings/knock-notice";
 import { rememberDevice, rememberedDevice } from "@/lib/meetings/device-prefs";
-import { acquisitionMessage, cameraMessage } from "@/lib/meetings/media-acquisition";
-import { openCallMedia, openCameraOnly } from "@/lib/meetings/open-media";
+import {
+  acquisitionMessage,
+  cameraMessage,
+  planPreviewAdoption,
+  type PreviewFacts,
+} from "@/lib/meetings/media-acquisition";
+import { openCallMedia, openCameraOnly, type OpenedMedia } from "@/lib/meetings/open-media";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
 import { ADMISSION_NUDGE, admissionChannelName } from "@/lib/meetings/admission-channel";
@@ -190,6 +199,24 @@ const FALLBACK_ICE: RTCConfiguration = peerConfig([
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ]);
+
+/**
+ * A live track in the terms planPreviewAdoption reasons about.
+ *
+ * `getSettings()` rather than what was requested, because those differ exactly
+ * when it matters: a request for the system default resolves to a concrete
+ * device, and adopting on the strength of the request would be adopting without
+ * having checked anything.
+ */
+function factsOf(track: MediaStreamTrack | null): PreviewFacts | null {
+  if (!track) return null;
+  try {
+    return { deviceId: track.getSettings().deviceId || "", readyState: track.readyState };
+  } catch {
+    // A track that will not describe itself is not one to adopt on faith.
+    return null;
+  }
+}
 
 /**
  * How long one attempt at the ICE config may take before it is given up on.
@@ -1342,8 +1369,29 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Mirrors `callPhase` for the click handlers, which have to decide before a
   // state update has been committed.
   const callPhaseRef = useRef<CallPhase>("live");
-  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
+  // How the green room is told the call has taken its tracks over, so it stops
+  // stopping them. See planPreviewAdoption and MeetingGreenRoom's `release`.
+  const releasePreviewRef = useRef<(() => void) | null>(null);
+  /** A capture change already in flight, so the re-run it triggers cannot loop. */
+  const captureRetuneRef = useRef(false);
+  /**
+   * The capture height last asked of a given camera.
+   *
+   * Kept per track, because a different camera has different modes: one that
+   * cannot do 360p says nothing about the next one plugged in.
+   */
+  const captureAskedRef = useRef<{ track: MediaStreamTrack; height: number } | null>(null);
+  /**
+   * The call has taken the preview's tracks.
+   *
+   * After that the green room must not be allowed to hand them back. It goes on
+   * rendering for the moment before it unmounts, and its own state changes keep
+   * firing `onPreviewStream` — so without this the room would file the adopted
+   * microphone as a preview again, and the next teardown would stop the track
+   * the member is currently talking into.
+   */
+  const adoptedPreviewRef = useRef(false);
   const [displayName, setDisplayName] = useState("");
   const [joining, setJoining] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
@@ -1536,6 +1584,63 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   }, []);
 
   /**
+   * Point the camera at what is actually being drawn, and say what it is on now.
+   *
+   * Returns the capture height to size the encoders against — which is the
+   * CURRENT one, not the one being asked for, because applyConstraints takes a
+   * moment and a scale computed against a resolution the camera has not reached
+   * yet would be wrong for exactly as long as that takes. The re-run when it
+   * lands is what picks up the new size.
+   *
+   * Only the raw camera is touched. The processed track a background effect
+   * sends is a canvas that follows the camera's dimensions on its own, so
+   * constraining the camera shrinks the segmentation work too.
+   */
+  const retuneCapture = useCallback((caps: ReadonlyMap<string, SendCap | null>): number | null => {
+    const camera = rawCameraTrackRef.current;
+    if (!camera || camera.readyState !== "live") return null;
+
+    let settings: MediaTrackSettings;
+    try { settings = camera.getSettings(); } catch { return null; }
+    const current = settings.height ?? null;
+
+    // Derived from the caps rather than from the requests, so one rule decides
+    // both: anything asking for more than a thumbnail keeps the camera up.
+    const wantsFull = [...caps.values()].some((c) => c !== null && c.scaleResolutionDownBy < THUMBNAIL_SCALE);
+    const target = wantsFull ? FULL_CAPTURE : THUMBNAIL_CAPTURE;
+
+    // Asked for once per camera per target, and not again unless something
+    // moves. `ideal` is a request, not a requirement: a camera with no 360p mode
+    // resolves the promise and stays at 720p — so a re-run that only checked the
+    // height would find the same gap, ask again, and spin applyConstraints
+    // forever on exactly the hardware that cannot satisfy it.
+    const asked = captureAskedRef.current;
+    const alreadyAsked = asked?.track === camera && asked.height === target.height;
+
+    if (current !== target.height && !alreadyAsked && !captureRetuneRef.current) {
+      captureRetuneRef.current = true;
+      captureAskedRef.current = { track: camera, height: target.height };
+      void camera
+        .applyConstraints({
+          width: { ideal: target.width },
+          height: { ideal: target.height },
+          frameRate: { ideal: target.frameRate, max: target.frameRate },
+        })
+        .catch(() => { /* a camera with no such mode keeps the one it has */ })
+        .finally(() => {
+          captureRetuneRef.current = false;
+          // Only when the camera actually moved. Re-running on a camera that
+          // ignored the request is the loop this guard exists to prevent, and
+          // there is nothing new to size the encoders against anyway.
+          let settled: number | null = null;
+          try { settled = camera.getSettings().height ?? null; } catch { /* gone */ }
+          if (settled !== current) applySendCapsRef.current();
+        });
+    }
+    return current;
+  }, []);
+
+  /**
    * Push the current send budget onto every video sender.
    *
    * This is the whole answer to a mesh call that sounds like it is underwater.
@@ -1565,6 +1670,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         ? new Map(ids.map((id) => [id, screenSendCap(ids.length, bwModeRef.current)]))
         : allocateSendCaps(requestedTierRef.current, ids, bwModeRef.current);
 
+    // Move the CAMERA to match the largest thing anyone asked for, not just the
+    // encoders. Sizing the encoders alone still leaves a laptop capturing 720p
+    // thirty times a second and scaling each frame down four times over for
+    // four thumbnails — real CPU, and on a phone real battery, spent producing
+    // detail that is thrown away before it reaches the wire. A screen share is
+    // exempt: its size is the thing being read.
+    const captureHeight = sharing ? null : retuneCapture(caps);
+
     videoSenderRef.current.forEach((sender, peerId) => {
       const cap = caps.get(peerId) ?? null;
       let params: RTCRtpSendParameters;
@@ -1574,7 +1687,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (cap) {
         enc.active = true;
         enc.maxBitrate = cap.maxBitrate;
-        enc.scaleResolutionDownBy = cap.scaleResolutionDownBy;
+        // Corrected for the capture actually in effect. The caps are divisors
+        // written against 720p, so applying one unchanged to a 360p capture
+        // would halve the picture a second time — see scaleForCapture.
+        enc.scaleResolutionDownBy = captureHeight === null
+          ? cap.scaleResolutionDownBy
+          : scaleForCapture(cap.scaleResolutionDownBy, captureHeight);
         enc.maxFramerate = cap.maxFramerate;
       } else {
         enc.active = false;
@@ -1584,7 +1702,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       params.degradationPreference = sharing ? "maintain-resolution" : "balanced";
       void sender.setParameters(params).catch(() => { /* older engines reject some fields */ });
     });
-  }, []);
+  }, [retuneCapture]);
   const applySendCapsRef = useRef(applySendCaps);
   useEffect(() => { applySendCapsRef.current = applySendCaps; }, [applySendCaps]);
 
@@ -2326,10 +2444,6 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
     }
 
-    // Release the local-only preview and acquire the real sending stream.
-    previewStreamRef.current?.getTracks().forEach((t) => t.stop());
-    previewStreamRef.current = null; setPreviewStream(null);
-
     const choice = joinChoiceRef.current;
     const camId = choice?.cameraId ?? "";
     const micId = choice?.micId ?? "";
@@ -2338,27 +2452,77 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // the whole point of the toggle.
     const wantCam = choice ? choice.cameraEnabled : true;
 
-    // One unavailable device no longer costs the other. This used to be a
-    // single combined getUserMedia, and a combined request fails WHOLE: one
-    // camera another application already held — Zoom left open, OBS, or simply
-    // the green room's own preview a few milliseconds from being released —
-    // and the member landed here with an empty MediaStream. No camera, which
-    // was the real problem, and no microphone, which was never broken, for the
-    // rest of the call: unable to be seen OR heard, with nothing saying why.
-    //
-    // openCallMedia keeps the single permission prompt for the ordinary path
-    // and only splits the request when that fails, then walks the member's
-    // choice, their remembered device, the system default and the rest of the
-    // hardware in that order — retrying a merely-busy device once, because
-    // releasing a camera is asynchronous and the green room let go of this one
-    // a moment ago.
-    const opened = await openCallMedia({
+    // Take the green room's devices rather than closing them and opening the
+    // same two again. That reopen was the most expensive thing on this path and
+    // the least necessary — a few hundred milliseconds, more on Windows, a
+    // camera light blinking at the moment somebody is watching their own face,
+    // and a race the room could lose, because a camera released a moment ago is
+    // often still held when it is asked for again. planPreviewAdoption decides
+    // whether what is open is what the call would have opened; anything else
+    // falls through to the full path below, which knows how to walk devices and
+    // to say why when it cannot.
+    const preview = previewStreamRef.current;
+    const previewCam = preview?.getVideoTracks()[0] ?? null;
+    const previewMic = preview?.getAudioTracks()[0] ?? null;
+    const plan = planPreviewAdoption({
       wantCamera: wantCam,
       cameraId: camId,
       micId,
-      rememberedCameraId: rememberedDevice("videoinput"),
-      rememberedMicId: rememberedDevice("audioinput"),
+      camera: factsOf(previewCam),
+      microphone: factsOf(previewMic),
     });
+
+    let opened: OpenedMedia;
+    if (plan.adopt && previewMic) {
+      // The camera the call does not want is stopped here and not carried: a
+      // member joining with their camera off has a dark light as the point.
+      if (!plan.camera && previewCam) { try { previewCam.stop(); } catch { /* already stopped */ } }
+      const cameraTrack = plan.camera ? previewCam : null;
+      // The green room stops owning these now, in both directions: it will not
+      // stop them, and nothing it says afterwards is filed as a preview.
+      adoptedPreviewRef.current = true;
+      releasePreviewRef.current?.();
+      opened = {
+        cameraTrack,
+        micTrack: previewMic,
+        cameraWanted: wantCam,
+        // Nothing fell back and nothing failed: these are the devices that were
+        // asked for, still open, reported by what is live rather than by what
+        // was requested.
+        camera: cameraTrack
+          ? { deviceId: cameraTrack.getSettings().deviceId || camId || "", fellBack: false, failure: null }
+          : { deviceId: null, fellBack: false, failure: null },
+        microphone: { deviceId: previewMic.getSettings().deviceId || micId || "", fellBack: false, failure: null },
+      };
+    } else {
+      // Not adoptable — a device was swapped between the green room and the
+      // press, or the preview never opened one. Release what there is and open
+      // properly.
+      //
+      // One unavailable device no longer costs the other. This used to be a
+      // single combined getUserMedia, and a combined request fails WHOLE: one
+      // camera another application already held — Zoom left open, OBS, or
+      // simply the green room's own preview a few milliseconds from being
+      // released — and the member landed here with an empty MediaStream. No
+      // camera, which was the real problem, and no microphone, which was never
+      // broken, for the rest of the call.
+      //
+      // openCallMedia keeps the single permission prompt for the ordinary path
+      // and only splits the request when that fails, then walks the member's
+      // choice, their remembered device, the system default and the rest of the
+      // hardware in that order — retrying a merely-busy device once, because
+      // releasing a camera is asynchronous and this may have let go of one a
+      // moment ago.
+      preview?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
+      opened = await openCallMedia({
+        wantCamera: wantCam,
+        cameraId: camId,
+        micId,
+        rememberedCameraId: rememberedDevice("videoinput"),
+        rememberedMicId: rememberedDevice("audioinput"),
+      });
+    }
+    previewStreamRef.current = null;
 
     const stream = new MediaStream();
     if (opened.micTrack) stream.addTrack(opened.micTrack);
@@ -2578,6 +2742,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── joinMeeting ──────────────────────────────────────────────────────────
   const joinMeeting = useCallback(async (choice?: GreenRoomChoice) => {
+    // A join that did not complete — a cancelled knock, a deny, a second
+    // press — leaves the green room still holding its own devices, so the next
+    // attempt is free to adopt them again.
+    adoptedPreviewRef.current = false;
     if (choice) {
       joinChoiceRef.current = choice;
       setSelectedCamId(choice.cameraId);
@@ -3905,7 +4073,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         onDisplayNameChange={setDisplayName}
         meetingTitle={meetingTitle}
         onJoin={(choice) => void joinMeeting(choice)}
-        onPreviewStream={(s) => { previewStreamRef.current = s; setPreviewStream(s); }}
+        onPreviewStream={(s, release) => {
+          // Nothing the green room says after the call has taken its tracks:
+          // they are on the wire now, and filing them as a preview again would
+          // hand the next teardown a live microphone to stop.
+          if (adoptedPreviewRef.current) return;
+          previewStreamRef.current = s;
+          releasePreviewRef.current = release;
+        }}
       />
     );
   }

@@ -240,3 +240,107 @@ export function acquisitionMessage(outcome: AcquisitionOutcome): string | null {
 
   return null;
 }
+
+// ── Taking over the green room's devices ─────────────────────────────────────
+
+// The green room opens the camera and the microphone so somebody can check
+// themselves before anyone can see them. The call then stopped both and opened
+// the same two devices again, a few milliseconds later.
+//
+// That reopen is the most expensive thing on the join path and the least
+// necessary. It costs a few hundred milliseconds on a laptop and considerably
+// more on Windows; it blinks the camera light off and on at the moment the
+// member is watching their own face; and it is a race the room can lose,
+// because a camera released a moment ago is often still held when it is asked
+// for again — which is the entire reason the retry above exists.
+//
+// So the call takes the tracks instead, when they are the ones it would have
+// opened. The check is what makes that safe: adopting a track that is not the
+// device the member chose would put them on the wrong camera for the call,
+// silently, which is worse than the delay this avoids.
+
+/** What a live preview track is, in the terms this decision needs. */
+export interface PreviewFacts {
+  /** `getSettings().deviceId` — what is really open, not what was asked for. */
+  deviceId: string;
+  readyState: string;
+}
+
+export type AdoptionReason =
+  /** Everything the call needs is already open and is the right device. */
+  | "adopted"
+  /** No live preview microphone, so there is nothing to take. */
+  | "no_microphone"
+  /** The preview is on a different microphone than the call was asked for. */
+  | "microphone_mismatch"
+  /** A camera is wanted and the preview has none live. */
+  | "no_camera"
+  /** The preview is on a different camera than the call was asked for. */
+  | "camera_mismatch";
+
+export interface PreviewAdoption {
+  /** Take the preview's tracks rather than opening the devices again. */
+  adopt: boolean;
+  /** Carry the preview's camera into the call. False also means: stop it. */
+  camera: boolean;
+  reason: AdoptionReason;
+}
+
+/**
+ * Whether a track is the device that was asked for.
+ *
+ * An empty request means "whatever the system considers current", which is
+ * exactly what the green room opened when it was given the same empty request —
+ * so anything live satisfies it. A named request has to match what is actually
+ * open, read from the track rather than from what was requested, because those
+ * differ precisely when it matters.
+ */
+function isRequestedDevice(requested: string, facts: PreviewFacts | null): boolean {
+  if (!facts || facts.readyState !== "live") return false;
+  if (!requested) return true;
+  return facts.deviceId === requested;
+}
+
+/**
+ * Whether the call can take the green room's devices as they are.
+ *
+ * The microphone decides it. A meeting can be joined without a camera and
+ * frequently is, but a member with no microphone is sitting in a room nobody
+ * knows they are in — so an adoption that cannot supply one is not an
+ * optimisation, it is a silent failure, and the full open path (which knows how
+ * to walk devices and report why) handles that case instead.
+ *
+ * `camera: false` with `adopt: true` is the ordinary "joining with my camera
+ * off" case, and it carries an instruction: the preview's camera track is not
+ * coming into the call and must be stopped, or the member joins with their
+ * camera off and the light still on.
+ */
+export function planPreviewAdoption(input: {
+  wantCamera: boolean;
+  cameraId: string;
+  micId: string;
+  camera: PreviewFacts | null;
+  microphone: PreviewFacts | null;
+}): PreviewAdoption {
+  if (!input.microphone || input.microphone.readyState !== "live") {
+    return { adopt: false, camera: false, reason: "no_microphone" };
+  }
+  if (!isRequestedDevice(input.micId, input.microphone)) {
+    return { adopt: false, camera: false, reason: "microphone_mismatch" };
+  }
+
+  if (!input.wantCamera) {
+    // Nothing to check: no camera is wanted, and any the preview holds is
+    // stopped rather than carried.
+    return { adopt: true, camera: false, reason: "adopted" };
+  }
+
+  if (!input.camera || input.camera.readyState !== "live") {
+    return { adopt: false, camera: false, reason: "no_camera" };
+  }
+  if (!isRequestedDevice(input.cameraId, input.camera)) {
+    return { adopt: false, camera: false, reason: "camera_mismatch" };
+  }
+
+  return { adopt: true, camera: true, reason: "adopted" };
+}
