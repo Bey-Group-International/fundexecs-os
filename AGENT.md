@@ -2231,6 +2231,75 @@ Deployed, monitoring               →  live, observability active
              |  it: if it still reproduces, the console now says which of the
              |  four states it was, which is the thing nobody could see before.
 
+2026-09-15  |  Screen sharing and recording  |  Seventh pass, asked for by the
+             |  user. Two findings in sharing, one in recording.
+             |  1. YOU COULD NOT STOP SHARING YOUR SCREEN WITH YOUR CAMERA OFF.
+             |  swapOutgoingVideo returned early on a null track — `if (!next ||
+             |  !stream) return`. restoreCameraTrack passes cameraTrackRef, which
+             |  IS null for a member sharing with their camera off, so ending the
+             |  share replaced nothing on the senders and stopped nothing.
+             |  shareOn went false, the button went back to "Share screen", the
+             |  room was told sharing had ended — and the screen kept going out
+             |  to every participant with the browser's own sharing indicator
+             |  still lit. The only person who could not tell was the one
+             |  sharing. A null `next` now means SEND NOTHING rather than DO
+             |  NOTHING, which is also the right answer on the two other paths
+             |  that can reach it with null (abandonBackground, and a restore
+             |  with no camera).
+             |  2. getDisplayMedia was asked for `{ video: true }` — "whatever
+             |  this display is", which on a 4K monitor is 3840x2160 captured at
+             |  whatever the compositor runs and re-encoded continuously. The
+             |  send caps bound the wire; they do nothing about capture and
+             |  encode, paid by the one machine also running the meeting and the
+             |  thing being presented. displayConstraints caps the FRAME RATE at
+             |  15 and deliberately leaves resolution alone: shared screens are
+             |  static, so halving the rate halves the encoder's work and costs
+             |  nothing visible, while resolution is what makes text readable — a
+             |  screen share nobody can read is not a cheaper one, it is a failed
+             |  one. `ideal` throughout, never `max` or `exact`: an
+             |  OverconstrainedError here reaches the member as a share button
+             |  that does nothing. Audio still not requested, and the comment now
+             |  says why (nowhere to route it; asking would light the "sharing
+             |  audio" indicator while sending silence).
+             |  3. THE RECORDING UPLOAD PATH WAS BUILT TO MAKE RETRYING SAFE AND
+             |  NEVER RETRIED. Object upserted by a path derived from the part's
+             |  own index, row upserted on (recording_id, idx) — sending a part
+             |  twice is indistinguishable from once. Having paid for that, it
+             |  dropped any part whose first attempt failed and wrote a console
+             |  line. Uploads run continuously for the length of a call from a
+             |  browser: a thirty-second wifi stumble in an hour-long board
+             |  meeting is six holes, and the recording was still filed
+             |  "complete" because nothing counted them. upload-retry decides
+             |  what is worth repeating (network/5xx/429/408 and anything
+             |  unrecognised, because giving up on an unfamiliar error shape
+             |  loses footage while retrying costs three requests; 401/403/413
+             |  are decisions and get none) with three attempts inside ~8s —
+             |  short because parts upload IN ORDER and a part that retries for a
+             |  minute holds up every part behind it.
+             |  What could not be stored is now counted and reported, in seconds
+             |  rather than parts: "4 chunks" means nothing to somebody deciding
+             |  whether to hold the meeting again. GUARD, not asked for: this
+             |  goes in a NEW `notice` field, not `error`. The existing error bar
+             |  is role="alert", red, and has no dismiss — routing "the rest was
+             |  saved" through it would tell a host their recording is broken and
+             |  leave the claim on screen for the rest of the meeting. The notice
+             |  is role="status", neutral, and dismissible. A retry that outlives
+             |  its recording also checks it is still the same recording before
+             |  writing.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5924 green (+19, 5905 to 5924). The 4 new devices tests fail
+             |  against the pre-change source; the 15 upload-retry tests cover a
+             |  module that did not exist, so "failing before" does not apply to
+             |  them.
+             |  NOT EXERCISED: finding 1 has no test, for the third entry running
+             |  — the MeetingRoom harness stops short of entering the room, so
+             |  there is no media harness and building one is larger than the
+             |  fix. Verified by reading. Also not exercised: a real 4K display
+             |  captured at 15fps, a real failing upload, and whether any browser
+             |  declines the frameRate hint. recording-composer.ts (412 lines)
+             |  remains the largest untested module in this area and was not
+             |  touched.
+
 ```
 
 ---
