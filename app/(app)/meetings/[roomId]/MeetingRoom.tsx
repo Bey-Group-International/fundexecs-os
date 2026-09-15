@@ -103,8 +103,11 @@ import {
   acquisitionMessage,
   cameraMessage,
   planPreviewAdoption,
+  type MediaFailure,
   type PreviewFacts,
 } from "@/lib/meetings/media-acquisition";
+import { watchFor } from "@/lib/meetings/device-reacquire";
+import { startReacquire } from "@/lib/meetings/reacquire-loop";
 import { openCallMedia, openCameraOnly, type OpenedMedia } from "@/lib/meetings/open-media";
 import { resolveGuestKey } from "@/lib/meetings/guest-key";
 import { createAdmissionSession, type AdmissionSession } from "@/lib/meetings/admission-session";
@@ -1174,6 +1177,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // The camera device itself, which feeds the processor. Kept apart from the
   // above because switching cameras has to rebuild the effect on the new device.
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  // The same track as state, so the effect that watches for the camera dying
+  // can re-attach when the camera changes. It cannot key off `localStream`:
+  // with a background effect on, that stream carries the composited canvas and
+  // the camera behind it is reachable only through this ref.
+  const [rawCameraTrack, setRawCameraTrack] = useState<MediaStreamTrack | null>(null);
+  // A device the join could not open, and why. Set only for a device the member
+  // actually wanted, cleared the moment it is recovered or the member takes the
+  // matter into their own hands. See the re-acquisition effects below.
+  const [cameraToRecover, setCameraToRecover] = useState<MediaFailure | null>(null);
+  const [micToRecover, setMicToRecover] = useState<MediaFailure | null>(null);
+  // What the member asked for before the hardware had its say. A device that
+  // comes back should come back the way they meant it to be, not switched on
+  // because it happened to be recovered.
+  const micIntentRef = useRef(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -1410,6 +1427,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // changes — it is the thing that changes it.
   const selectedCamIdRef = useRef("");
   useEffect(() => { selectedCamIdRef.current = selectedCamId; }, [selectedCamId]);
+  // The same, for the microphone, read by the re-acquisition loop for the same
+  // reason: it is what changes the live device, so it cannot depend on it.
+  const selectedMicIdRef = useRef("");
+  useEffect(() => { selectedMicIdRef.current = selectedMicId; }, [selectedMicId]);
   // A camera being opened from the button. Held so the control can say it is
   // working rather than looking like a press that did nothing: opening a camera
   // takes a moment, and longer when the first one tried is busy.
@@ -2535,9 +2556,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     setSelectedMicId(opened.microphone.deviceId ?? "");
     // Null when everything opened as asked, so a clean join says nothing.
     setMediaError(acquisitionMessage(opened));
+    // A device the member wanted and did not get is not the end of the matter.
+    // The common failure by a distance is a camera still held by the Zoom they
+    // have not quit yet, and that condition ends — usually within seconds, and
+    // until now with nothing watching for the moment it did.
+    setCameraToRecover(wantCam && !opened.cameraTrack ? opened.camera.failure : null);
+    setMicToRecover(!opened.micTrack ? opened.microphone.failure : null);
     // Carry the green room's mic/camera state into the call, so someone who
     // muted themselves before joining is still muted a second later.
     const micWanted = choice ? choice.micEnabled : true;
+    micIntentRef.current = micWanted;
     stream.getAudioTracks().forEach((t) => { t.enabled = micWanted; });
     const micLive = micWanted && stream.getAudioTracks().length > 0;
     setMicOn(micLive);
@@ -2551,6 +2579,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     localStreamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
     rawCameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
+    setRawCameraTrack(rawCameraTrackRef.current);
     setLocalStream(stream);
 
     // Carry in the background settled on in the green room, falling back to the
@@ -3359,6 +3388,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // ref write below are both side effects.
     const next = !micOnRef.current;
     micOnRef.current = next;
+    // Their decision now, not the join's. Whatever the room was going back for
+    // on their behalf stops here — a device that reappears must not undo a
+    // member who has just chosen to be muted.
+    micIntentRef.current = next;
+    setMicToRecover(null);
     localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = next; });
     setMicOn(next);
     if (!next) lastAudibleRef.current.delete(LOCAL_SPEAKER_ID);
@@ -3379,6 +3413,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       return;
     }
     camOnRef.current = next;
+    setCameraToRecover(null);
     localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
     setCamOn(next);
     // A disabled track still sends black frames at a cost, and those black
@@ -3575,6 +3610,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const previousRaw = rawCameraTrackRef.current;
     const previousProcessor = processorRef.current;
     rawCameraTrackRef.current = track;
+    setRawCameraTrack(track);
 
     if (needsSegmentation(bgEffectRef.current)) {
       processorRef.current = null;
@@ -3624,6 +3660,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       camOnRef.current = true;
       setCamOn(true);
       setSelectedCamId(opened.outcome.deviceId ?? "");
+      setCameraToRecover(null);
       setMediaError(null);
       await adoptCameraTrack(opened.track);
       applySendCapsRef.current();
@@ -3700,6 +3737,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // was asked for would leave the picker unable to tick anything.
       setSelectedMicId(t.getSettings().deviceId || deviceId);
       rememberDevice("audioinput", deviceId);
+      setMicToRecover(null);
       setMediaError(null);
     } catch (e) {
       console.warn("[switchMic]", e);
@@ -3724,6 +3762,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       await adoptCameraTrack(t);
       setSelectedCamId(t.getSettings().deviceId || deviceId);
       rememberDevice("videoinput", deviceId);
+      setCameraToRecover(null);
       setMediaError(null);
     } catch (e) {
       console.warn("[switchCam]", e);
@@ -3757,15 +3796,21 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     if (!stream) return;
 
     const audio = stream.getAudioTracks()[0];
-    const video = stream.getVideoTracks()[0];
+    // The CAMERA, not whatever the room is currently sending. Those are the
+    // same track only when no background effect is on; with one, the stream
+    // carries the composited canvas and the camera behind it is reachable only
+    // here. Watching the stream meant that turning on a background quietly
+    // detached this recovery — so the members most likely to be on a laptop
+    // webcam, in the feature this product leads with, were the ones with no
+    // recovery at all. It also meant the listener was attached exactly once:
+    // every camera after the first, whether from the picker or from this very
+    // fallback, died unnoticed.
+    const video = rawCameraTrack;
 
     const onAudioEnded = () => {
       setMediaError("Your microphone disconnected. Switching to the system default…");
       void switchMic("");
     };
-    // Only when the camera track IS the camera. With a background effect on,
-    // the outgoing track is the processor's canvas, and its ending means the
-    // effect stopped, which the background code already handles.
     const onVideoEnded = () => {
       if (!camOnRef.current) return;
       setMediaError("Your camera disconnected. Switching to the system default…");
@@ -3773,12 +3818,109 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     };
 
     audio?.addEventListener("ended", onAudioEnded);
-    if (video && video === rawCameraTrackRef.current) video.addEventListener("ended", onVideoEnded);
+    video?.addEventListener("ended", onVideoEnded);
     return () => {
       audio?.removeEventListener("ended", onAudioEnded);
       video?.removeEventListener("ended", onVideoEnded);
     };
-  }, [ready, localStream, switchMic, switchCam]);
+  }, [ready, localStream, rawCameraTrack, switchMic, switchCam]);
+
+  // ── Going back for a device the meeting started without ───────────────────
+  //
+  // A join is allowed to succeed without a camera or a microphone: landing in
+  // the room with a message beats not landing at all. But the failure that
+  // dominates is a camera another application is still holding, and that
+  // condition ends — usually within seconds of the member quitting the Zoom
+  // they were told about. Nothing used to be watching for the moment it did, so
+  // they sat out the meeting on a black tile beside a button they did not know
+  // to press.
+  //
+  // What each failure is worth, and what to wait for, is decided by watchFor;
+  // the waiting itself is startReacquire. Both loops stop themselves the
+  // instant the device is back, and the effects below stop them whenever the
+  // member takes the device into their own hands — the one thing this must
+  // never fight.
+
+  const reacquireCamera = useCallback(async () => {
+    // Not while sharing: replacing the outgoing track mid-share would cut the
+    // screen off, and the camera can just as well be adopted when it stops.
+    if (shareOnRef.current) return false;
+    const opened = await openCameraOnly({
+      cameraId: selectedCamIdRef.current,
+      rememberedCameraId: rememberedDevice("videoinput"),
+    });
+    if (!opened.track) return false;
+    camOnRef.current = true;
+    setCamOn(true);
+    setSelectedCamId(opened.outcome.deviceId ?? "");
+    await adoptCameraTrack(opened.track);
+    applySendCapsRef.current();
+    announceVideoStateRef.current();
+    return true;
+  }, [adoptCameraTrack]);
+
+  const reacquireMic = useCallback(async () => {
+    const s = await navigator.mediaDevices.getUserMedia({
+      audio: constraintsFor("audioinput", selectedMicIdRef.current || null),
+      video: false,
+    });
+    const track = s.getAudioTracks()[0];
+    if (!track || !localStreamRef.current) { s.getTracks().forEach((x) => x.stop()); return false; }
+    // The state the member asked for before the hardware had its say. A mic
+    // recovered for somebody who joined muted stays muted; one recovered for
+    // somebody who joined unmuted and never touched the button goes live,
+    // because that is what they asked for and were denied by a device.
+    const live = micIntentRef.current;
+    track.enabled = live;
+    track.contentHint = contentHintFor("microphone");
+    audioSenderRef.current.forEach((sender) => { void sender.replaceTrack(track).catch(() => { /* peer closed */ }); });
+    const stream = localStreamRef.current;
+    stream.getAudioTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } stream.removeTrack(t); });
+    stream.addTrack(track);
+    setLocalStream(new MediaStream(stream.getTracks()));
+    setSelectedMicId(track.getSettings().deviceId || "");
+    micOnRef.current = live;
+    setMicOn(live);
+    // Everyone else has been drawing this member as muted. Only the signal
+    // corrects that; the track arriving is invisible to them.
+    sendSignalRef.current({ type: "mic", from: myIdRef.current, micOn: live, displayName: localNameRef.current });
+    return true;
+  }, []);
+
+  const reacquireCameraRef = useRef(reacquireCamera);
+  useEffect(() => { reacquireCameraRef.current = reacquireCamera; }, [reacquireCamera]);
+  const reacquireMicRef = useRef(reacquireMic);
+  useEffect(() => { reacquireMicRef.current = reacquireMic; }, [reacquireMic]);
+
+  useEffect(() => {
+    if (!sessionLive || !cameraToRecover) return;
+    const watch = watchFor(cameraToRecover);
+    if (watch === "never") return;
+    return startReacquire({
+      watch,
+      permissionName: "camera",
+      attempt: () => reacquireCameraRef.current(),
+      onRecovered: () => {
+        setCameraToRecover(null);
+        setMediaError(null);
+      },
+    });
+  }, [sessionLive, cameraToRecover]);
+
+  useEffect(() => {
+    if (!sessionLive || !micToRecover) return;
+    const watch = watchFor(micToRecover);
+    if (watch === "never") return;
+    return startReacquire({
+      watch,
+      permissionName: "microphone",
+      attempt: () => reacquireMicRef.current(),
+      onRecovered: () => {
+        setMicToRecover(null);
+        setMediaError(null);
+      },
+    });
+  }, [sessionLive, micToRecover]);
 
   const toggleRaiseHand = useCallback(() => {
     // Same shape as the mic and camera toggles: read the ref, write the ref,
@@ -3919,6 +4061,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     processorRef.current = null;
     try { rawCameraTrackRef.current?.stop(); } catch { /* already stopped */ }
     rawCameraTrackRef.current = null;
+    setRawCameraTrack(null);
     localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     previewStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     // Not `setReady(false)`: `ready` also decides whether the pre-join screen is
