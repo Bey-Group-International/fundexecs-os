@@ -276,7 +276,9 @@ describe("the guest's Realtime subscription", () => {
   // whole trust model in one test: a forged broadcast can only cause a request.
   it("asks the server on a nudge, and acts on what it says", async () => {
     window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
-    const net = fakeNetwork(["waiting", "denied"]);
+    // Three answers, not two: the knock takes the first and the ask that
+    // connecting makes takes the second, which leaves the third for the nudge.
+    const net = fakeNetwork(["waiting", "waiting", "denied"]);
     await joinAsGuest();
     await waitingForHost();
     const before = net.knocks().length;
@@ -285,6 +287,19 @@ describe("the guest's Realtime subscription", () => {
 
     expect(await screen.findByRole("heading", { name: /you weren't admitted/i })).toBeInTheDocument();
     expect(net.knocks().length).toBeGreaterThan(before);
+  });
+
+  // The gap this closes: the decision is made between the knock being recorded
+  // and the socket joining the channel, so the nudge is published to nobody.
+  // Nothing is nudged here and no timer is advanced — on the watched cadence the
+  // next poll is fifteen seconds out, well past what findBy waits for — so the
+  // only thing that can answer is the ask that connecting itself makes.
+  it("finds a decision taken before the subscription was listening", async () => {
+    window.localStorage.setItem(`fx_guest_key_${ROOM}`, "sticky-key");
+    fakeNetwork(["waiting", "denied"]);
+    await joinAsGuest();
+
+    expect(await screen.findByRole("heading", { name: /you weren't admitted/i })).toBeInTheDocument();
   });
 
   it("drops the subscription when the guest leaves", async () => {

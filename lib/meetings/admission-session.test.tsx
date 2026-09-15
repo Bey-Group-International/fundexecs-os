@@ -519,13 +519,17 @@ describe("a decision pushed over Realtime", () => {
   // publish on that channel, so a payload that was believed would be worth
   // forging. The verdict always comes from the server.
   it("asks the server what happened rather than believing the nudge", async () => {
-    const h = watched({ poll: ["admitted"] });
+    // The first answer is spent on the catch-up ask that connecting performs, so
+    // the second is the one the nudge goes and gets.
+    const h = watched({ poll: ["waiting", "admitted"] });
     await h.session.start();
-    expect(h.calls.poll).toBe(0);
+    await flush();
+    const beforeNudge = h.calls.poll;
+    expect(h.onAdmitted).not.toHaveBeenCalled();
 
     h.watcher.nudge();
     await flush();
-    expect(h.calls.poll).toBe(1);
+    expect(h.calls.poll).toBe(beforeNudge + 1);
     expect(h.onAdmitted).toHaveBeenCalledTimes(1);
   });
 
@@ -540,11 +544,65 @@ describe("a decision pushed over Realtime", () => {
   });
 
   it("carries a deny as readily as an admit", async () => {
-    const h = watched({ poll: ["denied"] });
+    const h = watched({ poll: ["waiting", "denied"] });
     await h.session.start();
+    await flush();
     h.watcher.nudge();
     await flush();
     expect(h.onDenied).toHaveBeenCalledTimes(1);
+  });
+
+  // A push only reaches whoever is already listening, and the guest is not
+  // listening until the knock's response has come back and the socket has joined
+  // the channel. A host watching the panel admits inside that gap.
+  it("finds a decision made before it was listening, without waiting for a tick", async () => {
+    const h = watched({ poll: ["admitted"] });
+    await h.session.start();
+    await flush();
+
+    // No timer has advanced: this can only have come from the ask that
+    // connecting performs. Before it did, the first watched poll was fifteen
+    // seconds away — the whole of an instant admission spent on a spinner.
+    expect(h.onAdmitted).toHaveBeenCalledTimes(1);
+    expect(h.calls.poll).toBe(1);
+  });
+
+  it("catches up on a nudge published while the socket was down", async () => {
+    const calls = { poll: 0 };
+    let status = "waiting";
+    const w = watcher({ connected: true });
+    const onAdmitted = jest.fn();
+    const session = createAdmissionSession({
+      onAdmitted, onDenied: jest.fn(), onEnded: jest.fn(),
+      watch: w.watch,
+      knock: async () => "waiting",
+      poll: async () => { calls.poll += 1; return status; },
+    });
+    await session.start();
+    await flush();
+
+    w.state.setConnected(false);
+    // Decided while nothing was subscribed, so the nudge reached no one and
+    // nothing is coming to say so.
+    status = "admitted";
+    await flush();
+    expect(onAdmitted).not.toHaveBeenCalled();
+
+    w.state.setConnected(true);
+    await flush();
+    expect(onAdmitted).toHaveBeenCalledTimes(1);
+    session.stop();
+  });
+
+  // The control: asking on connect is what connecting costs, so a subscription
+  // that never connects must not pay it. This guest is on the responsive cadence
+  // precisely because nothing is watching for them.
+  it("does not ask on connect when there is no connection to make", async () => {
+    const h = watched({ connected: false, poll: ["admitted"] });
+    await h.session.start();
+    await flush();
+    expect(h.calls.poll).toBe(0);
+    h.session.stop();
   });
 
   it("unsubscribes when the guest leaves", async () => {
@@ -556,21 +614,25 @@ describe("a decision pushed over Realtime", () => {
   });
 
   it("unsubscribes once a verdict arrives", async () => {
-    const h = watched({ poll: ["admitted"] });
+    const h = watched({ poll: ["waiting", "admitted"] });
     await h.session.start();
+    await flush();
+    expect(h.watcher.detached).toBe(false);
     h.watcher.nudge();
     await flush();
     expect(h.watcher.detached).toBe(true);
   });
 
   it("ignores a nudge that arrives after the guest left", async () => {
-    const h = watched({ poll: ["admitted"] });
+    const h = watched({ poll: ["waiting"] });
     await h.session.start();
+    await flush();
+    const asked = h.calls.poll;
     h.session.stop();
 
     h.watcher.nudge();
     await flush();
-    expect(h.calls.poll).toBe(0);
+    expect(h.calls.poll).toBe(asked);
     expect(h.onAdmitted).not.toHaveBeenCalled();
   });
 });

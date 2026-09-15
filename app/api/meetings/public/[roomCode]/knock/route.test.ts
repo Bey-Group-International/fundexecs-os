@@ -46,6 +46,43 @@ function admissionsBuilder({ existing, inserted }: { existing?: unknown; inserte
   return b;
 }
 
+/**
+ * The admissions table as it behaves when two knocks for the same guest are in
+ * flight: the first select finds nothing, the insert loses to UNIQUE
+ * (meeting_id, guest_key), and the select after it finds the winner.
+ *
+ * The select counter is passed in rather than held per builder, because the
+ * route reaches for `from("live_meeting_admissions")` afresh each time and the
+ * whole point is what the SECOND read sees.
+ *
+ * `insertError` is a raw Postgres error rather than a shaped one, because the
+ * route has to read the code off whatever supabase-js hands it.
+ */
+function racingAdmissionsBuilder(
+  winner: unknown,
+  insertError: { code?: string },
+  reads: { count: number },
+) {
+  const b: Record<string, unknown> = {
+    eq: () => b, is: () => b, order: () => b,
+    select: () => b,
+    update: (patch: Record<string, unknown>) => { updateCapture.patch = patch; return b; },
+    insert: () => {
+      const ins: Record<string, unknown> = {
+        select: () => ins,
+        maybeSingle: async () => ({ data: null, error: insertError }),
+      };
+      return ins;
+    },
+    maybeSingle: async () => {
+      reads.count += 1;
+      // The first read is the one that saw nothing and led to the insert.
+      return { data: reads.count === 1 ? null : winner, error: null };
+    },
+  };
+  return b;
+}
+
 /** Tables touched, in order — so a test can assert how many round trips a poll costs. */
 const tablesHit: string[] = [];
 
@@ -59,6 +96,22 @@ function wire(
     if (table === "live_meetings") return meetingBuilder(meeting);
     if (table === "organization_members") return memberBuilder(member);
     return admissionsBuilder(admissions);
+  });
+}
+
+/** Like `wire`, but the admissions table loses an insert race. */
+function wireRace(
+  meeting: unknown,
+  winner: unknown,
+  member: unknown = null,
+  insertError: { code?: string } = { code: "23505" },
+) {
+  const reads = { count: 0 };
+  from.mockImplementation((table: string) => {
+    tablesHit.push(table);
+    if (table === "live_meetings") return meetingBuilder(meeting);
+    if (table === "organization_members") return memberBuilder(member);
+    return racingAdmissionsBuilder(winner, insertError, reads);
   });
 }
 
@@ -190,6 +243,44 @@ describe("POST knock", () => {
       params(),
     );
     expect(await res.json()).toEqual({ admissionId: "a1", status: "waiting" });
+  });
+
+  // Read-then-insert is not atomic, and this endpoint is called concurrently by
+  // design: the guest's first knock races the re-knock their poll fires when the
+  // server has no record of them. The loser used to be answered with a 500 —
+  // turning the one operation documented as idempotent into a failure precisely
+  // when it was repeated.
+  it("answers a knock that lost the insert race with the row that won", async () => {
+    wireRace(meeting, { id: "a1", status: "waiting", display_name: "Ada" });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "waiting" });
+  });
+
+  it("does not undo a decision that landed while the knock was racing", async () => {
+    wireRace(meeting, { id: "a1", status: "denied", display_name: "Ada" });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "denied" });
+  });
+
+  // The promotion a teammate is owed has to survive the race too, or a member
+  // whose two knocks collided would be left waiting on a host who is told
+  // nothing is wrong.
+  it("still promotes a teammate whose knock lost the race", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    wireRace(meeting, { id: "a1", status: "waiting", display_name: "Mel" }, { organization_id: "org1" });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Mel" }), params());
+    expect(await res.json()).toEqual({ admissionId: "a1", status: "admitted" });
+    expect(updateCapture.patch).toMatchObject({ status: "admitted" });
+  });
+
+  // The control: only a unique violation means "somebody else got there first".
+  // Every other insert failure is still a failure, and must not be dressed up as
+  // a knock that worked.
+  it("still reports a genuine insert failure", async () => {
+    wireRace(meeting, { id: "a1", status: "waiting", display_name: "Ada" }, null, { code: "42501" });
+    const res = await POST(postReq({ guestKey: "g1", displayName: "Ada" }), params());
+    expect(res.status).toBe(500);
   });
 
   it("does not let quick access override an explicit denial", async () => {

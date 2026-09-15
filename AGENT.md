@@ -1853,6 +1853,65 @@ Deployed, monitoring               →  live, observability active
              |  network, which is the only thing that proves the relay path. Worth a
              |  phone on cellular with wifi off before this is trusted.
 
+2026-09-15  |  The waiting room: the door, not the doorbell  |  Fifth pass, on
+             |  the path between knocking and being let in. Three findings, each
+             |  one a place where the cost lands on somebody standing outside.
+             |  1. A GUEST ADMITTED INSTANTLY WAITED FIFTEEN SECONDS. The push
+             |  that tells a guest their answer is ready only reaches whoever is
+             |  already subscribed, and the guest is not subscribed until the
+             |  knock's response has travelled back and the socket has joined the
+             |  channel. A host watching the panel clicks Admit inside that gap —
+             |  which is the case the responsive cadence was tuned for — and the
+             |  nudge is published to a channel nobody is on. The guest is then on
+             |  the WATCHED cadence, whose first poll is fifteen seconds out, so
+             |  the fastest possible admission produced the slowest possible wait.
+             |  setWatching now asks once on connecting. Same fix, same reason,
+             |  for every reconnect after a drop: nudges published while the
+             |  socket was down reached nobody, and only asking finds out.
+             |  2. The poll could not use an index. GET knock?key= looks a guest
+             |  up by guest_key alone — it holds the room code, not the meeting
+             |  id, so the meeting is reached through a join rather than used as
+             |  a filter. Every index on live_meeting_admissions leads with
+             |  meeting_id (the PK is on id; UNIQUE (meeting_id, guest_key) and
+             |  the status index both lead with meeting_id), and a btree cannot
+             |  answer a predicate on its second column. So the hottest read in
+             |  the meeting stack was a sequential scan — paid per waiting guest
+             |  per tick, while somebody watches a spinner, over a table nothing
+             |  ever deletes from. One index on (guest_key).
+             |  3. The knock was documented as idempotent and was not. Read-then-
+             |  insert is not atomic, and this endpoint is called concurrently BY
+             |  DESIGN: the first knock races the re-knock the poll fires when the
+             |  server has no record of the guest, and two tabs or a double press
+             |  do the same. The loser hit UNIQUE (meeting_id, guest_key) and was
+             |  answered with a 500 — the one operation promised to be safe to
+             |  repeat, failing precisely when it was repeated. A unique violation
+             |  now re-reads and answers from the row that won, through the same
+             |  path as a knock already on file, so the outcome is identical
+             |  whichever way the race went — including the promotion a teammate
+             |  is owed.
+             |  Also: the teammate check and the existing-knock read answer
+             |  different questions and neither needs the other's answer, so they
+             |  run together instead of in sequence. For a signed-in caller the
+             |  teammate check is itself two round trips (resolve the user, then
+             |  look up membership), all of it inside the one request a guest is
+             |  actively waiting on. Quick access still skips it rather than
+             |  racing it: the answer cannot change the outcome.
+             |  Looked at and left alone: the host's list already applies Realtime
+             |  events directly and coalesces one reconciling re-read per burst;
+             |  the nudge already carries no verdict, for reasons in
+             |  admission-channel.ts; the poll schedule already widens with the
+             |  wait; a hidden tab already stops polling.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5714 green (+8 new, 5706 to 5714). Run against the pre-change
+             |  code, six of the eight fail, as do four pre-existing tests whose
+             |  answer queues assumed no ask on connecting; the other two new
+             |  tests are controls (a non-unique insert failure is still a 500, a
+             |  subscription that never connects still does not ask on connect).
+             |  Not exercised: the index against a table with rows in it — the
+             |  plan change is read off the index definitions, not off an EXPLAIN
+             |  — and a real concurrent knock, which the test simulates by making
+             |  the insert fail the way Postgres would.
+
 ```
 
 ---
