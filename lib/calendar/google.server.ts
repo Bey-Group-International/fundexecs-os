@@ -23,6 +23,8 @@ import {
   normalizeEvent,
   syncWindow,
 } from "@/lib/calendar/google";
+import { clipToWindow, externalEventsToBusy, type StoredExternalEvent } from "@/lib/calendar/busy";
+import { mergeIntervals, type BusyInterval } from "@/lib/calendar/feeds";
 
 type Client = SupabaseClient<Database>;
 
@@ -565,33 +567,59 @@ export async function recordConnectionResult(
   }
 }
 
+/** Above this, the window is returning more than availability can reason about. */
+const BUSY_EVENT_CAP = 2000;
+
 /**
  * Busy intervals from connected Google calendars, for availability.
  *
  * Reads cache only, exactly as the ICS path does: a booking-page visitor asking
  * for slots must never wait on Google. Transparent ("free") events and
  * calendars the member excluded are left out.
+ *
+ * `timezone` is the host's — the zone their booking page publishes hours in.
+ * All-day events are stored anchored at UTC midnight, so without it a host
+ * anywhere else has the wrong hours blocked; see `externalEventsToBusy`.
  */
 export async function googleBusyForUser(
   client: Client,
   userId: string,
   windowStart: Date,
   windowEnd: Date,
-): Promise<Array<{ start: string; end: string }>> {
+  timezone: string,
+): Promise<BusyInterval[]> {
   try {
     const { data, error } = await client
       .from("external_events")
-      .select("starts_at, ends_at, transparency, status, google_calendars!inner(blocks_availability)")
+      .select("starts_at, ends_at, is_all_day, transparency, status, google_calendars!inner(blocks_availability)")
       .eq("user_id", userId)
+      // A calendar the member switched out of availability still draws on their
+      // grid; it just stops holding their time.
       .eq("google_calendars.blocks_availability", true)
-      .lt("starts_at", windowEnd.toISOString())
-      .gt("ends_at", windowStart.toISOString())
-      .limit(2000);
+      // An all-day event is stored at UTC midnight but occupies the host's own
+      // day, so it can begin up to a zone offset (±14h) outside the window and
+      // still cover part of it. A day of slack each way costs one more day of
+      // rows and is what keeps the edges of the window honest.
+      .lt("starts_at", new Date(windowEnd.getTime() + 86_400_000).toISOString())
+      .gt("ends_at", new Date(windowStart.getTime() - 86_400_000).toISOString())
+      .limit(BUSY_EVENT_CAP);
     if (error) throw new Error(error.message);
 
-    return ((data ?? []) as Array<{ starts_at: string; ends_at: string; transparency: string | null; status: string | null }>)
-      .filter((r) => r.status !== "cancelled" && r.transparency !== "transparent")
-      .map((r) => ({ start: r.starts_at, end: r.ends_at }));
+    const rows = (data ?? []) as StoredExternalEvent[];
+    // Truncation here quietly stops blocking real commitments, so it is loud
+    // rather than invisible.
+    if (rows.length >= BUSY_EVENT_CAP) {
+      console.warn(
+        `[google-calendar] busy lookup hit the ${BUSY_EVENT_CAP}-event cap for user ${userId}; ` +
+          "some commitments may not be blocking slots.",
+      );
+    }
+
+    return clipToWindow(
+      mergeIntervals(externalEventsToBusy(rows, timezone)),
+      windowStart.toISOString(),
+      windowEnd.toISOString(),
+    );
   } catch (err) {
     // Availability must still resolve. Losing busy time can permit a
     // double-booking, so this is logged loudly rather than swallowed.

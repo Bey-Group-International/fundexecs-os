@@ -8,6 +8,7 @@ import { sendMeetingInvites, guestEmails } from "@/lib/meetings/invite";
 import { diffMeetingPlace, diffMeetingTiming, sendMeetingUpdates } from "@/lib/meetings/meeting-updates";
 import { conflictMessage, findConflicts, type ConflictCandidate } from "@/lib/meetings/schedule";
 import { loadBlockConflicts } from "@/lib/meetings/blocks.server";
+import { loadExternalConflicts } from "@/lib/meetings/conflicts.server";
 import { normalizeAttendees, type MeetingAttendeeInput } from "@/lib/meetings/attendees";
 import { needsDirectory, resolveAttendeeDirectory } from "@/lib/meetings/directory";
 import { loadOrgDirectory } from "@/lib/meetings/directory.server";
@@ -145,10 +146,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Params }
         subjectHostId: (prior.host_id as string | null) ?? null,
         subjectEmails: guestEmails(subjectAttendees),
       });
-      const blockedBy = await loadBlockConflicts(supabase, auth.ctx.userId, startIso, endIso);
-      if ((conflicts.length > 0 || blockedBy.length > 0) && body.allowConflict !== true) {
+      // Whose clock the warning is read in. Resolved here rather than reusing
+      // the one computed further down, which is only reached once this check
+      // has let the edit through.
+      const conflictZone = (cleanString(body.timezone) ?? (prior.timezone as string | null)) || "UTC";
+      // Same escape as a meeting clash for both of the host's own calendars:
+      // time they blocked by hand, and time already taken in a calendar they
+      // only connected.
+      const [blockedBy, busyElsewhere] = await Promise.all([
+        loadBlockConflicts(supabase, auth.ctx.userId, startIso, endIso),
+        loadExternalConflicts(supabase, {
+          userId: auth.ctx.userId,
+          startIso,
+          endIso,
+          timezone: conflictZone,
+        }),
+      ]);
+      if (
+        (conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0) &&
+        body.allowConflict !== true
+      ) {
         return NextResponse.json(
-          { error: conflictMessage(conflicts.length, blockedBy.length), conflicts, blockedBy },
+          {
+            error: conflictMessage(conflicts.length, blockedBy.length, busyElsewhere.length),
+            conflicts,
+            blockedBy,
+            busyElsewhere,
+          },
           { status: 409 },
         );
       }

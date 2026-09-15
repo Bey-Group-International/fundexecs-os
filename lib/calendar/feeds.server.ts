@@ -19,6 +19,7 @@ import {
   mergeIntervals,
   validateFeedUrl,
 } from "@/lib/calendar/feeds";
+import { clipToWindow, externalEventsToBusy, type StoredExternalEvent } from "@/lib/calendar/busy";
 
 type Client = SupabaseClient<Database>;
 
@@ -316,24 +317,77 @@ export function cachedBusyOf(row: Pick<FeedRow, "cached_busy">): BusyInterval[] 
   return out;
 }
 
+/** Above this, the window is returning more than availability can reason about. */
+const BUSY_EVENT_CAP = 2000;
+
 /**
- * All external busy time for a member, from cache.
+ * Busy time from a member's subscribed calendars, over one window.
  *
  * Deliberately does not fetch. A stale cache is reported through the feed's own
  * health rather than repaired here, so an availability lookup never waits on a
  * third party. `refreshStaleFeeds` is what closes the gap.
+ *
+ * Read from the stored events rather than from each feed's `cached_busy` blob,
+ * for two reasons. The blob covers the feed's whole read window — four months —
+ * so a one-week slot lookup was comparing every candidate slot against four
+ * months of intervals. And the blob has thrown away which events were all-day,
+ * which is the one thing that cannot be interpreted without knowing the host's
+ * zone: an all-day event is stored at UTC midnight and occupies the host's own
+ * day, not UTC's. The two sources stay in lockstep — `recordFeedResult` writes
+ * the events first and only stamps the cache if they landed.
  */
-export async function externalBusyForUser(client: Client, userId: string): Promise<BusyInterval[]> {
+export async function externalBusyForUser(
+  client: Client,
+  userId: string,
+  window: { fromIso: string; toIso: string; timezone: string },
+): Promise<BusyInterval[]> {
   try {
+    const from = new Date(window.fromIso);
+    const to = new Date(window.toIso);
     const { data, error } = await client
-      .from("calendar_feeds")
-      .select("cached_busy")
+      .from("calendar_feed_events")
+      .select("starts_at, ends_at, is_all_day, transparent, status, calendar_feeds!inner(is_active)")
       .eq("user_id", userId)
-      .eq("is_active", true)
-      .limit(50);
+      .eq("calendar_feeds.is_active", true)
+      // A day of slack each way: an all-day event is stored at UTC midnight but
+      // occupies the host's own day, so it can begin up to a zone offset
+      // (±14h) outside the window and still cover part of it.
+      .lt("starts_at", new Date(to.getTime() + 86_400_000).toISOString())
+      .gt("ends_at", new Date(from.getTime() - 86_400_000).toISOString())
+      .limit(BUSY_EVENT_CAP);
     if (error) throw new Error(error.message);
-    const all = (data ?? []).flatMap((row) => cachedBusyOf(row as Pick<FeedRow, "cached_busy">));
-    return mergeIntervals(all);
+
+    const rows = (data ?? []) as Array<{
+      starts_at: string;
+      ends_at: string;
+      is_all_day: boolean | null;
+      transparent: boolean | null;
+      status: string | null;
+    }>;
+    // Truncation here quietly stops blocking real commitments, so it is loud
+    // rather than invisible.
+    if (rows.length >= BUSY_EVENT_CAP) {
+      console.warn(
+        `[calendar-feeds] busy lookup hit the ${BUSY_EVENT_CAP}-event cap for user ${userId}; ` +
+          "some commitments may not be blocking slots.",
+      );
+    }
+
+    // iCalendar states it as a boolean and Google as a keyword; the rule that
+    // reads them is one piece of code, so the boolean is spelled Google's way.
+    const events: StoredExternalEvent[] = rows.map((r) => ({
+      starts_at: r.starts_at,
+      ends_at: r.ends_at,
+      is_all_day: r.is_all_day,
+      status: r.status,
+      transparency: r.transparent ? "transparent" : "opaque",
+    }));
+
+    return clipToWindow(
+      mergeIntervals(externalEventsToBusy(events, window.timezone)),
+      from.toISOString(),
+      to.toISOString(),
+    );
   } catch (err) {
     // Availability must still resolve. Losing external busy time can permit a
     // double-booking, so this is logged loudly rather than swallowed quietly.

@@ -2300,6 +2300,70 @@ Deployed, monitoring               →  live, observability active
              |  remains the largest untested module in this area and was not
              |  touched.
 
+2026-09-15  |  The calendar that was read and never consulted  |  Asked to
+             |  optimize the meeting invite and scheduling flow. The invite side
+             |  turned out to be in good order — iTIP REQUEST/CANCEL, stable
+             |  UIDs, sequence bumps, host confirmation, reschedule and
+             |  relocation mail all already there. The scheduling side had a
+             |  hole you could drive a client call through.
+             |  `googleBusyForUser` existed. It was written, commented ("for
+             |  availability"), joined to `google_calendars.blocks_availability`
+             |  so a member could choose which calendars hold their time — and
+             |  called by NOTHING. `blocksTime` next to it, docstring entirely
+             |  about availability, called only by its own test. So every Google
+             |  event a member had ever synced sat in `external_events` where the
+             |  grid drew it and availability never looked. A host with Google
+             |  Calendar connected could be booked straight over a client call
+             |  through their own public link, and be told the slot was free.
+             |  This is the second feature this week found fully built and
+             |  unreachable, after the sync backoff. The pattern worth naming:
+             |  the code was written to the right design and the last wire was
+             |  never run, and nothing anywhere fails when that happens — a
+             |  calendar with no busy time and a calendar nobody asked about
+             |  look identical from the outside.
+             |  Wired it in, and the same for the in-app form: scheduling a
+             |  meeting in here warned about other meetings in here and about
+             |  time blocked by hand, and said nothing about the calendar the
+             |  member actually lives in. Now a third kind of conflict, with the
+             |  same "Save anyway" escape, showing spans only — the host knows
+             |  what is in their own calendar, and the summary of a private
+             |  event has no business travelling to say "busy".
+             |  The all-day trap, which is why this needed a zone: all-day events
+             |  are stored anchored at UTC MIDNIGHT, deliberately — the grid
+             |  draws them as banners and only needs them to sort. Availability
+             |  is not so forgiving. Taken literally, "all day Thursday" for a
+             |  host in New York blocks 8pm Wednesday to 8pm Thursday: it frees
+             |  four booked hours of Thursday evening and eats four unbooked
+             |  hours of Wednesday. Both wrong, in opposite directions, and
+             |  invisible unless you are the host wondering why. So the stored
+             |  instants are read back as the calendar dates they encode and
+             |  re-anchored to midnight in the host's own zone, borrowing the
+             |  scheduling layer's `localToIso` rather than growing a second
+             |  implementation of DST — two implementations is exactly how the
+             |  two sides of a booking come to disagree about what time it is.
+             |  Same bug in the ICS path, so `externalBusyForUser` now reads the
+             |  stored feed events rather than each feed's `cached_busy` blob.
+             |  The blob had thrown away which events were all-day — the one
+             |  thing that cannot be interpreted without the host's zone — and
+             |  covered the feed's whole four-month read window, so a one-week
+             |  slot lookup compared every candidate slot against four months of
+             |  intervals. Both sources are now windowed with a day of slack each
+             |  way (an all-day event can start a zone-offset outside the window
+             |  and still cover it), capped loudly at 2000 events rather than
+             |  silently, and failed independently: a revoked Google grant must
+             |  not stop a subscribed feed from blocking time, and neither may
+             |  take the booking page down.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5905 → 5936 green (+31 new, one of which caught me dropping the
+             |  `blocks_availability` filter while rewriting the query — the
+             |  exact kind of silent widening that lets a calendar the member
+             |  switched off start holding their time again).
+             |  NOT EXERCISED: no live Google account in this environment, so the
+             |  join-to-`google_calendars` embed and the feed-events embed are
+             |  verified by shape against the two existing queries that use the
+             |  same pattern, not against a real PostgREST. First real booking
+             |  against a connected calendar is the proof.
+
 2026-09-15  |  Three ways to be left outside the door  |  An audit of the
              |  waiting room, asked for by the user; three defects found and
              |  fixed. All the same shape: somebody stuck outside with nothing

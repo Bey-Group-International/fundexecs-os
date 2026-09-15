@@ -22,6 +22,7 @@ import type {
 import { generateRoomCode } from "@/lib/meetings/service";
 import { blocksToBusyIntervals } from "@/lib/meetings/blocks";
 import { externalBusyForUser } from "@/lib/calendar/feeds.server";
+import { googleBusyForUser } from "@/lib/calendar/google.server";
 import {
   DEFAULT_AVAILABILITY,
   DEFAULT_EVENT_TYPES,
@@ -254,7 +255,18 @@ export async function resolvePublicPage(
  */
 export async function busyIntervals(
   client: SchedulingClient,
-  opts: { hostUserId: string; fromIso: string; toIso: string; excludeBookingId?: string | null },
+  opts: {
+    hostUserId: string;
+    fromIso: string;
+    toIso: string;
+    excludeBookingId?: string | null;
+    /**
+     * The host's zone — the one their booking page publishes hours in. Needed
+     * because an all-day event in a connected calendar is stored at UTC
+     * midnight but occupies the host's own day.
+     */
+    timezone: string;
+  },
 ): Promise<BusyInterval[]> {
   // Anything that *overlaps* the window can start before it. Meetings are capped
   // at MAX_MEETING_MINUTES, so looking back that far is sufficient and keeps the
@@ -332,12 +344,30 @@ export async function busyIntervals(
     ),
   );
 
-  // Time already taken in a subscribed external calendar (Google, Outlook,
-  // Apple, Calendly). Served from each feed's cache — never fetched here,
-  // because this runs inside a public slot lookup and must not wait on a third
-  // party. externalBusyForUser resolves to an empty list rather than throwing,
-  // so a feed problem narrows availability accuracy without failing the page.
-  out.push(...(await externalBusyForUser(client as never, opts.hostUserId)));
+  // Time already taken in a connected calendar: a subscribed ICS feed
+  // (Outlook, Apple, Calendly) or Google Calendar itself. Served from what the
+  // last sync stored — never fetched here, because this runs inside a public
+  // slot lookup and must not wait on a third party.
+  //
+  // Both resolve to an empty list rather than throwing, and both fail
+  // independently: a broken Google connection must not also stop an ICS feed
+  // from blocking time, and neither may take the booking page down. The cost
+  // of a miss is a double-booking, so each logs loudly on the way through.
+  const [feedBusy, googleBusy] = await Promise.all([
+    externalBusyForUser(client as never, opts.hostUserId, {
+      fromIso: opts.fromIso,
+      toIso: opts.toIso,
+      timezone: opts.timezone,
+    }),
+    googleBusyForUser(
+      client as never,
+      opts.hostUserId,
+      new Date(opts.fromIso),
+      new Date(opts.toIso),
+      opts.timezone,
+    ),
+  ]);
+  out.push(...feedBusy, ...googleBusy);
 
   return out;
 }
@@ -382,6 +412,7 @@ export async function openSlots(
     fromIso: new Date(new Date(`${fromDate}T00:00:00.000Z`).getTime() - 48 * 3600_000).toISOString(),
     toIso: new Date(new Date(`${toDate}T00:00:00.000Z`).getTime() + 48 * 3600_000).toISOString(),
     excludeBookingId: opts.excludeBookingId,
+    timezone: page.timezone,
   });
 
   const slots = generateSlots({
@@ -433,6 +464,7 @@ async function assertSlotOpen(
     fromIso: new Date(start.getTime() - 24 * 3600_000).toISOString(),
     toIso: new Date(start.getTime() + 24 * 3600_000).toISOString(),
     excludeBookingId: opts.excludeBookingId,
+    timezone: page.timezone,
   });
 
   const open = isSlotAvailable(startIso, {
