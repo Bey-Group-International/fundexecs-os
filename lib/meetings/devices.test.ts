@@ -8,6 +8,8 @@ import {
   pickDevice,
   readinessProblems,
   smoothLevel,
+  displayConstraints,
+  SCREEN_SHARE_FPS,
 } from "./devices";
 
 const d = (over: Partial<Device>): Device => ({
@@ -252,5 +254,39 @@ describe("canJoin", () => {
 
   it("stops only when the mic is both blocked and absent", () => {
     expect(canJoin({ micDenied: true, mics: 0 })).toBe(false);
+  });
+});
+
+describe("what to ask for when sharing a screen", () => {
+  // The request used to be a bare `{ video: true }` — on a 4K monitor, a
+  // 3840x2160 source captured at whatever the compositor runs, re-encoded
+  // continuously, on the one machine also running the meeting and the thing
+  // being presented.
+  it("caps the frame rate, because a shared screen barely moves", () => {
+    const video = displayConstraints().video as MediaTrackConstraints;
+    expect(video.frameRate).toEqual({ ideal: SCREEN_SHARE_FPS });
+    expect(SCREEN_SHARE_FPS).toBeLessThan(30);
+  });
+
+  // Resolution is what makes text readable. A screen share nobody can read is
+  // not a cheaper screen share, it is a failed one.
+  it("leaves the resolution alone", () => {
+    const video = displayConstraints().video as MediaTrackConstraints;
+    expect(video.width).toBeUndefined();
+    expect(video.height).toBeUndefined();
+  });
+
+  // `ideal` rather than `max`: an OverconstrainedError here reaches the member
+  // as a share button that does nothing.
+  it("asks rather than demands, so no browser can refuse outright", () => {
+    const json = JSON.stringify(displayConstraints());
+    expect(json).not.toContain("max");
+    expect(json).not.toContain("exact");
+  });
+
+  // Asking for audio without carrying it anywhere would light the "sharing
+  // audio" indicator while sending silence.
+  it("does not ask for audio it has nowhere to send", () => {
+    expect(displayConstraints().audio).toBe(false);
   });
 });

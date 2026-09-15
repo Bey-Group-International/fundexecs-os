@@ -19,10 +19,16 @@
 import { useCallback, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  CHUNK_MS,
   RECORDING_BUCKET,
   chunkPath,
   type RecordingState,
 } from "@/lib/meetings/recording-policy";
+import {
+  classifyUploadError,
+  droppedPartsNotice,
+  uploadRetryDelay,
+} from "@/lib/meetings/upload-retry";
 import { RecordingComposer, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -43,6 +49,18 @@ export interface UseRecordingResult {
   state: RecordingState;
   /** Set when a recording failed, for the one line the host is shown. */
   error: string | null;
+  /**
+   * Something the host should know about a recording that nonetheless worked.
+   *
+   * Kept apart from `error` because the two want opposite treatment: a failure
+   * is an alert that stays until it is dealt with, and this is a note about a
+   * file that plays. Rendering "the rest was saved" in a red alert bar with no
+   * way to dismiss it would tell the host their recording is broken and then
+   * leave the claim on screen for the rest of the meeting.
+   */
+  notice: string | null;
+  /** Put the notice away. */
+  dismissNotice: () => void;
   /** Seconds of meeting captured so far. */
   elapsed: number;
   start: () => Promise<void>;
@@ -52,6 +70,7 @@ export interface UseRecordingResult {
 export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const [state, setState] = useState<RecordingState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
   const composerRef = useRef<RecordingComposer | null>(null);
@@ -66,37 +85,67 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const bytesRef = useRef(0);
   const countRef = useRef(0);
+  // Parts that could not be stored after every attempt. Counted rather than
+  // logged: a recording that quietly lost a minute of a board meeting and
+  // reported itself complete is worse than one that says so.
+  const droppedRef = useRef(0);
 
   const { supabase, meetingId, hostName, room, announce } = input;
 
+  /**
+   * Store one part, retrying the failures that are worth retrying.
+   *
+   * Retrying is safe by construction and always was: the object goes to a path
+   * derived from the part's own index with `upsert: true`, and the row upserts
+   * on (recording_id, idx). Sending the same part twice is indistinguishable
+   * from sending it once. The path paid for that property and then dropped any
+   * part whose first attempt failed, which turns a thirty-second wifi stumble
+   * in an hour-long meeting into six holes and a recording still filed as
+   * complete.
+   *
+   * Still never fatal. A part that cannot be stored costs five seconds of the
+   * recording; giving up on the recording would cost the rest of the meeting.
+   * What changes is that it is counted, and the host is told at the end.
+   */
   const uploadChunk = useCallback(async (blob: Blob, index: number, mimeType: string) => {
     const mId = meetingId;
     const rId = recordingIdRef.current;
     if (!mId || !rId) return;
     const path = chunkPath(mId, rId, index, mimeType);
-    try {
-      const { error: uploadError } = await supabase.storage
-        .from(RECORDING_BUCKET)
-        .upload(path, blob, { contentType: mimeType, upsert: true });
-      if (uploadError) throw uploadError;
 
-      // The row is written only after the object exists. A chunk row pointing at
-      // an object that was never stored would have the playback route serve a
-      // hole in the middle of the meeting.
-      const { error: rowError } = await supabase
-        .from("live_meeting_recording_chunks")
-        .upsert(
-          { recording_id: rId, idx: index, path, size: blob.size },
-          { onConflict: "recording_id,idx" },
-        );
-      if (rowError) throw rowError;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from(RECORDING_BUCKET)
+          .upload(path, blob, { contentType: mimeType, upsert: true });
+        if (uploadError) throw uploadError;
 
-      bytesRef.current += blob.size;
-      countRef.current += 1;
-    } catch (err) {
-      // Deliberately not fatal. A part that fails to upload costs five seconds
-      // of the recording; stopping here would cost the rest of the meeting.
-      console.warn("[recording] part failed to upload", index, err);
+        // The row is written only after the object exists. A chunk row pointing at
+        // an object that was never stored would have the playback route serve a
+        // hole in the middle of the meeting.
+        const { error: rowError } = await supabase
+          .from("live_meeting_recording_chunks")
+          .upsert(
+            { recording_id: rId, idx: index, path, size: blob.size },
+            { onConflict: "recording_id,idx" },
+          );
+        if (rowError) throw rowError;
+
+        bytesRef.current += blob.size;
+        countRef.current += 1;
+        return;
+      } catch (err) {
+        const delay = classifyUploadError(err) === "retry" ? uploadRetryDelay(attempt) : null;
+        if (delay === null) {
+          droppedRef.current += 1;
+          console.warn("[recording] part permanently lost", index, err);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        // The recording may have been stopped and a new one started while this
+        // part was waiting. Storing it now would write into the wrong recording.
+        if (recordingIdRef.current !== rId) return;
+      }
     }
   }, [supabase, meetingId]);
 
@@ -135,6 +184,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const start = useCallback(async () => {
     if (composerRef.current || !meetingId) return;
     setError(null);
+    setNotice(null);
     setState("starting");
 
     try {
@@ -154,6 +204,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       recordingIdRef.current = (data as { id: string }).id;
       bytesRef.current = 0;
       countRef.current = 0;
+      droppedRef.current = 0;
       queueRef.current = Promise.resolve();
 
       const composer = new RecordingComposer(room, {
@@ -175,7 +226,12 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
             return;
           }
           setState("idle");
-          void finalize("complete");
+          // Reported only after finalize, which waits on the upload queue: parts
+          // are still landing when the recorder stops, and counting the losses
+          // before they have all had their attempts would understate them.
+          void finalize("complete").then(() => {
+            setNotice(droppedPartsNotice(droppedRef.current, CHUNK_MS));
+          });
         },
       });
 
@@ -213,5 +269,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
     }
   }, [supabase, meetingId, hostName, room, announce, uploadChunk, finalize]);
 
-  return { state, error, elapsed, start, stop };
+  const dismissNotice = useCallback(() => setNotice(null), []);
+
+  return { state, error, notice, dismissNotice, elapsed, start, stop };
 }
