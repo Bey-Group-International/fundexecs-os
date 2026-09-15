@@ -86,6 +86,57 @@ async function callerIsOrgMember(orgId: string | null, svc: SupabaseLike): Promi
 
 type SupabaseLike = { from: (table: string) => any };
 
+/** A knock already on file, or null. The shape both callers below need. */
+interface Knock { id: string; status: string; display_name: string }
+
+async function readKnock(svc: SupabaseLike, meetingId: string, guestKey: string): Promise<Knock | null> {
+  const { data } = await (svc as any)
+    .from("live_meeting_admissions")
+    .select("id, status, display_name")
+    .eq("meeting_id", meetingId)
+    .eq("guest_key", guestKey)
+    .maybeSingle();
+  return (data as Knock | null) ?? null;
+}
+
+/**
+ * The answer for a guest who already has a row.
+ *
+ * Returns the existing decision rather than clobbering it — but promotes anyone
+ * who should not be waiting at all: a teammate whose client knocked before we
+ * recognized them, or any guest on a meeting whose quick access was switched on
+ * while they were already in the queue.
+ */
+async function answerKnock(
+  svc: SupabaseLike,
+  existing: Knock,
+  admitOnSight: boolean,
+  displayName: string,
+) {
+  if (admitOnSight && existing.status === "waiting") {
+    await (svc as any)
+      .from("live_meeting_admissions")
+      .update({ status: "admitted", decided_at: new Date().toISOString() })
+      .eq("id", existing.id);
+    return NextResponse.json({ admissionId: existing.id, status: "admitted" });
+  }
+  // A guest whose knock is still pending may re-knock under a name they have
+  // since corrected — they are keyed by guest_key now, not by a per-load id, so
+  // the second knock lands on the same row. The host is deciding on a name, so
+  // it should be the one the guest is currently offering. A decided row is left
+  // exactly as it was: the decision was made about that name.
+  if (existing.status === "waiting" && displayName !== existing.display_name) {
+    await (svc as any)
+      .from("live_meeting_admissions")
+      .update({ display_name: displayName })
+      .eq("id", existing.id);
+  }
+  return NextResponse.json({ admissionId: existing.id, status: existing.status });
+}
+
+/** Postgres unique_violation — here, always UNIQUE (meeting_id, guest_key). */
+const UNIQUE_VIOLATION = "23505";
+
 // POST — record (or look up) this guest's knock. Returns the current status.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
   // Before any database work: a limiter that only bites after the insert would
@@ -112,40 +163,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   // holding the link is the whole check and nobody waits. Read off the meeting
   // row rather than trusted from the request: the client that knocks is the
   // guest's, and a guest must never be able to admit themselves.
+  //
+  // The teammate check and the existing-knock read answer different questions
+  // and neither needs the other's answer, so they go together. Run in sequence
+  // they were two round trips deep in the one request a guest is actively
+  // waiting on — and for a signed-in caller the teammate check is itself two,
+  // since it resolves the user before it can look up their membership. Quick
+  // access skips the check entirely rather than racing it: the answer cannot
+  // change the outcome, so asking for it would be a round trip spent on nothing.
   const quickAccess = meeting.guest_quick_access === true;
-  const admitOnSight = quickAccess || (await callerIsOrgMember(meeting.organization_id, supabase));
+  const [admitOnSight, existing] = await Promise.all([
+    quickAccess ? Promise.resolve(true) : callerIsOrgMember(meeting.organization_id, supabase),
+    readKnock(supabase, meeting.id, guestKey),
+  ]);
 
-  // Return the existing decision rather than clobbering it — but promote anyone
-  // who should not be waiting at all: a teammate whose client knocked before we
-  // recognized them, or any guest on a meeting whose quick access was switched
-  // on while they were already in the queue.
-  const { data: existing } = await (supabase as any)
-    .from("live_meeting_admissions")
-    .select("id, status, display_name")
-    .eq("meeting_id", meeting.id)
-    .eq("guest_key", guestKey)
-    .maybeSingle();
-  if (existing) {
-    if (admitOnSight && existing.status === "waiting") {
-      await (supabase as any)
-        .from("live_meeting_admissions")
-        .update({ status: "admitted", decided_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      return NextResponse.json({ admissionId: existing.id as string, status: "admitted" });
-    }
-    // A guest whose knock is still pending may re-knock under a name they have
-    // since corrected — they are keyed by guest_key now, not by a per-load id, so
-    // the second knock lands on the same row. The host is deciding on a name, so
-    // it should be the one the guest is currently offering. A decided row is left
-    // exactly as it was: the decision was made about that name.
-    if (existing.status === "waiting" && displayName !== existing.display_name) {
-      await (supabase as any)
-        .from("live_meeting_admissions")
-        .update({ display_name: displayName })
-        .eq("id", existing.id);
-    }
-    return NextResponse.json({ admissionId: existing.id as string, status: existing.status as string });
-  }
+  if (existing) return answerKnock(supabase, existing, admitOnSight, displayName);
 
   const { data: inserted, error } = await (supabase as any)
     .from("live_meeting_admissions")
@@ -159,8 +191,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     })
     .select("id, status")
     .maybeSingle();
-  if (error || !inserted) return NextResponse.json({ error: "Could not knock" }, { status: 500 });
-  return NextResponse.json({ admissionId: inserted.id as string, status: inserted.status as string });
+  if (inserted) {
+    return NextResponse.json({ admissionId: inserted.id as string, status: inserted.status as string });
+  }
+
+  // Read-then-insert is not atomic, and this endpoint is called concurrently by
+  // design: the guest's first knock races the re-knock their poll fires when the
+  // server has no record of them, and two tabs or a double press do the same.
+  // The loser hits UNIQUE (meeting_id, guest_key) — which is the constraint
+  // doing its job, not a failure. Answering it with a 500 made the one operation
+  // documented as idempotent fail precisely when it was repeated.
+  //
+  // So re-read and answer from the row that won, through the same path as a knock
+  // that was already on file. That keeps the outcome identical whichever way the
+  // race went, including the promotion a teammate is owed.
+  if ((error as { code?: string } | null)?.code === UNIQUE_VIOLATION) {
+    const winner = await readKnock(supabase, meeting.id, guestKey);
+    if (winner) return answerKnock(supabase, winner, admitOnSight, displayName);
+  }
+  return NextResponse.json({ error: "Could not knock" }, { status: 500 });
 }
 
 // GET ?key=<guestKey> — poll the decision. Guests can't use RLS/Realtime, so they
