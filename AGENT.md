@@ -1977,6 +1977,57 @@ Deployed, monitoring               →  live, observability active
              |  real permission grant mid-call, and Safari's Permissions support,
              |  which has come and gone by version.
 
+2026-09-15  |  A camera that checks itself  |  Reported: configure the camera
+             |  in the green room, start the meeting, and it is live for NOBODY
+             |  — including the member — until they open device settings and
+             |  pick the same camera again. Reproduces on every join path, with
+             |  and without a background.
+             |  Static analysis found at least four ways to reach that state and
+             |  they are indistinguishable from inside the room: a device asked
+             |  for again before its driver let go (the green room's tracks are
+             |  stopped and the same camera requested milliseconds later;
+             |  openCallMedia retries once, and some hardware needs longer); a
+             |  track that had already ended; a track left DISABLED by the
+             |  background hold, which disables the camera until the segmenter
+             |  builds and depends on every route out re-enabling it; and an
+             |  adopted preview that was never live.
+             |  DECISION: do not chase which. The member's own repair — open
+             |  settings, pick the camera — works for all four, which means the
+             |  fix is to do that automatically rather than to find the one true
+             |  cause. camera-liveness judges the camera by what it IS doing:
+             |  wanted and no track, wanted and ended, or open-and-disabled
+             |  behind a UI that says it is on. The room asks once, 2.5s after
+             |  joining, and repairs what it finds.
+             |  Two details that matter. The check reads the CAMERA, not the
+             |  outgoing track: with an effect on, the outgoing track is the
+             |  processor's canvas, and a healthy canvas over a dead camera is
+             |  precisely the state this catches. And a disabled-but-open track
+             |  is repaired by setting the flag, not by reopening — reopening
+             |  works, and also blinks the camera light in front of somebody
+             |  watching their own face and costs a second of black on every
+             |  other tile, for a fault that is one boolean.
+             |  Deliberately late (a fresh track is briefly not producing, and
+             |  the hold is released only when a 12MB segmenter lands — judging
+             |  either sooner would condemn a camera that is merely starting)
+             |  and deliberately one-shot (a safety net under a path that is
+             |  supposed to work; anything still wrong afterwards belongs to the
+             |  re-acquisition loop, anything breaking later to the device-loss
+             |  listener).
+             |  Not repaired: a member who joined with their camera off, or who
+             |  turned it off in the first 2.5 seconds. camWantedRef follows
+             |  their intent rather than camOn, which is false in exactly the
+             |  broken case this exists to catch.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5759 green (+12 new, 5747 to 5759).
+             |  NOT EXERCISED, and the honest gap: the wiring has no test, for
+             |  the same reason as the entry above — the MeetingRoom harness
+             |  stops short of entering the room, so there is no media harness.
+             |  The verdict logic is covered; the effect that calls it is
+             |  verified by reading. And because the root cause was never
+             |  isolated, this is a net under the failure rather than a fix for
+             |  it: if it still reproduces, the console now says which of the
+             |  four states it was, which is the thing nobody could see before.
+
 ```
 
 ---

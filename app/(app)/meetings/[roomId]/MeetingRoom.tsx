@@ -106,6 +106,12 @@ import {
   type MediaFailure,
   type PreviewFacts,
 } from "@/lib/meetings/media-acquisition";
+import {
+  CAMERA_CHECK_MS,
+  cameraVerdict,
+  needsRepair,
+  repairFor,
+} from "@/lib/meetings/camera-liveness";
 import { watchFor } from "@/lib/meetings/device-reacquire";
 import { startReacquire } from "@/lib/meetings/reacquire-loop";
 import { openCallMedia, openCameraOnly, type OpenedMedia } from "@/lib/meetings/open-media";
@@ -1191,6 +1197,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // comes back should come back the way they meant it to be, not switched on
   // because it happened to be recovered.
   const micIntentRef = useRef(true);
+  // The same for the camera. Not `camOn`, which is false in exactly the broken
+  // case this exists to catch — a camera that was wanted and did not open.
+  const camWantedRef = useRef(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -2566,6 +2575,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // muted themselves before joining is still muted a second later.
     const micWanted = choice ? choice.micEnabled : true;
     micIntentRef.current = micWanted;
+    camWantedRef.current = wantCam;
     stream.getAudioTracks().forEach((t) => { t.enabled = micWanted; });
     const micLive = micWanted && stream.getAudioTracks().length > 0;
     setMicOn(micLive);
@@ -3413,6 +3423,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       return;
     }
     camOnRef.current = next;
+    camWantedRef.current = next;
     setCameraToRecover(null);
     localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
     setCamOn(next);
@@ -3658,6 +3669,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // state from this ref, so setting it afterwards would put a disabled
       // track on the wire.
       camOnRef.current = true;
+      camWantedRef.current = true;
       setCamOn(true);
       setSelectedCamId(opened.outcome.deviceId ?? "");
       setCameraToRecover(null);
@@ -3921,6 +3933,61 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       },
     });
   }, [sessionLive, micToRecover]);
+
+  // ── Is the camera actually on? ────────────────────────────────────────────
+  //
+  // For a reported failure with no single reproducible cause: a member sets
+  // their camera up in the green room, the meeting starts, and it is live for
+  // nobody — including them — until they open device settings and pick the same
+  // camera again. It happens on every join path, with and without a background.
+  //
+  // There are at least four ways to land in that state and they look identical
+  // from here: a device that was asked for again before its driver let go, a
+  // track that had already ended, a track left DISABLED by the background hold
+  // when the route out of it did not re-enable it, and a preview adopted that
+  // was never live. Chasing which one is the wrong shape of fix, because the
+  // member's own repair — open settings, pick the camera — works for all of
+  // them. So the room does that itself, once, a couple of seconds in.
+  //
+  // Deliberately late: a freshly opened track is briefly not producing, and the
+  // background hold is released only when a 12MB segmenter lands, so judging
+  // either immediately would condemn a camera that is merely starting.
+  // Deliberately one-shot: this is a safety net under a path that is supposed
+  // to work. Anything still wrong afterwards belongs to the re-acquisition
+  // loop, and anything that breaks later to the device-loss listener.
+  useEffect(() => {
+    if (!sessionLive) return;
+    const timer = setTimeout(() => {
+      // The camera itself, not what is being sent: with a background effect the
+      // outgoing track is the processor's canvas, and a healthy canvas over a
+      // dead camera is exactly the state this exists to catch.
+      const track = rawCameraTrackRef.current;
+      const verdict = cameraVerdict({
+        wanted: camWantedRef.current,
+        on: camOnRef.current,
+        track: track ? { readyState: track.readyState, enabled: track.enabled } : null,
+      });
+      if (!needsRepair(verdict)) return;
+      console.warn("[meeting] camera was not live after joining:", verdict);
+
+      if (repairFor(verdict) === "enable" && track) {
+        // Open and working and simply switched off. Reopening would blink the
+        // camera light in front of somebody watching their own face and cost a
+        // second of black on every other tile, for a fault that is one flag.
+        track.enabled = true;
+        // The composited track when an effect is on, the camera when it is not.
+        const outgoing = cameraTrackRef.current;
+        if (outgoing && outgoing !== track) outgoing.enabled = true;
+        applySendCapsRef.current();
+        announceVideoStateRef.current();
+        return;
+      }
+      // No track, or a dead one. Same repair the member would have reached for,
+      // through the same path as the device picker.
+      void reacquireCameraRef.current();
+    }, CAMERA_CHECK_MS);
+    return () => clearTimeout(timer);
+  }, [sessionLive]);
 
   const toggleRaiseHand = useCallback(() => {
     // Same shape as the mic and camera toggles: read the ref, write the ref,
