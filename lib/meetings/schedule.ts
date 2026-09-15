@@ -479,15 +479,22 @@ export function nextExternalSyncStatus(opts: {
 }
 
 /**
- * What to tell someone whose chosen time is already spoken for. Blocked time is
- * their own note to themselves, so it reads differently from a clash with a
- * real meeting — and when both apply, the meeting is the more urgent fact.
+ * What to tell someone whose chosen time is already spoken for.
+ *
+ * The three kinds are genuinely different facts about the same hour — a clash
+ * with a meeting in here, the member's own note to themselves, and something
+ * already on the calendar they live in — so the message names each one that
+ * applies rather than picking a winner and hiding the rest.
  */
-export function conflictMessage(meetingCount: number, blockCount: number): string {
-  if (meetingCount > 0 && blockCount > 0) {
-    return "That time conflicts with another meeting and falls inside time you've blocked.";
-  }
-  if (meetingCount > 0) return "Time conflicts with another meeting.";
-  if (blockCount > 0) return "That time falls inside time you've blocked off.";
-  return "That time is unavailable.";
+export function conflictMessage(meetingCount: number, blockCount: number, externalCount = 0): string {
+  const clashes: string[] = [];
+  if (meetingCount > 0) clashes.push("another meeting");
+  if (externalCount > 0) clashes.push("an event on your connected calendar");
+  if (clashes.length === 0 && blockCount > 0) return "That time falls inside time you've blocked off.";
+  if (clashes.length === 0) return "That time is unavailable.";
+
+  const conflictsWith = clashes.length === 2 ? `${clashes[0]} and ${clashes[1]}` : clashes[0];
+  return blockCount > 0
+    ? `That time conflicts with ${conflictsWith}, and falls inside time you've blocked.`
+    : `That time conflicts with ${conflictsWith}.`;
 }
