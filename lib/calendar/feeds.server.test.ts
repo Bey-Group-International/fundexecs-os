@@ -164,6 +164,10 @@ function fakeClient(result: { data?: unknown; error?: unknown } = { data: [], er
           rec.filters.push([c, v]);
           return builder;
         },
+        gt: (c: string, v: unknown) => {
+          rec.filters.push([c, v]);
+          return builder;
+        },
         in: (c: string, v: unknown) => {
           rec.filters.push([c, v]);
           return builder;
@@ -240,28 +244,64 @@ describe("cachedBusyOf", () => {
 });
 
 describe("externalBusyForUser", () => {
-  it("merges cached busy time across every connected calendar", async () => {
+  const WINDOW = { fromIso: "2026-09-02T00:00:00.000Z", toIso: "2026-09-03T00:00:00.000Z", timezone: "UTC" };
+
+  it("merges busy time across every connected calendar", async () => {
     const client = fakeClient({
       data: [
-        { cached_busy: [{ start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T10:00:00.000Z" }] },
-        { cached_busy: [{ start: "2026-09-02T10:00:00.000Z", end: "2026-09-02T11:00:00.000Z" }] },
+        { starts_at: "2026-09-02T09:00:00.000Z", ends_at: "2026-09-02T10:00:00.000Z", is_all_day: false, transparent: false, status: "CONFIRMED" },
+        { starts_at: "2026-09-02T10:00:00.000Z", ends_at: "2026-09-02T11:00:00.000Z", is_all_day: false, transparent: false, status: "CONFIRMED" },
       ],
     });
-    await expect(externalBusyForUser(client as never, "user-1")).resolves.toEqual([
+    await expect(externalBusyForUser(client as never, "user-1", WINDOW)).resolves.toEqual([
       { start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T11:00:00.000Z" },
     ]);
   });
 
-  it("only reads the cache — availability must never wait on a third party", async () => {
+  it("leaves out events the owner marked free", async () => {
+    const client = fakeClient({
+      data: [
+        { starts_at: "2026-09-02T09:00:00.000Z", ends_at: "2026-09-02T10:00:00.000Z", is_all_day: false, transparent: true, status: "CONFIRMED" },
+      ],
+    });
+    await expect(externalBusyForUser(client as never, "user-1", WINDOW)).resolves.toEqual([]);
+  });
+
+  // An all-day event is stored anchored at UTC midnight. Read literally it
+  // would block the wrong hours for every host who is not in UTC.
+  it("puts an all-day event on the host's own day", async () => {
+    const client = fakeClient({
+      data: [
+        { starts_at: "2026-09-02T00:00:00.000Z", ends_at: "2026-09-03T00:00:00.000Z", is_all_day: true, transparent: false, status: "CONFIRMED" },
+      ],
+    });
+    await expect(
+      externalBusyForUser(client as never, "user-1", { ...WINDOW, timezone: "America/New_York" }),
+    ).resolves.toEqual([
+      // New York's 2nd starts at 04:00 UTC, so only that part of it falls
+      // inside a window that is expressed in UTC.
+      { start: "2026-09-02T04:00:00.000Z", end: "2026-09-03T00:00:00.000Z" },
+    ]);
+  });
+
+  it("reads only calendars the member still has switched on", async () => {
     const client = fakeClient({ data: [] });
-    await externalBusyForUser(client as never, "user-1");
+    await externalBusyForUser(client as never, "user-1", WINDOW);
+    const call = client.calls.find((c) => c.table === "calendar_feed_events");
+    expect(call?.filters).toContainEqual(["calendar_feeds.is_active", true]);
+    expect(call?.filters).toContainEqual(["user_id", "user-1"]);
+  });
+
+  it("only reads what is stored — availability must never wait on a third party", async () => {
+    const client = fakeClient({ data: [] });
+    await externalBusyForUser(client as never, "user-1", WINDOW);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("resolves to no busy time when the query fails, rather than breaking availability", async () => {
     const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
     const client = fakeClient({ data: null, error: { message: "down" } });
-    await expect(externalBusyForUser(client as never, "user-1")).resolves.toEqual([]);
+    await expect(externalBusyForUser(client as never, "user-1", WINDOW)).resolves.toEqual([]);
     // Losing external busy time can permit a double-booking, so it is logged.
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();

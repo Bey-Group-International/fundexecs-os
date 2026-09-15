@@ -16,6 +16,7 @@ jest.mock("@/lib/vault", () => ({
 import {
   accessTokenFor,
   applyEvents,
+  googleBusyForUser,
   listCalendars,
   listEvents,
   openRefreshToken,
@@ -505,5 +506,89 @@ describe("syncConnection — time budget", () => {
     expect(summary.incomplete).toBe(false);
     const synced = updates.filter((u) => u.table === "google_calendars" && "last_synced_at" in u.patch);
     expect(synced).toHaveLength(CALENDARS.length);
+  });
+});
+
+/** A stand-in that answers one query, recording the filters it was given. */
+function busyClient(result: { data?: unknown; error?: unknown }) {
+  const filters: Array<[string, unknown]> = [];
+  const client = {
+    filters,
+    from() {
+      const b: Record<string, unknown> = {
+        select: () => b,
+        eq: (c: string, v: unknown) => {
+          filters.push([c, v]);
+          return b;
+        },
+        lt: (c: string, v: unknown) => {
+          filters.push([c, v]);
+          return b;
+        },
+        gt: (c: string, v: unknown) => {
+          filters.push([c, v]);
+          return b;
+        },
+        limit: () => b,
+        then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null, ...result }).then(res, rej),
+      };
+      return b;
+    },
+  };
+  return client;
+}
+
+describe("googleBusyForUser", () => {
+  const FROM = new Date("2026-09-02T00:00:00.000Z");
+  const TO = new Date("2026-09-03T00:00:00.000Z");
+
+  it("merges the events that occupy the member", async () => {
+    const client = busyClient({
+      data: [
+        { starts_at: "2026-09-02T09:00:00.000Z", ends_at: "2026-09-02T10:00:00.000Z", is_all_day: false },
+        { starts_at: "2026-09-02T10:00:00.000Z", ends_at: "2026-09-02T11:00:00.000Z", is_all_day: false },
+      ],
+    });
+    await expect(googleBusyForUser(client as never, "user-1", FROM, TO, "UTC")).resolves.toEqual([
+      { start: "2026-09-02T09:00:00.000Z", end: "2026-09-02T11:00:00.000Z" },
+    ]);
+  });
+
+  it("leaves out events the member is free for", async () => {
+    const client = busyClient({
+      data: [
+        { starts_at: "2026-09-02T09:00:00.000Z", ends_at: "2026-09-02T10:00:00.000Z", transparency: "transparent" },
+        { starts_at: "2026-09-02T11:00:00.000Z", ends_at: "2026-09-02T12:00:00.000Z", status: "cancelled" },
+      ],
+    });
+    await expect(googleBusyForUser(client as never, "user-1", FROM, TO, "UTC")).resolves.toEqual([]);
+  });
+
+  // The member can switch a calendar out of availability without hiding it,
+  // and that switch has to be honoured at the query rather than in the client.
+  it("reads only calendars the member lets block their time", async () => {
+    const client = busyClient({ data: [] });
+    await googleBusyForUser(client as never, "user-1", FROM, TO, "UTC");
+    expect(client.filters).toContainEqual(["google_calendars.blocks_availability", true]);
+    expect(client.filters).toContainEqual(["user_id", "user-1"]);
+  });
+
+  it("puts an all-day event on the member's own day", async () => {
+    const client = busyClient({
+      data: [{ starts_at: "2026-09-02T00:00:00.000Z", ends_at: "2026-09-03T00:00:00.000Z", is_all_day: true }],
+    });
+    await expect(
+      googleBusyForUser(client as never, "user-1", FROM, TO, "America/New_York"),
+    ).resolves.toEqual([{ start: "2026-09-02T04:00:00.000Z", end: "2026-09-03T00:00:00.000Z" }]);
+  });
+
+  it("resolves to no busy time when the query fails, rather than breaking availability", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const client = busyClient({ data: null, error: { message: "down" } });
+    await expect(googleBusyForUser(client as never, "user-1", FROM, TO, "UTC")).resolves.toEqual([]);
+    // Losing busy time can permit a double-booking, so it is logged.
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

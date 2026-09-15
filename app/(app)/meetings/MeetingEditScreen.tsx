@@ -232,6 +232,10 @@ export function MeetingEditScreen({
   // Time the host blocked themselves. Reported separately from meeting
   // conflicts because it reads differently — nobody else is affected.
   const [blockedBy, setBlockedBy] = useState<Array<{ id: string; title: string; startsAt: string; endsAt: string }>>([]);
+  // Time already taken in a calendar we only read (Google, or a subscribed
+  // feed). Spans only — the host knows what is in their own calendar, and the
+  // summary of a private event has no business travelling here to say "busy".
+  const [busyElsewhere, setBusyElsewhere] = useState<Array<{ start: string; end: string }>>([]);
   const [allowConflict, setAllowConflict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -306,6 +310,12 @@ export function MeetingEditScreen({
   async function submit(draft: boolean) {
     setError(null);
     setNotice(null);
+    // Last attempt's clashes describe last attempt's time. Leaving them up
+    // after a save that went through — or after the host moved the meeting to
+    // clear them — is how a warning stops being read.
+    setConflicts([]);
+    setBlockedBy([]);
+    setBusyElsewhere([]);
     const errors = validateMeetingDraft({ title, meetingType, date, startTime, endTime, timezone });
     if (!draft && Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -372,10 +382,12 @@ export function MeetingEditScreen({
         const json = (await res.json()) as {
           conflicts?: Array<{ id: string; title: string; scheduledAt: string }>;
           blockedBy?: Array<{ id: string; title: string; startsAt: string; endsAt: string }>;
+          busyElsewhere?: Array<{ start: string; end: string }>;
           error?: string;
         };
         setConflicts(json.conflicts ?? []);
         setBlockedBy(json.blockedBy ?? []);
+        setBusyElsewhere(json.busyElsewhere ?? []);
         // A 409 with neither list is the scheduling link's own guard — the slot
         // was taken by another booking — and "Save anyway" cannot clear it, so
         // show what the server said rather than the conflict wording.
@@ -762,14 +774,20 @@ export function MeetingEditScreen({
             </div>
           ) : null}
 
-          {conflicts.length > 0 || blockedBy.length > 0 ? (
+          {conflicts.length > 0 || blockedBy.length > 0 || busyElsewhere.length > 0 ? (
             <div className="mt-4 rounded-lg border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-3 py-3 sm:ml-11">
               <p className="text-xs font-medium text-[var(--fg-primary)]">
-                {conflicts.length > 0 ? "Scheduling conflict" : "Inside blocked time"}
+                {conflicts.length > 0 || busyElsewhere.length > 0 ? "Scheduling conflict" : "Inside blocked time"}
               </p>
               <ul className="mt-1 list-disc pl-4 text-xs text-[var(--fg-muted)]">
                 {conflicts.map((c) => (
                   <li key={c.id}>{c.title} — {new Date(c.scheduledAt).toLocaleString()}</li>
+                ))}
+                {busyElsewhere.map((b) => (
+                  <li key={b.start}>
+                    Busy in a connected calendar — {new Date(b.start).toLocaleString()} to{" "}
+                    {new Date(b.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </li>
                 ))}
                 {blockedBy.map((b) => (
                   <li key={b.id}>
