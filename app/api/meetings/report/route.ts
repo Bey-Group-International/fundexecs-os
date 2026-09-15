@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, LONG_RUN_TIMEOUT_MS } from "@/lib/anthropic-client";
-import { createTeamTask } from "@/lib/team-tasks";
 import { persistInstitutionalMeetingRecord } from "@/lib/meetings/service";
+import { createActionItemTasks } from "@/lib/meetings/action-items.server";
+import { parseActionItem } from "@/lib/meetings/action-items";
+import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { EMPTY_REPORT, clampTranscript, generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { chooseTranscript, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
     // Verify caller is the meeting host
     const { data: meeting } = await supabase
       .from("live_meetings")
-      .select("id, host_id, organization_id, deal_id, title")
+      .select("id, host_id, organization_id, deal_id, title, started_at, scheduled_at")
       .eq("id", body.meetingId)
       .single();
 
@@ -166,29 +168,39 @@ export async function POST(req: Request) {
       participants: body.participants ?? [],
       transcript,
       analysis,
+      // When the meeting happened, not when the report ran. Usually moments
+      // apart; an hour or more apart whenever this is reached by the room's
+      // retry, and a different day whenever a host ends a meeting the next
+      // morning.
+      occurredAt: meeting.started_at ?? meeting.scheduled_at ?? null,
     });
 
-    // Fire-and-forget: create a task for each action item
+    // A task for each action item, on the list of whoever the item names.
+    //
+    // Awaited, not fired off. This used to be `void Promise.allSettled(...)` on
+    // the line before the response: on a serverless runtime the invocation can
+    // be frozen the moment the response is sent, so any insert that had not
+    // landed simply never did — silently, because nothing was waiting to hear.
+    // The inserts run in parallel and cost one round trip.
+    let tasks = { created: 0, routed: 0, unrouted: [] as string[] };
     const actionItems = normalizeNoteList(analysis.action_items);
     if (actionItems.length > 0 && meeting.organization_id) {
-      void Promise.allSettled(
-        actionItems.map((item) =>
-          createTeamTask(supabase, {
-            organizationId: meeting.organization_id!,
-            assignedTo: user.id,
-            assignedBy: user.id,
-            title: item.slice(0, 120),
-            description: `Auto-created from meeting: ${meeting.title ?? body.title ?? "Untitled"}`,
-            hub: "execute",
-            module: "live_meetings",
-            priority: "normal",
-            contextSnapshot: normalizeNoteText(analysis.summary),
-          }),
-        ),
-      );
+      // Loaded only when an item actually names somebody — most of the cost of
+      // this route is the model call, and there is no reason to add two table
+      // reads to a report whose items are all unowned.
+      const named = actionItems.some((item) => parseActionItem(item).owner);
+      tasks = await createActionItemTasks(supabase, {
+        orgId: meeting.organization_id,
+        hostId: user.id,
+        meetingTitle: meeting.title ?? body.title ?? "Untitled",
+        dealId: meeting.deal_id ?? null,
+        summary: normalizeNoteText(analysis.summary),
+        items: actionItems,
+        directory: named ? await loadOrgDirectory(supabase, meeting.organization_id) : [],
+      });
     }
 
-    return NextResponse.json({ reportId: report.id, analysis });
+    return NextResponse.json({ reportId: report.id, analysis, tasks });
   } catch (err) {
     console.error("[/api/meetings/report]", err);
     return NextResponse.json(

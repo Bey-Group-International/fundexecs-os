@@ -147,6 +147,81 @@ export function resolveAttendeeDirectory(
   return { attendees: out, resolved, unreachable };
 }
 
+/** A member the directory can point at when the caller needs more than an address. */
+export interface DirectoryPerson extends DirectoryMember {
+  id: string;
+}
+
+/**
+ * The one member a spoken name can mean, or undefined when it means none or many.
+ *
+ * Same folding and the same unique-or-nothing rule as the attendee path above,
+ * for callers who need the member rather than the address — routing an action
+ * item to whoever it names, which is a task on somebody's list and so wants the
+ * same care as an invitation.
+ *
+ * A first name counts here, unlike the guest side: an action item says "Sarah",
+ * because that is what the transcript called her, and refusing every first name
+ * would route the whole list back to the host. Uniqueness is what makes that
+ * safe — two Sarahs and it goes to neither.
+ */
+export function matchDirectoryPerson<T extends DirectoryMember>(
+  name: string | null | undefined,
+  members: readonly T[],
+): T | undefined {
+  const typed = key(name);
+  const raw = (name ?? "").trim().toLowerCase();
+  if (!typed && !raw) return undefined;
+
+  const list = (members ?? []).filter((m) => !!m.email?.trim());
+
+  /**
+   * "One person", "several people", or "nobody here".
+   *
+   * The three have to stay apart. Collapsing "several" into "nobody" is how a
+   * name that is ambiguous in its exact form gets resolved by a LOOSER one that
+   * happens to be unique — two colleagues both called Sam Lee, one of whom
+   * writes their address sam.lee@, and the task lands on that one.
+   */
+  const lookup = (forms: ReadonlyArray<(m: T) => string>): T | "many" | null => {
+    const index = new Map<string, Set<T>>();
+    for (const member of list) {
+      for (const form of forms) {
+        const k = form(member);
+        if (!k) continue;
+        const bucket = index.get(k);
+        if (bucket) bucket.add(member);
+        else index.set(k, new Set([member]));
+      }
+    }
+    let ambiguous = false;
+    for (const form of [typed, raw]) {
+      const bucket = form ? index.get(form) : undefined;
+      if (bucket?.size === 1) return [...bucket][0];
+      if (bucket && bucket.size > 1) ambiguous = true;
+    }
+    return ambiguous ? "many" : null;
+  };
+
+  // Exact first: how the directory spells them, and their address.
+  const exact = lookup([(m) => key(m.name), (m) => m.email.trim().toLowerCase()]);
+  if (exact === "many") return undefined;
+  if (exact) return exact;
+
+  // Then the loose forms — a first name, or the part of an address before the
+  // "@". The local part belongs here rather than with the exact ones: in an
+  // organization with two Sarahs, one sarah@ and one sokonkwo@, treating
+  // "sarah" as an identity would resolve the ambiguous first name through the
+  // lucky address. Here it shares a bucket with both their first names, and
+  // resolves to neither.
+  const loose = lookup([
+    (m) => firstName(m.name ?? ""),
+    (m) => localPart(m.email),
+    (m) => firstName(localPart(m.email)),
+  ]);
+  return loose && loose !== "many" ? loose : undefined;
+}
+
 /** Whether any attendee still needs an address looked up. */
 export function needsDirectory(attendees: readonly MeetingAttendeeInput[] | null | undefined): boolean {
   return (attendees ?? []).some((a) => !a.email?.trim() && !!a.name?.trim());

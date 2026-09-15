@@ -54,6 +54,11 @@ function wire({ meeting = MEETING as unknown } = {}) {
     const b: Record<string, unknown> = {
       select: () => b,
       eq: () => b,
+      order: () => b,
+      // loadOrgDirectory pages with .range(); it fails closed, so a harness
+      // that answers nothing means "everything stays with the host".
+      range: async () => ({ data: [], error: null }),
+      in: async () => ({ data: [], error: null }),
       insert: (row: Record<string, unknown>) => {
         if (table === "live_meeting_reports") writes.reports.push(row);
         return b;
@@ -162,5 +167,53 @@ describe("when no API key is configured", () => {
     wire();
     expect((await POST(req())).status).toBe(200);
     expect(writes.meetingUpdate).toMatchObject({ status: "ended" });
+  });
+});
+
+describe("action items become tasks", () => {
+  // createTeamTask answers the row it wrote, or null when it could not.
+  beforeEach(() => createTeamTask.mockResolvedValue({ id: "t1" }));
+
+  const withItems = (items: string[]) =>
+    generateMeetingReport.mockResolvedValue({
+      summary: "They agreed to wire on Friday.",
+      key_points: ["Timing"],
+      action_items: items,
+      decisions: [],
+    });
+
+  /** The input each createTeamTask call was made with. */
+  const taskInputs = () => createTeamTask.mock.calls.map((c) => c[1] as Record<string, unknown>);
+
+  // The bug: this was `void Promise.allSettled(...)` on the line before the
+  // response. On a serverless runtime the invocation can be frozen the moment
+  // the response is sent, so the inserts that had not landed never did.
+  it("has written them before it answers", async () => {
+    withItems(["Ana: Wire the funds", "Circulate the memo"]);
+    wire();
+    await POST(req());
+    expect(createTeamTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports what it created", async () => {
+    withItems(["Ana: Wire the funds"]);
+    wire();
+    const body = await (await POST(req())).json();
+    expect(body.tasks).toMatchObject({ created: 1 });
+  });
+
+  it("keeps them with the host when the directory cannot be read", async () => {
+    // loadOrgDirectory fails closed. That must mean the host, never a guess.
+    withItems(["Ana: Wire the funds"]);
+    wire();
+    await POST(req());
+    expect(taskInputs()[0].assignedTo).toBe("host-1");
+  });
+
+  it("raises nothing when the report had no action items", async () => {
+    withItems([]);
+    wire();
+    await POST(req());
+    expect(createTeamTask).not.toHaveBeenCalled();
   });
 });

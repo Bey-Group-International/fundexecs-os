@@ -119,6 +119,69 @@ describe("meeting service", () => {
       },
     ]);
   });
+
+  /** A client that records what it was asked to insert. */
+  function recordingClient(inserts: Record<string, unknown>[]) {
+    return {
+      from: () => ({
+        insert: (values: Record<string, unknown>) => {
+          inserts.push(values);
+          return Promise.resolve({ error: null });
+        },
+        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      }),
+    } as never;
+  }
+
+  const RECORD = {
+    meeting: { id: "m1", organization_id: "org1", deal_id: null, title: "Diligence call" },
+    actorId: "u1",
+    transcript: "A: hello",
+    analysis: { summary: "s", key_points: [], action_items: [], decisions: [], follow_up_draft: "" },
+  };
+
+  it("dates the record to when the meeting happened", async () => {
+    // Not to when the report ran. Those are moments apart as a meeting ends
+    // and a day apart whenever a host ends one the next morning.
+    const inserts: Record<string, unknown>[] = [];
+    await persistInstitutionalMeetingRecord(recordingClient(inserts), {
+      ...RECORD,
+      occurredAt: "2026-07-05T10:00:00.000Z",
+    });
+    expect(inserts[0].occurred_at).toBe("2026-07-05T10:00:00.000Z");
+  });
+
+  it("falls back to now when the meeting has no time on it", async () => {
+    const inserts: Record<string, unknown>[] = [];
+    await persistInstitutionalMeetingRecord(recordingClient(inserts), { ...RECORD, occurredAt: null });
+    expect(typeof inserts[0].occurred_at).toBe("string");
+    expect(isNaN(new Date(inserts[0].occurred_at as string).getTime())).toBe(false);
+  });
+
+  it("does not file a record dated to nonsense", async () => {
+    const inserts: Record<string, unknown>[] = [];
+    await persistInstitutionalMeetingRecord(recordingClient(inserts), { ...RECORD, occurredAt: "soon" });
+    expect(isNaN(new Date(inserts[0].occurred_at as string).getTime())).toBe(false);
+  });
+
+  // The record of the meeting. A write that fails in silence is
+  // indistinguishable from a meeting that produced nothing, and the first
+  // anyone knows is a search that comes back empty months later.
+  it("says so when the record could not be written", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const supabase = {
+      from: () => ({
+        insert: () => Promise.resolve({ error: { message: "permission denied" } }),
+        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      }),
+    } as never;
+    await persistInstitutionalMeetingRecord(supabase, RECORD);
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("meeting_notes not written"),
+      "permission denied",
+    );
+    spy.mockRestore();
+  });
 });
 
 describe("updateMeeting — the calendar sequence and the reminder stamp", () => {
