@@ -1911,6 +1911,56 @@ Deployed, monitoring               →  live, observability active
              |  plan change is read off the index definitions, not off an EXPLAIN
              |  — and a real concurrent knock, which the test simulates by making
              |  the insert fail the way Postgres would.
+             |
+2026-09-15  |  Calendar hygiene, and a report that reads like a record  |  Three
+             |  asks, and two turned out to be features whose machinery was
+             |  already written and unreachable.
+             |  Starvation (the real bug): `consecutive_failures` has been
+             |  written on every Google sync since sync existed and read by
+             |  NOTHING. Worse than a missing feature, because the sweep takes
+             |  the 25 connections with the oldest `last_sync_at` — and a
+             |  connection that fails never updates that timestamp, so it sorts
+             |  to the FRONT forever. One revoked grant was retried hourly at
+             |  full cost and held a slot a healthy connection never reached.
+             |  The more broken a connection, the more of the sweep it consumed.
+             |  Fixed with a `next_attempt_at` column and a 15min→1day backoff;
+             |  a connection that recovers has it cleared rather than serving out
+             |  a penalty. Healthy connections synced within the hour are also
+             |  skipped — a deployment under 25 connections was re-syncing every
+             |  one every hour, including ones refreshed by hand minutes before.
+             |  "Sync now" still always syncs: the pacing exists to stop the
+             |  sweep wasting itself, not to refuse somebody who asked.
+             |  Remove from calendar: `decideWrite` has ALWAYS returned a delete
+             |  when a meeting's sync flag is false, and nothing anywhere ever
+             |  set it false. The delete dialog on the meetings screen said so
+             |  out loud — "Connected calendar events are not deleted unless
+             |  separately approved and synced" — true, with no way to act on it.
+             |  Now DELETE /api/meetings/[id]/calendar. Host-only (it is their
+             |  calendar, their grant) and deliberately NOT folded into Delete:
+             |  a meeting that moved elsewhere is still a meeting that happened.
+             |  Export, per the founder ("more institutional in form and
+             |  presentation, and there should be a docx download"): the .docx
+             |  download already existed and was labelled "Word", which reads as
+             |  a link to something else — every format now states its extension.
+             |  The document gained a Meeting Record block (date, time, duration,
+             |  reference, participants, tone) replacing one interpuncted line;
+             |  decisions and action items moved AHEAD of the discussion and
+             |  became numbered, because "action 3 is mine" is a sentence people
+             |  say and they cannot say it about a bullet; and a provenance
+             |  footer that admits what is model-generated.
+             |  Found while doing it: `loadReportForExport` has selected
+             |  `attendees` since it was written and `buildReportMarkdown` threw
+             |  them away — every report this product ever exported was the
+             |  record of a conversation that did not say who had it.
+             |  Transcripts in exports now render as speaker turns through
+             |  `parseTranscript`, the same parser the report PAGE has always
+             |  used, so the filed document matches the page somebody read.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5733 green. Five existing export tests were REWRITTEN rather than
+             |  relaxed — the format changed on purpose and they now assert the
+             |  new shape; a test that stops checking is worse than one that
+             |  changes its mind. Not exercised: a real Google account revoking
+             |  access (the backoff path), and a rendered .docx opened in Word.
 
 ```
 
