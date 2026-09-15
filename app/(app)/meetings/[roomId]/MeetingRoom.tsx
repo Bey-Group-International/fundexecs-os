@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { MeetingGreenRoom, type GreenRoomChoice } from "./MeetingGreenRoom";
-import { constraintsFor, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
+import { constraintsFor, displayConstraints, levelFromSamples, smoothLevel } from "@/lib/meetings/devices";
 import {
   LOCAL_SPEAKER_ID,
   SPEAKING_LEVEL,
@@ -3801,8 +3801,17 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
    */
   const swapOutgoingVideo = useCallback((next: MediaStreamTrack | null, stopOutgoing: boolean) => {
     const stream = localStreamRef.current;
-    if (!next || !stream) return;
-    next.contentHint = contentHintFor(shareOnRef.current ? "screen" : "camera");
+    if (!stream) return;
+    // A null `next` means SEND NOTHING, and it has to mean that rather than
+    // "do nothing". This used to return early on it, and the case that reaches
+    // it is not rare: a member sharing their screen with their camera off.
+    // Ending that share called restoreCameraTrack, which passes the camera
+    // track — null for them — so the screen track was never replaced on the
+    // senders and never stopped. `shareOn` went false, the button said
+    // "Share screen", the room was told sharing had ended, and the screen kept
+    // going out to every participant with the browser's own sharing indicator
+    // still lit. The one person who could not tell was the one sharing.
+    if (next) next.contentHint = contentHintFor(shareOnRef.current ? "screen" : "camera");
     // The sender held from the transceiver, not one found by looking for a track
     // that is already video: someone who joined with their camera off has a
     // video sender carrying nothing, and searching by track kind skipped it —
@@ -3811,9 +3820,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     stream.getVideoTracks().forEach((t) => {
       if (t !== next) { if (stopOutgoing) { try { t.stop(); } catch { /* already stopped */ } } stream.removeTrack(t); }
     });
-    if (!stream.getVideoTracks().includes(next)) stream.addTrack(next);
+    if (next && !stream.getVideoTracks().includes(next)) stream.addTrack(next);
     // The camera may have been toggled off while this track was not on the wire.
-    next.enabled = camOnRef.current;
+    if (next) next.enabled = camOnRef.current;
     setLocalStream(new MediaStream(stream.getTracks()));
     applySendCapsRef.current();
   }, []);
@@ -4045,7 +4054,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const toggleScreen = useCallback(async () => {
     if (shareOn) { restoreCameraTrack(); return; }
     try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenStream = await navigator.mediaDevices.getDisplayMedia(displayConstraints());
       const screenTrack = screenStream.getVideoTracks()[0];
       if (!screenTrack || !localStreamRef.current) return;
       screenTrack.contentHint = contentHintFor("screen");
@@ -4755,6 +4764,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           {recorder.error && (
             <div role="alert" className="flex items-center gap-3 px-4 py-2 bg-red-500/10 border-b border-[var(--status-danger)]/30 shrink-0">
               <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.error}</p>
+            </div>
+          )}
+          {/* A recording that worked but lost parts. Not an alert — the file
+              plays — and dismissible, because it describes something finished
+              rather than something to act on. */}
+          {recorder.notice && (
+            <div role="status" className="flex items-center gap-3 px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--line)] shrink-0">
+              <p className="flex-1 text-xs text-[var(--fg-secondary)]">{recorder.notice}</p>
+              <button
+                onClick={recorder.dismissNotice}
+                className="text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors"
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {layout === "grid" ? (

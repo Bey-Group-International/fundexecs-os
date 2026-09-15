@@ -70,6 +70,43 @@ export function pickDevice(devices: Device[], kind: DeviceKind, remembered: stri
   return systemDefault ?? candidates[0];
 }
 
+/**
+ * What to ask getDisplayMedia for.
+ *
+ * The request used to be a bare `{ video: true }`, which means "whatever this
+ * display is" — and on a 4K monitor that is a 3840x2160 source captured at
+ * whatever rate the compositor runs, re-encoded continuously, and on a mesh
+ * call uploaded to every other participant. The send caps bound what goes on
+ * the wire; they do nothing about what it costs to capture and encode in the
+ * first place, which is paid by the one machine that can least afford it: the
+ * one also running the meeting, the presentation, and whatever is being shown.
+ *
+ * Frame rate is the lever, not resolution. Shared screens are overwhelmingly
+ * static — a document, a deck, a spreadsheet — so halving the rate halves the
+ * encoder's work and costs nothing anybody can see. Resolution is left alone
+ * on purpose: it is what makes text readable, and a screen share nobody can
+ * read is not a cheaper screen share, it is a failed one.
+ *
+ * `ideal` rather than `max` throughout, so a browser that cannot honour one of
+ * these gives its best rather than refusing: an OverconstrainedError here
+ * reaches the member as a share button that does nothing.
+ */
+export function displayConstraints(): DisplayMediaStreamOptions {
+  return {
+    video: {
+      frameRate: { ideal: SCREEN_SHARE_FPS },
+    },
+    // Not requested. Routing tab audio into the call needs a second outgoing
+    // track and a decision about whether it is mixed with the presenter's
+    // microphone or sent beside it, and asking for it without carrying it
+    // anywhere would light the "sharing audio" indicator while sending silence.
+    audio: false,
+  };
+}
+
+/** Frames a second to capture a shared screen at. */
+export const SCREEN_SHARE_FPS = 15;
+
 /** Constraints for one chosen device, or the system default when none is chosen. */
 export function constraintsFor(
   kind: "audioinput" | "videoinput",
