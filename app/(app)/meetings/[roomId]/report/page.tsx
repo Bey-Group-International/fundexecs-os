@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { CopyButton } from "./CopyButton";
+import { FollowUpPanel } from "./FollowUpPanel";
 import { ExportMenu } from "./ExportMenu";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { RecordingPanel } from "./RecordingPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { reportViewState, shouldPollReport, type ReportViewState } from "@/lib/meetings/attendance";
+import { TRUNCATED_KEY } from "@/lib/meetings/report-analysis";
 
 type Meeting = {
   id: string;
@@ -18,6 +19,7 @@ type Meeting = {
   created_at: string;
   started_at: string | null;
   ended_at: string | null;
+  scheduled_at: string | null;
 };
 
 type Report = {
@@ -44,7 +46,7 @@ export default function MeetingReportPage() {
       supabase.auth.getUser(),
       supabase
         .from("live_meetings")
-        .select("id, host_id, title, created_at, started_at, ended_at")
+        .select("id, host_id, title, created_at, started_at, ended_at, scheduled_at")
         .eq("room_code", roomId)
         .maybeSingle(),
     ]);
@@ -122,7 +124,7 @@ export default function MeetingReportPage() {
   if (state === "forbidden") return <NotAnAttendeeState title={data?.meeting.title ?? null} />;
 
   // Narrowed by the states above: "ready" means both of these are present.
-  const { meeting, report } = data!;
+  const { meeting, report, viewerId } = data!;
   if (!report) return <GeneratingState />;
 
   // Coerced, not cast. These are stored model output, and reports written before
@@ -135,6 +137,10 @@ export default function MeetingReportPage() {
   const followUp = normalizeNoteText(analysis?.follow_up_draft) || null;
   const sentiment = analysis?.sentiment as string | null;
   const nextMeeting = analysis?.next_meeting_suggestion as string | null;
+  // The model ran out of room before it finished. Said out loud, because a
+  // report that stops early reads exactly like a meeting that decided nothing.
+  const truncated = analysis?.[TRUNCATED_KEY] === true;
+  const isHost = Boolean(viewerId && viewerId === meeting.host_id);
 
   const duration = meeting.started_at && meeting.ended_at
     ? Math.round((new Date(meeting.ended_at).getTime() - new Date(meeting.started_at).getTime()) / 60000)
@@ -154,7 +160,13 @@ export default function MeetingReportPage() {
             {meeting.title ?? "Meeting"}
           </h1>
           <p className="text-sm text-[var(--fg-muted)] mt-0.5">
-            {new Date(meeting.created_at as string).toLocaleDateString("en-US", {
+            {/* When the meeting HAPPENED. `created_at` is when the row was
+                made, which for anything scheduled in advance is a different
+                day entirely — a report for Tuesday's board call dated the
+                Thursday before it was booked. */}
+            {new Date(
+              meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at,
+            ).toLocaleDateString("en-US", {
               weekday: "long", year: "numeric", month: "long", day: "numeric",
             })}
             {duration ? ` · ${duration} min` : ""}
@@ -165,6 +177,16 @@ export default function MeetingReportPage() {
           <ExportMenu roomId={roomId} />
         </div>
       </div>
+
+      {truncated && (
+        <div className="rounded-xl border border-[var(--status-warning,#f59e0b)]/40 bg-[var(--status-warning,#f59e0b)]/10 px-4 py-3">
+          <p className="text-xs font-medium text-[var(--fg-primary)]">This report was cut short</p>
+          <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+            The analysis ran out of room before it finished, so the later sections — usually the
+            follow-up draft — may be incomplete. Regenerating it from the meeting log will try again.
+          </p>
+        </div>
+      )}
 
       {/* Summary */}
       {report.summary && (
@@ -223,14 +245,8 @@ export default function MeetingReportPage() {
         </div>
       )}
 
-      {/* Follow-up draft */}
-      {followUp && (
-        <Section title="Follow-up Draft" action={<CopyButton text={followUp} />}>
-          <pre className="text-sm text-[var(--fg-primary)] whitespace-pre-wrap font-sans leading-relaxed">
-            {followUp}
-          </pre>
-        </Section>
-      )}
+      {/* Follow-up draft — editable, and sendable by the host. */}
+      {followUp && <FollowUpPanel meetingId={meeting.id} draft={followUp} canSend={isHost} />}
 
       {/* The recording, when there is one. Renders nothing otherwise: most
           meetings are not recorded, and an empty heading on every report would

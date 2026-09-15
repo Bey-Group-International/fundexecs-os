@@ -2424,6 +2424,72 @@ Deployed, monitoring               →  live, observability active
              |  the room. Verified by reading. Also not exercised: a real
              |  WebSocket-hostile network, and a real 404 mid-wait.
 
+2026-09-15  |  The report that stopped early, and the email nobody could send  |
+             |  Asked to optimize meeting notes and summaries. Four things, and
+             |  the first is one I made worse myself.
+             |  THE REPORT WAS BEING CUT OFF MID-SENTENCE. `max_tokens: 2048`,
+             |  for a schema that asks for a summary, three lists, a sentiment, a
+             |  next-meeting line AND a complete ready-to-send follow-up email.
+             |  When the model runs out of room inside a tool call the API does
+             |  not raise: it sets stop_reason and hands back the partial JSON,
+             |  which looks exactly like an answer. The fields at the END of the
+             |  schema are the ones that never arrive, and `follow_up_draft` is
+             |  last. So hosts got reports with no email, or an email stopping
+             |  mid-sentence, and nothing anywhere said why. I made it worse two
+             |  changes ago by raising the transcript budget from 12,000
+             |  characters to 120,000 — a longer meeting means more to report on,
+             |  into the same 2,048. Raised to 8,192 and stop_reason is now read;
+             |  a report that still runs out says so on its own page.
+             |  ACTION ITEMS WENT TO THE WRONG PERSON — always the host. The
+             |  prompt asks for "Sarah: Send the deck by Friday" and the model
+             |  obliges; every one of those became a task assigned to whoever
+             |  ended the meeting. The host collected a list of other people's
+             |  commitments and Sarah was never told about hers. Now the owner is
+             |  parsed off the front and matched against the organization's own
+             |  directory, unique-or-nothing, the same rule the invitation path
+             |  uses. Two Sarahs and it stays with the host, because a commitment
+             |  filed against the wrong colleague is worse than one that did not
+             |  move — somebody will act on it.
+             |  Two traps in that matching, both caught by tests I wrote before
+             |  the code: the address local-part is a NAME-ish form, not an
+             |  identity, so "Sarah" in an org with sarah@ and sokonkwo@ must not
+             |  resolve through the lucky address; and "ambiguous" must not be
+             |  returned as "not found", or an exact form that means two people
+             |  falls through to a looser form that happens to mean one.
+             |  AND THE TASKS OFTEN WERE NOT CREATED AT ALL. `void
+             |  Promise.allSettled(...)` on the line before the response. On a
+             |  serverless runtime the invocation can be frozen the moment the
+             |  response is sent, so whatever had not landed never did —
+             |  silently, because nothing was waiting to hear. Awaited now.
+             |  THE FOLLOW-UP DEAD-ENDED IN THE CLIPBOARD. The model writes a
+             |  ready-to-send email; the page offered a Copy button. So the host
+             |  went to another application, pasted it, and typed in the
+             |  addresses of people this meeting already knows — while the
+             |  product held the attendee list, a connected mailbox and the same
+             |  send path the invitations use. It is now editable in place and
+             |  sends to everyone on the meeting who has an address, host only,
+             |  sender excluded, one bad address not stopping the rest.
+             |  Smaller: the report page dated itself to the meeting ROW's
+             |  created_at, so a board call booked the week before was reported
+             |  under the day it was scheduled. And the institutional record
+             |  wrote through Promise.allSettled with nothing reading the
+             |  results — a failed write was indistinguishable from a meeting
+             |  that produced nothing, discovered months later as a search that
+             |  comes back empty.
+             |  Worth naming: `notes_snapshot` and `meeting_notes` are both
+             |  written and read by nothing, anywhere. That is the fourth
+             |  write-only store this week, after the transcript table, the
+             |  failure counter and the Google busy lookup. I did not build
+             |  readers for them — there is no screen asking — but the pattern is
+             |  now the most reliable thing in this codebase for finding real
+             |  bugs: follow what gets written and ask who reads it.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5955 → 6027 green (+72 new).
+             |  NOT EXERCISED: no mailbox is connected here, so the follow-up
+             |  send is verified against a mocked sendEmail, not a real Gmail
+             |  round trip. And the truncation path is tested by asserting on
+             |  stop_reason, not by making a real model run out of room.
+
 ```
 
 ---

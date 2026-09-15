@@ -68,6 +68,15 @@ export interface PersistMeetingRecordInput {
   participants?: string[];
   transcript: string;
   analysis: Record<string, unknown>;
+  /**
+   * When the meeting happened.
+   *
+   * Defaults to now, which is right when this runs as a meeting ends and wrong
+   * every other time — a retry an hour later, or a record written for a
+   * meeting that finished before anyone pressed anything, would file an
+   * institutional record dated to the paperwork rather than to the event.
+   */
+  occurredAt?: string | null;
 }
 
 export function generateRoomCode(): string {
@@ -611,12 +620,14 @@ export async function persistInstitutionalMeetingRecord(
     follow_up_draft: typeof input.analysis.follow_up_draft === "string" ? input.analysis.follow_up_draft : "",
   };
 
-  await Promise.allSettled([
+  const occurredAt = validInstant(input.occurredAt) ?? new Date().toISOString();
+
+  const [record, snapshotWrite] = await Promise.allSettled([
     supabase.from("meeting_notes").insert({
       organization_id: input.meeting.organization_id,
       deal_id: input.meeting.deal_id ?? null,
       title: input.meeting.title ?? "Meeting",
-      occurred_at: new Date().toISOString(),
+      occurred_at: occurredAt,
       participants: input.participants ?? [],
       transcript: input.transcript,
       analysis: input.analysis as Json,
@@ -630,4 +641,31 @@ export async function persistInstitutionalMeetingRecord(
       } as never)
       .eq("id", input.meeting.id),
   ]);
+
+  // Settled so neither write can take the report down with it — but not
+  // silent. This is the record of the meeting; a failure that nothing reports
+  // is indistinguishable from a meeting that produced nothing, and the first
+  // anyone knows is a search that comes back empty months later.
+  reportWriteFailure("meeting_notes", input.meeting.id, record);
+  reportWriteFailure("live_meetings.notes_snapshot", input.meeting.id, snapshotWrite);
+}
+
+/** An ISO instant, or null when the value is not one. */
+function validInstant(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const at = new Date(value);
+  return isNaN(at.getTime()) ? null : at.toISOString();
+}
+
+function reportWriteFailure(
+  what: string,
+  meetingId: string,
+  result: PromiseSettledResult<{ error?: { message?: string } | null } | unknown>,
+): void {
+  if (result.status === "rejected") {
+    console.error(`[meetings/service] ${what} not written for ${meetingId}`, result.reason);
+    return;
+  }
+  const error = (result.value as { error?: { message?: string } | null } | null)?.error;
+  if (error) console.error(`[meetings/service] ${what} not written for ${meetingId}`, error.message ?? error);
 }

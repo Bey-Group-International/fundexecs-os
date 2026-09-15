@@ -64,6 +64,35 @@ export function clampTranscript(transcript: string): string {
 }
 
 /**
+ * Room for the model to answer in.
+ *
+ * Was 2,048 — for a schema that asks for a summary, three lists, a sentiment, a
+ * next-meeting suggestion AND a complete ready-to-send follow-up email. A real
+ * meeting's worth of that does not fit, and the way it does not fit is the
+ * quiet kind: the API stops mid-tool-call, hands back whatever JSON it had
+ * reached, and the fields at the END of the schema are the ones that never
+ * arrive. `follow_up_draft` is last. So the host got a report with no email, or
+ * with an email that stops mid-sentence, and nothing anywhere said why.
+ *
+ * It got worse when the transcript budget went from 12,000 characters to
+ * 120,000: a longer meeting means more to report on, into the same 2,048.
+ *
+ * 8,192 is comfortably more than a full report needs and a small fraction of
+ * what the model can write. Output is billed on what is actually produced, so
+ * the headroom is free unless it is used.
+ */
+export const REPORT_MAX_TOKENS = 8_192;
+
+/**
+ * Set on a report the model ran out of room to finish.
+ *
+ * Kept rather than discarded: a summary and key points that did arrive are
+ * worth having. But they are marked, because a report that stops early reads
+ * exactly like a meeting that decided nothing.
+ */
+export const TRUNCATED_KEY = "report_truncated";
+
+/**
  * The shape every report is stored in.
  *
  * Deliberately the same object for a first generation and a regeneration: the
@@ -137,7 +166,7 @@ export async function generateMeetingReport(
 
   const msg = await client.messages.create({
     model,
-    max_tokens: 2048,
+    max_tokens: REPORT_MAX_TOKENS,
     system: SYSTEM,
     messages: [
       {
@@ -165,6 +194,17 @@ Generate a comprehensive post-meeting report.`,
   const toolUse = msg.content.find((b) => b.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") return { ...EMPTY_REPORT };
 
+  // Running out of room mid-tool-call is not an error the API raises — it is a
+  // stop_reason, and the partial JSON comes back looking like an answer. Reading
+  // it without checking is how an unfinished report becomes a filed one.
+  const truncated = msg.stop_reason === "max_tokens";
+  if (truncated) {
+    console.warn(
+      `[report-analysis] the model hit the ${REPORT_MAX_TOKENS}-token ceiling; ` +
+        "this report is incomplete and is marked as such.",
+    );
+  }
+
   const raw = toolUse.input as Record<string, unknown>;
   return {
     ...raw,
@@ -172,5 +212,6 @@ Generate a comprehensive post-meeting report.`,
     key_points: normalizeNoteList(raw.key_points),
     action_items: normalizeNoteList(raw.action_items),
     decisions: normalizeNoteList(raw.decisions),
+    [TRUNCATED_KEY]: truncated,
   };
 }

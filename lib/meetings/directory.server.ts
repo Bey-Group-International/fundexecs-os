@@ -3,7 +3,7 @@
 // name can be emailed. See directory.ts for the matching itself.
 import type { createServerClient } from "@/lib/supabase/server";
 import type { OrganizationMember, Principal } from "@/lib/supabase/database.types";
-import type { DirectoryMember } from "@/lib/meetings/directory";
+import type { DirectoryPerson } from "@/lib/meetings/directory";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -40,7 +40,7 @@ export async function loadOrgDirectory(
   supabase: ServerClient,
   orgId: string,
   maxMembers = MAX_MEMBERS,
-): Promise<DirectoryMember[]> {
+): Promise<DirectoryPerson[]> {
   try {
     const ids = new Set<string>();
     for (let page = 0; page * PAGE_SIZE <= maxMembers; page += 1) {
@@ -63,17 +63,19 @@ export async function loadOrgDirectory(
 
     // `in()` on thousands of ids is a URL nobody should build. Chunked, and a
     // failed chunk fails the whole directory rather than shrinking it.
-    const out: DirectoryMember[] = [];
+    const out: DirectoryPerson[] = [];
     const all = [...ids];
     for (let i = 0; i < all.length; i += PAGE_SIZE) {
       const { data, error } = await supabase
         .from("principals")
-        .select("full_name, email")
+        // The id comes along because a member is not only an address: routing
+        // an action item to whoever it names needs the principal itself.
+        .select("id, full_name, email")
         .in("id", all.slice(i, i + PAGE_SIZE));
       if (error) return [];
 
-      for (const p of (data ?? []) as Pick<Principal, "full_name" | "email">[]) {
-        if (p.email?.trim()) out.push({ name: p.full_name, email: p.email });
+      for (const p of (data ?? []) as Pick<Principal, "id" | "full_name" | "email">[]) {
+        if (p.email?.trim()) out.push({ id: p.id, name: p.full_name, email: p.email });
       }
     }
 

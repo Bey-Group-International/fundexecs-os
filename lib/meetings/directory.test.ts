@@ -1,4 +1,4 @@
-import { needsDirectory, resolveAttendeeDirectory } from "./directory";
+import { needsDirectory, resolveAttendeeDirectory, matchDirectoryPerson } from "./directory";
 
 const DIRECTORY = [
   { name: "Mike Ross", email: "Mike.Ross@fund.test" },
@@ -85,5 +85,51 @@ describe("resolveAttendeeDirectory", () => {
       DIRECTORY,
     );
     expect(out.attendees.map((a) => a.name)).toEqual(["Rae Chen", "Ada"]);
+  });
+});
+
+describe("matchDirectoryPerson", () => {
+  const SARAH = { id: "p1", name: "Sarah Chen", email: "sarah@fund.test" };
+  const MIKE = { id: "p2", name: "Mike Alvarez", email: "mike@fund.test" };
+  const OTHER_SARAH = { id: "p3", name: "Sarah Okonkwo", email: "sokonkwo@fund.test" };
+
+  it("finds a member by first name", () => {
+    expect(matchDirectoryPerson("Sarah", [SARAH, MIKE])?.id).toBe("p1");
+  });
+
+  it("finds a member by full name", () => {
+    expect(matchDirectoryPerson("Sarah Chen", [SARAH, MIKE, OTHER_SARAH])?.id).toBe("p1");
+  });
+
+  it("finds a member by address", () => {
+    expect(matchDirectoryPerson("mike@fund.test", [SARAH, MIKE])?.id).toBe("p2");
+  });
+
+  // The whole reason this is unique-or-nothing: a task on the wrong
+  // colleague's list is worse than one that stayed with the host.
+  it("refuses a first name two members answer to", () => {
+    expect(matchDirectoryPerson("Sarah", [SARAH, OTHER_SARAH])).toBeUndefined();
+  });
+
+  it("does not fall through to a looser form when an exact one is ambiguous", () => {
+    // Two people whose full names fold to the same key must not then be
+    // separated by a first-name pass that happens to find one of them.
+    const a = { id: "p1", name: "Sam Lee", email: "sam.lee@fund.test" };
+    const b = { id: "p2", name: "Sam Lee", email: "slee@fund.test" };
+    expect(matchDirectoryPerson("Sam Lee", [a, b])).toBeUndefined();
+  });
+
+  it("returns nothing for a name nobody has", () => {
+    expect(matchDirectoryPerson("Priya", [SARAH, MIKE])).toBeUndefined();
+  });
+
+  it("returns nothing for empty input or an empty directory", () => {
+    expect(matchDirectoryPerson("", [SARAH])).toBeUndefined();
+    expect(matchDirectoryPerson("Sarah", [])).toBeUndefined();
+  });
+
+  it("ignores case and punctuation the way the invite path does", () => {
+    expect(matchDirectoryPerson("sarah chen", [SARAH])?.id).toBe("p1");
+    expect(matchDirectoryPerson("SARAH", [SARAH])?.id).toBe("p1");
   });
 });
