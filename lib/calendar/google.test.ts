@@ -7,7 +7,12 @@ import {
   isTombstone,
   normalizeCalendar,
   normalizeEvent,
+  RETRY_STEPS_MS,
+  SYNC_INTERVAL_MS,
+  isDueForSync,
+  nextAttemptAt,
   normalizeHexColor,
+  retryDelayMs,
   syncWindow,
 } from "./google";
 
@@ -225,5 +230,97 @@ describe("describeGoogleError", () => {
   it("says something usable for anything else", () => {
     expect(describeGoogleError(503, "")).toMatch(/having trouble/);
     expect(describeGoogleError(418, "")).toMatch(/418/);
+  });
+});
+
+// ── Retry pacing ────────────────────────────────────────────────────────────
+//
+// `consecutive_failures` was written on every sync and read by nothing, and the
+// sweep takes the connections with the OLDEST last_sync_at. A failing
+// connection never updates that timestamp, so it sorted to the front of the
+// queue forever — retried hourly at full cost, and holding a slot a healthy
+// connection then never reached. These are the rules that stop that.
+
+describe("retryDelayMs", () => {
+  it("does not delay a connection that has not failed", () => {
+    expect(retryDelayMs(0)).toBe(0);
+    expect(retryDelayMs(-1)).toBe(0);
+  });
+
+  it("backs off further with each consecutive failure", () => {
+    const delays = [1, 2, 3, 4, 5].map(retryDelayMs);
+    for (let i = 1; i < delays.length; i++) {
+      expect(delays[i]).toBeGreaterThan(delays[i - 1]);
+    }
+  });
+
+  it("retries a blip soon", () => {
+    expect(retryDelayMs(1)).toBe(RETRY_STEPS_MS[0]);
+    expect(retryDelayMs(1)).toBeLessThanOrEqual(15 * 60_000);
+  });
+
+  // Nine failures in a row means a revoked grant in practice. Nothing the sweep
+  // does will fix that; the member has to reconnect.
+  it("holds at the longest step rather than growing without bound", () => {
+    const longest = RETRY_STEPS_MS[RETRY_STEPS_MS.length - 1];
+    expect(retryDelayMs(RETRY_STEPS_MS.length)).toBe(longest);
+    expect(retryDelayMs(9)).toBe(longest);
+    expect(retryDelayMs(500)).toBe(longest);
+  });
+});
+
+describe("nextAttemptAt", () => {
+  it("is the delay from now", () => {
+    const now = new Date("2026-09-15T12:00:00.000Z");
+    expect(nextAttemptAt(1, now).getTime() - now.getTime()).toBe(retryDelayMs(1));
+  });
+
+  it("is now for a connection that has not failed", () => {
+    const now = new Date("2026-09-15T12:00:00.000Z");
+    expect(nextAttemptAt(0, now).toISOString()).toBe(now.toISOString());
+  });
+});
+
+describe("isDueForSync", () => {
+  const now = new Date("2026-09-15T12:00:00.000Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const ahead = (ms: number) => new Date(now.getTime() + ms).toISOString();
+
+  it("always syncs a connection that never has", () => {
+    expect(isDueForSync({ lastSyncAt: null, nextAttemptAt: null }, now)).toBe(true);
+  });
+
+  // This is the starvation fix: a backing-off connection yields its slot.
+  it("skips a connection that is still backing off", () => {
+    expect(isDueForSync({ lastSyncAt: ago(86_400_000), nextAttemptAt: ahead(60_000) }, now))
+      .toBe(false);
+  });
+
+  it("tries again once the backoff has elapsed", () => {
+    expect(isDueForSync({ lastSyncAt: ago(86_400_000), nextAttemptAt: ago(1) }, now))
+      .toBe(true);
+  });
+
+  // A deployment with fewer than 25 connections used to re-sync every one of
+  // them every hour, including one a member had refreshed by hand four minutes
+  // earlier.
+  it("skips a connection that succeeded moments ago", () => {
+    expect(isDueForSync({ lastSyncAt: ago(4 * 60_000), nextAttemptAt: null }, now)).toBe(false);
+  });
+
+  it("syncs one that is due", () => {
+    expect(isDueForSync({ lastSyncAt: ago(SYNC_INTERVAL_MS + 1), nextAttemptAt: null }, now))
+      .toBe(true);
+  });
+
+  // Just under the hour, so the hourly sweep does not skip a connection merely
+  // because it ran a minute early.
+  it("is due before a full hour has passed", () => {
+    expect(SYNC_INTERVAL_MS).toBeLessThan(60 * 60_000);
+  });
+
+  it("treats an unreadable timestamp as due rather than as never", () => {
+    expect(isDueForSync({ lastSyncAt: "not a date", nextAttemptAt: null }, now)).toBe(true);
+    expect(isDueForSync({ lastSyncAt: ago(60_000), nextAttemptAt: "not a date" }, now)).toBe(false);
   });
 });

@@ -11,11 +11,14 @@ import { useEffect, useRef, useState } from "react";
 // object URL to leak. Only the email is a fetch, because only it is a POST.
 
 const FORMATS = [
-  { format: "pdf", label: "PDF" },
-  { format: "docx", label: "Word" },
-  { format: "md", label: "Markdown" },
-  { format: "html", label: "HTML" },
-  { format: "rtf", label: "Rich text" },
+  // Extensions stated, not implied. "Word" was the .docx download and read as a
+  // link to something else — somebody looking for a .docx had no way to know
+  // this was it.
+  { format: "docx", label: "Word (.docx)" },
+  { format: "pdf", label: "PDF (.pdf)" },
+  { format: "md", label: "Markdown (.md)" },
+  { format: "html", label: "HTML (.html)" },
+  { format: "rtf", label: "Rich text (.rtf)" },
 ] as const;
 
 type EmailState =

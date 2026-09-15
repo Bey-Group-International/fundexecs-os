@@ -37,6 +37,7 @@ const CONN = {
   last_sync_at: null,
   last_error: null,
   consecutive_failures: 0,
+  next_attempt_at: null,
 };
 
 beforeEach(() => {

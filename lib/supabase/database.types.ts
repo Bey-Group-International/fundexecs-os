@@ -2606,6 +2606,14 @@ export type GoogleCalendarConnection = {
   last_sync_at: string | null;
   last_error: string | null;
   consecutive_failures: number;
+  /**
+   * When a failing connection may next be tried; null means now.
+   *
+   * Without this a connection that fails keeps its old `last_sync_at`, sorts to
+   * the front of the sweep's "oldest first" queue every hour, and starves the
+   * healthy connections behind it.
+   */
+  next_attempt_at: string | null;
   created_at: string;
   updated_at: string;
 };

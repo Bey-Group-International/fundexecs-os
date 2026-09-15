@@ -14,6 +14,7 @@
 // Pure: no DOM, no Supabase, no model calls.
 
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
+import { parseTranscript } from "@/lib/meetings/transcript-view";
 
 /** The report and its meeting, as the exporters need to see them. */
 export interface ReportExportInput {
@@ -27,6 +28,17 @@ export interface ReportExportInput {
   actionItems: unknown;
   analysis: Record<string, unknown> | null;
   fullTranscript: string | null;
+  /**
+   * Who was on the meeting.
+   *
+   * Loaded by `loadReportForExport` since it was written, and until now thrown
+   * away by this builder — every exported report was a record of a conversation
+   * that did not say who had it. Untyped because it comes out of a jsonb
+   * column; `attendeeNames` is what makes it safe to read.
+   */
+  attendees?: unknown;
+  /** The room code, which is the only stable human-quotable reference a meeting has. */
+  roomCode?: string | null;
 }
 
 export interface ReportExportOptions {
@@ -125,6 +137,83 @@ function bullets(items: string[]): string {
 }
 
 /**
+ * Numbered, for the sections somebody will refer back to by number.
+ *
+ * "Action 3 is mine" is a sentence people say in the meeting after this one,
+ * and they cannot say it about a bullet.
+ */
+function numbered(items: string[]): string {
+  return items.map((item, i) => `${i + 1}. ${item}`).join("\n");
+}
+
+/**
+ * The attendee names, from the meeting's jsonb column.
+ *
+ * Deliberately forgiving: this data has been through a directory resolution
+ * step and several schema versions, and an attendee stored oddly is still
+ * somebody who was in the room. An entry with nothing usable is dropped rather
+ * than rendered as an empty line in a filed document.
+ */
+export function attendeeNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const names: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry === "string") {
+      const name = entry.trim();
+      if (name && !names.includes(name)) names.push(name);
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as { name?: unknown; email?: unknown };
+    const name = typeof e.name === "string" ? e.name.trim() : "";
+    const email = typeof e.email === "string" ? e.email.trim() : "";
+    // The address only when there is no name: "Rae Patel <rae@…>" in a filed
+    // document is an address book entry, not a participant list.
+    const label = name || email;
+    if (label && !names.includes(label)) names.push(label);
+  }
+  return names;
+}
+
+/** A time of day, for the record block. Omitted when the meeting never started. */
+function headerTime(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
+}
+
+/** One labelled fact in the record block, or nothing when there is no value. */
+function fact(label: string, value: string | null): string | null {
+  return value && value.trim() ? `- **${label}:** ${value.trim()}` : null;
+}
+
+/**
+ * The transcript, as turns rather than as a wall.
+ *
+ * `parseTranscript` already exists for the report page, which renders the same
+ * stored text as speaker turns; the exported file was getting the raw block
+ * with one paragraph per utterance and the speaker's name glued to the front of
+ * each. Reusing it means the document somebody files matches the page they
+ * read, and consecutive lines from one speaker become one paragraph instead of
+ * five.
+ */
+function transcriptSection(text: string): string {
+  const turns = parseTranscript(text);
+  if (!turns.length) return asParagraphs(text);
+  return turns
+    .map((turn) => {
+      const who = turn.speaker
+        ? `**${turn.speaker}**${turn.uncertain ? " *(attribution uncertain)*" : ""}`
+        : "**Unattributed**";
+      return [who, "", turn.paragraphs.join("\n\n")].join("\n");
+    })
+    .join("\n\n");
+}
+
+/**
  * Render the report as markdown.
  *
  * Sections that have no content are left out entirely rather than printed
@@ -145,30 +234,56 @@ export function buildReportMarkdown(
 
   const title = (input.title ?? "").trim() || UNTITLED_MEETING;
   const duration = meetingDurationMinutes(input.startedAt, input.endedAt);
-
-  // Date, length and tone on one line under the title — the things somebody
-  // scanning a filed report wants before they read a word of it.
-  const meta = [
-    headerDate(input.createdAt),
-    duration ? `${duration} min` : null,
-    sentiment ? `Sentiment: ${sentiment}` : null,
-  ].filter(Boolean).join(" · ");
+  const attendees = attendeeNames(input.attendees);
 
   const lines: string[] = options.titleHeading === false ? [] : [`# ${title}`, ""];
-  if (meta) lines.push(meta, "");
 
+  // The record block. A filed document has to answer "which meeting is this"
+  // before it says anything about what happened in it — a summary with no date,
+  // no reference and nobody's name attached is a note, not a record.
+  //
+  // This replaces a single interpuncted line of date, length and sentiment.
+  // Labelled facts rather than a table: the same markdown has to survive five
+  // renderers, and a bulleted list is the richest structure all five agree on.
+  const record = [
+    fact("Date", headerDate(input.createdAt)),
+    fact("Time", headerTime(input.startedAt)),
+    fact("Duration", duration ? `${duration} minutes` : null),
+    fact("Reference", input.roomCode ? input.roomCode.toUpperCase() : null),
+    fact("Participants", attendees.length ? attendees.join(", ") : null),
+    fact("Tone", sentiment ? sentiment.charAt(0).toUpperCase() + sentiment.slice(1) : null),
+  ].filter(Boolean) as string[];
+
+  if (record.length) lines.push(...section("Meeting Record", record.join("\n")));
+
+  // Decisions first, then what they commit somebody to, then the discussion
+  // that produced them. The old order opened on Key Points, which buries the
+  // two sections anybody rereads this document for under the one they do not.
   lines.push(
     ...section("Summary", normalizeNoteText(input.summary)),
-    ...section("Key Points", bullets(keyPoints)),
-    ...section("Decisions", bullets(decisions)),
-    ...section("Action Items", bullets(actionItems)),
+    ...section("Decisions", numbered(decisions)),
+    ...section("Action Items", numbered(actionItems)),
+    ...section("Discussion", bullets(keyPoints)),
     ...section("Next Meeting", nextMeeting),
     ...section("Follow-up Draft", followUp),
   );
 
   if (options.includeTranscript && (input.fullTranscript ?? "").trim()) {
-    lines.push(...section("Full Transcript", asParagraphs(input.fullTranscript ?? "")));
+    lines.push(...section("Transcript", transcriptSection(input.fullTranscript ?? "")));
   }
+
+  // Provenance. A document that leaves the building should say what produced
+  // it and from what, so that a reader a year later knows whether they are
+  // holding minutes somebody wrote or a summary a model made — and the line
+  // below is the honest answer to that.
+  lines.push(
+    "---",
+    "",
+    `*Record generated by FundExecs from the meeting's own transcript${
+      options.includeTranscript ? ", which is reproduced in full above" : ""
+    }. Summaries, decisions and action items are model-generated and should be read as a starting point rather than as minutes.*`,
+    "",
+  );
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }
