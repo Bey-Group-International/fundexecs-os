@@ -112,6 +112,17 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
     confidence mask plus a small dilation of the person region keeps caps, hats
     and headscarves, and is cheap enough to be free when the dilation runs on the
     downscaled mask grid rather than the full frame.
+  - A record only exists if something reads it. The transcript table was
+    written by every call for months and restored by nothing, so the real
+    durability of a meeting was one browser tab. A write path with no read path
+    is not a backup; it is a habit.
+  - Who owns a piece of data has to be decided once, explicitly. Everyone
+    holding the whole transcript and everyone saving it are different things,
+    and conflating them cost one stored copy per participant.
+  - Progress through a list that other people can insert into cannot be a
+    position. It has to be identity, or the mark moves under you.
+  - A guest has no session, so anything behind `auth.uid()` silently excludes
+    exactly the person the feature is for. RLS cannot fail loudly; a route can.
 
 ### What has not been built yet
 
@@ -1852,6 +1863,68 @@ Deployed, monitoring               →  live, observability active
              |  5688 green (+59 new). Not exercised: a real guest on a real hostile
              |  network, which is the only thing that proves the relay path. Worth a
              |  phone on cellular with wifi off before this is trusted.
+             |
+2026-09-15  |  Live meetings: the transcript nobody was keeping  |  Asked to
+             |  optimize recording and transcripts. Recording does not exist —
+             |  no MediaRecorder anywhere, no table, no bucket — so per the
+             |  founder this is phase 1 of two, transcript now and full A/V
+             |  recording next. What the transcript path was actually doing:
+             |  Losing it (1): live_meeting_transcripts was written throughout
+             |  every call ever hosted and read by NOTHING. A backup never once
+             |  restored. The report was built from whatever the host's browser
+             |  still held in memory, so the record of a meeting hung on one tab
+             |  surviving to the end of it. Report and regenerate now read the
+             |  rows and take whichever record holds more LINES — not characters,
+             |  because a duplicated transcript is longer than a correct one.
+             |  Losing it (2): every participant saved EVERY line, its own and
+             |  everyone else's, so a three-person meeting stored each sentence
+             |  three times and the model read the room stuttering.
+             |  Losing it (3): progress was an INDEX into an array that remote
+             |  lines splice into the MIDDLE of, ordered by when they were spoken.
+             |  The mark slid over unsaved lines and back across saved ones — it
+             |  dropped and duplicated in the same call.
+             |  Losing it (4): the mark advanced BEFORE the insert resolved and
+             |  the insert was fire-and-forget. A failed write deleted those words
+             |  from history, silently, with nothing in the console.
+             |  Losing it (5): a 60s interval cleared on unmount with no final
+             |  flush, so up to a minute went unsaved — the minute a meeting
+             |  decides things in.
+             |  Losing it (6): a GUEST could not write at all. RLS on that table
+             |  is keyed on auth.uid() and a guest is nobody. Every guest line was
+             |  refused by a policy that cannot fail loudly. Fixing the duplication
+             |  alone would have deleted guests from the record entirely — the
+             |  transcript would have got cleaner and emptier at once, which is
+             |  why the new route exists.
+             |  Losing it (7): the model was handed "Meeting: Untitled" and
+             |  "Participants: Unknown" on every meeting ever ended from the room,
+             |  while its own prompt asks it to assign action items to named
+             |  people. endMeeting sent neither.
+             |  Losing it (8): TRANSCRIPT_LIMIT was 12,000 chars — twenty minutes
+             |  of speech. Longer meetings were cut to their tail, mid-WORD, with
+             |  no marker, so the model described the last twenty minutes as the
+             |  whole conversation. Now 120,000 (~2.5 hours), cut on a line
+             |  boundary, and the cut announces itself.
+             |  Built: lib/meetings/transcript-buffer.ts (ownership, id-keyed
+             |  watermark, batching, backoff) + transcript-restore.ts (rows back
+             |  to text, and which record to trust) + POST /api/meetings/[id]/
+             |  transcript, which takes the guest door the ICE endpoint already
+             |  proved and stamps speaker_user_id from the SESSION so an admitted
+             |  guest cannot post lines as the host. Rows carry the client's own
+             |  line id as primary key, so a retried flush upserts instead of
+             |  duplicating — which is what makes retrying safe at all.
+             |  Flush is now 15s, reschedules itself with backoff, drains on end,
+             |  and fires keepalive on unmount and pagehide.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5739 green (+51 new).
+             |  Not exercised: a real multi-party call. Specifically unproven —
+             |  that a guest's lines now land, and that a host killing their tab
+             |  mid-call leaves a meeting the report can still be built from.
+             |  Left undone deliberately: the meeting log still gates "regenerate"
+             |  on a report row existing (canRegenerate reads report.has_transcript),
+             |  so a meeting whose host died before pressing End has rows that are
+             |  reachable by the API and not by the UI. Closing that needs the log
+             |  query to know which meetings have lines without reading every line
+             |  — a view or an RPC — and it did not belong in this change.
 
 2026-09-15  |  The waiting room: the door, not the doorbell  |  Fifth pass, on
              |  the path between knocking and being let in. Three findings, each

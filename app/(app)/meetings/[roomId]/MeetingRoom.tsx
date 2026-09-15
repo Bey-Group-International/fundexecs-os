@@ -31,6 +31,14 @@ import {
   suspensionMessage,
   type BackgroundEffect,
 } from "@/lib/meetings/backgrounds";
+import {
+  MAX_BATCH,
+  nextBatch,
+  nextFlushDelay,
+  pendingLines,
+  speakerNames,
+  transcriptRows,
+} from "@/lib/meetings/transcript-buffer";
 import { BackgroundProcessor } from "@/lib/meetings/background-processor";
 import { getBackground } from "@/lib/meetings/background-store";
 import {
@@ -231,7 +239,6 @@ const ICE_FETCH_TIMEOUT_MS = 4000;
 // connection is described in the console. Long enough that a normal call never
 // trips it, short enough to still be on screen when somebody reports it.
 const INBOUND_VIDEO_AUDIT_MS = 8_000;
-const TRANSCRIPT_FLUSH_MS = 60_000;
 // Voice metering: fast enough that a short "yes" leaves samples behind for
 // attribution, slow enough not to compete with rendering for the main thread.
 const VOICE_SAMPLE_MS = 120;
@@ -1184,6 +1191,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [localName, setLocalName] = useState("You");
   const localNameRef = useRef("You");
   const [meetingId, setMeetingId] = useState<string | null>(null);
+  // Mirrored so the transcript flush can read it without being rebuilt — and so
+  // the unload path, which runs after React has stopped re-rendering anything,
+  // still knows which meeting it is saving.
+  const meetingIdRef = useRef<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const isHostRef = useRef(false);
 
@@ -1275,6 +1286,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const transcriptRef = useRef<TranscriptLine[]>([]);
   const recognitionRef = useRef<any>(null);
   const interimIdRef = useRef<string>(crypto.randomUUID());
+  // Which of our own lines the database has confirmed. A SET of line ids, not a
+  // position: remote lines splice into the middle of the transcript by when
+  // they were spoken, so any index into it is invalidated the moment somebody
+  // else says something — which is how the old high-water mark managed to skip
+  // lines and re-send others in the same call.
+  const savedLineIdsRef = useRef<Set<string>>(new Set());
+  // Consecutive failed flushes, driving the backoff. Reset by any success.
+  const flushFailuresRef = useRef(0);
 
   // Speaker awareness. The recognizer reports words; these report voices — who
   // has a live mic, who is actually audible, and who was audible while the words
@@ -1400,6 +1419,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // channel re-subscribed) just because this flipped.
   const isGuestRef = useRef(false);
   const [meetingTitle, setMeetingTitle] = useState("Meeting");
+  // Read at the moment the meeting ends, which is after the last render that
+  // could have closed over the state.
+  const meetingTitleRef = useRef("Meeting");
+  useEffect(() => { meetingTitleRef.current = meetingTitle; }, [meetingTitle]);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   // Pre-join devices. The green room enumerates and picks; these hold what it
@@ -2818,7 +2841,8 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       }
     } catch { /* proceed */ }
 
-    setMeetingId(mId); setIsHost(hostFlag); isHostRef.current = hostFlag;
+    setMeetingId(mId); meetingIdRef.current = mId;
+    setIsHost(hostFlag); isHostRef.current = hostFlag;
     localUserIdRef.current = me?.id ?? null;
 
     // The host and org teammates enter immediately; only external guests wait.
@@ -3326,30 +3350,121 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   // ── Transcript flush ──────────────────────────────────────────────────────
 
+  /**
+   * Post this device's unsaved words, and remember which ones landed.
+   *
+   * Everything about the old version of this lost speech. It wrote through the
+   * Supabase client straight at the table, which an invite-link guest is not
+   * allowed to do — their session is nobody, RLS said no, and nothing surfaced
+   * it. It saved every line in the array rather than its own, so each sentence
+   * was stored once per participant. It tracked progress as an INDEX into an
+   * array that remote lines splice into the middle of, so the mark slid over
+   * unsaved lines and back across saved ones. And it advanced that mark before
+   * the write resolved and never looked at the result, so a failed insert
+   * simply deleted those words from history.
+   *
+   * What replaces it: own lines only, keyed by id rather than position, and an
+   * id is forgotten only once the server has confirmed it. Which means a flush
+   * may safely be retried — the rows carry their own primary keys, so a retry
+   * conflicts instead of duplicating.
+   *
+   * `keepalive` is for the unload path, where the document is going away and an
+   * ordinary fetch is cancelled with it. The browser caps a keepalive body at
+   * 64KB; MAX_BATCH sits far inside that.
+   */
+  const flushTranscript = useCallback(async (opts: { keepalive?: boolean } = {}): Promise<boolean> => {
+    const mId = meetingIdRef.current;
+    if (!mId) return true;
+    const pending = pendingLines(transcriptRef.current, savedLineIdsRef.current);
+    if (!pending.length) return true;
+    const batch = nextBatch(pending, MAX_BATCH);
+
+    const query = isGuestRef.current && guestKeyRef.current
+      ? `?guestKey=${encodeURIComponent(guestKeyRef.current)}`
+      : "";
+    try {
+      const res = await fetch(`/api/meetings/${mId}/transcript${query}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines: transcriptRows(batch, mId) }),
+        keepalive: opts.keepalive === true,
+      });
+      if (!res.ok) { flushFailuresRef.current += 1; return false; }
+      // Marked saved from the batch we sent rather than from the response, so a
+      // reply that is lost in transit still retires the lines the server has:
+      // re-sending them would be harmless anyway, and the failure mode worth
+      // avoiding is the one where nothing ever retires and the batch never
+      // reaches the end of a long meeting.
+      for (const line of batch) savedLineIdsRef.current.add(line.id);
+      flushFailuresRef.current = 0;
+      return true;
+    } catch {
+      flushFailuresRef.current += 1;
+      return false;
+    }
+  }, []);
+
+  const flushTranscriptRef = useRef(flushTranscript);
+  useEffect(() => { flushTranscriptRef.current = flushTranscript; }, [flushTranscript]);
+
+  /**
+   * Keep flushing until nothing is owed.
+   *
+   * One flush sends at most MAX_BATCH lines, which is the right bound for the
+   * periodic path — the next tick takes the rest — and the wrong one for the
+   * last flush of a meeting, where there is no next tick. A call whose writes
+   * had been failing can reach the end holding hundreds of unsaved lines, and a
+   * single batch would save fifty of them and lose the rest.
+   *
+   * Bounded twice over: it stops when a flush fails, and it stops after enough
+   * rounds to carry any meeting a browser could hold. Neither is expected to
+   * bite; both are here because this runs while somebody is waiting for a
+   * report and an unbounded loop would hold them there.
+   */
+  const drainTranscript = useCallback(async (): Promise<void> => {
+    for (let round = 0; round < 20; round++) {
+      if (!pendingLines(transcriptRef.current, savedLineIdsRef.current).length) return;
+      if (!(await flushTranscriptRef.current())) return;
+    }
+  }, []);
+
+  // A timer that reschedules itself rather than a fixed interval, so a failing
+  // flush can back off instead of hammering a connection that is already gone —
+  // and so it comes straight back to the normal cadence once it recovers.
   useEffect(() => {
     if (!sessionLive || !meetingId) return;
-    const lastFlushed = { idx: 0 };
-    const interval = setInterval(() => {
-      const finalLines = transcriptRef.current.filter((l) => l.final);
-      const newLines = finalLines.slice(lastFlushed.idx);
-      if (!newLines.length) return;
-      lastFlushed.idx = finalLines.length;
-      void (supabase.from("live_meeting_transcripts") as any).insert(
-        newLines.map((l) => ({
-          meeting_id: meetingId,
-          speaker: l.speaker,
-          // The name can change mid-call and two people can share one; these
-          // identify the speaker after the fact, when the roster is gone.
-          speaker_id: l.speakerId,
-          speaker_user_id: l.userId,
-          confidence: l.confidence,
-          text: l.text,
-          ts: new Date(l.ts).toISOString(),
-        })),
-      );
-    }, TRANSCRIPT_FLUSH_MS);
-    return () => clearInterval(interval);
-  }, [sessionLive, meetingId, supabase]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    const tick = async () => {
+      await flushTranscriptRef.current();
+      if (stopped) return;
+      timer = setTimeout(() => { void tick(); }, nextFlushDelay(flushFailuresRef.current));
+    };
+    timer = setTimeout(() => { void tick(); }, nextFlushDelay(0));
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      // The last words of a meeting are the ones worth having, and they are
+      // exactly the ones a plain interval never reaches: it is cleared on the
+      // way out with up to a full period still unsaved. This is not reliable on
+      // its own — the request outlives the component but not the document — so
+      // the pagehide listener below covers a closing tab.
+      void flushTranscriptRef.current({ keepalive: true });
+    };
+  }, [sessionLive, meetingId]);
+
+  // Closing the tab is the most common way a meeting ends, and the least
+  // graceful. `pagehide` rather than `beforeunload` for the same reason the
+  // departure record uses it: it fires on mobile Safari's back-forward cache
+  // path, where beforeunload does not.
+  useEffect(() => {
+    if (!sessionLive) return;
+    const onHide = () => { void flushTranscriptRef.current({ keepalive: true }); };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [sessionLive]);
 
   // ── Controls ──────────────────────────────────────────────────────────────
 
@@ -3979,12 +4094,33 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (!meetingId) { router.push("/meetings"); return; }
 
+    // Save what has not been saved BEFORE asking for the report, so the two
+    // records agree and so the rows survive whatever happens next. A report
+    // request can fail, time out, or be abandoned by a host who closes the tab
+    // while it runs; the transcript should not depend on any of that.
+    await drainTranscript();
+
     const fullText = transcriptRef.current.filter((l) => l.final).map(formatTranscriptLine).join("\n");
+    // The model was told "Meeting: Untitled" and "Participants: Unknown" on
+    // every meeting ever ended from this room, because neither was sent. Its
+    // system prompt asks it to assign action items to named people and to draft
+    // a follow-up email, and it was doing both without knowing whose meeting it
+    // was or who had been in it.
+    const participants = speakerNames(
+      transcriptRef.current,
+      [localNameRef.current, ...[...peersDataRef.current.values()].map((p) => p.displayName)],
+    );
     try {
       const res = await fetch("/api/meetings/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingId, transcript: fullText, duration }),
+        body: JSON.stringify({
+          meetingId,
+          title: meetingTitleRef.current,
+          participants,
+          transcript: fullText,
+          duration,
+        }),
       });
       if (res.ok) { router.push(`/meetings/${roomCode}/report`); return; }
       // A failed report used to fall through to the meetings list, which reads as
@@ -3996,7 +4132,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     endingRef.current = false;
     callPhaseRef.current = nextPhase(callPhaseRef.current, "report_failed");
     setCallPhase(callPhaseRef.current);
-  }, [sendSignal, teardownCall, meetingId, duration, roomCode, router]);
+  }, [sendSignal, teardownCall, meetingId, duration, roomCode, router, drainTranscript]);
 
   const endForAll = useCallback(async () => {
     await endMeeting();
