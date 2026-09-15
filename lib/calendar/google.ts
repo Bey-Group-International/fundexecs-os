@@ -279,3 +279,80 @@ export function describeGoogleError(status: number, body: string): string {
   if (status >= 500) return "Google Calendar is having trouble.";
   return `Google returned ${status}.`;
 }
+
+// ── Retry pacing ────────────────────────────────────────────────────────────
+//
+// `consecutive_failures` has been written on every sync since this module
+// existed and read by nothing. The effect was worse than a missing feature,
+// because of how the sweep picks its work: it takes the 25 connections with the
+// OLDEST `last_sync_at`. A connection that fails never updates that timestamp,
+// so it stays old, so it sorts to the front — forever. One member revoking
+// Google's access in their account settings meant their dead connection was
+// retried at full cost every hour, and it held a slot at the head of the queue
+// that a healthy connection then never reached.
+//
+// So a failing connection has to yield. These two functions say when.
+
+/**
+ * How long to wait after this many consecutive failures, in milliseconds.
+ *
+ * Doubling from fifteen minutes to a day. The shape matters more than the
+ * numbers: a blip retries almost immediately, while a connection that has
+ * failed nine times in a row — which in practice means a revoked grant — is
+ * asked for once a day, because nothing this sweep does will fix it. The member
+ * has to reconnect, and `connectionHealth` is what tells them so.
+ */
+export const RETRY_STEPS_MS = [
+  15 * 60_000,
+  30 * 60_000,
+  60 * 60_000,
+  3 * 60 * 60_000,
+  6 * 60 * 60_000,
+  24 * 60 * 60_000,
+] as const;
+
+export function retryDelayMs(consecutiveFailures: number): number {
+  if (consecutiveFailures <= 0) return 0;
+  const i = Math.min(consecutiveFailures, RETRY_STEPS_MS.length) - 1;
+  return RETRY_STEPS_MS[i];
+}
+
+/** When a connection that has just failed may next be tried. */
+export function nextAttemptAt(consecutiveFailures: number, now: Date = new Date()): Date {
+  return new Date(now.getTime() + retryDelayMs(consecutiveFailures));
+}
+
+/**
+ * How stale a HEALTHY connection may be before the sweep bothers with it.
+ *
+ * The sweep runs hourly and previously re-synced whichever connections sorted
+ * first regardless of how recently they had succeeded, so a deployment with
+ * fewer than 25 connections re-synced every one of them every hour — including
+ * ones synced four minutes earlier by a member pressing "Sync now".
+ */
+export const SYNC_INTERVAL_MS = 55 * 60_000;
+
+/**
+ * Whether the sweep should try this connection now.
+ *
+ * Two independent reasons to skip, and they are different things: a connection
+ * that is backing off after failures must not be retried yet, and a connection
+ * that succeeded minutes ago has nothing to fetch. Both leave the slot to
+ * somebody who needs it.
+ *
+ * A connection that has never synced is always due — it is the one case where
+ * waiting helps nobody.
+ */
+export function isDueForSync(
+  conn: { lastSyncAt: string | null; nextAttemptAt: string | null },
+  now: Date = new Date(),
+): boolean {
+  if (conn.nextAttemptAt) {
+    const until = Date.parse(conn.nextAttemptAt);
+    if (Number.isFinite(until) && until > now.getTime()) return false;
+  }
+  if (!conn.lastSyncAt) return true;
+  const last = Date.parse(conn.lastSyncAt);
+  if (!Number.isFinite(last)) return true;
+  return now.getTime() - last >= SYNC_INTERVAL_MS;
+}

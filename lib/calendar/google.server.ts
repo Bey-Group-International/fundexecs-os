@@ -17,6 +17,8 @@ import {
   decideSyncMode,
   describeGoogleError,
   isTombstone,
+  isDueForSync,
+  nextAttemptAt,
   normalizeCalendar,
   normalizeEvent,
   syncWindow,
@@ -41,6 +43,8 @@ export interface ConnectionRow {
   last_sync_at: string | null;
   last_error: string | null;
   consecutive_failures: number;
+  /** When a failing connection may next be tried; null means now. */
+  next_attempt_at: string | null;
 }
 
 /** Encrypt a refresh token for storage. Mirrors org_secrets' column split. */
@@ -428,7 +432,7 @@ export async function syncConnection(
 
   const token = await accessTokenFor(conn);
   if (!token.ok || !token.data) {
-    await recordConnectionResult(client, conn.id, false, token.error, now);
+    await recordConnectionResult(client, conn.id, false, token.error, now, conn.consecutive_failures);
     summary.failed++;
     return summary;
   }
@@ -436,7 +440,7 @@ export async function syncConnection(
 
   const list = await listCalendars(accessToken);
   if (!list.ok) {
-    await recordConnectionResult(client, conn.id, false, list.error, now);
+    await recordConnectionResult(client, conn.id, false, list.error, now, conn.consecutive_failures);
     summary.failed++;
     return summary;
   }
@@ -447,7 +451,7 @@ export async function syncConnection(
     .select("id, google_calendar_id, sync_token")
     .eq("connection_id", conn.id);
   if (error) {
-    await recordConnectionResult(client, conn.id, false, error.message, now);
+    await recordConnectionResult(client, conn.id, false, error.message, now, conn.consecutive_failures);
     summary.failed++;
     return summary;
   }
@@ -505,7 +509,7 @@ export async function syncConnection(
   // recording one does not stamp last_sync_at, which is what keeps the partial
   // run at the front of the sweep's queue.
   if (!summary.incomplete || summary.failed > 0) {
-    await recordConnectionResult(client, conn.id, summary.failed === 0, null, now);
+    await recordConnectionResult(client, conn.id, summary.failed === 0, null, now, conn.consecutive_failures);
   }
   return summary;
 }
@@ -517,11 +521,31 @@ export async function recordConnectionResult(
   ok: boolean,
   error: string | null | undefined,
   now: Date = new Date(),
+  /** The failure count BEFORE this result, used to pace the next attempt. */
+  failures = 0,
 ): Promise<void> {
   const stamp = now.toISOString();
+  // On success the backoff is cleared along with the failure count, so a
+  // connection that recovers is immediately eligible again rather than serving
+  // out a penalty it no longer deserves.
+  //
+  // On failure the next attempt is written from the failure count as it will be
+  // AFTER the increment below — `consecutive_failures + 1` — because the row is
+  // read once per sweep and reading it again here to find out costs a round
+  // trip to learn a number we already know.
   const patch = ok
-    ? { last_sync_at: stamp, last_error: null, consecutive_failures: 0, updated_at: stamp }
-    : { last_error: error ?? "Unknown error", updated_at: stamp };
+    ? {
+        last_sync_at: stamp,
+        last_error: null,
+        consecutive_failures: 0,
+        next_attempt_at: null,
+        updated_at: stamp,
+      }
+    : {
+        last_error: error ?? "Unknown error",
+        next_attempt_at: nextAttemptAt((failures ?? 0) + 1, now).toISOString(),
+        updated_at: stamp,
+      };
 
   const { error: updateError } = await client
     .from("google_calendar_connections")
@@ -581,6 +605,13 @@ export interface SweepSummary {
   upserted: number;
   deleted: number;
   failed: number;
+  /**
+   * Connections passed over as not due — either backing off after failures, or
+   * synced recently enough to have nothing to fetch. Reported rather than
+   * silent, because "the sweep did nothing" and "the sweep found nothing to do"
+   * look identical from the outside and are very different problems.
+   */
+  skipped: number;
   /** True when any connection's sync was cut short by its time budget. */
   incomplete: boolean;
 }
@@ -598,15 +629,21 @@ export async function syncStaleGoogleConnections(
   opts: { userId?: string; limit?: number; now?: Date; budgetMs?: number } = {},
 ): Promise<SweepSummary> {
   const now = opts.now ?? new Date();
-  const summary: SweepSummary = { connections: 0, upserted: 0, deleted: 0, failed: 0, incomplete: false };
+  const summary: SweepSummary = {
+    connections: 0, upserted: 0, deleted: 0, failed: 0, skipped: 0, incomplete: false,
+  };
 
   let query = client
     .from("google_calendar_connections")
     .select(
-      "id, user_id, organization_id, google_email, refresh_ciphertext, refresh_iv, refresh_auth_tag, last_sync_at, last_error, consecutive_failures",
+      "id, user_id, organization_id, google_email, refresh_ciphertext, refresh_iv, refresh_auth_tag, last_sync_at, last_error, consecutive_failures, next_attempt_at",
     )
     .order("last_sync_at", { ascending: true, nullsFirst: true })
-    .limit(opts.limit ?? 25);
+    // Over-fetched on purpose. The due check below is the real filter and it
+    // cannot be expressed as one comparison — "backing off" and "synced
+    // recently" are separate conditions — so the query takes a wider slice and
+    // the loop stops once it has done a sweep's worth of actual work.
+    .limit((opts.limit ?? 25) * 4);
   if (opts.userId) query = query.eq("user_id", opts.userId);
 
   const { data, error } = await query;
@@ -615,7 +652,21 @@ export async function syncStaleGoogleConnections(
     return summary;
   }
 
+  // A member pressing "Sync now" means it: their own connection is synced
+  // whatever the pacing says. The pacing exists to stop the hourly sweep
+  // wasting itself, not to refuse somebody who asked.
+  const forced = Boolean(opts.userId);
+  const budget = opts.limit ?? 25;
+
   for (const conn of (data ?? []) as ConnectionRow[]) {
+    if (summary.connections >= budget) { summary.incomplete = true; break; }
+    if (!forced && !isDueForSync(
+      { lastSyncAt: conn.last_sync_at, nextAttemptAt: conn.next_attempt_at },
+      now,
+    )) {
+      summary.skipped++;
+      continue;
+    }
     const result = await syncConnection(client, conn, now, { budgetMs: opts.budgetMs });
     summary.connections++;
     summary.upserted += result.upserted;

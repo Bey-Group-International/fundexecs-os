@@ -200,6 +200,35 @@ export function UpcomingMeetingsList({
     setBusy(null);
   }
 
+  /**
+   * Take a meeting off the host's connected calendar, leaving the meeting.
+   *
+   * The machinery has been in place since calendar sync shipped and nothing
+   * could reach it: `decideWrite` returns a delete when a meeting's sync flag
+   * is off, and nothing anywhere ever turned that flag off. The delete dialog
+   * on this very screen says so out loud — "Connected calendar events are not
+   * deleted unless separately approved and synced" — which was true and had no
+   * way to act on it.
+   *
+   * Deliberately NOT part of Delete. A meeting that moved to another system, or
+   * was put on the calendar by mistake, is still a meeting that happened.
+   */
+  async function removeFromCalendar(id: string) {
+    setBusy(id);
+    setError(null);
+    const res = await fetch(`/api/meetings/${id}/calendar`, { method: "DELETE" });
+    if (!res.ok && res.status !== 202) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(json.error ?? "Couldn't remove that meeting from your calendar.");
+    } else if (res.status === 202) {
+      // The flag is written; the event comes off on the next sync. Said plainly
+      // rather than shown as success, because the event is still there now.
+      setError("Calendar sync is off for this meeting — the event will come off your calendar shortly.");
+    }
+    await refresh();
+    setBusy(null);
+  }
+
   async function retrySync(id: string) {
     setBusy(id);
     setError(null);
@@ -503,6 +532,17 @@ export function UpcomingMeetingsList({
                       {syncStatus === "sync_failed" || syncStatus === "needs_resync" ? (
                         <ActionButton disabled={busy === meeting.id} onClick={() => void retrySync(meeting.id)}>
                           Retry sync
+                        </ActionButton>
+                      ) : null}
+                      {/* Only where there is something to remove. Offering it
+                          on a meeting that was never pushed would be a button
+                          that does nothing and says it succeeded. */}
+                      {meeting.external_calendar_sync_enabled ? (
+                        <ActionButton
+                          disabled={busy === meeting.id}
+                          onClick={() => void removeFromCalendar(meeting.id)}
+                        >
+                          {busy === meeting.id ? "Removing…" : "Remove from calendar"}
                         </ActionButton>
                       ) : null}
                       <ActionButton danger onClick={() => setDeleteId(meeting.id)}>
