@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
 import { TranscriptPanel } from "./TranscriptPanel";
+import { RecordingPanel } from "./RecordingPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { reportViewState, shouldPollReport, type ReportViewState } from "@/lib/meetings/attendance";
 
@@ -230,6 +231,11 @@ export default function MeetingReportPage() {
           </pre>
         </Section>
       )}
+
+      {/* The recording, when there is one. Renders nothing otherwise: most
+          meetings are not recorded, and an empty heading on every report would
+          be noise on the majority of pages to serve the minority. */}
+      <RecordingPanel meetingId={meeting.id} />
 
       {/* Full transcript, read back into turns rather than shown as the raw
           block it is stored as. */}

@@ -112,6 +112,13 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
     confidence mask plus a small dilation of the person region keeps caps, hats
     and headscarves, and is cheap enough to be free when the dilation runs on the
     downscaled mask grid rather than the full frame.
+- ✅ Meeting recording — the host's browser composites the mesh to a canvas,
+  mixes every participant's audio, and encodes one watchable file. Active
+  speaker with a grid fallback; a shared screen takes the frame. Uploaded in
+  five-second parts during the call and served back through a Range-aware route
+  that stitches them, so a recording survives the laptop that made it and can
+  still be seeked. 720p, 90-day retention, swept by the hourly cron. Every
+  participant sees the same recording badge, from the same broadcast.
   - A record only exists if something reads it. The transcript table was
     written by every call for months and restored by nothing, so the real
     durability of a meeting was one browser tab. A write path with no read path
@@ -123,6 +130,17 @@ You are building a system that replaces 30+ point solutions for PE funds, real e
     position. It has to be identity, or the mark moves under you.
   - A guest has no session, so anything behind `auth.uid()` silently excludes
     exactly the person the feature is for. RLS cannot fail loudly; a route can.
+  - A mesh has no server in the middle, so it has no place to record from. Any
+    feature needing every stream at once has to run in a participant's browser,
+    which makes that participant's laptop a single point of failure — and the
+    fix is always the same one phase 1 found: send the work somewhere durable as
+    it is produced, not when it is finished.
+  - Auto-directed video needs hysteresis or it is unwatchable. Cutting to
+    whoever is loudest right now produces a frame that flicks at every "mm-hm".
+  - Consent is a property of the room, not a setting on the recorder. If only
+    the person recording can see that a recording is happening, notice has not
+    been given — so it rides a broadcast every participant renders, and it is
+    re-sent whenever somebody joins.
 
 ### What has not been built yet
 
@@ -1925,6 +1943,68 @@ Deployed, monitoring               →  live, observability active
              |  reachable by the API and not by the UI. Closing that needs the log
              |  query to know which meetings have lines without reading every line
              |  — a view or an RPC — and it did not belong in this change.
+             |
+2026-09-15  |  Live meetings: recording, phase 3  |  Phase 2 of the founder's
+             |  two-phase plan (transcript first, then full A/V). Recording did
+             |  not exist at all before this — no MediaRecorder, no table, no
+             |  bucket — so this is a build, not an optimization.
+             |  The constraint that shapes everything: this is a MESH. No server
+             |  ever holds the media, so nothing server-side can record it; there
+             |  is nothing in the middle to record. The only place all the
+             |  streams exist at once is a browser, and the only browser
+             |  guaranteed present for the whole meeting and entitled to the
+             |  result is the HOST's. Decisions (all per founder): host
+             |  composites one file; active speaker with grid fallback and screen
+             |  share taking the frame; visible indicator + announcement rather
+             |  than per-person consent gates; 720p/1.5Mbps/90 days.
+             |  Built: recording-policy.ts (720p not 1080p — a quarter of the
+             |  pixels to composite on a machine already running the call; 24fps;
+             |  VP9 first, MP4 last because H.264 encoding is the most expensive
+             |  option here; zero-padded part paths so a string sort IS playback
+             |  order) + recording-layout.ts (the only interesting logic: a
+             |  challenger must hold the floor 1.5s before the frame cuts, and
+             |  crosstalk falls to the grid rather than flicking between two
+             |  people — the failure mode that makes auto-directed video
+             |  unwatchable) + recording-range.ts + recording-composer.ts +
+             |  use-recording.ts + the sweep + a Range-aware playback route.
+             |  Applying phase 1's lesson directly: a record held only in a
+             |  browser is one closed lid away from never existing. So parts are
+             |  uploaded every 5s during the call, and a host whose battery dies
+             |  loses seconds rather than an hour. Nothing ever stitches them —
+             |  Storage cannot concatenate server-side and pulling 675MB through
+             |  a function to rewrite it costs more than storing it twice — so
+             |  the playback route presents the parts as one stream and maps
+             |  Range requests onto them, which is what makes SEEKING work.
+             |  No API route in the write path at all: only the host records, the
+             |  host is signed in, and RLS on the bucket and both tables asks
+             |  exactly the question that matters. A route in the middle would be
+             |  a body limit and a round trip with no opinion.
+             |  Consent is not a host-side setting: several US states require
+             |  EVERY party to know, so the badge is driven by a broadcast signal
+             |  every participant renders, it is never hidden on mobile, and it
+             |  is re-announced whenever somebody joins — a late arrival has
+             |  missed the original and would otherwise sit in a recorded meeting
+             |  with no badge.
+             |  Self-caught before pushing: decode surfaces were pruned by what
+             |  was in the FRAME, so anyone cycling in and out of the 4-tile strip
+             |  had their <video> destroyed and rebuilt — and a new one shows
+             |  black until it decodes, so the recording would have flickered
+             |  exactly when the conversation moved around. Pruned by room
+             |  membership instead.
+             |  Also caught: the `video` signal carried no `sharing` flag, so the
+             |  composer could only recognise the HOST's own share — a guest
+             |  presenting slides would have been composited as a small tile of
+             |  their slides, which is the one thing a recording exists to catch.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  5815 green (+76 new). NOT exercised, and this is the important
+             |  part: no frame of video has ever been composited by this code. No
+             |  camera, no second browser, no MediaRecorder in CI. The pure
+             |  layout/range/policy logic is tested hard because it is the only
+             |  part that can be, and the composer is deliberately thin for the
+             |  same reason. Needs a real two-browser call before it is trusted,
+             |  and specifically: whether a host's CPU can composite at 24fps
+             |  while running the call, and whether the assembled parts play and
+             |  seek in a browser.
 
 2026-09-15  |  The waiting room: the door, not the doorbell  |  Fifth pass, on
              |  the path between knocking and being let in. Three findings, each

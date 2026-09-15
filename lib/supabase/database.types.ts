@@ -2755,6 +2755,42 @@ export type LiveMeetingTranscript = {
   ts: string;
 };
 
+/**
+ * One recording of a live meeting.
+ *
+ * The bytes are not here: they are parts in the `meeting-recordings` bucket,
+ * indexed by LiveMeetingRecordingChunk. This row is the recording's identity,
+ * its state while it is being made, and its expiry.
+ */
+export type LiveMeetingRecording = {
+  id: string;
+  meeting_id: string;
+  /** The host who pressed Record — the question a consent dispute asks. */
+  started_by: string | null;
+  started_by_name: string | null;
+  started_at: string;
+  ended_at: string | null;
+  /** 'recording' is live; 'abandoned' is a host who vanished mid-call. */
+  status: "recording" | "complete" | "failed" | "abandoned";
+  mime_type: string;
+  duration_seconds: number | null;
+  size_bytes: number;
+  chunk_count: number;
+  expires_at: string;
+  /** Set once the objects are swept, so the row can still say one existed. */
+  deleted_at: string | null;
+  created_at: string;
+};
+
+/** One uploaded part. `size` is what lets the playback route answer a Range request. */
+export type LiveMeetingRecordingChunk = {
+  recording_id: string;
+  idx: number;
+  path: string;
+  size: number;
+  created_at: string;
+};
+
 export type LiveMeetingReport = {
   id: string;
   meeting_id: string;
@@ -3060,6 +3096,8 @@ export type Database = {
       live_meeting_participants: TableShape<LiveMeetingParticipant>;
       live_meeting_transcripts: TableShape<LiveMeetingTranscript>;
       live_meeting_reports: TableShape<LiveMeetingReport>;
+      live_meeting_recordings: TableShape<LiveMeetingRecording>;
+      live_meeting_recording_chunks: TableShape<LiveMeetingRecordingChunk>;
       scheduling_pages: TableShape<SchedulingPage>;
       scheduling_event_types: TableShape<SchedulingEventType>;
       scheduling_bookings: TableShape<SchedulingBooking>;

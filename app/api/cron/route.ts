@@ -10,6 +10,7 @@ import { runIntelligenceSyncAllOrgs } from "@/lib/intelligence/sweep";
 import { refreshStaleFeeds } from "@/lib/calendar/feeds.server";
 import { syncStaleGoogleConnections } from "@/lib/calendar/google.server";
 import { runMeetingReminders, type ReminderSweepStats } from "@/lib/meetings/reminder-sweep.server";
+import { runRecordingSweep, type RecordingSweepStats } from "@/lib/meetings/recording-sweep.server";
 import {
   runSubscriptionRenewals,
   applySettledInvoices,
@@ -227,6 +228,22 @@ export async function GET(request: Request) {
     console.error("meeting_reminders failed", e);
   }
 
+  // Meeting recordings: retention, and closing out recordings nobody stopped.
+  //
+  // Recordings are by a wide margin the most expensive thing this product
+  // stores — around 675 MB per hour of meeting — and nothing else deletes them.
+  // Retention that waits for somebody to remember is not retention, it is a
+  // bill. This also closes out rows still claiming to be recording hours later,
+  // which is a host whose tab died mid-call: the parts they did upload are kept
+  // and the recording is marked complete, because those parts are a real,
+  // watchable record of most of a meeting.
+  let recordings: RecordingSweepStats = { expired: 0, abandoned: 0, objectsDeleted: 0, errors: 0 };
+  try {
+    recordings = await runRecordingSweep(supabase, now);
+  } catch (e) {
+    console.error("recording_sweep failed", e);
+  }
+
   // Subscription renewals. This is what makes a plan actually recur: FundExecs
   // owns the billing period, so nothing renews unless this sweep runs. Each due
   // subscription is billed — an invoice to settle by transfer where remittance
@@ -287,6 +304,9 @@ export async function GET(request: Request) {
         calendarFeedsFailed: calendarFeeds.failed,
         meetingRemindersSent: reminders.sent,
         meetingRemindersFailed: reminders.failed,
+        recordingsExpired: recordings.expired,
+        recordingsClosedOut: recordings.abandoned,
+        recordingObjectsDeleted: recordings.objectsDeleted,
         subscriptionsDue: subscriptions.due,
         subscriptionsRenewed: subscriptions.renewed,
         subscriptionsFailed: subscriptions.failed,
