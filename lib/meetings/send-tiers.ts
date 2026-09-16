@@ -80,6 +80,35 @@ export function tierForView(input: {
 }
 
 /**
+ * What a member on a struggling line is allowed to ask for.
+ *
+ * This is the half of bandwidth adaptation that was missing, and its absence
+ * meant the adaptation could not fix the thing it detected. Every measurement
+ * the link state is built from is an INBOUND one — bytes received, packets
+ * lost, streams arriving — so `bwMode` is a statement about what this member is
+ * failing to download. Every response to it was on the send side: halve our own
+ * encoders, then switch them off, then tell the room our video is paused.
+ *
+ * So a member on a congested downlink kept pulling the full inbound stream from
+ * every peer while switching off the one thing that was not causing the loss —
+ * their own camera. The loss went on, `verdict` kept reading it, and they spent
+ * the rest of the call invisible to the room and no better off.
+ *
+ * The lever was already here and unused: a receiver says what it wants and
+ * senders encode to that. A degraded link stops asking anyone for a full-size
+ * picture; an audio-only one stops asking for pictures at all. Now the thing
+ * being reduced is the thing being measured.
+ *
+ * Applied after the demotion linger rather than before, so a mode change takes
+ * effect at once instead of waiting out a promotion nobody can afford.
+ */
+export function capTierForMode(tier: VideoTier, mode: BandwidthMode): VideoTier {
+  if (mode === "audio-only") return "none";
+  if (mode === "degraded" && tier === "high") return "low";
+  return tier;
+}
+
+/**
  * How long someone keeps full quality after they stop being the spotlight.
  *
  * The active speaker is chosen from the audio meter, which moves every time

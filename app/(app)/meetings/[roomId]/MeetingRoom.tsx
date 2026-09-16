@@ -104,6 +104,7 @@ import {
   FULL_CAPTURE,
   THUMBNAIL_CAPTURE,
   THUMBNAIL_SCALE,
+  capTierForMode,
   tierForView,
   withDemotionDelay,
   DEMOTION_LINGER_MS,
@@ -1921,15 +1922,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         cameraOn: said ? said.camOn && !said.paused : true,
       });
       if (desired === "high") lastHighAtRef.current.set(id, now);
-      const tier = withDemotionDelay({
+      const held = withDemotionDelay({
         desired,
         lastHighAt: lastHighAtRef.current.get(id) ?? null,
         now,
       });
       // A tier that is only `high` because of the linger has to be revisited,
       // or the demotion never lands: nothing else in the room changes when a
-      // timer expires.
-      if (tier !== desired) holding = true;
+      // timer expires. Decided before the bandwidth cap below, which is not a
+      // held promotion and does not expire.
+      if (held !== desired) holding = true;
+      // What a struggling line may ask for. Everything above decides what we
+      // WANT to draw; this is the first point at which what we can afford to
+      // receive has ever been consulted — see capTierForMode.
+      const tier = capTierForMode(held, bwModeRef.current);
       if (sentRequestRef.current.get(id) === tier) continue;
       sentRequestRef.current.set(id, tier);
       sendSignalRef.current({ type: "video_request", from: myIdRef.current, to: id, tier });
@@ -2962,12 +2968,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const enterRoomRef = useRef(enterRoom);
   useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
 
-  // What we ask for follows what we draw: the layout, who is in the spotlight,
-  // who is in the room, and whether they say their camera is on.
+  // What we ask for follows what we draw — and, since the link state is built
+  // entirely from inbound measurements, what we can afford to receive.
   useEffect(() => {
     if (!ready) return;
     refreshVideoRequestsRef.current();
-  }, [ready, layout, activeSpeakerId, peers, peerVideo]);
+  }, [ready, layout, activeSpeakerId, peers, peerVideo, bwMode]);
 
   // A backgrounded tab draws nothing, so it should receive nothing. This is the
   // only lever that removes encoder cost at the far end rather than reducing
