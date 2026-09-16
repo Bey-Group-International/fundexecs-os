@@ -16,6 +16,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { createTeamTask } from "@/lib/team-tasks";
 import { matchDirectoryPerson, type DirectoryPerson } from "@/lib/meetings/directory";
 import { actionItemKey, clampTitle, parseActionItem } from "@/lib/meetings/action-items";
+import { logSafe } from "@/lib/log-safe";
 
 type Client = SupabaseClient<Database>;
 
@@ -142,7 +143,13 @@ export async function raisedActionItems(supabase: Client, meetingId: string): Pr
       if (key) keys.add(key);
     }
   } catch (err) {
-    console.error("[meetings/action-items] could not read what this meeting already raised", meetingId, err);
+    // The id comes off a request body, so it is sanitised rather than
+    // interpolated: a value carrying a newline would end this line and have
+    // whatever followed read as an entry this process wrote.
+    console.error(
+      `[meetings/action-items] could not read what meeting ${logSafe(meetingId)} already raised`,
+      err,
+    );
   }
   return keys;
 }

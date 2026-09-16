@@ -7,6 +7,7 @@
 // the addresses of people this meeting already knows.
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgContext } from "@/lib/auth";
+import { logSafe } from "@/lib/log-safe";
 import { createServerClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email";
 import { mailboxFor } from "@/lib/meetings/mailbox.server";
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sent = results.filter((r) => r.status === "fulfilled" && (r.value as { ok: boolean }).ok).length;
   if (sent === 0) {
-    console.error(`[/api/meetings/${id}/follow-up] every send failed`);
+    console.error(`[/api/meetings/${logSafe(id)}/follow-up] every send failed`);
     return NextResponse.json(
       { error: "The follow-up could not be sent. Check the connected mailbox and try again.", sent, total: recipients.length },
       { status: 502 },
@@ -140,7 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (statusError) {
       // Not worth failing the response over: the email went. But the badge is
       // now wrong, and nothing else would ever say so.
-      console.error(`[/api/meetings/${id}/follow-up] status not marked done`, statusError.message);
+      console.error(`[/api/meetings/${logSafe(id)}/follow-up] status not marked done`, statusError.message);
     }
   }
 
