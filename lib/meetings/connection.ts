@@ -238,6 +238,61 @@ export interface LinkSample {
   videoExpected: boolean;
 }
 
+/** What arrived from one peer since the last sample. */
+export interface PeerInboundRate {
+  id: string;
+  /** Kilobits per second, across every inbound stream on that connection. */
+  kbps: number;
+}
+
+/**
+ * Turn a round of per-peer stats into one measurement, or null for none.
+ *
+ * The rate is the WORST stream we are expecting video on, not the average of
+ * the room. That distinction is the whole point and the version this replaces
+ * got it backwards: it summed every peer's bytes and divided by the peer count,
+ * under a comment claiming that this was "per peer, not in total" and that an
+ * aggregate "hides one starved stream behind three healthy ones". A mean is an
+ * aggregate. It hid the starved stream exactly as well as the sum would have,
+ * and it invented starvation that was not there — every silent participant
+ * dragged the average down, and Opus DTX had just been turned on to make silent
+ * participants cost nothing at all. A seven-person call with one camera on
+ * averaged about 37kbps and read as a dying link.
+ *
+ * `expectingVideoFrom` is the other half, and it is about what we ASKED for
+ * rather than what the far end says its camera is doing. Those are different
+ * questions the moment this tab goes to the background: every tier drops to
+ * `none`, the peers stop sending video exactly as instructed, and their cameras
+ * are still on — so the old rule expected video that it had itself cancelled,
+ * found none, and reported a weak connection. Switching tabs for ten seconds
+ * was enough to start it.
+ *
+ * With nothing to expect video from, the mean is reported instead. It is not
+ * used to condemn the line — `verdict` only reads a low rate when video is
+ * expected — and it is still what tells a recovering link that packets are
+ * flowing at all.
+ */
+export function summarizeInbound(input: {
+  rates: readonly PeerInboundRate[];
+  /** Peers we have asked for video AND who say they are sending it. */
+  expectingVideoFrom: ReadonlySet<string>;
+  lostPackets: number;
+  deliveredPackets: number;
+}): LinkSample | null {
+  if (input.rates.length === 0) return null;
+
+  const expecting = input.rates.filter((r) => input.expectingVideoFrom.has(r.id));
+  const kbps = expecting.length > 0
+    ? Math.min(...expecting.map((r) => r.kbps))
+    : input.rates.reduce((total, r) => total + r.kbps, 0) / input.rates.length;
+
+  return {
+    kbps: Number.isFinite(kbps) ? Math.max(0, kbps) : 0,
+    lossPct: input.deliveredPackets > 0 ? (input.lostPackets / input.deliveredPackets) * 100 : 0,
+    videoExpected: expecting.length > 0,
+  };
+}
+
 export interface LinkState {
   mode: BandwidthMode;
   /** Consecutive samples that read as bad / as healthy. */

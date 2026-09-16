@@ -79,6 +79,7 @@ import {
   withImmediateRetry,
   screenSendCap,
   stepLink,
+  summarizeInbound,
   videoSendCap,
   withOpusResilience,
 } from "@/lib/meetings/connection";
@@ -86,6 +87,7 @@ import {
   type BandwidthMode,
   type LinkState,
   type PeerLinkStatus,
+  type PeerInboundRate,
   type RecoveryState,
   type SendCap,
 } from "@/lib/meetings/connection";
@@ -3547,59 +3549,87 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Per stat id, so a stream that comes and goes doesn't read as a cliff.
     let prev: Record<string, { bytes: number; received: number; lost: number }> = {};
     let prevTs = Date.now();
+    // What we were asking each peer for when the last sample was taken. A tier
+    // that changed since then makes this round's rate a measurement of the
+    // change rather than of the line.
+    let prevTiers = new Map<string, VideoTier>();
+    // getStats on a roomful of connections is not instant, and two rounds
+    // running at once would each read the other's half-written `prev`.
+    let inFlight = false;
 
     const check = async () => {
-      const pcs = [...peersRef.current.values()];
-      if (!pcs.length) return;
+      if (inFlight) return;
+      const entries = [...peersRef.current.entries()];
+      if (!entries.length) return;
 
       const now = Date.now();
       const elapsed = (now - prevTs) / 1000;
-      prevTs = now;
       if (elapsed <= 0) return;
+      inFlight = true;
+      prevTs = now;
 
-      let bits = 0;
       let received = 0;
       let lost = 0;
       const seen: typeof prev = {};
+      const rates: PeerInboundRate[] = [];
+      const tiers = new Map<string, VideoTier>();
+      const expectingVideoFrom = new Set<string>();
 
-      for (const pc of pcs) {
-        try {
-          const stats = await pc.getStats();
-          stats.forEach((st) => {
-            if (st.type !== "inbound-rtp") return;
-            const s2 = st as RTCInboundRtpStreamStats;
-            const id = s2.id;
-            const bytes = s2.bytesReceived ?? 0;
-            const packets = s2.packetsReceived ?? 0;
-            // packetsLost is signed and can go backwards after a correction.
-            const packetsLost = Math.max(0, s2.packetsLost ?? 0);
-            seen[id] = { bytes, received: packets, lost: packetsLost };
-            const was = prev[id];
-            if (!was) return;
-            bits += Math.max(0, bytes - was.bytes) * 8;
-            received += Math.max(0, packets - was.received);
-            lost += Math.max(0, packetsLost - was.lost);
-          });
-        } catch { /* a connection closing mid-poll */ }
+      try {
+        for (const [peerId, pc] of entries) {
+          const asked = sentRequestRef.current.get(peerId) ?? "high";
+          tiers.set(peerId, asked);
+
+          // Expecting video means we asked for it AND they say they are
+          // sending it. Both halves are load-bearing: without the first, a
+          // backgrounded tab expects the video it just cancelled; without the
+          // second, a room with every camera off reads as a starved one.
+          // Unknown counts as sending — the announcement lands a moment after
+          // a peer appears, and assuming video is the cautious half.
+          const said = peerVideoRef.current.get(peerId);
+          if (asked !== "none" && (said ? said.camOn && !said.paused : true)) {
+            expectingVideoFrom.add(peerId);
+          }
+
+          let peerBits = 0;
+          // Only a peer we have two samples of has a rate at all. A newcomer
+          // reads as zero otherwise, which is indistinguishable from starved.
+          let comparable = false;
+          try {
+            const stats = await pc.getStats();
+            stats.forEach((st) => {
+              if (st.type !== "inbound-rtp") return;
+              const s2 = st as RTCInboundRtpStreamStats;
+              const id = s2.id;
+              const bytes = s2.bytesReceived ?? 0;
+              const packets = s2.packetsReceived ?? 0;
+              // packetsLost is signed and can go backwards after a correction.
+              const packetsLost = Math.max(0, s2.packetsLost ?? 0);
+              seen[id] = { bytes, received: packets, lost: packetsLost };
+              const was = prev[id];
+              if (!was) return;
+              comparable = true;
+              peerBits += Math.max(0, bytes - was.bytes) * 8;
+              received += Math.max(0, packets - was.received);
+              lost += Math.max(0, packetsLost - was.lost);
+            });
+          } catch { continue; /* a connection closing mid-poll */ }
+
+          // A peer whose tier moved during the window is mid-transition: its
+          // encoder is starting up or shutting down, and neither rate is a
+          // statement about the network.
+          if (comparable && prevTiers.get(peerId) === asked) {
+            rates.push({ id: peerId, kbps: peerBits / 1000 / elapsed });
+          }
+        }
+      } finally {
+        inFlight = false;
       }
-      prev = seen;
 
-      const delivered = received + lost;
-      // Per peer, not in total: an aggregate hides one starved stream behind
-      // three healthy ones, which is exactly the case worth catching in a room
-      // big enough to be causing it.
-      const sample = {
-        kbps: bits / 1000 / elapsed / pcs.length,
-        lossPct: delivered > 0 ? (lost / delivered) * 100 : 0,
-        // Whether a low rate means anything. A room with every camera off
-        // delivers about as little as a starved one, and only the participants
-        // can say which it is. Unknown counts as yes: the announcement lands a
-        // moment after a peer appears, and assuming video is the cautious half.
-        videoExpected: [...peersRef.current.keys()].some((id) => {
-          const v = peerVideoRef.current.get(id);
-          return v ? v.camOn && !v.paused : true;
-        }),
-      };
+      prev = seen;
+      prevTiers = tiers;
+
+      const sample = summarizeInbound({ rates, expectingVideoFrom, lostPackets: lost, deliveredPackets: received + lost });
 
       const before = linkRef.current.mode;
       linkRef.current = stepLink(linkRef.current, sample);
@@ -4627,6 +4657,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // showing, and clearing it would drop someone into the green room while their
     // report was still generating. The phase is what the intervals watch.
     setCallPhase((prev) => (prev === "live" ? "left" : prev));
+
+    // The link verdict belongs to the call that was measured, not to the next
+    // one. Left standing, a member who left on a bad connection and rejoined on
+    // a good one started the new call in audio-only and had to earn their way
+    // back out of a judgement about a network they were no longer on.
+    linkRef.current = INITIAL_LINK;
+    bwModeRef.current = "normal";
+    setBwMode("normal");
 
     setLocalStream(null);
     setPeers(new Map());

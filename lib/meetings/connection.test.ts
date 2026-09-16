@@ -14,6 +14,7 @@ import {
   ICE_RETRY_CADENCE_MS,
   msUntilNextAttempt,
   nextRecovery,
+  summarizeInbound,
   recoveryExhausted,
   withImmediateRetry,
   offerCollision,
@@ -111,6 +112,88 @@ describe("screenSendCap", () => {
 
   it("is absent in audio-only, like the camera", () => {
     expect(screenSendCap(3, "audio-only")).toBeNull();
+  });
+});
+
+describe("summarizeInbound", () => {
+  const rate = (id: string, kbps: number) => ({ id, kbps });
+
+  it("has nothing to say when there is nothing to measure", () => {
+    expect(summarizeInbound({
+      rates: [], expectingVideoFrom: new Set(), lostPackets: 0, deliveredPackets: 0,
+    })).toBeNull();
+  });
+
+  // The case the old room-average could not see, under a comment claiming it
+  // was the case it existed for.
+  it("reports the worst stream, not the average of the room", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 40), rate("b", 900), rate("c", 900)],
+      expectingVideoFrom: new Set(["a", "b", "c"]),
+      lostPackets: 0,
+      deliveredPackets: 1_000,
+    })!;
+
+    expect(sample.kbps).toBe(40);
+    expect(sample.videoExpected).toBe(true);
+  });
+
+  // Seven people, one camera on, everybody else silent — and DTX means silence
+  // costs almost nothing. The mean was about 37kbps and read as a dying link.
+  it("does not let silent listeners drag a healthy stream down", () => {
+    const sample = summarizeInbound({
+      rates: [rate("talker", 400), ...["a", "b", "c", "d", "e"].map((id) => rate(id, 4))],
+      expectingVideoFrom: new Set(["talker"]),
+      lostPackets: 0,
+      deliveredPackets: 1_000,
+    })!;
+
+    expect(sample.kbps).toBe(400);
+  });
+
+  // Backgrounding the tab drops every tier to `none`, and the peers stop
+  // sending exactly as instructed. Their cameras are still on, so the old rule
+  // expected video it had itself cancelled and condemned the line for it.
+  it("expects no video from a peer it told to stop sending", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 12), rate("b", 9)],
+      expectingVideoFrom: new Set(),
+      lostPackets: 0,
+      deliveredPackets: 500,
+    })!;
+
+    expect(sample.videoExpected).toBe(false);
+    // The mean, which still says packets are flowing — that is what tells a
+    // link in audio-only that it has recovered.
+    expect(sample.kbps).toBe(10.5);
+  });
+
+  it("ignores a peer we are not expecting video from when picking the worst", () => {
+    const sample = summarizeInbound({
+      rates: [rate("watching", 600), rate("camera-off", 3)],
+      expectingVideoFrom: new Set(["watching"]),
+      lostPackets: 0,
+      deliveredPackets: 1_000,
+    })!;
+
+    expect(sample.kbps).toBe(600);
+  });
+
+  it("reads loss as a percentage of what was delivered", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 500)], expectingVideoFrom: new Set(["a"]),
+      lostPackets: 50, deliveredPackets: 1_000,
+    })!;
+    expect(sample.lossPct).toBe(5);
+  });
+
+  it("calls no loss no loss rather than dividing by nothing", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 0)], expectingVideoFrom: new Set(["a"]),
+      lostPackets: 0, deliveredPackets: 0,
+    })!;
+    expect(sample.lossPct).toBe(0);
+    expect(sample.kbps).toBe(0);
   });
 });
 
