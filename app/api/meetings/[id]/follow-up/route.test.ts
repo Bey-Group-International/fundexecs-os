@@ -38,14 +38,21 @@ const MEETING = {
 
 const REPORT = { analysis: { follow_up_draft: "Hi all,\n\nGood meeting.\n\n— Host" } };
 
-function wire({ meeting = MEETING as unknown, report = REPORT as unknown } = {}) {
+/** What the route wrote back to the meeting row. */
+const updates: Record<string, unknown>[] = [];
+
+function wire({ meeting = MEETING as unknown, report = REPORT as unknown, updateError = null as null | { message: string } } = {}) {
   from.mockImplementation((table: string) => {
     const b: Record<string, unknown> = {
       select: () => b,
-      eq: () => b,
+      eq: () => Object.assign(Promise.resolve({ error: updateError }), b),
       is: () => b,
       order: () => b,
       limit: () => b,
+      update: (row: Record<string, unknown>) => {
+        if (table === "live_meetings") updates.push(row);
+        return b;
+      },
       maybeSingle: async () => ({
         data: table === "live_meetings" ? meeting : report,
         error: null,
@@ -66,6 +73,7 @@ const params = Promise.resolve({ id: "m1" });
 
 beforeEach(() => {
   jest.clearAllMocks();
+  updates.length = 0;
   requireOrgContext.mockResolvedValue(HOST);
   mailboxFor.mockResolvedValue({ ok: true, token: "tok" });
   sendEmail.mockResolvedValue({ ok: true });
@@ -166,5 +174,45 @@ describe("when it cannot send", () => {
     const res = await POST(req(), { params });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ sent: 1, total: 2 });
+  });
+});
+
+describe("closing out \"Follow-Up Needed\"", () => {
+  // followup_status is set to "draft" by every report that produced an email
+  // and was never once set to "done", so the meetings list flagged the meeting
+  // forever however diligently the host actually followed up.
+  it("marks the meeting done when everyone was reached", async () => {
+    wire();
+    const res = await POST(req(), { params });
+    expect(await res.json()).toMatchObject({ followUpComplete: true });
+    expect(updates).toContainEqual({ followup_status: "done" });
+  });
+
+  it("leaves it open when somebody was not reached", async () => {
+    // A partial send is still outstanding for whoever missed it, and closing it
+    // would hide exactly the meetings that still need a person.
+    wire({
+      meeting: {
+        ...MEETING,
+        attendees: [
+          { name: "Sarah", email: "sarah@fund.test" },
+          { name: "Mike", email: "mike@fund.test" },
+        ],
+      },
+    });
+    sendEmail.mockImplementation(async (args: { to: { email: string } }) => ({
+      ok: args.to.email !== "sarah@fund.test",
+    }));
+    const res = await POST(req(), { params });
+    expect(await res.json()).toMatchObject({ sent: 1, total: 2, followUpComplete: false });
+    expect(updates).toEqual([]);
+  });
+
+  it("still reports the send when the badge could not be updated", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    wire({ updateError: { message: "denied" } });
+    expect((await POST(req(), { params })).status).toBe(200);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

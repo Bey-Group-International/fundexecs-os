@@ -124,5 +124,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  return NextResponse.json({ sent, total: recipients.length, mailboxConnected: true });
+  // The meetings list reads followup_status and shows "Follow-Up Needed" off
+  // it. Nothing has ever written "done" — every report with a follow-up draft
+  // set it to "draft" and left it there, so a meeting carried that badge for
+  // the rest of its life however diligently the host actually followed up.
+  //
+  // Only when everyone was reached. A partial send is still outstanding for
+  // whoever did not get it, and quietly closing it would hide exactly the
+  // meetings that still need a person.
+  if (sent === recipients.length) {
+    const { error: statusError } = await supabase
+      .from("live_meetings")
+      .update({ followup_status: "done" } as never)
+      .eq("id", id);
+    if (statusError) {
+      // Not worth failing the response over: the email went. But the badge is
+      // now wrong, and nothing else would ever say so.
+      console.error(`[/api/meetings/${id}/follow-up] status not marked done`, statusError.message);
+    }
+  }
+
+  return NextResponse.json({
+    sent,
+    total: recipients.length,
+    mailboxConnected: true,
+    followUpComplete: sent === recipients.length,
+  });
 }

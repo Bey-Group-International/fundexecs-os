@@ -12,6 +12,7 @@ const requireOrgContext = jest.fn();
 const gateConversationalSpend = jest.fn();
 const generateMeetingReport = jest.fn();
 const from = jest.fn();
+const createActionItemTasks = jest.fn();
 
 jest.mock("@/lib/auth", () => ({ requireOrgContext: () => requireOrgContext() }));
 jest.mock("@/lib/supabase/server", () => ({
@@ -25,6 +26,10 @@ jest.mock("@/lib/conversational-gate", () => ({
 jest.mock("@/lib/meetings/report-analysis", () => ({
   generateMeetingReport: (...a: unknown[]) => generateMeetingReport(...a),
 }));
+jest.mock("@/lib/meetings/action-items.server", () => ({
+  createActionItemTasks: (...a: unknown[]) => createActionItemTasks(...a),
+}));
+jest.mock("@/lib/meetings/directory.server", () => ({ loadOrgDirectory: async () => [] }));
 
 import { POST } from "./route";
 
@@ -38,8 +43,15 @@ const MEETING = {
   scheduled_at: "2026-03-01T10:00:00Z", duration_minutes: 60, status: "ended", is_draft: false,
 };
 
-/** Records what the route did to live_meeting_reports. */
-const writes: { inserted?: Record<string, unknown>; updated?: unknown } = {};
+/**
+ * Records what the route wrote, BY TABLE.
+ *
+ * The table matters: the point of this route is that it never updates a report
+ * row, while it does update the meeting's follow-up badge. One `updated` slot
+ * for both made those indistinguishable.
+ */
+const writes: { inserted?: Record<string, unknown>; updated?: Record<string, unknown> } = {};
+const updatesByTable: Record<string, unknown[]> = {};
 
 function wire({
   meeting = MEETING as unknown,
@@ -51,7 +63,11 @@ function wire({
       select: () => b, eq: () => b, is: () => b, order: () => b, limit: () => b,
       maybeSingle: async () => ({ data: table === "live_meetings" ? meeting : report, error: null }),
       insert: (row: Record<string, unknown>) => { writes.inserted = row; return b; },
-      update: (row: unknown) => { writes.updated = row; return b; },
+      update: (row: unknown) => {
+        (updatesByTable[table] ??= []).push(row);
+        if (table === "live_meetings") writes.updated = row as Record<string, unknown>;
+        return b;
+      },
       single: async () => insertResult,
     };
     return b;
@@ -62,8 +78,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   writes.inserted = undefined;
   writes.updated = undefined;
+  for (const key of Object.keys(updatesByTable)) delete updatesByTable[key];
   requireOrgContext.mockResolvedValue({ ok: true, ctx: { orgId: "org1", userId: "host-1" } });
   gateConversationalSpend.mockResolvedValue({ ok: true });
+  createActionItemTasks.mockResolvedValue({ created: 0, routed: 0, unrouted: [], skipped: 0 });
   generateMeetingReport.mockResolvedValue({
     summary: "They agreed to wire on Friday.",
     key_points: ["Timing"], action_items: ["Ana: wire Friday"], decisions: ["Wire on Friday"],
@@ -126,7 +144,9 @@ describe("what it writes", () => {
     const res = await POST(req(), params);
     expect(res.status).toBe(200);
     expect(writes.inserted).toMatchObject({ meeting_id: "m1", summary: "They agreed to wire on Friday." });
-    expect(writes.updated).toBeUndefined();
+    // The log shows the newest report and keeps the previous one readable, so
+    // nothing here may rewrite a report row that somebody may have relied on.
+    expect(updatesByTable["live_meeting_reports"]).toBeUndefined();
   });
 
   it("carries the same transcript onto the new row", async () => {
@@ -209,5 +229,44 @@ describe("credits", () => {
     expect(res.status).toBe(402);
     expect(generateMeetingReport).not.toHaveBeenCalled();
     expect(writes.inserted).toBeUndefined();
+  });
+});
+
+describe("a regenerated report reaches the people it names", () => {
+  // A host regenerates because the first report read wrong. The corrected
+  // action items used to go nowhere: the new report said Ana owed something
+  // and nothing ever told Ana.
+  it("raises the corrected action items", async () => {
+    wire();
+    await POST(req(), params);
+    expect(createActionItemTasks).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ meetingId: "m1", items: ["Ana: wire Friday"], hostId: "host-1" }),
+    );
+  });
+
+  // Safe only because createActionItemTasks skips what this meeting already
+  // raised — otherwise every regeneration would file the lot again.
+  it("hands it the meeting, which is how the unchanged items are left alone", async () => {
+    wire();
+    await POST(req(), params);
+    expect(createActionItemTasks.mock.calls[0][1]).toMatchObject({ meetingId: "m1" });
+  });
+
+  it("moves the follow-up badge with the report it replaced", async () => {
+    wire();
+    await POST(req(), params);
+    expect(writes.updated).toEqual({ followup_status: "draft" });
+  });
+
+  it("clears the badge when the new report has no follow-up", async () => {
+    generateMeetingReport.mockResolvedValue({
+      summary: "They agreed to wire on Friday.",
+      key_points: [], action_items: [], decisions: [],
+      sentiment: "neutral", next_meeting_suggestion: "", follow_up_draft: "",
+    });
+    wire();
+    await POST(req(), params);
+    expect(writes.updated).toEqual({ followup_status: "not_started" });
   });
 });

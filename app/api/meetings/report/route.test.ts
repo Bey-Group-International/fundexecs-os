@@ -59,6 +59,8 @@ function wire({ meeting = MEETING as unknown } = {}) {
       // that answers nothing means "everything stays with the host".
       range: async () => ({ data: [], error: null }),
       in: async () => ({ data: [], error: null }),
+      // The "what has this meeting already raised?" read.
+      limit: async () => ({ data: [], error: null }),
       insert: (row: Record<string, unknown>) => {
         if (table === "live_meeting_reports") writes.reports.push(row);
         return b;
@@ -208,6 +210,13 @@ describe("action items become tasks", () => {
     wire();
     await POST(req());
     expect(taskInputs()[0].assignedTo).toBe("host-1");
+  });
+
+  it("stamps the meeting on each task, so a retry does not raise it twice", async () => {
+    withItems(["Ana: Wire the funds"]);
+    wire();
+    await POST(req());
+    expect(taskInputs()[0].meetingId).toBe("m1");
   });
 
   it("raises nothing when the report had no action items", async () => {

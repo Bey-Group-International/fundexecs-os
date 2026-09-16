@@ -32,6 +32,8 @@ export interface CreateTeamTaskInput {
   sourceTaskId?: string | null;
   dealId?: string | null;
   assetId?: string | null;
+  /** The meeting whose report raised this, so it is not raised again. */
+  meetingId?: string | null;
   contextSnapshot?: Json;
 }
 
@@ -139,6 +141,7 @@ export async function createTeamTask(supabase: Client, input: CreateTeamTaskInpu
         source_task_id: input.sourceTaskId ?? null,
         deal_id: input.dealId ?? null,
         asset_id: input.assetId ?? null,
+        meeting_id: input.meetingId ?? null,
         context_snapshot: input.contextSnapshot ?? ({} as Json),
       })
       .select("*")

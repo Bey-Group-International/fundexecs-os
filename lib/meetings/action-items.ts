@@ -92,3 +92,24 @@ export function clampTitle(text: string, limit = 120): string {
   const head = space > Math.floor(limit * 0.6) ? cut.slice(0, space) : cut;
   return `${head.replace(/[\s,;:.\-–—]+$/, "")}…`;
 }
+
+/**
+ * Comparable form of an action item, for telling a re-run from a new commitment.
+ *
+ * A report can be produced more than once for the same meeting: the room
+ * retries when a response is lost, and a host regenerates when the first one
+ * read wrong. Without this, the second run files every commitment again — on
+ * somebody else's list, now that items reach the person they name.
+ *
+ * Deliberately exact once case, spacing and trailing punctuation are set
+ * aside. A model that rewords an item has said something new, and a
+ * near-match rule would quietly swallow a real second commitment.
+ */
+export function actionItemKey(line: string): string {
+  return (line ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.;:,\-\u2013\u2014]+$/, "")
+    .trim();
+}
