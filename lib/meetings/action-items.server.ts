@@ -15,12 +15,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { createTeamTask } from "@/lib/team-tasks";
 import { matchDirectoryPerson, type DirectoryPerson } from "@/lib/meetings/directory";
-import { clampTitle, parseActionItem } from "@/lib/meetings/action-items";
+import { actionItemKey, clampTitle, parseActionItem } from "@/lib/meetings/action-items";
+import { logId } from "@/lib/log-safe";
 
 type Client = SupabaseClient<Database>;
 
 export interface ActionItemTaskInput {
   orgId: string;
+  /** The meeting these came from. Stamped on each task, and how a re-run is spotted. */
+  meetingId: string;
   /** Who ran the meeting: the assigner, and the assignee of last resort. */
   hostId: string;
   meetingTitle: string;
@@ -39,6 +42,8 @@ export interface ActionItemTaskResult {
   routed: number;
   /** Items that named an owner the directory could not place, uniquely or at all. */
   unrouted: string[];
+  /** Items this meeting had already raised, left alone rather than filed twice. */
+  skipped: number;
 }
 
 /**
@@ -59,13 +64,22 @@ export async function createActionItemTasks(
   const parsed = (input.items ?? [])
     .map(parseActionItem)
     .filter((item) => item.task.trim().length > 0);
-  if (parsed.length === 0) return { created: 0, routed: 0, unrouted: [] };
+  if (parsed.length === 0) return { created: 0, routed: 0, unrouted: [], skipped: 0 };
+
+  // What this meeting has raised before. A report is produced more than once
+  // whenever the room retries a lost response or a host regenerates one that
+  // read wrong, and filing the same commitment on a colleague's list twice is
+  // worse than not filing it at all.
+  const already = await raisedActionItems(supabase, input.meetingId);
+  const fresh = parsed.filter((item) => !already.has(actionItemKey(item.line)));
+  const skipped = parsed.length - fresh.length;
+  if (fresh.length === 0) return { created: 0, routed: 0, unrouted: [], skipped };
 
   const directory = input.directory ?? [];
   const unrouted: string[] = [];
 
   const results = await Promise.all(
-    parsed.map(async (item) => {
+    fresh.map(async (item) => {
       const match = item.owner ? matchDirectoryPerson(item.owner, directory) : undefined;
       if (item.owner && !match) unrouted.push(item.owner);
 
@@ -84,7 +98,10 @@ export async function createActionItemTasks(
         priority: "normal",
         // Meetings about a deal produce tasks about that deal.
         dealId: input.dealId ?? null,
-        contextSnapshot: (input.summary ?? "") as Json,
+        meetingId: input.meetingId,
+        // The item verbatim, so a later run can tell it has already been
+        // raised without having to reconstruct the title it was given.
+        contextSnapshot: { summary: input.summary ?? "", action_item: item.line } as Json,
       });
 
       return { ok: Boolean(task), routed: Boolean(task && match) };
@@ -95,7 +112,50 @@ export async function createActionItemTasks(
     created: results.filter((r) => r.ok).length,
     routed: results.filter((r) => r.routed).length,
     unrouted,
+    skipped,
   };
+}
+
+/**
+ * The action items this meeting has already turned into tasks.
+ *
+ * Never throws: failing to read them means the worst case is a duplicate task,
+ * and refusing to write the report over it would be far worse. Logged, because
+ * a duplicate nobody expected is confusing enough to deserve a trail.
+ */
+export async function raisedActionItems(supabase: Client, meetingId: string): Promise<Set<string>> {
+  const keys = new Set<string>();
+  if (!meetingId) return keys;
+  try {
+    const { data, error } = await supabase
+      .from("team_tasks")
+      .select("title, context_snapshot")
+      .eq("meeting_id", meetingId)
+      .limit(500);
+    if (error) throw new Error(error.message);
+
+    for (const row of (data ?? []) as Array<{ title: string | null; context_snapshot: unknown }>) {
+      const snapshot = row.context_snapshot as { action_item?: unknown } | null;
+      const verbatim = typeof snapshot?.action_item === "string" ? snapshot.action_item : "";
+      // The title is the fallback for tasks written before the item was kept
+      // verbatim; it is the clamped form, so it only matches short items.
+      const key = actionItemKey(verbatim || row.title || "");
+      if (key) keys.add(key);
+    }
+  } catch (err) {
+    // The id never reaches the format string, and never reaches the log as
+    // itself. Two separate problems: a value in the first argument to
+    // console.error IS the format string, so a "%s" in it would swallow the
+    // next argument; and a newline in it would end the line and have whatever
+    // followed read as an entry this process wrote. So the message is a
+    // constant and the id goes through an allowlist as an argument.
+    console.error(
+      "[meetings/action-items] could not read what a meeting already raised",
+      { meetingId: logId(meetingId) },
+      err,
+    );
+  }
+  return keys;
 }
 
 /** What the task says about where it came from. */

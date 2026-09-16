@@ -7,6 +7,9 @@ import { generateMeetingReport } from "@/lib/meetings/report-analysis";
 import { chooseTranscript, restoreTranscript, type StoredLine } from "@/lib/meetings/transcript-restore";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { toLogEntry } from "@/lib/meetings/meeting-log";
+import { createActionItemTasks } from "@/lib/meetings/action-items.server";
+import { parseActionItem } from "@/lib/meetings/action-items";
+import { loadOrgDirectory } from "@/lib/meetings/directory.server";
 import type { Json } from "@/lib/supabase/database.types";
 
 export const runtime = "nodejs";
@@ -158,6 +161,39 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (error || !saved) {
     console.error("[/api/meetings/:id/report/regenerate] insert failed", error);
     return NextResponse.json({ error: "Could not save the new report." }, { status: 500 });
+  }
+
+  // A host regenerates because the first report read wrong. The corrected
+  // action items used to go nowhere at all — the new report said Sarah owed
+  // something and nothing ever told Sarah. Raising them is only safe because
+  // createActionItemTasks now skips what this meeting has already raised, so
+  // the items that did not change are left alone rather than filed twice.
+  const actionItems = normalizeNoteList(analysis.action_items);
+  if (actionItems.length > 0 && meeting.organization_id) {
+    const named = actionItems.some((item) => parseActionItem(item).owner);
+    await createActionItemTasks(supabase, {
+      orgId: meeting.organization_id,
+      meetingId: id,
+      hostId: auth.ctx.userId,
+      meetingTitle: meeting.title ?? "Untitled",
+      summary: normalizeNoteText(analysis.summary),
+      items: actionItems,
+      directory: named ? await loadOrgDirectory(supabase, meeting.organization_id) : [],
+    });
+  }
+
+  // The meetings list reads followup_status and shows "Follow-Up Needed" off
+  // it. A regeneration that turns a report with no follow-up into one that has
+  // a draft — or the reverse — has to move that with it, or the list keeps
+  // describing the report the host just replaced.
+  const { error: statusError } = await supabase
+    .from("live_meetings")
+    .update({
+      followup_status: normalizeNoteText(analysis.follow_up_draft) ? "draft" : "not_started",
+    } as never)
+    .eq("id", id);
+  if (statusError) {
+    console.error("[/api/meetings/:id/report/regenerate] follow-up status not updated", statusError.message);
   }
 
   // Hand back the same shape the log renders, so the row updates in place

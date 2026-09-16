@@ -182,7 +182,7 @@ export async function POST(req: Request) {
     // be frozen the moment the response is sent, so any insert that had not
     // landed simply never did — silently, because nothing was waiting to hear.
     // The inserts run in parallel and cost one round trip.
-    let tasks = { created: 0, routed: 0, unrouted: [] as string[] };
+    let tasks = { created: 0, routed: 0, unrouted: [] as string[], skipped: 0 };
     const actionItems = normalizeNoteList(analysis.action_items);
     if (actionItems.length > 0 && meeting.organization_id) {
       // Loaded only when an item actually names somebody — most of the cost of
@@ -191,6 +191,9 @@ export async function POST(req: Request) {
       const named = actionItems.some((item) => parseActionItem(item).owner);
       tasks = await createActionItemTasks(supabase, {
         orgId: meeting.organization_id,
+        // Stamped on each task, and how a retry after a lost response is
+        // spotted: the same commitment must not reach a colleague twice.
+        meetingId: body.meetingId,
         hostId: user.id,
         meetingTitle: meeting.title ?? body.title ?? "Untitled",
         dealId: meeting.deal_id ?? null,

@@ -2490,6 +2490,60 @@ Deployed, monitoring               →  live, observability active
              |  round trip. And the truncation path is tested by asserting on
              |  stop_reason, not by making a real model run out of room.
 
+2026-09-16  |  A badge nobody could clear, and a task raised twice  |  Second
+             |  pass on meeting notes, and the headline came from following the
+             |  same thread as yesterday: find what gets written and ask who
+             |  reads it — then ask who ever writes the OTHER value.
+             |  `followup_status` IS read: deriveMeetingStatus turns it into
+             |  "Follow-Up Needed" on the meetings list. Every report that
+             |  produced a follow-up email set it to "draft". NOTHING, anywhere,
+             |  has ever set it to "done". So a meeting earned that badge the
+             |  moment it was summarised and carried it for the rest of its life,
+             |  however diligently the host actually followed up — the one state
+             |  the list was built to celebrate was unreachable. Sending the
+             |  follow-up now closes it, and only on a full send: a partial one
+             |  is still outstanding for whoever missed it, and closing it would
+             |  hide exactly the meetings that still need a person.
+             |  THE SECOND THING I MADE WORSE MYSELF, YESTERDAY. The report route
+             |  has no idempotency: any re-POST for the same meeting writes
+             |  another report row and another full set of tasks. That was
+             |  survivable while every task landed on the host's own list. It is
+             |  not now that items reach the person they name — the room retries
+             |  a lost response, and Sarah gets "send the deck" twice. So
+             |  team_tasks gained a meeting_id, and a run skips what this meeting
+             |  has already raised, keyed on the item verbatim (case, spacing and
+             |  a trailing full stop set aside; a REWORDED item is a new
+             |  commitment, because a near-match rule would swallow a real one).
+             |  That dedupe is what made the third thing safe. Regenerating a
+             |  report — the thing a host reaches for precisely because the first
+             |  one read wrong — raised no tasks at all. The corrected report said
+             |  Ana owed something and nothing ever told Ana. It raises them now,
+             |  and the unchanged items are left alone rather than filed again.
+             |  It also moves `followup_status` with the report it replaced,
+             |  instead of leaving the list describing the one the host rejected.
+             |  Reading the failure direction each time: failing to read what was
+             |  already raised means a duplicate, so it is logged and the write
+             |  proceeds; failing to write the badge means a wrong badge, so the
+             |  email still reports success. Neither is allowed to lose a report.
+             |  Also: `context_snapshot` was a bare string here and an object
+             |  everywhere else in the codebase; it is an object now, and holds
+             |  the item verbatim, which is what the dedupe reads.
+             |  Two tests caught harness lies rather than code bugs, which is its
+             |  own kind of finding: the regenerate harness recorded every update
+             |  into one slot, so "never updates a report row" and "updates the
+             |  meeting's badge" were indistinguishable; and its report insert was
+             |  being clobbered by the real createTeamTask reaching the same fake.
+             |  Confidence: typecheck/eslint clean, production build passes, Jest
+             |  6027 → 6056 green (+29 new).
+             |  NOT EXERCISED: the migration is unapplied here, so the meeting_id
+             |  column and its index are verified by shape only. Note the deploy
+             |  window — migrations apply in parallel with the deploy, so for a
+             |  few seconds createTeamTask will insert a column that does not yet
+             |  exist, return null, and raise no tasks for a report ending in
+             |  exactly that gap. Same shape as the calendar_feed_events window
+             |  already documented above, and the same answer: it is seconds, and
+             |  the alternative is a two-stage deploy for a nullable column.
+
 ```
 
 ---
