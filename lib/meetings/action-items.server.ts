@@ -16,7 +16,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { createTeamTask } from "@/lib/team-tasks";
 import { matchDirectoryPerson, type DirectoryPerson } from "@/lib/meetings/directory";
 import { actionItemKey, clampTitle, parseActionItem } from "@/lib/meetings/action-items";
-import { logSafe } from "@/lib/log-safe";
+import { logId } from "@/lib/log-safe";
 
 type Client = SupabaseClient<Database>;
 
@@ -143,11 +143,15 @@ export async function raisedActionItems(supabase: Client, meetingId: string): Pr
       if (key) keys.add(key);
     }
   } catch (err) {
-    // The id comes off a request body, so it is sanitised rather than
-    // interpolated: a value carrying a newline would end this line and have
-    // whatever followed read as an entry this process wrote.
+    // The id never reaches the format string, and never reaches the log as
+    // itself. Two separate problems: a value in the first argument to
+    // console.error IS the format string, so a "%s" in it would swallow the
+    // next argument; and a newline in it would end the line and have whatever
+    // followed read as an entry this process wrote. So the message is a
+    // constant and the id goes through an allowlist as an argument.
     console.error(
-      `[meetings/action-items] could not read what meeting ${logSafe(meetingId)} already raised`,
+      "[meetings/action-items] could not read what a meeting already raised",
+      { meetingId: logId(meetingId) },
       err,
     );
   }

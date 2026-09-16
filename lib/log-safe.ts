@@ -9,35 +9,25 @@
 // That is how a forged "sync completed" or an invented stack trace gets into
 // an incident timeline.
 //
-// Pure, and deliberately blunt — a log line is for reading, so anything that
-// could be a control character becomes a visible marker rather than vanishing.
-
-/** Longest a single interpolated value may be before it is cut. */
-export const MAX_LOG_VALUE = 200;
-
-/** The visible stand-in for a control character (␚). */
-const MARKER = "␚";
+// There are two separate problems here, and the second is the one that is easy
+// to miss. A value in the FIRST argument to console.error is the format string,
+// so a "%s" in it swallows the next argument — which is how a caller's id can
+// rewrite the rest of the line even with every newline stripped out of it. So
+// the rule this module exists to make easy is: the message is a constant, and
+// the untrusted value goes through here and travels as an argument.
 
 /**
- * An untrusted value, safe to interpolate into one log line.
+ * An identifier, or a marker saying it was not one.
  *
- * Control characters are replaced rather than stripped: a value that contained
- * them is worth seeing as such, and a silent strip would make "abc\ndef" and
- * "abcdef" look identical in the one place somebody is trying to work out what
- * actually happened.
+ * An allowlist rather than an escape. Every id this application logs is a UUID
+ * or a room code — letters, digits, dashes and underscores — so anything else
+ * is not an id that got mangled, it is a value that has no business being one,
+ * and printing a scrubbed version of it would only make it look plausible.
+ *
+ * This is also the difference between "we removed the newlines" and "nothing
+ * but an id can get through", which is the property worth having: it holds
+ * whatever a future caller passes, and whatever a future attacker sends.
  */
-export function logSafe(value: unknown): string {
-  let text: string;
-  if (typeof value === "string") text = value;
-  else if (value === null || value === undefined) text = String(value);
-  else if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-    text = String(value);
-  } else {
-    // Objects are not rendered: `String({})` is "[object Object]", which tells
-    // a reader nothing and hides whatever the caller meant to show.
-    text = "[unprintable]";
-  }
-
-  const flattened = text.replace(/[\u0000-\u001f\u007f]/g, MARKER);
-  return flattened.length > MAX_LOG_VALUE ? `${flattened.slice(0, MAX_LOG_VALUE)}…` : flattened;
+export function logId(value: unknown): string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : "[invalid-id]";
 }
