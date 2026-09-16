@@ -67,6 +67,7 @@ import {
   contentHintFor,
   isPolite,
   linkNotice,
+  msUntilNextAttempt,
   nextRecovery,
   offerCollision,
   peerConfig,
@@ -74,6 +75,8 @@ import {
   peerLinkStatus,
   peerStatusLabel,
   recordAttempt,
+  recoveryExhausted,
+  withImmediateRetry,
   screenSendCap,
   stepLink,
   videoSendCap,
@@ -1385,7 +1388,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // held back from the screen for the grace period before it is called one.
   const connChangedAtRef = useRef<Map<string, number>>(new Map());
   const recoveryTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const gaveUpRef = useRef<Set<string>>(new Set());
+  // Peers whose opening burst of ICE restarts is spent, so their tile says
+  // "Connection lost". Retries continue underneath it on a slow cadence — this
+  // is what the room SAYS, not whether it is still trying.
+  const peerLostRef = useRef<Set<string>>(new Set());
   const [peerStatus, setPeerStatus] = useState<Map<string, PeerLinkStatus>>(new Map());
   // Remote tracks arrive one at a time on their own transceivers. Keeping the
   // stream ourselves means the tile is handed one object for the life of the
@@ -1741,7 +1747,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     negotiationArmedRef.current.delete(peerId);
     recoveryRef.current.delete(peerId);
     remoteStreamsRef.current.delete(peerId);
-    gaveUpRef.current.delete(peerId);
+    peerLostRef.current.delete(peerId);
     // A peer who left is not still presenting. Without this a recording keeps
     // the whole frame given to a screen share whose owner has gone.
     sharingPeersRef.current.delete(peerId);
@@ -1962,7 +1968,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           // there and says the same thing about whether media can flow.
           pc.connectionState ?? connectionStateFromIce(pc.iceConnectionState),
           Date.now() - (connChangedAtRef.current.get(peerId) ?? 0),
-          gaveUpRef.current.has(peerId),
+          peerLostRef.current.has(peerId),
         )
       : "lost";
     setPeerStatus((prev) => {
@@ -1992,26 +1998,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const now = Date.now();
     const action = nextRecovery(state, now);
 
-    if (action === "give_up") {
-      gaveUpRef.current.add(peerId);
-      refreshPeerStatusRef.current(peerId);
-      return;
-    }
-    if (action === "wait") {
+    // Come back at the moment this peer is actually due, rather than polling.
+    const sleepThenRetry = (delay: number) => {
       const existing = recoveryTimerRef.current.get(peerId);
       if (existing) clearTimeout(existing);
       recoveryTimerRef.current.set(peerId, setTimeout(() => {
         recoveryTimerRef.current.delete(peerId);
         recoverPeerRef.current(peerId);
-      }, 1500));
+      }, delay));
+    };
+
+    if (action === "give_up") {
+      peerLostRef.current.add(peerId);
+      refreshPeerStatusRef.current(peerId);
       return;
     }
+    if (action === "wait") { sleepThenRetry(msUntilNextAttempt(state, now)); return; }
 
-    recoveryRef.current.set(peerId, recordAttempt(state, now));
+    const attempted = recordAttempt(state, now);
+    recoveryRef.current.set(peerId, attempted);
+    // Past the opening burst the member is told, because by now they have been
+    // staring at a frozen tile for half a minute and deserve an answer. Being
+    // told is all it is: the retries below go on regardless, which is the whole
+    // difference between this and the version that stopped here for good.
+    if (recoveryExhausted(attempted) && !peerLostRef.current.has(peerId)) {
+      peerLostRef.current.add(peerId);
+      refreshPeerStatusRef.current(peerId);
+    }
     try { pc.restartIce(); } catch { /* not supported — the renegotiation below still helps */ }
     // Both ends can reach here at once; the collision handling in the offer
     // path is what keeps that from deadlocking.
     void renegotiateRef.current(peerId, { iceRestart: true });
+    // Schedule the next attempt here rather than waiting to be called back by a
+    // connection state change. A connection whose offers are going nowhere —
+    // the signalling socket is down, the far end is asleep — may not emit
+    // another state change at all, and that silence is exactly the case the
+    // retries exist for.
+    sleepThenRetry(msUntilNextAttempt(attempted, Date.now()));
   }, []);
   const recoverPeerRef = useRef(recoverPeer);
   useEffect(() => { recoverPeerRef.current = recoverPeer; }, [recoverPeer]);
@@ -2213,7 +2236,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (pc.connectionState === "connected") {
         // A connection that came back has spent none of its retries.
         recoveryRef.current.delete(peerId);
-        gaveUpRef.current.delete(peerId);
+        peerLostRef.current.delete(peerId);
         const timer = recoveryTimerRef.current.get(peerId);
         if (timer) { clearTimeout(timer); recoveryTimerRef.current.delete(peerId); }
         // Encoder parameters do not survive a renegotiation on every engine.
@@ -2339,6 +2362,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "offer" && msg.to === myId) {
       let pc = peersRef.current.get(msg.from);
+      // An offer arriving on a connection that has already failed is the far
+      // end rebuilding their side, and applying it to the corpse of ours is how
+      // a recovered network still produced a black tile. Rebuild to meet them —
+      // createPeerConnection closes and forgets the old one on the way past.
+      if (pc && (pc.connectionState === "failed" || pc.signalingState === "closed")) pc = undefined;
       if (!pc) pc = createPeerConnection(msg.from);
       // Record the offerer's name (e.g. the host) so guests don't see a UUID.
       if (msg.displayName) setPeerName(msg.from, msg.displayName);
@@ -2797,11 +2825,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     channelRef.current = channel;
     channel.on("broadcast", { event: "signal" }, ({ payload }: { payload: SignalMsg }) => { void handleSignal(payload); })
       .subscribe((status) => {
-        // Only announce on a real subscription, and only once — the callback also
-        // fires for CHANNEL_ERROR / TIMED_OUT / CLOSED and again on reconnect.
-        if (status !== "SUBSCRIBED" || announcedRef.current) return;
+        // The callback also fires for CHANNEL_ERROR / TIMED_OUT / CLOSED, and
+        // again on reconnect. Only a real subscription is worth acting on.
+        if (status !== "SUBSCRIBED") return;
+        const first = !announcedRef.current;
         announcedRef.current = true;
         void icePromise.then(() => {
+          // Announcing once was the last door closed on a call that lost its
+          // network. A `join` is the only message that rebuilds a peer
+          // connection from nothing, so after a socket drop — which is also a
+          // socket that carried none of the offers our ICE restarts were
+          // producing — the peers still trying to recover were restarting into
+          // a void, and nothing would ever say hello again.
+          //
+          // Not on every resubscribe, though: a socket that blipped while the
+          // media kept flowing needs nothing, and a `join` tears down every
+          // peer connection in the room and rebuilds it. So it is sent only
+          // when there is something to rebuild.
+          const stalled = [...peersRef.current.values()].some(
+            (pc) => pc.connectionState !== "connected" && pc.connectionState !== "closed",
+          );
+          if (!first && !stalled) return;
           sendSignal({ type: "join", from: myIdRef.current, displayName: name });
           sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
           announceVideoStateRef.current();
@@ -3467,6 +3511,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (!live.has(id)) lastAudibleRef.current.delete(id);
     }
   }, [peers]);
+
+  /**
+   * The machine is back on a network. Stop waiting out a guess.
+   *
+   * The retry backoff is arithmetic about a network nobody can observe, and
+   * `online` is the one moment the browser observes it for us. Without this a
+   * member who reconnects their Wi-Fi four seconds into a twenty-second cadence
+   * sits out the remaining sixteen for no reason — and every peer does, so the
+   * room comes back a good deal slower than the network did.
+   *
+   * Only the connections that are actually in trouble: a healthy peer needs no
+   * ICE restart, and offering one would cost a renegotiation to fix nothing.
+   */
+  useEffect(() => {
+    if (!sessionLive) return;
+    const onOnline = () => {
+      peersRef.current.forEach((pc, peerId) => {
+        if (pc.connectionState === "connected" || pc.connectionState === "closed") return;
+        const state = recoveryRef.current.get(peerId);
+        if (state) recoveryRef.current.set(peerId, withImmediateRetry(state));
+        recoverPeerRef.current(peerId);
+      });
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [sessionLive]);
 
   // ── Bandwidth adaptation ──────────────────────────────────────────────────
 

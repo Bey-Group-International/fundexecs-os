@@ -9,7 +9,13 @@ import {
   contentHintFor,
   isPolite,
   linkNotice,
+  ICE_BURST_ATTEMPTS,
+  ICE_GIVE_UP_MS,
+  ICE_RETRY_CADENCE_MS,
+  msUntilNextAttempt,
   nextRecovery,
+  recoveryExhausted,
+  withImmediateRetry,
   offerCollision,
   peerLinkStatus,
   peerStatusLabel,
@@ -246,6 +252,84 @@ describe("nextRecovery", () => {
     let state = INITIAL_RECOVERY;
     for (let i = 0; i < 5; i++) state = recordAttempt(state, i * 60_000);
     expect(nextRecovery(state, 10_000_000)).toBe("give_up");
+  });
+
+  // The defect this replaced: the burst spans about twenty-nine seconds, and
+  // running out of it meant never trying again. A laptop asleep for a minute,
+  // or a train tunnel, left both ends showing "Connection lost" for the rest of
+  // the meeting with no way back but a page reload.
+  it("keeps trying after the opening burst is spent", () => {
+    let state = INITIAL_RECOVERY;
+    let at = 1_000;
+    for (let i = 0; i < ICE_BURST_ATTEMPTS; i++) { state = recordAttempt(state, at); at += 30_000; }
+
+    expect(recoveryExhausted(state)).toBe(true);
+    expect(nextRecovery(state, at)).toBe("restart");
+  });
+
+  it("slows to a cadence rather than backing off forever", () => {
+    let state = INITIAL_RECOVERY;
+    for (let i = 0; i < 20; i++) state = recordAttempt(state, 1_000 + i * ICE_RETRY_CADENCE_MS);
+    const last = 1_000 + 19 * ICE_RETRY_CADENCE_MS;
+
+    expect(msUntilNextAttempt(state, last)).toBe(ICE_RETRY_CADENCE_MS);
+    expect(nextRecovery(state, last + ICE_RETRY_CADENCE_MS - 1)).toBe("wait");
+    expect(nextRecovery(state, last + ICE_RETRY_CADENCE_MS)).toBe("restart");
+  });
+
+  // Measured from when the trouble started, not counted in attempts: what is
+  // being judged is how long this peer has been unreachable.
+  it("stops once the peer has been unreachable longer than a meeting survives", () => {
+    let state = recordAttempt(INITIAL_RECOVERY, 1_000);
+    state = recordAttempt(state, 1_000 + ICE_GIVE_UP_MS - 1);
+
+    expect(nextRecovery(state, 1_000 + ICE_GIVE_UP_MS - 1)).toBe("wait");
+    expect(nextRecovery(state, 1_000 + ICE_GIVE_UP_MS)).toBe("give_up");
+  });
+
+  it("starts the horizon even when the clock reads zero", () => {
+    const state = recordAttempt(INITIAL_RECOVERY, 0);
+    expect(nextRecovery(state, ICE_GIVE_UP_MS)).toBe("give_up");
+  });
+
+  it("has nothing to wait for before the first attempt", () => {
+    expect(msUntilNextAttempt(INITIAL_RECOVERY, 5_000)).toBe(0);
+  });
+});
+
+describe("recoveryExhausted", () => {
+  // What the tile SAYS, which is not the same question as whether we are still
+  // trying. Conflating the two is how an honest badge became a permanent one.
+  it("says nothing until the burst a member waits through is spent", () => {
+    let state = INITIAL_RECOVERY;
+    for (let i = 0; i < ICE_BURST_ATTEMPTS - 1; i++) {
+      state = recordAttempt(state, i * 10_000);
+      expect(recoveryExhausted(state)).toBe(false);
+    }
+    expect(recoveryExhausted(recordAttempt(state, 100_000))).toBe(true);
+  });
+});
+
+describe("withImmediateRetry", () => {
+  // The backoff is arithmetic about a network nobody can see; `online` is the
+  // browser seeing it. Waiting out the rest of a cadence then buys nothing.
+  it("makes the next attempt due at once", () => {
+    let state = INITIAL_RECOVERY;
+    for (let i = 0; i < 8; i++) state = recordAttempt(state, 1_000 + i * ICE_RETRY_CADENCE_MS);
+    const now = 1_000 + 7 * ICE_RETRY_CADENCE_MS + 4_000;
+    expect(nextRecovery(state, now)).toBe("wait");
+
+    expect(nextRecovery(withImmediateRetry(state), now)).toBe("restart");
+  });
+
+  // Otherwise flapping Wi-Fi would be a way to retry a peer that left forever.
+  it("does not extend the horizon or forgive the attempts", () => {
+    const state = recordAttempt(INITIAL_RECOVERY, 1_000);
+    const eager = withImmediateRetry(state);
+
+    expect(eager.attempts).toBe(state.attempts);
+    expect(eager.firstAttemptAt).toBe(state.firstAttemptAt);
+    expect(nextRecovery(eager, 1_000 + ICE_GIVE_UP_MS)).toBe("give_up");
   });
 });
 

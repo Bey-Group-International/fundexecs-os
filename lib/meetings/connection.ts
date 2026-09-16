@@ -357,38 +357,131 @@ export function linkNotice(mode: BandwidthMode): string | null {
  */
 export const DISCONNECT_GRACE_MS = 2500;
 
-/** Restarting forever is a battery drain and a signaling flood; this is the cap. */
-const MAX_ICE_ATTEMPTS = 5;
-/** Backoff between attempts, so a peer that is simply gone is not hammered. */
+/**
+ * The opening burst of restarts, and the gaps between them.
+ *
+ * Front-loaded because most recoverable failures recover in the first few
+ * seconds: a Wi-Fi roam, a cell handover, a NAT binding that expired. The burst
+ * spans about twenty-nine seconds in total, and that number is the whole reason
+ * for everything below it — it is how long a member will wait before deciding
+ * the call is broken, and it is nowhere near long enough to be how long the
+ * NETWORK gets before we stop trying.
+ */
+export const ICE_BURST_ATTEMPTS = 5;
 const RESTART_BACKOFF_MS = [0, 2000, 4000, 8000, 15000];
+
+/**
+ * How often to keep trying once the burst is spent.
+ *
+ * The version this replaces stopped after the burst and never tried again. A
+ * laptop asleep for a minute, a train tunnel, a slow Wi-Fi handover — anything
+ * longer than those twenty-nine seconds — left every tile reading "Connection
+ * lost" for the rest of the meeting with no way back but a page reload, for
+ * both ends at once, because each had given up on the other. The outage did not
+ * have to be severe. It had to be slightly longer than the retry budget.
+ *
+ * Twenty seconds apart costs one ICE restart and one offer per peer per twenty
+ * seconds, which is nothing next to the media the call is already carrying, and
+ * it means a network that comes back at any point during the meeting finds a
+ * call still trying to reach it.
+ */
+export const ICE_RETRY_CADENCE_MS = 20_000;
+
+/**
+ * When to stop entirely.
+ *
+ * Measured from the first attempt rather than counted in attempts, because what
+ * is being judged is how long the peer has been unreachable, not how many times
+ * we asked. Ten minutes is past any outage a meeting survives socially: someone
+ * gone that long has left, and their tile should stop pretending otherwise.
+ */
+export const ICE_GIVE_UP_MS = 10 * 60_000;
 
 export interface RecoveryState {
   attempts: number;
   /** When the last restart was asked for. */
   lastAttemptAt: number;
+  /**
+   * When this run of trouble began, for the give-up horizon.
+   *
+   * Meaningless until `attempts` is non-zero, and read nowhere else. Kept
+   * separate from `lastAttemptAt` so that clearing the backoff — which is what
+   * a network returning does — cannot also extend the horizon.
+   */
+  firstAttemptAt: number;
 }
 
-export const INITIAL_RECOVERY: RecoveryState = { attempts: 0, lastAttemptAt: 0 };
+export const INITIAL_RECOVERY: RecoveryState = { attempts: 0, lastAttemptAt: 0, firstAttemptAt: 0 };
 
 export type RecoveryAction = "restart" | "wait" | "give_up";
 
 /**
  * Whether to ask ICE to try again.
  *
- * `wait` and `give_up` are deliberately different answers: the first means come
- * back in a moment, the second means this peer is not coming back and the UI
- * should say so instead of spinning indefinitely.
+ * Three answers, and the middle one is the one that used to be missing. `wait`
+ * means come back when the backoff is up. `give_up` means this peer has been
+ * unreachable for longer than a meeting outlasts and nothing more will be
+ * attempted. Running out of the opening burst is NEITHER of those — it is worth
+ * telling the member about (see `recoveryExhausted`) and is not a reason to
+ * stop, so past the burst this keeps answering `restart` on a slow cadence
+ * until the horizon.
  */
 export function nextRecovery(state: RecoveryState, now: number): RecoveryAction {
-  if (state.attempts >= MAX_ICE_ATTEMPTS) return "give_up";
-  const backoff = RESTART_BACKOFF_MS[Math.min(state.attempts, RESTART_BACKOFF_MS.length - 1)];
-  if (state.attempts > 0 && now - state.lastAttemptAt < backoff) return "wait";
-  return "restart";
+  if (state.attempts === 0) return "restart";
+  if (now - state.firstAttemptAt >= ICE_GIVE_UP_MS) return "give_up";
+  return msUntilNextAttempt(state, now) > 0 ? "wait" : "restart";
+}
+
+/**
+ * How long until this peer is due for another attempt.
+ *
+ * Exported so the caller can sleep exactly that long. The version this replaces
+ * re-checked every 1500ms regardless, which was wasteful against a fifteen-
+ * second backoff and would have been absurd against the cadence above.
+ */
+export function msUntilNextAttempt(state: RecoveryState, now: number): number {
+  if (state.attempts === 0) return 0;
+  const backoff = state.attempts < RESTART_BACKOFF_MS.length
+    ? RESTART_BACKOFF_MS[state.attempts]
+    : ICE_RETRY_CADENCE_MS;
+  const waited = now - state.lastAttemptAt;
+  if (!Number.isFinite(waited)) return 0;
+  return Math.max(0, backoff - waited);
+}
+
+/**
+ * Whether the opening burst is spent — the moment a member deserves to be told.
+ *
+ * This is what drives the "Connection lost" badge, and it is deliberately NOT
+ * what drives whether we keep trying. Saying so on the screen and giving up
+ * underneath it were the same flag before, which is how an honest badge turned
+ * into a permanent one.
+ */
+export function recoveryExhausted(state: RecoveryState): boolean {
+  return state.attempts >= ICE_BURST_ATTEMPTS;
+}
+
+/**
+ * Drop the backoff, because something happened that the backoff did not know.
+ *
+ * The delays above are guesses about a network nobody can see. When the browser
+ * says the machine is online again, the guess is superseded: waiting out the
+ * rest of a twenty-second cadence would be waiting for no reason. The attempt
+ * count and the horizon are untouched, so this cannot be used to retry forever.
+ */
+export function withImmediateRetry(state: RecoveryState): RecoveryState {
+  return { ...state, lastAttemptAt: 0 };
 }
 
 /** Record that a restart was issued. */
 export function recordAttempt(state: RecoveryState, now: number): RecoveryState {
-  return { attempts: state.attempts + 1, lastAttemptAt: now };
+  return {
+    attempts: state.attempts + 1,
+    lastAttemptAt: now,
+    // Stamped from the attempt count rather than from the value, so a first
+    // attempt that lands on a zero clock still starts the horizon.
+    firstAttemptAt: state.attempts === 0 ? now : state.firstAttemptAt,
+  };
 }
 
 export type PeerLinkStatus = "connecting" | "live" | "reconnecting" | "lost";
@@ -404,9 +497,10 @@ export type PeerLinkStatus = "connecting" | "live" | "reconnecting" | "lost";
 export function peerLinkStatus(
   connectionState: RTCPeerConnectionState,
   msSinceChange: number,
-  gaveUp = false,
+  /** The opening burst of restarts is spent. Retries continue underneath. */
+  lost = false,
 ): PeerLinkStatus {
-  if (gaveUp) return "lost";
+  if (lost) return "lost";
   switch (connectionState) {
     case "connected":
       return "live";
