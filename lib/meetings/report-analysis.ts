@@ -129,11 +129,23 @@ const SYSTEM = `You are an expert meeting analyst for a venture-capital / invest
 Produce comprehensive, actionable meeting reports. Transcript lines are prefixed "SpeakerName: text" — use speaker names when assigning action items.
 For the follow_up_draft, write a ready-to-send professional email covering: (1) brief summary paragraph, (2) decisions made, (3) numbered action items with owners and deadlines where stated, (4) proposed next meeting if relevant, (5) professional closing. Plain text only.`;
 
-/** What a report holds before it is written. Empty is a valid answer. */
+/**
+ * What a report holds before it is written. Empty is a valid answer.
+ *
+ * Every key the schema promises, not just the three that have columns of their
+ * own. The log reads `analysis.decisions` and the export reads
+ * `analysis.next_meeting_suggestion` straight off this object; a stored report
+ * missing them is a different shape from every other stored report, for no
+ * reason beyond which fields happened to be listed here.
+ */
 export const EMPTY_REPORT: Record<string, unknown> = {
   summary: "",
   key_points: [],
   action_items: [],
+  decisions: [],
+  sentiment: "neutral",
+  next_meeting_suggestion: "",
+  follow_up_draft: "",
 };
 
 export interface ReportAnalysisInput {

@@ -448,6 +448,8 @@ export type TeamTask = Timestamps & {
   source_task_id: string | null;
   deal_id: string | null;
   asset_id: string | null;
+  /** The live meeting whose report raised this task, when one did. */
+  meeting_id: string | null;
   context_snapshot: Json;
   completed_at: string | null;
 }
