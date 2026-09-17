@@ -110,6 +110,38 @@ describe("screenSendCap", () => {
     expect(cap.maxFramerate).toBeLessThan(videoSendCap(3)!.maxFramerate);
   });
 
+  // The defect this closes: the divisor was pinned at 1 unconditionally, so a
+  // big room told the encoder to keep every pixel of a 1440p capture on a few
+  // hundred kilobits. That is a smear in which nothing is readable — it loses
+  // the legibility the full resolution was there to protect.
+  it("gives up resolution once the bitrate cannot carry it", () => {
+    const roomy = screenSendCap(3)!;
+    const thin = screenSendCap(8)!;
+
+    expect(thin.maxBitrate).toBeLessThan(roomy.maxBitrate);
+    expect(thin.scaleResolutionDownBy).toBeGreaterThan(roomy.scaleResolutionDownBy);
+  });
+
+  // Never the other way round: more pixels on a thinner line is the failure.
+  it("never raises resolution as the budget falls", () => {
+    let previous = 0;
+    for (const peers of [1, 2, 3, 4, 5, 6, 8, 12]) {
+      const cap = screenSendCap(peers)!;
+      expect(cap.scaleResolutionDownBy).toBeGreaterThanOrEqual(previous);
+      previous = cap.scaleResolutionDownBy;
+    }
+  });
+
+  // A weak link halves the budget, and the picture has to follow it down.
+  it("follows the link down as well as the room size", () => {
+    expect(screenSendCap(3, "degraded")!.scaleResolutionDownBy)
+      .toBeGreaterThan(screenSendCap(3)!.scaleResolutionDownBy);
+  });
+
+  it("still sends nothing at all when video is paused", () => {
+    expect(screenSendCap(3, "audio-only")).toBeNull();
+  });
+
   it("is absent in audio-only, like the camera", () => {
     expect(screenSendCap(3, "audio-only")).toBeNull();
   });

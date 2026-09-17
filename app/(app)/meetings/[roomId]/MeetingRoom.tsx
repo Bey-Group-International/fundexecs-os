@@ -110,6 +110,7 @@ import {
   DEMOTION_LINGER_MS,
   type VideoTier,
 } from "@/lib/meetings/send-tiers";
+import { effectiveLayout, layoutIsForced, screenSharerId, stageFocusId } from "@/lib/meetings/stage";
 import {
   knockAlert,
   shouldRequestNotificationPermission,
@@ -770,7 +771,7 @@ function formatClock(seconds: number): string {
 // ─── ControlBar ───────────────────────────────────────────────────────────────
 
 function ControlBar({
-  micOn, camOn, shareOn, copilotOpen, isHost, handRaised, layout, chatUnread, waitingCount, duration, roomCode, bwMode,
+  micOn, camOn, shareOn, shareStarting, copilotOpen, isHost, handRaised, layout, layoutForced, chatUnread, waitingCount, duration, roomCode, bwMode,
   onToggleMic, onToggleCam, onToggleScreen, onToggleCopilot, onLeave, onEndForAll,
   onSwitchMic, onSwitchCam, onSwitchSpeaker, onRaiseHand, onReaction, onMuteAll, onToggleLayout, onFlipCamera,
   activeMicId, activeCamId, camStarting,
@@ -789,9 +790,11 @@ function ControlBar({
   backgroundBtnRef: React.RefObject<HTMLButtonElement | null>;
   /** The call is already being torn down — the exit controls must not re-fire. */
   leaving: boolean;
-  micOn: boolean; camOn: boolean; shareOn: boolean; copilotOpen: boolean; isHost: boolean;
+  micOn: boolean; camOn: boolean; shareOn: boolean; shareStarting: boolean; copilotOpen: boolean; isHost: boolean;
   handRaised: boolean; layout: "grid" | "speaker"; chatUnread: number; waitingCount: number; duration: number;
   roomCode: string; bwMode: BandwidthMode;
+  /** A live screen share is holding speaker view open over the chosen grid. */
+  layoutForced: boolean;
   onToggleMic: () => void; onToggleCam: () => void; onToggleScreen: () => void;
   onToggleCopilot: () => void; onLeave: () => void; onEndForAll: () => void;
   onSwitchMic: (id: string) => void; onSwitchCam: (id: string) => void; onSwitchSpeaker: (id: string) => void;
@@ -851,7 +854,7 @@ function ControlBar({
 
         {/* Screen share — hidden on mobile (not practical) */}
         <span className="hidden sm:block">
-          <CtrlBtn active={shareOn} onClick={onToggleScreen} title={shareOn ? "Stop sharing" : "Share screen"} activeIcon={<ScreenShareIcon />} inactiveIcon={<ScreenShareIcon />} />
+          <CtrlBtn active={shareOn} onClick={onToggleScreen} busy={shareStarting} title={shareOn ? "Stop sharing" : "Share screen"} activeIcon={<ScreenShareIcon />} inactiveIcon={<ScreenShareIcon />} />
         </span>
 
         {/* Raise hand */}
@@ -879,7 +882,10 @@ function ControlBar({
 
         {/* Layout toggle — hidden on mobile */}
         <span className="hidden sm:block">
-          <button onClick={onToggleLayout} title={layout === "grid" ? "Speaker view" : "Grid view"}
+          <button onClick={onToggleLayout}
+            title={layoutForced
+              ? "Someone is sharing their screen — grid view resumes when they stop"
+              : layout === "grid" ? "Speaker view" : "Grid view"}
             className="w-10 h-10 rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-3)] flex items-center justify-center transition-colors">
             {layout === "grid" ? <SpeakerViewIcon /> : <GridViewIcon />}
           </button>
@@ -1404,9 +1410,9 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
 
   // What each peer says about their own video, which pixels cannot tell us.
-  const [peerVideo, setPeerVideo] = useState<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
+  const [peerVideo, setPeerVideo] = useState<Map<string, { camOn: boolean; paused: boolean; sharing: boolean }>>(new Map());
   // Read from the stats timer, which is created once.
-  const peerVideoRef = useRef<Map<string, { camOn: boolean; paused: boolean }>>(new Map());
+  const peerVideoRef = useRef<Map<string, { camOn: boolean; paused: boolean; sharing: boolean }>>(new Map());
   // Who is presenting, by signaling id. Only the recording reads this: the live
   // room shows a share as ordinary video, but the recording gives it the frame.
   const sharingPeersRef = useRef<Set<string>>(new Set());
@@ -1478,11 +1484,31 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const [layout, setLayout] = useState<"grid" | "speaker">("grid");
   // Mirrors for refreshVideoRequests, which runs from a visibility listener and
   // from effects and must see the current view without being rebuilt by it.
-  const layoutRef = useRef<"grid" | "speaker">("grid");
-  useEffect(() => { layoutRef.current = layout; }, [layout]);
+
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
-  const activeSpeakerIdRef = useRef<string | null>(null);
-  useEffect(() => { activeSpeakerIdRef.current = activeSpeakerId; }, [activeSpeakerId]);
+
+  // ── The stage ─────────────────────────────────────────────────────────────
+  //
+  // Derived here rather than in the render body because the video-request path
+  // reads it from refs, and those refs have to be current before the effect
+  // that fires that path — an effect declared further down would run after it
+  // and spend a whole round asking for the wrong thing.
+  //
+  // What this fixes: `sharingPeers` was tracked, broadcast and kept current,
+  // and read by nothing but the recording composer. The live room drew a shared
+  // screen as one grid cell the size of a face, and the spotlight followed the
+  // audio meter — so a presenter who paused to take a question lost the big
+  // tile to the person asking. See lib/meetings/stage.ts.
+  const sharerId = useMemo(
+    () => screenSharerId({ localIsSharing: shareOn, localId: LOCAL_SPEAKER_ID, peers: peerVideo }),
+    [shareOn, peerVideo],
+  );
+  const stageLayout = effectiveLayout(layout, sharerId);
+  const stageFocus = stageFocusId({ screenSharerId: sharerId, activeSpeakerId });
+  const stageLayoutRef = useRef<"grid" | "speaker">("grid");
+  const stageFocusRef = useRef<string | null>(null);
+  useEffect(() => { stageLayoutRef.current = stageLayout; }, [stageLayout]);
+  useEffect(() => { stageFocusRef.current = stageFocus; }, [stageFocus]);
 
   // Bandwidth adaptation
   const [bwMode, setBwMode] = useState<BandwidthMode>("normal");
@@ -1585,6 +1611,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // working rather than looking like a press that did nothing: opening a camera
   // takes a moment, and longer when the first one tried is busy.
   const [camStarting, setCamStarting] = useState(false);
+  // The screen picker is open. Same job as camStarting — it disables the button
+  // so a second press cannot open a second picker — but it also has to be a ref,
+  // because the guard is read inside an async callback that was created before
+  // the state it would otherwise be reading.
+  const [shareStarting, setShareStarting] = useState(false);
+  const sharePendingRef = useRef(false);
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
   // Read synchronously by `enterRoom`, which runs in the same tick as the click
   // that produced the choice — a state update would not be visible to it yet.
@@ -1916,8 +1948,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       const said = peerVideoRef.current.get(id);
       const desired = tierForView({
         documentHidden: hidden,
-        isSpotlight: layoutRef.current === "speaker" && activeSpeakerIdRef.current === id,
-        layout: layoutRef.current,
+        // The STAGE's spotlight, not the audio meter's: a peer sharing their
+        // screen is what the room is looking at, and asking them for a
+        // thumbnail of it is asking for an unreadable one.
+        isSpotlight: stageLayoutRef.current === "speaker" && stageFocusRef.current === id,
+        layout: stageLayoutRef.current,
         tileCount,
         cameraOn: said ? said.camOn && !said.paused : true,
       });
@@ -2524,11 +2559,16 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // derived from it.
       if (msg.sharing) sharingPeersRef.current.add(msg.from);
       else sharingPeersRef.current.delete(msg.from);
+      const sharing = msg.sharing === true;
       setPeerVideo((prev) => {
         const ex = prev.get(msg.from);
-        if (ex && ex.camOn === msg.camOn && ex.paused === msg.paused) return prev;
+        if (ex && ex.camOn === msg.camOn && ex.paused === msg.paused && ex.sharing === sharing) return prev;
         const next = new Map(prev);
-        next.set(msg.from, { camOn: msg.camOn, paused: msg.paused });
+        // `sharing` is carried in the render state as well as the ref: the ref
+        // is read by the recording composer every frame, and the live stage
+        // needs to re-render when it changes — which was exactly what it never
+        // did. See lib/meetings/stage.ts.
+        next.set(msg.from, { camOn: msg.camOn, paused: msg.paused, sharing });
         return next;
       });
     }
@@ -2973,7 +3013,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!ready) return;
     refreshVideoRequestsRef.current();
-  }, [ready, layout, activeSpeakerId, peers, peerVideo, bwMode]);
+  }, [ready, stageLayout, stageFocus, peers, peerVideo, bwMode]);
 
   // A backgrounded tab draws nothing, so it should receive nothing. This is the
   // only lever that removes encoder cost at the far end rather than reducing
@@ -3935,16 +3975,41 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Derived from the ref, like toggleMic: the ref write is a side effect and
     // does not belong inside a state updater.
     const next = !camOnRef.current;
+
+    // WHICH tracks this touches is the whole of it. During a screen share the
+    // local stream's only video track IS the screen — toggleScreen takes the
+    // camera off the stream entirely — so flipping `enabled` across the stream
+    // blanked the share for the entire room. Every viewer got black frames
+    // while the browser still lit its "sharing" indicator, the button still
+    // read "Stop sharing", and `announceVideoState` still reported the video
+    // live (it ORs in shareOn), so nobody even fell back to a name card. The
+    // one person who could not see it was the presenter, whose own tile is the
+    // screen. reacquireCamera has always known not to touch the wire mid-share;
+    // the manual toggle never learned.
+    //
+    // So while sharing this moves the camera's own track, which is off the wire
+    // and held in the refs, and records an intention that restoreCameraTrack
+    // applies when the share ends.
+    const sharing = shareOnRef.current;
+    const camera = cameraTrackRef.current;
+    const live = sharing
+      ? camera?.readyState === "live"
+      : localStreamRef.current?.getVideoTracks().some((t) => t.readyState === "live") ?? false;
+
     // Turning on with nothing to turn on. `enabled` only means something to a
     // track that exists, and a track that has ended is no better than none.
-    if (next && !localStreamRef.current?.getVideoTracks().some((t) => t.readyState === "live")) {
+    // Safe mid-share: adoptCameraTrack keeps its hands off the senders while
+    // shareOn, so this readies a camera for when the share ends rather than
+    // interrupting it.
+    if (next && !live) {
       void startCameraRef.current();
       return;
     }
     camOnRef.current = next;
     camWantedRef.current = next;
     setCameraToRecover(null);
-    localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
+    if (sharing) { if (camera) camera.enabled = next; }
+    else localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = next; });
     setCamOn(next);
     // A disabled track still sends black frames at a cost, and those black
     // frames are all the far end had to go on — so stop the stream at the
@@ -4217,17 +4282,42 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
   const toggleScreen = useCallback(async () => {
     if (shareOn) { restoreCameraTrack(); return; }
+    // The picker stays open as long as the member likes, and `shareOn` is false
+    // that whole time — so a second press opened a SECOND picker. Both
+    // resolving left the first capture running: taken off the stream without
+    // being stopped, delivered to nobody, with the browser still telling the
+    // member that surface was being shared, until the tab closed. The camera
+    // button has had this guard since it grew one; this one never did.
+    if (sharePendingRef.current) return;
+    sharePendingRef.current = true;
+    setShareStarting(true);
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia(displayConstraints());
       const screenTrack = screenStream.getVideoTracks()[0];
-      if (!screenTrack || !localStreamRef.current) return;
+      // Giving up has to stop the capture. Abandoning the stream — which is
+      // what happened when the call was torn down while the picker was open —
+      // leaves a capture nobody holds a reference to and an indicator nobody
+      // can clear.
+      if (!screenTrack || !localStreamRef.current) {
+        screenStream.getTracks().forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
+        return;
+      }
       screenTrack.contentHint = contentHintFor("screen");
       // Set before the caps are applied: sharing has its own budget, and a
       // member sharing with their camera off is still sending video.
       shareOnRef.current = true;
       videoSenderRef.current.forEach((sender) => { void sender.replaceTrack(screenTrack).catch(() => { /* peer closed */ }); });
       const stream = localStreamRef.current;
-      stream.getVideoTracks().forEach((t) => { stream.removeTrack(t); });
+      stream.getVideoTracks().forEach((t) => {
+        stream.removeTrack(t);
+        // A camera track is kept alive deliberately: a background processor may
+        // still be reading it, and it goes back on the wire when the share
+        // ends. Anything else here is a capture that is finished, and leaving
+        // one running is the leak this whole guard is about.
+        if (t !== cameraTrackRef.current && t !== rawCameraTrackRef.current) {
+          try { t.stop(); } catch { /* already stopped */ }
+        }
+      });
       stream.addTrack(screenTrack);
       setLocalStream(new MediaStream(stream.getTracks()));
       setShareOn(true);
@@ -4238,6 +4328,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       // the camera back it opened the screen picker again. Restore directly.
       screenTrack.onended = () => restoreCameraTrack();
     } catch { /* user cancelled the picker */ }
+    finally {
+      sharePendingRef.current = false;
+      setShareStarting(false);
+    }
   }, [shareOn, restoreCameraTrack]);
 
   /**
@@ -4874,12 +4968,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // Assume a peer's camera is on until they say otherwise: the announcement
   // lands a moment after they appear, and a tile that starts on "Camera off" and
   // corrects itself reads worse than one that starts blank.
-  const videoOf = (id: string) => peerVideo.get(id) ?? { camOn: true, paused: false };
+  const videoOf = (id: string) => peerVideo.get(id) ?? { camOn: true, paused: false, sharing: false };
   const statusOf = (id: string) => peerStatus.get(id) ?? "connecting";
   const isHandRaised = (id: string) => id === "local" ? handRaised : raisedHands.has(id);
 
   // Speaker view helpers
-  const speakerTileId = activeSpeakerId ?? "local";
+  const speakerTileId = stageFocus ?? "local";
   const speakerIsLocal = speakerTileId === "local";
   const speakerPeer = speakerIsLocal ? null : allPeers.find((p) => p.id === speakerTileId);
   const stripItems: { id: string; displayName: string; stream: MediaStream | null; isLocal: boolean }[] = speakerIsLocal
@@ -4952,7 +5046,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
               </button>
             </div>
           )}
-          {layout === "grid" ? (
+          {stageLayout === "grid" ? (
             <div className={`flex-1 grid ${gridClass} gap-3 p-4 content-center`}>
               <VideoTile stream={localStream} label={localName} muted isLocal handRaised={handRaised} reaction={getReaction("local")} micOn={micOn} speaking={speaking.has(LOCAL_SPEAKER_ID)} camOn={camOn} videoPaused={bwMode === "audio-only"} />
               {allPeers.map((peer: Peer) => (
@@ -5043,10 +5137,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           covered by a panel. */}
       <div className="relative z-40 shrink-0">
       <ControlBar
-        micOn={micOn} camOn={camOn} shareOn={shareOn} copilotOpen={copilotOpen}
+        micOn={micOn} camOn={camOn} shareOn={shareOn} shareStarting={shareStarting} copilotOpen={copilotOpen}
         isHost={isHost} handRaised={handRaised} layout={layout} chatUnread={chatUnread}
         waitingCount={isHost ? waitingPeers.length : 0} duration={duration}
-        roomCode={roomCode} bwMode={bwMode}
+        roomCode={roomCode} bwMode={bwMode} layoutForced={layoutIsForced(layout, sharerId)}
         recordingState={recordingBanner?.state ?? "idle"}
         recordingBy={recordingBanner?.by ?? ""}
         recordingElapsed={recorder.elapsed}

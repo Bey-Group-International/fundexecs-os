@@ -10,6 +10,7 @@ import {
   smoothLevel,
   displayConstraints,
   SCREEN_SHARE_FPS,
+  SCREEN_SHARE_MAX_HEIGHT,
 } from "./devices";
 
 const d = (over: Partial<Device>): Device => ({
@@ -268,12 +269,30 @@ describe("what to ask for when sharing a screen", () => {
     expect(SCREEN_SHARE_FPS).toBeLessThan(30);
   });
 
-  // Resolution is what makes text readable. A screen share nobody can read is
-  // not a cheaper screen share, it is a failed one.
-  it("leaves the resolution alone", () => {
+  // This used to assert the opposite — that the resolution was left entirely
+  // alone — on the reasoning that resolution is what makes text readable. That
+  // reasoning is right and is exactly why the unbounded version defeated
+  // itself: a 5K panel was captured at 5120x2880 and handed to an encoder that
+  // screenSendCap forbids to scale, on a few hundred kilobits. The pixels were
+  // kept and the legibility they were kept for was spent on them.
+  it("caps the height, because no mesh budget can carry a 5K panel", () => {
+    const video = displayConstraints().video as MediaTrackConstraints;
+    expect(video.height).toEqual({ ideal: SCREEN_SHARE_MAX_HEIGHT });
+    expect(SCREEN_SHARE_MAX_HEIGHT).toBeLessThan(2160);
+  });
+
+  // Height only: the member picked a window, a tab or a whole display, and
+  // constraining both axes would letterbox whichever one they chose.
+  it("leaves the aspect ratio to the browser", () => {
     const video = displayConstraints().video as MediaTrackConstraints;
     expect(video.width).toBeUndefined();
-    expect(video.height).toBeUndefined();
+  });
+
+  // A screen already smaller than the ceiling must not be blown up to meet it.
+  it("is a ceiling rather than a target", () => {
+    const height = (displayConstraints().video as MediaTrackConstraints).height;
+    expect(height).not.toHaveProperty("min");
+    expect(height).not.toHaveProperty("exact");
   });
 
   // `ideal` rather than `max`: an OverconstrainedError here reaches the member

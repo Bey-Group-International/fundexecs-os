@@ -218,8 +218,32 @@ export function videoSendCap(peerCount: number, mode: BandwidthMode = "normal"):
 export function screenSendCap(peerCount: number, mode: BandwidthMode = "normal"): SendCap | null {
   const cap = videoSendCap(peerCount, mode);
   if (!cap) return null;
-  return { maxBitrate: cap.maxBitrate, scaleResolutionDownBy: 1, maxFramerate: cap.maxFramerate >= 24 ? 15 : 8 };
+  const kbps = cap.maxBitrate / 1000;
+  return {
+    maxBitrate: cap.maxBitrate,
+    // Resolution is held for as long as the bitrate can carry it, and given up
+    // only when it cannot — the same rule as the camera ladder above, at a
+    // different point on the curve because text survives a low frame rate and
+    // does not survive a low bitrate at full size.
+    //
+    // Pinning this at 1 unconditionally was the defect: below the floor the
+    // encoder was being told to keep every pixel of a 1440p or larger capture
+    // on a few hundred kilobits, which produces a smear in which nothing is
+    // readable — losing the legibility the full resolution was protecting. Half
+    // resolution at the same bitrate is a picture somebody can actually read.
+    scaleResolutionDownBy: kbps >= SCREEN_FULL_RES_FLOOR_KBPS ? 1 : 2,
+    maxFramerate: cap.maxFramerate >= 24 ? 15 : 8,
+  };
 }
+
+/**
+ * The bitrate below which a shared screen is better off at half resolution.
+ *
+ * Chosen from what a mesh actually provides rather than from an ideal: the
+ * budget is 2400kbps total, so this is the point at about four other people
+ * where full resolution stops being affordable.
+ */
+const SCREEN_FULL_RES_FLOOR_KBPS = 600;
 
 // ─── Reading the line ────────────────────────────────────────────────────────
 
