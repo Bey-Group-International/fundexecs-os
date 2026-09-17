@@ -2615,6 +2615,68 @@ Deployed, monitoring               →  live, observability active
              |  running with that gap; it is now the main thing standing between
              |  this area and real regression cover.
 
+
+2026-09-17  |  The feature that only worked in the recording  |  Asked to check
+             |  for defects with screen sharing, then to fix all four. The
+             |  through-line: `recording-layout.ts` had the right rules the
+             |  whole time, and the live room had none of them.
+             |  THE CAMERA BUTTON BLANKED THE SHARE. toggleScreen takes the
+             |  camera off the local stream entirely, so during a share the
+             |  stream's only video track IS the screen — and toggleCam flipped
+             |  `enabled` across that stream. One press sent black frames to the
+             |  whole room while the browser still lit its sharing indicator,
+             |  the button still read "Stop sharing", and announceVideoState
+             |  still reported the video live, because it ORs in shareOn. So
+             |  nobody even fell back to a name card; they drew a black
+             |  rectangle. The one person who could not see it was the
+             |  presenter, whose own tile IS the screen. reacquireCamera has
+             |  carried a "not while sharing" guard for weeks. The manual toggle
+             |  never learned, because nothing made the two share a rule.
+             |  A SHARE WAS NEVER SPOTLIGHTED. `sharingPeers` was tracked,
+             |  broadcast over the signalling channel, and kept in step with
+             |  every announcement — and read by nothing but the recording
+             |  composer. In the live room a shared screen was one grid cell the
+             |  size of a face, which at six people nobody can read, and the
+             |  spotlight followed the audio meter, so a presenter who paused to
+             |  take a question lost the big tile to the person asking, mid
+             |  slide. That is the fifth write-mostly store this fortnight, and
+             |  the first where the reader existed but was the wrong one: the
+             |  recording read it, the room did not. New question to add to
+             |  "who reads this?" — WHICH reader, and is it the one the user is
+             |  looking at.
+             |  A SECOND PICKER LEAKED THE FIRST CAPTURE. No in-flight guard on
+             |  toggleScreen, and `shareOn` stays false while the picker is
+             |  open, so a second press opened a second picker; the first
+             |  capture was then dropped from the stream without being stopped
+             |  and ran until the tab closed, with the browser still telling the
+             |  member that surface was shared. The camera button has had this
+             |  guard since it grew one.
+             |  A SHARE KEPT PIXELS IT COULD NOT AFFORD. The capture asked only
+             |  for a frame-rate cap, and screenSendCap pinned the resolution
+             |  divisor at 1 deliberately, because resolution is what makes text
+             |  readable. Both are right and together they defeat the thing they
+             |  protect: at four peers the budget is ~600kbps, and a 5K capture
+             |  held at full size on that is a smear. Capped at 1440p (ideal,
+             |  never max — an OverconstrainedError here is a share button that
+             |  does nothing) and the encoder now gives up resolution below the
+             |  floor, which is the rule the camera ladder twenty lines above
+             |  already stated.
+             |  Worth naming: three of the four are the same failure of pairing.
+             |  Two code paths that must agree — toggleCam and reacquireCamera,
+             |  the live stage and the recording stage, the capture size and the
+             |  encoder divisor — where one knew the rule and the other did not,
+             |  and nothing in between forced the question. Each was individually
+             |  well commented. The comments are what found them again.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6083 → 6101 green (+18 new), baseline re-measured from
+             |  origin/main in a clean worktree. Six of the eighteen were run
+             |  against the previous rules first and fail there.
+             |  NOT EXERCISED: the MeetingRoom harness still stops short of
+             |  entering the room, so toggleCam's share branch, the picker guard
+             |  and the stage wiring are verified by reading; only the pure
+             |  policy in stage.ts, devices.ts and connection.ts is under test.
+             |  Fifth pass with that gap. It is no longer the main risk in this
+             |  area — it is the only one.
 ```
 
 ---
