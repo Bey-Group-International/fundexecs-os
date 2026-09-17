@@ -21,6 +21,14 @@ import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { stageToTemperature } from "@/lib/capital-map";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey } from "@/lib/supabase/database.types";
+import {
+  EntityDedupe,
+  cleanEmail,
+  cleanLinkedIn,
+  cleanPhone,
+  cleanWebUrl,
+  matchCategory,
+} from "@/lib/source-identity";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
@@ -443,36 +451,47 @@ function normalizeCandidates(
   options: string[],
   existingNames: string[],
 ): SourceCandidate[] {
-  const seen = new Set(existingNames.map((n) => n.toLowerCase()));
+  // Fuzzy identity, not exact string match: "Acme Capital", "Acme Capital LLC"
+  // and "Acme Capital Management" are one firm, and re-proposing a target the
+  // operator already has in the pipeline is the fastest way to lose their trust.
+  const dedupe = new EntityDedupe(existingNames);
   const out: SourceCandidate[] = [];
   for (const r of raw) {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
     const name = cleanStr(o.name, 120);
-    if (!name || seen.has(name.toLowerCase())) continue;
-    seen.add(name.toLowerCase());
+    if (!name || !dedupe.add(name)) continue;
+
     let category = cleanStr(o.category, 60);
     if (!cfg.freeCategory) {
-      const match = options.find((opt) => opt.toLowerCase() === category.toLowerCase());
-      category = match ?? options[0] ?? "other";
+      // Separator- and plural-tolerant matching, so "Family Office" and
+      // "family_offices" both land on `family_office`. Only a genuine miss
+      // falls back — and it falls back to a neutral bucket rather than
+      // silently filing the target as whatever the enum happens to list first.
+      category = matchCategory(category, options) ?? pickFallbackCategory(options);
     }
+
     const rawStrategies = o.strategies;
     const strategies = Array.isArray(rawStrategies)
       ? (rawStrategies as unknown[]).filter((s): s is string => typeof s === "string").map((s) => s.trim()).filter(Boolean).slice(0, 5)
       : undefined;
+
     out.push({
       name,
-      category: category || (cfg.freeCategory ? "" : options[0] ?? "other"),
+      category: category || (cfg.freeCategory ? "" : pickFallbackCategory(options)),
       fitScore: clampScore(o.fitScore),
       rationale: cleanStr(o.rationale, 240) || "Fits the mandate.",
       firstMove: cleanStr(o.firstMove, 120) || "Research and qualify.",
-      sourceUrl: cleanUrl(o.sourceUrl),
-      website: cleanUrl(o.website),
+      sourceUrl: cleanWebUrl(o.sourceUrl),
+      website: cleanWebUrl(o.website),
       contactName: cleanStr(o.contactName, 120) || undefined,
       contactRole: cleanStr(o.contactRole, 120) || undefined,
-      contactEmail: cleanStr(o.contactEmail, 200) || undefined,
-      contactPhone: cleanStr(o.contactPhone, 40) || undefined,
-      contactLinkedIn: cleanUrl(o.contactLinkedIn) || undefined,
+      // Contact details are shape-validated here and cross-checked against the
+      // firm's domain in lib/source-verification.ts before the operator sees
+      // them. A dropped field is better than a bounced first email.
+      contactEmail: cleanEmail(o.contactEmail),
+      contactPhone: cleanPhone(o.contactPhone),
+      contactLinkedIn: cleanLinkedIn(o.contactLinkedIn),
       aumRange: cleanStr(o.aumRange, 60) || undefined,
       ticketRange: cleanStr(o.ticketRange, 60) || undefined,
       strategies: strategies?.length ? strategies : undefined,
@@ -481,6 +500,12 @@ function normalizeCandidates(
     if (out.length >= 6) break;
   }
   return out.sort((a, b) => b.fitScore - a.fitScore);
+}
+
+// When a proposed category matches nothing, prefer an explicit catch-all over
+// the first enum member — "other" is honest, "family_office" is a wrong answer.
+function pickFallbackCategory(options: string[]): string {
+  return options.find((o) => /^(other|general|misc)/i.test(o)) ?? options[0] ?? "other";
 }
 
 // After Claude generates candidates, look up real decision-maker contacts via
@@ -938,6 +963,7 @@ export const __test = {
   mandateContext,
   operatorContextBlock,
   normalizeCandidates,
+  pickFallbackCategory,
   normalizeScores,
   fallbackCandidates,
   fallbackScores,

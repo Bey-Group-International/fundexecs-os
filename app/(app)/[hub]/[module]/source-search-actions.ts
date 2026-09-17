@@ -8,10 +8,14 @@ import {
   planSourceSearch,
   generateTargets,
   sourceConfigFor,
-  type SourceCandidate,
+  sourcingEnrichmentEnabled,
   type SourcingMandate,
 } from "@/lib/source-ai";
 import { buildOperatorContext, isPersonalized } from "@/lib/source-intelligence";
+import { getCachedCandidates, setCachedCandidates } from "@/lib/source-candidate-cache";
+import { verifyCandidates, reverifyCached, type VerifiedCandidate } from "@/lib/source-verification";
+import { EntityDedupe } from "@/lib/source-identity";
+import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { AGENT_BY_KEY } from "@/lib/agents";
 import type { AgentKey, Json } from "@/lib/supabase/database.types";
 
@@ -64,12 +68,16 @@ export async function startSourceSearch(prompt: string): Promise<StartSearchResu
 
   const orgId = auth.ctx.orgId;
   const supabase = await createServerClient();
-  const mandate = await loadMandate(orgId);
-  const context = await buildOperatorContext(supabase, {
-    orgId,
-    principalId: auth.ctx.userId,
-    role: auth.ctx.role,
-  });
+  // The mandate and the operator context are independent reads — planning needs
+  // both, so fetch them together rather than paying for them back to back.
+  const [mandate, context] = await Promise.all([
+    loadMandate(orgId),
+    buildOperatorContext(supabase, {
+      orgId,
+      principalId: auth.ctx.userId,
+      role: auth.ctx.role,
+    }),
+  ]);
   const plan = await planSourceSearch(clean, mandate, context);
   if (!plan.steps.length) return { ok: false, error: "Couldn't plan that search." };
 
@@ -101,67 +109,96 @@ export async function startSourceSearch(prompt: string): Promise<StartSearchResu
   if (error || !workflow) return { ok: false, error: error?.message ?? "Could not start the search." };
   const workflowId = workflow.id;
 
-  await supabase.from("task_events").insert({
+  // One insert for every step instead of a round trip each. step_order is the
+  // stable handle back to the plan, since insert order isn't guaranteed on read.
+  const stepRows = plan.steps.map((step, i) => ({
     organization_id: orgId,
-    task_id: workflowId,
-    event_type: "task.created",
-    agent: "associate",
+    parent_task_id: workflowId,
+    title: step.title,
+    description: step.query,
     hub: "source",
-    payload: { title: plan.summary || clean, steps: plan.steps.length } as Json,
-  });
+    assigned_agent: step.agent,
+    status: "pending",
+    progress: 0,
+    graph_touched: "relationship",
+    requires_approval: false,
+    created_by: auth.ctx.userId,
+    step_order: i + 1,
+    session_id: sessionId,
+  }));
+
+  const [{ data: stepTasks }] = await Promise.all([
+    supabase.from("tasks").insert(stepRows).select("id, step_order"),
+    supabase.from("task_events").insert({
+      organization_id: orgId,
+      task_id: workflowId,
+      event_type: "task.created",
+      agent: "associate",
+      hub: "source",
+      payload: { title: plan.summary || clean, steps: plan.steps.length } as Json,
+    }),
+  ]);
+
+  const idByOrder = new Map<number, string>(
+    ((stepTasks ?? []) as { id: string; step_order: number | null }[])
+      .filter((r) => r.step_order != null)
+      .map((r) => [r.step_order as number, r.id]),
+  );
 
   const steps: SearchStep[] = [];
-  for (let i = 0; i < plan.steps.length; i++) {
-    const s = plan.steps[i];
-    const cfg = sourceConfigFor(s.module);
-    const { data: stepTask } = await supabase
-      .from("tasks")
-      .insert({
-        organization_id: orgId,
-        parent_task_id: workflowId,
-        title: s.title,
-        description: s.query,
-        hub: "source",
-        assigned_agent: s.agent,
-        status: "pending",
-        progress: 0,
-        graph_touched: "relationship",
-        requires_approval: false,
-        created_by: auth.ctx.userId,
-        step_order: i + 1,
-        session_id: sessionId,
-      })
-      .select("id")
-      .single();
-    if (stepTask?.id) {
-      steps.push({
-        id: stepTask.id,
-        module: s.module,
-        agent: s.agent,
-        agentName: AGENT_BY_KEY[s.agent]?.name ?? "Agent",
-        title: s.title,
-        query: s.query,
-        entities: cfg?.entities ?? "targets",
-      });
-    }
-  }
+  plan.steps.forEach((step, i) => {
+    const id = idByOrder.get(i + 1);
+    if (!id) return;
+    const cfg = sourceConfigFor(step.module);
+    steps.push({
+      id,
+      module: step.module,
+      agent: step.agent,
+      agentName: AGENT_BY_KEY[step.agent]?.name ?? "Agent",
+      title: step.title,
+      query: step.query,
+      entities: cfg?.entities ?? "targets",
+    });
+  });
+  if (!steps.length) return { ok: false, error: "Could not stage the search steps." };
 
   return { ok: true, sessionId, workflowId, summary: plan.summary, steps, personalized: isPersonalized(context) };
 }
 
 export interface RunStepResult {
   ok: boolean;
-  candidates?: SourceCandidate[];
+  candidates?: VerifiedCandidate[];
+  /** True when the set came from the short-TTL cache rather than a fresh run. */
+  cached?: boolean;
+  /** ISO timestamp of the cached generation, for the freshness line. */
+  cachedAt?: string;
   error?: string;
 }
 
-// Execute one agent step: stream progress, generate candidates against the
-// mandate + the step's query, and close the task. Returns the candidates.
+/** The category enum a module's insert path will accept, for verification. */
+function allowedCategories(module: string): string[] {
+  const cfg = sourceConfigFor(module);
+  if (!cfg || cfg.freeCategory) return [];
+  const add = ADD_ROW_CONFIGS[cfg.key];
+  return add?.fields.find((f) => f.name === cfg.categoryField)?.options ?? [];
+}
+
+// Execute one agent step: generate candidates against the mandate + the step's
+// query, verify them, and close the task. Returns the verified candidates.
+//
+// Steps are independent, so the client runs several at once; everything here is
+// written to be safe under that concurrency and to spend as little wall-clock as
+// possible — the three context reads happen together, and the task bookkeeping
+// runs alongside the generation rather than in front of it.
 export async function runSourceStep(args: {
   workflowId: string;
   stepId: string;
   module: string;
   query: string;
+  /** Names already surfaced by earlier steps — keeps one plan from repeating itself. */
+  exclude?: string[];
+  /** Skip the candidate cache and force a fresh generation. */
+  refresh?: boolean;
 }): Promise<RunStepResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
@@ -171,46 +208,99 @@ export async function runSourceStep(args: {
   const orgId = auth.ctx.orgId;
   const supabase = await createServerClient();
 
-  await supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", args.stepId);
-  await supabase.from("task_events").insert({
-    organization_id: orgId,
-    task_id: args.workflowId,
-    event_type: "task.progress",
-    agent: cfg.agent,
-    hub: "source",
-    payload: { step_id: args.stepId, message: `Sourcing ${cfg.entities}…` } as Json,
-  });
+  // Progress bookkeeping is for the timeline, not for correctness — start it
+  // and get on with the work instead of waiting two round trips to begin.
+  const announced = Promise.all([
+    supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", args.stepId),
+    supabase.from("task_events").insert({
+      organization_id: orgId,
+      task_id: args.workflowId,
+      event_type: "task.progress",
+      agent: cfg.agent,
+      hub: "source",
+      payload: { step_id: args.stepId, message: `Sourcing ${cfg.entities}…` } as Json,
+    }),
+  ]).catch(() => undefined);
 
-  const mandate = await loadMandate(orgId);
-  const { data } = await supabase
-    .from(cfg.table as "investors")
-    .select("name")
-    .eq("organization_id", orgId)
-    .is("archived_at", null)
-    .limit(60);
-  const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
-  const context = await buildOperatorContext(supabase, {
-    orgId,
-    principalId: auth.ctx.userId,
-    role: auth.ctx.role,
+  // Three independent reads: the mandate, what's already in this module, and the
+  // operator context. Nothing here depends on anything else here.
+  const [mandate, existingRows, context] = await Promise.all([
+    loadMandate(orgId),
+    supabase
+      .from(cfg.table as "investors")
+      .select("name")
+      .eq("organization_id", orgId)
+      .is("archived_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(120),
+    buildOperatorContext(supabase, {
+      orgId,
+      principalId: auth.ctx.userId,
+      role: auth.ctx.role,
+      module: args.module,
+    }),
+  ]);
+
+  const existing = ((existingRows.data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
+  // Earlier steps' results count as "already surfaced" so a multi-module plan
+  // can't hand the operator the same firm twice under two headings.
+  const exclusions = [...existing, ...(args.exclude ?? []).filter(Boolean)];
+
+  const cacheKey = {
     module: args.module,
-  });
-  const candidates = await generateTargets(args.module, mandate, existing, args.query, context);
+    mandate,
+    query: args.query,
+    existing: exclusions,
+    enriched: sourcingEnrichmentEnabled(),
+  };
 
-  await supabase
-    .from("tasks")
-    .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })
-    .eq("id", args.stepId);
-  await supabase.from("task_events").insert({
-    organization_id: orgId,
-    task_id: args.workflowId,
-    event_type: "task.completed",
-    agent: cfg.agent,
-    hub: "source",
-    payload: { step_id: args.stepId, count: candidates.length } as Json,
-  });
+  let candidates: VerifiedCandidate[];
+  let cached = false;
+  let cachedAt: string | undefined;
 
-  return { ok: true, candidates };
+  const hit = await getCachedCandidates(orgId, cacheKey, args.refresh);
+  if (hit) {
+    // Cached sets were verified before storage. Re-run the free structural
+    // checks so a stale entry can't outlive a validation rule change, while
+    // keeping the provider corroboration the cache exists to avoid repeating.
+    candidates = await reverifyCached(hit.candidates, allowedCategories(args.module));
+    cached = true;
+    cachedAt = hit.cachedAt;
+  } else {
+    const generated = await generateTargets(args.module, mandate, exclusions, args.query, context);
+    // Nothing reaches the operator unverified: shape and cross-field checks
+    // always, provider corroboration when Apollo is configured.
+    candidates = await verifyCandidates(generated, allowedCategories(args.module));
+    await setCachedCandidates(orgId, cacheKey, candidates);
+  }
+
+  // Belt and braces: the cache key can't see another step's in-flight results,
+  // so filter the final set against the exclusions one more time.
+  const dedupe = new EntityDedupe(exclusions);
+  candidates = candidates.filter((c) => dedupe.add(c.name));
+
+  await announced;
+  await Promise.all([
+    supabase
+      .from("tasks")
+      .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })
+      .eq("id", args.stepId),
+    supabase.from("task_events").insert({
+      organization_id: orgId,
+      task_id: args.workflowId,
+      event_type: "task.completed",
+      agent: cfg.agent,
+      hub: "source",
+      payload: {
+        step_id: args.stepId,
+        count: candidates.length,
+        cached,
+        verified: candidates.filter((c) => c.verification.status === "verified").length,
+      } as Json,
+    }),
+  ]);
+
+  return { ok: true, candidates, cached, cachedAt };
 }
 
 // Mark the workflow complete once the client has run every step.

@@ -7,8 +7,9 @@ import {
   scorePipeline,
   queueSourceAction,
 } from "@/app/(app)/[hub]/[module]/source-ai-actions";
-import type { SourceCandidate, PipelineScore } from "@/lib/source-ai";
+import type { PipelineScore } from "@/lib/source-ai";
 import { buildSourceSelectionPayload } from "@/lib/source-selection";
+import type { VerificationStatus, VerifiedCandidate } from "@/lib/source-verification";
 import type { ActionKind } from "@/lib/gates";
 
 function humanize(s: string): string {
@@ -22,6 +23,42 @@ function scoreTone(score: number): string {
 }
 
 type Mode = "idle" | "generate" | "score";
+
+// Every candidate is verified internally before it reaches this list; the badge
+// tells the operator how far that verification got.
+const VERIFICATION_UI: Record<VerificationStatus, { label: string; title: string; className: string }> = {
+  verified: {
+    label: "verified",
+    title: "Firm and contact confirmed against provider records.",
+    className: "border-status-success/40 bg-status-success/10 text-status-success",
+  },
+  corroborated: {
+    label: "cited",
+    title: "Carries a supporting source link, but no provider record confirmed it.",
+    className: "border-status-info/40 bg-status-info/10 text-status-info",
+  },
+  unverified: {
+    label: "lead",
+    title: "Generated from model knowledge — confirm before acting on it.",
+    className: "border-line bg-surface-2 text-fg-muted",
+  },
+  flagged: {
+    label: "check",
+    title: "Failed an internal consistency check — research before outreach.",
+    className: "border-status-danger/40 bg-status-danger/10 text-status-danger",
+  },
+};
+
+// The status in plain language, plus whichever checks failed, so a warning
+// badge is never unexplained.
+function verificationTitle(c: VerifiedCandidate): string {
+  const failed = c.verification.checks.filter((k) => !k.ok && k.detail).map((k) => k.detail);
+  return [
+    VERIFICATION_UI[c.verification.status].title,
+    `Confidence ${Math.round(c.verification.confidence * 100)}%.`,
+    ...failed,
+  ].join(" ");
+}
 
 // In-module AI Sourcing surface: generate thesis-fit targets (review-and-accept
 // into the pipeline) and score the targets already there with a gated next-best
@@ -45,26 +82,28 @@ export function AiSourcingPanel({
   const [mode, setMode] = useState<Mode>("idle");
   const [ask, setAsk] = useState("");
   const [pending, start] = useTransition();
-  const [candidates, setCandidates] = useState<SourceCandidate[] | null>(null);
+  const [candidates, setCandidates] = useState<VerifiedCandidate[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [scores, setScores] = useState<PipelineScore[] | null>(null);
   const [queued, setQueued] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState<string>("");
   const [personalized, setPersonalized] = useState(false);
+  const [cached, setCached] = useState(false);
 
-  const runGenerate = () => {
+  const runGenerate = (options: { refresh?: boolean } = {}) => {
     setMode("generate");
     setMessage(null);
     setScores(null);
     const query = ask.trim();
     setLastQuery(query);
     start(async () => {
-      const res = await sourceTargets(hub, module, query || undefined);
+      const res = await sourceTargets(hub, module, query || undefined, options);
       if (!res.ok) return setMessage(res.error ?? "Could not source targets.");
       setCandidates(res.candidates ?? []);
       setSelected(new Set((res.candidates ?? []).map((_, i) => i)));
       setPersonalized(Boolean(res.personalized));
+      setCached(Boolean(res.cached));
     });
   };
 
@@ -143,7 +182,7 @@ export function AiSourcingPanel({
         <div className="ml-auto flex gap-1.5">
           <button
             type="button"
-            onClick={runGenerate}
+            onClick={() => runGenerate()}
             disabled={pending}
             className="rounded-md border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 text-xs font-medium text-gold-200 transition hover:bg-gold-500/20 disabled:opacity-50"
           >
@@ -192,6 +231,24 @@ export function AiSourcingPanel({
       {/* Generate: review-and-accept */}
       {mode === "generate" && candidates && candidates.length > 0 ? (
         <div className="mt-3 space-y-2">
+          {cached ? (
+            <div className="flex items-center justify-between gap-2">
+              <span
+                title="Returned from a recent identical request. Refresh for a new generation."
+                className="font-mono text-[11px] uppercase tracking-wider text-fg-muted"
+              >
+                cached
+              </span>
+              <button
+                type="button"
+                onClick={() => runGenerate({ refresh: true })}
+                disabled={pending}
+                className="font-mono text-[11px] uppercase tracking-wider text-fg-muted transition hover:text-gold-300 disabled:opacity-50"
+              >
+                ↻ refresh
+              </button>
+            </div>
+          ) : null}
           {candidates.map((c, i) => (
             <label
               key={`${c.name}-${i}`}
@@ -210,8 +267,16 @@ export function AiSourcingPanel({
                     {c.fitScore}% fit
                   </span>
                 </div>
-                <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-                  {humanize(c.category)}
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+                    {humanize(c.category)}
+                  </span>
+                  <span
+                    title={verificationTitle(c)}
+                    className={`rounded-full border px-1.5 py-px font-mono text-[10px] uppercase tracking-wider ${VERIFICATION_UI[c.verification.status].className}`}
+                  >
+                    {VERIFICATION_UI[c.verification.status].label}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
                 <p className="mt-1 text-[11px] text-gold-300">→ {c.firstMove}</p>
