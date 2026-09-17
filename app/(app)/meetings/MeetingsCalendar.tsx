@@ -1180,7 +1180,12 @@ function MonthView({
                     >
                       {day.getDate()}
                     </span>
-                    {externalToday.length ? (
+                    {/* Once the day is open, the panel below lists every one of
+                        these in full. The cell stops being a summary and becomes
+                        the header for that list: the date, and nothing it would
+                        only say twice. The count stays in the label above, so a
+                        screen reader still hears what the day holds. */}
+                    {!isOpen && externalToday.length ? (
                       <div className="flex flex-wrap items-center gap-1" title={externalToday.map((e) => e.title).join("\n")}>
                         {externalToday.slice(0, 6).map((e) => {
                           const layer = layersById.get(e.calendarId);
@@ -1198,25 +1203,27 @@ function MonthView({
                       </div>
                     ) : null}
 
-                    <div className="flex flex-col gap-0.5">
-                      {dayBlocks.map((b) => (
-                        <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `block:${b.id}`); }} />
-                      ))}
-                      {shown.map((m) => (
-                        <MonthChip key={m.id} m={m} live={(presence[m.id]?.count ?? 0) > 0} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `meeting:${m.id}`); }} />
-                      ))}
-                      {extra > 0 ? (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => { e.stopPropagation(); onOpenDay(day); }}
-                          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onOpenDay(day); } }}
-                          className="cursor-pointer px-1 text-[11px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
-                        >
-                          +{extra} more
-                        </span>
-                      ) : null}
-                    </div>
+                    {isOpen ? null : (
+                      <div className="flex flex-col gap-0.5">
+                        {dayBlocks.map((b) => (
+                          <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `block:${b.id}`); }} />
+                        ))}
+                        {shown.map((m) => (
+                          <MonthChip key={m.id} m={m} live={(presence[m.id]?.count ?? 0) > 0} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `meeting:${m.id}`); }} />
+                        ))}
+                        {extra > 0 ? (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); onOpenDay(day); }}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onOpenDay(day); } }}
+                            className="cursor-pointer px-1 text-[11px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+                          >
+                            +{extra} more
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
                   </button>
                 );
               })}
