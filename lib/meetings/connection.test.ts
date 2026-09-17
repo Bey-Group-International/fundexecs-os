@@ -9,7 +9,14 @@ import {
   contentHintFor,
   isPolite,
   linkNotice,
+  ICE_BURST_ATTEMPTS,
+  ICE_GIVE_UP_MS,
+  ICE_RETRY_CADENCE_MS,
+  msUntilNextAttempt,
   nextRecovery,
+  summarizeInbound,
+  recoveryExhausted,
+  withImmediateRetry,
   offerCollision,
   peerLinkStatus,
   peerStatusLabel,
@@ -105,6 +112,88 @@ describe("screenSendCap", () => {
 
   it("is absent in audio-only, like the camera", () => {
     expect(screenSendCap(3, "audio-only")).toBeNull();
+  });
+});
+
+describe("summarizeInbound", () => {
+  const rate = (id: string, kbps: number) => ({ id, kbps });
+
+  it("has nothing to say when there is nothing to measure", () => {
+    expect(summarizeInbound({
+      rates: [], expectingVideoFrom: new Set(), lostPackets: 0, deliveredPackets: 0,
+    })).toBeNull();
+  });
+
+  // The case the old room-average could not see, under a comment claiming it
+  // was the case it existed for.
+  it("reports the worst stream, not the average of the room", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 40), rate("b", 900), rate("c", 900)],
+      expectingVideoFrom: new Set(["a", "b", "c"]),
+      lostPackets: 0,
+      deliveredPackets: 1_000,
+    })!;
+
+    expect(sample.kbps).toBe(40);
+    expect(sample.videoExpected).toBe(true);
+  });
+
+  // Seven people, one camera on, everybody else silent — and DTX means silence
+  // costs almost nothing. The mean was about 37kbps and read as a dying link.
+  it("does not let silent listeners drag a healthy stream down", () => {
+    const sample = summarizeInbound({
+      rates: [rate("talker", 400), ...["a", "b", "c", "d", "e"].map((id) => rate(id, 4))],
+      expectingVideoFrom: new Set(["talker"]),
+      lostPackets: 0,
+      deliveredPackets: 1_000,
+    })!;
+
+    expect(sample.kbps).toBe(400);
+  });
+
+  // Backgrounding the tab drops every tier to `none`, and the peers stop
+  // sending exactly as instructed. Their cameras are still on, so the old rule
+  // expected video it had itself cancelled and condemned the line for it.
+  it("expects no video from a peer it told to stop sending", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 12), rate("b", 9)],
+      expectingVideoFrom: new Set(),
+      lostPackets: 0,
+      deliveredPackets: 500,
+    })!;
+
+    expect(sample.videoExpected).toBe(false);
+    // The mean, which still says packets are flowing — that is what tells a
+    // link in audio-only that it has recovered.
+    expect(sample.kbps).toBe(10.5);
+  });
+
+  it("ignores a peer we are not expecting video from when picking the worst", () => {
+    const sample = summarizeInbound({
+      rates: [rate("watching", 600), rate("camera-off", 3)],
+      expectingVideoFrom: new Set(["watching"]),
+      lostPackets: 0,
+      deliveredPackets: 1_000,
+    })!;
+
+    expect(sample.kbps).toBe(600);
+  });
+
+  it("reads loss as a percentage of what was delivered", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 500)], expectingVideoFrom: new Set(["a"]),
+      lostPackets: 50, deliveredPackets: 1_000,
+    })!;
+    expect(sample.lossPct).toBe(5);
+  });
+
+  it("calls no loss no loss rather than dividing by nothing", () => {
+    const sample = summarizeInbound({
+      rates: [rate("a", 0)], expectingVideoFrom: new Set(["a"]),
+      lostPackets: 0, deliveredPackets: 0,
+    })!;
+    expect(sample.lossPct).toBe(0);
+    expect(sample.kbps).toBe(0);
   });
 });
 
@@ -246,6 +335,84 @@ describe("nextRecovery", () => {
     let state = INITIAL_RECOVERY;
     for (let i = 0; i < 5; i++) state = recordAttempt(state, i * 60_000);
     expect(nextRecovery(state, 10_000_000)).toBe("give_up");
+  });
+
+  // The defect this replaced: the burst spans about twenty-nine seconds, and
+  // running out of it meant never trying again. A laptop asleep for a minute,
+  // or a train tunnel, left both ends showing "Connection lost" for the rest of
+  // the meeting with no way back but a page reload.
+  it("keeps trying after the opening burst is spent", () => {
+    let state = INITIAL_RECOVERY;
+    let at = 1_000;
+    for (let i = 0; i < ICE_BURST_ATTEMPTS; i++) { state = recordAttempt(state, at); at += 30_000; }
+
+    expect(recoveryExhausted(state)).toBe(true);
+    expect(nextRecovery(state, at)).toBe("restart");
+  });
+
+  it("slows to a cadence rather than backing off forever", () => {
+    let state = INITIAL_RECOVERY;
+    for (let i = 0; i < 20; i++) state = recordAttempt(state, 1_000 + i * ICE_RETRY_CADENCE_MS);
+    const last = 1_000 + 19 * ICE_RETRY_CADENCE_MS;
+
+    expect(msUntilNextAttempt(state, last)).toBe(ICE_RETRY_CADENCE_MS);
+    expect(nextRecovery(state, last + ICE_RETRY_CADENCE_MS - 1)).toBe("wait");
+    expect(nextRecovery(state, last + ICE_RETRY_CADENCE_MS)).toBe("restart");
+  });
+
+  // Measured from when the trouble started, not counted in attempts: what is
+  // being judged is how long this peer has been unreachable.
+  it("stops once the peer has been unreachable longer than a meeting survives", () => {
+    let state = recordAttempt(INITIAL_RECOVERY, 1_000);
+    state = recordAttempt(state, 1_000 + ICE_GIVE_UP_MS - 1);
+
+    expect(nextRecovery(state, 1_000 + ICE_GIVE_UP_MS - 1)).toBe("wait");
+    expect(nextRecovery(state, 1_000 + ICE_GIVE_UP_MS)).toBe("give_up");
+  });
+
+  it("starts the horizon even when the clock reads zero", () => {
+    const state = recordAttempt(INITIAL_RECOVERY, 0);
+    expect(nextRecovery(state, ICE_GIVE_UP_MS)).toBe("give_up");
+  });
+
+  it("has nothing to wait for before the first attempt", () => {
+    expect(msUntilNextAttempt(INITIAL_RECOVERY, 5_000)).toBe(0);
+  });
+});
+
+describe("recoveryExhausted", () => {
+  // What the tile SAYS, which is not the same question as whether we are still
+  // trying. Conflating the two is how an honest badge became a permanent one.
+  it("says nothing until the burst a member waits through is spent", () => {
+    let state = INITIAL_RECOVERY;
+    for (let i = 0; i < ICE_BURST_ATTEMPTS - 1; i++) {
+      state = recordAttempt(state, i * 10_000);
+      expect(recoveryExhausted(state)).toBe(false);
+    }
+    expect(recoveryExhausted(recordAttempt(state, 100_000))).toBe(true);
+  });
+});
+
+describe("withImmediateRetry", () => {
+  // The backoff is arithmetic about a network nobody can see; `online` is the
+  // browser seeing it. Waiting out the rest of a cadence then buys nothing.
+  it("makes the next attempt due at once", () => {
+    let state = INITIAL_RECOVERY;
+    for (let i = 0; i < 8; i++) state = recordAttempt(state, 1_000 + i * ICE_RETRY_CADENCE_MS);
+    const now = 1_000 + 7 * ICE_RETRY_CADENCE_MS + 4_000;
+    expect(nextRecovery(state, now)).toBe("wait");
+
+    expect(nextRecovery(withImmediateRetry(state), now)).toBe("restart");
+  });
+
+  // Otherwise flapping Wi-Fi would be a way to retry a peer that left forever.
+  it("does not extend the horizon or forgive the attempts", () => {
+    const state = recordAttempt(INITIAL_RECOVERY, 1_000);
+    const eager = withImmediateRetry(state);
+
+    expect(eager.attempts).toBe(state.attempts);
+    expect(eager.firstAttemptAt).toBe(state.firstAttemptAt);
+    expect(nextRecovery(eager, 1_000 + ICE_GIVE_UP_MS)).toBe("give_up");
   });
 });
 

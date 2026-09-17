@@ -67,6 +67,7 @@ import {
   contentHintFor,
   isPolite,
   linkNotice,
+  msUntilNextAttempt,
   nextRecovery,
   offerCollision,
   peerConfig,
@@ -74,8 +75,11 @@ import {
   peerLinkStatus,
   peerStatusLabel,
   recordAttempt,
+  recoveryExhausted,
+  withImmediateRetry,
   screenSendCap,
   stepLink,
+  summarizeInbound,
   videoSendCap,
   withOpusResilience,
 } from "@/lib/meetings/connection";
@@ -83,6 +87,7 @@ import {
   type BandwidthMode,
   type LinkState,
   type PeerLinkStatus,
+  type PeerInboundRate,
   type RecoveryState,
   type SendCap,
 } from "@/lib/meetings/connection";
@@ -99,6 +104,7 @@ import {
   FULL_CAPTURE,
   THUMBNAIL_CAPTURE,
   THUMBNAIL_SCALE,
+  capTierForMode,
   tierForView,
   withDemotionDelay,
   DEMOTION_LINGER_MS,
@@ -1385,7 +1391,10 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   // held back from the screen for the grace period before it is called one.
   const connChangedAtRef = useRef<Map<string, number>>(new Map());
   const recoveryTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const gaveUpRef = useRef<Set<string>>(new Set());
+  // Peers whose opening burst of ICE restarts is spent, so their tile says
+  // "Connection lost". Retries continue underneath it on a slow cadence — this
+  // is what the room SAYS, not whether it is still trying.
+  const peerLostRef = useRef<Set<string>>(new Set());
   const [peerStatus, setPeerStatus] = useState<Map<string, PeerLinkStatus>>(new Map());
   // Remote tracks arrive one at a time on their own transceivers. Keeping the
   // stream ourselves means the tile is handed one object for the life of the
@@ -1741,7 +1750,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     negotiationArmedRef.current.delete(peerId);
     recoveryRef.current.delete(peerId);
     remoteStreamsRef.current.delete(peerId);
-    gaveUpRef.current.delete(peerId);
+    peerLostRef.current.delete(peerId);
     // A peer who left is not still presenting. Without this a recording keeps
     // the whole frame given to a screen share whose owner has gone.
     sharingPeersRef.current.delete(peerId);
@@ -1913,15 +1922,20 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
         cameraOn: said ? said.camOn && !said.paused : true,
       });
       if (desired === "high") lastHighAtRef.current.set(id, now);
-      const tier = withDemotionDelay({
+      const held = withDemotionDelay({
         desired,
         lastHighAt: lastHighAtRef.current.get(id) ?? null,
         now,
       });
       // A tier that is only `high` because of the linger has to be revisited,
       // or the demotion never lands: nothing else in the room changes when a
-      // timer expires.
-      if (tier !== desired) holding = true;
+      // timer expires. Decided before the bandwidth cap below, which is not a
+      // held promotion and does not expire.
+      if (held !== desired) holding = true;
+      // What a struggling line may ask for. Everything above decides what we
+      // WANT to draw; this is the first point at which what we can afford to
+      // receive has ever been consulted — see capTierForMode.
+      const tier = capTierForMode(held, bwModeRef.current);
       if (sentRequestRef.current.get(id) === tier) continue;
       sentRequestRef.current.set(id, tier);
       sendSignalRef.current({ type: "video_request", from: myIdRef.current, to: id, tier });
@@ -1962,7 +1976,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
           // there and says the same thing about whether media can flow.
           pc.connectionState ?? connectionStateFromIce(pc.iceConnectionState),
           Date.now() - (connChangedAtRef.current.get(peerId) ?? 0),
-          gaveUpRef.current.has(peerId),
+          peerLostRef.current.has(peerId),
         )
       : "lost";
     setPeerStatus((prev) => {
@@ -1992,26 +2006,43 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     const now = Date.now();
     const action = nextRecovery(state, now);
 
-    if (action === "give_up") {
-      gaveUpRef.current.add(peerId);
-      refreshPeerStatusRef.current(peerId);
-      return;
-    }
-    if (action === "wait") {
+    // Come back at the moment this peer is actually due, rather than polling.
+    const sleepThenRetry = (delay: number) => {
       const existing = recoveryTimerRef.current.get(peerId);
       if (existing) clearTimeout(existing);
       recoveryTimerRef.current.set(peerId, setTimeout(() => {
         recoveryTimerRef.current.delete(peerId);
         recoverPeerRef.current(peerId);
-      }, 1500));
+      }, delay));
+    };
+
+    if (action === "give_up") {
+      peerLostRef.current.add(peerId);
+      refreshPeerStatusRef.current(peerId);
       return;
     }
+    if (action === "wait") { sleepThenRetry(msUntilNextAttempt(state, now)); return; }
 
-    recoveryRef.current.set(peerId, recordAttempt(state, now));
+    const attempted = recordAttempt(state, now);
+    recoveryRef.current.set(peerId, attempted);
+    // Past the opening burst the member is told, because by now they have been
+    // staring at a frozen tile for half a minute and deserve an answer. Being
+    // told is all it is: the retries below go on regardless, which is the whole
+    // difference between this and the version that stopped here for good.
+    if (recoveryExhausted(attempted) && !peerLostRef.current.has(peerId)) {
+      peerLostRef.current.add(peerId);
+      refreshPeerStatusRef.current(peerId);
+    }
     try { pc.restartIce(); } catch { /* not supported — the renegotiation below still helps */ }
     // Both ends can reach here at once; the collision handling in the offer
     // path is what keeps that from deadlocking.
     void renegotiateRef.current(peerId, { iceRestart: true });
+    // Schedule the next attempt here rather than waiting to be called back by a
+    // connection state change. A connection whose offers are going nowhere —
+    // the signalling socket is down, the far end is asleep — may not emit
+    // another state change at all, and that silence is exactly the case the
+    // retries exist for.
+    sleepThenRetry(msUntilNextAttempt(attempted, Date.now()));
   }, []);
   const recoverPeerRef = useRef(recoverPeer);
   useEffect(() => { recoverPeerRef.current = recoverPeer; }, [recoverPeer]);
@@ -2213,7 +2244,7 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
       if (pc.connectionState === "connected") {
         // A connection that came back has spent none of its retries.
         recoveryRef.current.delete(peerId);
-        gaveUpRef.current.delete(peerId);
+        peerLostRef.current.delete(peerId);
         const timer = recoveryTimerRef.current.get(peerId);
         if (timer) { clearTimeout(timer); recoveryTimerRef.current.delete(peerId); }
         // Encoder parameters do not survive a renegotiation on every engine.
@@ -2339,6 +2370,11 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
 
     if (msg.type === "offer" && msg.to === myId) {
       let pc = peersRef.current.get(msg.from);
+      // An offer arriving on a connection that has already failed is the far
+      // end rebuilding their side, and applying it to the corpse of ours is how
+      // a recovered network still produced a black tile. Rebuild to meet them —
+      // createPeerConnection closes and forgets the old one on the way past.
+      if (pc && (pc.connectionState === "failed" || pc.signalingState === "closed")) pc = undefined;
       if (!pc) pc = createPeerConnection(msg.from);
       // Record the offerer's name (e.g. the host) so guests don't see a UUID.
       if (msg.displayName) setPeerName(msg.from, msg.displayName);
@@ -2797,11 +2833,27 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     channelRef.current = channel;
     channel.on("broadcast", { event: "signal" }, ({ payload }: { payload: SignalMsg }) => { void handleSignal(payload); })
       .subscribe((status) => {
-        // Only announce on a real subscription, and only once — the callback also
-        // fires for CHANNEL_ERROR / TIMED_OUT / CLOSED and again on reconnect.
-        if (status !== "SUBSCRIBED" || announcedRef.current) return;
+        // The callback also fires for CHANNEL_ERROR / TIMED_OUT / CLOSED, and
+        // again on reconnect. Only a real subscription is worth acting on.
+        if (status !== "SUBSCRIBED") return;
+        const first = !announcedRef.current;
         announcedRef.current = true;
         void icePromise.then(() => {
+          // Announcing once was the last door closed on a call that lost its
+          // network. A `join` is the only message that rebuilds a peer
+          // connection from nothing, so after a socket drop — which is also a
+          // socket that carried none of the offers our ICE restarts were
+          // producing — the peers still trying to recover were restarting into
+          // a void, and nothing would ever say hello again.
+          //
+          // Not on every resubscribe, though: a socket that blipped while the
+          // media kept flowing needs nothing, and a `join` tears down every
+          // peer connection in the room and rebuilds it. So it is sent only
+          // when there is something to rebuild.
+          const stalled = [...peersRef.current.values()].some(
+            (pc) => pc.connectionState !== "connected" && pc.connectionState !== "closed",
+          );
+          if (!first && !stalled) return;
           sendSignal({ type: "join", from: myIdRef.current, displayName: name });
           sendSignal({ type: "mic", from: myIdRef.current, micOn: micOnRef.current, displayName: name });
           announceVideoStateRef.current();
@@ -2916,12 +2968,12 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
   const enterRoomRef = useRef(enterRoom);
   useEffect(() => { enterRoomRef.current = enterRoom; }, [enterRoom]);
 
-  // What we ask for follows what we draw: the layout, who is in the spotlight,
-  // who is in the room, and whether they say their camera is on.
+  // What we ask for follows what we draw — and, since the link state is built
+  // entirely from inbound measurements, what we can afford to receive.
   useEffect(() => {
     if (!ready) return;
     refreshVideoRequestsRef.current();
-  }, [ready, layout, activeSpeakerId, peers, peerVideo]);
+  }, [ready, layout, activeSpeakerId, peers, peerVideo, bwMode]);
 
   // A backgrounded tab draws nothing, so it should receive nothing. This is the
   // only lever that removes encoder cost at the far end rather than reducing
@@ -3468,6 +3520,32 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     }
   }, [peers]);
 
+  /**
+   * The machine is back on a network. Stop waiting out a guess.
+   *
+   * The retry backoff is arithmetic about a network nobody can observe, and
+   * `online` is the one moment the browser observes it for us. Without this a
+   * member who reconnects their Wi-Fi four seconds into a twenty-second cadence
+   * sits out the remaining sixteen for no reason — and every peer does, so the
+   * room comes back a good deal slower than the network did.
+   *
+   * Only the connections that are actually in trouble: a healthy peer needs no
+   * ICE restart, and offering one would cost a renegotiation to fix nothing.
+   */
+  useEffect(() => {
+    if (!sessionLive) return;
+    const onOnline = () => {
+      peersRef.current.forEach((pc, peerId) => {
+        if (pc.connectionState === "connected" || pc.connectionState === "closed") return;
+        const state = recoveryRef.current.get(peerId);
+        if (state) recoveryRef.current.set(peerId, withImmediateRetry(state));
+        recoverPeerRef.current(peerId);
+      });
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [sessionLive]);
+
   // ── Bandwidth adaptation ──────────────────────────────────────────────────
 
   useEffect(() => {
@@ -3477,59 +3555,87 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // Per stat id, so a stream that comes and goes doesn't read as a cliff.
     let prev: Record<string, { bytes: number; received: number; lost: number }> = {};
     let prevTs = Date.now();
+    // What we were asking each peer for when the last sample was taken. A tier
+    // that changed since then makes this round's rate a measurement of the
+    // change rather than of the line.
+    let prevTiers = new Map<string, VideoTier>();
+    // getStats on a roomful of connections is not instant, and two rounds
+    // running at once would each read the other's half-written `prev`.
+    let inFlight = false;
 
     const check = async () => {
-      const pcs = [...peersRef.current.values()];
-      if (!pcs.length) return;
+      if (inFlight) return;
+      const entries = [...peersRef.current.entries()];
+      if (!entries.length) return;
 
       const now = Date.now();
       const elapsed = (now - prevTs) / 1000;
-      prevTs = now;
       if (elapsed <= 0) return;
+      inFlight = true;
+      prevTs = now;
 
-      let bits = 0;
       let received = 0;
       let lost = 0;
       const seen: typeof prev = {};
+      const rates: PeerInboundRate[] = [];
+      const tiers = new Map<string, VideoTier>();
+      const expectingVideoFrom = new Set<string>();
 
-      for (const pc of pcs) {
-        try {
-          const stats = await pc.getStats();
-          stats.forEach((st) => {
-            if (st.type !== "inbound-rtp") return;
-            const s2 = st as RTCInboundRtpStreamStats;
-            const id = s2.id;
-            const bytes = s2.bytesReceived ?? 0;
-            const packets = s2.packetsReceived ?? 0;
-            // packetsLost is signed and can go backwards after a correction.
-            const packetsLost = Math.max(0, s2.packetsLost ?? 0);
-            seen[id] = { bytes, received: packets, lost: packetsLost };
-            const was = prev[id];
-            if (!was) return;
-            bits += Math.max(0, bytes - was.bytes) * 8;
-            received += Math.max(0, packets - was.received);
-            lost += Math.max(0, packetsLost - was.lost);
-          });
-        } catch { /* a connection closing mid-poll */ }
+      try {
+        for (const [peerId, pc] of entries) {
+          const asked = sentRequestRef.current.get(peerId) ?? "high";
+          tiers.set(peerId, asked);
+
+          // Expecting video means we asked for it AND they say they are
+          // sending it. Both halves are load-bearing: without the first, a
+          // backgrounded tab expects the video it just cancelled; without the
+          // second, a room with every camera off reads as a starved one.
+          // Unknown counts as sending — the announcement lands a moment after
+          // a peer appears, and assuming video is the cautious half.
+          const said = peerVideoRef.current.get(peerId);
+          if (asked !== "none" && (said ? said.camOn && !said.paused : true)) {
+            expectingVideoFrom.add(peerId);
+          }
+
+          let peerBits = 0;
+          // Only a peer we have two samples of has a rate at all. A newcomer
+          // reads as zero otherwise, which is indistinguishable from starved.
+          let comparable = false;
+          try {
+            const stats = await pc.getStats();
+            stats.forEach((st) => {
+              if (st.type !== "inbound-rtp") return;
+              const s2 = st as RTCInboundRtpStreamStats;
+              const id = s2.id;
+              const bytes = s2.bytesReceived ?? 0;
+              const packets = s2.packetsReceived ?? 0;
+              // packetsLost is signed and can go backwards after a correction.
+              const packetsLost = Math.max(0, s2.packetsLost ?? 0);
+              seen[id] = { bytes, received: packets, lost: packetsLost };
+              const was = prev[id];
+              if (!was) return;
+              comparable = true;
+              peerBits += Math.max(0, bytes - was.bytes) * 8;
+              received += Math.max(0, packets - was.received);
+              lost += Math.max(0, packetsLost - was.lost);
+            });
+          } catch { continue; /* a connection closing mid-poll */ }
+
+          // A peer whose tier moved during the window is mid-transition: its
+          // encoder is starting up or shutting down, and neither rate is a
+          // statement about the network.
+          if (comparable && prevTiers.get(peerId) === asked) {
+            rates.push({ id: peerId, kbps: peerBits / 1000 / elapsed });
+          }
+        }
+      } finally {
+        inFlight = false;
       }
-      prev = seen;
 
-      const delivered = received + lost;
-      // Per peer, not in total: an aggregate hides one starved stream behind
-      // three healthy ones, which is exactly the case worth catching in a room
-      // big enough to be causing it.
-      const sample = {
-        kbps: bits / 1000 / elapsed / pcs.length,
-        lossPct: delivered > 0 ? (lost / delivered) * 100 : 0,
-        // Whether a low rate means anything. A room with every camera off
-        // delivers about as little as a starved one, and only the participants
-        // can say which it is. Unknown counts as yes: the announcement lands a
-        // moment after a peer appears, and assuming video is the cautious half.
-        videoExpected: [...peersRef.current.keys()].some((id) => {
-          const v = peerVideoRef.current.get(id);
-          return v ? v.camOn && !v.paused : true;
-        }),
-      };
+      prev = seen;
+      prevTiers = tiers;
+
+      const sample = summarizeInbound({ rates, expectingVideoFrom, lostPackets: lost, deliveredPackets: received + lost });
 
       const before = linkRef.current.mode;
       linkRef.current = stepLink(linkRef.current, sample);
@@ -4557,6 +4663,14 @@ export function MeetingRoom({ roomCode }: { roomCode: string }) {
     // showing, and clearing it would drop someone into the green room while their
     // report was still generating. The phase is what the intervals watch.
     setCallPhase((prev) => (prev === "live" ? "left" : prev));
+
+    // The link verdict belongs to the call that was measured, not to the next
+    // one. Left standing, a member who left on a bad connection and rejoined on
+    // a good one started the new call in audio-only and had to earn their way
+    // back out of a judgement about a network they were no longer on.
+    linkRef.current = INITIAL_LINK;
+    bwModeRef.current = "normal";
+    setBwMode("normal");
 
     setLocalStream(null);
     setPeers(new Map());
