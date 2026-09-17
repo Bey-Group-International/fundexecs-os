@@ -87,40 +87,104 @@ interface FeedbackLite {
   category: string | null;
   subject_name: string;
   action: string | null;
+  /** When the signal was recorded. Absent rows are treated as current. */
+  created_at?: string | null;
 }
 
-function topCounts(values: (string | null | undefined)[], limit: number): string[] {
-  const counts = new Map<string, number>();
-  for (const v of values) {
-    const k = (v ?? "").trim();
+/**
+ * How fast a preference signal loses influence. At one half-life an accept
+ * counts half as much as one recorded today.
+ *
+ * Thirty days is chosen against how a mandate actually moves: a firm that
+ * pivots from industrials to logistics, or closes its first fund and starts
+ * writing bigger checks, should see the digest follow within a quarter rather
+ * than stay anchored to what it liked a year ago. Long enough that a quiet
+ * fortnight doesn't erase what the engine knows; short enough that a genuine
+ * change of direction wins.
+ */
+export const FEEDBACK_HALF_LIFE_DAYS = 30;
+
+/** Nothing decays to nothing — an old signal still outranks no signal at all. */
+const MIN_WEIGHT = 0.01;
+
+/**
+ * Exponential recency weight for one signal. A row with no timestamp weighs
+ * full: absent a date we can't claim it's stale, and guessing old would
+ * silently discard it.
+ */
+export function recencyWeight(createdAt: string | null | undefined, now: number): number {
+  if (!createdAt) return 1;
+  const at = new Date(createdAt).getTime();
+  if (!Number.isFinite(at)) return 1;
+  const ageDays = (now - at) / DAY;
+  if (ageDays <= 0) return 1; // future-dated or just-written
+  return Math.max(MIN_WEIGHT, Math.pow(0.5, ageDays / FEEDBACK_HALF_LIFE_DAYS));
+}
+
+interface WeightedValue {
+  value: string | null | undefined;
+  weight: number;
+}
+
+/**
+ * Rank labels by summed weight rather than raw count, so three accepts last
+ * week outrank four from six months ago.
+ */
+function weightedTopCounts(entries: WeightedValue[], limit: number): string[] {
+  const totals = new Map<string, number>();
+  for (const { value, weight } of entries) {
+    const k = (value ?? "").trim();
     if (!k) continue;
-    counts.set(k, (counts.get(k) ?? 0) + 1);
+    totals.set(k, (totals.get(k) ?? 0) + weight);
   }
-  return [...counts.entries()]
+  return [...totals.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([k]) => k.replace(/_/g, " "));
 }
 
+/** Unweighted ranking — every value counts once. */
+function topCounts(values: (string | null | undefined)[], limit: number): string[] {
+  return weightedTopCounts(values.map((value) => ({ value, weight: 1 })), limit);
+}
+
 /**
- * Distill recent feedback into a one-line preference digest. Returns "" when
- * there's nothing meaningful to say (so the prompt block stays empty for new
- * operators rather than carrying noise).
+ * Distill recent feedback into a one-line preference digest, weighting recent
+ * signals above old ones.
+ *
+ * Counting every signal equally meant an operator's taste was an average over
+ * their whole history: a firm that spent last year on family offices and this
+ * quarter on private credit still read as "favors family office", and the
+ * engine kept sourcing against a mandate they had moved on from. Weighting by
+ * recency lets the digest turn when the operator does, without throwing away
+ * the older signal entirely.
+ *
+ * Returns "" when there's nothing meaningful to say, so the prompt block stays
+ * empty for new operators rather than carrying noise.
  */
-export function summarizeFeedback(rows: FeedbackLite[]): string {
+export function summarizeFeedback(rows: FeedbackLite[], now: number = Date.now()): string {
   if (!rows.length) return "";
-  const accepted = rows.filter((r) => r.signal === "accepted");
-  const rejected = rows.filter((r) => r.signal === "rejected");
-  const queued = rows.filter((r) => r.signal === "queued");
+  const weighted = rows.map((r) => ({ row: r, weight: recencyWeight(r.created_at, now) }));
+  const bySignal = (signal: string) => weighted.filter((w) => w.row.signal === signal);
+
+  const accepted = bySignal("accepted");
+  const rejected = bySignal("rejected");
+  const queued = bySignal("queued");
 
   const parts: string[] = [];
-  const favored = topCounts(accepted.map((r) => r.category), 3);
+  const favored = weightedTopCounts(accepted.map((w) => ({ value: w.row.category, weight: w.weight })), 3);
   if (favored.length) parts.push(`favors ${favored.join(", ")}`);
-  const skipped = topCounts(rejected.map((r) => r.category), 2);
+  const skipped = weightedTopCounts(rejected.map((w) => ({ value: w.row.category, weight: w.weight })), 2);
   if (skipped.length) parts.push(`tends to skip ${skipped.join(", ")}`);
-  const actions = topCounts(queued.map((r) => r.action), 2);
+  const actions = weightedTopCounts(queued.map((w) => ({ value: w.row.action, weight: w.weight })), 2);
   if (actions.length) parts.push(`usually queues ${actions.join(", ")}`);
-  const recent = accepted.slice(0, 4).map((r) => r.subject_name).filter(Boolean);
+
+  // The named examples should be the freshest, whatever order the caller passed.
+  const recent = [...accepted]
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 4)
+    .map((w) => w.row.subject_name)
+    .filter(Boolean);
   if (recent.length) parts.push(`recently accepted ${recent.join(", ")}`);
 
   return parts.join("; ");
@@ -178,7 +242,7 @@ export async function getLearnedPreferences(
   try {
     let q = supabase
       .from("source_feedback")
-      .select("signal, category, subject_name, action, principal_id")
+      .select("signal, category, subject_name, action, principal_id, created_at")
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false })
       .limit(120);
@@ -307,6 +371,8 @@ export function isPersonalized(ctx: OperatorContext): boolean {
 
 export const __test = {
   summarizeFeedback,
+  recencyWeight,
+  weightedTopCounts,
   summarizeActivity,
   summarizePortfolio,
   summarizeUser,

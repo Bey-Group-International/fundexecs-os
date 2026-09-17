@@ -6,7 +6,7 @@
 import { __test } from "@/lib/source-intelligence";
 import { __test as engineTest } from "@/lib/source-ai";
 
-const { summarizeFeedback, summarizeActivity, summarizePortfolio, summarizeUser, topCounts } = __test;
+const { summarizeFeedback, summarizeActivity, summarizePortfolio, summarizeUser, topCounts, recencyWeight, weightedTopCounts } = __test;
 const { operatorContextBlock } = engineTest;
 
 describe("topCounts", () => {
@@ -46,6 +46,111 @@ describe("summarizeFeedback", () => {
     expect(out).toContain("favors lp");
     expect(out).not.toContain("tends to skip");
     expect(out).not.toContain("usually queues");
+  });
+});
+
+describe("recencyWeight", () => {
+  const NOW = Date.parse("2026-09-17T00:00:00Z");
+  const daysAgo = (n: number) => new Date(NOW - n * 24 * 60 * 60 * 1000).toISOString();
+
+  it("weighs a signal recorded today at full", () => {
+    expect(recencyWeight(daysAgo(0), NOW)).toBe(1);
+  });
+
+  it("halves at one half-life and quarters at two", () => {
+    expect(recencyWeight(daysAgo(30), NOW)).toBeCloseTo(0.5, 5);
+    expect(recencyWeight(daysAgo(60), NOW)).toBeCloseTo(0.25, 5);
+  });
+
+  it("never decays a signal to nothing", () => {
+    expect(recencyWeight(daysAgo(3650), NOW)).toBeGreaterThan(0);
+  });
+
+  it("weighs an undated or unparseable row at full rather than discarding it", () => {
+    expect(recencyWeight(null, NOW)).toBe(1);
+    expect(recencyWeight(undefined, NOW)).toBe(1);
+    expect(recencyWeight("not a date", NOW)).toBe(1);
+  });
+
+  it("does not exceed full weight for a future-dated row", () => {
+    expect(recencyWeight(daysAgo(-5), NOW)).toBe(1);
+  });
+});
+
+describe("weightedTopCounts", () => {
+  it("ranks by summed weight, not by count", () => {
+    const out = weightedTopCounts(
+      [
+        { value: "private_credit", weight: 1 },
+        { value: "private_credit", weight: 1 },
+        { value: "family_office", weight: 0.2 },
+        { value: "family_office", weight: 0.2 },
+        { value: "family_office", weight: 0.2 },
+      ],
+      1,
+    );
+    // Three stale family-office signals lose to two fresh private-credit ones.
+    expect(out).toEqual(["private credit"]);
+  });
+
+  it("skips empty values", () => {
+    expect(weightedTopCounts([{ value: null, weight: 1 }, { value: "  ", weight: 1 }], 3)).toEqual([]);
+  });
+});
+
+describe("summarizeFeedback recency weighting", () => {
+  const NOW = Date.parse("2026-09-17T00:00:00Z");
+  const daysAgo = (n: number) => new Date(NOW - n * 24 * 60 * 60 * 1000).toISOString();
+
+  it("follows a mandate shift instead of averaging over all history", () => {
+    const rows = [
+      // This quarter: private credit.
+      { signal: "accepted", category: "private_credit", subject_name: "New A", action: null, created_at: daysAgo(2) },
+      { signal: "accepted", category: "private_credit", subject_name: "New B", action: null, created_at: daysAgo(5) },
+      // Last year: family offices, and more of them.
+      { signal: "accepted", category: "family_office", subject_name: "Old A", action: null, created_at: daysAgo(300) },
+      { signal: "accepted", category: "family_office", subject_name: "Old B", action: null, created_at: daysAgo(320) },
+      { signal: "accepted", category: "family_office", subject_name: "Old C", action: null, created_at: daysAgo(340) },
+      { signal: "accepted", category: "family_office", subject_name: "Old D", action: null, created_at: daysAgo(360) },
+    ];
+    expect(summarizeFeedback(rows, NOW)).toContain("favors private credit");
+  });
+
+  it("still remembers the older preference behind the current one", () => {
+    const rows = [
+      { signal: "accepted", category: "private_credit", subject_name: "New A", action: null, created_at: daysAgo(2) },
+      { signal: "accepted", category: "family_office", subject_name: "Old A", action: null, created_at: daysAgo(300) },
+    ];
+    const out = summarizeFeedback(rows, NOW);
+    expect(out).toContain("private credit");
+    expect(out).toContain("family office");
+  });
+
+  it("names the freshest accepts regardless of the order passed in", () => {
+    const rows = [
+      { signal: "accepted", category: "lp", subject_name: "Ancient", action: null, created_at: daysAgo(400) },
+      { signal: "accepted", category: "lp", subject_name: "Fresh", action: null, created_at: daysAgo(1) },
+    ];
+    const out = summarizeFeedback(rows, NOW);
+    expect(out).toContain("recently accepted Fresh, Ancient");
+  });
+
+  it("lets a fresh rejection outweigh stale ones", () => {
+    const rows = [
+      { signal: "rejected", category: "venture", subject_name: "V1", action: null, created_at: daysAgo(1) },
+      { signal: "rejected", category: "real_estate", subject_name: "R1", action: null, created_at: daysAgo(200) },
+      { signal: "rejected", category: "real_estate", subject_name: "R2", action: null, created_at: daysAgo(210) },
+    ];
+    expect(summarizeFeedback(rows, NOW)).toContain("tends to skip venture");
+  });
+
+  it("treats undated rows the way it always did", () => {
+    const out = summarizeFeedback([
+      { signal: "accepted", category: "family_office", subject_name: "Acme FO", action: null },
+      { signal: "accepted", category: "family_office", subject_name: "Beta FO", action: null },
+    ], NOW);
+    expect(out).toContain("favors family office");
+    expect(out).toContain("recently accepted Acme FO, Beta FO");
   });
 });
 
