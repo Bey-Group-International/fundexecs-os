@@ -111,7 +111,9 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                       </button>
                     </form>
                   ) : null}
-                  {m.aiDraftable ? <GenerateAiButton sectionKey={m.section} docName={m.name} /> : null}
+                  {m.aiDraftable ? (
+                    <GenerateAiButton sectionKey={m.section} docName={m.name} label={m.name} />
+                  ) : null}
                   <form
                     action={(fd) =>
                       startTransition(async () => {
@@ -295,7 +297,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                       <span className="min-w-0 flex-1 basis-[8rem] truncate text-sm text-fg-secondary">
                         {s.label}
                       </span>
-                      <GenerateAiButton sectionKey={s.key} />
+                      <GenerateAiButton sectionKey={s.key} label={s.label} />
                     </div>
                   ))}
                 </div>
