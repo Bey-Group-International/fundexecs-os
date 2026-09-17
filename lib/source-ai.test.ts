@@ -151,6 +151,98 @@ describe("normalizeCandidates", () => {
     );
     expect(out.map((c) => c.name)).toEqual(["New B", "New A"]);
   });
+
+  it("drops a duplicate that differs only by legal form", () => {
+    const out = normalizeCandidates(
+      [
+        { name: "Acme Capital, L.P.", category: "family_office", fitScore: 90, rationale: "x", firstMove: "y" },
+        { name: "Beta Partners", category: "institution", fitScore: 60, rationale: "x", firstMove: "y" },
+      ],
+      cfg,
+      opts,
+      ["Acme Capital LLC"],
+    );
+    expect(out.map((c) => c.name)).toEqual(["Beta Partners"]);
+  });
+
+  it("does not repeat a firm within one batch", () => {
+    const out = normalizeCandidates(
+      [
+        { name: "Acme Capital", category: "family_office", fitScore: 90, rationale: "x", firstMove: "y" },
+        { name: "Acme Capital Management", category: "family_office", fitScore: 80, rationale: "x", firstMove: "y" },
+      ],
+      cfg,
+      opts,
+      [],
+    );
+    expect(out).toHaveLength(1);
+  });
+
+  it("matches a category despite separator and case differences", () => {
+    const out = normalizeCandidates(
+      [{ name: "Loose Category LP", category: "Family Office", fitScore: 80, rationale: "x", firstMove: "y" }],
+      cfg,
+      opts,
+      [],
+    );
+    expect(out[0].category).toBe("family_office");
+  });
+
+  it("falls back to a neutral bucket rather than the first enum value", () => {
+    const out = normalizeCandidates(
+      [{ name: "Sovereign Fund", category: "sovereign_wealth_fund", fitScore: 80, rationale: "x", firstMove: "y" }],
+      cfg,
+      opts,
+      [],
+    );
+    expect(out[0].category).toBe("other");
+  });
+
+  it("drops contact details that fail validation", () => {
+    const out = normalizeCandidates(
+      [
+        {
+          name: "Sloppy LP",
+          category: "family_office",
+          fitScore: 80,
+          rationale: "x",
+          firstMove: "y",
+          contactEmail: "jane@example.com",
+          contactPhone: "555-555-5555",
+          contactLinkedIn: "https://sloppy.com/in/jane",
+        },
+      ],
+      cfg,
+      opts,
+      [],
+    );
+    expect(out[0].contactEmail).toBeUndefined();
+    expect(out[0].contactPhone).toBeUndefined();
+    expect(out[0].contactLinkedIn).toBeUndefined();
+  });
+
+  it("keeps contact details that pass validation", () => {
+    const out = normalizeCandidates(
+      [
+        {
+          name: "Careful LP",
+          category: "family_office",
+          fitScore: 80,
+          rationale: "x",
+          firstMove: "y",
+          contactEmail: "mara@carefullp.com",
+          contactPhone: "+1 (415) 992-4471",
+          contactLinkedIn: "https://www.linkedin.com/in/marawhitfield",
+        },
+      ],
+      cfg,
+      opts,
+      [],
+    );
+    expect(out[0].contactEmail).toBe("mara@carefullp.com");
+    expect(out[0].contactPhone).toBe("+1 (415) 992-4471");
+    expect(out[0].contactLinkedIn).toBe("https://www.linkedin.com/in/marawhitfield");
+  });
 });
 
 describe("generateTargets fallback", () => {

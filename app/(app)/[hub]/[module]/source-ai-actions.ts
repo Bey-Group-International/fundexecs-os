@@ -12,11 +12,17 @@ import {
   generateTargets,
   scorePipeline as scorePipelineEngine,
   sourceConfigFor,
+  sourcingEnrichmentEnabled,
   apolloEnrichCandidates,
   type SourceCandidate,
   type PipelineScore,
   type SourcingMandate,
 } from "@/lib/source-ai";
+import { getCachedCandidates, setCachedCandidates } from "@/lib/source-candidate-cache";
+import { verifyCandidates, reverifyCached, type VerifiedCandidate } from "@/lib/source-verification";
+import { applyMandateFit, ensureMandateFit, type ScoredCandidate } from "@/lib/source-fit";
+import { EntityDedupe } from "@/lib/source-identity";
+import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { buildOperatorContext, isPersonalized, recordSourceFeedback, type SourceFeedbackInput } from "@/lib/source-intelligence";
 import { ingestEntities, entityKindForModule, type IntelEntityInput } from "@/lib/sourcing-intel";
 import type { AgentKey, InvestorType, Json } from "@/lib/supabase/database.types";
@@ -45,39 +51,132 @@ async function loadMandate(orgId: string): Promise<SourcingMandate | null> {
   };
 }
 
+/**
+ * Every active name in a module's table, paged with a stable order.
+ *
+ * Ordered by id so the pages partition the set: ordering by a mutable column
+ * lets a concurrent write move a row between pages, which would skip it. The
+ * cap is a safety valve against an unbounded loop, not an expected limit.
+ */
+async function allActiveNames(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  table: string,
+  orgId: string,
+): Promise<string[]> {
+  const PAGE = 1000;
+  const MAX_PAGES = 50;
+  const names: string[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await supabase
+      .from(table as "investors")
+      .select("name")
+      .eq("organization_id", orgId)
+      .is("archived_at", null)
+      .order("id", { ascending: true })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) break;
+    const rows = (data ?? []) as { name: string }[];
+    names.push(...rows.map((r) => r.name).filter(Boolean));
+    if (rows.length < PAGE) break;
+  }
+  return names;
+}
+
 // --- 1. GENERATE ------------------------------------------------------------
 export interface SourceTargetsResult {
   ok: boolean;
-  candidates?: SourceCandidate[];
+  candidates?: (VerifiedCandidate & ScoredCandidate)[];
   personalized?: boolean;
+  /** True when the set came from the short-TTL cache rather than a fresh run. */
+  cached?: boolean;
+  cachedAt?: string;
   error?: string;
 }
 
-export async function sourceTargets(hub: string, module: string, query?: string): Promise<SourceTargetsResult> {
+/** The category enum a module's insert path will accept, for verification. */
+function allowedCategories(key: string): string[] {
+  const cfg = sourceConfigFor(key);
+  if (!cfg || cfg.freeCategory) return [];
+  return ADD_ROW_CONFIGS[cfg.key]?.fields.find((f) => f.name === cfg.categoryField)?.options ?? [];
+}
+
+export async function sourceTargets(
+  hub: string,
+  module: string,
+  query?: string,
+  options: { refresh?: boolean } = {},
+): Promise<SourceTargetsResult> {
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false, error: "Not authorized." };
   const key = `${hub}/${module}`;
   const cfg = sourceConfigFor(key);
   if (!cfg) return { ok: false, error: "AI sourcing is not available for this module." };
 
+  const orgId = auth.ctx.orgId;
   const supabase = await createServerClient();
-  const { data } = await supabase
-    .from(cfg.table as "investors")
-    .select("name")
-    .eq("organization_id", auth.ctx.orgId)
-    .is("archived_at", null)
-    .limit(60);
-  const existing = ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
-  const mandate = await loadMandate(auth.ctx.orgId);
-  const context = await buildOperatorContext(supabase, {
-    orgId: auth.ctx.orgId,
-    principalId: auth.ctx.userId,
-    role: auth.ctx.role,
-    module: key,
-  });
+
+  // Three independent reads — the existing rows, the mandate, and the operator
+  // context — issued together rather than one after another.
+  const [existingRows, mandate, context] = await Promise.all([
+    supabase
+      .from(cfg.table as "investors")
+      .select("name")
+      .eq("organization_id", orgId)
+      .is("archived_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(120),
+    loadMandate(orgId),
+    buildOperatorContext(supabase, {
+      orgId,
+      principalId: auth.ctx.userId,
+      role: auth.ctx.role,
+      module: key,
+    }),
+  ]);
+
+  const existing = ((existingRows.data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
   const request = query?.trim().slice(0, 500) || undefined;
-  const candidates = await generateTargets(key, mandate, existing, request, context);
-  return { ok: true, candidates, personalized: isPersonalized(context) };
+  const cacheKey = {
+    module: key,
+    mandate,
+    query: request,
+    existing,
+    enriched: sourcingEnrichmentEnabled(),
+    // Personalization is an input to generation, so it is an input to the key.
+    context,
+  };
+
+  const hit = await getCachedCandidates(orgId, cacheKey, options.refresh);
+  if (hit) {
+    // Cached sets were verified before storage. Re-run the free structural
+    // checks so a stale entry can't outlive a validation rule change, while
+    // keeping the provider corroboration the cache exists to avoid repeating.
+    // The cached blend was computed against this same mandate (it's part of the
+    // key), so it stands; only an entry predating the scoring gets filled in.
+    const candidates = await reverifyCached(
+      ensureMandateFit(hit.candidates, mandate),
+      allowedCategories(key),
+    );
+    return {
+      ok: true,
+      candidates,
+      personalized: isPersonalized(context),
+      cached: true,
+      cachedAt: hit.cachedAt,
+    };
+  }
+
+  const generated = await generateTargets(key, mandate, existing, request, context);
+  // Re-score against the mandate before verifying, so the evidence-first
+  // ranking inside verifyCandidates sorts on the blended figure rather than
+  // the model's unaudited one.
+  const scored = applyMandateFit(generated, mandate);
+  // Nothing reaches the operator unverified: shape and cross-field checks
+  // always, provider corroboration when Apollo is configured.
+  const candidates = await verifyCandidates(scored, allowedCategories(key));
+  await setCachedCandidates(orgId, cacheKey, candidates);
+
+  return { ok: true, candidates, personalized: isPersonalized(context), cached: false };
 }
 
 // --- 2. ACCEPT → INSERT -----------------------------------------------------
@@ -124,11 +223,21 @@ export async function addSourcedTargets(
   const orgId = auth.ctx.orgId;
   const supabase = await createServerClient();
 
-  // Filter to named candidates first so Apollo credits aren't spent on entries
-  // that the clean step would drop anyway.
+  // Drop anything the pipeline already holds before spending a write or an
+  // Apollo credit on it. The client's candidate list was deduped when it was
+  // generated, but an operator can sit on a result set while another session
+  // adds the same firm — the check belongs here, at the point of insert.
+  //
+  // Every active name, not the first page of them: an unordered `.limit(500)`
+  // silently omits rows once a pipeline outgrows it, and a candidate matching
+  // an omitted row would pass dedupe and be inserted. These tables carry no
+  // name uniqueness constraint, so nothing downstream would catch it.
+  const dedupe = new EntityDedupe(await allActiveNames(supabase, cfg.table, orgId));
   let validCandidates = (candidates as SourceCandidate[]).filter(
-    (c) => String(c.name ?? "").trim(),
+    (c) => String(c.name ?? "").trim() && dedupe.add(c.name),
   );
+  if (validCandidates.length === 0) return { ok: true, added: 0 };
+
   if (process.env.APOLLO_API_KEY) {
     try { validCandidates = await apolloEnrichCandidates(validCandidates); } catch { /* non-fatal */ }
   }
@@ -358,13 +467,15 @@ export async function scorePipeline(hub: string, module: string): Promise<ScoreP
   }));
   if (rows.length === 0) return { ok: true, scores: [] };
 
-  const mandate = await loadMandate(auth.ctx.orgId);
-  const context = await buildOperatorContext(supabase, {
-    orgId: auth.ctx.orgId,
-    principalId: auth.ctx.userId,
-    role: auth.ctx.role,
-    module: key,
-  });
+  const [mandate, context] = await Promise.all([
+    loadMandate(auth.ctx.orgId),
+    buildOperatorContext(supabase, {
+      orgId: auth.ctx.orgId,
+      principalId: auth.ctx.userId,
+      role: auth.ctx.role,
+      module: key,
+    }),
+  ]);
   const scores = await scorePipelineEngine(key, mandate, rows, context);
   return { ok: true, scores };
 }
