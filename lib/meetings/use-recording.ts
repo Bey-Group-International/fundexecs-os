@@ -29,7 +29,7 @@ import {
   droppedPartsNotice,
   uploadRetryDelay,
 } from "@/lib/meetings/upload-retry";
-import { RecordingComposer, type RoomSnapshot } from "@/lib/meetings/recording-composer";
+import { RecordingComposer, type PartTiming, type RoomSnapshot } from "@/lib/meetings/recording-composer";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Client = SupabaseClient<Database>;
@@ -107,7 +107,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
    * recording; giving up on the recording would cost the rest of the meeting.
    * What changes is that it is counted, and the host is told at the end.
    */
-  const uploadChunk = useCallback(async (blob: Blob, index: number, mimeType: string) => {
+  const uploadChunk = useCallback(async (blob: Blob, index: number, mimeType: string, timing: PartTiming) => {
     const mId = meetingId;
     const rId = recordingIdRef.current;
     if (!mId || !rId) return;
@@ -126,7 +126,17 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         const { error: rowError } = await supabase
           .from("live_meeting_recording_chunks")
           .upsert(
-            { recording_id: rId, idx: index, path, size: blob.size },
+            {
+              recording_id: rId,
+              idx: index,
+              path,
+              size: blob.size,
+              // Where this part sits on the clock, which is what lets the
+              // player seek: the stored stream is a live WebM with no duration
+              // and no cue index of its own.
+              offset_ms: timing.offsetMs,
+              duration_ms: timing.durationMs,
+            },
             { onConflict: "recording_id,idx" },
           );
         if (rowError) throw rowError;
@@ -208,11 +218,11 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       queueRef.current = Promise.resolve();
 
       const composer = new RecordingComposer(room, {
-        onChunk: (blob, index) => {
+        onChunk: (blob, index, timing) => {
           const mime = composer.mimeType ?? "video/webm";
           // Chained rather than awaited: this runs inside a MediaRecorder event
           // and must return immediately or it stalls the encoder.
-          queueRef.current = queueRef.current.then(() => uploadChunk(blob, index, mime));
+          queueRef.current = queueRef.current.then(() => uploadChunk(blob, index, mime, timing));
         },
         onStopped: (reason, err) => {
           if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }

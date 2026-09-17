@@ -49,9 +49,17 @@ export interface RoomSnapshot {
   audioStreams: () => MediaStream[];
 }
 
+/** Where a part sits on the recording's own clock. */
+export interface PartTiming {
+  /** Milliseconds from the start of the recording to the start of this part. */
+  offsetMs: number;
+  /** How long this part runs. */
+  durationMs: number;
+}
+
 export interface ComposerHandlers {
   /** Called with each encoded part, in order. Must not throw. */
-  onChunk: (blob: Blob, index: number) => void;
+  onChunk: (blob: Blob, index: number, timing: PartTiming) => void;
   /** Called once when recording stops for any reason, including failure. */
   onStopped: (reason: "stopped" | "error", error?: unknown) => void;
 }
@@ -88,6 +96,17 @@ export class RecordingComposer {
   private frameTimer: number | null = null;
   private focus: FocusState = NO_FOCUS;
   private chunkIndex = 0;
+  /**
+   * Where the next part starts on the recording's own clock.
+   *
+   * Measured rather than assumed. MediaRecorder's timeslice is a request, not a
+   * promise — a busy tab, a slow encoder or a device change all stretch it —
+   * and a timeline built from "five seconds each" drifts away from the video it
+   * is meant to describe, which a viewer sees as a scrubber that lands a minute
+   * off by the end of a long meeting.
+   */
+  private partCursorMs = 0;
+  private startedAtMs = 0;
   private stopped = false;
 
   constructor(
@@ -147,8 +166,19 @@ export class RecordingComposer {
 
     this.recorder.ondataavailable = (ev) => {
       // Zero-length parts happen at the boundaries and are not worth an object.
+      // They are not worth a slot on the clock either: a part that holds
+      // nothing did not take any time, and counting it would push everything
+      // after it later than it really is.
       if (ev.data && ev.data.size > 0) {
-        this.handlers.onChunk(ev.data, this.chunkIndex);
+        const elapsed = Math.max(0, Math.round(performance.now() - this.startedAtMs));
+        // The event fires at the END of a part, so what has elapsed since the
+        // last one is this part's length.
+        const timing: PartTiming = {
+          offsetMs: this.partCursorMs,
+          durationMs: Math.max(1, elapsed - this.partCursorMs),
+        };
+        this.partCursorMs = elapsed;
+        this.handlers.onChunk(ev.data, this.chunkIndex, timing);
         this.chunkIndex += 1;
       }
     };
@@ -163,6 +193,8 @@ export class RecordingComposer {
       this.handlers.onStopped("stopped");
     };
 
+    this.startedAtMs = performance.now();
+    this.partCursorMs = 0;
     this.recorder.start(CHUNK_MS);
 
     // setInterval rather than requestAnimationFrame: rAF is throttled to about

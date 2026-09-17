@@ -67,7 +67,11 @@ export interface LoadedReport extends ReportExportInput {
 export async function loadReportForExport(
   supabase: SupabaseClient,
   roomCode: string,
-  options: ReportExportOptions & { userId?: string | null } = {},
+  options: ReportExportOptions & {
+    userId?: string | null;
+    /** Canonical app URL, so the document's recording link works off-site. */
+    origin?: string | null;
+  } = {},
 ): Promise<LoadedReport | null> {
   const includeTranscript = options.includeTranscript === true;
 
@@ -122,5 +126,47 @@ export async function loadReportForExport(
     actionItems: report?.action_items ?? null,
     analysis: (report?.analysis as Record<string, unknown> | null) ?? null,
     fullTranscript: (report?.full_transcript as string | null) ?? null,
+    recording: await loadRecordingForExport(supabase, meeting.id as string, options.origin),
   };
+}
+
+/**
+ * The meeting's recording, for the document to name.
+ *
+ * The newest one that can still be played, read through the caller's own
+ * client so a viewer who may not see the recording does not get a link to it
+ * in their export. Never throws: an export must not fail because a recording
+ * lookup did, and the document is complete without the block.
+ */
+async function loadRecordingForExport(
+  supabase: SupabaseClient,
+  meetingId: string,
+  origin: string | null | undefined,
+): Promise<ReportExportInput["recording"]> {
+  if (!origin) return null;
+  try {
+    const { data } = await supabase
+      .from("live_meeting_recordings")
+      .select("id, duration_seconds, expires_at, deleted_at, status")
+      .eq("meeting_id", meetingId)
+      .is("deleted_at", null)
+      .neq("status", "abandoned")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const rec = data as
+      | { id: string; duration_seconds: number | null; expires_at: string | null }
+      | null;
+    if (!rec) return null;
+
+    return {
+      url: `${origin.replace(/\/$/, "")}/api/meetings/${meetingId}/recording/${rec.id}/stream`,
+      expiresAt: rec.expires_at,
+      durationSeconds: rec.duration_seconds,
+    };
+  } catch (err) {
+    console.warn("[report-export] recording lookup failed", err);
+    return null;
+  }
 }

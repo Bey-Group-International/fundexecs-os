@@ -48,14 +48,14 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   // there.
   const { data: recording } = await rls
     .from("live_meeting_recordings")
-    .select("id, meeting_id, mime_type, status, deleted_at")
+    .select("id, meeting_id, mime_type, status, deleted_at, started_at")
     .eq("id", recordingId)
     .eq("meeting_id", id)
     .maybeSingle();
 
   const rec = recording as {
     id: string; meeting_id: string; mime_type: string;
-    status: string; deleted_at: string | null;
+    status: string; deleted_at: string | null; started_at: string;
   } | null;
 
   if (!rec) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -119,10 +119,36 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     "Cache-Control": "private, max-age=3600",
   };
 
+  // Saving a copy. The panel tells a viewer their recording is deleted after
+  // ninety days; until this there was nothing they could do about it, which
+  // makes the warning worse than no warning.
+  //
+  // Same rule as watching, deliberately: RLS has already decided this caller
+  // was in the meeting, and a recording you may watch in full is one you may
+  // keep. The filename carries the meeting date so a folder of them is
+  // navigable.
+  if (new URL(req.url).searchParams.get("download") === "1") {
+    headers["Content-Disposition"] = `attachment; filename="${downloadFilename(rec.started_at, rec.mime_type)}"`;
+  }
+
   if (range) headers["Content-Range"] = contentRangeHeader(range, size);
 
   return new NextResponse(stream as unknown as BodyInit, {
     status: range ? 206 : 200,
     headers,
   });
+}
+
+/**
+ * A filename a person can find again.
+ *
+ * Built here rather than taken from the meeting title: a title is user input
+ * that ends up in a Content-Disposition header, and quoting it correctly for
+ * every browser is a worse problem than not having the title in the name.
+ */
+function downloadFilename(startedAt: string, mimeType: string): string {
+  const at = new Date(startedAt);
+  const day = isNaN(at.getTime()) ? "recording" : at.toISOString().slice(0, 10);
+  const ext = /mp4/i.test(mimeType || "") ? "mp4" : "webm";
+  return `meeting-recording-${day}.${ext}`;
 }
