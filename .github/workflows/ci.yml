@@ -7,7 +7,27 @@ on:
   # BASE, so a pull request stacked on another branch ran no tests at all — it
   # simply looked quiet rather than unverified, and #997 reached main that way.
   # Every pull request gets checked now, whatever it targets.
+  #
+  # The types are spelled out to add `ready_for_review`, which is NOT in the
+  # default set (opened, synchronize, reopened). That omission is what turned a
+  # missed delivery into an unverified merge: on #1103 the `opened` event
+  # produced no run for either workflow — nothing in this file explains that, and
+  # nothing here can prevent it — and because marking the PR ready is not a
+  # trigger, there was no second chance. The PR sat with a quiet check panel that
+  # looked passing rather than absent, and only a later push to the branch ever
+  # ran the tests. #1097 had the same miss.
+  #
+  # This does not stop GitHub dropping an event. It means the next thing that
+  # happens in practice — a draft being marked ready — asks again. The cost is
+  # that a PR opened as a draft and later marked ready runs this twice; that is
+  # the cheaper side of the trade against a merge nothing checked.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+  # A manual lever, for when an event is missed anyway. jest.yml has had one;
+  # this workflow did not, so when #1103's runs went missing the tests could be
+  # dispatched by hand and lint, typecheck and build could not.
+  workflow_dispatch:
 
 permissions:
   contents: read

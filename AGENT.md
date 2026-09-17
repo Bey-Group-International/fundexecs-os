@@ -2745,6 +2745,41 @@ Deployed, monitoring               →  live, observability active
              |  Fifth pass with that gap. It is no longer the main risk in this
              |  area — it is the only one.
 
+
+2026-09-17  |  The checks that were absent, not passing  |  Asked to fix the CI
+             |  trigger miss, after watching it happen twice.
+             |  On #1103 neither ci.yml nor jest.yml produced a run for the
+             |  pushed head. The `opened` event simply did not deliver — no
+             |  config in this repo explains that and none can prevent it. What
+             |  the config DID do was make the miss unrecoverable: neither
+             |  workflow listened for `ready_for_review`, so marking the draft
+             |  ready — the very next thing that happens here — asked nothing,
+             |  and the PR carried a check panel that read quiet rather than
+             |  absent. #1097 was the same miss; that one was rescued by an
+             |  unrelated push happening to land.
+             |  Three gaps, all closed: `ready_for_review` on both workflows, so
+             |  a dropped `opened` gets a second chance; `reopened` on jest.yml,
+             |  which was missing outright, so a closed-and-reopened PR ran no
+             |  tests at all; and `workflow_dispatch` on ci.yml, which jest.yml
+             |  already had — when #1103's runs vanished the tests could be
+             |  dispatched by hand and lint, typecheck and build could not.
+             |  Worth naming: absent and green look identical in the check panel,
+             |  and I nearly merged on that. The habit that caught it was not
+             |  reading the panel at all — it was asking the workflow-run list
+             |  which SHA each workflow last ran on. A check that never ran
+             |  reports nothing, and nothing renders as calm.
+             |  Cost accepted: a PR opened as a draft and later marked ready now
+             |  runs ci.yml twice. Cheaper than a merge nothing checked. If that
+             |  doubling bites, `concurrency` with cancel-in-progress is the
+             |  standard answer and was deliberately not added here — it changes
+             |  cancellation semantics for every run, which is more than this
+             |  was asked to do.
+             |  Confidence: both files parse and expose the intended trigger
+             |  sets; typecheck clean and Jest 6190 green, though neither touches
+             |  YAML. No workflow linter is configured in this repo. The real
+             |  proof is this PR itself: jest.yml correctly will NOT run on it
+             |  (its paths filter excludes .github/workflows/**), and ci.yml
+             |  should fire once on open and again on ready-for-review.
 ```
 
 ---

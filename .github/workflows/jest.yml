@@ -3,7 +3,11 @@ name: Jest
 on:
   # Run tests on PRs to verify code doesn't break before merge
   pull_request:
-    types: [opened, synchronize]
+    # `reopened` and `ready_for_review` are both additions. Without the first, a
+    # pull request closed and reopened ran no tests at all. Without the second,
+    # a missed `opened` delivery had no second chance to fire — see the longer
+    # note in ci.yml, which lost the same two runs on #1103.
+    types: [opened, synchronize, reopened, ready_for_review]
     # No `branches:` filter on purpose — it matches the PR's BASE, so a stacked
     # pull request ran no tests. See the note in ci.yml.
     paths:
