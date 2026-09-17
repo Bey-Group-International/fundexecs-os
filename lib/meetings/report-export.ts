@@ -39,6 +39,15 @@ export interface ReportExportInput {
   attendees?: unknown;
   /** The room code, which is the only stable human-quotable reference a meeting has. */
   roomCode?: string | null;
+  /**
+   * The meeting's recording, when it has one that can still be played.
+   *
+   * Named in the document rather than left to the report page. A filed record
+   * that does not mention the recording is a record that loses it: the file is
+   * deleted after its retention period, and somebody reading the export a month
+   * later has no way to know it was ever there, let alone that it is going.
+   */
+  recording?: { url: string; expiresAt: string | null; durationSeconds: number | null } | null;
 }
 
 export interface ReportExportOptions {
@@ -256,6 +265,12 @@ export function buildReportMarkdown(
 
   if (record.length) lines.push(...section("Meeting Record", record.join("\n")));
 
+  // The recording, stated with its expiry. A document that mentions a video
+  // without saying it is being deleted invites somebody to rely on a link that
+  // will stop working.
+  const recording = recordingFacts(input.recording);
+  if (recording) lines.push(...section("Recording", recording));
+
   // Decisions first, then what they commit somebody to, then the discussion
   // that produced them. The old order opened on Key Points, which buries the
   // two sections anybody rereads this document for under the one they do not.
@@ -318,4 +333,30 @@ export function reportExportFilename(
 
   const base = [slug, date].filter(Boolean).join("-");
   return `${base}${suffix}.${extension}`;
+}
+
+/**
+ * The recording block: where it is, how long it runs, and when it goes.
+ *
+ * Returns null when there is nothing to say. A "Recording" heading over the
+ * words "not recorded" is worse than no heading — most meetings are not
+ * recorded, and the majority of exports would carry it.
+ */
+function recordingFacts(
+  recording: ReportExportInput["recording"],
+): string | null {
+  if (!recording?.url) return null;
+
+  const minutes =
+    typeof recording.durationSeconds === "number" && recording.durationSeconds > 0
+      ? Math.max(1, Math.round(recording.durationSeconds / 60))
+      : null;
+
+  const facts = [
+    fact("Watch", recording.url),
+    fact("Length", minutes ? `${minutes} minutes` : null),
+    fact("Available until", headerDate(recording.expiresAt ?? null)),
+  ].filter(Boolean) as string[];
+
+  return facts.length ? facts.join("\n") : null;
 }

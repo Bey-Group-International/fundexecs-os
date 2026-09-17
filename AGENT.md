@@ -2544,6 +2544,73 @@ Deployed, monitoring               →  live, observability active
              |  already documented above, and the same answer: it is seconds, and
              |  the alternative is a two-stage deploy for a nullable column.
 
+2026-09-17  |  A scrubber with a length  |  Asked to optimize recording playback
+             |  and export, with questions first. Four answers, all the
+             |  recommended option; the first one is the whole pass.
+             |  THE RECORDING COULD BE PLAYED AND NOT WATCHED. The playback
+             |  route already stitched the parts and answered Range requests,
+             |  and I had called that "enough to seek" when I built it. It is
+             |  not, and the reason is the container rather than the transport.
+             |  What MediaRecorder writes while a meeting runs is a LIVE WebM:
+             |  no duration in its header and no cue index, because neither can
+             |  be written until a recording that is still being made has ended.
+             |  A browser handed that shows a scrubber with no length and
+             |  refuses to seek. Byte ranges cannot rescue it either — a byte
+             |  offset into the middle of a WebM is not decodable without the
+             |  header the FIRST part carries. So an hour-long meeting could be
+             |  watched from the beginning and nowhere else, which is not
+             |  really watching it.
+             |  The fix is to stop asking the container for a timeline and store
+             |  one. Each part now records where it starts and how long it runs,
+             |  MEASURED at capture rather than assumed from the five-second
+             |  timeslice — a timeslice is a request, not a promise, and a
+             |  timeline built from "five seconds each" drifts far enough over
+             |  an hour that the scrubber lands a minute out by the end.
+             |  Playback then goes through MediaSource: part 0 is the
+             |  initialization segment, every part after it is a cluster with
+             |  its own absolute timestamp, and appending part N alone is
+             |  enough to play from part N. A seek becomes "which part holds
+             |  this moment" — a question about data, not about a format.
+             |  Native controls had to go with it, because a duration the
+             |  element does not believe in cannot drive its scrubber.
+             |  Falls back to the plain element where MediaSource or the codec
+             |  is missing: worse, no seeking, but it plays, and rendering
+             |  nothing on an older browser would be the bigger regression.
+             |  Recordings made before timing existed fall back to the nominal
+             |  part length, which is approximate and keeps them watchable.
+             |  THE 90-DAY WARNING WITH NOTHING TO DO ABOUT IT. The panel has
+             |  always said "Deleted in N days" and there was no way to save a
+             |  copy, which makes stating it worse than not stating it. A
+             |  download now, on the same rule as watching: RLS has already
+             |  decided this caller was in the meeting, and a recording you may
+             |  watch in full is one you may keep. The filename is built from
+             |  the date rather than the title — a title is user input on its
+             |  way into a Content-Disposition header, and quoting that for
+             |  every browser is a worse problem than not having it.
+             |  The export now names the recording with its expiry, so a filed
+             |  record does not quietly lose the video a month later. And a
+             |  transcript line jumps the player to that moment: the turns come
+             |  from the stored ROWS rather than being re-parsed out of the
+             |  rendered text, because only the rows ever carried a time — and
+             |  they never stopped being structured, so reading them is less
+             |  work as well as more accurate.
+             |  Two judgement calls worth keeping. A turn whose attribution
+             |  confidence changes mid-way is split rather than merged: that is
+             |  two different claims about who was speaking. And a host who
+             |  pressed Record halfway through leaves early turns at a negative
+             |  offset — kept and clamped to zero, because the words were still
+             |  said and the nearest moment the recording holds is its start.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6063 → 6095 green (+32 new).
+             |  NOT EXERCISED, and it is the important gap: there is no browser
+             |  here. The MediaSource path — appending disjoint parts, the
+             |  duration taking, the seek landing where the timeline says — is
+             |  verified by reading and by the pure timeline tests underneath
+             |  it, not by watching a recording. The arithmetic is covered; the
+             |  wiring is not. First real playback of a real meeting is the
+             |  proof, and the fallback is what catches it if the wiring is
+             |  wrong.
+
 ```
 
 ---
