@@ -67,6 +67,34 @@ export interface UseRecordingResult {
   stop: () => void;
 }
 
+/**
+ * One recording's own state, from the row being created to the row being closed.
+ *
+ * Mutable on purpose: the upload queue updates the counters from inside a
+ * MediaRecorder event, where a React state round trip would stall the encoder.
+ * What matters is that the mutation lands on the run it belongs to.
+ */
+interface RecordingRun {
+  readonly id: string;
+  readonly startedAt: number;
+  bytes: number;
+  count: number;
+  /**
+   * Parts that could not be stored after every attempt. Counted rather than
+   * logged: a recording that quietly lost a minute of a board meeting and
+   * reported itself complete is worse than one that says so.
+   */
+  dropped: number;
+  /**
+   * Parts upload one at a time, in the order the encoder produced them.
+   * Concurrent uploads would finish out of order, which does not corrupt the
+   * file — each part knows its own index — but does mean a host who stops mid
+   * upload can leave a gap with parts on either side of it. A queue makes the
+   * stored recording a prefix of the real one, always.
+   */
+  queue: Promise<void>;
+}
+
 export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const [state, setState] = useState<RecordingState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -74,21 +102,30 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
   const [elapsed, setElapsed] = useState(0);
 
   const composerRef = useRef<RecordingComposer | null>(null);
-  const recordingIdRef = useRef<string | null>(null);
-  const startedAtRef = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Parts are uploaded one at a time in the order the encoder produced them.
-  // Concurrent uploads would finish out of order, which does not corrupt the
-  // file — each part knows its own index — but does mean a host who stops mid
-  // upload can leave a gap with parts on either side of it. A queue makes the
-  // stored recording a prefix of the real one, always.
-  const queueRef = useRef<Promise<void>>(Promise.resolve());
-  const bytesRef = useRef(0);
-  const countRef = useRef(0);
-  // Parts that could not be stored after every attempt. Counted rather than
-  // logged: a recording that quietly lost a minute of a board meeting and
-  // reported itself complete is worse than one that says so.
-  const droppedRef = useRef(0);
+
+  /**
+   * Everything that belongs to ONE recording, kept together and kept with it.
+   *
+   * This was six separate refs, and the separation was the bug — twice. Each
+   * ref outlived the recording it described, and every path that read one
+   * after the fact read whatever the NEXT recording had put there.
+   *
+   * The id survived a completed recording, so a later start that failed before
+   * it could create its own row called finalize("failed") on the PREVIOUS,
+   * finished recording: a good file rewritten to a failure, with an ended_at
+   * of now and a duration counted from a start hours earlier. The counters
+   * survived too, and `start` zeroed them — so stopping and immediately
+   * recording again let the second recording blank the first one's byte count
+   * and part count while its finalize was still awaiting the upload queue, and
+   * blanked the dropped-part count with them, which silently threw away the
+   * notice telling the host what the first recording had lost.
+   *
+   * Passing the run explicitly makes both impossible to write: a function that
+   * needs a recording is handed the one it means, and "is this still the
+   * current recording" is an identity check rather than a guess.
+   */
+  const runRef = useRef<RecordingRun | null>(null);
 
   const { supabase, meetingId, hostName, room, announce } = input;
 
@@ -107,11 +144,16 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
    * recording; giving up on the recording would cost the rest of the meeting.
    * What changes is that it is counted, and the host is told at the end.
    */
-  const uploadChunk = useCallback(async (blob: Blob, index: number, mimeType: string, timing: PartTiming) => {
+  const uploadChunk = useCallback(async (
+    run: RecordingRun,
+    blob: Blob,
+    index: number,
+    mimeType: string,
+    timing: PartTiming,
+  ) => {
     const mId = meetingId;
-    const rId = recordingIdRef.current;
-    if (!mId || !rId) return;
-    const path = chunkPath(mId, rId, index, mimeType);
+    if (!mId) return;
+    const path = chunkPath(mId, run.id, index, mimeType);
 
     for (let attempt = 0; ; attempt++) {
       try {
@@ -127,7 +169,7 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           .from("live_meeting_recording_chunks")
           .upsert(
             {
-              recording_id: rId,
+              recording_id: run.id,
               idx: index,
               path,
               size: blob.size,
@@ -141,33 +183,32 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           );
         if (rowError) throw rowError;
 
-        bytesRef.current += blob.size;
-        countRef.current += 1;
+        run.bytes += blob.size;
+        run.count += 1;
         return;
       } catch (err) {
         const delay = classifyUploadError(err) === "retry" ? uploadRetryDelay(attempt) : null;
         if (delay === null) {
-          droppedRef.current += 1;
+          run.dropped += 1;
           console.warn("[recording] part permanently lost", index, err);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, delay));
         // The recording may have been stopped and a new one started while this
         // part was waiting. Storing it now would write into the wrong recording.
-        if (recordingIdRef.current !== rId) return;
+        if (runRef.current !== run) return;
       }
     }
   }, [supabase, meetingId]);
 
-  const finalize = useCallback(async (status: "complete" | "failed") => {
-    const rId = recordingIdRef.current;
-    if (!rId) return;
+  const finalize = useCallback(async (run: RecordingRun, status: "complete" | "failed") => {
     // Everything queued has to land before the row claims to be finished, or
     // the duration and size would describe a recording still being written.
-    await queueRef.current;
-    const seconds = startedAtRef.current
-      ? Math.round((Date.now() - startedAtRef.current) / 1000)
-      : 0;
+    // Everything read after that await comes off `run`, which no later
+    // recording can reach — that await is exactly where the counters used to
+    // be swapped out from under this.
+    await run.queue;
+    const seconds = run.startedAt ? Math.round((Date.now() - run.startedAt) / 1000) : 0;
     try {
       await supabase
         .from("live_meeting_recordings")
@@ -175,10 +216,10 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
           status,
           ended_at: new Date().toISOString(),
           duration_seconds: seconds,
-          size_bytes: bytesRef.current,
-          chunk_count: countRef.current,
+          size_bytes: run.bytes,
+          chunk_count: run.count,
         })
-        .eq("id", rId);
+        .eq("id", run.id);
     } catch (err) {
       console.warn("[recording] could not close the recording row", err);
     }
@@ -197,6 +238,11 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
     setNotice(null);
     setState("starting");
 
+    // Declared out here so the catch can close out THIS call's recording and
+    // nothing else. Null until the row exists, which is the case the old code
+    // got wrong: it read a ref that still held the previous recording's id.
+    let started: RecordingRun | null = null;
+
     try {
       const { data, error: rowError } = await supabase
         .from("live_meeting_recordings")
@@ -211,18 +257,23 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         .single();
       if (rowError || !data) throw rowError ?? new Error("could not start recording");
 
-      recordingIdRef.current = (data as { id: string }).id;
-      bytesRef.current = 0;
-      countRef.current = 0;
-      droppedRef.current = 0;
-      queueRef.current = Promise.resolve();
+      const run: RecordingRun = {
+        id: (data as { id: string }).id,
+        startedAt: Date.now(),
+        bytes: 0,
+        count: 0,
+        dropped: 0,
+        queue: Promise.resolve(),
+      };
+      runRef.current = run;
+      started = run;
 
       const composer = new RecordingComposer(room, {
         onChunk: (blob, index, timing) => {
           const mime = composer.mimeType ?? "video/webm";
           // Chained rather than awaited: this runs inside a MediaRecorder event
           // and must return immediately or it stalls the encoder.
-          queueRef.current = queueRef.current.then(() => uploadChunk(blob, index, mime, timing));
+          run.queue = run.queue.then(() => uploadChunk(run, blob, index, mime, timing));
         },
         onStopped: (reason, err) => {
           if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
@@ -232,15 +283,17 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
             console.error("[recording] stopped on error", err);
             setError("The recording stopped unexpectedly. What was captured has been saved.");
             setState("failed");
-            void finalize("failed");
+            void finalize(run, "failed");
             return;
           }
           setState("idle");
           // Reported only after finalize, which waits on the upload queue: parts
           // are still landing when the recorder stops, and counting the losses
           // before they have all had their attempts would understate them.
-          void finalize("complete").then(() => {
-            setNotice(droppedPartsNotice(droppedRef.current, CHUNK_MS));
+          // `run.dropped` rather than a shared ref, so a host who starts the
+          // next recording during that wait does not erase what this one lost.
+          void finalize(run, "complete").then(() => {
+            setNotice(droppedPartsNotice(run.dropped, CHUNK_MS));
           });
         },
       });
@@ -255,13 +308,12 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
         void supabase
           .from("live_meeting_recordings")
           .update({ mime_type: composer.mimeType })
-          .eq("id", recordingIdRef.current);
+          .eq("id", run.id);
       }
 
-      startedAtRef.current = Date.now();
       setElapsed(0);
       tickRef.current = setInterval(
-        () => setElapsed(Math.round((Date.now() - startedAtRef.current) / 1000)),
+        () => setElapsed(Math.round((Date.now() - run.startedAt) / 1000)),
         1000,
       );
 
@@ -275,7 +327,10 @@ export function useRecording(input: UseRecordingInput): UseRecordingResult {
       composerRef.current = null;
       setError(err instanceof Error ? err.message : "Recording could not be started.");
       setState("failed");
-      if (recordingIdRef.current) void finalize("failed");
+      // Only a run THIS call created. The id used to be a ref that outlived the
+      // recording it belonged to, so a start that failed before creating its
+      // own row closed out the previous, finished recording as a failure.
+      if (started) void finalize(started, "failed");
     }
   }, [supabase, meetingId, hostName, room, announce, uploadChunk, finalize]);
 

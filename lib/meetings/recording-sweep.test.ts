@@ -3,6 +3,7 @@
 // destructive and neither is ever observed by hand, so both are pinned here.
 
 import { ABANDON_AFTER_MS, runRecordingSweep } from "@/lib/meetings/recording-sweep.server";
+import { CHUNK_MS } from "@/lib/meetings/recording-policy";
 
 type Row = Record<string, unknown>;
 
@@ -151,6 +152,36 @@ describe("abandoned recordings", () => {
     expect(patch?.size_bytes).toBe(2000);
     expect(patch?.chunk_count).toBe(2);
     expect(patch?.ended_at).toBe(NOW.toISOString());
+  });
+
+  // The defect this closes: the sweep recomputed the size and the part count
+  // from the rows and then set no duration at all, so a recording it closed was
+  // listed with a size and no length — the panel renders a duration only when
+  // there is one.
+  it("gives the closed-out recording the length its parts describe", async () => {
+    const h = harness({
+      stale: [{ id: "r4", started_at: stale }],
+      chunks: [
+        { idx: 0, size: 900, offset_ms: 0, duration_ms: 5_000 },
+        { idx: 1, size: 1100, offset_ms: 5_000, duration_ms: 4_000 },
+      ],
+    });
+    await runRecordingSweep(client(h), NOW);
+
+    expect(h.updates.find((u) => u.id === "r4")?.patch.duration_seconds).toBe(9);
+  });
+
+  // Recordings made before parts carried timing still have to come out with a
+  // usable length rather than a zero.
+  it("falls back to the nominal part length when timing was never captured", async () => {
+    const h = harness({
+      stale: [{ id: "r5", started_at: stale }],
+      chunks: [{ idx: 0, size: 900 }, { idx: 1, size: 1100 }],
+    });
+    await runRecordingSweep(client(h), NOW);
+
+    const seconds = h.updates.find((u) => u.id === "r5")?.patch.duration_seconds as number;
+    expect(seconds).toBe(Math.round((2 * CHUNK_MS) / 1000));
   });
 
   it("calls a recording with no parts abandoned", async () => {
