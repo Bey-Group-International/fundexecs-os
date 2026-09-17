@@ -16,6 +16,7 @@ import { createHash } from "crypto";
 import { getCached, setCached } from "@/lib/source-cache";
 import type { SourcingMandate } from "@/lib/source-ai";
 import type { VerifiedCandidate } from "@/lib/source-verification";
+import type { ScoredCandidate } from "@/lib/source-fit";
 import type { VerifiedResult } from "@/lib/source-hub-types";
 
 /** Cache module bucket — keeps candidate rows separate from provider lookups. */
@@ -60,8 +61,15 @@ function keyParams(key: CandidateCacheKey): Record<string, unknown> {
   };
 }
 
+/**
+ * What the cache round-trips. The fit breakdown is optional on read because an
+ * entry written before deterministic scoring existed won't carry it; callers
+ * pass the set through `ensureMandateFit` to fill that in.
+ */
+export type CachedCandidate = VerifiedCandidate & Partial<ScoredCandidate>;
+
 export interface CachedCandidates {
-  candidates: VerifiedCandidate[];
+  candidates: CachedCandidate[];
   /** True when these came back from cache rather than a fresh generation. */
   cached: boolean;
   /** When the cached set was generated (ISO), for the UI's freshness line. */
@@ -75,7 +83,7 @@ export async function getCachedCandidates(
   refresh = false,
 ): Promise<CachedCandidates | null> {
   if (refresh) return null;
-  const hit = await getCached<VerifiedCandidate[]>(orgId, MODULE, PROVIDER, keyParams(key));
+  const hit = await getCached<CachedCandidate[]>(orgId, MODULE, PROVIDER, keyParams(key));
   const candidates = hit?.data;
   if (!Array.isArray(candidates) || candidates.length === 0) return null;
   return { candidates, cached: true, cachedAt: hit?.cache?.cached_at };
@@ -85,10 +93,10 @@ export async function getCachedCandidates(
 export async function setCachedCandidates(
   orgId: string,
   key: CandidateCacheKey,
-  candidates: VerifiedCandidate[],
+  candidates: CachedCandidate[],
 ): Promise<void> {
   if (!candidates.length) return; // never cache an empty result
-  const envelope: VerifiedResult<VerifiedCandidate[]> = {
+  const envelope: VerifiedResult<CachedCandidate[]> = {
     status: "success",
     // These candidates have been through lib/source-verification; the envelope
     // reports what that pass concluded rather than a fixed guess.

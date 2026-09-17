@@ -14,6 +14,7 @@ import {
 import { buildOperatorContext, isPersonalized } from "@/lib/source-intelligence";
 import { getCachedCandidates, setCachedCandidates } from "@/lib/source-candidate-cache";
 import { verifyCandidates, reverifyCached, type VerifiedCandidate } from "@/lib/source-verification";
+import { applyMandateFit, ensureMandateFit, type ScoredCandidate } from "@/lib/source-fit";
 import { EntityDedupe } from "@/lib/source-identity";
 import { ADD_ROW_CONFIGS } from "@/lib/module-forms";
 import { AGENT_BY_KEY } from "@/lib/agents";
@@ -167,7 +168,7 @@ export async function startSourceSearch(prompt: string): Promise<StartSearchResu
 
 export interface RunStepResult {
   ok: boolean;
-  candidates?: VerifiedCandidate[];
+  candidates?: (VerifiedCandidate & ScoredCandidate)[];
   /** True when the set came from the short-TTL cache rather than a fresh run. */
   cached?: boolean;
   /** ISO timestamp of the cached generation, for the freshness line. */
@@ -254,7 +255,7 @@ export async function runSourceStep(args: {
     enriched: sourcingEnrichmentEnabled(),
   };
 
-  let candidates: VerifiedCandidate[];
+  let candidates: (VerifiedCandidate & ScoredCandidate)[];
   let cached = false;
   let cachedAt: string | undefined;
 
@@ -263,14 +264,23 @@ export async function runSourceStep(args: {
     // Cached sets were verified before storage. Re-run the free structural
     // checks so a stale entry can't outlive a validation rule change, while
     // keeping the provider corroboration the cache exists to avoid repeating.
-    candidates = await reverifyCached(hit.candidates, allowedCategories(args.module));
+    // The cached blend was computed against this same mandate (it's part of the
+    // key), so it stands; only an entry predating the scoring gets filled in.
+    candidates = await reverifyCached(
+      ensureMandateFit(hit.candidates, mandate),
+      allowedCategories(args.module),
+    );
     cached = true;
     cachedAt = hit.cachedAt;
   } else {
     const generated = await generateTargets(args.module, mandate, exclusions, args.query, context);
+    // Re-score against the mandate before verifying, so the evidence-first
+    // ranking inside verifyCandidates sorts on the blended figure rather than
+    // the model's unaudited one.
+    const scored = applyMandateFit(generated, mandate);
     // Nothing reaches the operator unverified: shape and cross-field checks
     // always, provider corroboration when Apollo is configured.
-    candidates = await verifyCandidates(generated, allowedCategories(args.module));
+    candidates = await verifyCandidates(scored, allowedCategories(args.module));
     await setCachedCandidates(orgId, cacheKey, candidates);
   }
 

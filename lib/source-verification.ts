@@ -99,10 +99,13 @@ const FREE_MAIL_DOMAINS = new Set([
  * Pass 1 — structural verification. Pure, offline, and always runs. Returns the
  * candidate with unusable fields stripped and a verification record attached.
  */
-export function verifyStructure(candidate: SourceCandidate, allowedCategories: string[] = []): VerifiedCandidate {
+export function verifyStructure<T extends SourceCandidate>(
+  candidate: T,
+  allowedCategories: string[] = [],
+): T & VerifiedCandidate {
   const checks: VerificationCheck[] = [];
   const provenance: CandidateVerification["provenance"] = {};
-  const out: SourceCandidate = { ...candidate };
+  const out: T = { ...candidate };
 
   const push = (id: string, label: string, ok: boolean, detail?: string) =>
     checks.push({ id, label, ok, detail });
@@ -222,10 +225,10 @@ export function scoreConfidence(
  * candidate exactly as pass 1 produced it. Verification must never be the reason
  * a search fails to return.
  */
-export async function corroborateCandidates(
-  candidates: VerifiedCandidate[],
+export async function corroborateCandidates<T extends VerifiedCandidate>(
+  candidates: T[],
   options: { concurrency?: number; timeoutMs?: number } = {},
-): Promise<VerifiedCandidate[]> {
+): Promise<T[]> {
   if (!candidates.length || !process.env.APOLLO_API_KEY) return candidates;
   const concurrency = Math.max(1, options.concurrency ?? 4);
   const timeoutMs = options.timeoutMs ?? 4000;
@@ -246,11 +249,11 @@ export async function corroborateCandidates(
     }
   };
 
-  const corroborateOne = async (c: VerifiedCandidate): Promise<VerifiedCandidate> => {
+  const corroborateOne = async (c: T): Promise<T> => {
     if (c.verification.status === "flagged" && !normalizeEntityName(c.name)) return c;
     const checks = [...c.verification.checks];
     const provenance = { ...c.verification.provenance };
-    const out: SourceCandidate = { ...c };
+    const out: T = { ...c };
 
     const org = await withTimeout(() =>
       enrichOrganization({ domain: domainOf(c.website), name: c.name }),
@@ -341,7 +344,7 @@ export async function corroborateCandidates(
 
   // Bounded parallelism: a worker pool rather than sequential batches, so one
   // slow lookup can't stall the candidates behind it.
-  const results = new Array<VerifiedCandidate>(candidates.length);
+  const results = new Array<T>(candidates.length);
   let cursor = 0;
   await Promise.all(
     Array.from({ length: Math.min(concurrency, candidates.length) }, async () => {
@@ -364,11 +367,11 @@ export async function corroborateCandidates(
  * candidate, then external corroboration, then ordered so the best-evidenced
  * targets are what the operator sees first.
  */
-export async function verifyCandidates(
-  candidates: SourceCandidate[],
+export async function verifyCandidates<T extends SourceCandidate>(
+  candidates: T[],
   allowedCategories: string[] = [],
   options: { corroborate?: boolean } = {},
-): Promise<VerifiedCandidate[]> {
+): Promise<(T & VerifiedCandidate)[]> {
   if (!candidates.length) return [];
   const structural = candidates.map((c) => verifyStructure(c, allowedCategories));
   const verified = options.corroborate === false ? structural : await corroborateCandidates(structural);
@@ -386,10 +389,10 @@ export async function verifyCandidates(
  * as the structural pass still accepts it. Anything the fresh checks flag is
  * demoted regardless of what the cache claimed.
  */
-export async function reverifyCached(
-  cached: VerifiedCandidate[],
+export async function reverifyCached<T extends VerifiedCandidate>(
+  cached: T[],
   allowedCategories: string[] = [],
-): Promise<VerifiedCandidate[]> {
+): Promise<T[]> {
   const out = cached.map((entry) => {
     const fresh = verifyStructure(entry, allowedCategories);
     const wasVerified = entry.verification?.status === "verified";
@@ -427,7 +430,7 @@ const STATUS_RANK: Record<VerificationStatus, number> = {
  * unsubstantiated 90 — the operator's time is better spent on the target we can
  * actually stand behind.
  */
-export function rankVerified(candidates: VerifiedCandidate[]): VerifiedCandidate[] {
+export function rankVerified<T extends VerifiedCandidate>(candidates: T[]): T[] {
   return [...candidates].sort((a, b) => {
     const statusDelta = STATUS_RANK[b.verification.status] - STATUS_RANK[a.verification.status];
     if (statusDelta !== 0) return statusDelta;

@@ -12,13 +12,14 @@ import { AGENT_BY_KEY } from "@/lib/agents";
 import { buildSourceSelectionPayload } from "@/lib/source-selection";
 import { EntityDedupe } from "@/lib/source-identity";
 import type { VerificationStatus, VerifiedCandidate } from "@/lib/source-verification";
+import type { MandateFit, ScoredCandidate } from "@/lib/source-fit";
 import type { AgentKey } from "@/lib/supabase/database.types";
 
 type StepStatus = "queued" | "running" | "done" | "error";
 interface LiveStep extends SearchStep {
   status: StepStatus;
   count?: number;
-  candidates?: VerifiedCandidate[];
+  candidates?: (VerifiedCandidate & ScoredCandidate)[];
   cached?: boolean;
   refreshing?: boolean;
 }
@@ -71,6 +72,31 @@ function humanize(s: string): string {
 
 // Tooltip text for the verification badge: the status in plain language, plus
 // whichever checks failed, so "check" is never an unexplained warning.
+// Why the fit score is what it is: which mandate constraints this candidate
+// meets, which it misses, and which couldn't be checked. Turns an opaque
+// percentage into something an operator can argue with.
+function fitTitle(c: { fitScore: number; modelFitScore?: number; mandateFit?: MandateFit }): string {
+  if (!c.mandateFit || c.mandateFit.coverage === 0) {
+    return "Model fit estimate. Nothing in this candidate could be checked against the mandate.";
+  }
+  const lines = c.mandateFit.signals
+    .filter((s) => s.matched !== null)
+    .map((s) => `${s.matched ? "\u2713" : "\u2717"} ${s.label}: ${s.detail ?? ""}`.trim());
+  const unchecked = c.mandateFit.signals.filter((s) => s.matched === null);
+  if (unchecked.length) lines.push(`Not assessed: ${unchecked.map((s) => s.label.toLowerCase()).join(", ")}.`);
+  const model = typeof c.modelFitScore === "number" && c.modelFitScore !== c.fitScore
+    ? ` Blended from a ${c.modelFitScore}% model estimate and ${c.mandateFit.score}% mandate overlap.`
+    : "";
+  return `${lines.join(" ")}${model}`;
+}
+
+// A compact mandate-overlap read for the row: ✓/✗ per assessed constraint.
+function fitChips(c: { mandateFit?: MandateFit }): { label: string; matched: boolean }[] {
+  return (c.mandateFit?.signals ?? [])
+    .filter((s): s is typeof s & { matched: boolean } => s.matched !== null)
+    .map((s) => ({ label: s.label, matched: s.matched }));
+}
+
 function verificationTitle(c: VerifiedCandidate): string {
   const base = VERIFICATION_UI[c.verification.status].title;
   const failed = c.verification.checks.filter((k) => !k.ok && k.detail).map((k) => k.detail);
@@ -460,7 +486,10 @@ export function SourceSearch({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
                               <span className="truncate text-sm font-medium text-fg-primary">{c.name}</span>
-                              <span className={`shrink-0 font-mono text-xs ${scoreTone(c.fitScore)}`}>
+                              <span
+                                title={fitTitle(c)}
+                                className={`shrink-0 font-mono text-xs ${scoreTone(c.fitScore)}`}
+                              >
                                 {c.fitScore}% fit
                               </span>
                             </div>
@@ -475,6 +504,15 @@ export function SourceSearch({
                               >
                                 {VERIFICATION_UI[c.verification.status].label}
                               </span>
+                              {/* Which mandate constraints this target actually meets. */}
+                              {fitChips(c).map((chip) => (
+                                <span
+                                  key={chip.label}
+                                  className={`font-mono text-[10px] uppercase tracking-wider ${chip.matched ? "text-status-success" : "text-fg-muted line-through"}`}
+                                >
+                                  {chip.matched ? "\u2713" : "\u2717"} {chip.label}
+                                </span>
+                              ))}
                             </div>
                             <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
                             {/* Pre-review intel, so the operator can qualify without leaving the page. */}

@@ -10,6 +10,7 @@ import {
 import type { PipelineScore } from "@/lib/source-ai";
 import { buildSourceSelectionPayload } from "@/lib/source-selection";
 import type { VerificationStatus, VerifiedCandidate } from "@/lib/source-verification";
+import type { MandateFit, ScoredCandidate } from "@/lib/source-fit";
 import type { ActionKind } from "@/lib/gates";
 
 function humanize(s: string): string {
@@ -49,6 +50,30 @@ const VERIFICATION_UI: Record<VerificationStatus, { label: string; title: string
   },
 };
 
+// Why the fit score is what it is: which mandate constraints this candidate
+// meets, which it misses, and which couldn't be checked.
+function fitTitle(c: { fitScore: number; modelFitScore?: number; mandateFit?: MandateFit }): string {
+  if (!c.mandateFit || c.mandateFit.coverage === 0) {
+    return "Model fit estimate. Nothing in this candidate could be checked against the mandate.";
+  }
+  const lines = c.mandateFit.signals
+    .filter((s) => s.matched !== null)
+    .map((s) => `${s.matched ? "\u2713" : "\u2717"} ${s.label}: ${s.detail ?? ""}`.trim());
+  const unchecked = c.mandateFit.signals.filter((s) => s.matched === null);
+  if (unchecked.length) lines.push(`Not assessed: ${unchecked.map((s) => s.label.toLowerCase()).join(", ")}.`);
+  const model = typeof c.modelFitScore === "number" && c.modelFitScore !== c.fitScore
+    ? ` Blended from a ${c.modelFitScore}% model estimate and ${c.mandateFit.score}% mandate overlap.`
+    : "";
+  return `${lines.join(" ")}${model}`;
+}
+
+// A compact mandate-overlap read for the row: \u2713/\u2717 per assessed constraint.
+function fitChips(c: { mandateFit?: MandateFit }): { label: string; matched: boolean }[] {
+  return (c.mandateFit?.signals ?? [])
+    .filter((s): s is typeof s & { matched: boolean } => s.matched !== null)
+    .map((s) => ({ label: s.label, matched: s.matched }));
+}
+
 // The status in plain language, plus whichever checks failed, so a warning
 // badge is never unexplained.
 function verificationTitle(c: VerifiedCandidate): string {
@@ -82,7 +107,7 @@ export function AiSourcingPanel({
   const [mode, setMode] = useState<Mode>("idle");
   const [ask, setAsk] = useState("");
   const [pending, start] = useTransition();
-  const [candidates, setCandidates] = useState<VerifiedCandidate[] | null>(null);
+  const [candidates, setCandidates] = useState<(VerifiedCandidate & ScoredCandidate)[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [scores, setScores] = useState<PipelineScore[] | null>(null);
   const [queued, setQueued] = useState<Set<string>>(new Set());
@@ -263,7 +288,7 @@ export function AiSourcingPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="truncate text-sm font-medium text-fg-primary">{c.name}</span>
-                  <span className={`shrink-0 font-mono text-xs ${scoreTone(c.fitScore)}`}>
+                  <span title={fitTitle(c)} className={`shrink-0 font-mono text-xs ${scoreTone(c.fitScore)}`}>
                     {c.fitScore}% fit
                   </span>
                 </div>
@@ -277,6 +302,15 @@ export function AiSourcingPanel({
                   >
                     {VERIFICATION_UI[c.verification.status].label}
                   </span>
+                  {/* Which mandate constraints this target actually meets. */}
+                  {fitChips(c).map((chip) => (
+                    <span
+                      key={chip.label}
+                      className={`font-mono text-[10px] uppercase tracking-wider ${chip.matched ? "text-status-success" : "text-fg-muted line-through"}`}
+                    >
+                      {chip.matched ? "\u2713" : "\u2717"} {chip.label}
+                    </span>
+                  ))}
                 </div>
                 <p className="mt-1 text-xs text-fg-secondary">{c.rationale}</p>
                 <p className="mt-1 text-[11px] text-gold-300">→ {c.firstMove}</p>
