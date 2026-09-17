@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CalendarLayers from "./CalendarLayers";
 import {
   type CalendarLayer,
@@ -50,6 +50,11 @@ import {
   type CalendarView,
 } from "@/lib/meetings/calendar";
 import { defaultBlockEnd } from "@/lib/meetings/blocks";
+import {
+  buildDayAgenda,
+  summarizeDayAgenda,
+  type DayAgendaItem,
+} from "@/lib/meetings/day-agenda";
 import { actionForKey, SHORTCUT_HELP } from "@/lib/meetings/calendar-shortcuts";
 import {
   MIN_DURATION_MINUTES,
@@ -180,6 +185,12 @@ export function MeetingsCalendar({
   const [slotMenu, setSlotMenu] = useState<{ iso: string; x: number; y: number } | null>(null);
   const [blockDraft, setBlockDraft] = useState<{ startsAt: string; endsAt: string } | null>(null);
   const [blockError, setBlockError] = useState<string | null>(null);
+  // The day whose list is expanded under its week row in month view, and the
+  // item inside it being read. Held here rather than in MonthView so that
+  // navigating the month can collapse it — a panel left open under a week that
+  // is no longer on screen is a panel nobody asked for.
+  const [expandedDay, setExpandedDay] = useState<Date | null>(null);
+  const [expandedItemKey, setExpandedItemKey] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [channelName] = useState(() => nextChannelName("calendar-meetings"));
 
@@ -241,6 +252,27 @@ export function MeetingsCalendar({
   }, [orgId]);
 
   const statusOf = useMemo(() => (m: CalendarMeeting) => deriveMeetingStatus(m, nowMinuteMs), [nowMinuteMs]);
+
+  // Leaving the month (or the view) takes the expanded day with it: the panel
+  // belongs to a week row, and that row is about to be replaced.
+  const monthKey = `${anchor.getFullYear()}-${anchor.getMonth()}`;
+  useEffect(() => {
+    setExpandedDay(null);
+    setExpandedItemKey(null);
+  }, [monthKey, view]);
+
+  // Clicking the day that is already open closes it, the way a disclosure
+  // should — but only when it is the day itself being clicked. Clicking a chip
+  // inside an open day switches to that item instead of collapsing under them.
+  const openDay = useCallback((day: Date, itemKey?: string) => {
+    setExpandedItemKey(itemKey ?? null);
+    setExpandedDay((prev) => (prev && isSameDay(prev, day) && !itemKey ? null : startOfDay(day)));
+  }, []);
+  const closeDay = useCallback(() => {
+    setExpandedDay(null);
+    setExpandedItemKey(null);
+  }, []);
+  const selectDayItem = useCallback((itemKey: string | null) => setExpandedItemKey(itemKey), []);
 
   const visible = useMemo(
     () => applyCalendarFilter(meetings, filter, userId, statusOf),
@@ -546,7 +578,25 @@ export function MeetingsCalendar({
       <div className="grid gap-6 pb-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Calendar surface */}
         <div className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] p-2 sm:p-3">
-          {view === "month" ? <MonthView anchor={anchor} meetings={visible} {...shared} /> : null}
+          {view === "month" ? (
+            <MonthView
+              anchor={anchor}
+              meetings={visible}
+              {...shared}
+              expandedDay={expandedDay}
+              expandedItemKey={expandedItemKey}
+              onOpenDay={openDay}
+              onSelectItem={selectDayItem}
+              onCloseDay={closeDay}
+              onNewMeeting={(d) => openScheduleAt(localIso(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0))}
+              onBlockTime={(d) => {
+                const iso = localIso(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0);
+                setBlockDraft({ startsAt: iso, endsAt: defaultBlockEnd(iso) });
+                setBlockError(null);
+              }}
+              onEditMeeting={(m) => setEditing(m)}
+            />
+          ) : null}
           {view === "week" ? <TimeGridView days={weekDays(anchor)} meetings={visible} {...shared} /> : null}
           {view === "day" ? <TimeGridView days={[anchor]} meetings={visible} {...shared} /> : null}
           {view === "agenda" ? <AgendaView anchor={anchor} meetings={visible} {...shared} /> : null}
@@ -1035,9 +1085,47 @@ interface SharedViewProps {
   onMoveMeeting?: (m: CalendarMeeting, startIso: string, durationMinutes: number) => void;
 }
 
-function MonthView({ anchor, meetings, blocks, externalEvents, layersById, today, presence, onSelectEvent, onSelectBlock, onSelectSlot, onExpandDay }: SharedViewProps & { anchor: Date }) {
+function MonthView({
+  anchor,
+  meetings,
+  blocks,
+  externalEvents,
+  layersById,
+  now,
+  today,
+  presence,
+  statusOf,
+  onSelectBlock,
+  onExpandDay,
+  expandedDay,
+  expandedItemKey,
+  onOpenDay,
+  onSelectItem,
+  onCloseDay,
+  onNewMeeting,
+  onBlockTime,
+  onEditMeeting,
+}: SharedViewProps & {
+  anchor: Date;
+  /** The day whose list is open, or null. */
+  expandedDay: Date | null;
+  /** The row inside that list being read, or null for the list itself. */
+  expandedItemKey: string | null;
+  onOpenDay: (day: Date, itemKey?: string) => void;
+  onSelectItem: (itemKey: string | null) => void;
+  onCloseDay: () => void;
+  onNewMeeting: (day: Date) => void;
+  onBlockTime: (day: Date) => void;
+  onEditMeeting: (m: CalendarMeeting) => void;
+}) {
   const weeks = monthMatrix(anchor);
   const labels = weekdayLabels();
+  // The grid re-renders on every tick of the clock, and every cell carries a
+  // spoken date. One reused formatter instead of 42 fresh ones a second.
+  const spokenDate = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" });
+    return (d: Date) => fmt.format(d);
+  }, []);
   return (
     <div>
       <div className="grid grid-cols-7 border-b border-[var(--line)]">
@@ -1046,87 +1134,451 @@ function MonthView({ anchor, meetings, blocks, externalEvents, layersById, today
         ))}
       </div>
       <div className="grid grid-cols-7">
-        {weeks.flat().map((day, i) => {
-          const inMonth = isSameMonth(day, anchor);
-          const isToday = isSameDay(day, today);
-          const evs = eventsForDay(meetings, day);
-          const dayBlocks = blocksForDay(blocks, day);
-          // Connected-calendar events get a row of dots rather than chips. A
-          // month cell has room for about three things, and this app's own
-          // meetings are what a member came here to act on — but a day that
-          // looks empty while Google says otherwise is the exact confusion
-          // this whole feature exists to remove.
-          const externalToday = [
-            ...eventSpansForDay(externalEvents, day).map((s) => s.event),
-            ...allDayEventsForDay(externalEvents, day),
-          ];
-          // Blocks take the first row so a busy day reads as busy at a glance,
-          // then meetings fill what's left of the three-chip budget.
-          const shown = evs.slice(0, Math.max(1, 3 - dayBlocks.length));
-          const extra = evs.length - shown.length;
+        {weeks.map((week, wi) => {
+          // The panel is rendered as a full-width row after the week that owns
+          // the expanded day, so the month above it stays readable and the
+          // weeks below simply move down.
+          const expandedHere = expandedDay ? week.some((d) => isSameDay(d, expandedDay)) : false;
           return (
-            <button
-              key={i}
-              onClick={(e) =>
-                onSelectSlot(
-                  localIso(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0),
-                  e.clientX,
-                  e.clientY,
-                )
-              }
-              className={`flex min-h-[104px] flex-col gap-1 border-b border-r border-[var(--line)] p-1.5 text-left transition-colors hover:bg-[var(--surface-0)] ${
-                inMonth ? "" : "bg-surface-0/40"
-              }`}
-            >
-              <span
-                className={`inline-flex h-6 w-6 items-center justify-center self-start rounded-full text-xs ${
-                  isToday ? "bg-[var(--gold-400)] font-semibold text-white" : inMonth ? "text-[var(--fg-secondary)]" : "text-[var(--fg-muted)]"
-                }`}
-              >
-                {day.getDate()}
-              </span>
-              {externalToday.length ? (
-                <div className="flex flex-wrap items-center gap-1" title={externalToday.map((e) => e.title).join("\n")}>
-                  {externalToday.slice(0, 6).map((e) => {
-                    const layer = layersById.get(e.calendarId);
-                    return (
-                      <span
-                        key={e.id}
-                        className="h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: layer ? colorForLayer(layer) : "var(--fg-muted)" }}
-                      />
-                    );
-                  })}
-                  {externalToday.length > 6 ? (
-                    <span className="text-[10px] leading-none text-[var(--fg-muted)]">+{externalToday.length - 6}</span>
-                  ) : null}
+            <Fragment key={wi}>
+              {week.map((day, di) => {
+                const inMonth = isSameMonth(day, anchor);
+                const isToday = isSameDay(day, today);
+                const isOpen = Boolean(expandedDay && isSameDay(day, expandedDay));
+                const evs = eventsForDay(meetings, day);
+                const dayBlocks = blocksForDay(blocks, day);
+                // Connected-calendar events get a row of dots rather than chips. A
+                // month cell has room for about three things, and this app's own
+                // meetings are what a member came here to act on — but a day that
+                // looks empty while Google says otherwise is the exact confusion
+                // this whole feature exists to remove. The dots are a summary; the
+                // day panel below is where the events themselves are readable.
+                const externalToday = [
+                  ...eventSpansForDay(externalEvents, day).map((s) => s.event),
+                  ...allDayEventsForDay(externalEvents, day),
+                ];
+                // Blocks take the first row so a busy day reads as busy at a glance,
+                // then meetings fill what's left of the three-chip budget.
+                const shown = evs.slice(0, Math.max(1, 3 - dayBlocks.length));
+                const extra = evs.length - shown.length;
+                const count = evs.length + dayBlocks.length + externalToday.length;
+                return (
+                  <button
+                    key={di}
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-label={`${spokenDate(day)} — ${count === 0 ? "nothing scheduled" : `${count} item${count === 1 ? "" : "s"}`}`}
+                    onClick={() => onOpenDay(day)}
+                    className={`flex min-h-[104px] flex-col gap-1 border-b border-r border-[var(--line)] p-1.5 text-left transition-colors hover:bg-[var(--surface-0)] ${
+                      inMonth ? "" : "bg-surface-0/40"
+                    } ${isOpen ? "bg-[var(--surface-0)] ring-1 ring-inset ring-[var(--gold-400)]" : ""}`}
+                  >
+                    <span
+                      className={`inline-flex h-6 w-6 items-center justify-center self-start rounded-full text-xs ${
+                        isToday ? "bg-[var(--gold-400)] font-semibold text-white" : inMonth ? "text-[var(--fg-secondary)]" : "text-[var(--fg-muted)]"
+                      }`}
+                    >
+                      {day.getDate()}
+                    </span>
+                    {externalToday.length ? (
+                      <div className="flex flex-wrap items-center gap-1" title={externalToday.map((e) => e.title).join("\n")}>
+                        {externalToday.slice(0, 6).map((e) => {
+                          const layer = layersById.get(e.calendarId);
+                          return (
+                            <span
+                              key={e.id}
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={{ backgroundColor: layer ? colorForLayer(layer) : "var(--fg-muted)" }}
+                            />
+                          );
+                        })}
+                        {externalToday.length > 6 ? (
+                          <span className="text-[10px] leading-none text-[var(--fg-muted)]">+{externalToday.length - 6}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-col gap-0.5">
+                      {dayBlocks.map((b) => (
+                        <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `block:${b.id}`); }} />
+                      ))}
+                      {shown.map((m) => (
+                        <MonthChip key={m.id} m={m} live={(presence[m.id]?.count ?? 0) > 0} onClick={(e) => { e.stopPropagation(); onOpenDay(day, `meeting:${m.id}`); }} />
+                      ))}
+                      {extra > 0 ? (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); onOpenDay(day); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onOpenDay(day); } }}
+                          className="cursor-pointer px-1 text-[11px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
+                        >
+                          +{extra} more
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
+              {expandedHere && expandedDay ? (
+                <div className="col-span-7 border-b border-r border-[var(--line)] bg-[var(--surface-0)]">
+                  <DayPanel
+                    key={dayKey(expandedDay)}
+                    day={expandedDay}
+                    meetings={meetings}
+                    blocks={blocks}
+                    externalEvents={externalEvents}
+                    layersById={layersById}
+                    now={now}
+                    presence={presence}
+                    statusOf={statusOf}
+                    selectedKey={expandedItemKey}
+                    onSelectItem={onSelectItem}
+                    onClose={onCloseDay}
+                    onNewMeeting={onNewMeeting}
+                    onBlockTime={onBlockTime}
+                    onEditMeeting={onEditMeeting}
+                    onClearBlock={onSelectBlock}
+                    onOpenDayView={onExpandDay}
+                  />
                 </div>
               ) : null}
-
-              <div className="flex flex-col gap-0.5">
-                {dayBlocks.map((b) => (
-                  <BlockChip key={b.id} b={b} onClick={(e) => { e.stopPropagation(); onSelectBlock(b); }} />
-                ))}
-                {shown.map((m) => (
-                  <MonthChip key={m.id} m={m} live={(presence[m.id]?.count ?? 0) > 0} onClick={(e) => { e.stopPropagation(); onSelectEvent(m); }} />
-                ))}
-                {extra > 0 ? (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); onExpandDay(day); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onExpandDay(day); } }}
-                    className="cursor-pointer px-1 text-[11px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
-                  >
-                    +{extra} more
-                  </span>
-                ) : null}
-              </div>
-            </button>
+            </Fragment>
           );
         })}
       </div>
     </div>
+  );
+}
+
+// ── The day panel ───────────────────────────────────────────────────────────
+//
+// What a month cell cannot say. Three chips and a row of dots are a summary;
+// clicking the day opens the whole of it — own meetings, blocked time, and the
+// connected calendars — as collapsible groups, each row opening into its own
+// detail. The detail replaces the list rather than stacking a dialog on top of
+// it, and its close button returns to the list, so a member can read three
+// things on a day without the day ever leaving the screen.
+export function DayPanel({
+  day,
+  meetings,
+  blocks,
+  externalEvents,
+  layersById,
+  now,
+  presence,
+  statusOf,
+  selectedKey,
+  onSelectItem,
+  onClose,
+  onNewMeeting,
+  onBlockTime,
+  onEditMeeting,
+  onClearBlock,
+  onOpenDayView,
+}: {
+  day: Date;
+  meetings: CalendarMeeting[];
+  blocks: CalendarBlock[];
+  externalEvents: ExternalEvent[];
+  layersById: Map<string, CalendarLayer>;
+  now: number;
+  presence: Record<string, RoomPresence>;
+  statusOf: (m: CalendarMeeting) => MeetingDisplayStatus;
+  /** The row being read, or null for the list. Held by the caller so that
+   *  clicking the same chip twice reopens it — state kept in here would see no
+   *  change on the second click and quietly do nothing. */
+  selectedKey: string | null;
+  onSelectItem: (itemKey: string | null) => void;
+  onClose: () => void;
+  onNewMeeting: (day: Date) => void;
+  onBlockTime: (day: Date) => void;
+  onEditMeeting: (m: CalendarMeeting) => void;
+  onClearBlock: (b: CalendarBlock) => void;
+  onOpenDayView: (day: Date) => void;
+}) {
+  const agenda = useMemo(
+    () => buildDayAgenda(day, { meetings, blocks, externalEvents }),
+    [day, meetings, blocks, externalEvents],
+  );
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  // Resolved every render rather than stored: a block cleared from its own
+  // detail, or a meeting that a refresh moved off this day, must fall back to
+  // the list instead of leaving a detail describing something that is gone.
+  const selected = useMemo(() => {
+    if (!selectedKey) return null;
+    for (const section of agenda.sections) {
+      const hit = section.items.find((i) => i.key === selectedKey);
+      if (hit) return hit;
+    }
+    return null;
+  }, [agenda, selectedKey]);
+
+  // Escape backs out one level at a time — detail to list, list to closed —
+  // because a member reading the third meeting of a day did not ask to lose
+  // the day.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (selected) onSelectItem(null);
+      else onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, onSelectItem, onClose]);
+
+  return (
+    <section
+      aria-label={`${formatDayTitle(day)} schedule`}
+      className="flex flex-col"
+    >
+      <header className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold text-[var(--fg-primary)]">{formatDayTitle(day)}</h3>
+          <p className="text-[11px] text-[var(--fg-muted)]">{summarizeDayAgenda(agenda)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNewMeeting(day)}
+          className="rounded-lg bg-gold-400 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-gold-500"
+        >
+          New meeting
+        </button>
+        <button
+          type="button"
+          onClick={() => onBlockTime(day)}
+          className="rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+        >
+          Block time
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenDayView(day)}
+          className="rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+        >
+          Day view →
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Close ${formatDayTitle(day)}`}
+          className="rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)]"
+        >
+          <CloseIcon />
+        </button>
+      </header>
+
+      {selected ? (
+        <DayItemDetail
+          item={selected}
+          layersById={layersById}
+          now={now}
+          presence={selected.meeting ? presence[selected.meeting.id] : undefined}
+          status={selected.meeting ? statusOf(selected.meeting) : undefined}
+          onBack={() => onSelectItem(null)}
+          onEditMeeting={onEditMeeting}
+          onClearBlock={onClearBlock}
+          onDone={onClose}
+        />
+      ) : agenda.total === 0 ? (
+        <p className="px-3 py-6 text-center text-xs text-[var(--fg-muted)]">
+          Nothing on this day yet — start a meeting, or block the time.
+        </p>
+      ) : (
+        <div className="flex flex-col">
+          {agenda.sections.map((section) => {
+            const open = !collapsed[section.kind];
+            return (
+              <div key={section.kind} className="border-b border-[var(--line)] last:border-b-0">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setCollapsed((c) => ({ ...c, [section.kind]: open }))}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--surface-1)]"
+                >
+                  <Caret open={open} />
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
+                    {section.label}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-[var(--fg-muted)]">{section.items.length}</span>
+                </button>
+                {open ? (
+                  <ul className="flex flex-col pb-1">
+                    {section.items.map((item) => (
+                      <li key={item.key}>
+                        <button
+                          type="button"
+                          onClick={() => onSelectItem(item.key)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-1)]"
+                        >
+                          <ItemDot item={item} layersById={layersById} live={itemIsLive(item, presence)} />
+                          <span className="w-24 shrink-0 truncate font-mono text-[11px] tabular-nums text-[var(--fg-muted)]">
+                            {item.timeLabel}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg-primary)]">{item.title}</span>
+                          {item.continuesNextDay ? (
+                            <span className="shrink-0 text-[10px] text-[var(--fg-muted)]">continues</span>
+                          ) : null}
+                          <span className="shrink-0 text-[var(--fg-muted)]"><ChevronRight /></span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Someone is in the room right now. Only ever true of this app's own meetings —
+ *  an external calendar cannot tell us who is in a call. */
+function itemIsLive(item: DayAgendaItem, presence: Record<string, RoomPresence>): boolean {
+  return Boolean(item.meeting && (presence[item.meeting.id]?.count ?? 0) > 0);
+}
+
+/** The colour that tells a row what it is without reading it: meeting type,
+ *  muted for blocked time, and the source calendar's own colour for events. */
+function ItemDot({ item, layersById, live }: { item: DayAgendaItem; layersById: Map<string, CalendarLayer>; live: boolean }) {
+  if (live) return <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--status-success)]" />;
+  if (item.meeting) return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${typeMeta(item.meeting.meeting_type).dot}`} />;
+  if (item.event) {
+    const layer = layersById.get(item.event.calendarId);
+    return (
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: layer ? colorForLayer(layer) : "var(--fg-muted)" }}
+      />
+    );
+  }
+  return <span className="h-1.5 w-1.5 shrink-0 rounded-full border border-dashed border-[var(--fg-muted)]" />;
+}
+
+// ── One row of the day, opened ──────────────────────────────────────────────
+// Whatever the row is, the close button means the same thing here: back to the
+// day it came from, never out of the calendar.
+function DayItemDetail({
+  item,
+  layersById,
+  now,
+  presence,
+  status,
+  onBack,
+  onEditMeeting,
+  onClearBlock,
+  onDone,
+}: {
+  item: DayAgendaItem;
+  layersById: Map<string, CalendarLayer>;
+  now: number;
+  presence?: RoomPresence;
+  status?: MeetingDisplayStatus;
+  onBack: () => void;
+  onEditMeeting: (m: CalendarMeeting) => void;
+  onClearBlock: (b: CalendarBlock) => void;
+  onDone: () => void;
+}) {
+  const layer = item.event ? layersById.get(item.event.calendarId) : undefined;
+  return (
+    <div>
+      <div className="flex items-start gap-3 border-b border-[var(--line)] px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          {item.meeting && status ? (
+            <MeetingDetailHeading meeting={item.meeting} status={status} presence={presence} now={now} />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]">
+                  {item.block ? "Blocked time" : layer?.name ?? "Connected calendar"}
+                </span>
+              </div>
+              <h4 className="mt-2 text-base font-semibold text-[var(--fg-primary)]">{item.title}</h4>
+              <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+                {item.allDay
+                  ? "All day"
+                  : `${item.startsEarlierDay ? "from earlier" : item.timeLabel}${
+                      item.block ? ` – ${shortTime(item.block.endsAt)}` : item.event ? ` – ${shortTime(item.event.endsAt)}` : ""
+                    }`}
+                {item.continuesNextDay ? " · continues the next day" : ""}
+              </p>
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to the day's list"
+          title="Back to the day's list"
+          className="rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)]"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+
+      {item.meeting && status ? (
+        <MeetingDetailBody
+          meeting={item.meeting}
+          presence={presence}
+          now={now}
+          onEdit={() => { const m = item.meeting!; onDone(); onEditMeeting(m); }}
+          onAfterEarn={onDone}
+        />
+      ) : item.block ? (
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <p className="min-w-0 flex-1 text-xs text-[var(--fg-muted)]">
+            Time you marked unavailable. Clearing it frees the slot for scheduling.
+          </p>
+          <button
+            type="button"
+            onClick={() => { onClearBlock(item.block!); onBack(); }}
+            className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+          >
+            Clear block
+          </button>
+        </div>
+      ) : item.event ? (
+        <div className="flex flex-col gap-2 p-3 text-sm">
+          {item.event.location ? <DetailRow label="Location" value={item.event.location} /> : null}
+          <DetailRow label="Shows as" value={item.event.isBusy ? "Busy" : "Free"} />
+          {item.event.link ? (
+            <a
+              href={item.event.link}
+              target="_blank"
+              rel="noreferrer"
+              className="self-start rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            >
+              Open in {layer?.source === "google" ? "Google Calendar" : "its calendar"} →
+            </a>
+          ) : null}
+          <p className="text-[11px] text-[var(--fg-muted)]">
+            This event belongs to a connected calendar — edit it there, not here.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Caret({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 text-[var(--fg-muted)] transition-transform ${open ? "rotate-90" : ""}`}
+      aria-hidden="true"
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
   );
 }
 
@@ -1658,7 +2110,121 @@ function Legend({ meetings }: { meetings: CalendarMeeting[] }) {
   );
 }
 
-// ── Event detail popover ────────────────────────────────────────────────────
+// ── Meeting detail ──────────────────────────────────────────────────────────
+// Split into a heading and a body so the same meeting reads identically in the
+// popover (week / day / schedule views) and inside the month day panel, where
+// the chrome around it is a disclosure rather than a dialog.
+
+/** Live means someone is in the room, or the clock says it is happening now. */
+function meetingIsLive(meeting: CalendarMeeting, presence: RoomPresence | undefined, now: number): boolean {
+  const ts = meetingTimeState(meeting.scheduled_at, meeting.duration_minutes, now);
+  return (presence?.count ?? 0) > 0 || ts?.phase === "in_progress";
+}
+
+function MeetingDetailHeading({
+  meeting,
+  status,
+  presence,
+  now,
+}: {
+  meeting: CalendarMeeting;
+  status: MeetingDisplayStatus;
+  presence?: RoomPresence;
+  now: number;
+}) {
+  const meta = typeMeta(meeting.meeting_type);
+  const ts = meetingTimeState(meeting.scheduled_at, meeting.duration_minutes, now);
+  const live = meetingIsLive(meeting, presence, now);
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.chip}`}>{meta.label}</span>
+        <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{status}</span>
+        {live ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success/10 px-2 py-0.5 text-[11px] font-medium text-[var(--status-success)]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--status-success)]" /> Live
+          </span>
+        ) : null}
+      </div>
+      <h3 className="mt-2 text-base font-semibold text-[var(--fg-primary)]">{meeting.title}</h3>
+      <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
+        {meeting.scheduled_at ? new Date(meeting.scheduled_at).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBD"}
+        {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
+        {ts && ts.phase !== "ended" ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
+      </p>
+    </>
+  );
+}
+
+function MeetingDetailBody({
+  meeting,
+  presence,
+  now,
+  onEdit,
+  onAfterEarn,
+}: {
+  meeting: CalendarMeeting;
+  presence?: RoomPresence;
+  now: number;
+  onEdit: () => void;
+  /** Called once Earn has been handed the meeting — the surface showing this
+   *  detail steps out of the way so the conversation is what's on screen. */
+  onAfterEarn: () => void;
+}) {
+  const live = meetingIsLive(meeting, presence, now);
+  const copilot = meeting.assigned_copilot_agent ? AGENTS.find((a) => a.key === meeting.assigned_copilot_agent)?.name ?? meeting.assigned_copilot_agent : null;
+  const attendees = meeting.attendees ?? [];
+
+  // Open Earn with a clean one-liner and run it, carrying only the meeting id +
+  // mode as chatContext. The rich institutional context (deal financials, lead
+  // contacts, saved notes) is gathered and injected SERVER-SIDE from that id — it
+  // never travels through the browser. This is the same no-leak path the meetings
+  // list uses; the earlier `earn:set-composer-prompt` only pre-filled the composer
+  // and dropped the context, so prep/follow-up ran without any of it.
+  function runWithEarn(prompt: string, chatContext: { id: string; mode: "prep" | "followup" }) {
+    window.dispatchEvent(
+      new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend: true, chatContext } }),
+    );
+    onAfterEarn();
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-2 p-4 text-sm">
+        {presence && presence.count > 0 ? (
+          <p className="text-xs text-[var(--status-success)]">{presence.count} in the room · {presence.names.join(", ")}</p>
+        ) : null}
+        {meeting.objective ? <DetailRow label="Objective" value={meeting.objective} /> : null}
+        {meeting.agenda ? <DetailRow label="Agenda" value={meeting.agenda} /> : null}
+        {copilot ? <DetailRow label="Copilot" value={copilot} /> : null}
+        {attendees.length ? <DetailRow label="Attendees" value={attendees.map((a) => a.email ?? a.name).join(", ")} /> : null}
+        <DetailRow label="Room" value={meeting.room_code} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] p-3">
+        <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-[var(--status-success)] text-white hover:opacity-90" : "bg-gold-400 text-white hover:bg-gold-500"}`}>
+          {live ? "Join live →" : "Join →"}
+        </Link>
+        <button onClick={onEdit} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">Edit</button>
+        {meeting.status === "ended" ? (
+          <>
+            <Link href={`/meetings/${meeting.room_code}/report`} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">View report</Link>
+            {/* Follow-up belongs after the meeting — the ended state is exactly when it's owed. */}
+            <button onClick={() => runWithEarn(`Draft the follow-up for "${meeting.title}".`, { id: meeting.id, mode: "followup" })} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
+              Follow up with Earn
+            </button>
+          </>
+        ) : (
+          <button onClick={() => runWithEarn(`Prepare me for "${meeting.title}".`, { id: meeting.id, mode: "prep" })} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
+            Prepare with Earn
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** The modal form, used by the views that have no room to expand a day inline. */
 function EventDetail({
   meeting,
   presence,
@@ -1683,80 +2249,19 @@ function EventDetail({
   }, [onClose]);
 
   const meta = typeMeta(meeting.meeting_type);
-  const ts = meetingTimeState(meeting.scheduled_at, meeting.duration_minutes, now);
-  const live = (presence?.count ?? 0) > 0 || ts?.phase === "in_progress";
-  const copilot = meeting.assigned_copilot_agent ? AGENTS.find((a) => a.key === meeting.assigned_copilot_agent)?.name ?? meeting.assigned_copilot_agent : null;
-  const attendees = meeting.attendees ?? [];
-
-  // Open Earn with a clean one-liner and run it, carrying only the meeting id +
-  // mode as chatContext. The rich institutional context (deal financials, lead
-  // contacts, saved notes) is gathered and injected SERVER-SIDE from that id — it
-  // never travels through the browser. This is the same no-leak path the meetings
-  // list uses; the earlier `earn:set-composer-prompt` only pre-filled the composer
-  // and dropped the context, so prep/follow-up ran without any of it.
-  function runWithEarn(prompt: string, chatContext: { id: string; mode: "prep" | "followup" }) {
-    window.dispatchEvent(
-      new CustomEvent("earn:open-with-context", { detail: { prompt, autoSend: true, chatContext } }),
-    );
-    onClose();
-  }
 
   return (
     <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] shadow-2xl">
         <div className="flex items-start gap-3 border-b border-[var(--line)] p-4" style={{ borderLeft: `3px solid ${meta.accent}` }}>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.chip}`}>{meta.label}</span>
-              <span className="rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--fg-muted)]">{status}</span>
-              {live ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success/10 px-2 py-0.5 text-[11px] font-medium text-[var(--status-success)]">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--status-success)]" /> Live
-                </span>
-              ) : null}
-            </div>
-            <h3 className="mt-2 text-base font-semibold text-[var(--fg-primary)]">{meeting.title}</h3>
-            <p className="mt-0.5 text-xs text-[var(--fg-muted)]">
-              {meeting.scheduled_at ? new Date(meeting.scheduled_at).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Time TBD"}
-              {meeting.duration_minutes ? ` · ${meeting.duration_minutes} min` : ""}
-              {ts && ts.phase !== "ended" ? ` · ${ts.phase === "in_progress" ? "In progress" : ts.label}` : ""}
-            </p>
+            <MeetingDetailHeading meeting={meeting} status={status} presence={presence} now={now} />
           </div>
           <button onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-0)] hover:text-[var(--fg-primary)]">
             <CloseIcon />
           </button>
         </div>
-
-        <div className="flex flex-col gap-2 p-4 text-sm">
-          {presence && presence.count > 0 ? (
-            <p className="text-xs text-[var(--status-success)]">{presence.count} in the room · {presence.names.join(", ")}</p>
-          ) : null}
-          {meeting.objective ? <DetailRow label="Objective" value={meeting.objective} /> : null}
-          {meeting.agenda ? <DetailRow label="Agenda" value={meeting.agenda} /> : null}
-          {copilot ? <DetailRow label="Copilot" value={copilot} /> : null}
-          {attendees.length ? <DetailRow label="Attendees" value={attendees.map((a) => a.email ?? a.name).join(", ")} /> : null}
-          <DetailRow label="Room" value={meeting.room_code} />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] p-3">
-          <Link href={`/meetings/${meeting.room_code}`} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${live ? "bg-[var(--status-success)] text-white hover:opacity-90" : "bg-gold-400 text-white hover:bg-gold-500"}`}>
-            {live ? "Join live →" : "Join →"}
-          </Link>
-          <button onClick={onEdit} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">Edit</button>
-          {meeting.status === "ended" ? (
-            <>
-              <Link href={`/meetings/${meeting.room_code}/report`} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">View report</Link>
-              {/* Follow-up belongs after the meeting — the ended state is exactly when it's owed. */}
-              <button onClick={() => runWithEarn(`Draft the follow-up for "${meeting.title}".`, { id: meeting.id, mode: "followup" })} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
-                Follow up with Earn
-              </button>
-            </>
-          ) : (
-            <button onClick={() => runWithEarn(`Prepare me for "${meeting.title}".`, { id: meeting.id, mode: "prep" })} className="ml-auto rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]">
-              Prepare with Earn
-            </button>
-          )}
-        </div>
+        <MeetingDetailBody meeting={meeting} presence={presence} now={now} onEdit={onEdit} onAfterEarn={onClose} />
       </div>
     </div>
   );
