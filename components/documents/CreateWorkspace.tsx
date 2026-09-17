@@ -14,7 +14,11 @@ import { useMemo, useState, useTransition } from "react";
 import { newBlankDocument, newDocumentFromTemplate } from "./create-actions";
 import { GenerateAiButton } from "@/components/build/GenerateAiButton";
 import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
+import { AI_DRAFTABLE_SECTIONS } from "@/lib/document-create";
 import type { MaterialStatus, TemplateGroup } from "@/lib/document-create";
+
+// The sections Earn can draft cold, in data-room order.
+const DRAFTABLE_SECTIONS = DATA_ROOM_SECTIONS.filter((s) => AI_DRAFTABLE_SECTIONS.has(s.key));
 
 interface Props {
   materials: MaterialStatus[];
@@ -71,11 +75,13 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
               >
                 {m.present ? "✓" : "○"}
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-[9rem]">
                 <p className={`truncate text-sm ${m.present ? "text-fg-secondary" : "text-fg-primary"}`}>
                   {m.name}
                 </p>
-                <p className="mt-0.5 font-mono text-[11px] text-fg-muted">{m.sectionLabel}</p>
+                <p className="mt-0.5 truncate font-mono text-[11px] text-fg-muted">
+                  {m.sectionLabel}
+                </p>
               </div>
 
               {m.present ? (
@@ -83,7 +89,7 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
                   In library
                 </span>
               ) : (
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                   {m.templateId ? (
                     <form
                       action={(fd) =>
@@ -261,22 +267,39 @@ export function CreateWorkspace({ materials, groups, missingCount, usedTemplateS
               </button>
             </form>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={() => setBlankOpen(true)}
-                className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
+                className="self-start rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-gold-300 transition hover:bg-gold-500/20"
               >
                 + Blank document
               </button>
-              <p className="text-xs text-fg-muted">
-                Or draft a section from your firm data:
-              </p>
-              {[...DATA_ROOM_SECTIONS]
-                .filter((s) => ["overview", "thesis", "track_record", "team"].includes(s.key))
-                .map((s) => (
-                  <GenerateAiButton key={s.key} sectionKey={s.key} />
-                ))}
+
+              <div>
+                <p className="mb-1.5 text-xs text-fg-muted">
+                  Or let Earn draft a section from your firm data:
+                </p>
+                {/* Each button carries its section beside it. GenerateAiButton
+                    renders a fixed "✦ AI Draft" label with the section only in a
+                    tooltip — fine in the Library, where the button sits inside a
+                    row that names itself, but four of them side by side here
+                    would be four identical buttons with nothing to choose
+                    between. */}
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {DRAFTABLE_SECTIONS.map((s) => (
+                    <div
+                      key={s.key}
+                      className="flex flex-wrap items-center gap-2 rounded-lg border border-line/60 bg-surface-1 px-3 py-2"
+                    >
+                      <span className="min-w-0 flex-1 basis-[8rem] truncate text-sm text-fg-secondary">
+                        {s.label}
+                      </span>
+                      <GenerateAiButton sectionKey={s.key} />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
