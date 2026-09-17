@@ -121,6 +121,40 @@ export function recencyWeight(createdAt: string | null | undefined, now: number)
   return Math.max(MIN_WEIGHT, Math.pow(0.5, ageDays / FEEDBACK_HALF_LIFE_DAYS));
 }
 
+/**
+ * Summed recency weight across a set of signals — how much LIVE signal is here,
+ * as opposed to how many rows there are.
+ */
+export function feedbackMass(rows: FeedbackLite[], now: number = Date.now()): number {
+  return rows.reduce((sum, r) => sum + recencyWeight(r.created_at, now), 0);
+}
+
+/**
+ * The count-based rule this replaces asked for three signals of any age. The
+ * weighted equivalent has to allow for decay, or three accepts from last week
+ * would fall just short of a bare `3` and an active operator would silently
+ * lose their personalization.
+ *
+ * So the threshold is derived rather than picked: three signals, each allowed
+ * to be up to a fortnight old. That admits an operator active in the last two
+ * weeks, and a dozen signals from two months ago; it excludes two fresh
+ * signals, and it excludes a dormant history of any size the reader can return,
+ * since nothing weighs less than MIN_WEIGHT and the read is capped at 120 rows.
+ */
+const PERSONAL_SIGNAL_ROWS = 3;
+const PERSONAL_SIGNAL_GRACE_DAYS = 14;
+
+/**
+ * How much live signal an operator needs before the digest speaks for them
+ * alone rather than for the org.
+ *
+ * Counting rows, a returning operator with fifty year-old accepts looked richly
+ * personalized while carrying almost no live signal, and was served their own
+ * stale taste in preference to what the firm is doing now.
+ */
+export const PERSONAL_SIGNAL_THRESHOLD =
+  PERSONAL_SIGNAL_ROWS * Math.pow(0.5, PERSONAL_SIGNAL_GRACE_DAYS / FEEDBACK_HALF_LIFE_DAYS);
+
 interface WeightedValue {
   value: string | null | undefined;
   weight: number;
@@ -250,10 +284,15 @@ export async function getLearnedPreferences(
     const { data } = await q;
     const all = (data ?? []) as (FeedbackLite & { principal_id: string | null })[];
     if (!all.length) return undefined;
-    // Prefer the current operator's own signal; fall back to org-wide if they're
-    // new to this module so suggestions aren't cold for first-time users.
+    // Prefer the current operator's own signal, but measure it by live weight
+    // rather than row count. A first-time user has no signal; a returning user
+    // with a long-dormant history has many rows and almost as little. Both are
+    // better served by the org's recent behavior than by a cold personal digest.
+    // One clock for the whole call, so the threshold and the digest agree.
+    const now = Date.now();
     const mine = principalId ? all.filter((r) => r.principal_id === principalId) : [];
-    const digest = summarizeFeedback(mine.length >= 3 ? mine : all);
+    const usePersonal = feedbackMass(mine, now) >= PERSONAL_SIGNAL_THRESHOLD;
+    const digest = summarizeFeedback(usePersonal ? mine : all, now);
     return digest || undefined;
   } catch {
     return undefined;
@@ -373,6 +412,8 @@ export const __test = {
   summarizeFeedback,
   recencyWeight,
   weightedTopCounts,
+  feedbackMass,
+  PERSONAL_SIGNAL_THRESHOLD,
   summarizeActivity,
   summarizePortfolio,
   summarizeUser,

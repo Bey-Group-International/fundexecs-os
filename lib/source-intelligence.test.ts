@@ -6,7 +6,17 @@
 import { __test } from "@/lib/source-intelligence";
 import { __test as engineTest } from "@/lib/source-ai";
 
-const { summarizeFeedback, summarizeActivity, summarizePortfolio, summarizeUser, topCounts, recencyWeight, weightedTopCounts } = __test;
+const {
+  summarizeFeedback,
+  summarizeActivity,
+  summarizePortfolio,
+  summarizeUser,
+  topCounts,
+  recencyWeight,
+  weightedTopCounts,
+  feedbackMass,
+  PERSONAL_SIGNAL_THRESHOLD,
+} = __test;
 const { operatorContextBlock } = engineTest;
 
 describe("topCounts", () => {
@@ -151,6 +161,65 @@ describe("summarizeFeedback recency weighting", () => {
     ], NOW);
     expect(out).toContain("favors family office");
     expect(out).toContain("recently accepted Acme FO, Beta FO");
+  });
+});
+
+describe("feedbackMass", () => {
+  const NOW = Date.parse("2026-09-17T00:00:00Z");
+  const daysAgo = (n: number) => new Date(NOW - n * 24 * 60 * 60 * 1000).toISOString();
+  const row = (created_at: string | null) => ({
+    signal: "accepted",
+    category: "lp",
+    subject_name: "X",
+    action: null,
+    created_at,
+  });
+
+  it("is zero for no signal at all", () => {
+    expect(feedbackMass([], NOW)).toBe(0);
+  });
+
+  it("counts fresh signals at face value", () => {
+    expect(feedbackMass([row(daysAgo(0)), row(daysAgo(0)), row(daysAgo(0))], NOW)).toBeCloseTo(3, 5);
+  });
+
+  it("clears the personalization threshold on three fresh signals", () => {
+    const fresh = [row(daysAgo(0)), row(daysAgo(1)), row(daysAgo(2))];
+    expect(feedbackMass(fresh, NOW)).toBeGreaterThanOrEqual(PERSONAL_SIGNAL_THRESHOLD);
+  });
+
+  it("still clears it for an operator active within the last fortnight", () => {
+    const recent = [row(daysAgo(3)), row(daysAgo(8)), row(daysAgo(12))];
+    expect(feedbackMass(recent, NOW)).toBeGreaterThanOrEqual(PERSONAL_SIGNAL_THRESHOLD);
+  });
+
+  it("does not clear it on two fresh signals — three is still the bar", () => {
+    expect(feedbackMass([row(daysAgo(0)), row(daysAgo(0))], NOW)).toBeLessThan(
+      PERSONAL_SIGNAL_THRESHOLD,
+    );
+  });
+
+  it("does not clear it on three year-old signals", () => {
+    const stale = [row(daysAgo(365)), row(daysAgo(380)), row(daysAgo(400))];
+    expect(feedbackMass(stale, NOW)).toBeLessThan(PERSONAL_SIGNAL_THRESHOLD);
+  });
+
+  it("clears it on a dozen signals from two months ago", () => {
+    const middling = Array.from({ length: 12 }, () => row(daysAgo(60)));
+    expect(feedbackMass(middling, NOW)).toBeGreaterThanOrEqual(PERSONAL_SIGNAL_THRESHOLD);
+  });
+
+  it("cannot be reached by dormant history alone within the read limit", () => {
+    // The reader caps at 120 rows and no signal weighs less than the floor, so
+    // the largest possible mass from an entirely cold history stays under the
+    // threshold. If either constant moves, this is the guard that catches it.
+    const READ_LIMIT = 120;
+    const dormant = Array.from({ length: READ_LIMIT }, () => row(daysAgo(3650)));
+    expect(feedbackMass(dormant, NOW)).toBeLessThan(PERSONAL_SIGNAL_THRESHOLD);
+  });
+
+  it("treats undated rows as live, matching the old count-based behavior", () => {
+    expect(feedbackMass([row(null), row(null), row(null)], NOW)).toBe(3);
   });
 });
 
