@@ -2490,6 +2490,7 @@ Deployed, monitoring               →  live, observability active
              |  round trip. And the truncation path is tested by asserting on
              |  stop_reason, not by making a real model run out of room.
 
+
 2026-09-16  |  A badge nobody could clear, and a task raised twice  |  Second
              |  pass on meeting notes, and the headline came from following the
              |  same thread as yesterday: find what gets written and ask who
@@ -2543,6 +2544,76 @@ Deployed, monitoring               →  live, observability active
              |  exactly that gap. Same shape as the calendar_feed_events window
              |  already documented above, and the same answer: it is seconds, and
              |  the alternative is a two-stage deploy for a nullable column.
+
+2026-09-16  |  The adaptation that could not fix what it measured  |  Asked to
+             |  check for defects with the bandwidth connection, then to fix
+             |  them in phases. Three, and they compound: the room decided a
+             |  link was bad on evidence it had manufactured, then answered it
+             |  in the one direction that could not help, and if the network
+             |  actually went away it stopped trying to come back.
+             |  THE REMEDY POINTED THE WRONG WAY. Every input to the link state
+             |  is INBOUND — bytes received, packets lost, streams arriving — so
+             |  `bwMode` says what this member is failing to download. Every
+             |  response to it was on the send side: halve our encoders, switch
+             |  them off, tell the room our video is paused. So somebody on a
+             |  congested downlink kept pulling the full stream from every peer
+             |  while switching off the one thing that was not causing the loss.
+             |  The loss went on, so the mode never lifted, and they spent the
+             |  call invisible and no better off. The lever was already built
+             |  and unused: receivers already tell senders what size to encode
+             |  for. A degraded link now stops asking anyone for a full-size
+             |  picture and an audio-only one stops asking for pictures at all,
+             |  so the thing being reduced is the thing being measured.
+             |  THE MEASUREMENT WAS AN AVERAGE CALLING ITSELF A MINIMUM. The
+             |  sampler summed every peer's bytes and divided by the peer count,
+             |  under a comment insisting this was "per peer, not in total"
+             |  because an aggregate "hides one starved stream behind three
+             |  healthy ones". A mean is an aggregate. It hid the starved stream
+             |  just as well, and invented starvation that was not there: every
+             |  silent participant dragged it down, and Opus DTX had just been
+             |  turned on to make silence free. Seven people, one camera on,
+             |  average about 37kbps against a 90kbps floor — a healthy call
+             |  reading as a dying one. `videoExpected` had the mirror flaw: it
+             |  asked what each peer's camera was doing, never what we had asked
+             |  them to send. Background the tab and every tier drops to `none`,
+             |  the peers stop sending exactly as instructed, their cameras stay
+             |  on — so the rule expected video it had itself cancelled. Ten
+             |  seconds in another tab started it, and because `degraded` judges
+             |  on loss alone the room read healthy again and climbed back:
+             |  normal/degraded, every twenty seconds, halving its own send caps
+             |  and broadcasting to the room on each flip.
+             |  A THIRTY-SECOND OUTAGE WAS PERMANENT. ICE recovery ran five
+             |  restarts across about twenty-nine seconds and then stopped for
+             |  good — the attempt cap and the give-up were the same number. A
+             |  laptop asleep for a minute, a tunnel, a slow Wi-Fi handover left
+             |  every tile reading "Connection lost" for the rest of the meeting
+             |  at BOTH ends, each having given up on the other, with no way
+             |  back but a reload. Three doors, all of which had to close: the
+             |  burst now drives the badge while retries continue on a
+             |  twenty-second cadence out to ten minutes; `online` clears the
+             |  backoff instead of being ignored; and the signalling channel,
+             |  which announced once, now says hello again on a resubscribe when
+             |  there is a stalled peer to rebuild — a socket that dropped is
+             |  also a socket that carried none of the offers those restarts
+             |  were producing.
+             |  Worth naming: the first two defects are the same mistake in
+             |  opposite directions — a number was trusted without asking what
+             |  it was a number OF. The mean was trusted as a per-stream rate;
+             |  an inbound rate was trusted to justify an outbound remedy. Both
+             |  had confident comments on top. The comments are how I found
+             |  them: each one stated an intent the code underneath did not
+             |  implement, which is a better defect detector than reading the
+             |  code cold.
+             |  Confidence: typecheck/eslint clean, production build passes,
+             |  Jest 6063 → 6083 green (+20 new), re-measured against main after
+             |  merging it in. Eight of the twenty were run against the previous
+             |  rules first and fail there.
+             |  NOT EXERCISED: the MeetingRoom harness still stops short of
+             |  entering the room, so all three wirings — the sampler loop, the
+             |  `online` listener, the resubscribe rejoin — are verified by
+             |  reading, with only the pure policy under test. Fourth pass
+             |  running with that gap; it is now the main thing standing between
+             |  this area and real regression cover.
 
 2026-09-17  |  A scrubber with a length  |  Asked to optimize recording playback
              |  and export, with questions first. Four answers, all the

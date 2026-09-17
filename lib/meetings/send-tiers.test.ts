@@ -11,6 +11,7 @@ import {
   allocateSendCaps,
   tierForView,
   totalUpstreamKbps,
+  capTierForMode,
   withDemotionDelay,
   type VideoTier,
   scaleForCapture,
@@ -165,6 +166,47 @@ describe("withDemotionDelay", () => {
 
   it("does not hold someone who was never watched", () => {
     expect(hold({ desired: "low", lastHighAt: null })).toBe("low");
+  });
+});
+
+describe("capTierForMode", () => {
+  // The defect this closes: every input to the link state is an INBOUND
+  // measurement, and every response to it was on the send side. A member on a
+  // congested downlink switched off their own camera — the one thing that was
+  // not causing the loss — kept pulling the full inbound stream, and stayed
+  // invisible for the rest of the call without the line improving at all.
+  it("stops asking for pictures at all once video is being paused", () => {
+    expect(capTierForMode("high", "audio-only")).toBe("none");
+    expect(capTierForMode("low", "audio-only")).toBe("none");
+    expect(capTierForMode("none", "audio-only")).toBe("none");
+  });
+
+  it("stops asking anyone for a full-size picture on a degraded line", () => {
+    expect(capTierForMode("high", "degraded")).toBe("low");
+  });
+
+  // Degraded is the step before giving up on video, so it keeps the picture
+  // that costs least rather than removing it.
+  it("leaves a thumbnail alone on a degraded line", () => {
+    expect(capTierForMode("low", "degraded")).toBe("low");
+    expect(capTierForMode("none", "degraded")).toBe("none");
+  });
+
+  it("changes nothing on a healthy line", () => {
+    for (const tier of ["high", "low", "none"] as const) {
+      expect(capTierForMode(tier, "normal")).toBe(tier);
+    }
+  });
+
+  // It only ever reduces. A cap that could raise a tier would override the
+  // layout — asking for a full-size picture of somebody drawn at 96px.
+  it("never asks for more than the layout wanted", () => {
+    const rank = { none: 0, low: 1, high: 2 } as const;
+    for (const mode of ["normal", "degraded", "audio-only"] as const) {
+      for (const tier of ["high", "low", "none"] as const) {
+        expect(rank[capTierForMode(tier, mode)]).toBeLessThanOrEqual(rank[tier]);
+      }
+    }
   });
 });
 
