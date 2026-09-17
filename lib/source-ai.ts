@@ -529,13 +529,17 @@ export async function apolloEnrichCandidates(candidates: SourceCandidate[]): Pro
           ]);
           if (res.status === "success" && res.data?.[0]) {
             const p = res.data[0];
+            // Provider fields go through the same hygiene as model-generated
+            // ones. This runs after verification, so it is the last gate before
+            // a contact is persisted — an unvalidated provider value would
+            // reach the record without ever being checked.
             return {
               ...c,
               contactName: c.contactName || p.name,
               contactRole: c.contactRole || p.title,
-              contactEmail: c.contactEmail || p.email,
-              contactPhone: c.contactPhone || p.phone,
-              contactLinkedIn: c.contactLinkedIn || p.linkedin_url,
+              contactEmail: c.contactEmail || cleanEmail(p.email),
+              contactPhone: c.contactPhone || cleanPhone(p.phone),
+              contactLinkedIn: c.contactLinkedIn || cleanLinkedIn(p.linkedin_url),
             };
           }
         } catch { /* non-fatal */ }

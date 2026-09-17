@@ -98,9 +98,11 @@ export function parseAmountRange(raw: unknown): AmountRange | null {
   const openEndedUp = /\b(under|below|less than|up to|max|maximum|sub)\b|^</.test(s);
   const openEndedDown = /\b(over|above|more than|at least|min|minimum|from)\b|\+\s*$|^>/.test(s);
 
-  // Split on a range separator, but not on a hyphen inside a number.
+  // Split on a range separator, but not on a hyphen inside a number — and not
+  // inside a word: without the boundaries, the "and" in "thousand" splits
+  // "500 thousand" into "500 thous" and the value comes back 1000x too small.
   const parts = s
-    .split(/\s*(?:–|—|-{1,2}|to|through|and|\.\.\.?)\s*/)
+    .split(/\s*(?:–|—|-{1,2}|\bto\b|\bthrough\b|\band\b|\.\.\.?)\s*/)
     .map((p) => p.trim())
     .filter((p) => /\d/.test(p));
 
@@ -179,6 +181,25 @@ const US_REGIONS: Record<string, string[]> = {
 // Terms that mean "anywhere in the US" — they match any US state or region.
 const US_WIDE = new Set(["us", "usa", "u s", "united states", "united states of america", "america", "north america", "domestic", "nationwide"]);
 
+// Two-letter state codes that are also ordinary words or common place-name
+// particles. "Rio de Janeiro" is not Delaware and "La Jolla" is not Louisiana,
+// so these are only read as states when written as a code (uppercase in the
+// original text) or when they are the entire term.
+const AMBIGUOUS_STATE_CODES = new Set([
+  "de", "la", "in", "or", "me", "hi", "pa", "ok", "oh", "id",
+  "ma", "co", "ne", "mi", "mt", "mo", "ms", "ct", "al", "ar",
+]);
+
+/** Whole-word phrase test without building a regex per call. */
+function hasPhrase(haystack: string, phrase: string): boolean {
+  if (haystack === phrase) return true;
+  return (
+    haystack.startsWith(`${phrase} `) ||
+    haystack.endsWith(` ${phrase}`) ||
+    haystack.includes(` ${phrase} `)
+  );
+}
+
 function normalizeGeoText(v: string): string {
   return v
     .normalize("NFD")
@@ -198,14 +219,19 @@ function statesImplied(term: string): Set<string> {
     return out;
   }
   for (const [name, code] of Object.entries(US_STATES)) {
-    // Word-boundary match so "indiana" doesn't pick up every "in".
-    if (t === name || new RegExp(`\\b${name}\\b`).test(t)) out.add(code);
+    if (hasPhrase(t, name)) out.add(code);
   }
   for (const code of Object.values(US_STATES)) {
-    if (new RegExp(`\\b${code}\\b`).test(t)) out.add(code);
+    if (!hasPhrase(t, code)) continue;
+    // An ambiguous code counts only when the source actually wrote it as a
+    // code — uppercase in the raw text — or when it is the whole term.
+    if (AMBIGUOUS_STATE_CODES.has(code) && t !== code && !hasPhrase(term, code.toUpperCase())) {
+      continue;
+    }
+    out.add(code);
   }
   for (const [region, codes] of Object.entries(US_REGIONS)) {
-    if (t === region || new RegExp(`\\b${region}\\b`).test(t)) codes.forEach((c) => out.add(c));
+    if (hasPhrase(t, region)) codes.forEach((c) => out.add(c));
   }
   return out;
 }
@@ -440,4 +466,4 @@ export function ensureMandateFit<T extends SourceCandidate & Partial<ScoredCandi
   });
 }
 
-export const __test = { WEIGHTS, US_REGIONS, statesImplied, strategyTokens, MAX_DETERMINISTIC_WEIGHT };
+export const __test = { WEIGHTS, US_REGIONS, statesImplied, strategyTokens, hasPhrase, AMBIGUOUS_STATE_CODES, MAX_DETERMINISTIC_WEIGHT };

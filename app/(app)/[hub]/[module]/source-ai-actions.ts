@@ -51,6 +51,37 @@ async function loadMandate(orgId: string): Promise<SourcingMandate | null> {
   };
 }
 
+/**
+ * Every active name in a module's table, paged with a stable order.
+ *
+ * Ordered by id so the pages partition the set: ordering by a mutable column
+ * lets a concurrent write move a row between pages, which would skip it. The
+ * cap is a safety valve against an unbounded loop, not an expected limit.
+ */
+async function allActiveNames(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  table: string,
+  orgId: string,
+): Promise<string[]> {
+  const PAGE = 1000;
+  const MAX_PAGES = 50;
+  const names: string[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await supabase
+      .from(table as "investors")
+      .select("name")
+      .eq("organization_id", orgId)
+      .is("archived_at", null)
+      .order("id", { ascending: true })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) break;
+    const rows = (data ?? []) as { name: string }[];
+    names.push(...rows.map((r) => r.name).filter(Boolean));
+    if (rows.length < PAGE) break;
+  }
+  return names;
+}
+
 // --- 1. GENERATE ------------------------------------------------------------
 export interface SourceTargetsResult {
   ok: boolean;
@@ -111,6 +142,8 @@ export async function sourceTargets(
     query: request,
     existing,
     enriched: sourcingEnrichmentEnabled(),
+    // Personalization is an input to generation, so it is an input to the key.
+    context,
   };
 
   const hit = await getCachedCandidates(orgId, cacheKey, options.refresh);
@@ -194,15 +227,12 @@ export async function addSourcedTargets(
   // Apollo credit on it. The client's candidate list was deduped when it was
   // generated, but an operator can sit on a result set while another session
   // adds the same firm — the check belongs here, at the point of insert.
-  const { data: existingRows } = await supabase
-    .from(cfg.table as "investors")
-    .select("name")
-    .eq("organization_id", orgId)
-    .is("archived_at", null)
-    .limit(500);
-  const dedupe = new EntityDedupe(
-    ((existingRows ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean),
-  );
+  //
+  // Every active name, not the first page of them: an unordered `.limit(500)`
+  // silently omits rows once a pipeline outgrows it, and a candidate matching
+  // an omitted row would pass dedupe and be inserted. These tables carry no
+  // name uniqueness constraint, so nothing downstream would catch it.
+  const dedupe = new EntityDedupe(await allActiveNames(supabase, cfg.table, orgId));
   let validCandidates = (candidates as SourceCandidate[]).filter(
     (c) => String(c.name ?? "").trim() && dedupe.add(c.name),
   );

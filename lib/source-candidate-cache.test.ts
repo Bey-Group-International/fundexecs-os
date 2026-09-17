@@ -1,7 +1,7 @@
 import { __test } from "@/lib/source-candidate-cache";
 import type { SourcingMandate } from "@/lib/source-ai";
 
-const { existingFingerprint, keyParams } = __test;
+const { existingFingerprint, contextFingerprint, keyParams } = __test;
 
 const MANDATE: SourcingMandate = {
   thesisTitle: "Lower-mid-market industrials",
@@ -64,5 +64,61 @@ describe("keyParams", () => {
 
   it("handles a missing mandate", () => {
     expect(() => keyParams({ ...base, mandate: null })).not.toThrow();
+  });
+});
+
+describe("contextFingerprint", () => {
+  it("is stable for the same context", () => {
+    const ctx = { user: "Mara", learned: "favors private credit" };
+    expect(contextFingerprint(ctx)).toBe(contextFingerprint({ ...ctx }));
+  });
+
+  it("separates operators with different learned preferences", () => {
+    expect(contextFingerprint({ learned: "favors private credit" }))
+      .not.toBe(contextFingerprint({ learned: "favors family office" }));
+  });
+
+  it("changes when any part of the context changes", () => {
+    const base = { user: "Mara", portfolio: "3 deals", activity: "2 added", learned: "favors credit" };
+    expect(contextFingerprint({ ...base, user: "Dev" })).not.toBe(contextFingerprint(base));
+    expect(contextFingerprint({ ...base, activity: "5 added" })).not.toBe(contextFingerprint(base));
+  });
+
+  it("treats absent and empty context alike", () => {
+    expect(contextFingerprint(undefined)).toBe("none");
+    expect(contextFingerprint({})).toBe("none");
+  });
+
+  it("cannot be collided by shifting text across fields", () => {
+    // A plain concatenation would make these two identical.
+    expect(contextFingerprint({ user: "ab", portfolio: "c" }))
+      .not.toBe(contextFingerprint({ user: "a", portfolio: "bc" }));
+  });
+});
+
+describe("keyParams personalization", () => {
+  const base = {
+    module: "source/lp_pipeline",
+    mandate: MANDATE,
+    query: "family offices",
+    existing: ["Acme Capital"],
+    enriched: false,
+  };
+
+  it("gives two operators with different preferences different keys", () => {
+    const mine = keyParams({ ...base, context: { learned: "favors private credit" } });
+    const theirs = keyParams({ ...base, context: { learned: "favors family office" } });
+    expect(mine).not.toEqual(theirs);
+  });
+
+  it("invalidates when new feedback changes the digest", () => {
+    const before = keyParams({ ...base, context: { learned: "favors private credit" } });
+    const after = keyParams({ ...base, context: { learned: "favors private credit, logistics" } });
+    expect(before).not.toEqual(after);
+  });
+
+  it("still matches for the same operator context", () => {
+    const ctx = { user: "Mara", learned: "favors private credit" };
+    expect(keyParams({ ...base, context: ctx })).toEqual(keyParams({ ...base, context: { ...ctx } }));
   });
 });

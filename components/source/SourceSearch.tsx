@@ -141,9 +141,13 @@ export function SourceSearch({
   const ranInitial = useRef(false);
   const workflowRef = useRef<string | null>(null);
   // Mirror of `steps` for the refresh path, which needs the current results
-  // without re-creating its callback on every state change.
+  // without re-creating its callback on every state change. Written in an
+  // effect, not during render: React can discard a render it never commits,
+  // and the ref would keep the value from that discarded pass.
   const stepsRef = useRef<LiveStep[]>([]);
-  stepsRef.current = steps;
+  useEffect(() => {
+    stepsRef.current = steps;
+  }, [steps]);
 
   const busy = phase === "planning" || phase === "running";
 
@@ -264,6 +268,14 @@ export function SourceSearch({
         query: step.query,
         refresh: true,
       });
+      if (!r.ok) {
+        // runSourceStep reports failure by returning, not by throwing. Passing
+        // that to applyStepResult would replace the step with an empty list and
+        // silently bin results the operator still had.
+        setError(r.error ?? "Could not refresh that step.");
+        setSteps((prev) => prev.map((x) => (x.id === step.id ? { ...x, refreshing: false } : x)));
+        return;
+      }
       // A refresh replaces this step's results, so the names it previously
       // surfaced must not keep blocking themselves in the run-wide dedupe.
       const dedupe = new EntityDedupe();

@@ -94,8 +94,15 @@ describe("EntityDedupe", () => {
 });
 
 describe("cleanEmail", () => {
-  it("accepts a real address, lowercased", () => {
-    expect(cleanEmail("  Mara.Whitfield@AcmeCapital.com ")).toBe("mara.whitfield@acmecapital.com");
+  it("normalizes the domain but preserves the local part's casing", () => {
+    // The local part is case-sensitive per RFC 5321. Most providers ignore
+    // that, but lowercasing it is still rewriting someone's address.
+    expect(cleanEmail("  Mara.Whitfield@AcmeCapital.com ")).toBe("Mara.Whitfield@acmecapital.com");
+  });
+
+  it("catches placeholders regardless of casing", () => {
+    expect(cleanEmail("Jane.Doe@AcmeCapital.com")).toBeUndefined();
+    expect(cleanEmail("info@EXAMPLE.com")).toBeUndefined();
   });
 
   it("rejects malformed addresses", () => {
@@ -137,6 +144,15 @@ describe("cleanPhone", () => {
 
   it("allows a trailing extension", () => {
     expect(cleanPhone("+1 415 992 4471 ext 204")).toBe("+1 415 992 4471 ext 204");
+    expect(cleanPhone("415 992 4471 x204")).toBe("415 992 4471 x204");
+  });
+
+  it("does not count extension digits toward the length", () => {
+    // Six real digits plus a one-digit extension is not a seven-digit number.
+    expect(cleanPhone("123456 ext 7")).toBeUndefined();
+    // A full-length (15-digit) international number with an extension still
+    // fits — before the fix, the extension's digits pushed it over the max.
+    expect(cleanPhone("+44 20 7946 0958 123 ext 12")).toBe("+44 20 7946 0958 123 ext 12");
   });
 });
 

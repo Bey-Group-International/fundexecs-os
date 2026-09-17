@@ -14,7 +14,7 @@
 // and every caller can force a miss with `refresh`.
 import { createHash } from "crypto";
 import { getCached, setCached } from "@/lib/source-cache";
-import type { SourcingMandate } from "@/lib/source-ai";
+import type { OperatorContext, SourcingMandate } from "@/lib/source-ai";
 import type { VerifiedCandidate } from "@/lib/source-verification";
 import type { ScoredCandidate } from "@/lib/source-fit";
 import type { VerifiedResult } from "@/lib/source-hub-types";
@@ -35,6 +35,17 @@ export interface CandidateCacheKey {
   existing: string[];
   /** Web-search enrichment changes the answer, so it's part of the key. */
   enriched: boolean;
+  /**
+   * The per-operator context generation reasons with — learned preferences,
+   * recent activity, portfolio, identity.
+   *
+   * This belongs in the key because `generateTargets` is given it. Without it,
+   * two operators in one organization with opposite learned preferences share
+   * a cache entry and one of them silently receives the other's personalized
+   * results; a fresh accept/reject signal would also leave the digest it
+   * changed unused for the life of the entry.
+   */
+  context?: OperatorContext;
 }
 
 /** Order-independent digest of the pipeline names, so row order can't miss the cache. */
@@ -44,9 +55,22 @@ function existingFingerprint(names: string[]): string {
   return createHash("sha256").update(sorted.join("|")).digest("hex").slice(0, 16) + `:${sorted.length}`;
 }
 
+/**
+ * Digest of the operator context. The context is already distilled to short
+ * strings, so hashing them is a faithful fingerprint: any change to what the
+ * engine is told produces a different key.
+ */
+function contextFingerprint(context?: OperatorContext): string {
+  if (!context) return "none";
+  const parts = [context.user, context.portfolio, context.activity, context.learned];
+  if (parts.every((p) => !p)) return "none";
+  return createHash("sha256").update(parts.map((p) => p ?? "").join("\u0000")).digest("hex").slice(0, 16);
+}
+
 function keyParams(key: CandidateCacheKey): Record<string, unknown> {
   const m = key.mandate;
   return {
+    context: contextFingerprint(key.context),
     module: key.module,
     query: (key.query ?? "").trim().toLowerCase(),
     enriched: key.enriched,
@@ -119,4 +143,4 @@ export async function setCachedCandidates(
   await setCached(orgId, MODULE, PROVIDER, keyParams(key), envelope, CANDIDATE_TTL_SECONDS);
 }
 
-export const __test = { existingFingerprint, keyParams, MODULE, PROVIDER };
+export const __test = { existingFingerprint, contextFingerprint, keyParams, MODULE, PROVIDER };

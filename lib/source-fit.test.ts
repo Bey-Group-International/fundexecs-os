@@ -76,6 +76,14 @@ describe("parseAmountRange", () => {
     expect(parseAmountRange("$5M–$1M")).toEqual({ min: 1e6, max: 5e6 });
   });
 
+  it("does not split on 'and' inside a word", () => {
+    // "thousand" ends in "and". Without word boundaries this split into
+    // "500 thous" and came back 1000x too small.
+    expect(parseAmountRange("500 thousand")).toEqual({ min: 5e5, max: 5e5 });
+    expect(parseAmountRange("$500 thousand to $2 million")).toEqual({ min: 5e5, max: 2e6 });
+    expect(parseAmountRange("$1 thousand through $10 thousand")).toEqual({ min: 1e3, max: 1e4 });
+  });
+
   it("returns null when nothing numeric is present", () => {
     expect(parseAmountRange("undisclosed")).toBeNull();
     expect(parseAmountRange(undefined)).toBeNull();
@@ -118,6 +126,20 @@ describe("geographyMatches", () => {
   it("does not match a state code hiding inside a word", () => {
     // "Indiana" contains "in" and "ana"; a substring match would fire falsely.
     expect(geographyMatches("Indianapolis, IN", ["Oregon"])).toBe(false);
+  });
+
+  it("does not read ordinary words as state codes", () => {
+    // "de" is Delaware and "la" is Louisiana, both in the Southeast/South
+    // region sets — so a substring match put Brazil and Spain on-thesis.
+    expect(geographyMatches("Rio de Janeiro", ["Southeast"])).toBe(false);
+    expect(geographyMatches("La Jolla, Spain", ["South"])).toBe(false);
+    expect(geographyMatches("Isle of Man", ["Southeast"])).toBe(false);
+  });
+
+  it("still reads a genuine state code, upper or lower case", () => {
+    expect(geographyMatches("Wilmington, DE", ["Southeast"])).toBe(true);
+    expect(geographyMatches("New Orleans, LA", ["South"])).toBe(true);
+    expect(geographyMatches("austin, tx", ["Texas"])).toBe(true);
   });
 
   it("is false with nothing to compare", () => {

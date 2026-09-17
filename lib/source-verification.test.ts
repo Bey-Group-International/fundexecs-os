@@ -156,6 +156,25 @@ describe("rankVerified", () => {
     expect(ranked[0].name).toBe("Evidenced Capital");
   });
 
+  it("orders the same set the same way whatever order it arrives in", () => {
+    // Confidences one bucket apart pairwise but two apart end to end used to
+    // make the comparator intransitive, so the result depended on input order.
+    const make = (name: string, confidence: number, fitScore: number) => {
+      const base = verifyStructure(candidate({ name, fitScore }), CATEGORIES);
+      return { ...base, verification: { ...base.verification, confidence } };
+    };
+    const a = make("A", 0.6, 50);
+    const b = make("B", 0.63, 60);
+    const c = make("C", 0.67, 70);
+    const order = (list: VerifiedCandidate[]) => rankVerified(list).map((x) => x.name).join(",");
+    const expected = order([a, b, c]);
+    expect(order([c, b, a])).toBe(expected);
+    expect(order([b, a, c])).toBe(expected);
+    expect(order([b, c, a])).toBe(expected);
+    expect(order([a, c, b])).toBe(expected);
+    expect(order([c, a, b])).toBe(expected);
+  });
+
   it("falls back to fit score within the same evidence tier", () => {
     const low = verifyStructure(candidate({ name: "Low Capital", fitScore: 40 }), CATEGORIES);
     const high = verifyStructure(candidate({ name: "High Capital", fitScore: 88 }), CATEGORIES);

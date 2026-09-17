@@ -430,14 +430,21 @@ const STATUS_RANK: Record<VerificationStatus, number> = {
  * unsubstantiated 90 — the operator's time is better spent on the target we can
  * actually stand behind.
  */
+/** Confidence granularity for ranking; finer differences defer to fit score. */
+const CONFIDENCE_BUCKET = 0.05;
+
 export function rankVerified<T extends VerifiedCandidate>(candidates: T[]): T[] {
   return [...candidates].sort((a, b) => {
     const statusDelta = STATUS_RANK[b.verification.status] - STATUS_RANK[a.verification.status];
     if (statusDelta !== 0) return statusDelta;
-    const confidenceDelta = b.verification.confidence - a.verification.confidence;
-    if (Math.abs(confidenceDelta) > 0.05) return confidenceDelta;
+    // Bucket before comparing. A raw epsilon is not transitive — 0.60 ties 0.63
+    // and 0.63 ties 0.67, but 0.60 and 0.67 do not — so the final order would
+    // depend on the order the candidates arrived in.
+    const bucket = (v: number) => Math.round(v / CONFIDENCE_BUCKET);
+    const bucketDelta = bucket(b.verification.confidence) - bucket(a.verification.confidence);
+    if (bucketDelta !== 0) return bucketDelta;
     return b.fitScore - a.fitScore;
   });
 }
 
-export const __test = { FREE_MAIL_DOMAINS, STATUS_RANK };
+export const __test = { FREE_MAIL_DOMAINS, STATUS_RANK, CONFIDENCE_BUCKET };

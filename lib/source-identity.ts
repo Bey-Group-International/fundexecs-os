@@ -165,19 +165,23 @@ const PLACEHOLDER_LOCALS = new Set([
  */
 export function cleanEmail(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
-  const s = v.trim().toLowerCase();
+  const s = v.trim();
   if (!s || s.length > 254) return undefined;
   // One @, a local part, and a dotted domain with a real TLD.
-  if (!/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(s)) {
+  if (!/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(s)) {
     return undefined;
   }
   const [local, domain] = s.split("@");
   if (local.length > 64) return undefined;
-  if (PLACEHOLDER_LOCALS.has(local)) return undefined;
-  if (PLACEHOLDER_DOMAINS.has(domain)) return undefined;
-  const tld = domain.slice(domain.lastIndexOf(".") + 1);
+  // The local part is case-sensitive per RFC 5321 — most providers ignore that,
+  // but it is not ours to decide, so only the domain is normalized. Placeholder
+  // checks still compare case-insensitively.
+  if (PLACEHOLDER_LOCALS.has(local.toLowerCase())) return undefined;
+  const lowerDomain = domain.toLowerCase();
+  if (PLACEHOLDER_DOMAINS.has(lowerDomain)) return undefined;
+  const tld = lowerDomain.slice(lowerDomain.lastIndexOf(".") + 1);
   if (tld.length < 2 || /^\d+$/.test(tld)) return undefined;
-  return s;
+  return `${local}@${lowerDomain}`;
 }
 
 /**
@@ -189,8 +193,12 @@ export function cleanPhone(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
   const s = v.trim();
   if (!s || s.length > 40) return undefined;
-  if (/[a-z]/i.test(s.replace(/\s*(ext|x|extension)\.?\s*\d+$/i, ""))) return undefined;
-  const digits = s.replace(/\D/g, "");
+  // Strip a trailing extension BEFORE measuring: counting its digits let
+  // "123456 ext 7" pass the seven-digit minimum on a six-digit number, and
+  // pushed a legitimate 15-digit number with an extension over the maximum.
+  const base = s.replace(/\s*(?:extension|ext|x)\.?\s*\d+$/i, "");
+  if (/[a-z]/i.test(base)) return undefined;
+  const digits = base.replace(/\D/g, "");
   if (digits.length < 7 || digits.length > 15) return undefined;
   if (/^(\d)\1+$/.test(digits)) return undefined; // 5555555555
   if (digits.includes("1234567890") || digits.includes("0123456789")) return undefined;

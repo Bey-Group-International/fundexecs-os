@@ -209,10 +209,31 @@ export async function runSourceStep(args: {
   const orgId = auth.ctx.orgId;
   const supabase = await createServerClient();
 
+  // Both task ids arrive from the client. RLS stops a cross-organization UPDATE
+  // to `tasks`, but a `task_events` row only has to carry the caller's own
+  // organization_id — so an id belonging to another organization would be
+  // accepted as this event's subject. Confirm both ids are this org's, and that
+  // the step really belongs to the workflow, before writing anything.
+  const { data: ownedTasks } = await supabase
+    .from("tasks")
+    .select("id, parent_task_id")
+    .eq("organization_id", orgId)
+    .in("id", [args.workflowId, args.stepId]);
+  const owned = (ownedTasks ?? []) as { id: string; parent_task_id: string | null }[];
+  const step = owned.find((t) => t.id === args.stepId);
+  const workflowOwned = owned.some((t) => t.id === args.workflowId);
+  if (!step || !workflowOwned || step.parent_task_id !== args.workflowId) {
+    return { ok: false, error: "Unknown search step." };
+  }
+
   // Progress bookkeeping is for the timeline, not for correctness — start it
   // and get on with the work instead of waiting two round trips to begin.
   const announced = Promise.all([
-    supabase.from("tasks").update({ status: "in_progress", progress: 0.5 }).eq("id", args.stepId),
+    supabase
+      .from("tasks")
+      .update({ status: "in_progress", progress: 0.5 })
+      .eq("id", args.stepId)
+      .eq("organization_id", orgId),
     supabase.from("task_events").insert({
       organization_id: orgId,
       task_id: args.workflowId,
@@ -253,6 +274,8 @@ export async function runSourceStep(args: {
     query: args.query,
     existing: exclusions,
     enriched: sourcingEnrichmentEnabled(),
+    // Personalization is an input to generation, so it is an input to the key.
+    context,
   };
 
   let candidates: (VerifiedCandidate & ScoredCandidate)[];
@@ -294,7 +317,8 @@ export async function runSourceStep(args: {
     supabase
       .from("tasks")
       .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })
-      .eq("id", args.stepId),
+      .eq("id", args.stepId)
+      .eq("organization_id", orgId),
     supabase.from("task_events").insert({
       organization_id: orgId,
       task_id: args.workflowId,
@@ -318,12 +342,25 @@ export async function completeSourceSearch(workflowId: string): Promise<{ ok: bo
   const auth = await requireOrgContext();
   if (!auth.ok) return { ok: false };
   const supabase = await createServerClient();
+  const orgId = auth.ctx.orgId;
+
+  // Same client-supplied id, same check as runSourceStep: an event must never
+  // be written against a task this organization does not own.
+  const { data: workflow } = await supabase
+    .from("tasks")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("id", workflowId)
+    .maybeSingle();
+  if (!workflow) return { ok: false };
+
   await supabase
     .from("tasks")
     .update({ status: "completed", progress: 1, completed_at: new Date().toISOString() })
-    .eq("id", workflowId);
+    .eq("id", workflowId)
+    .eq("organization_id", orgId);
   await supabase.from("task_events").insert({
-    organization_id: auth.ctx.orgId,
+    organization_id: orgId,
     task_id: workflowId,
     event_type: "task.completed",
     agent: "associate",
