@@ -19,7 +19,13 @@ jest.mock("@/components/build/GenerateAiButton", () => ({
 
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { CreateWorkspace } from "./CreateWorkspace";
-import { groupTemplates, keyMaterialStatus, missingMaterialCount } from "@/lib/document-create";
+import {
+  AI_DRAFTABLE_SECTIONS,
+  groupTemplates,
+  keyMaterialStatus,
+  missingMaterialCount,
+} from "@/lib/document-create";
+import { DATA_ROOM_SECTIONS } from "@/lib/data-room";
 
 function renderCreate(docNames: string[] = [], usedSections: string[] = []) {
   const materials = keyMaterialStatus(docNames);
@@ -175,6 +181,28 @@ describe("start from scratch", () => {
     const fd = newBlankDocument.mock.calls[0][0] as FormData;
     expect(fd.get("name")).toBe("Side Letter Policy");
     expect(fd.get("section")).toBe("legal");
+  });
+
+  it("names the section beside every draft button", () => {
+    // Found by rendering in a real browser: GenerateAiButton's label is a fixed
+    // "✦ AI Draft" with the section only in a tooltip. That reads fine in the
+    // Library, where the button sits in a row that names itself, but five of
+    // them side by side here were five identical buttons with nothing to choose
+    // between.
+    renderCreate();
+    const scratch = within(region("Start from scratch"));
+    for (const key of AI_DRAFTABLE_SECTIONS) {
+      const label = DATA_ROOM_SECTIONS.find((s) => s.key === key)!.label;
+      expect(scratch.getByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("offers a draft button for exactly the AI-draftable sections", () => {
+    renderCreate();
+    const buttons = within(region("Start from scratch")).getAllByRole("button", {
+      name: /^AI /,
+    });
+    expect(buttons).toHaveLength(AI_DRAFTABLE_SECTIONS.size);
   });
 
   it("can be dismissed without creating anything", () => {
