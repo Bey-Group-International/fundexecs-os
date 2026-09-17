@@ -14,6 +14,8 @@ import { ModuleHeader } from "@/components/build/DraftWithEarn";
 import { SectionHighlighter } from "@/components/build/SectionHighlighter";
 import { WorkspaceDocumentListLive } from "@/components/workspace/WorkspaceDocumentListLive";
 import { documentKindLabel, formatBytes, isUploadedFile } from "@/lib/document-files";
+// Shared with Create so the two panes cannot disagree about what Earn can draft.
+import { AI_DRAFTABLE_SECTIONS } from "@/lib/document-create";
 import { relativeTime } from "@/lib/activity";
 import { LibraryWorkspace } from "./LibraryWorkspace";
 import type { LibraryDoc, LibrarySection } from "./LibraryControls";
@@ -26,9 +28,6 @@ import type {
   Principal,
   Document,
 } from "@/lib/supabase/database.types";
-
-// Sections Earn can draft from the Build foundation without a source file.
-const AI_DRAFTABLE = new Set(["overview", "thesis", "marketing", "team", "track_record"]);
 
 export async function DocumentsLibraryLive() {
   const ctx = await getSessionContext();
@@ -131,7 +130,7 @@ export async function DocumentsLibraryLive() {
       description: s.description,
       docs,
       viaBuild,
-      aiDraftable: AI_DRAFTABLE.has(s.key),
+      aiDraftable: AI_DRAFTABLE_SECTIONS.has(s.key),
     };
   });
 
