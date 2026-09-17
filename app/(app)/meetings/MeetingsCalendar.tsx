@@ -1486,6 +1486,18 @@ function DayItemDetail({
   return (
     <div>
       <div className="flex items-start gap-3 border-b border-[var(--line)] px-3 py-2.5">
+        {/* Leading, not trailing. The panel's own close sits at the top right,
+            and two identical × a thumb's width apart means the one that loses
+            the whole day is the one hit by accident. */}
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to the day's list"
+          title="Back to the day's list"
+          className="mt-0.5 shrink-0 rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)]"
+        >
+          <CloseIcon />
+        </button>
         <div className="min-w-0 flex-1">
           {item.meeting && status ? (
             <MeetingDetailHeading meeting={item.meeting} status={status} presence={presence} now={now} />
@@ -1508,15 +1520,6 @@ function DayItemDetail({
             </>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back to the day's list"
-          title="Back to the day's list"
-          className="rounded-full p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--fg-primary)]"
-        >
-          <CloseIcon />
-        </button>
       </div>
 
       {item.meeting && status ? (
