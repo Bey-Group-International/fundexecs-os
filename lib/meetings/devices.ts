@@ -95,6 +95,10 @@ export function displayConstraints(): DisplayMediaStreamOptions {
   return {
     video: {
       frameRate: { ideal: SCREEN_SHARE_FPS },
+      // Height only, so the aspect ratio of whatever surface they picked is
+      // left to the browser. See SCREEN_SHARE_MAX_HEIGHT for why there is a
+      // ceiling at all, and why it is `ideal`.
+      height: { ideal: SCREEN_SHARE_MAX_HEIGHT },
     },
     // Not requested. Routing tab audio into the call needs a second outgoing
     // track and a decision about whether it is mixed with the presenter's
@@ -106,6 +110,26 @@ export function displayConstraints(): DisplayMediaStreamOptions {
 
 /** Frames a second to capture a shared screen at. */
 export const SCREEN_SHARE_FPS = 15;
+
+/**
+ * The tallest capture worth taking from a shared screen.
+ *
+ * There used to be no ceiling, on the reasoning that resolution is what makes
+ * text readable — which is true, and is exactly why the unbounded version
+ * defeated itself. A 5K panel was captured at 5120x2880 and handed to an
+ * encoder that `screenSendCap` forbids to scale, on a mesh budget that at four
+ * peers is about 600kbps. Nothing in that chain can produce readable text: the
+ * pixels are kept and the legibility they were kept for is spent on them.
+ * 1440p is past the point where a shared document is comfortable to read and
+ * an order of magnitude cheaper to encode.
+ *
+ * `ideal`, never `max`: a browser that cannot deliver this must hand back what
+ * it has rather than reject the request, because an OverconstrainedError here
+ * reaches the member as a share button that does nothing. When the capture
+ * does come back larger, the encoder-side ladder in `screenSendCap` is the
+ * second line of defence.
+ */
+export const SCREEN_SHARE_MAX_HEIGHT = 1440;
 
 /** Constraints for one chosen device, or the system default when none is chosen. */
 export function constraintsFor(
