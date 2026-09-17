@@ -41,6 +41,9 @@ export async function POST(
   const loaded = await loadReportForExport(supabase, roomCode, {
     includeTranscript,
     userId: auth.ctx.userId,
+    // Canonical, so the recording link in the attached document works from an
+    // inbox rather than only from the tab it was generated in.
+    origin: SITE_URL,
   });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
   // Sending is a stronger act than downloading, and the same rule governs it:

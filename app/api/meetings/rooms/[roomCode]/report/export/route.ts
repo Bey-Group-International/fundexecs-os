@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { SITE_URL } from "@/lib/site";
 import { getSessionContext } from "@/lib/auth";
 import {
   EXPORT_CONTENT_TYPES,
@@ -49,6 +50,9 @@ export async function GET(
   const loaded = await loadReportForExport(supabase, roomCode, {
     includeTranscript,
     userId: ctx.userId,
+    // Canonical, so the recording link in the document works from an inbox or
+    // a file on somebody's desktop rather than only from this tab.
+    origin: SITE_URL,
   });
   if (!loaded) return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
 

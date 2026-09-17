@@ -2798,6 +2798,10 @@ export type LiveMeetingRecordingChunk = {
   idx: number;
   path: string;
   size: number;
+  /** Milliseconds from the recording's start to this part's. Null before timing was captured. */
+  offset_ms: number | null;
+  /** How long this part runs, measured rather than assumed from the timeslice. */
+  duration_ms: number | null;
   created_at: string;
 };
 

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { ExportMenu } from "./ExportMenu";
 import { TranscriptPanel } from "./TranscriptPanel";
+import type { RecordingPlayerHandle } from "./RecordingPlayer";
+import { transcriptCues, type CueRow } from "@/lib/meetings/transcript-cues";
 import { RecordingPanel } from "./RecordingPanel";
 import { normalizeNoteList, normalizeNoteText } from "@/lib/meetings/live-notes";
 import { reportViewState, shouldPollReport, type ReportViewState } from "@/lib/meetings/attendance";
@@ -38,6 +40,11 @@ export default function MeetingReportPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const [data, setData] = useState<Data | undefined>(undefined);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The rows the room wrote while people were speaking. Only these carry a
+  // time, which is what lets a line in the transcript drive the recording.
+  const [lines, setLines] = useState<CueRow[]>([]);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
+  const playerRef = useRef<RecordingPlayerHandle>(null);
 
   async function fetchReport() {
     const supabase = createClient();
@@ -80,6 +87,16 @@ export default function MeetingReportPage() {
         : Promise.resolve({ data: null }),
     ]);
 
+    // Timed lines, read through the viewer's own client: RLS gives these to
+    // the people who were in the meeting, the same rule the report uses. A
+    // failure here costs the timestamps, not the transcript.
+    void supabase
+      .from("live_meeting_transcripts")
+      .select("speaker, text, ts, confidence, overlapped")
+      .eq("meeting_id", meeting.id)
+      .order("ts", { ascending: true })
+      .then(({ data: rows }) => setLines((rows as CueRow[] | null) ?? []));
+
     const next: Data = {
       meeting: meeting as Meeting,
       report: (report as Report | null) ?? null,
@@ -107,6 +124,19 @@ export default function MeetingReportPage() {
     return () => stopPolling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
+
+  // Placed above the early returns: a hook that only runs on some renders is
+  // a hook that runs in a different order on the next one.
+  const cues = useMemo(
+    () => transcriptCues(lines, recordingStartedAt),
+    [lines, recordingStartedAt],
+  );
+  const handleRecordingReady = useCallback((startedAt: string) => {
+    setRecordingStartedAt(startedAt);
+  }, []);
+  const seekRecording = useCallback((ms: number) => {
+    playerRef.current?.seekTo(ms);
+  }, []);
 
   const state = viewStateOf(data);
 
@@ -251,11 +281,21 @@ export default function MeetingReportPage() {
       {/* The recording, when there is one. Renders nothing otherwise: most
           meetings are not recorded, and an empty heading on every report would
           be noise on the majority of pages to serve the minority. */}
-      <RecordingPanel meetingId={meeting.id} />
+      <RecordingPanel
+        meetingId={meeting.id}
+        playerRef={playerRef}
+        onRecordingReady={handleRecordingReady}
+      />
 
       {/* Full transcript, read back into turns rather than shown as the raw
           block it is stored as. */}
-      {report.full_transcript && <TranscriptPanel transcript={report.full_transcript} />}
+      {report.full_transcript && (
+        <TranscriptPanel
+          transcript={report.full_transcript}
+          cues={cues}
+          onSeek={recordingStartedAt ? seekRecording : undefined}
+        />
+      )}
 
     </div>
   );

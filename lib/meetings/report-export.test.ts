@@ -277,3 +277,50 @@ describe("reportExportFilename", () => {
       .not.toContain("--");
   });
 });
+
+describe("the recording block", () => {
+  const BASE = {
+    title: "Series B sync",
+    createdAt: "2026-09-17T10:00:00.000Z",
+    startedAt: null,
+    endedAt: null,
+    summary: "We agreed terms.",
+    keyPoints: [],
+    actionItems: [],
+    analysis: null,
+    fullTranscript: null,
+  };
+
+  it("names the recording, its length and when it goes", () => {
+    const md = buildReportMarkdown({
+      ...BASE,
+      recording: {
+        url: "https://app.test/api/meetings/m1/recording/r1/stream",
+        expiresAt: "2026-12-16T10:00:00.000Z",
+        durationSeconds: 3_600,
+      },
+    });
+    expect(md).toContain("## Recording");
+    expect(md).toContain("https://app.test/api/meetings/m1/recording/r1/stream");
+    expect(md).toContain("60 minutes");
+    // A document that mentions a video without saying it is being deleted
+    // invites somebody to rely on a link that will stop working.
+    expect(md).toMatch(/Available until/);
+  });
+
+  // Most meetings are not recorded, and a "Recording" heading over the words
+  // "not recorded" would be on the majority of exports.
+  it("says nothing at all when there is no recording", () => {
+    expect(buildReportMarkdown({ ...BASE, recording: null })).not.toContain("## Recording");
+    expect(buildReportMarkdown(BASE)).not.toContain("## Recording");
+  });
+
+  it("omits a length it does not know rather than printing zero", () => {
+    const md = buildReportMarkdown({
+      ...BASE,
+      recording: { url: "https://app.test/x", expiresAt: null, durationSeconds: null },
+    });
+    expect(md).toContain("## Recording");
+    expect(md).not.toMatch(/Length/);
+  });
+});

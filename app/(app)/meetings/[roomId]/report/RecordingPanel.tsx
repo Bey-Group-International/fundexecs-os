@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatSize } from "@/lib/meetings/recording-policy";
+import { RecordingPlayer, type RecordingPlayerHandle } from "./RecordingPlayer";
 
 /**
  * The recording, on the report page.
@@ -44,7 +45,17 @@ function daysUntil(iso: string): number {
   return Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000);
 }
 
-export function RecordingPanel({ meetingId }: { meetingId: string }) {
+export function RecordingPanel({
+  meetingId,
+  playerRef,
+  onRecordingReady,
+}: {
+  meetingId: string;
+  /** Handed to the first playable recording, so the transcript can drive it. */
+  playerRef?: React.Ref<RecordingPlayerHandle>;
+  /** When the recording the transcript should follow is known. */
+  onRecordingReady?: (startedAt: string) => void;
+}) {
   const [recordings, setRecordings] = useState<Recording[] | null>(null);
 
   useEffect(() => {
@@ -58,10 +69,17 @@ export function RecordingPanel({ meetingId }: { meetingId: string }) {
         .select("id, status, duration_seconds, size_bytes, started_by_name, started_at, expires_at, deleted_at, mime_type")
         .eq("meeting_id", meetingId)
         .order("started_at", { ascending: true });
-      if (!cancelled) setRecordings((data as Recording[] | null) ?? []);
+      if (cancelled) return;
+      const rows = (data as Recording[] | null) ?? [];
+      setRecordings(rows);
+      // The transcript follows the first recording that can actually be
+      // played. A meeting with two recordings is rare; one whose only
+      // recording was deleted or captured nothing is not.
+      const playable = rows.find((r) => !r.deleted_at && r.status !== "abandoned");
+      if (playable) onRecordingReady?.(playable.started_at);
     })();
     return () => { cancelled = true; };
-  }, [meetingId]);
+  }, [meetingId, onRecordingReady]);
 
   if (!recordings?.length) return null;
 
@@ -75,7 +93,7 @@ export function RecordingPanel({ meetingId }: { meetingId: string }) {
       </p>
 
       <div className="flex flex-col gap-5">
-        {recordings.map((rec) => {
+        {recordings.map((rec, index) => {
           // Said plainly rather than shown as a broken player. A recording that
           // aged out is a different thing from one that failed, and a viewer
           // following an old link deserves to know which.
@@ -101,11 +119,10 @@ export function RecordingPanel({ meetingId }: { meetingId: string }) {
 
           return (
             <div key={rec.id} className="flex flex-col gap-2">
-              <video
-                controls
-                preload="metadata"
-                className="w-full rounded-lg bg-black aspect-video"
-                src={`/api/meetings/${meetingId}/recording/${rec.id}/stream`}
+              <RecordingPlayer
+                meetingId={meetingId}
+                recordingId={rec.id}
+                ref={index === 0 ? playerRef : undefined}
               />
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--fg-muted)]">
                 {rec.status === "recording" && (
@@ -124,6 +141,17 @@ export function RecordingPanel({ meetingId }: { meetingId: string }) {
                 <span className={expiringIn <= 7 ? "text-[var(--status-warning)]" : undefined}>
                   {expiringIn > 0 ? `Deleted in ${expiringIn} day${expiringIn === 1 ? "" : "s"}` : "Deleted soon"}
                 </span>
+                {/* Until this there was nothing anybody could do about that
+                    expiry, which makes stating it worse than not stating it.
+                    A plain anchor: the route sets Content-Disposition, so the
+                    browser saves it with no object URL to leak. */}
+                <a
+                  href={`/api/meetings/${meetingId}/recording/${rec.id}/stream?download=1`}
+                  download
+                  className="text-[var(--gold-400)] hover:underline"
+                >
+                  Download
+                </a>
               </div>
             </div>
           );

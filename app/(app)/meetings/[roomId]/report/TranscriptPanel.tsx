@@ -8,6 +8,8 @@ import {
   transcriptWordCount,
 } from "@/lib/meetings/transcript-view";
 import { speakerColorIndex } from "@/lib/meetings/speaker-attribution";
+import { cuesAreTimed, type TranscriptCue } from "@/lib/meetings/transcript-cues";
+import { formatClock } from "@/lib/meetings/recording-timeline";
 
 // The transcript, typeset.
 //
@@ -32,11 +34,32 @@ const SPEAKER_COLORS = [
   "#fdba74",
 ];
 
-export function TranscriptPanel({ transcript }: { transcript: string }) {
+export function TranscriptPanel({
+  transcript,
+  cues,
+  onSeek,
+}: {
+  transcript: string;
+  /**
+   * The same transcript, from the rows the room wrote while people spoke.
+   *
+   * Preferred when present, because only the rows carry a time — and a time is
+   * the difference between a transcript you read and one you can use. The
+   * rendered text stays the fallback, for meetings whose rows predate this and
+   * for anyone whose access reaches the report but not the rows.
+   */
+  cues?: TranscriptCue[];
+  /** Jump the recording to a moment. Absent, timestamps are not offered. */
+  onSeek?: (ms: number) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const turns = useMemo(() => parseTranscript(transcript), [transcript]);
+  const timed = Boolean(onSeek && cues && cuesAreTimed(cues));
+  const turns = useMemo(
+    () => (cues && cues.length > 0 ? cues : parseTranscript(transcript)),
+    [cues, transcript],
+  );
   const speakers = useMemo(() => transcriptSpeakers(turns), [turns]);
   const words = useMemo(() => transcriptWordCount(turns), [turns]);
 
@@ -135,6 +158,18 @@ export function TranscriptPanel({ transcript }: { transcript: string }) {
                       </>
                     ) : (
                       <span className="text-xs italic text-[var(--fg-muted)]">Unattributed</span>
+                    )}
+                    {/* Offered only when it would do something: there is a
+                        player to drive, and the cues carry a real clock. */}
+                    {timed && (
+                      <button
+                        type="button"
+                        onClick={() => onSeek?.((turn as TranscriptCue).atMs)}
+                        className="font-mono text-[11px] tabular-nums text-[var(--gold-400)] hover:underline"
+                        title="Play the recording from here"
+                      >
+                        {formatClock((turn as TranscriptCue).atMs)}
+                      </button>
                     )}
                     {turn.uncertain && (
                       <span
